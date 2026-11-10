@@ -97,7 +97,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		return MarshalDispatch{}, err
 	}
 	if blocked, reason := budgetBlocksDispatch(run.Budget, taskUsage, planUsage); blocked {
-		pauseMarshal(&run, "budget boundary: "+reason, "start a new run with updated budget settings; settings do not change this run", "")
+		pauseMarshal(&run, marshal.Pause{Reason: "budget boundary: " + reason, Resolutions: []string{"start a new run with updated budget settings; settings do not change this run"}, Code: marshal.CodeBudget, Action: marshal.PauseResume})
 		if err := s.save(ctx, runID, run, rev); err != nil {
 			return MarshalDispatch{}, err
 		}
@@ -206,8 +206,8 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 			retained, retainedRev, loadErr := s.load(context.WithoutCancel(ctx), runID)
 			if loadErr == nil {
 				retained.Operation = nil // no worker has been launched
-				pauseMarshal(&retained, "failed attempt recovery: "+err.Error(),
-					"inspect and preserve the retained worktree; restore its recorded branch and commit and resolve dirty changes, then /marshal resume", run.State)
+				pauseMarshal(&retained, marshal.Pause{Reason: "failed attempt recovery: " + err.Error(),
+					Resolutions: []string{"inspect and preserve the retained worktree; restore its recorded branch and commit and resolve dirty changes, then /marshal resume"}, ResumeState: run.State, Code: marshal.CodeFailedAttemptRecovery, Action: marshal.PauseResume})
 				loadErr = s.save(context.WithoutCancel(ctx), runID, retained, retainedRev)
 			}
 			err = errors.Join(err, loadErr)
@@ -343,7 +343,8 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		}
 		run.Tasks[i].State = marshal.Escalated
 		run.Tasks[i].EscalationReason = "security: " + err.Error()
-		pauseMarshal(&run, "security: "+err.Error(), "resolve the security alert and amend the plan before retrying", "")
+		run.Tasks[i].EscalationCode = escalationCode(marshal.CodeSecurity, run.Tasks[i].EscalationReason)
+		pauseMarshal(&run, marshal.Pause{Reason: "security: " + err.Error(), Resolutions: []string{"resolve the security alert and amend the plan before retrying"}, Code: marshal.CodeSecurity, Action: marshal.PauseResume})
 		if saveErr := s.save(context.WithoutCancel(ctx), runID, run, rev); saveErr != nil {
 			return handin, errors.Join(err, saveErr)
 		}
@@ -736,7 +737,8 @@ func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
 	case marshal.VerdictEscalate:
 		t.State = marshal.Escalated
 		t.EscalationReason = "worker rework limit reached"
-		pauseMarshal(run, "worker rework limit reached", "resolve the escalation or amend the plan", "")
+		t.EscalationCode = escalationCode(marshal.CodeReworkLimit, t.EscalationReason)
+		pauseMarshal(run, marshal.Pause{Reason: "worker rework limit reached", Resolutions: []string{"resolve the escalation or amend the plan"}, Code: marshal.CodeReworkLimit, Action: marshal.PauseResume})
 	}
 	return result
 }
@@ -944,6 +946,40 @@ func isPermanentEscalationReason(reason string) bool {
 	return false
 }
 
+// escalationCode is the code an escalation is stored with. It applies the
+// old text rule once, to the machine text, so a permanent cause keeps its
+// permanent code whatever its human text later says.
+func escalationCode(base, machineText string) string {
+	if strings.HasPrefix(machineText, infraRetryEscalation) {
+		return marshal.CodeInfraRetry
+	}
+	r := strings.ToLower(machineText)
+	for _, p := range []struct{ word, code string }{
+		{"budget", marshal.CodeBudget}, {"quarantine", marshal.CodeQuarantine},
+		{"suspension", marshal.CodeSuspension}, {"honeypot", marshal.CodeHoneypot},
+		{"security", marshal.CodeSecurity}, {"governing files changed", marshal.CodeGoverningFilesChanged},
+	} {
+		if strings.Contains(r, p.word) {
+			return p.code
+		}
+	}
+	return base
+}
+
+var permanentEscalationCodes = map[string]bool{
+	marshal.CodeBudget: true, marshal.CodeQuarantine: true, marshal.CodeSuspension: true,
+	marshal.CodeHoneypot: true, marshal.CodeSecurity: true, marshal.CodeGoverningFilesChanged: true,
+}
+
+// isPermanentEscalation decides by code; a task escalated by an older build
+// has no code and is judged by its text, as before.
+func isPermanentEscalation(t marshal.Task) bool {
+	if t.EscalationCode != "" {
+		return permanentEscalationCodes[t.EscalationCode]
+	}
+	return isPermanentEscalationReason(t.EscalationReason)
+}
+
 func unpauseIfNoEscalated(run *marshal.Run) {
 	for _, t := range run.Tasks {
 		if t.State == marshal.Escalated || t.State == marshal.Cancelled {
@@ -989,7 +1025,7 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	// still waiting to be dispatched; it stays queued for its new worker.
 	queued := t.State == marshal.Queued && operatorReason != "" && governedProviderSwitchAllowed
 	if t.State == marshal.Escalated {
-		if isPermanentEscalationReason(t.EscalationReason) {
+		if isPermanentEscalation(*t) {
 			return fmt.Errorf("cannot reassign task with escalation reason: %s", t.EscalationReason)
 		}
 	} else if t.State != marshal.Reassigned && !queued {
@@ -1018,6 +1054,7 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 		t.State = marshal.Reassigned
 	}
 	t.EscalationReason = ""
+	t.EscalationCode = ""
 	if t.ReturnsByAgent == nil {
 		t.ReturnsByAgent = map[string]int{}
 	}
@@ -1066,7 +1103,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 		return fmt.Errorf("task is %s; /marshal retry applies to returned or escalated tasks; use /marshal resume to continue", t.State)
 	}
 	wasEscalated := t.State == marshal.Escalated
-	if isPermanentEscalationReason(t.EscalationReason) {
+	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
 	}
 	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
@@ -1095,6 +1132,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	}
 	t.State = marshal.Returned
 	t.EscalationReason = ""
+	t.EscalationCode = ""
 	if t.ReturnsByAgent != nil && (wasEscalated || isExtremeBuild) {
 		retireWorkerReturns(t, t.Worker)
 	}
@@ -1125,7 +1163,7 @@ func (s *MarshalService) CancelTask(ctx context.Context, runID, taskID string) e
 	if t.State != marshal.Escalated {
 		return errors.New("only escalated tasks can be cancelled")
 	}
-	if isPermanentEscalationReason(t.EscalationReason) {
+	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot cancel task with escalation reason: %s", t.EscalationReason)
 	}
 	if err := marshal.TransitionTask(t.State, marshal.Cancelled); err != nil {
@@ -1137,8 +1175,8 @@ func (s *MarshalService) CancelTask(ctx context.Context, runID, taskID string) e
 	}
 	// Cancellation does not satisfy the approved task's criteria or remove
 	// its dependency obligations. Only a reviewed scope amendment can do so.
-	pauseMarshal(&run, "task "+taskID+" cancelled; approved plan scope requires review",
-		"create and approve an amended plan that removes or replaces the cancelled task and updates its dependencies, then /marshal use-plan", "")
+	pauseMarshal(&run, marshal.Pause{Reason: "task " + taskID + " cancelled; approved plan scope requires review",
+		Resolutions: []string{"create and approve an amended plan that removes or replaces the cancelled task and updates its dependencies, then /marshal use-plan"}, Code: marshal.CodeTaskCancelled, Action: marshal.PauseUsePlan})
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
@@ -1327,7 +1365,7 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		run.Compatibility.Disposition = "reviewed-current-runtime"
 	}
 	if result != verification.VerifiedComplete {
-		pauseMarshal(&run, "verification failed: "+string(result), "/marshal resume to retry verification", marshal.Verifying)
+		pauseMarshal(&run, marshal.Pause{Reason: "verification failed: " + string(result), Resolutions: []string{"/marshal resume to retry verification"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationFailed, Action: marshal.PauseResume})
 	}
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return result, err
@@ -1737,7 +1775,7 @@ func validateAmendModes(run marshal.Run, current plan.ExecutionPlan, next Marsha
 	return nil
 }
 
-func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason string) error {
+func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, code, reason string) error {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return err
@@ -1755,8 +1793,9 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 		}
 		run.Tasks[i].State = marshal.Escalated
 		run.Tasks[i].EscalationReason = reason
+		run.Tasks[i].EscalationCode = escalationCode(code, reason)
 	}
-	pauseMarshal(&run, reason, "resolve the escalation or amend the plan", "")
+	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"resolve the escalation or amend the plan"}, Code: code, Action: marshal.PauseResume})
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
@@ -1835,7 +1874,7 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			}
 			_, err = wm.Prepare(ctx, model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit})
 			if err != nil {
-				pauseMarshal(&run, "interrupted worker worktree: "+err.Error(), "inspect retained worktree and amend the plan", "")
+				pauseMarshal(&run, marshal.Pause{Reason: "interrupted worker worktree: " + err.Error(), Resolutions: []string{"inspect retained worktree and amend the plan"}, Code: marshal.CodeInterruptedWorktree, Action: marshal.PauseResume})
 			} else if run.State != marshal.AwaitingUser {
 				run.State = marshal.Reviewing
 			}

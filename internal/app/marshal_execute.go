@@ -139,7 +139,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		// well within this bound. Reaching it means something loops; the run
 		// is handed to the user rather than left to spend its budget.
 		if round > marshalMaxRounds(run) {
-			if err := s.Escalate(ctx, runID, "", "the run stopped making progress"); err != nil {
+			if err := s.Escalate(ctx, runID, "", marshal.CodeRunStalled, "the run stopped making progress"); err != nil {
 				return run, err
 			}
 			return current()
@@ -339,7 +339,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			next := s.otherWorker(t.Worker, t.Mode)
 			if next == "" {
 				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
-				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, reason))
+				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeNoReassignWorker, reason))
 			}
 			if err := s.Reassign(ctx, runID, t.PlanTaskID, next); err != nil {
 				return launched, err
@@ -363,7 +363,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				}
 			}
 			if g := s.workerTaskGovernance(ctx, t); !g.Governed() {
-				return launched, s.Escalate(ctx, runID, t.PlanTaskID, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
+				return launched, s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeWorkerNotGoverned, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
 		}
 		d, err := s.dispatchWithBrief(ctx, runID, t.PlanTaskID, "", brief)

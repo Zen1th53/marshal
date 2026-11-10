@@ -149,7 +149,7 @@ func (w *Workspace) marshalPanel() *MarshalPanel {
 func (w *Workspace) marshalPanelWithNote(runID, provider, note string) *MarshalPanel {
 	if p := w.marshalPanel(); p != nil && p.RunID == runID {
 		copy := *p
-		copy.Provider, copy.Note = provider, note
+		copy.Provider, copy.Note, copy.Stopped = provider, note, false
 		return &copy
 	}
 	return &MarshalPanel{RunID: runID, Provider: provider, Note: note}
@@ -1267,7 +1267,9 @@ func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, servi
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, r, "running"))
 		}
 	})
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, marshalOutcomeNote(run, err)))
+	panel := newMarshalPanel(runID, provider, run, marshalOutcomeNote(run, err))
+	panel.Stopped = err != nil
+	w.marshalPublish(m, runID, panel)
 	if err != nil && ctx.Err() == nil {
 		// The panel line alone is invisible to the Marshal; its inbox carries
 		// the same stop reason so it can act instead of asking the owner.
@@ -1629,7 +1631,7 @@ func (w *Workspace) marshalAmendDeny() (string, error) {
 	p := w.marshalPanel()
 	if p != nil && p.RunID == runID {
 		copy := *p
-		copy.Note = "amendment denied"
+		copy.Note, copy.Stopped = "amendment denied", false
 		w.marshalPublish(m, runID, &copy)
 	}
 	return "Amendment denied.", nil

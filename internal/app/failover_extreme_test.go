@@ -613,7 +613,7 @@ func TestExtremeFailoverPreservesBudgetPause(t *testing.T) {
 		t.Fatal(e)
 	}
 	r, v, _ = s.load(t.Context(), "run")
-	pauseMarshal(&r, "budget boundary", "adjust budget", "")
+	pauseMarshal(&r, marshal.Pause{Reason: "budget boundary", Resolutions: []string{"adjust budget"}, Code: marshal.CodeBudget, Action: marshal.PauseResume})
 	if e = s.save(t.Context(), "run", r, v); e != nil {
 		t.Fatal(e)
 	}

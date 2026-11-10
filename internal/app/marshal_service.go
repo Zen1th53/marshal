@@ -120,7 +120,7 @@ func (s *MarshalService) decisionEvent(runID, taskID string, kind events.EventTy
 }
 func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run, revision int64) error {
 	if run.State == marshal.AwaitingUser && run.Pause == nil {
-		pauseMarshal(&run, "operator intervention required", "resolve the escalation, suspension or security issue, or amend the plan", "")
+		pauseMarshal(&run, marshal.Pause{Reason: "operator intervention required", Resolutions: []string{"resolve the escalation, suspension or security issue, or amend the plan"}, Code: marshal.CodeOperatorIntervention, Action: marshal.PauseResume})
 	}
 	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
 

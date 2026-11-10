@@ -166,7 +166,7 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	// No proven completion. Preserve the branch and all evidence, with a
 	// durable explanation; an operator may amend or approve a fresh attempt.
 	run.Operation = nil
-	pauseMarshal(&run, "interrupted "+op.Kind+" operation "+op.ID, "inspect retained artifacts and amend the plan before retrying", "")
+	pauseMarshal(&run, marshal.Pause{Reason: "interrupted " + op.Kind + " operation " + op.ID, Resolutions: []string{"inspect retained artifacts and amend the plan before retrying"}, Code: marshal.CodeInterruptedOperation, Action: marshal.PauseResume})
 	op.Event.Type = events.EventTypeMarshalEscalated
 	op.Event.Data["reason"] = run.Pause.Reason
 	op.Next = &run
@@ -231,7 +231,7 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 			continue
 		}
 		if err != nil {
-			pauseMarshal(&run, err.Error(), "inspect the retained operation and Git references before resolving it", "")
+			pauseMarshal(&run, marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume})
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
 				failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, errors.Join(err, saveErr)))
 			}

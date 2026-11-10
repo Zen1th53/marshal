@@ -1022,7 +1022,7 @@ func TestMarshalProposalReassignRouting(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
-	if err := service.Escalate(t.Context(), runID, taskID, "worker rework limit reached"); err != nil {
+	if err := service.Escalate(t.Context(), runID, taskID, marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1078,7 +1078,7 @@ func TestMarshalProposalRetryRouting(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
-	if err := service.Escalate(t.Context(), runID, taskID, "worker rework limit reached"); err != nil {
+	if err := service.Escalate(t.Context(), runID, taskID, marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 

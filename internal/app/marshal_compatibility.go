@@ -76,7 +76,7 @@ func (s *MarshalService) observeMarshalCompatibility(ctx context.Context, runID 
 	if disposition == "incompatible" || disposition == "replan-required" {
 		compatibility.ObservedRuntime, compatibility.Disposition = image, disposition
 		run.Compatibility = &compatibility
-		pauseMarshal(&run, reason, "retain the current artifacts; use a runtime supporting the recorded protocol, or confirm a new Goal, create and approve a new plan and /marshal use-plan", "")
+		pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"retain the current artifacts; use a runtime supporting the recorded protocol, or confirm a new Goal, create and approve a new plan and /marshal use-plan"}, Code: marshal.CodeRuntimeIncompatible, Action: marshal.PauseUsePlan})
 	} else {
 		if previous != nil && previous.ObservedRuntime == image {
 			return run, rev, nil

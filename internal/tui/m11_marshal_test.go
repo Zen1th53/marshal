@@ -334,7 +334,7 @@ func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
 	ws.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
 
 	// Escalate task
-	if err := service.Escalate(ctx, runID, taskID, "worker rework limit reached"); err != nil {
+	if err := service.Escalate(ctx, runID, taskID, marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -345,7 +345,7 @@ func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
 	}
 
 	// Escalate again and test /marshal reassign
-	if err := service.Escalate(ctx, runID, taskID, "worker rework limit reached"); err != nil {
+	if err := service.Escalate(ctx, runID, taskID, marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 	// Community keeps a governed Process 05 task on its approved plan's
@@ -371,7 +371,7 @@ func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
 		if err != nil || !strings.Contains(out, "reassigned to claude") {
 			t.Fatalf("reassign output: %q %v", out, err)
 		}
-		if err := service.Escalate(ctx, runID, taskID, "no worker"); err != nil {
+		if err := service.Escalate(ctx, runID, taskID, marshal.CodeEscalated, "no worker"); err != nil {
 			t.Fatal(err)
 		}
 	}

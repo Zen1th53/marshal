@@ -133,7 +133,7 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 		recovery = "install or /harness verify an independent provider, then /marshal resume to retry verification"
 	}
 	ctx = context.WithoutCancel(ctx)
-	pauseMarshal(&run, cause.Error(), recovery, marshal.Verifying)
+	pauseMarshal(&run, marshal.Pause{Reason: cause.Error(), Resolutions: []string{recovery}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume})
 	if err := s.save(ctx, runID, run, revision); err != nil {
 		return errors.Join(cause, err)
 	}

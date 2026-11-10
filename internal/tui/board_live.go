@@ -388,7 +388,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		frame = a.Frame()
 	}
 	var hits []boardHit
-	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, hits: &hits}
+	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, hits: &hits}
 	v.noNav = w.navigationRefusal() != ""
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
@@ -743,7 +743,7 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		// With no request waiting, Enter on a stopped run's notice types
 		// its command into the composer; Enter there runs it.
 		if event.Type == KeyEnter && !inbox {
-			if stop, ok := (boardVisual{board: p.Board, note: p.Note}).stopNotice(); ok {
+			if stop, ok := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice(); ok {
 				w.composer.SetText(stop.commands[0])
 				return true
 			}

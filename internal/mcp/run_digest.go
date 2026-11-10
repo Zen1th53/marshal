@@ -18,6 +18,9 @@ type runDigest struct {
 	PlanVersion     int64            `json:"plan_version,omitempty"`
 	Paused          string           `json:"paused,omitempty"`
 	Resolutions     []string         `json:"resolutions,omitempty"`
+	PauseCode       string           `json:"pause_code,omitempty"`
+	PauseAction     string           `json:"pause_action,omitempty"`
+	PauseTask       string           `json:"pause_task,omitempty"`
 	CloseAuthorized bool             `json:"close_authorized"`
 	Tasks           []runDigestTask  `json:"tasks"`
 	EventsCursor    string           `json:"events_cursor,omitempty"`
@@ -59,6 +62,7 @@ func (s *Server) runDigest(ctx context.Context) (runDigest, error) {
 	out.RunID, out.State, out.Tier, out.PlanID, out.PlanVersion = id, run.State, run.Tier, run.PlanID, run.PlanVersion
 	if run.Pause != nil {
 		out.Paused, out.Resolutions = run.Pause.Reason, run.Pause.Resolutions
+		out.PauseCode, out.PauseAction, out.PauseTask = run.Pause.Code, string(run.Pause.Action), run.Pause.TaskID
 	}
 	out.CloseAuthorized = run.ValidCloseAuthorization()
 	for _, t := range run.Tasks {

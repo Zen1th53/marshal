@@ -296,7 +296,7 @@ func TestSecurityPauseReportsResolution(t *testing.T) {
 	if _, err := s.StartPlanning(t.Context(), "run", "write", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Escalate(t.Context(), "run", "", "security suspension"); err != nil {
+	if err := s.Escalate(t.Context(), "run", "", marshal.CodeEscalated, "security suspension"); err != nil {
 		t.Fatal(err)
 	}
 	run, err := s.Resume(t.Context(), "run")

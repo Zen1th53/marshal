@@ -136,8 +136,9 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		}
 		r.Tasks[idx].State = marshal.Escalated
 		r.Tasks[idx].EscalationReason = "provider failover interrupted: " + retErr.Error()
+		r.Tasks[idx].EscalationCode = escalationCode(marshal.CodeFailoverInterrupted, r.Tasks[idx].EscalationReason)
 		r.Operation = nil
-		pauseMarshal(&r, r.Tasks[idx].EscalationReason, "inspect retained limited attempt and retry", "")
+		pauseMarshal(&r, marshal.Pause{Reason: r.Tasks[idx].EscalationReason, Resolutions: []string{"inspect retained limited attempt and retry"}, Code: marshal.CodeFailoverInterrupted, Action: marshal.PauseResume})
 		retErr = errors.Join(retErr, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, r, v, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": r.Tasks[idx].EscalationReason}))
 	}()
 	run, rev, loadErr := s.load(context.WithoutCancel(ctx), runID)
@@ -184,12 +185,17 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	if err != nil {
 		t.State = marshal.Escalated
 		t.EscalationReason = "provider failover: " + err.Error()
+		baseCode := marshal.CodeProviderFailover
+		if errors.Is(err, errWaitingOnQuota) {
+			baseCode = marshal.CodeProviderQuota
+		}
+		t.EscalationCode = escalationCode(baseCode, t.EscalationReason)
 		run.Operation = nil
 		resolution := "retry after resolving provider availability"
 		if errors.Is(err, errWaitingOnQuota) {
 			resolution = "resume after the provider quota resets"
 		}
-		pauseMarshal(&run, t.EscalationReason, resolution, "")
+		pauseMarshal(&run, marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{resolution}, Code: baseCode, Action: marshal.PauseResume})
 		return handin, errors.Join(err, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, run, rev, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": t.EscalationReason}))
 	}
 
@@ -241,6 +247,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	t.State = marshal.Reassigned
 	t.ResultCommit = ""
 	t.EscalationReason = ""
+	t.EscalationCode = ""
 	if t.ReturnsByAgent == nil {
 		t.ReturnsByAgent = map[string]int{}
 	}

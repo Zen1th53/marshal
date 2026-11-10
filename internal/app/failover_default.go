@@ -26,8 +26,9 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	t := &run.Tasks[i]
 	t.State = marshal.Escalated
 	t.EscalationReason = "provider limit: " + reason
+	t.EscalationCode = escalationCode(marshal.CodeProviderLimit, t.EscalationReason)
 	run.Operation = nil
-	pauseMarshal(&run, "provider limit: "+reason, "resolve the provider limit before retrying", "")
+	pauseMarshal(&run, marshal.Pause{Reason: "provider limit: " + reason, Resolutions: []string{"resolve the provider limit before retrying"}, Code: marshal.CodeProviderLimit, Action: marshal.PauseResume})
 	if saveErr := s.save(context.WithoutCancel(ctx), runID, run, rev); saveErr != nil {
 		return handin, saveErr
 	}

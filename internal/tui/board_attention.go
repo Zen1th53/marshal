@@ -38,7 +38,7 @@ func (w *Workspace) attentionNow() attnSnapshot {
 	p := w.state.Marshal
 	v := boardVisual{}
 	if p != nil {
-		v.board, v.note = p.Board, p.Note
+		v.board, v.note, v.stopped = p.Board, p.Note, p.Stopped
 	}
 	w.mu.RUnlock()
 	v.gates = w.ownerGates(p)

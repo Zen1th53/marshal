@@ -22,7 +22,8 @@ type MarshalPanel struct {
 	Tasks    []MarshalTaskRow
 	// Note is the latest thing the operator should know: what is happening,
 	// or what the run is waiting for.
-	Note string
+	Note    string
+	Stopped bool // the run's execution ended with an error
 	// Board is the same run as the Board read model: projected from the run
 	// here, then tailed with the run's decision events when published.
 	Board boardmodel.Board
