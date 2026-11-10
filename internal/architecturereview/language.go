@@ -18,7 +18,7 @@ func EnglishUIStrings() map[string]string {
 	return map[string]string{
 		"architecture": "Architecture", "traffic": "Traffic", "marshal": "Marshal", "diagram": "Diagram",
 		"select_area": "Select area", "approve": "Accept architecture", "approved": "✓ Accepted", "working": "Marshal is working…", "fit": "Fit",
-		"view_hint": "View only · Use a pencil to comment", "area_hint": "Drag to select an area", "request_type": "Request type",
+		"view_hint": "Click a part to open it · Use a pencil to comment", "area_hint": "Drag to select an area", "request_type": "Request type",
 		"comment": "Comment", "change": "Change request", "request_label": "Write to Marshal", "placeholder": "Comment or request a precise change here…",
 		"submit": "Submit to Marshal", "withdraw": "Withdraw request", "close": "Close", "pencil_prefix": "Comment:", "version": "Revision",
 		"selected_area": "Selected area", "empty_area": "This area contains no architecture elements.", "connection": "Connection",

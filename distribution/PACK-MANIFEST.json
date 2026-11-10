@@ -4171,8 +4171,8 @@
     },
     {
       "path": "internal/architecturecodec/language.go",
-      "sha256": "35d9d1f0393bf3de800622f56569b5855cbd8d81be2186c93ff8ac9903e1e314",
-      "bytes": 10472
+      "sha256": "5d3f6ff858d2378f882f7316428b05000a620349588f2dbf048ed7fb40036ad1",
+      "bytes": 10486
     },
     {
       "path": "internal/architecturecodec/layout.go",
@@ -4211,8 +4211,8 @@
     },
     {
       "path": "internal/architecturereview/language.go",
-      "sha256": "fa77f7f368c86a9a9516567bcbd9d86fbc964eba3e917fe24e565e542424511f",
-      "bytes": 11574
+      "sha256": "e16633a1598115ab57eaf9ae483cd118f7ebf5935ddeec607c47911931614357",
+      "bytes": 11588
     },
     {
       "path": "internal/architecturereview/language_test.go",
@@ -4230,14 +4230,24 @@
       "bytes": 5123
     },
     {
+      "path": "internal/architecturereview/page_test.go",
+      "sha256": "c6bbf7a801ad1353314119c7d69cbf8fdb7ac16055bddcdac047ba02a34032e6",
+      "bytes": 1973
+    },
+    {
       "path": "internal/architecturereview/review.go",
       "sha256": "8789ff580d6069dcd4df702e1b9c267d84550739db2486faf94603c394b6e6ef",
       "bytes": 27136
     },
     {
       "path": "internal/architecturereview/review.html",
-      "sha256": "5f8eba4e2faf7d2517125bd0ca6307549da7b122a77f76635323320e1136ce5d",
-      "bytes": 20230
+      "sha256": "322b337f4c794a9196f43c46771fa064a1598bfb933e0ffe01dbc0d4d71afdab",
+      "bytes": 25996
+    },
+    {
+      "path": "internal/architecturereview/review_browser_test.go",
+      "sha256": "792979a6afdba31572380063167e3a237c93b67827492cf0bc140a04fbe37021",
+      "bytes": 1797
     },
     {
       "path": "internal/architecturereview/review_test.go",
