@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/projectmemory"
 )
@@ -106,14 +105,6 @@ func TestSecretsAreRedactedBeforeIngestion(t *testing.T) {
 	if !candidate.SecretsRedacted {
 		t.Fatal("the candidate does not record that a credential was removed")
 	}
-
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", []string{"ev-1"})
-	if len(request.ReviewConcerns) == 0 {
-		t.Fatal("a source that carried credentials raised no review concern")
-	}
-	if constitution.GatePromotion(request).Promote {
-		t.Fatal("a source that carried credentials was promoted unexamined")
-	}
 }
 
 // Content that is nothing but a credential yields no candidate at all.
@@ -146,23 +137,12 @@ func TestAssimilationRequiresAProjectBinding(t *testing.T) {
 	}
 }
 
-// Every candidate is bound to its project, and the gate refuses one that
-// arrives claiming a different project.
-func TestCandidatesAreBoundAndCrossProjectPromotionIsRefused(t *testing.T) {
+// Every candidate is bound to its project.
+func TestCandidatesAreBoundToTheirProject(t *testing.T) {
 	result := assimilate(source(projectmemory.SourceRepositoryFact, "go.mod", "module example", headCommit))
 	candidate := result.Candidates[0]
 	if candidate.ProjectID != testProject {
 		t.Fatalf("the candidate is bound to %q, want %q", candidate.ProjectID, testProject)
-	}
-
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", []string{"ev-1"})
-	request.ProjectID = string(otherProject)
-	decision := constitution.GatePromotion(request)
-	if decision.Promote {
-		t.Fatal("a candidate belonging to one project was promoted into another")
-	}
-	if decision.Reason != constitution.ReasonCrossProjectLeak {
-		t.Fatalf("the refusal reason was %s, want a cross-project leak", decision.Reason)
 	}
 }
 
@@ -176,18 +156,6 @@ func TestProviderMemoryCannotPoisonProjectKnowledge(t *testing.T) {
 	if candidate.Trust != projectmemory.TrustUntrusted {
 		t.Fatalf("provider memory was trusted as %s", candidate.Trust)
 	}
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", nil)
-	if !request.Candidate.ProposedByAI {
-		t.Fatal("provider memory was not marked as model-originated")
-	}
-	if !request.Candidate.ContainsHiddenReasoning {
-		t.Fatal("provider-generated memory was not treated as hidden reasoning")
-	}
-	for i := 0; i < 5; i++ {
-		if constitution.GatePromotion(request).Promote {
-			t.Fatal("a repeated unverified assertion was eventually promoted")
-		}
-	}
 }
 
 // Documentation is a claim. It may be promoted only with real evidence, never
@@ -199,17 +167,10 @@ func TestDocumentationIsAClaimNotTruth(t *testing.T) {
 	if candidate.Trust != projectmemory.TrustClaim {
 		t.Fatalf("documentation was trusted as %s", candidate.Trust)
 	}
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", nil)
-	if !request.Candidate.ProposedByAI {
-		t.Fatal("an unverifiable claim was not held to the evidence standard")
-	}
-	if constitution.GatePromotion(request).Promote {
-		t.Fatal("documentation was promoted with no evidence")
-	}
 }
 
-// A repository fact is verifiable and can be promoted when current and evidenced.
-func TestVerifiableRepositoryFactCanBePromoted(t *testing.T) {
+// A repository fact is verifiable and read as current at the head commit.
+func TestVerifiableRepositoryFactIsTrustedAndCurrent(t *testing.T) {
 	result := assimilate(source(projectmemory.SourceRepositoryFact, "go.mod",
 		"the module is github.com/example/project", headCommit))
 	candidate := result.Candidates[0]
@@ -219,13 +180,6 @@ func TestVerifiableRepositoryFactCanBePromoted(t *testing.T) {
 	}
 	if candidate.Freshness != projectmemory.FreshCurrent {
 		t.Fatalf("a fact read at the current commit was %s", candidate.Freshness)
-	}
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", []string{"ev-repo"})
-	if len(request.ReviewConcerns) != 0 {
-		t.Fatalf("a current verifiable fact raised concerns: %v", request.ReviewConcerns)
-	}
-	if !constitution.GatePromotion(request).Promote {
-		t.Fatal("a current, evidenced repository fact was refused")
 	}
 }
 
@@ -241,13 +195,6 @@ func TestStaleSourceIsFlaggedAndHeld(t *testing.T) {
 	if candidate.Freshness.Current() {
 		t.Fatal("a stale source reported itself as current")
 	}
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", []string{"ev-1"})
-	if len(request.ReviewConcerns) == 0 {
-		t.Fatal("a stale source raised no concern")
-	}
-	if constitution.GatePromotion(request).Promote {
-		t.Fatal("a stale source was promoted unexamined")
-	}
 }
 
 // Freshness that could not be established is not treated as fresh.
@@ -259,10 +206,6 @@ func TestUnknownFreshnessIsNotTreatedAsCurrent(t *testing.T) {
 	}
 	if candidate.Freshness.Current() {
 		t.Fatal("unknown freshness was treated as current")
-	}
-	request := projectmemory.ToPromotionRequest(candidate, "operator-1", []string{"ev"})
-	if constitution.GatePromotion(request).Promote {
-		t.Fatal("a source of unknown currency was promoted")
 	}
 }
 
@@ -278,10 +221,6 @@ func TestContradictorySourcesAreHeldForReconciliation(t *testing.T) {
 	for _, candidate := range result.Candidates {
 		if len(candidate.ConflictsWith) == 0 {
 			t.Fatalf("candidate %q was not linked to its contradiction", candidate.Fact)
-		}
-		request := projectmemory.ToPromotionRequest(candidate, "operator-1", []string{"ev"})
-		if constitution.GatePromotion(request).Promote {
-			t.Fatal("a contradicted candidate was promoted before the conflict was settled")
 		}
 	}
 }
@@ -335,16 +274,5 @@ func TestAssimilationIsStableAcrossRuns(t *testing.T) {
 		if first.Candidates[i].ID == other.Candidates[i].ID {
 			t.Fatal("the same content in two projects produced the same candidate identity")
 		}
-	}
-}
-
-// An AI can never be the promoting authority, whatever the source.
-func TestAICannotPromoteAssimilatedMemory(t *testing.T) {
-	result := assimilate(source(projectmemory.SourceRepositoryFact, "go.mod", "module example", headCommit))
-	request := projectmemory.ToPromotionRequest(result.Candidates[0], "control-intelligence", []string{"ev"})
-	request.PromotedByIsAI = true
-
-	if constitution.GatePromotion(request).Promote {
-		t.Fatal("a model promoted assimilated project memory")
 	}
 }

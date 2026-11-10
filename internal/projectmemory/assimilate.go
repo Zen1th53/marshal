@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
@@ -458,52 +457,6 @@ func stripNegation(text string) string {
 func onlyRedactionMarkers(text string) bool {
 	remaining := strings.TrimSpace(strings.ReplaceAll(strings.ToLower(text), "[redacted]", ""))
 	return strings.Trim(remaining, " \t\n\r:=,.;-_\"'") == ""
-}
-
-// ToPromotionRequest converts a candidate into the form Process 00's gate
-// evaluates.
-//
-// The mapping is where Process 02 hands authority over. Trust and freshness
-// become inputs the gate weighs; they are not permissions. A candidate from an
-// untrusted source arrives marked as AI-proposed with no evidence, which is
-// precisely the shape the gate refuses.
-func ToPromotionRequest(candidate Candidate, promotedBy string, evidenceIDs []string) constitution.PromotionRequest {
-	memoryClass := constitution.ClassProject
-	if candidate.Kind == SourceGitHistory || candidate.Kind == SourceRepositoryFact {
-		memoryClass = constitution.ClassEvidence
-	}
-
-	// Only a source MARSHAL can re-derive counts as evidence-backed. Anything
-	// else is proposed material that the gate must judge on its evidence, and
-	// is marked as model-originated so the gate applies that standard.
-	proposedByAI := !candidate.Trust.Promotable()
-
-	// ContainsSecret is reported as false because the fact reaching the gate
-	// has already been redacted — the credential is gone, not merely masked in
-	// a copy. Passing true would reject text that no longer holds a secret.
-	//
-	// That a source *carried* credentials is still significant, so it is
-	// handled where it belongs: such a source is treated as needing review
-	// rather than promoted on its own terms.
-	return constitution.PromotionRequest{
-		Candidate: constitution.MemoryCandidate{
-			ID:                      candidate.ID,
-			ProjectID:               string(candidate.ProjectID),
-			Class:                   memoryClass,
-			Stage:                   constitution.StageValidated,
-			Fact:                    candidate.Fact,
-			ProposedBy:              string(candidate.Kind),
-			ProposedByAI:            proposedByAI,
-			EvidenceIDs:             evidenceIDs,
-			EvidenceFresh:           candidate.Freshness.Current(),
-			Contradicts:             candidate.ConflictsWith,
-			ContainsSecret:          false,
-			ContainsHiddenReasoning: candidate.Kind == SourceProviderMemory,
-		},
-		ProjectID:      string(candidate.ProjectID),
-		PromotedBy:     promotedBy,
-		ReviewConcerns: reviewConcerns(candidate),
-	}
 }
 
 // reviewConcerns lists reasons a candidate should not be promoted unexamined.
