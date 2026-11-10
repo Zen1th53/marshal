@@ -580,7 +580,7 @@ func (s hostSnapshot) policyRows() []hostPolicyRow {
 	}
 	if r, ok := s.root(); ok {
 		disk.state = state(ruleDisk, r.FreeBytes < 2*p.DiskFreeThresholdBytes(r.TotalBytes))
-		disk.now = fmt.Sprintf("%.0f GB", float64(r.FreeBytes)/1e9)
+		disk.now = hostwatch.GBText(r.FreeBytes)
 	} else {
 		disk = unknown(disk)
 	}
