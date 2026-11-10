@@ -100,6 +100,12 @@ func tmuxLaunchInBackground(ctx context.Context) bool {
 	return background
 }
 
+// Notes InitTmux leaves when tmux integration cannot start.
+const (
+	tmuxForeignSessionNote = "Marshal is running inside another tmux session, so the chat and worker windows can't open here. Quit (Ctrl+C twice) and run marshal from a terminal that isn't inside tmux."
+	tmuxStateRefusedNote   = "Marshal can't use this folder's state directory. Run marshal doctor in a terminal to see why."
+)
+
 // InitTmux initializes tmux session and window awareness for the workspace.
 func (w *Workspace) InitTmux(root ...string) {
 	projectRoot := w.providerRoot()
@@ -111,14 +117,14 @@ func (w *Workspace) InitTmux(root ...string) {
 		return
 	}
 	if err := statepath.Validate(projectRoot); err != nil {
-		w.RecordActivity("State namespace refused: " + err.Error())
+		w.RecordActivity(tmuxStateRefusedNote)
 		return
 	}
 	session, win, winID, pane := tmux.SessionName(projectRoot), statepath.Name, "", ""
 	if tmux.IsInsideTmux() {
 		if sess, name, id, err := tmux.CurrentSessionAndWindow(context.Background()); err == nil && sess != "" {
 			if !tmux.SessionBelongs(sess, projectRoot) {
-				w.RecordActivity("tmux namespace differs; open the dedicated " + statepath.Name + " session")
+				w.RecordActivity(tmuxForeignSessionNote)
 				return
 			}
 			session = sess

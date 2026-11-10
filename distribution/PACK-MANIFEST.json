@@ -15076,8 +15076,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "a640f8ea84be5b63ce3b11be7135df8df15435656917e8c9fd3d958d4b296386",
-      "bytes": 79566
+      "sha256": "dbcb5a1e0155444f5dfc1e0272fca76947a8035a04e9ed384e5d3bc061083c82",
+      "bytes": 79886
     },
     {
       "path": "internal/tui/tmux_native_osc_test.go",
@@ -15086,8 +15086,8 @@
     },
     {
       "path": "internal/tui/tmux_native_test.go",
-      "sha256": "421d2762825b4476c0246d72c17474c7647b6c759ea70554cdc59e5a035b6211",
-      "bytes": 38352
+      "sha256": "aed5e47c16cd47e69ae4822c9e2aad4558f59bccefd5b9b75d68538326904958",
+      "bytes": 38921
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",
