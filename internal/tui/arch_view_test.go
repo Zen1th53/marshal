@@ -239,7 +239,7 @@ func TestArchViewContent(t *testing.T) {
 	for _, want := range []string{
 		"ARCHITECTURE contract rev 7 · a3f1c9e2 · accepted by owner 2026-11-02 13:38 · Marshal 0.0.9",
 		"in force       rev 7 accepted · Marshal acts only inside it",
-		truncateVisible("▸ D3 "+bpD3, 51),
+		"▸ D3 " + bpD3,
 		"✓ M5 runtime dispatches approved tasks",
 		"· D4 more tasks? → M5",
 		"Memory / MCP",

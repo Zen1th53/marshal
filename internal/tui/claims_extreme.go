@@ -8,7 +8,7 @@ package tui
 // otherwise. claims_default.go holds the governed edition's wording.
 const (
 	bpD1 = "the Marshal approves the plan (or asks you: y)"
-	bpD3 = "decision due? → the Marshal decides or asks you"
+	bpD3 = "decision due? → Marshal decides or asks you"
 	bpU5 = "the Marshal delivers the verified result"
 
 	securityKeyWhat    = "security: network calls and audit"
