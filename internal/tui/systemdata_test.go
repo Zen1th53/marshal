@@ -84,31 +84,6 @@ func TestSystemNeverRendersTokenDigestOrPlaintext(t *testing.T) {
 	if !snap.Tokens[0].Credential.Redacted {
 		t.Fatal("credential indicator is not redacted")
 	}
-	if got := tokensScreen(snap).Fields; len(got) == 0 {
-		t.Fatal("token screen has no fields")
-	}
-	for _, field := range tokensScreen(snap).Fields {
-		if field.Value.Text == "secret-digest" {
-			t.Fatal("token digest reached screen content")
-		}
-	}
-}
-
-func TestSystemRendererRegistryContainsOnlyStandaloneSystemScreens(t *testing.T) {
-	renderers := systemScreens()
-	if len(renderers) != 84 {
-		t.Fatalf("System renderer count = %d, want 84 explicit standalone screens", len(renderers))
-	}
-	for id, render := range renderers {
-		if render == nil {
-			t.Fatalf("%s has a nil renderer", id)
-		}
-	}
-	for _, action := range []string{"CTUI-0705", "CTUI-0741", "CTUI-0750", "CTUI-0761", "CTUI-0762", "CTUI-0763", "CTUI-0767", "CTUI-0769", "CTUI-0771", "CTUI-0774", "CTUI-0781", "CTUI-0782", "CTUI-0783", "CTUI-0785", "CTUI-0787", "CTUI-0803"} {
-		if _, ok := renderers[action]; ok {
-			t.Fatalf("action %s was incorrectly registered as a standalone screen", action)
-		}
-	}
 }
 
 // --- bindings Codex reported as unavailable that do exist ---

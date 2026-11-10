@@ -556,8 +556,7 @@ func localServerBinding(s *ControlSource, id ActionID, title string, kind locals
 }
 
 // menuRestUnderConstruction names, for each entry P10 reviewed and could not
-// wire safely, the exact reason. The same text is the entry's cause in
-// wired.json, so a re-walk reproduces it.
+// wire safely, the exact reason.
 var menuRestUnderConstruction = []struct {
 	id, title, requires string
 	safety              Safety

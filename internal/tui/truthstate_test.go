@@ -301,26 +301,6 @@ func TestTheZeroValueIsNotAClaim(t *testing.T) {
 	}
 }
 
-// A zero Snapshot is entirely unset, so a screen rendered before the first read
-// says so on every field rather than describing an empty project.
-func TestAZeroSnapshotClaimsNothing(t *testing.T) {
-	var snap Snapshot
-	for name, v := range map[string]Value{
-		"tasks":    snap.Runtime.Tasks,
-		"agents":   snap.Runtime.Agents,
-		"blockers": snap.Blockers.Status,
-		"mode":     snap.Cloud.Mode,
-		"cpu":      snap.Resources.CPU,
-		"events":   snap.Events.Status,
-	} {
-		if v.Status.IsSuccess() {
-			t.Fatalf("%s claims to be known before anything was read", name)
-		}
-		if v.Display() == "EMPTY" {
-			t.Fatalf("%s claims no record exists before anything was read", name)
-		}
-	}
-}
 
 // A deliberately empty value still means EMPTY. The unset default must not cost
 // the real answer its meaning.

@@ -13,8 +13,7 @@ slash command once, and records what each one did:
   SKIP  nothing to press in this session (no lanes, no inbox item)
   EXPECTED  by design, not a defect, with its category: an unbound letter
         on the bare Board starts composer text (owner decision 2026-11-06,
-        "composer-by-design"); Ctrl+N refuses in an edition that does not
-        release navigation ("edition-gated"). Not counted as FAIL
+        "composer-by-design"). Not counted as FAIL
 
 Usage:
   button_walk.py --target PANE --out DIR [--groups board,views,...]
@@ -290,11 +289,6 @@ def walk_board(bd):
     step(bd, "BK-help-anykey", g, ["x"], gone(r"Esc or \? closes"), "a key closes the help", leak="x", prep=lambda: (bd.keys("?"), bd.settle()))
     bd.home()
     step(bd, "BK-Ctrl+P", g, ["C-p"], has(r"Command Palette"), "Ctrl+P opens the palette")
-    bd.home()
-    # Community does not release the navigation menu: Ctrl+N answers that
-    # it is not available, and the footer offers no ^N hint there.
-    step(bd, "BK-Ctrl+N", g, ["C-n"], first_line(r"1 ?Hom"), "Ctrl+N opens the advanced menu",
-         expected=lambda b, a, comp: "navigation surface is not available" in a and "^N advanced" not in b, category="edition-gated")
     bd.home()
     step(bd, "BK-slash", g, ["/"], lambda b, a: bd.composer_text().startswith("/"), "/ starts a command")
     bd.home()

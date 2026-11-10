@@ -616,33 +616,3 @@ func TestBoardRepeatedAnswerShowsAgain(t *testing.T) {
 		t.Fatal("the repeated answer was taken as already seen")
 	}
 }
-
-// TestBoardEscDoesNotOpenTheMenu: Esc on the bare Board does nothing; it
-// used to open the full-screen menu, whose search then took the command
-// the operator typed next. '/' from the menu starts a command line.
-func TestBoardEscDoesNotOpenTheMenu(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	if w.navView == nil {
-		t.Skip("navigation manifest not loaded")
-	}
-	w.frameLines(120, 40)
-	ctx := t.Context()
-	w.handleTerminalKey(ctx, KeyEvent{Type: KeyEsc})
-	if w.navView.IsOpen() {
-		t.Fatal("Esc on the bare Board opened the menu")
-	}
-	w.openNavigation(ctx)
-	if !w.navView.IsOpen() {
-		t.Skip("navigation refused in this workspace")
-	}
-	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: '/'})
-	if w.navView.IsOpen() || w.composer.Text() != "/" {
-		t.Fatalf("'/' in the menu: open %v composer %q", w.navView.IsOpen(), w.composer.Text())
-	}
-	for _, r := range "marshal status" {
-		w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: r})
-	}
-	if got := w.composer.Text(); got != "/marshal status" {
-		t.Fatalf("command typed after '/' went elsewhere: composer %q", got)
-	}
-}

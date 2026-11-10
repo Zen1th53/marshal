@@ -27,7 +27,6 @@ TEMPLATE=""
 SKIP_PROVIDERS=0
 SKIP_TUI=0
 SKIP_CLI=0
-SKIP_WALK=0
 SKIP_FLOW=0
 PROVIDERS="codex claude opencode agy"
 MARSHAL_PROVIDER=codex
@@ -53,7 +52,6 @@ Usage: tools/e2e/extreme-e2e.sh [options]
                         auto-started Marshal chat check)
   --skip-tui            skip B (TUI)
   --skip-cli            skip A (offline CLI)
-  --skip-walk           in B, skip the full Ctrl+N action walk (~10 min)
   --skip-flow           skip D/E (Marshal flow); C still runs unless --skip-providers
   --providers "LIST"    providers for C (default "codex claude opencode agy")
   --marshal PROVIDER    provider for the Marshal chat in D (default codex)
@@ -77,7 +75,6 @@ while [ $# -gt 0 ]; do
 	--skip-providers) SKIP_PROVIDERS=1 ;;
 	--skip-tui) SKIP_TUI=1 ;;
 	--skip-cli) SKIP_CLI=1 ;;
-	--skip-walk) SKIP_WALK=1 ;;
 	--skip-flow) SKIP_FLOW=1 ;;
 	--providers) PROVIDERS=$2; shift ;;
 	--marshal) MARSHAL_PROVIDER=$2; shift ;;
@@ -460,12 +457,6 @@ section_b() {
 	else
 		record B02-landing-clean PASS 0 "landing renders, no integrity alert"
 	fi
-	if cap "$W0" | grep -q 'Ctrl+N'; then
-		record B03-landing-mentions-ctrl-n PASS 0 "Ctrl+N advertised"
-	else
-		record B03-landing-mentions-ctrl-n FAIL 0 "landing never mentions Ctrl+N (advanced menu); only '[Esc] Navigation'"
-	fi
-
 	# The Marshal chat window is started automatically in Marshal.
 	sleep 8
 	local chat
@@ -521,38 +512,6 @@ section_b() {
 	save_cap "$W0" 21-nav-help
 	keys "$W0" Escape
 	sleep 0.4
-
-	if [ "$SKIP_WALK" = 0 ]; then
-		t=$(now)
-		# The docked chat halves the menu pane; status lines and verdicts are
-		# truncated at that width, so walk with the menu pane ~230 columns wide.
-		tm resize-window -t "$W0" -x 460 -y 55 2>/dev/null
-		python3 "$SCRIPT_DIR/tui_walk.py" --target "$W0" --manifest "$REPO/internal/tui/manifest.json" \
-			--out "$CAP/actions" >"$OUT/tui-actions.jsonl" 2>"$OUT/tui-walk.err"
-		python3 "$SCRIPT_DIR/tui_matrix.py" "$OUT/tui-actions.jsonl" >"$OUT/tui-actions.md"
-		tm resize-window -t "$W0" -x 220 -y 55 2>/dev/null
-		local total bad
-		total=$(grep -c '^{' "$OUT/tui-actions.jsonl")
-		bad=$(grep -Ec '"state": "(ERROR|DEAD|UNREACHABLE|CHANGED)"' "$OUT/tui-actions.jsonl")
-		if [ "$bad" -eq 0 ] && [ "$total" -gt 0 ]; then
-			record B30-menu-action-walk PASS "$(elapsed "$t")" "$total actions; matrix $OUT/tui-actions.md"
-		else
-			record B30-menu-action-walk FAIL "$(elapsed "$t")" "$bad of $total actions ERROR/DEAD/UNREACHABLE; matrix $OUT/tui-actions.md"
-		fi
-		local id st
-		for id in CTUI-0077 CTUI-0078 CTUI-0081 CTUI-0082; do
-			st=$(grep "\"$id\"" "$OUT/tui-actions.jsonl" | grep -o '"state": "[A-Z]*"' | cut -d'"' -f4)
-			if [ "$st" = FORM ]; then
-				record "B31-budget-$id" PASS 0 "opens typed form"
-			elif [ "$st" = DISABLED ] && grep "\"$id\"" "$OUT/tui-actions.jsonl" | grep -q "no goal yet"; then
-				record "B31-budget-$id" PASS 0 "refused before the form: there is no goal yet"
-			else
-				record "B31-budget-$id" FAIL 0 "state=$st"
-			fi
-		done
-	else
-		record B30-menu-action-walk SKIP 0 "--skip-walk"
-	fi
 
 	# Submit one safe action end to end and verify its durable effect.
 	t=$(now)

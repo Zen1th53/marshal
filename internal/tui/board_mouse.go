@@ -106,9 +106,9 @@ func (w *Workspace) boardMouseWanted() bool {
 
 // handleBoardMouse is a click on the Board. It returns false for anything
 // that is not the Board's: a mouse report with the Board hidden, or with
-// navigation, the diff viewer or the palette over it.
+// the diff viewer or the palette over it.
 func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
-	if event.Type != KeyMouse || !w.boardVisible() || w.navView.IsOpen() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
+	if event.Type != KeyMouse || !w.boardVisible() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
 		return false
 	}
 	// Only a left press acts; releases, other buttons and the wheel are

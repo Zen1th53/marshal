@@ -62,11 +62,6 @@ type Workspace struct {
 	completer  *Completer
 	palette    *CommandPalette
 	diffViewer *DiffViewer
-	// navView is the frozen-IA navigation surface. It owns the screen while
-	// open, so MARSHAL is operable without knowing a single slash command.
-	navView *NavView
-	// navErr is why the navigation view is missing, if it is.
-	navErr error
 
 	// runtime is the canonical mutation authority Control submits through.
 	// It is nil in a store-only workspace, in which case every Control action
@@ -75,10 +70,6 @@ type Workspace struct {
 	// projectIdentity is the canonical project id the plan and execution
 	// services are keyed by.
 	projectIdentity projectid.ID
-	// runtimeReplaced is set only after a stopped-runtime restore has reopened
-	// the canonical runtime. The input loop reattaches its read/mutation
-	// sources after the current confirmation releases NavView's lock.
-	runtimeReplaced bool
 	controlOverride *ControlSource
 	// ultraRequest asks the Community Cloud for an entitlement through the
 	// canonical client. Nil when no Cloud is configured.
@@ -176,7 +167,6 @@ type Workspace struct {
 	repaint               chan struct{}
 	animator              atomic.Pointer[anim.Animator] // set while runRawTerminal owns the screen
 	commandBusy           atomic.Bool
-	navigationOpening     atomic.Bool
 	commandWG             sync.WaitGroup
 	commandCancelMu       sync.Mutex
 	commandCancel         context.CancelFunc
@@ -555,11 +545,6 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	palette := NewCommandPalette(th, paletteActions)
 	diffViewer := NewDiffViewer(th, cwd)
 
-	// The frozen-IA navigation view. If the embedded manifest will not load the
-	// workspace still opens: losing navigation must not cost somebody their
-	// session.
-	navView, navErr := NewNavView(th)
-
 	ws := &Workspace{
 		commandNames: append([]string(nil), compCtx.Commands...),
 		repaint:      make(chan struct{}, 1),
@@ -583,8 +568,6 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		completer:    completer,
 		palette:      palette,
 		diffViewer:   diffViewer,
-		navView:      navView,
-		navErr:       navErr,
 		terminal:     NewTerminal(os.Stdin, os.Stdout),
 		state: UIState{
 			ProjectID:          projectID,
@@ -613,7 +596,6 @@ func (w *Workspace) SetTheme(mode ThemeMode, animation bool) {
 	w.composer.theme = w.theme
 	w.palette.theme = w.theme
 	w.diffViewer.theme = w.theme
-	w.navView.SetTheme(w.theme)
 }
 
 // SetCoordinator sets an explicit coordinator.
@@ -917,7 +899,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	loopCtx, loopCancel := context.WithCancel(ctx)
 	ctx = loopCtx
 	defer func() { loopCancel(); w.Close() }()
-	w.navView.OnRepaint(w.requestRepaint)
 	w.startAnimator()
 	defer w.stopAnimator()
 	w.startFollowers(ctx)
@@ -927,10 +908,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// returned to its own window before the workspace closes.
 	w.startDock(ctx)
 	defer w.endDock()
-	w.navView.mu.Lock()
-	w.navView.asyncActions = true
-	w.navView.commandBusy = &w.commandBusy
-	w.navView.mu.Unlock()
 	w.renderFullView()
 	if w.nativeOnStart != nil {
 		args := *w.nativeOnStart
@@ -1053,10 +1030,6 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 			w.cancelCommand()
 			return false
 		}
-		if w.interruptNavigation() {
-			w.renderFullView()
-			return false
-		}
 		if w.palette.IsOpen() {
 			w.palette.Close()
 			w.interruptArmed = false
@@ -1159,21 +1132,6 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.renderFullView()
 		return false
 	}
-	// The dispatch lives in its own method so a test can drive exactly
-	// the branch this loop takes rather than a copy of it.
-	if w.dispatchNavigationKey(ctx, event) {
-		w.syncMouseMode()
-		w.mu.RLock()
-		exitRequested := w.exitRequested
-		w.mu.RUnlock()
-		if exitRequested {
-			w.clearTerminal()
-			return true
-		}
-		w.renderFullView()
-		return false
-	}
-
 	// Handle Command Palette (Ctrl+P)
 	if event.Type == KeyCtrlP {
 		w.closeCompletion()
@@ -1417,14 +1375,14 @@ func (w *Workspace) handleShortcut(ctx context.Context, event KeyEvent) bool {
 		case 'm':
 			// The native chat takes the keyboard in its composer; Esc
 			// gives it back.
-			if w.nativeChatShown() && !w.navView.IsOpen() && !w.inboxView.Confirming() {
+			if w.nativeChatShown() && !w.inboxView.Confirming() {
 				w.focusNativeChat(true)
 				return true
 			}
 			// The chat is always docked beside the Board; m moves the
 			// keyboard there and F11 brings it back. With no Board on
 			// screen m is ordinary composer input.
-			if !w.boardVisible() || w.navView.IsOpen() || w.inboxView.Confirming() || w.inboxView.Inspecting() || w.boardUI.inspect != "" {
+			if !w.boardVisible() || w.inboxView.Confirming() || w.inboxView.Inspecting() || w.boardUI.inspect != "" {
 				return false
 			}
 			if err := w.focusMarshalChat(ctx); err != nil {
@@ -1436,7 +1394,7 @@ func (w *Workspace) handleShortcut(ctx context.Context, event KeyEvent) bool {
 			return true
 		case '?':
 			// Over the Board, ? opens the keys; elsewhere the overview.
-			if w.boardVisible() && !w.navView.IsOpen() {
+			if w.boardVisible() {
 				w.openBoardHelp()
 				w.renderFullView()
 				return true
@@ -1484,13 +1442,6 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 		return
 	}
 	if w.uiEvents != nil && !w.directTerminalCommand(cmd) {
-		if w.navView != nil {
-			phase := w.navView.Confirmation().Phase()
-			if phase == PhasePreparing || phase == PhaseSubmitting {
-				w.RecordActivity("A Control operation is still running.")
-				return
-			}
-		}
 		if !w.commandBusy.CompareAndSwap(false, true) {
 			w.RecordActivity("A command is still running; Ctrl+C cancels it.")
 			return
@@ -1596,7 +1547,7 @@ func (w *Workspace) syncMouseMode() {
 	if w.terminal == nil || !w.terminal.IsTerminal() {
 		return
 	}
-	want := w.navView != nil && w.navView.IsOpen() || w.boardMouseWanted()
+	want := w.boardMouseWanted()
 	if want == w.mouseOn {
 		return
 	}
@@ -1841,46 +1792,6 @@ func (w *Workspace) closeCompletion() {
 // appended to the terminal: the screen writes only rows that changed and
 // addresses each one absolutely.
 
-// dispatchNavigationKey handles the navigation view's share of the key stream.
-//
-// It reports whether the key was consumed, so the caller repaints and moves on.
-// Extracting it means the interactive loop and the tests exercise the same
-// branch: a raw-terminal loop needs a real TTY and cannot be driven directly.
-func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) bool {
-	// While navigation is open it owns every key, so arrow keys and Enter
-	// drive the frozen IA rather than the composer.
-	if w.navView.IsOpen() {
-		// '/' always starts a command, even from the menu: typed after it,
-		// "/marshal retry …" went into the menu's search instead. The
-		// menu's own search stays on Ctrl+K, and text the menu is editing
-		// (its search, filter, a form) still takes '/'.
-		if event.Type == KeyRune && event.Rune == '/' && !w.navView.TakesText() {
-			w.navView.Close()
-			w.composer.SetText("/")
-			w.composer.cursor = 1
-			w.refreshCompletion()
-			w.renderFullView()
-			return true
-		}
-		w.navView.HandleKey(ctx, event)
-		w.mu.Lock()
-		replaced := w.runtimeReplaced
-		w.runtimeReplaced = false
-		w.mu.Unlock()
-		if replaced {
-			// submitConfirmation holds NavView's lock while the destructive
-			// operation runs. Rebinding here, after HandleKey returns, avoids a
-			// lock inversion and guarantees every section reads the reopened
-			// canonical runtime rather than its closed predecessor.
-			w.openNavigation(ctx)
-			w.navView.refreshInBackground(ctx)
-		}
-		return true
-	}
-
-	return false
-}
-
 // setOutput records a workspace response for the next frame, the same way a
 // command result is recorded, so it cannot scroll the screen or leave chrome
 // behind in scrollback.
@@ -1892,19 +1803,6 @@ func (w *Workspace) setOutput(text string, isError bool) {
 	w.answer, w.answerIsError = text, isError
 	w.mu.Unlock()
 	w.renderFullView()
-}
-
-// interruptNavigation closes the navigation view for Ctrl+C.
-//
-// Ctrl+C unwinds the innermost context first, and an open navigation view is
-// the innermost thing there is. It reports whether it consumed the interrupt.
-func (w *Workspace) interruptNavigation() bool {
-	if !w.navView.IsOpen() {
-		return false
-	}
-	w.navView.Close()
-	w.interruptArmed = false
-	return true
 }
 
 // AttachRuntime wires the canonical mutation authority into the workspace.
@@ -2239,7 +2137,6 @@ func (w *Workspace) controlSource() *ControlSource {
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)
 				reopened.SetPermissionSink(w.queuePermission)
 				w.store = reopened.Store()
-				w.runtimeReplaced = true
 			},
 		},
 		SessionID: session,
@@ -2247,112 +2144,6 @@ func (w *Workspace) controlSource() *ControlSource {
 		// The approver is the session acting. The backend records who decided;
 		// nothing here judges whether that is self-approval.
 		ApproverID: session,
-	}
-}
-
-// openNavigation enters the frozen-IA navigation view.
-//
-// The canonical readers are attached at open time rather than at construction
-// because the Cloud gate arrives after the workspace is built, and a view that
-// captured a nil gate at startup would report Standard forever.
-func (w *Workspace) openNavigation(ctx context.Context) {
-	if w.navView == nil {
-		return
-	}
-	if w.uiEvents != nil {
-		w.navView.mu.Lock()
-		w.navView.open = true
-		w.navView.status, w.navView.statusSeen = "reading canonical state…", false
-		w.navView.mu.Unlock()
-		if !w.navigationOpening.CompareAndSwap(false, true) {
-			return
-		}
-		w.workers.start(ctx, &w.commandWG, func(ctx context.Context) {
-			defer w.navigationOpening.Store(false)
-			composeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-			w.attachNavigation(composeCtx)
-		})
-		return
-	}
-	w.attachNavigation(ctx)
-}
-
-func (w *Workspace) attachNavigation(ctx context.Context) {
-	if w.navView == nil {
-		return
-	}
-	w.mu.RLock()
-	source := &StatusSource{
-		Runtime:   w.runtimeReader(),
-		Resources: defaultResourceReader{},
-		// The Cloud handles are read afresh on every access rather than
-		// captured here: the handshake finishes after the workspace is built,
-		// and a reader holding the nil gate it saw at open time would report
-		// Standard for the rest of the session.
-		Cloud: &workspaceCloudReader{
-			live: func() (*cloud.Gate, bool, string, string, error) {
-				w.mu.RLock()
-				defer w.mu.RUnlock()
-				return w.ultra, w.ultraClient != nil,
-					w.ultraState.InstallationID, w.ultraSession, w.ultraErr
-			},
-		},
-	}
-	w.mu.RUnlock()
-	w.attachLifecycleSource(source)
-	control := w.controlSource()
-	var providers ProviderReader
-	if control != nil {
-		if authority, ok := control.Authority.(*runtimeControlAuthority); ok {
-			providers = authority
-			// The runtime control authority adapts the persisted entitlement
-			// request state (Status CTUI-0157 / Models CTUI-0557) to F's
-			// presentation DTO, so Status and Models report the same attempt.
-			source.RequestReader = authority
-		}
-	}
-	w.navView.AttachSource(source, providers)
-	// Control is attached at open time for the same reason the Cloud reader is
-	// read live: the runtime may arrive after the workspace was built.
-	w.navView.AttachControl(control)
-	// Work reads through the same canonical handles as Control, so the two
-	// sections cannot disagree about which project and session are current.
-	if authority, ok := control.Authority.(*runtimeControlAuthority); ok && authority != nil {
-		w.navView.AttachWork(&WorkSource{
-			Reader:    authority,
-			SessionID: control.SessionID,
-			ProjectID: control.ProjectID,
-		})
-		w.navView.AttachVerify(&VerifySource{
-			Reader:    authority,
-			SessionID: control.SessionID,
-		})
-		w.navView.AttachMemory(&MemoryFeed{
-			Reader:    authority,
-			SessionID: control.SessionID,
-			ProjectID: control.ProjectID,
-		})
-		w.navView.AttachModels(&ModelsFeed{
-			Reader:        authority,
-			ProjectID:     control.ProjectID,
-			RequestReader: authority,
-		})
-		w.navView.AttachSecurity(&SecurityFeed{
-			Reader:    authority,
-			ProjectID: control.ProjectID,
-		})
-		w.navView.AttachSystem(&SystemFeed{Reader: authority})
-	}
-	// A background refresh must reach the screen. Without this the frame sits
-	// on "refreshing…" until the operator presses a key.
-	w.navView.OnRepaint(w.requestRepaint)
-	if w.uiEvents != nil {
-		// This already runs in the owned composition worker. Finish the read
-		// before its context is cancelled, preserving a close made by the user.
-		w.navView.Refresh(ctx)
-	} else {
-		w.navView.Open(ctx)
 	}
 }
 
@@ -2390,15 +2181,6 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 	classic := w.boardClassic
 	home := w.homeBoard
 	w.mu.RUnlock()
-
-	// The navigation view owns the screen while open, as the diff viewer does.
-	if w.navView.IsOpen() {
-		lines := w.navView.Render(cols, rows-1)
-		for len(lines) < rows {
-			lines = append(lines, "")
-		}
-		return lines, rows, 1
-	}
 
 	// The diff viewer and palette own the screen while open.
 	if w.diffViewer.IsOpen() {

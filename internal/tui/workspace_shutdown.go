@@ -106,14 +106,7 @@ func (w *Workspace) Close() {
 	w.closeLocalServers()
 	w.workers.stop()
 	w.marshalStop()
-	if w.navView != nil {
-		w.navView.workers.stop()
-	}
 	w.cancelCommand()
 	w.cancelGovernedDispatches()
 	w.workers.wg.Wait()
-	if w.navView != nil {
-		w.navView.workers.wg.Wait()
-		w.navView.Wait()
-	}
 }

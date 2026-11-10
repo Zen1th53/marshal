@@ -96,9 +96,6 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 			"owns the repair, and app.Runtime exposes no application-layer repair " +
 			"boundary for a TUI action to call",
 	}
-	// CTUI-0219 relaunches the terminal in the other session
-	// (session_relaunch.go); it never rebinds this workspace.
-	b["CTUI-0219"] = openSessionBinding(s)
 
 	// --- Work: Process 03 Goal ---
 
@@ -441,6 +438,6 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 		b[id] = binding
 	}
 
-	configureTaskControlBindings(s, b)
+	configureBuildBindings(s, b)
 	return b
 }

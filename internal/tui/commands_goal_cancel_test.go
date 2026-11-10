@@ -29,9 +29,6 @@ func TestGoalCancelCommandAsksThenConfirms(t *testing.T) {
 	if !strings.Contains(out, "Type /goal cancel confirm") {
 		t.Fatalf("ask did not prompt for confirm: %q", out)
 	}
-	if ws.navView.IsOpen() {
-		t.Fatal("navigation opened on /goal cancel")
-	}
 
 	out, err = ws.ExecuteCommand(ctx, "/goal cancel confirm")
 	if err != nil {
@@ -53,9 +50,6 @@ func TestGoalCancelCommandAsksThenConfirms(t *testing.T) {
 	}
 	if !strings.HasPrefix(out, "Nothing to confirm.") {
 		t.Fatalf("second confirm answer = %q", out)
-	}
-	if ws.navView.IsOpen() {
-		t.Fatal("navigation opened during /goal cancel")
 	}
 }
 

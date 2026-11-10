@@ -510,9 +510,6 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		w.RecordActivity("Native Marshal chat unavailable, using the tmux dock: " + err.Error())
 	}
 	if w.isTmuxActive() {
-		if w.navView != nil {
-			w.navView.Close()
-		}
 		isChat := len(marshalBrief) > 0
 		if isChat && watch != nil {
 			saved := loadChatBinding(root)
@@ -570,9 +567,6 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 
-	if w.navView != nil {
-		w.navView.Close()
-	}
 	resume := w.SuspendTerminal()
 	defer resume()
 	// The Marshal model takes a moment to start under its briefing. Show the

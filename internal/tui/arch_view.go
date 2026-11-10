@@ -518,3 +518,33 @@ func archPage(o store.ArchitectureOverview, edition string, rules []string, cur,
 	b.WriteString(`</ul><p class="dim">written ` + e(now.Format("2006-01-02 15:04:05")) + " · read-only</p></body></html>\n")
 	return []byte(b.String())
 }
+
+// wrap breaks text to width, so a reason is never truncated away. The contract
+// requires the explanation to remain readable at any width.
+func wrap(s string, width int) []string {
+	if width <= 0 {
+		return nil
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	var out []string
+	line := ""
+	for _, w := range words {
+		candidate := w
+		if line != "" {
+			candidate = line + " " + w
+		}
+		if len([]rune(candidate)) > width && line != "" {
+			out = append(out, line)
+			line = w
+			continue
+		}
+		line = candidate
+	}
+	if line != "" {
+		out = append(out, line)
+	}
+	return out
+}
