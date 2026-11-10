@@ -30,6 +30,7 @@ type marshalProposal struct {
 	sourceSession, revision, digest, instructionRef, criteria             string
 	action, key, value, provider, path, id, reason, language, earlierWork string
 	taskID, targetWorker, model                                           string
+	question, choices                                                     string
 	freshSession                                                          bool
 }
 
@@ -85,11 +86,20 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	}
 	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
 	p.revision, p.digest, p.instructionRef, p.criteria = fields["revision"], fields["digest"], fields["instruction_ref"], fields["criteria"]
+	p.question, p.choices = fields["question"], fields["choices"]
 	var keys []string
 	switch p.action {
 	case "intake":
 		keys = []string{"action", "language", "earlier_work"}
 		if strings.TrimSpace(p.language) == "" || len(p.language) > 100 || (p.earlierWork != "" && p.earlierWork != "yes" && p.earlierWork != "no") {
+			return p, invalid
+		}
+	case "ask":
+		keys = []string{"action", "question", "choices"}
+		if strings.TrimSpace(p.question) == "" || len(p.question) > 300 {
+			return p, invalid
+		}
+		if _, err := parseAskChoices(p.choices); err != nil {
 			return p, invalid
 		}
 	case "setting":
@@ -902,6 +912,8 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 		}
 	case "accept-architecture":
 		w.applyMarshalArchitectureAcceptance(p)
+	case "ask":
+		w.openAsk(p)
 	case "intake":
 		if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
 			w.permissions.mu.Lock()

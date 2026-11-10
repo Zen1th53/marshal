@@ -210,6 +210,12 @@ type Workspace struct {
 	// gateContractSource replaces the store's pending contract in tests.
 	gates              gateState
 	gateContractSource gateSource
+	// ask is the one open question the Marshal asked the owner, shown as a
+	// card in the Board's inbox (board_ask.go).
+	ask struct {
+		mu   sync.Mutex
+		card *askCard
+	}
 	// guard is the plan-only guard's baseline and alert (board_guard.go);
 	// guardSource replaces git status and guardTell the delivery to the
 	// Marshal chat in tests.
