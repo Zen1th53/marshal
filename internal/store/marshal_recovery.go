@@ -157,11 +157,11 @@ func (s *Store) PauseIncompatibleMarshalRuns(ctx context.Context, project string
 			continue
 		}
 		run := record.Value
-		if run.Pause != nil && run.Pause.Reason == c.Reason {
+		if run.Pause != nil && (run.Pause.Detail == c.Reason || run.Pause.Reason == c.Reason) {
 			continue
 		}
 		run.State = marshal.AwaitingUser
-		run.Pause = &marshal.Pause{Reason: c.Reason, Resolutions: []string{c.RecoveryAction}}
+		run.Pause = &marshal.Pause{Reason: c.Reason, Resolutions: []string{c.RecoveryAction}, Code: marshal.CodeRuntimeIncompatible, Action: marshal.PauseResume, Detail: c.Reason}
 		if err := s.SaveMarshalState(ctx, project, runID, run, record.Revision, nil, nil, 0); err != nil {
 			return err
 		}

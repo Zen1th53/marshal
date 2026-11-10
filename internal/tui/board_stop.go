@@ -24,6 +24,7 @@ type runStop struct {
 	// none.
 	next     string
 	commands []string
+	code     string
 }
 
 // stopCommandRE finds the operator commands a pause resolution names.
@@ -37,26 +38,41 @@ const defaultStopNext = "see the escalated task, then /marshal amend or /marshal
 func (v boardVisual) stopNotice() (runStop, bool) {
 	run := v.board.Run
 	if run.State == marshal.AwaitingUser {
-		s := runStop{waiting: true, reason: firstLine(run.Paused), next: firstLine(strings.Join(run.Next, "; "))}
+		s := runStop{waiting: true, reason: firstLine(run.Paused), next: firstLine(strings.Join(run.Next, "; ")), code: run.PauseCode}
 		if s.reason == "" {
 			s.reason = "the run needs your decision"
 		}
 		if s.next == "" {
 			s.next = defaultStopNext
 		}
-		s.commands = stopCommands(s.next)
+		if run.PauseAction != "" {
+			s.commands = pauseCommands(run.PauseAction, run.PauseTask)
+		} else {
+			s.commands = stopCommands(s.next) // paused by an older build
+		}
 		return s, true
 	}
 	note := strings.TrimSpace(v.note)
-	if rest, ok := strings.CutPrefix(note, "stopped: "); ok && run.State != marshal.Closed {
-		s := runStop{reason: firstLine(rest), next: "fix the cause above, then /marshal resume"}
+	if v.stopped && run.State != marshal.Closed {
+		reason := strings.TrimPrefix(note, "stopped: ")
+		s := runStop{reason: firstLine(reason), next: "fix the cause above, then /marshal resume", commands: []string{"/marshal resume"}}
 		if s.reason == "" {
 			s.reason = "the run's execution ended"
 		}
-		s.commands = stopCommands(s.next)
 		return s, true
 	}
 	return runStop{}, false
+}
+
+// pauseCommands is what Enter runs for a pause, from its action.
+func pauseCommands(a marshal.PauseAction, task string) []string {
+	switch a {
+	case marshal.PauseRetryTask:
+		return []string{"/marshal retry " + task, "/marshal resume"}
+	case marshal.PauseUsePlan:
+		return []string{"/marshal use-plan"}
+	}
+	return []string{"/marshal resume"}
 }
 
 func firstLine(s string) string {

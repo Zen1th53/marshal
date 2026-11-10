@@ -6,6 +6,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // A run waiting for the operator says so in the header, gives the reason
@@ -47,10 +48,48 @@ func TestBoardRunStopNotice(t *testing.T) {
 // A stopped execution (the panel's "stopped: …" note) is a stop too.
 func TestBoardRunStoppedNotice(t *testing.T) {
 	w, _ := boardWorkspace(t)
-	w.setMarshalPanel(newMarshalPanel("R-7f3a", "codex", fakeRun(), "stopped: worker codex exited 2"))
+	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), "stopped: worker codex exited 2")
+	p.Stopped = true
+	w.setMarshalPanel(p)
 	got := plainFrame(w, 170, 45)
 	if !strings.Contains(got, "STOPPED") || !strings.Contains(got, "run stopped · type /marshal resume · worker codex exited 2") {
 		t.Fatalf("stopped notice:\n%s", got)
+	}
+}
+
+func TestStopEnterUsesStructuredAction(t *testing.T) {
+	b := boardmodel.Board{Run: boardmodel.RunHead{State: marshal.AwaitingUser, Next: []string{"Press Enter to try again."}, PauseAction: marshal.PauseRetryTask, PauseTask: "T-1"}}
+	stop, ok := (boardVisual{board: b}).stopNotice()
+	if !ok || strings.Join(stop.commands, ",") != "/marshal retry T-1,/marshal resume" {
+		t.Fatalf("structured action commands: %+v, %v", stop, ok)
+	}
+
+	b.Run.PauseAction = ""
+	b.Run.Next = []string{"resolve …, then /marshal retry T-1 and /marshal resume"}
+	stop, ok = (boardVisual{board: b}).stopNotice()
+	if !ok || strings.Join(stop.commands, ",") != "/marshal retry,/marshal resume" {
+		t.Fatalf("legacy pause commands: %+v, %v", stop, ok)
+	}
+}
+
+func TestStoppedRunDetectedWithoutNotePrefix(t *testing.T) {
+	b := boardmodel.Board{Run: boardmodel.RunHead{State: marshal.Verifying}}
+	if _, ok := (boardVisual{board: b, stopped: true, note: "anything"}).stopNotice(); !ok {
+		t.Fatal("stopped execution was not detected without the note prefix")
+	}
+	if _, ok := (boardVisual{board: b, note: "stopped: x"}).stopNotice(); ok {
+		t.Fatal("note prefix alone marked execution stopped")
+	}
+}
+
+// A panel copied with a new note is no longer the stopped execution's panel.
+func TestPanelWithNewNoteIsNotStopped(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), "stopped: worker codex exited 2")
+	p.Stopped = true
+	w.setMarshalPanel(p)
+	if w.marshalPanelWithNote("R-7f3a", "codex", "amendment failed: x").Stopped {
+		t.Fatal("a later note kept the stopped flag")
 	}
 }
 

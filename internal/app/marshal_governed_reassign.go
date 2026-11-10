@@ -77,7 +77,8 @@ func (s *MarshalService) escalateGovernedHarnessMismatch(ctx context.Context, ru
 	run.Operation = nil
 	run.Tasks[i].State = marshal.Escalated
 	run.Tasks[i].EscalationReason = governedHarnessEscalation
-	pauseMarshal(&run, governedHarnessEscalation, "reassign the task to its plan worker or amend the plan", "")
+	run.Tasks[i].EscalationCode = escalationCode(marshal.CodeGovernedHarness, governedHarnessEscalation)
+	pauseMarshal(&run, marshal.Pause{Reason: governedHarnessEscalation, Resolutions: []string{"reassign the task to its plan worker or amend the plan"}, Code: marshal.CodeGovernedHarness, Action: marshal.PauseResume})
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}

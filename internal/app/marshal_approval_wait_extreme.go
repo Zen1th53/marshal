@@ -222,7 +222,7 @@ func (s *MarshalService) pausePrivateProcess05Approval(ctx context.Context, runI
 	// approval does not hold the others: Execute keeps dispatching and
 	// reviewing them, and pauses only when nothing but waits remain.
 	if pending && !parallelProcess05Waits(s.Gate, run) {
-		pauseMarshal(&run, wait.Error(), process05WaitResolution, marshal.Dispatching)
+		pauseMarshal(&run, marshal.Pause{Reason: wait.Error(), Resolutions: []string{process05WaitResolution}, ResumeState: marshal.Dispatching, Code: marshal.CodeApprovalWait, Action: marshal.PauseResume})
 	}
 	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 }
@@ -380,7 +380,7 @@ func (s *MarshalService) pausePrivateProcess05Waits(ctx context.Context, runID s
 	if len(reasons) == 0 {
 		return false, nil
 	}
-	pauseMarshal(&run, strings.Join(reasons, "; "), process05WaitResolution, marshal.Dispatching)
+	pauseMarshal(&run, marshal.Pause{Reason: strings.Join(reasons, "; "), Resolutions: []string{process05WaitResolution}, ResumeState: marshal.Dispatching, Code: marshal.CodeApprovalWait, Action: marshal.PauseResume})
 	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 }
 

@@ -54,7 +54,8 @@ func (s *MarshalService) escalateTaskLaneAdmission(ctx context.Context, runID st
 	run.Operation = nil
 	run.Tasks[i].State = marshal.Escalated
 	run.Tasks[i].EscalationReason = reason
-	pauseMarshal(&run, reason, "resolve the lane refusal, then /marshal retry "+taskID+" and /marshal resume", "")
+	run.Tasks[i].EscalationCode = escalationCode(marshal.CodeLaneAdmission, reason)
+	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"resolve the lane refusal, then /marshal retry " + taskID + " and /marshal resume"}, Code: marshal.CodeLaneAdmission, Action: marshal.PauseRetryTask, TaskID: taskID})
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}

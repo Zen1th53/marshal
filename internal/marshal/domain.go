@@ -248,6 +248,7 @@ type Task struct {
 	Instructions        string `json:",omitempty"`
 	ExpectedOutput      string `json:",omitempty"`
 	EscalationReason    string `json:",omitempty"`
+	EscalationCode      string `json:",omitempty"`
 	FreshSessionRetries int    `json:",omitempty"`
 	// Exact pending Process 05 continuation; private builds validate its
 	// canonical approval receipt before returning this task to dispatch.
@@ -268,7 +269,54 @@ type Pause struct {
 	Reason      string
 	Resolutions []string
 	ResumeState RunState
+	Code        string      `json:",omitempty"`
+	Action      PauseAction `json:",omitempty"`
+	TaskID      string      `json:",omitempty"` // the plan task id Action names
+	Detail      string      `json:",omitempty"` // technical cause for the log and inspector
 }
+
+// PauseAction is what moves a paused run on. The Board's Enter key and the
+// Marshal read it; people read Reason and Resolutions.
+type PauseAction string
+
+const (
+	PauseResume    PauseAction = "resume"     // /marshal resume
+	PauseRetryTask PauseAction = "retry_task" // /marshal retry <TaskID>, then /marshal resume
+	PauseUsePlan   PauseAction = "use_plan"   // a new approved plan, then /marshal use-plan
+)
+
+// Pause and escalation codes name the cause for machines. Text may change; codes may not.
+const (
+	CodeLaneAdmission         = "lane_admission"
+	CodeBudget                = "budget"
+	CodeFailedAttemptRecovery = "failed_attempt_recovery"
+	CodeSecurity              = "security"
+	CodeReworkLimit           = "rework_limit"
+	CodeTaskCancelled         = "task_cancelled"
+	CodeVerificationFailed    = "verification_failed"
+	CodeVerificationStopped   = "verification_stopped"
+	CodeEscalated             = "escalated"
+	CodeRunStalled            = "run_stalled"
+	CodeNoReassignWorker      = "no_reassign_worker"
+	CodeWorkerNotGoverned     = "worker_not_governed"
+	CodeInterruptedWorktree   = "interrupted_worktree"
+	CodeInfraRetry            = "infra_retry"
+	CodeProviderLimit         = "provider_limit"
+	CodeProviderFailover      = "provider_failover"
+	CodeProviderQuota         = "provider_quota"
+	CodeFailoverInterrupted   = "provider_failover_interrupted"
+	CodeGovernedHarness       = "governed_harness"
+	CodeOperatorIntervention  = "operator_intervention"
+	CodeInterruptedOperation  = "interrupted_operation"
+	CodeOperationRecovery     = "operation_recovery"
+	CodeApprovalWait          = "approval_wait"
+	CodeRuntimeIncompatible   = "runtime_incompatible"
+	CodeGovernedRework        = "governed_rework"
+	CodeQuarantine            = "quarantine"
+	CodeSuspension            = "suspension"
+	CodeHoneypot              = "honeypot"
+	CodeGoverningFilesChanged = "governing_files_changed"
+)
 
 // LifecycleOperation is written before an external effect. Its completion
 // snapshot and audit event commit in the same transaction.

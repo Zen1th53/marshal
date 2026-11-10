@@ -77,6 +77,10 @@ type RunHead struct {
 	// run does not wait or recorded no reason.
 	Paused string
 	Next   []string
+	// PauseAction, PauseTask and PauseCode are the pause's machine fields.
+	PauseAction marshal.PauseAction
+	PauseTask   string
+	PauseCode   string
 }
 
 // TaskState is the operator's word for where a task is. It folds the
@@ -441,6 +445,7 @@ func Project(s Snapshot, evs []events.Event) Board {
 	b := Board{Run: RunHead{ID: s.RunID, State: s.Run.State, Total: len(s.Run.Tasks), TokenLimit: s.Run.Budget.Tokens.Plan, LaneCap: laneCap(s.Run.Settings)}, PlanID: s.Run.PlanID, Budget: s.Run.Budget}
 	if s.Run.State == marshal.AwaitingUser && s.Run.Pause != nil {
 		b.Run.Paused, b.Run.Next = s.Run.Pause.Reason, slices.Clone(s.Run.Pause.Resolutions)
+		b.Run.PauseAction, b.Run.PauseTask, b.Run.PauseCode = s.Run.Pause.Action, s.Run.Pause.TaskID, s.Run.Pause.Code
 	}
 	for _, t := range s.Run.Tasks {
 		row := NewTaskRow(t, s.Run.Settings)

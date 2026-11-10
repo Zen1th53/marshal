@@ -273,12 +273,12 @@ func pauseReturnedProcess05Task(run *marshal.Run, task marshal.Task) {
 		return
 	}
 	if run.Process05Parallel {
-		pauseMarshal(run, "governed task "+task.PlanTaskID+" reached its rework limit",
-			"review the retained return reasons; resolve the task or create and approve a new plan, then use /marshal use-plan", "")
+		pauseMarshal(run, marshal.Pause{Reason: "governed task " + task.PlanTaskID + " reached its rework limit",
+			Resolutions: []string{"review the retained return reasons; resolve the task or create and approve a new plan, then use /marshal use-plan"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
 		return
 	}
-	pauseMarshal(run, "returned governed task "+task.PlanTaskID+" requires a new approved Process 04 plan",
-		"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization", "")
+	pauseMarshal(run, marshal.Pause{Reason: "returned governed task " + task.PlanTaskID + " requires a new approved Process 04 plan",
+		Resolutions: []string{"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
 }
 
 // reworkInTaskLane reports whether a returned task reruns in a fresh task lane

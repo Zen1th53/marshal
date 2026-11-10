@@ -22,17 +22,17 @@ func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID str
 	if run.State != marshal.Verifying {
 		return cause
 	}
-	pauseMarshal(&run, "verification stopped: "+cause.Error(),
-		"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan", marshal.Verifying)
+	pauseMarshal(&run, marshal.Pause{Reason: "verification stopped: " + cause.Error(),
+		Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume})
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return errors.Join(cause, err)
 	}
 	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": run.Pause.Reason, "role": "verification", "resolutions": run.Pause.Resolutions}))
 }
 
-func pauseMarshal(run *marshal.Run, reason, resolution string, resume marshal.RunState) {
+func pauseMarshal(run *marshal.Run, p marshal.Pause) {
 	run.State = marshal.AwaitingUser
-	run.Pause = &marshal.Pause{Reason: reason, Resolutions: []string{resolution}, ResumeState: resume}
+	run.Pause = &p
 }
 
 // Cancellation leaves approved criteria unresolved, including on runs written
@@ -41,7 +41,7 @@ func (s *MarshalService) requireUncancelledScope(ctx context.Context, runID stri
 	for _, task := range run.Tasks {
 		if task.State == marshal.Cancelled {
 			reason := "task " + task.PlanTaskID + " cancelled; approved plan scope requires review"
-			pauseMarshal(&run, reason, "create and approve an amended plan that removes or replaces the cancelled task and updates its dependencies, then /marshal use-plan", "")
+			pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"create and approve an amended plan that removes or replaces the cancelled task and updates its dependencies, then /marshal use-plan"}, Code: marshal.CodeTaskCancelled, Action: marshal.PauseUsePlan})
 			return errors.Join(errors.New(reason), s.save(context.WithoutCancel(ctx), runID, run, rev))
 		}
 	}
@@ -122,5 +122,5 @@ func pauseMarshalBudget(run *marshal.Run, result marshal.BudgetResult) {
 	if len(unknown) > 0 {
 		reasons = append(reasons, "configured budget cannot be evaluated; usage unknown: "+strings.Join(unknown, ", "))
 	}
-	pauseMarshal(run, strings.Join(reasons, "; "), "start a new run with updated budget settings; settings do not change this run", "")
+	pauseMarshal(run, marshal.Pause{Reason: strings.Join(reasons, "; "), Resolutions: []string{"start a new run with updated budget settings; settings do not change this run"}, Code: marshal.CodeBudget, Action: marshal.PauseResume})
 }

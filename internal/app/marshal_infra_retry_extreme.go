@@ -99,13 +99,15 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	if recoveryErr != nil {
 		t.State = marshal.Escalated
 		t.EscalationReason = "failed attempt recovery: " + recoveryErr.Error()
-		pauseMarshal(&run, t.EscalationReason, "inspect and preserve the retained worktree; resolve its identity or dirty changes, then /marshal retry "+t.PlanTaskID+" and /marshal resume", "")
+		t.EscalationCode = escalationCode(marshal.CodeFailedAttemptRecovery, t.EscalationReason)
+		pauseMarshal(&run, marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{"inspect and preserve the retained worktree; resolve its identity or dirty changes, then /marshal retry " + t.PlanTaskID + " and /marshal resume"}, Code: marshal.CodeFailedAttemptRecovery, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
 		data["reason"] = t.EscalationReason
 		kindEvent = events.EventTypeMarshalEscalated
 	} else if t.InfraRetries > infraRetryLimit {
 		t.State = marshal.Escalated
 		t.EscalationReason = fmt.Sprintf("%s: %d attempts ended without a hand-in; last on %s (%s): %s", infraRetryEscalation, t.InfraRetries, t.Worker, kind, reason)
-		pauseMarshal(&run, t.EscalationReason, "resolve the provider or tool failure, then /marshal retry "+t.PlanTaskID+" and /marshal resume", "")
+		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
+		pauseMarshal(&run, marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{"resolve the provider or tool failure, then /marshal retry " + t.PlanTaskID + " and /marshal resume"}, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
 		data["reason"] = t.EscalationReason
 		kindEvent = events.EventTypeMarshalEscalated
 	} else {

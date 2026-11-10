@@ -358,7 +358,7 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 	}
 
 	// 1. Escalate task "a" with rework limit reason
-	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+	if err := s.Escalate(ctx, "run", "a", marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -372,7 +372,7 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 	}
 
 	// 3. Reassign task "a" from escalated state
-	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+	if err := s.Escalate(ctx, "run", "a", marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Reassign(ctx, "run", "a", "third"); err != nil {
@@ -384,7 +384,7 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 	}
 
 	// 4. Cancel task "a" from escalated state
-	if err := s.Escalate(ctx, "run", "a", "no worker available"); err != nil {
+	if err := s.Escalate(ctx, "run", "a", marshal.CodeEscalated, "no worker available"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CancelTask(ctx, "run", "a"); err != nil {
@@ -399,7 +399,7 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 		t.Fatalf("cancelled scope must await review: %+v", run)
 	}
 	// Cancelling every task still requires reviewed scope; it is not success.
-	if err := s.Escalate(ctx, "run", "b", "not needed"); err != nil {
+	if err := s.Escalate(ctx, "run", "b", marshal.CodeEscalated, "not needed"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CancelTask(ctx, "run", "b"); err != nil {
@@ -419,7 +419,7 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, reason := range []string{"plan budget exceeded", "security: honeypot touched", "quarantine active", "suspension enforced"} {
-		if err := sPerm.Escalate(ctx, "run-perm", "a", reason); err != nil {
+		if err := sPerm.Escalate(ctx, "run-perm", "a", marshal.CodeEscalated, reason); err != nil {
 			t.Fatal(err)
 		}
 		if err := sPerm.RetryTask(ctx, "run-perm", "a", false); err == nil {
@@ -454,7 +454,7 @@ func TestReassignDistinctErrorReasons(t *testing.T) {
 	}
 
 	// Escalate task 'a'
-	if err := s.Escalate(ctx, "run-err", "a", "temporary worker failure"); err != nil {
+	if err := s.Escalate(ctx, "run-err", "a", marshal.CodeEscalated, "temporary worker failure"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -490,7 +490,7 @@ func TestSingleProviderFreshSessionRetryBounded(t *testing.T) {
 	if _, err := s.Approve(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+	if err := s.Escalate(ctx, "run", "a", marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -509,7 +509,7 @@ func TestSingleProviderFreshSessionRetryBounded(t *testing.T) {
 	}
 
 	// Fresh session retry 2 succeeds
-	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+	if err := s.Escalate(ctx, "run", "a", marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RetryTask(ctx, "run", "a", true); err != nil {
@@ -521,7 +521,7 @@ func TestSingleProviderFreshSessionRetryBounded(t *testing.T) {
 	}
 
 	// Fresh session retry 3 fails (bound reached)
-	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+	if err := s.Escalate(ctx, "run", "a", marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 	err = s.RetryTask(ctx, "run", "a", true)
@@ -566,7 +566,7 @@ func TestReturnedTaskRetryPreservesReworkAndEscalatedRetry(t *testing.T) {
 	if err != nil || run.Tasks[0].State != marshal.Returned || run.Tasks[0].FreshSessionRetries != 1 || taskReturns(run.Tasks[0]) != 1 {
 		t.Fatalf("returned retry lost its next attempt: %v %+v", err, run.Tasks[0])
 	}
-	if err := s.Escalate(ctx, "retry-returned", "a", "worker rework limit reached"); err != nil {
+	if err := s.Escalate(ctx, "retry-returned", "a", marshal.CodeEscalated, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RetryTask(ctx, "retry-returned", "a", true); err != nil {
