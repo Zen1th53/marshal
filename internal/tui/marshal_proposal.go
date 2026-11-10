@@ -931,7 +931,11 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 			w.permissions.mu.Unlock()
 			return
 		}
-		w.RecordActivity(fmt.Sprintf("%s: intake updated (language %s, earlier work %s)", p.requester(), p.language, p.earlierWork))
+		note := fmt.Sprintf("%s: intake updated (language %s", p.requester(), p.language)
+		if p.earlierWork != "" {
+			note += ", earlier work " + p.earlierWork
+		}
+		w.RecordActivity(note + ")")
 		if w.store != nil {
 			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 		}

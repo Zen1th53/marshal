@@ -13491,8 +13491,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "1726c9123b8c0ee795ccc58bfce21b269735b6b00465bd1d154cd307c549eb87",
-      "bytes": 34436
+      "sha256": "9f3a18fadb3d57f8da3bf1fa33fe564926910c3d685b4ad1589b8664c15da6ab",
+      "bytes": 34500
     },
     {
       "path": "internal/tui/marshal_proposal_default_test.go",
