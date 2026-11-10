@@ -34,7 +34,7 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 			listed[f] = true
 		}
 	}
-	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "r", "i", "t", "l", "j", "k", "F11", "Esc", "Enter", "?", "/", "Ctrl+P", "Ctrl+N", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
+	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "r", "i", "t", "l", "j", "k", "F11", "Esc", "Enter", "?", "/", "Ctrl+P", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
 		if !listed[want] {
 			t.Errorf("the keymap lacks %q", want)
 		}

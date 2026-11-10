@@ -17,9 +17,6 @@ import (
 )
 
 func TestExtremeMenuReleaseAndManifestBindings(t *testing.T) {
-	if !buildNavigationReleased {
-		t.Fatal("Marshal menu is not released")
-	}
 	ia, err := FrozenIA()
 	if err != nil || len(ia.Sections) != 9 || len(ia.Gaps()) != 9 {
 		t.Fatalf("Marshal IA sections/gaps: %v %v", ia, err)

@@ -826,7 +826,7 @@ func (w *Workspace) nativeChatFocused() bool {
 }
 
 // handleNativeChatKey owns the keyboard while the chat composer is focused.
-// Keys it does not use (function keys, Ctrl+X, Ctrl+N, Ctrl+P) pass on.
+// Keys it does not use (function keys, Ctrl+X, Ctrl+P) pass on.
 func (w *Workspace) handleNativeChatKey(ctx context.Context, event KeyEvent) bool {
 	if !w.nativeChatShown() || !w.nativeChatFocused() {
 		return false

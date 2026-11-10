@@ -7,21 +7,13 @@ import (
 )
 
 func TestEditionNavigationAndCapabilityBoundaries(t *testing.T) {
-	ws := NewWorkspace(nil, "proj", "edition-test")
-	ws.navReleased = false
 	if editionExtreme {
 		if Edition() != "Marshal" {
 			t.Fatalf("Edition() = %q, want extreme", Edition())
 		}
-		if got := ws.navigationRefusal(); got != "" {
-			t.Fatalf("Standard navigation refusal = %q, want empty", got)
-		}
 	} else {
 		if Edition() != "standard" {
 			t.Fatalf("Edition() = %q, want standard", Edition())
-		}
-		if got := ws.navigationRefusal(); !strings.Contains(got, "not available yet") {
-			t.Fatalf("default navigation refusal = %q, want unreleased message", got)
 		}
 	}
 

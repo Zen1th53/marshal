@@ -18,13 +18,10 @@ import (
 // boardVisual paints the approved Board prototype from the read model. It owns
 // presentation only; decisions and events remain with their existing owners.
 type boardVisual struct {
-	tails                  func(string) []string
-	tailWant               int
-	usageWide, usageNarrow string
-	board                  model.Board
-	// noNav hides the ^N hint where Ctrl+N only refuses (navigation not
-	// released in this session).
-	noNav                       bool
+	tails                       func(string) []string
+	tailWant                    int
+	usageWide, usageNarrow      string
+	board                       model.Board
 	now                         time.Time
 	theme                       *Theme
 	frame                       anim.Frame
@@ -631,11 +628,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		items = append(items, [2]string{"1", "board"})
 		items = append(items, views...)
 	}
-	if v.noNav {
-		items = append(items, [][2]string{{"/", "command"}, {"^P", "palette"}, {"?", "help"}}...)
-	} else {
-		items = append(items, [][2]string{{"/", "command"}, {"^P", "palette"}, {"^N", "advanced"}, {"?", "help"}}...)
-	}
+	items = append(items, [][2]string{{"/", "command"}, {"^P", "palette"}, {"?", "help"}}...)
 	if v.hostView {
 		items = [][2]string{{"j/k", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
 	}
@@ -688,7 +681,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		if inView {
 			return 0
 		}
-		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "m/F11", "s", "v", "i", "?", "/", "^P", "^N", "l", "t"} {
+		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "m/F11", "s", "v", "i", "?", "/", "^P", "l", "t"} {
 			if k == key {
 				return i
 			}

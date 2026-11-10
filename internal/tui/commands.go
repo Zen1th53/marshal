@@ -76,18 +76,6 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/egress":
 		return h.handleEgress(ctx, parts[1:])
 
-	case "/menu":
-		// /menu is the same entry point as Ctrl+N and Esc-on-an-empty-composer:
-		// it opens the frozen navigation surface only when the live ULTRA gate
-		// allows it, and refuses with the reason otherwise.
-		if len(parts) != 1 {
-			return "Usage: /menu", nil
-		}
-		if h.ws.OpenNavigation(ctx) {
-			return "Opened the navigation surface.", nil
-		}
-		return "Navigation is unavailable: this session is Standard or the surface is not released.", nil
-
 	case "/help", "/?":
 		if len(parts) == 1 {
 			return helpOverview, nil
@@ -694,13 +682,8 @@ const helpOverview = `Talk to the Marshal: /marshal chat — plan and coordinate
   /help all         Full reference (PgUp/PgDn to page) · F1: This overview`
 
 func (h *CommandHandler) helpText() string {
-	navigationHint := ""
-	if h.ws.navigationRefusal() == "" {
-		navigationHint = "     Ctrl+N: Navigation · Esc: Navigation (empty composer)"
-	}
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
-  /menu                    Open the frozen navigation surface (same as Ctrl+N / Esc)
   /goal                    View the active goal
   /goal constraints        List bound constraints
   /goal create|edit|add-constraint|rm-constraint  Create or revise the goal as the local owner
@@ -798,7 +781,7 @@ Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
-  F10: Update    F11: Return to control centre    Ctrl+X: Stop all workers` + navigationHint + `
+  F10: Update    F11: Return to control centre    Ctrl+X: Stop all workers
 
 Composer:
   /  or  @                 Opens the command menu as you type

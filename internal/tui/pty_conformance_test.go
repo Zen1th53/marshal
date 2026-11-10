@@ -193,46 +193,17 @@ func startCommandTUI(t *testing.T, rows, cols uint16) *ptySession {
 	return startTUI(t, rows, cols)
 }
 
-// TestPTYWorkspaceStartsInComposerAndGatesNavigation proves a real `marshal tui`
-// launch lands on the composer. Community refuses unreleased navigation;
-// Extreme admits both entry points and returns safely to the same composer.
-func TestPTYWorkspaceStartsInComposerAndGatesNavigation(t *testing.T) {
+// TestPTYWorkspaceStartsInComposerAndHasNoMenu proves a real `marshal tui`
+// launch lands on the composer and menu keys do not leave it.
+func TestPTYWorkspaceStartsInComposerAndHasNoMenu(t *testing.T) {
 	s := startFrozenTUI(t, 40, 120)
 	s.mustSee("Marshal")
-	if editionExtreme {
-		s.send("\x0e") // Ctrl+N
-		s.mustSee("Continue Work")
-		return
-	}
-	// Navigation's own chrome must be absent: a Standard session never lands
-	// in a screen it is not entitled to and has to back out of.
+	s.send("\x0e")
+	s.send("\x1b")
+	time.Sleep(ptyWait(1 * time.Second))
+	s.mustNotSee("[TOP_LEVEL_SECTION]")
 	s.mustNotSee("Continue Work")
-
-	s.send("\x0e") // Ctrl+N
-	if statepath.PublicEngine {
-		s.mustSee("[TOP_LEVEL_SECTION]")
-		s.mustSee("Dashboard")
-		s.send("\x1b") // Return from the top-level menu to the composer.
-		s.mustSee("Quick Commands:")
-		if screen := s.screenText(40, 120); strings.Contains(screen, "[TOP_LEVEL_SECTION]") {
-			t.Fatalf("Esc did not close navigation:\n%s", screen)
-		}
-		s.send("\x1b") // The empty-composer entry point reopens the same menu.
-		deadline := time.Now().Add(ptyWait(8 * time.Second))
-		for !strings.Contains(s.screenText(40, 120), "[TOP_LEVEL_SECTION]") && time.Now().Before(deadline) {
-			time.Sleep(80 * time.Millisecond)
-		}
-		if screen := s.screenText(40, 120); !strings.Contains(screen, "[TOP_LEVEL_SECTION]") || !strings.Contains(screen, "Dashboard") {
-			t.Fatalf("Esc did not reopen admitted Marshal navigation:\n%s", screen)
-		}
-		s.send("\x1b")
-	} else {
-		s.mustSee("not available yet")
-		s.mustNotSee("Continue Work")
-		s.send("\x1b")
-		s.mustSee("not available yet")
-		s.mustNotSee("Continue Work")
-	}
+	s.mustNotSee("not available yet")
 
 	// The composer itself keeps working, which is the whole point of the refusal.
 	s.sendLine("/status")

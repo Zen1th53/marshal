@@ -96,9 +96,6 @@ type Workspace struct {
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
-	// navReleased reports whether the navigation surface may be opened at
-	// all; it is taken from navigationReleased when the workspace is built.
-	navReleased bool
 	// ultraStopAsked records that /ultra stop asked the person to confirm;
 	// only /ultra stop confirm straight after it turns execution off.
 	ultraStopAsked bool
@@ -443,7 +440,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
-			"/view", "/focus", "/takeover", "/take-over", "/stop", "/menu",
+			"/view", "/focus", "/takeover", "/take-over", "/stop",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
@@ -535,8 +532,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 
 	// The frozen-IA navigation view. If the embedded manifest will not load the
 	// workspace still opens: losing navigation must not cost somebody their
-	// session. The error is kept rather than discarded so that pressing Ctrl+N
-	// reports what actually failed instead of a bare "unavailable".
+	// session.
 	navView, navErr := NewNavView(th)
 
 	ws := &Workspace{
@@ -575,7 +571,6 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		},
 	}
 	ws.completer.ctx.InstallableSkills = ws.readInstallableSkills
-	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
 	// The palette ranks by the Board's focus and selection as it opens.
 	ws.palette.context = ws.paletteContext
@@ -752,7 +747,6 @@ func (w *Workspace) liveStateLocked() UIState {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = (editionExtreme || w.navReleased) && (editionExtreme || state.UltraEntitled)
 	state.SessionMode = effectiveModeLabel(w.mode, state.UltraEntitled)
 	return state
 }
@@ -1077,7 +1071,7 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.renderFullView()
 	}
 
-	// Navigation owns every key while it is open, and Ctrl+N opens it.
+	// F-keys run their commands.
 	if event.Type == KeyF7 {
 		w.runCommand(ctx, "/codex")
 		return false
@@ -1212,11 +1206,7 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		return false
 	}
 
-	// Esc toggles navigation mode when composer is empty and no popup/overlay is active
-	// On the Board, Esc closes only what is open over it (handled
-	// above); on the bare Board it does nothing. Opening the full-screen
-	// menu there put operators into its search while they meant to type a
-	// command. Ctrl+N opens the menu.
+	// Esc on an empty composer does nothing: there is no menu to open.
 	if event.Type == KeyEsc && w.say.open.Load() {
 		// Esc closes the message to the Marshal; what was typed is
 		// dropped as Esc drops a command.
@@ -1229,15 +1219,6 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		return false
 	}
 	if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
-		// Navigation is closed until verified, and an ULTRA surface
-		// after that, so Esc on an empty composer must not drop a
-		// session into it.
-		if refusal := w.navigationRefusal(); refusal != "" {
-			w.setOutput(refusal, false)
-			return false
-		}
-		w.openNavigation(ctx)
-		w.renderFullView()
 		return false
 	}
 
@@ -1872,63 +1853,7 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 		return true
 	}
 
-	// Ctrl+N opens navigation. It is the keyboard-first entry point: from here
-	// MARSHAL is fully operable without knowing a single slash command.
-	if event.Type == KeyCtrlN {
-		w.closeCompletion()
-		if refusal := w.navigationRefusal(); refusal != "" {
-			w.setOutput(refusal, false)
-			return true
-		}
-		if w.navView == nil {
-			reason := "the frozen interface manifest did not load"
-			if w.navErr != nil {
-				reason = w.navErr.Error()
-			}
-			w.setOutput("Navigation is unavailable: "+reason, true)
-			return true
-		}
-		w.openNavigation(ctx)
-		return true
-	}
 	return false
-}
-
-// Community navigation stays unreleased. Extreme exposes the canonical
-// destinations and keeps unavailable actions disabled with their reasons.
-var navigationReleased = buildNavigationReleased
-
-// navigationNotReleasedMessage says the surface is not offered yet, so nobody
-// takes an unfinished screen for a working one.
-const navigationNotReleasedMessage = "The navigation surface is not available yet: it is incomplete and has not been verified.\n" +
-	"  Every MARSHAL command remains available from this composer."
-
-// navigationRefusal says why this session may not open navigation, or ""
-// when it may.
-func (w *Workspace) navigationRefusal() string {
-	if !editionExtreme && !w.navReleased {
-		return navigationNotReleasedMessage
-	}
-	if !editionExtreme && !w.navigationEntitled() {
-		return navigationNotEntitledMessage
-	}
-	return ""
-}
-
-// navigationNotEntitledMessage explains the refusal without implying the
-// operator can switch it on locally: an entitlement is granted, not toggled.
-const navigationNotEntitledMessage = "The navigation surface is an ULTRA feature and this session is Standard.\n" +
-	"  Use /ultra to see why, or /ultra request to ask an operator for an entitlement.\n" +
-	"  Every MARSHAL command remains available from this composer."
-
-// navigationEntitled reports whether this session may open the navigation view.
-//
-// The gate is read live rather than captured, because the Cloud handshake
-// finishes after the workspace is built: a session that becomes entitled
-// mid-run must be able to open navigation without restarting.
-func (w *Workspace) navigationEntitled() bool {
-	gate, _ := w.ultraGate()
-	return gate.Entitled()
 }
 
 // setOutput records a workspace response for the next frame, the same way a
@@ -2404,21 +2329,6 @@ func (w *Workspace) attachNavigation(ctx context.Context) {
 	} else {
 		w.navView.Open(ctx)
 	}
-}
-
-// OpenNavigation enters MARSHAL's frozen Community navigation surface.
-//
-// It is never called on startup: a session opens on the composer, which every
-// user has. Navigation is an ULTRA surface, so an unentitled session is
-// refused here rather than at each section, and the refusal explains itself.
-// Esc at the root returns to the composer.
-func (w *Workspace) OpenNavigation(ctx context.Context) bool {
-	if refusal := w.navigationRefusal(); refusal != "" {
-		w.setOutput(refusal, false)
-		return false
-	}
-	w.openNavigation(ctx)
-	return true
 }
 
 func (w *Workspace) renderFullView() {

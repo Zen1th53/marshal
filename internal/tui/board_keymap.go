@@ -86,7 +86,6 @@ var boardKeymap = []boardKey{
 	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "Ctrl+P", What: "command palette", Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "Ctrl+N", What: "navigation", Command: "/menu", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "?", What: "this help", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)"},
 	{Group: "MARSHAL", Keys: "Ctrl+C", What: "interrupt; twice to exit", Class: KeyConfirm, Direct: "spec: ^C unchanged, it interrupts; a second press exits"},

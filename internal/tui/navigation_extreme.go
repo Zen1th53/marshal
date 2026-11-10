@@ -12,8 +12,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const buildNavigationReleased = true
-
 var buildResolvedGapIDs = []ActionID{"CTUI-0043", "CTUI-0044", "CTUI-0045", "CTUI-0048", "CTUI-0051", "CTUI-0052", "CTUI-0071", "CTUI-0073"}
 
 // Models must not swallow another section's gap and its canonical neighbours.
