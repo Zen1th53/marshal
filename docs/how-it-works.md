@@ -16,13 +16,13 @@ Marshal coordinates multiple AI coding agents to complete software engineering g
 A run begins when you provide a goal—either by pressing `s` on the Board or typing into the docked chat pane.
 
 1. **Clarification**: The model acting as the **Marshal** analyzes your repository structure, asks clarifying questions if requirements are ambiguous, and aligns on technical constraints.
-2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract defining components, invariants, and file paths. A `NEEDS YOU` gate appears on the Board for you to review and accept (`y`).
+2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract defining components, invariants, and file paths. A `NEEDS YOU` gate appears on the Board for you to review and accept (`y`, then `Enter`; or type `accept architecture` in the chat).
 3. **Task Decomposition**: The Marshal breaks the architecture down into small, discrete tasks. Each task specifies:
    - Target files or directories.
    - Assigned worker provider.
    - Objective acceptance criteria.
    - Executable verification checks (e.g., unit test commands, linter runs).
-4. **Plan Approval**: You review the drafted task graph and press `y` to approve the plan.
+4. **Plan Approval**: The Marshal checks the drafted task graph and approves it itself. You can read it on the Plan view (`7`). If the Marshal asks you instead, press `y` and then `Enter` on the `NEEDS YOU` gate.
 
 ---
 
@@ -50,8 +50,8 @@ To prevent models from overlooking their own mistakes, Marshal enforces **cross-
 
 After all individual tasks have been accepted, Marshal prepares for integration:
 
-- **Isolated Verification**: An independent verifier model—selected from providers other than the worker providers that authored changes—evaluates the integrated solution.
-- **Check Execution**: The verifier runs the project's actual build and test commands (e.g. `go test ./...`, `pytest`, `cargo test`) in an isolated environment.
+- **Independent Verification**: An independent verifier model—selected from providers other than the worker providers that authored changes—evaluates the integrated solution.
+- **Check Execution**: The verifier runs the project's actual build and test commands (e.g. `go test ./...`, `pytest`, `cargo test`) on your computer, against the integrated result.
 - **Objective Proof**: Completion is based on real execution status, process exit codes, and test outputs, not on model self-assertions.
 
 ---

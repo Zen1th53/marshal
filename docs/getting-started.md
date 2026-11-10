@@ -86,25 +86,27 @@ The accepted architecture becomes the binding contract for all subsequent tasks.
 
 ---
 
-## 6. Approve the Plan with `y`
+## 6. The Marshal Approves the Plan
 
 Next, the Marshal decomposes the architecture into discrete, small tasks. Each task defines:
 - Assigned worker model (e.g. Codex, Claude, OpenCode, Antigravity).
 - Scope of files to create or modify.
 - Concrete check criteria (e.g. `go test -v ./...` or `npm test`).
 
-When the plan is ready, another **`NEEDS YOU`** gate appears:
+When the plan is ready, the Marshal approves it itself and starts the workers. Press `7` to read the plan.
+
+If the Marshal asks you to approve it instead, a **`NEEDS YOU`** gate appears:
 ```text
 drafted plan waits for your approval · 2 tasks · [y] approve the plan · [7] open the plan
 ```
 
-Press `y` and then `Enter` to approve the plan and begin dispatching workers.
+Press `y` and then `Enter` to approve it.
 
 ---
 
 ## 7. Watch the Run
 
-Once approved, Marshal orchestrates the work automatically:
+Once the plan is approved, Marshal runs the work automatically:
 
 1. **Dispatch**: Tasks are assigned to worker agents. Each task runs in a separate Git worktree so workers never overwrite each other's in-progress changes.
 2. **Execution**: The worker implements the changes and submits them for review.
