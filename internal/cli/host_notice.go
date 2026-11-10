@@ -8,6 +8,10 @@ import (
 	"github.com/Zen1th53/marshal/internal/tui"
 )
 
+// hostWorkersNotice is the one-time notice the Marshal build prints before
+// the first launch. Startup's env.sandbox summary says the same thing.
+const hostWorkersNotice = "Marshal workers run on the host without a sandbox, with your account's file access and network access. Use a dedicated project directory and review commands before starting workers."
+
 func usesProject(args []string) bool {
 	if len(args) == 0 {
 		return true
@@ -40,7 +44,7 @@ func (c *command) hostWorkerNotice() error {
 	show := true
 	defer func() {
 		if show {
-			fmt.Fprintln(c.stderr, "Marshal workers run on the host without a sandbox, with your account's file access and network access. Use a dedicated project directory and review commands before starting workers.")
+			fmt.Fprintln(c.stderr, hostWorkersNotice)
 		}
 	}()
 	dir, err := c.machineCloudDir()

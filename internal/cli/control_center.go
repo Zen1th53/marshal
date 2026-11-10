@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
@@ -161,19 +162,22 @@ func (c *command) isInteractiveTerminal() bool {
 // startupEnvironment gathers the facts assessment needs that it cannot observe
 // for itself.
 //
-// Sandbox and network enforcement are reported from what the runtime actually
-// determines, not guessed from the presence of a binary. Both currently
-// resolve conservatively: an unproven capability is reported absent, so
-// execution blocks rather than proceeding unprotected.
+// Sandbox and network enforcement come from what the runtime actually
+// determines. The Marshal build runs workers on the host and never uses
+// bubblewrap, so it does not probe for it: probing would start bwrap on
+// every launch for an answer startup ignores in this build.
 func (c *command) startupEnvironment() startup.Environment {
-	return startup.Environment{
-		WorkingDir:      c.root,
-		SandboxEnforced: app.SandboxEnforcementAvailable(),
-		NetworkEnforced: app.EgressEnforcementAvailable(),
+	env := startup.Environment{
+		WorkingDir: c.root,
 		// The build-specific authorization supplies readiness evidence;
 		// Community keeps its conservative startup default.
 		UltraEntitled: startupUltraEntitled(),
 	}
+	if !sandbox.HostExecutionPreferred() {
+		env.SandboxEnforced = app.SandboxEnforcementAvailable()
+		env.NetworkEnforced = app.EgressEnforcementAvailable()
+	}
+	return env
 }
 
 // errCoreFailure signals that MARSHAL itself cannot run here. It is distinct

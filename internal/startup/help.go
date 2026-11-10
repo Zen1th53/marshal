@@ -51,9 +51,7 @@ var helpTopics = []HelpTopic{
 	{
 		Key:   "blocked",
 		Title: "Why work can be blocked",
-		Body: "Work is blocked when running it would not be safe or would not be reproducible: " +
-			"no project, no Git, no sandbox to isolate changes, or no policy saying what is permitted. " +
-			"Blocking work does not block MARSHAL. You keep Setup, Doctor, Help, your project history and recovery.",
+		Body:  blockedHelpBody,
 	},
 	{
 		Key:   "projects",
