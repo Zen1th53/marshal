@@ -50,7 +50,7 @@ func browserContextState(t *testing.T, runtime *Runtime, approved bool) string {
 		if err := json.Unmarshal(state, &value); err != nil {
 			t.Fatal(err)
 		}
-		request, _ := json.Marshal(map[string]any{"protocol_version": architecturereview.Version, "action": "approve", "revision": value["revision"], "digest": value["digest"], "ui_digest": value["ui_digest"], "language": value["language"]})
+		request, _ := json.Marshal(map[string]any{"protocol_version": architecturereview.Version, "action": "approve", "revision": value["revision"], "digest": value["digest"], "ui_digest": value["ui_digest"], "language": value["language"], "builders_digest": value["builders_digest"]})
 		if _, err := review.Apply(t.Context(), request); err != nil {
 			t.Fatal(err)
 		}

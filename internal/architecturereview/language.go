@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,16 +17,38 @@ import (
 func EnglishUIStrings() map[string]string {
 	return map[string]string{
 		"architecture": "Architecture", "traffic": "Traffic", "marshal": "Marshal", "diagram": "Diagram",
-		"select_area": "Select area", "approve": "Approve", "approved": "✓ Approved", "working": "Marshal is working…", "fit": "Fit",
+		"select_area": "Select area", "approve": "Accept architecture", "approved": "✓ Accepted", "working": "Marshal is working…", "fit": "Fit",
 		"view_hint": "View only · Use a pencil to comment", "area_hint": "Drag to select an area", "request_type": "Request type",
 		"comment": "Comment", "change": "Change request", "request_label": "Write to Marshal", "placeholder": "Comment or request a precise change here…",
 		"submit": "Submit to Marshal", "withdraw": "Withdraw request", "close": "Close", "pencil_prefix": "Comment:", "version": "Revision",
 		"selected_area": "Selected area", "empty_area": "This area contains no architecture elements.", "connection": "Connection",
 		"request_failed": "Request failed", "waiting": "Waiting for Marshal…", "discard_prompt": "There is an unsent request. Close this panel?",
 		"request_empty": "Write a comment or request first.", "stale_selection": "The diagram changed. Select the target again.",
-		"submitted": "Submitted to Marshal.", "pending_text": "There is an unsent request.", "approved_notice": "Architecture approved.",
+		"submitted": "Submitted to Marshal.", "pending_text": "There is an unsent request.", "approved_notice": "Accepted — the run continues in your terminal.",
 		"updated_notice": "Marshal prepared a new proposal. Select again for a new request.", "withdrawn": "Request withdrawn; history retained.",
+		"what_it_does": "What it does", "files": "Files", "no_files": "No files listed yet.", "builder": "Builder",
+		"builder_auto": "Auto (Marshal picks)", "builder_unavailable": "unavailable", "builder_saved": "Builder saved.",
+		"builder_locked": "Accepted — builders are fixed for this run.", "comment_on_part": "Comment on this part",
+		"accept_summary": "{parts} parts · {builders} builders chosen · {open} open comments", "accept_summary_plain": "{parts} parts · {open} open comments",
+		"accept_wait_reply": "Wait for the Marshal to answer your request.", "accept_open_request": "Answer or withdraw the open request first.",
+		"accept_unsent": "Send or clear the text you typed first.", "accepted_banner": "Accepted — the run continues in your terminal.",
+		"reopen_prompt": "This architecture is accepted. Sending this request reopens it and pauses the run until you accept again. Send it?",
+		"revision_first": "rev {rev} · first draft", "revision_changed": "rev {rev} · {n} parts changed since rev {prev}",
+		"revision_changed_one": "rev {rev} · 1 part changed since rev {prev}", "changed_badge": "changed", "design": "Design",
+		"design_brief": "Brief", "design_findings": "Review by {provider}", "design_resolutions": "How each finding was resolved",
+		"design_no_resolutions": "No resolutions recorded yet.", "design_shortened": "(shortened)", "accept_with_design": "design included",
 	}
+}
+
+// legacyUIStringKeys is the interface label set that existed before the browser
+// v2 keys were added. A stored translation covering exactly these keys stays
+// valid; the page falls back to English for the newer keys.
+var legacyUIStringKeys = []string{
+	"architecture", "traffic", "marshal", "diagram", "select_area", "approve", "approved", "working", "fit",
+	"view_hint", "area_hint", "request_type", "comment", "change", "request_label", "placeholder",
+	"submit", "withdraw", "close", "pencil_prefix", "version", "selected_area", "empty_area", "connection",
+	"request_failed", "waiting", "discard_prompt", "request_empty", "stale_selection", "submitted",
+	"pending_text", "approved_notice", "updated_notice", "withdrawn",
 }
 
 func approvedLanguage(language string) string {
@@ -99,7 +123,59 @@ func ValidateUI(raw json.RawMessage, language string, proposal json.RawMessage) 
 	if err = validateNormalizedUI(result, language, a); err != nil {
 		return nil, err
 	}
+	english := EnglishUIStrings()
+	translated := result["strings"].(map[string]any)
+	if len(translated) != len(english) {
+		return nil, errors.New("UI translation does not cover every interface label")
+	}
+	for key, englishText := range english {
+		text, _ := translated[key].(string)
+		if !equalPlaceholders(englishText, text) {
+			return nil, fmt.Errorf("UI translation label %q must keep its placeholders", key)
+		}
+	}
 	return canonicalJSON(result)
+}
+
+var placeholderPattern = regexp.MustCompile(`\{[a-z]+\}`)
+
+// equalPlaceholders reports whether two texts carry the same {placeholder}
+// tokens, so a translation cannot drop or invent an interpolated value.
+func equalPlaceholders(english, translated string) bool {
+	left := placeholderPattern.FindAllString(english, -1)
+	right := placeholderPattern.FindAllString(translated, -1)
+	sort.Strings(left)
+	sort.Strings(right)
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func uiStringKeys() []string {
+	expected := EnglishUIStrings()
+	keys := make([]string, 0, len(expected))
+	for key := range expected {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func uiStringsCover(texts map[string]any, keys []string) bool {
+	if len(texts) != len(keys) {
+		return false
+	}
+	for _, key := range keys {
+		if !nonempty(texts[key]) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateNormalizedUI(ui map[string]any, language string, a map[string]any) error {
@@ -107,14 +183,8 @@ func validateNormalizedUI(ui map[string]any, language string, a map[string]any) 
 		return errors.New("cached UI is not bound to the approved language")
 	}
 	texts, ok := ui["strings"].(map[string]any)
-	expected := EnglishUIStrings()
-	if !ok || len(texts) != len(expected) {
+	if !ok || (!uiStringsCover(texts, uiStringKeys()) && !uiStringsCover(texts, legacyUIStringKeys)) {
 		return errors.New("UI translation does not cover every interface label")
-	}
-	for key := range expected {
-		if !nonempty(texts[key]) {
-			return fmt.Errorf("UI translation label %q is missing or blank", key)
-		}
 	}
 	for _, collection := range []string{"components", "connections"} {
 		translated, ok := ui[collection].(map[string]any)

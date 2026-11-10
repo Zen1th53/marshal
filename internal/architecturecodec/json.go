@@ -276,6 +276,24 @@ func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, 
 	if err != nil || s["ui_digest"] != uiDigest || s["ui_architecture_digest"] != digest {
 		return nil, errors.New("architecture display translation digest is stale")
 	}
+	builders := map[string]any{}
+	if raw, present := s["builders"]; present {
+		object, ok := raw.(map[string]any)
+		if !ok {
+			return nil, errors.New("architecture builders are invalid")
+		}
+		builders = object
+	}
+	if err = ValidateBuilders(builders, a); err != nil {
+		return nil, err
+	}
+	buildersDigest, err := BuildersDigest(builders)
+	if err != nil {
+		return nil, err
+	}
+	if stored, present := s["builders_digest"]; present && stored != buildersDigest {
+		return nil, errors.New("architecture builders digest is stale")
+	}
 	status := "draft"
 	comments, ok := s["comments"].([]any)
 	if !ok {
@@ -303,9 +321,16 @@ func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, 
 		if approval["language"] != language || approval["ui_digest"] != uiDigest {
 			return nil, errors.New("architecture acceptance language or display is stale")
 		}
+		if stored, present := approval["builders_digest"]; present {
+			if stored != buildersDigest {
+				return nil, errors.New("architecture acceptance builders are stale")
+			}
+		} else if len(builders) != 0 {
+			return nil, errors.New("architecture acceptance builders are stale")
+		}
 		status = "accepted"
 	}
-	return canonicalJSON(map[string]any{"status": status, "project": project, "architecture_id": s["architecture_id"], "revision": s["revision"], "digest": digest, "layout_digest": s["layout_digest"], "architecture": a, "language": language, "ui_digest": uiDigest, "display": displayFor(ui)})
+	return canonicalJSON(map[string]any{"status": status, "project": project, "architecture_id": s["architecture_id"], "revision": s["revision"], "digest": digest, "layout_digest": s["layout_digest"], "architecture": a, "language": language, "ui_digest": uiDigest, "display": displayFor(ui), "builders": builders})
 }
 
 type ArchitectureTarget struct {
