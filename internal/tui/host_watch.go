@@ -418,6 +418,33 @@ func (s hostSnapshot) throttleRate() (float64, bool) {
 	}, 60)
 }
 
+// cpuBusy is the percent of CPU time not idle between the last two
+// samples that carry tick counters; ok is false without two such samples
+// or when the counters went backwards.
+func (s hostSnapshot) cpuBusy() (pct float64, ok bool) {
+	// Find the newest sample with ticks (b), then the next older one (a).
+	var b hostwatch.Sample
+	haveB := false
+	for i := len(s.Samples) - 1; i >= 0; i-- {
+		if !s.Samples[i].CPUTicksKnown {
+			continue
+		}
+		if !haveB {
+			b = s.Samples[i]
+			haveB = true
+			continue
+		}
+		a := s.Samples[i]
+		dt := b.CPUTicksTotal - a.CPUTicksTotal
+		di := b.CPUTicksIdle - a.CPUTicksIdle
+		if b.CPUTicksTotal <= a.CPUTicksTotal || b.CPUTicksIdle < a.CPUTicksIdle || di > dt {
+			return 0, false
+		}
+		return 100 * float64(dt-di) / float64(dt), true
+	}
+	return 0, false
+}
+
 // rate is the per-second (scale 1) or per-minute (scale 60) rate of a
 // counter over the last minute of samples.
 func (s hostSnapshot) rate(get func(hostwatch.Sample) (uint64, bool), scale float64) (float64, bool) {

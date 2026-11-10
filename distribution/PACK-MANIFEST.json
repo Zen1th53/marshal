@@ -6426,13 +6426,13 @@
     },
     {
       "path": "internal/hostwatch/hostwatch_test.go",
-      "sha256": "4472feb9ca807a2fc595eac66a873bc60bdd11d9f0461182dd749cc8a706b65e",
-      "bytes": 12854
+      "sha256": "67b19caed9c44de99ed3e82d9acea9b76a1c15d84b6295e47fb02d396fc29f90",
+      "bytes": 13175
     },
     {
       "path": "internal/hostwatch/live_test.go",
-      "sha256": "84233e139fdc2d2246efd1b76973d2a7fae102df9118e5266b660f3ad1a895d1",
-      "bytes": 1139
+      "sha256": "5e5815cbc7a2552b14babba787adb0f366fc00c1919a0195f00be5eaf73aa589",
+      "bytes": 1255
     },
     {
       "path": "internal/hostwatch/policy.go",
@@ -6446,8 +6446,8 @@
     },
     {
       "path": "internal/hostwatch/sampler.go",
-      "sha256": "2ba9de6ae1d6617b7c32181c76f0fee4c9541ea1eaa98ccea9dfdb36ad34291f",
-      "bytes": 12251
+      "sha256": "a6a813425ef1bbdfc937b14ec9bfa1d98b46f603143ed71020ec781c04048f41",
+      "bytes": 13039
     },
     {
       "path": "internal/hostwatch/testdata/proc/cpuinfo",
@@ -6473,6 +6473,11 @@
       "path": "internal/hostwatch/testdata/proc/pressure/memory",
       "sha256": "2a7606c0d7f4a87be2571a162e222b314a9d3f5898eae376a6efb809d96bb53b",
       "bytes": 99
+    },
+    {
+      "path": "internal/hostwatch/testdata/proc/stat",
+      "sha256": "59b9e5d4a94a3938dd9957d210db4da7022e6642bf1d47a1507dd11c1015045c",
+      "bytes": 76
     },
     {
       "path": "internal/hostwatch/testdata/sys/class/hwmon/hwmon0/name",
@@ -6551,8 +6556,8 @@
     },
     {
       "path": "internal/hostwatch/types.go",
-      "sha256": "5df68dfcd5c4326d7cc070cf326c0bd20c43d7f604d39baf12cbe3f85e3c6a04",
-      "bytes": 2011
+      "sha256": "e497e957cebf7064f85ac230b06d14cf0340c9ea78a911874ca19e528d480f7c",
+      "bytes": 2300
     },
     {
       "path": "internal/httpsrv/server.go",
@@ -13221,13 +13226,13 @@
     },
     {
       "path": "internal/tui/host_watch.go",
-      "sha256": "dca60dcd5789cab2502d0aab2adbb7cdd55eb75226b9d6f8bf36f7a547b4fae4",
-      "bytes": 12718
+      "sha256": "5d3d6904b08cbc8e5950f53a0181101d10a13f1ac5055d9ca307e80828d3a041",
+      "bytes": 13516
     },
     {
       "path": "internal/tui/host_watch_test.go",
-      "sha256": "b6327f6a8297056e719a394965c2e9bf2c9382dd7ac7367b00c881a7872c3fe3",
-      "bytes": 19556
+      "sha256": "54a6a7a5ef230e3e98b60f73af5c69c0789239d00d8076d5b077ba3291b65f2c",
+      "bytes": 20649
     },
     {
       "path": "internal/tui/ia.go",

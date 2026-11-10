@@ -39,6 +39,9 @@ func TestSamplerReadNormal(t *testing.T) {
 	if !sample.CPUPackageThrottleKnown || sample.CPUPackageThrottleCount != 42 {
 		t.Errorf("expected package throttle count 42, got %v", sample.CPUPackageThrottleCount)
 	}
+	if !sample.CPUTicksKnown || sample.CPUTicksTotal != 10000 || sample.CPUTicksIdle != 8500 {
+		t.Errorf("unexpected CPU ticks: total %d idle %d (known: %v)", sample.CPUTicksTotal, sample.CPUTicksIdle, sample.CPUTicksKnown)
+	}
 	if !sample.CPUPackageTempCKnown || sample.CPUPackageTempC != 65.0 {
 		t.Errorf("expected CPU package temp 65.0 C, got %v", sample.CPUPackageTempC)
 	}
@@ -152,6 +155,9 @@ func TestSamplerMissingPressureFiles(t *testing.T) {
 	}
 	if sample.CPUPressureSomeKnown || sample.CPUPressureFullKnown {
 		t.Errorf("expected CPU pressure to be unknown")
+	}
+	if sample.CPUTicksKnown {
+		t.Errorf("expected CPU ticks to be unknown without /proc/stat")
 	}
 }
 

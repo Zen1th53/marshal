@@ -22,6 +22,13 @@ type Sample struct {
 	CPUPackageTempCKnown    bool
 	CPUCoreTempC            map[string]float64 // core label -> temp in C
 
+	// CPUTicksTotal and CPUTicksIdle are /proc/stat's cumulative "cpu" line:
+	// total is user+nice+system+idle+iowait+irq+softirq+steal (guest is
+	// already inside user), idle is idle+iowait. Busy percent needs two samples.
+	CPUTicksTotal uint64
+	CPUTicksIdle  uint64
+	CPUTicksKnown bool
+
 	// CPU Pressure
 	CPUPressureSomeAvg10Percent float64
 	CPUPressureSomeKnown        bool
