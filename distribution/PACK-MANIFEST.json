@@ -12476,8 +12476,8 @@
     },
     {
       "path": "internal/tui/board_visual.go",
-      "sha256": "8441845b12e9a6e46f8c4d99563e5a7c100e266c094bec1a55860b9d82b6c4c1",
-      "bytes": 45306
+      "sha256": "848c135e6aa89f0023c8d7dc7791d7ef173192f1c48c2f6e124b1c85693084c5",
+      "bytes": 45321
     },
     {
       "path": "internal/tui/briefing_dir.go",

@@ -1367,7 +1367,7 @@ func (v boardVisual) activityLine(a model.ActivityLine) string {
 // inboxCount is what the header's inbox chip counts: pending requests and
 // the owner gates still waiting for a reply.
 func (v boardVisual) inboxCount() int {
-	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount()
+	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount() + v.askCount()
 }
 
 func boolInt(b bool) int {
