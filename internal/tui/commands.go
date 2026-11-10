@@ -40,6 +40,12 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	if cmd != "/ultra" && h.ws != nil {
 		h.ws.askUltraStop(false)
 	}
+	// A pending /goal cancel is confirmed by /goal cancel confirm straight after
+	// it or withdrawn by any other command, so a confirm typed later cannot
+	// cancel a goal the person stopped asking about.
+	if h.ws != nil && !(cmd == "/goal" && len(parts) == 3 && strings.EqualFold(parts[1], "cancel") && strings.EqualFold(parts[2], "confirm")) {
+		h.ws.askGoalCancel(nil)
+	}
 
 	// Backup paths may contain spaces; parse argv rather than splitting them.
 	if cmd == "/backup" {

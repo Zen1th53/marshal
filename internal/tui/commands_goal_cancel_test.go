@@ -8,11 +8,11 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-// TestGoalCancelCommandRoutesThroughDestructiveConfirmation proves that
-// /goal cancel no longer cancels immediately. It prepares the exact current goal
-// revision and opens the destructive Cancel/Proceed confirmation the Control
-// menu uses, and the goal is cancelled only on an acknowledged Proceed.
-func TestGoalCancelCommandRoutesThroughDestructiveConfirmation(t *testing.T) {
+// TestGoalCancelCommandAsksThenConfirms proves the two-step composer flow:
+// /goal cancel <reason> cancels nothing and asks for a confirmation, the
+// confirmation cancels exactly once against the revision read in the first
+// step, and a second confirmation is a no-op. The navigation menu never opens.
+func TestGoalCancelCommandAsksThenConfirms(t *testing.T) {
 	g := model.GoalContract{ID: "g", SessionID: "s", ProjectID: "p", Revision: 1, Confirmation: model.ConfirmationApproved, RequestDigest: "digest"}
 	f := &goalCancelFake{goalBudgetFake: &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: g}, revisions: map[int64]model.GoalContract{1: g}}}
 	ws := NewWorkspace(nil, "p", "s")
@@ -21,47 +21,102 @@ func TestGoalCancelCommandRoutesThroughDestructiveConfirmation(t *testing.T) {
 
 	out, err := ws.ExecuteCommand(ctx, "/goal cancel stop this")
 	if err != nil {
-		t.Fatalf("cancel command: %v", err)
+		t.Fatalf("ask command: %v", err)
 	}
 	if f.cancelCalls != 0 {
 		t.Fatalf("/goal cancel cancelled immediately (%d calls)", f.cancelCalls)
 	}
-	if !strings.Contains(out, "confirmation") {
-		t.Fatalf("command did not route to a confirmation: %q", out)
+	if !strings.Contains(out, "Type /goal cancel confirm") {
+		t.Fatalf("ask did not prompt for confirm: %q", out)
+	}
+	if ws.navView.IsOpen() {
+		t.Fatal("navigation opened on /goal cancel")
 	}
 
-	// Join the background navigation read before mutating the fake, so the
-	// cancellation write cannot race a concurrent CurrentGoal read.
-	ws.navView.Wait()
-	c := ws.navView.Confirmation()
-	if c.Phase() != PhaseConfirming {
-		t.Fatalf("no confirmation opened: phase %s", c.Phase())
+	out, err = ws.ExecuteCommand(ctx, "/goal cancel confirm")
+	if err != nil {
+		t.Fatalf("confirm command: %v", err)
 	}
-	if c.Selection() != 0 || c.Binding().Safety != SafetyDestructive {
-		t.Fatalf("confirmation is not default-Cancel destructive")
+	if f.cancelCalls != 1 || f.goal.Revision != 2 {
+		t.Fatalf("confirm did not cancel once: calls %d rev %d", f.cancelCalls, f.goal.Revision)
 	}
-	if reason := c.Request().Inputs["reason"]; reason != "stop this" {
-		t.Fatalf("reason not carried into the confirmation: %q", reason)
+	if out != "The goal was cancelled." {
+		t.Fatalf("confirm answer = %q", out)
 	}
 
-	// An unacknowledged Proceed must not cancel.
-	c.MoveSelection(1)
-	if _, err := c.Submit(ctx); err == nil || f.cancelCalls != 0 {
-		t.Fatalf("unacknowledged cancellation submitted")
+	out, err = ws.ExecuteCommand(ctx, "/goal cancel confirm")
+	if err != nil {
+		t.Fatalf("second confirm: %v", err)
 	}
-	c.Acknowledge()
-	outcome, err := c.Submit(ctx)
-	if err != nil || !outcome.Succeeded() || f.cancelCalls != 1 || f.goal.Revision != 2 {
-		t.Fatalf("acknowledged cancel: %+v %v calls %d", outcome, err, f.cancelCalls)
+	if f.cancelCalls != 1 {
+		t.Fatalf("second confirm cancelled again (%d calls)", f.cancelCalls)
 	}
-	if _, err := c.Submit(ctx); err == nil && f.cancelCalls != 1 {
-		t.Fatal("duplicate input cancelled twice")
+	if !strings.HasPrefix(out, "Nothing to confirm.") {
+		t.Fatalf("second confirm answer = %q", out)
+	}
+	if ws.navView.IsOpen() {
+		t.Fatal("navigation opened during /goal cancel")
+	}
+}
+
+// TestGoalCancelWithdrawnByAnotherCommand confirms that any command between the
+// ask and the confirm withdraws the pending cancellation.
+func TestGoalCancelWithdrawnByAnotherCommand(t *testing.T) {
+	g := model.GoalContract{ID: "g", SessionID: "s", ProjectID: "p", Revision: 1, Confirmation: model.ConfirmationApproved, RequestDigest: "digest"}
+	f := &goalCancelFake{goalBudgetFake: &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: g}, revisions: map[int64]model.GoalContract{1: g}}}
+	ws := NewWorkspace(nil, "p", "s")
+	ws.AttachControlSource(&ControlSource{Authority: f, SessionID: "s", ProjectID: "p"})
+	ctx := context.Background()
+
+	if _, err := ws.ExecuteCommand(ctx, "/goal cancel stop"); err != nil {
+		t.Fatalf("ask command: %v", err)
+	}
+	if _, err := ws.ExecuteCommand(ctx, "/help"); err != nil {
+		t.Fatalf("intervening command: %v", err)
+	}
+	out, err := ws.ExecuteCommand(ctx, "/goal cancel confirm")
+	if err != nil {
+		t.Fatalf("confirm command: %v", err)
+	}
+	if f.cancelCalls != 0 {
+		t.Fatalf("withdrawn cancellation still cancelled (%d calls)", f.cancelCalls)
+	}
+	if !strings.HasPrefix(out, "Nothing to confirm.") {
+		t.Fatalf("withdrawn confirm answer = %q", out)
+	}
+}
+
+// TestGoalCancelRefusesWhenGoalMoved confirms the confirm step re-reads the goal
+// and refuses when the revision moved since the ask, cancelling nothing.
+func TestGoalCancelRefusesWhenGoalMoved(t *testing.T) {
+	g := model.GoalContract{ID: "g", SessionID: "s", ProjectID: "p", Revision: 1, Confirmation: model.ConfirmationApproved, RequestDigest: "digest"}
+	f := &goalCancelFake{goalBudgetFake: &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: g}, revisions: map[int64]model.GoalContract{1: g}}}
+	ws := NewWorkspace(nil, "p", "s")
+	ws.AttachControlSource(&ControlSource{Authority: f, SessionID: "s", ProjectID: "p"})
+	ctx := context.Background()
+
+	if _, err := ws.ExecuteCommand(ctx, "/goal cancel stop"); err != nil {
+		t.Fatalf("ask command: %v", err)
+	}
+	// The goal moves after the ask: a later revision is the canonical current one.
+	f.goal.Revision = 2
+	f.revisions[2] = f.goal
+
+	out, err := ws.ExecuteCommand(ctx, "/goal cancel confirm")
+	if err != nil {
+		t.Fatalf("confirm command: %v", err)
+	}
+	if f.cancelCalls != 0 {
+		t.Fatalf("moved goal still cancelled (%d calls)", f.cancelCalls)
+	}
+	if !strings.HasPrefix(out, "The goal changed since you asked") {
+		t.Fatalf("moved confirm answer = %q", out)
 	}
 }
 
 // TestGoalCancelCommandWithNoGoalRefuses confirms the no-goal path still
-// answers without touching the confirmation, so an empty workspace is not
-// offered a destructive dialog for a goal that does not exist.
+// answers without cancelling, so an empty workspace is not offered a
+// cancellation for a goal that does not exist.
 func TestGoalCancelCommandWithNoGoalRefuses(t *testing.T) {
 	f := &goalCancelFake{goalBudgetFake: &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: model.GoalContract{}}, revisions: map[int64]model.GoalContract{}}}
 	ws := NewWorkspace(nil, "p", "s")

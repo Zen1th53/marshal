@@ -99,6 +99,9 @@ type Workspace struct {
 	// ultraStopAsked records that /ultra stop asked the person to confirm;
 	// only /ultra stop confirm straight after it turns execution off.
 	ultraStopAsked bool
+	// goalCancelAsked is the cancellation /goal cancel <reason> prepared and
+	// /goal cancel confirm may submit once; nil when nothing is pending.
+	goalCancelAsked *pendingGoalCancel
 	// ultraClient and ultraState are what asking for an entitlement needs: the
 	// request is signed with the installation key, so the gate alone is not
 	// enough. Nil when the Cloud is unconfigured, which is why every use
@@ -399,6 +402,28 @@ func (w *Workspace) takeUltraStop() bool {
 	asked := w.ultraStopAsked
 	w.ultraStopAsked = false
 	return asked
+}
+
+type pendingGoalCancel struct {
+	target Target
+	reason string
+	key    string
+}
+
+func (w *Workspace) askGoalCancel(p *pendingGoalCancel) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.goalCancelAsked = p
+}
+
+// takeGoalCancel returns the pending cancellation and withdraws it, so one
+// question allows one confirmation.
+func (w *Workspace) takeGoalCancel() *pendingGoalCancel {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	p := w.goalCancelAsked
+	w.goalCancelAsked = nil
+	return p
 }
 
 // NewWorkspace instantiates a dynamic terminal workspace connected to the canonical store.
