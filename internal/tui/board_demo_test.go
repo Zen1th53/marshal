@@ -23,24 +23,24 @@ func demoBoard(now time.Time) model.Board {
 	type row struct {
 		id, worker, scope string
 		state             model.TaskState
-		seconds, ev, rw   int
+		seconds, rw       int
 	}
 	data := []row{
-		{"T-009", "opencode-1", "internal/mcp/events_list.go", model.TaskMerged, 760, 7, 0},
-		{"T-011", "codex-2", "internal/mcp/run_digest*.go", "verifying", 543, 5, 0},
-		{"T-017", "codex-1", "internal/mcp/memory_recall.go", model.TaskWorking, 252, 3, 0},
-		{"T-018", "claude-1", "internal/app/memory_candidates*.go", model.TaskWorking, 238, 2, 0},
-		{"T-019", "agy-1", "internal/store/memory_restore.go", model.TaskWorking, 221, 1, 0},
-		{"T-020", "codex-1", "internal/app/memory_bridge.go", model.TaskReview, 380, 4, 0},
-		{"T-023", "codex-3", "internal/netpolicy/broker_npm.go", model.TaskParked, 127, 1, 0},
-		{"T-024", "claude-2", "internal/app/credential_lease.go", model.TaskRework, 475, 3, 1},
-		{"T-027", "opencode-2", "internal/tui/memory_review_extreme.go", model.TaskWorking, 72, 0, 0},
-		{"T-031", "agy-2", "scripts/release/push_tags.sh", model.TaskParked, 40, 0, 0},
-		{"T-033", "", "internal/store/migrations_canonical.go", model.TaskQueued, 0, 0, 0},
-		{"T-034", "", "docs/mcp-memory.md", model.TaskQueued, 0, 0, 0},
+		{"T-009", "opencode-1", "internal/mcp/events_list.go", model.TaskMerged, 760, 0},
+		{"T-011", "codex-2", "internal/mcp/run_digest*.go", "verifying", 543, 0},
+		{"T-017", "codex-1", "internal/mcp/memory_recall.go", model.TaskWorking, 252, 0},
+		{"T-018", "claude-1", "internal/app/memory_candidates*.go", model.TaskWorking, 238, 0},
+		{"T-019", "agy-1", "internal/store/memory_restore.go", model.TaskWorking, 221, 0},
+		{"T-020", "codex-1", "internal/app/memory_bridge.go", model.TaskReview, 380, 0},
+		{"T-023", "codex-3", "internal/netpolicy/broker_npm.go", model.TaskParked, 127, 0},
+		{"T-024", "claude-2", "internal/app/credential_lease.go", model.TaskRework, 475, 1},
+		{"T-027", "opencode-2", "internal/tui/memory_review_extreme.go", model.TaskWorking, 72, 0},
+		{"T-031", "agy-2", "scripts/release/push_tags.sh", model.TaskParked, 40, 0},
+		{"T-033", "", "internal/store/migrations_canonical.go", model.TaskQueued, 0, 0},
+		{"T-034", "", "docs/mcp-memory.md", model.TaskQueued, 0, 0},
 	}
 	for _, d := range data {
-		t := model.TaskRow{ID: d.id, Worker: d.worker, Title: d.scope, Scope: []string{d.scope}, State: d.state, Evidence: d.ev, EvidenceKnown: true, Returns: d.rw, ReworkLimit: 2}
+		t := model.TaskRow{ID: d.id, Worker: d.worker, Title: d.scope, Scope: []string{d.scope}, State: d.state, Returns: d.rw, ReworkLimit: 2}
 		if d.id == "T-023" {
 			t.Title = "npm broker"
 			t.AuthorizedHosts = []string{"api.openai.com", "github.com"}
