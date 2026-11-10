@@ -244,7 +244,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/sandbox failed: %v", err)
 	}
-	if !strings.Contains(out, "NOT VERIFIED") {
+	if !strings.Contains(out, sandboxStatusText) {
 		t.Fatalf("unexpected /sandbox response: %s", out)
 	}
 

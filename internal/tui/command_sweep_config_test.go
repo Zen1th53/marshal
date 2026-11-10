@@ -258,7 +258,7 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 	useCodexByDefault(t, absent.workDir)
 	cases := []struct{ cmd, bare, valid, result string }{
 		{"/policy", "NOT VERIFIED", "/policy network", "NOT VERIFIED"},
-		{"/sandbox", "NOT VERIFIED", "/sandbox read-only", "authority unavailable"},
+		{"/sandbox", sandboxStatusText, "/sandbox read-only", "authority unavailable"},
 		{"/doctor", "SYSTEM DIAGNOSTICS", "/doctor codex", "authority unavailable"},
 		{"/provider", "PROVIDER / HARNESS STATUS", "/provider config codex", "UNAVAILABLE"},
 		{"/harness", "HARNESS CAPABILITY PROBE", "/harness select qa codex", "NOT applied"},
@@ -671,7 +671,7 @@ exit 1
 	}
 	InvalidateProbeCache()
 	out := sweepWorkRun(t, ws, "/provider status", "Auth:    UNKNOWN")
-	if !strings.Contains(out, "BLOCKED_BY_POLICY") {
+	if !strings.Contains(out, strings.TrimRight(providerEgressLine, "\n")) {
 		t.Fatalf("changed egress observation: %s", out)
 	}
 	sweepWorkRun(t, ws, "/provider config codex", "Auth state: UNKNOWN")

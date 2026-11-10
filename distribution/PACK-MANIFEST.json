@@ -12621,8 +12621,8 @@
     },
     {
       "path": "internal/tui/command_sweep_config_test.go",
-      "sha256": "2b18272ae1bf9921bf4f4fb46da63839b1d02515dab6e3922f241ff0a1975c28",
-      "bytes": 28084
+      "sha256": "ea2b10a1c52309005d7db2cc622af06ecff8de28c6adb5e2ac92d4c6aaed310e",
+      "bytes": 28111
     },
     {
       "path": "internal/tui/command_sweep_crosscut_test.go",
@@ -13096,8 +13096,8 @@
     },
     {
       "path": "internal/tui/dynamic_e2e_test.go",
-      "sha256": "315f269782076fb78770855bdae7cbc984747688bd56a5b0e1783e78388fe1a5",
-      "bytes": 10365
+      "sha256": "2deab4d82e9180f94924cf704c5c37abdcb4b5ec711131348f03367dc6454c73",
+      "bytes": 10368
     },
     {
       "path": "internal/tui/edition_default.go",
