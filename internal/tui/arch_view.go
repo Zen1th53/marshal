@@ -26,6 +26,8 @@ type archSnapshot struct {
 	Loaded bool
 	At     time.Time
 	Err    string
+	// Telemetry is whether anonymous telemetry was on at the last read.
+	Telemetry bool
 }
 
 // archPaint is what one frame of the Architecture view needs.
@@ -46,29 +48,28 @@ type bpStep struct{ ID, Text string }
 var businessProcess = []bpStep{
 	{"M1", "Marshal introduces itself"}, {"L1", "language chosen"}, {"U1", "owner states the goal"}, {"S1", "Marshal reads state and earlier runs"},
 	{"M2", "clarify: requirements and limits recorded"}, {"U2", "owner picks mode and control level"}, {"M3", "mode and authority fixed"},
-	{"M4", "plan: tasks, workers, acceptance criteria"}, {"D1", "plan approved? (/marshal approve)"}, {"M5", "runtime dispatches approved tasks"},
+	{"M4", "plan: tasks, workers, acceptance criteria"}, {"D1", bpD1}, {"M5", "runtime dispatches approved tasks"},
 	{"A1", "workers do the tasks"}, {"A2", "workers hand in results"}, {"M6", "Marshal checks each result"}, {"D2", "defects? → back to A1 with reasons"},
-	{"D3", "interim approval due? → owner reviews"}, {"D4", "more tasks? → M5"}, {"M7", "assemble the result and report"}, {"U5", "owner accepts the result"},
-}
-
-// archComponents is what each part may do. Static text from the Board
-// prototype (COMPONENTS) until the accepted contract carries it.
-var archComponents = [][2]string{
-	{"Workspace / TUI", "Board, chat dock, inbox; owner input only"}, {"Marshal", "plans, reviews, never edits task files"},
-	{"Runtime", "Process 05 governed lanes, approvals R2/R3"}, {"Worktrees", "one per lane; merge to integration on accept"},
-	{"Egress broker", "manifest hosts only; others go to inbox"}, {"Credential broker", "short per-task leases; no auth files in lanes"},
-	{"Memory / MCP", "durable only after review; recalls audited"}, {"Audit", "append-only records"}, {"Host watch", "thermal, disk, memory policy every second"},
+	{"D3", bpD3}, {"D4", "more tasks? → M5"}, {"M7", "assemble the result and report"}, {"U5", bpU5},
 }
 
 // archRules is the rules in force. Static text from the Board prototype
 // (RULES) until the accepted contract carries them.
 var archRules = []string{"main never moves during a run", "hard gates need the typed canonical id", "architecture acceptance is owner-only", "publishing is owner-only"}
 
-// archRulesInForce is the build's rules in force: the Marshal's
-// own first.
-func archRulesInForce() []string {
+// archTelemetryRule is the Marshal build's own rule: ULTRA runs locally,
+// and anonymous telemetry is on or off as the machine is set now.
+func archTelemetryRule(on bool) string {
+	if on {
+		return "Marshal: local ULTRA, anonymous telemetry on"
+	}
+	return "Marshal: local ULTRA, telemetry off"
+}
+
+// archRulesInForce is the build's rules in force: the Marshal's own first.
+func archRulesInForce(telemetry bool) []string {
 	if editionExtreme {
-		return append([]string{"Marshal: local ULTRA, anonymous opt-out telemetry"}, archRules...)
+		return append([]string{archTelemetryRule(telemetry)}, archRules...)
 	}
 	return slices.Clone(archRules)
 }

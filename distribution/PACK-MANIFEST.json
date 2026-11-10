@@ -5071,8 +5071,8 @@
     },
     {
       "path": "internal/cloud/installation_telemetry.go",
-      "sha256": "a876f497f5eeaccd4654377077c44b12f814e62c2a055eeabd93c202cba3cd4f",
-      "bytes": 8784
+      "sha256": "7643128701c4e133745210dfcd5304a72a3872b7647e9966919aebcedf1e7902",
+      "bytes": 9503
     },
     {
       "path": "internal/cloud/installation_telemetry_test.go",
@@ -5158,6 +5158,11 @@
       "path": "internal/cloud/telemetry.go",
       "sha256": "d2a1d36de00a95f93831e6139426661ad39f22cd08b3bff8694b554a7c639b91",
       "bytes": 9862
+    },
+    {
+      "path": "internal/cloud/telemetry_active_test.go",
+      "sha256": "d5eb1d160fb5bb91c80cfd153b2d68654cc4644734e99fe71e038c6904727676",
+      "bytes": 885
     },
     {
       "path": "internal/cloud/telemetry_test.go",
@@ -11961,18 +11966,18 @@
     },
     {
       "path": "internal/tui/arch_view.go",
-      "sha256": "db7b2b46ddd34c5c5022199b1c80d50fa0d9b8172f59aac89f6455a413b43ea1",
-      "bytes": 20833
+      "sha256": "3fb98a4a35219d5601ca682d82ddc4817acec67def3a8eeea25f3cc816659fda",
+      "bytes": 20402
     },
     {
       "path": "internal/tui/arch_view_live.go",
-      "sha256": "9490572118ad3d18d79727df4b631ae0aa783438c7ed91c713fe501e4c4070a0",
-      "bytes": 9781
+      "sha256": "c5a8eff83a0d66baf91310efe48297655f265dc583aee700275c446f243e61c1",
+      "bytes": 9966
     },
     {
       "path": "internal/tui/arch_view_test.go",
-      "sha256": "de848b1847b0b27092b25e9f7a093c71d86f1ea35e688c893348ddf6cf031cfe",
-      "bytes": 20848
+      "sha256": "adfe6ed82e2b9d0742343d85aceef9e6e84836a174a5c3e2460b141287afbe2c",
+      "bytes": 20705
     },
     {
       "path": "internal/tui/architecture_acceptance.go",
@@ -12391,13 +12396,13 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "0187f9a2bb655777f4719b0f40a8447fc02a5e20440fae0164da2a53d1b740fc",
-      "bytes": 17609
+      "sha256": "a2295713e1371f78f060209f518104e006da916b1970babe526ebb39dd12b50d",
+      "bytes": 17588
     },
     {
       "path": "internal/tui/board_keymap_test.go",
-      "sha256": "f257e2c00795752a13c4c2e92b22f700469ec8e0817000f6ae79e8bd77ccb4a0",
-      "bytes": 8599
+      "sha256": "294f0aad290293203aec12b11340bafb383638136812dedaab069334b50b9f68",
+      "bytes": 8607
     },
     {
       "path": "internal/tui/board_lane_chips.go",
@@ -12575,6 +12580,26 @@
       "bytes": 1609
     },
     {
+      "path": "internal/tui/claims_default.go",
+      "sha256": "676d20807689aa98ec0000addc29e6e70b108b5a5823b84a8c1d793ea21be0ba",
+      "bytes": 1675
+    },
+    {
+      "path": "internal/tui/claims_default_test.go",
+      "sha256": "66c4c4e733475066853a1ec19aabed62a2dd37e42e446ce489d48061e68259b7",
+      "bytes": 673
+    },
+    {
+      "path": "internal/tui/claims_extreme.go",
+      "sha256": "c03ef0e9b4ca6a0070ecfbd6a8d82079355599da1dff0bef394ed68658be5c9a",
+      "bytes": 1710
+    },
+    {
+      "path": "internal/tui/claims_extreme_test.go",
+      "sha256": "c239ee2912f1222c08c65db60708755836d7c2e88557c038c90397b4240c11da",
+      "bytes": 1557
+    },
+    {
       "path": "internal/tui/codex_control_test.go",
       "sha256": "ce47a5b0e331d44b61799eeab8b38ddf5842d03625befa8cd9eb5cb341d22717",
       "bytes": 9120
@@ -12686,8 +12711,8 @@
     },
     {
       "path": "internal/tui/commands_egress.go",
-      "sha256": "82ba554f641764c1678a67dee8acf5ec93136762cafddc8cac99a95151abd7a9",
-      "bytes": 6498
+      "sha256": "3f26076bd0fdc212e0279c05f6a867a7ae461e121fad94281022840c9309716b",
+      "bytes": 6372
     },
     {
       "path": "internal/tui/commands_evidence.go",
@@ -12696,8 +12721,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "af1913f07d9bbfdc88480f7549ed4fb79e7a50d9afeb210ecf1d964a8cc71435",
-      "bytes": 60403
+      "sha256": "6b8c051b5fe58aa3328d233e2085aca847693c74ff6faf6976362bf57cf92a2b",
+      "bytes": 60096
     },
     {
       "path": "internal/tui/commands_fingerprint.go",
@@ -13771,8 +13796,8 @@
     },
     {
       "path": "internal/tui/modelsscreen.go",
-      "sha256": "002aa8342fc9fd4b1f635dc3368cab320f2ab486f9b684c8434d4e30aa8ee6c3",
-      "bytes": 18159
+      "sha256": "c3bed2d9afc5df058598a16ad170c8674b57047c75f03f6f5b4846c072899555",
+      "bytes": 18102
     },
     {
       "path": "internal/tui/mutation_test.go",
@@ -14725,14 +14750,24 @@
       "bytes": 5154
     },
     {
-      "path": "internal/tui/testdata/board/arch-split-120x40.golden",
+      "path": "internal/tui/testdata/board/arch-governed-split-120x40.golden",
       "sha256": "869b26c8dbd14b1d65c29f7538635a4767eb8e248abb521a3ad7224332103e7b",
       "bytes": 7209
     },
     {
-      "path": "internal/tui/testdata/board/arch-split-80x24.golden",
+      "path": "internal/tui/testdata/board/arch-governed-split-80x24.golden",
       "sha256": "f7a92e178c48eeca9d1a16822c5757dce4b991289daac107800106ebf768368b",
       "bytes": 3349
+    },
+    {
+      "path": "internal/tui/testdata/board/arch-split-120x40.golden",
+      "sha256": "cd5d611285ad720d087f498a9cd52940c77c2c45b4d0e7d655361104796b9ccc",
+      "bytes": 7198
+    },
+    {
+      "path": "internal/tui/testdata/board/arch-split-80x24.golden",
+      "sha256": "e228cb5eaa8a4baf0a6787104c31823b7ab8d7eca88a30dcd796e5a04ebd25ae",
+      "bytes": 3397
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-home-200x60.golden",
@@ -14880,13 +14915,23 @@
       "bytes": 3951
     },
     {
-      "path": "internal/tui/testdata/board/help-split-120x40.golden",
+      "path": "internal/tui/testdata/board/help-governed-split-120x40.golden",
       "sha256": "dc63d280e4925c79e5c71e1518e2133e98293faf8d5f927ef153835f4eee84f8",
       "bytes": 8352
     },
     {
-      "path": "internal/tui/testdata/board/help-split-80x24.golden",
+      "path": "internal/tui/testdata/board/help-governed-split-80x24.golden",
       "sha256": "3ca1cdc02b120ed1d5b910dfa5ed226d4f8d3aeacc642e2cb93c85caf8e7f1b5",
+      "bytes": 3808
+    },
+    {
+      "path": "internal/tui/testdata/board/help-split-120x40.golden",
+      "sha256": "be449a0276feda411d60be41d2e20b748deb95dac92cc850a0457a51c59207d5",
+      "bytes": 8352
+    },
+    {
+      "path": "internal/tui/testdata/board/help-split-80x24.golden",
+      "sha256": "cc0ed1e6252f6001803382ab5935f10373a2232383ffe883c3345449fa903afc",
       "bytes": 3808
     },
     {

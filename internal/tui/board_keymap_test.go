@@ -262,7 +262,7 @@ func TestBoardHelpGoldens(t *testing.T) {
 			r := l.Overlay(0)
 			help, _ := v.helpOverlay(r.W, r.H, 0)
 			frame := overlayBoard(paintBoard(l, th, v.render), l, th, 0, help)
-			checkViewGolden(t, "help", tc.name, frame, tc.w)
+			checkViewGolden(t, helpGoldenName, tc.name, frame, tc.w)
 		})
 	}
 }
