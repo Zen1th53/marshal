@@ -216,6 +216,12 @@ type Workspace struct {
 		mu   sync.Mutex
 		card *askCard
 	}
+	// req is the open requirements card the Marshal filled from the code
+	// and memory, shown as the first inbox entry (board_requirements.go).
+	req struct {
+		mu   sync.Mutex
+		card *reqCard
+	}
 	// guard is the plan-only guard's baseline and alert (board_guard.go);
 	// guardSource replaces git status and guardTell the delivery to the
 	// Marshal chat in tests.

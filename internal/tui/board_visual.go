@@ -88,6 +88,9 @@ type boardVisual struct {
 	// ask is the question the Marshal asked the owner (board_ask.go), nil
 	// for none; it renders before the gates, one key or click per answer.
 	ask *askCard
+	// req is the requirements card the Marshal filled (board_requirements.go),
+	// nil for none; it is the first inbox entry, Enter confirms, e edits.
+	req *reqCard
 	// guard is the plan-only guard's alert (board_guard.go), nil for
 	// none; guardArmed is set while its undo waits for Enter, guardUndo
 	// what it would do; guardPrefix the project's directory in its
@@ -1129,6 +1132,12 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		summary = "empty · no decision waiting"
 	}
 	stop, stopped := v.stopNotice()
+	if v.req != nil && !stopped {
+		summary = "the Marshal filled the requirements · you confirm or edit"
+		if m := len(v.board.Inbox); m > 0 {
+			summary += fmt.Sprintf(" · %d more waiting", m)
+		}
+	}
 	if v.ask != nil && !stopped {
 		summary = "the Marshal waits for your answer"
 		if m := len(v.board.Inbox); m > 0 {
@@ -1170,7 +1179,18 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		out = append(out, lines...)
 		out = out[:min(len(out), h)]
 	}
-	// A question the Marshal asked the owner comes first: one key or one
+	// The requirements card is the first inbox entry: the a–h lines the
+	// Marshal filled, Enter to confirm, e to edit (board_requirements.go).
+	if v.req != nil && len(out) < h {
+		lines := v.requirementsEntry(*v.req, p.Rect.X, p.Rect.Y+len(out), w)
+		for len(out)+len(lines) > h && len(lines) > 0 {
+			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
+			lines = lines[:len(lines)-1]
+		}
+		out = append(out, lines...)
+		out = out[:min(len(out), h)]
+	}
+	// A question the Marshal asked the owner comes next: one key or one
 	// click sends the chosen answer to the chat (board_ask.go).
 	if v.ask != nil && len(out) < h {
 		lines := v.askEntry(*v.ask, p.Rect.X, p.Rect.Y+len(out), w)
