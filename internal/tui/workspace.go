@@ -590,7 +590,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	})
 
 	// The Board's keys and views lead the palette; the registry follows.
-	paletteActions := append(boardPaletteActions(), GlobalRegistry.ToPaletteActions()...)
+	paletteActions := append(boardPaletteActions(nil), GlobalRegistry.ToPaletteActions()...)
 	palette := NewCommandPalette(th, paletteActions)
 	diffViewer := NewDiffViewer(th, cwd)
 

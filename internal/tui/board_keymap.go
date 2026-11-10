@@ -42,87 +42,208 @@ type boardKey struct {
 	// whose confirmation is still owed. TestBoardKeymapClasses pins the
 	// list, so a new one cannot slip in.
 	Direct string
+	// ID is the action's stable name, unique across the table and written
+	// lower-case dotted ("view.host", "marshal.say"). The help, the
+	// palette, the hint bar and every mouse button name one action by it,
+	// so the one registry drives them all and they cannot drift.
+	ID string
+	// Hint is the one-to-three word label the hint bar shows for the key
+	// ("say", "help"); empty keeps the key out of the hint bar.
+	Hint string
+	// When reports whether the action can run right now; nil means it
+	// always can. It reads only in-memory state (atomics, boardUI, the
+	// inbox), never disk, tmux or the store, because it runs on the paint
+	// path when the palette or the hint bar asks.
+	When func(*Workspace) bool
+	// Why is one plain sentence for why the action cannot run now, shown on
+	// the palette's disabled rows and when a click lands on an off hint. It
+	// is required whenever When is set.
+	Why func(*Workspace) string
 }
 
 func pressRune(r rune) *KeyEvent { return &KeyEvent{Type: KeyRune, Rune: r} }
 
+// reason wraps a fixed sentence as a Why, the common case where the one
+// reason an action is off does not depend on more of the workspace.
+func reason(s string) func(*Workspace) string { return func(*Workspace) string { return s } }
+
 // boardKeymap is every key the Board binds, in the order help lists them.
 var boardKeymap = []boardKey{
-	{Group: "VIEWS", Keys: "1  Esc", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "2  h", What: "host: temperature, disk, guards", View: "Host", Press: pressRune('2'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "3", What: "memory (MCP): review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen},
-	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen},
+	{Group: "VIEWS", Keys: "1  Esc", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
+	{Group: "VIEWS", Keys: "2  h", What: "host: temperature, disk, guards", View: "Host", Press: pressRune('2'), Class: KeyOpen, ID: "view.host", Hint: "host", When: func(w *Workspace) bool { return w.hostWatch.Load() != nil }, Why: reason("Host vitals are not available in this session.")},
+	{Group: "VIEWS", Keys: "3", What: "memory (MCP): review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
+	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen, ID: "view.providers", Hint: "providers", When: func(w *Workspace) bool { return w.providerSrc() != nil }, Why: reason("Provider health has nothing to show in this session.")},
+	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen, ID: "view.verify", Hint: "verify", When: func(w *Workspace) bool { return w.verifySrc() != nil }, Why: reason("There are no claims to verify in this session.")},
+	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen, ID: "view.security", Hint: "security", When: func(w *Workspace) bool { return w.securitySrc() != nil }, Why: reason("There is no security activity to show in this session.")},
+	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil }, Why: reason("There is no plan to show in this session.")},
+	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen, ID: "view.architecture", Hint: "architecture", When: func(w *Workspace) bool { return w.archSrc() != nil }, Why: reason("There is no architecture to show in this session.")},
 
-	{Group: "BOARD", Keys: "j k  ↑ ↓", What: "move in the focused pane, scroll", Class: KeyMove},
-	{Group: "BOARD", Keys: "Enter", What: "inspect a task; a lane: its worker", Class: KeyOpen},
-	{Group: "BOARD", Keys: "t  i  l", What: "focus tasks, inbox, lanes", Class: KeyMove},
-	{Group: "BOARD", Keys: "Esc", What: "close the inspector, a view, help", Class: KeyOpen},
-	{Group: "BOARD", Keys: "e", What: "inspector: toggle all events", Class: KeyOpen},
-	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen},
-	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen},
+	{Group: "BOARD", Keys: "j k  ↑ ↓", What: "move in the focused pane, scroll", Class: KeyMove, ID: "board.move", Hint: "move"},
+	{Group: "BOARD", Keys: "Enter", What: "inspect a task; a lane: its worker", Class: KeyOpen, ID: "board.inspect", Hint: "inspect", When: func(w *Workspace) bool { return w.boardUI.task != "" || w.boardUI.lane != "" }, Why: reason("Select a task or a lane first.")},
+	{Group: "BOARD", Keys: "t  i  l", What: "focus tasks, inbox, lanes", Class: KeyMove, ID: "board.focus"},
+	{Group: "BOARD", Keys: "Tab", What: "next pane; Shift+Tab: previous", Class: KeyMove, ID: "board.pane"},
+	{Group: "BOARD", Keys: "Esc  q", What: "close the inspector, a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.boardUI.inspect != "" || w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
+	{Group: "BOARD", Keys: "e", What: "inspector: toggle all events", Class: KeyOpen, ID: "inspector.events", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
+	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen, ID: "inspector.walk", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
+	{Group: "BOARD", Keys: "o", What: "inspector: show the worker's pane", Class: KeyOpen, ID: "inspector.pane"},
+	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
 
-	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}},
-	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm},
-	{Group: "INBOX", Keys: "i  Enter", What: "show the request's reason", Class: KeyOpen},
-	{Group: "INBOX", Keys: "Enter", What: "run stopped: do what it suggests", Class: KeyOpen, Listed: true},
-	{Group: "INBOX", Keys: "x", What: "cancel the decision being typed", Class: KeyOpen},
-	{Group: "INBOX", Keys: "hard gate", What: "type the canonical id, then Enter", Class: KeyConfirm, Listed: true},
+	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}, ID: "inbox.reply", Hint: "reply", When: func(w *Workspace) bool { return w.boardReplyWaiting() }, Why: reason("Nothing is waiting for your reply.")},
+	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm, ID: "inbox.decide", When: func(w *Workspace) bool { return len(w.boardInbox()) > 0 }, Why: reason("The inbox has nothing to decide.")},
+	{Group: "INBOX", Keys: "i  Enter", What: "show the request's reason", Class: KeyOpen, ID: "inbox.reason", Hint: "inbox", When: func(w *Workspace) bool { return len(w.boardInbox()) > 0 }, Why: reason("The inbox has nothing to show.")},
+	{Group: "INBOX", Keys: "Enter", What: "run stopped: do what it suggests", Class: KeyOpen, Listed: true, ID: "run.stopped", When: func(w *Workspace) bool { return w.boardStopWaiting() }, Why: reason("No stopped run is waiting.")},
+	{Group: "INBOX", Keys: "x", What: "cancel the decision being typed", Class: KeyOpen, ID: "inbox.cancel", When: func(w *Workspace) bool { return w.inboxView.Confirming() }, Why: reason("No decision is being typed.")},
+	{Group: "INBOX", Keys: "hard gate", What: "type the canonical id, then Enter", Class: KeyConfirm, Listed: true, ID: "inbox.hardgate"},
 
-	{Group: "IN A VIEW", Keys: "a  r  i", What: "memory: keep, reject, evidence", Class: KeyConfirm, Except: map[string]KeyClass{"i": KeyOpen}},
-	{Group: "IN A VIEW", Keys: "PgUp PgDn", What: "memory: scroll", Class: KeyMove},
-	{Group: "IN A VIEW", Keys: "v", What: "providers: verify harness, Enter", Press: pressRune('v'), Class: KeyConfirm},
-	{Group: "IN A VIEW", Keys: "r", What: "providers: route around, then Enter", Class: KeyConfirm},
-	{Group: "IN A VIEW", Keys: "x", What: "verify: return claims, then Enter", Press: pressRune('x'), Class: KeyConfirm},
-	{Group: "IN A VIEW", Keys: "a  d", What: "security: allow, deny, then Enter", Class: KeyConfirm},
-	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen},
-	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen},
+	{Group: "IN A VIEW", Keys: "a  r  i", What: "memory: keep, reject, evidence", Class: KeyConfirm, Except: map[string]KeyClass{"i": KeyOpen}, ID: "memory.decide", When: func(w *Workspace) bool { return w.memView.Load() }, Why: reason("Open the Memory view first.")},
+	{Group: "IN A VIEW", Keys: "PgUp PgDn", What: "memory: scroll", Class: KeyMove, ID: "memory.scroll", When: func(w *Workspace) bool { return w.memView.Load() }, Why: reason("Open the Memory view first.")},
+	{Group: "IN A VIEW", Keys: "v", What: "providers: verify harness, Enter", Press: pressRune('v'), Class: KeyConfirm, ID: "providers.verify", Hint: "verify", When: func(w *Workspace) bool { return w.provView.Load() }, Why: reason("Open the Providers view first.")},
+	{Group: "IN A VIEW", Keys: "r", What: "providers: route around, then Enter", Class: KeyConfirm, ID: "providers.route", When: func(w *Workspace) bool { return w.provView.Load() }, Why: reason("Open the Providers view first.")},
+	{Group: "IN A VIEW", Keys: "x", What: "verify: return claims, then Enter", Press: pressRune('x'), Class: KeyConfirm, ID: "verify.return", When: func(w *Workspace) bool { return w.verView.Load() }, Why: reason("Open the Verify view first.")},
+	{Group: "IN A VIEW", Keys: "a  d", What: "security: allow, deny, then Enter", Class: KeyConfirm, ID: "security.decide", When: func(w *Workspace) bool { return w.secView.Load() }, Why: reason("Open the Security view first.")},
+	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen, ID: "plan.inspect", When: func(w *Workspace) bool { return w.planView.Load() }, Why: reason("Open the Plan view first.")},
+	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen, ID: "arch.open", When: func(w *Workspace) bool { return w.archView.Load() }, Why: reason("Open the Architecture view first.")},
 
-	{Group: "MARSHAL", Keys: "m  F11", What: "chat; F11 or Alt+arrow switch", Press: pressRune('m'), Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "Ctrl+P", What: "command palette", Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "?", What: "this help", Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)"},
-	{Group: "MARSHAL", Keys: "Ctrl+C", What: "interrupt; twice to exit", Class: KeyConfirm, Direct: "spec: ^C unchanged, it interrupts; a second press exits"},
+	{Group: "MARSHAL", Keys: "m  F11", What: "chat; F11 or Alt+arrow switch", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() }, Why: reason("The Marshal chat opens on the Board.")},
+	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", When: func(w *Workspace) bool { return w.boardVisible() && w.boardUI.inspect == "" }, Why: reason("Leave the inspector to speak to the Marshal.")},
+	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen, ID: "command.line", Hint: "command"},
+	{Group: "MARSHAL", Keys: "Ctrl+P", What: "command palette", Class: KeyOpen, ID: "palette", Hint: "palette"},
+	{Group: "MARSHAL", Keys: "?", What: "this help", Press: pressRune('?'), Class: KeyOpen, ID: "help", Hint: "help"},
+	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)", ID: "workers.stop"},
+	{Group: "MARSHAL", Keys: "Ctrl+C", What: "interrupt; twice to exit", Class: KeyConfirm, Direct: "spec: ^C unchanged, it interrupts; a second press exits", ID: "interrupt"},
 
-	{Group: "FUNCTION KEYS", Keys: "F1", What: "help overview", Command: "/help", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F2", What: "review", Command: "/review", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F3", What: "diff", Command: "/diff", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F4", What: "status", Command: "/status", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F5", What: "models", Command: "/models", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F6", What: "MCP", Command: "/mcp", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F7", What: "native Codex", Command: "/codex", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F8", What: "native Claude", Command: "/claude", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F9", What: "native OpenCode", Command: "/opencode", Class: KeyOpen},
-	{Group: "FUNCTION KEYS", Keys: "F10", What: "update: check or install", Press: &KeyEvent{Type: KeyF10}, Class: KeyConfirm, Direct: "spec: F-keys unchanged; it installs only the update its notice offered"},
-	{Group: "FUNCTION KEYS", Keys: "F12", What: "native Antigravity", Command: "/agy", Class: KeyOpen},
+	{Group: "FUNCTION KEYS", Keys: "F1", What: "help overview", Command: "/help", Class: KeyOpen, ID: "fkey.help"},
+	{Group: "FUNCTION KEYS", Keys: "F2", What: "review", Command: "/review", Class: KeyOpen, ID: "fkey.review"},
+	{Group: "FUNCTION KEYS", Keys: "F3", What: "diff", Command: "/diff", Class: KeyOpen, ID: "fkey.diff"},
+	{Group: "FUNCTION KEYS", Keys: "F4", What: "status", Command: "/status", Class: KeyOpen, ID: "fkey.status"},
+	{Group: "FUNCTION KEYS", Keys: "F5", What: "models", Command: "/models", Class: KeyOpen, ID: "fkey.models"},
+	{Group: "FUNCTION KEYS", Keys: "F6", What: "MCP", Command: "/mcp", Class: KeyOpen, ID: "fkey.mcp"},
+	{Group: "FUNCTION KEYS", Keys: "F7", What: "native Codex", Command: "/codex", Class: KeyOpen, ID: "fkey.codex"},
+	{Group: "FUNCTION KEYS", Keys: "F8", What: "native Claude", Command: "/claude", Class: KeyOpen, ID: "fkey.claude"},
+	{Group: "FUNCTION KEYS", Keys: "F9", What: "native OpenCode", Command: "/opencode", Class: KeyOpen, ID: "fkey.opencode"},
+	{Group: "FUNCTION KEYS", Keys: "F10", What: "update: check or install", Press: &KeyEvent{Type: KeyF10}, Class: KeyConfirm, Direct: "spec: F-keys unchanged; it installs only the update its notice offered", ID: "fkey.update"},
+	{Group: "FUNCTION KEYS", Keys: "F12", What: "native Antigravity", Command: "/agy", Class: KeyOpen, ID: "fkey.agy"},
+}
+
+// boardReplyWaiting reports whether a reply is waiting on the Board: an
+// owner gate still to send, or the plan guard's undo alert. inbox.reply's
+// keys (y, u, K) do nothing without one, so the registry marks it off.
+func (w *Workspace) boardReplyWaiting() bool {
+	g := &w.guard
+	g.mu.Lock()
+	alert := g.alert != nil
+	g.mu.Unlock()
+	if alert {
+		return true
+	}
+	w.mu.RLock()
+	p := w.state.Marshal
+	w.mu.RUnlock()
+	for _, gate := range w.ownerGates(p) {
+		if !gate.sent {
+			return true
+		}
+	}
+	return false
+}
+
+// boardStopWaiting reports whether a stopped run is waiting with an empty
+// inbox, the only time run.stopped's Enter arms what the stop suggests and a
+// second Enter does it.
+func (w *Workspace) boardStopWaiting() bool {
+	if len(w.boardInbox()) > 0 {
+		return false
+	}
+	w.mu.RLock()
+	p := w.state.Marshal
+	var board boardmodel.Board
+	note, stopped := "", false
+	if p != nil {
+		board, note, stopped = p.Board, p.Note, p.Stopped
+	}
+	w.mu.RUnlock()
+	if p == nil {
+		return false
+	}
+	// The same notice the inbox's Enter reads (handleBoardKey), so the row
+	// is on exactly when that Enter would arm the stop.
+	_, ok := (boardVisual{board: board, note: note, stopped: stopped}).stopNotice()
+	return ok
+}
+
+// action is the entry as a palette action: the view entry for a view's key,
+// the key entry otherwise. runBoardAction and boardPaletteActions both build
+// it, so a click, the palette and the hint bar run the one same thing.
+func (k boardKey) action() PaletteAction {
+	a := PaletteAction{ID: k.ID, Category: "KEY", Title: k.What, Description: k.Group, Shortcut: k.Keys, Command: k.Command, Key: k.Press, Pane: k.pane()}
+	if k.View != "" {
+		a.Category, a.Title, a.View = "VIEW", "Open "+k.View+" view", true
+		if k.View == "Board" {
+			a.Title = "Open the Board"
+		}
+	}
+	return a
+}
+
+// available reports whether the action can run now and, when not, why.
+func (k boardKey) available(w *Workspace) (bool, string) {
+	if k.When == nil || k.When(w) {
+		return true, ""
+	}
+	if k.Why != nil {
+		return false, k.Why(w)
+	}
+	return false, ""
+}
+
+// boardAction is the registry entry with id; ok is false for an unknown id.
+func boardAction(id string) (boardKey, bool) {
+	for _, k := range boardKeymap {
+		if k.ID == id {
+			return k, true
+		}
+	}
+	return boardKey{}, false
 }
 
 // boardPaletteActions is the keymap as palette entries: one "Open <View>
-// view" per view first, then every other key.
-func boardPaletteActions() []PaletteAction {
+// view" per view first, then every other key. With a workspace it marks the
+// entries that cannot run now disabled and why; a nil workspace (the static
+// constructor) leaves every entry available.
+func boardPaletteActions(w *Workspace) []PaletteAction {
 	var views, keys []PaletteAction
 	for _, k := range boardKeymap {
-		a := PaletteAction{Category: "KEY", Title: k.What, Description: k.Group, Shortcut: k.Keys, Command: k.Command, Key: k.Press, Pane: k.pane()}
-		if k.View != "" {
-			a.ID, a.Category, a.Title, a.View = "view."+strings.ToLower(k.View), "VIEW", "Open "+k.View+" view", true
-			if k.View == "Board" {
-				a.Title = "Open the Board"
+		a := k.action()
+		if w != nil {
+			if ok, why := k.available(w); !ok {
+				a.Disabled, a.Reason = true, why
 			}
+		}
+		if k.View != "" {
 			views = append(views, a)
 			continue
 		}
-		a.ID = "key." + k.Keys
 		if k.Command == "" && k.Press == nil {
 			a.Disabled, a.Reason = true, "press "+k.Keys
 		}
 		keys = append(keys, a)
 	}
 	return append(views, keys...)
+}
+
+// runBoardAction runs one registry action the way its key would: the one
+// path the palette, the hint bar and every mouse button take. An unknown id
+// does nothing; an action that cannot run now says why instead.
+func (w *Workspace) runBoardAction(ctx context.Context, id string) {
+	k, ok := boardAction(id)
+	if !ok {
+		return
+	}
+	if run, why := k.available(w); !run {
+		w.setOutput(why, false)
+		return
+	}
+	w.runPaletteAction(ctx, k.action())
 }
 
 // pane is the Board pane or view the entry's keys act in: the inbox for

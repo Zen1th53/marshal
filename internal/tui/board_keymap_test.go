@@ -34,12 +34,12 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 			listed[f] = true
 		}
 	}
-	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "r", "i", "t", "l", "j", "k", "F11", "Esc", "Enter", "?", "/", "Ctrl+P", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
+	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "q", "r", "i", "t", "l", "j", "k", "Tab", "F11", "Esc", "Enter", "?", "/", "Ctrl+P", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
 		if !listed[want] {
 			t.Errorf("the keymap lacks %q", want)
 		}
 	}
-	actions := boardPaletteActions()
+	actions := boardPaletteActions(nil)
 	if len(actions) != len(boardKeymap) {
 		t.Fatalf("palette has %d key entries for %d keys", len(actions), len(boardKeymap))
 	}
@@ -71,16 +71,18 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 	}
 	w.palette.Close()
 
-	// The overlay lists every key and what it does, unscrolled. The vitals
-	// row takes the top row of every screen, so the body (and the overlay in
-	// it) is one row shorter than the terminal: 41 rows give the overlay the
-	// same height it had before the vitals row existed.
+	// The overlay lists every key and what it does. At 120 wide it is two
+	// columns; the keys and the mouse group no longer fit the body, so a
+	// body tall enough to hold them all is rendered to check nothing is
+	// dropped (the live overlay scrolls the overflow with j/k). The vitals
+	// row takes the top row of every screen, so 41 rows give the overlay
+	// the height a 40-row screen had before it.
 	th := NewTheme(ThemeNoColor, true, true)
 	v := boardViewVisual(memEpoch, th)
 	r := layout.Compute(120, 41, layout.Split).Overlay(0)
-	help, more := v.helpOverlay(r.W, r.H, 0)
+	help, more := v.helpOverlay(r.W, 1000, 0)
 	if more != 0 {
-		t.Fatalf("help at 120x41 scrolls %d lines", more)
+		t.Fatalf("help with a tall body still scrolls %d lines", more)
 	}
 	plain := StripANSI(strings.Join(help, "\n"))
 	for _, k := range boardKeymap {
@@ -138,7 +140,7 @@ func TestBoardKeymapBound(t *testing.T) {
 		}
 	}
 	ctx := t.Context()
-	for _, a := range boardPaletteActions() {
+	for _, a := range boardPaletteActions(nil) {
 		if !a.View {
 			continue
 		}
@@ -171,7 +173,7 @@ func TestBoardKeymapBound(t *testing.T) {
 			w.composer.SetText("")
 			for _, k := range boardKeymap {
 				if k.View == c.view {
-					w.runPaletteAction(ctx, boardPaletteActions()[viewIndex(c.view)])
+					w.runPaletteAction(ctx, boardPaletteActions(nil)[viewIndex(c.view)])
 				}
 			}
 			if !open[c.view]() {
@@ -210,7 +212,7 @@ func TestBoardKeymapBound(t *testing.T) {
 }
 
 func viewIndex(view string) int {
-	for i, a := range boardPaletteActions() {
+	for i, a := range boardPaletteActions(nil) {
 		if a.Title == "Open "+view+" view" {
 			return i
 		}
@@ -248,6 +250,106 @@ func TestBoardHelpOverlay(t *testing.T) {
 	}
 	if w.handleBoardHelpKey(KeyEvent{Type: KeyRune, Rune: 'b'}) {
 		t.Fatal("a closed help took a key")
+	}
+}
+
+// Every registry row has a unique id, a Why wherever it gates itself, and
+// is reachable by that id.
+func TestBoardActionIDsUnique(t *testing.T) {
+	if len(boardKeymap) != 50 {
+		t.Fatalf("boardKeymap has %d rows, want 50", len(boardKeymap))
+	}
+	seen := map[string]bool{}
+	for _, k := range boardKeymap {
+		if k.ID == "" {
+			t.Errorf("%s %q has no ID", k.Group, k.Keys)
+			continue
+		}
+		if seen[k.ID] {
+			t.Errorf("duplicate ID %q", k.ID)
+		}
+		seen[k.ID] = true
+		if k.When != nil && k.Why == nil {
+			t.Errorf("%s has a When but no Why", k.ID)
+		}
+		if _, ok := boardAction(k.ID); !ok {
+			t.Errorf("boardAction(%q) did not find the row", k.ID)
+		}
+	}
+	if _, ok := boardAction("nope.nope"); ok {
+		t.Error("boardAction found an unknown id")
+	}
+}
+
+// runBoardAction runs a view's action exactly as its key does: the Board's
+// key opens the view, the action opens the same view, and the Board's action
+// returns to the Board.
+func TestBoardActionRunsLikeItsKey(t *testing.T) {
+	w, _, _ := viewsWorkspace(t)
+	defer w.Close()
+	hw, _, _ := testWatcher(t, nil)
+	w.hostWatch.Store(hw)
+	ctx := t.Context()
+	open := map[string]func() bool{
+		"Host": w.hostView.Load, "Memory": w.memView.Load, "Providers": w.provView.Load, "Verify": w.verView.Load,
+		"Security": w.secView.Load, "Plan": w.planView.Load, "Architecture": w.archView.Load,
+	}
+	anyOpen := func() bool {
+		for _, f := range open {
+			if f() {
+				return true
+			}
+		}
+		return false
+	}
+	for _, k := range boardKeymap {
+		if k.View == "" {
+			continue
+		}
+		w.closeBodyViews()
+		if k.View == "Board" {
+			w.openArchView()
+			w.runBoardAction(ctx, k.ID)
+			if anyOpen() {
+				t.Errorf("%s did not return to the Board", k.ID)
+			}
+			continue
+		}
+		w.runBoardAction(ctx, k.ID)
+		if !open[k.View]() {
+			t.Errorf("%s did not open the %s view", k.ID, k.View)
+		}
+		for other, f := range open {
+			if other != k.View && f() {
+				t.Errorf("%s left the %s view open", k.ID, other)
+			}
+		}
+	}
+}
+
+// An action that cannot run now runs nothing and says why: with no host
+// vitals, view.host leaves the Host view shut and answers with its Why.
+func TestBoardActionUnavailableSaysWhy(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	ctx := t.Context()
+	if w.hostWatch.Load() != nil {
+		t.Fatal("the fixture already has host vitals")
+	}
+	k, ok := boardAction("view.host")
+	if !ok {
+		t.Fatal("view.host is not in the registry")
+	}
+	w.runBoardAction(ctx, "view.host")
+	if w.hostView.Load() {
+		t.Error("view.host opened the Host view with no vitals")
+	}
+	want := k.Why(w)
+	w.mu.RLock()
+	got := w.state.LastOutput
+	w.mu.RUnlock()
+	if got != want {
+		t.Errorf("answer %q, want the row's Why %q", got, want)
 	}
 }
 
