@@ -75,7 +75,7 @@ Example goal:
 After receiving your goal, the Marshal reviews your repository structure, asks clarifying questions if needed, and drafts an **architecture proposal** and project contract.
 
 When the draft is ready:
-1. The Board header alerts with a amber **`NEEDS YOU`** banner:
+1. The Board header alerts with an orange **`NEEDS YOU`** banner:
    ```text
    contract my-project rev 1 waits for your acceptance · [y] accept architecture · [b] open details
    ```
