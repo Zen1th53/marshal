@@ -555,3 +555,33 @@ func TestHostNoticeNeverDisplacesRunNote(t *testing.T) {
 		t.Fatalf("notice alone %q", got)
 	}
 }
+
+func TestHostCPUBusy(t *testing.T) {
+	tick := func(total, idle uint64) hostwatch.Sample {
+		return hostwatch.Sample{CPUTicksTotal: total, CPUTicksIdle: idle, CPUTicksKnown: true}
+	}
+	noTick := hostwatch.Sample{}
+
+	cases := []struct {
+		name    string
+		samples []hostwatch.Sample
+		wantPct float64
+		wantOK  bool
+	}{
+		{"two samples", []hostwatch.Sample{tick(10000, 8500), tick(12000, 10000)}, 25, true},
+		{"newest without ticks skipped", []hostwatch.Sample{tick(10000, 8500), tick(12000, 10000), noTick}, 25, true},
+		{"one sample", []hostwatch.Sample{tick(10000, 8500)}, 0, false},
+		{"decreasing total", []hostwatch.Sample{tick(12000, 10000), tick(10000, 8500)}, 0, false},
+		{"fewer than two with ticks", []hostwatch.Sample{noTick, tick(12000, 10000), noTick}, 0, false},
+		{"empty ring", nil, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := hostSnapshot{Samples: c.samples}
+			pct, ok := s.cpuBusy()
+			if ok != c.wantOK || (ok && pct != c.wantPct) {
+				t.Fatalf("cpuBusy() = (%v, %v), want (%v, %v)", pct, ok, c.wantPct, c.wantOK)
+			}
+		})
+	}
+}

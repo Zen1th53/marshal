@@ -65,6 +65,9 @@ func (s *Sampler) Read(ctx context.Context) (Sample, error) {
 	// 2. Load average
 	s.readLoadAvg(procRoot, &sample)
 
+	// 2b. CPU tick counters
+	s.readCPUStat(procRoot, &sample)
+
 	// 3. CPU frequency
 	s.readCPUFreq(sysRoot, &sample)
 
@@ -145,6 +148,39 @@ func (s *Sampler) readLoadAvg(procRoot string, sample *Sample) {
 			sample.CPULoadAvg15 = l15
 			sample.CPULoadAvgKnown = true
 		}
+	}
+}
+
+func (s *Sampler) readCPUStat(procRoot string, sample *Sample) {
+	data, err := os.ReadFile(filepath.Join(procRoot, "stat"))
+	if err != nil {
+		return
+	}
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "cpu ") {
+			continue
+		}
+		fields := strings.Fields(line)[1:] // drop the "cpu" label
+		if len(fields) < 8 {
+			return
+		}
+		var total, idle uint64
+		for i := 0; i < 8; i++ {
+			v, err := strconv.ParseUint(fields[i], 10, 64)
+			if err != nil {
+				return
+			}
+			total += v
+			if i == 3 || i == 4 { // idle + iowait
+				idle += v
+			}
+		}
+		sample.CPUTicksTotal = total
+		sample.CPUTicksIdle = idle
+		sample.CPUTicksKnown = true
+		return
 	}
 }
 
