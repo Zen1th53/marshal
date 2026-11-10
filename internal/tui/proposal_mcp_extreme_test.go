@@ -8,6 +8,7 @@ import (
 	"errors"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/proposalmcp"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -362,5 +363,26 @@ func TestLiveMCPCodexBindingNotAddedWithoutAttachedMarshal(t *testing.T) {
 			t.Fatalf("%s worker configuration received Marshal launch binding", provider)
 		}
 		cleanup()
+	}
+}
+func TestLiveMCPIntakeLanguageOnlyAccepted(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	if err := w.saveMarshalIntake(marshalIntake{Language: "English", EarlierWork: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	r := submitMCP(t, cfg, `{"submission_id":"lang-only","proposal":{"action":"intake","language":"Uzbek"}}`)
+	if r.State != "applied" {
+		t.Fatalf("language-only intake not applied over MCP: %+v", r)
+	}
+	data, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved marshalIntake
+	if err := json.Unmarshal(data, &saved); err != nil || saved.Language != "Uzbek" || saved.EarlierWork != "yes" {
+		t.Fatalf("saved intake = %+v %v, want Uzbek with earlier_work kept", saved, err)
+	}
+	if _, err := proposalmcp.Call(t.Context(), cfg, "submit", json.RawMessage(`{"submission_id":"lang-extra","proposal":{"action":"intake","language":"English","x":"1"}}`)); err == nil {
+		t.Fatal("intake with unknown key accepted over MCP")
 	}
 }
