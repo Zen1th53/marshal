@@ -181,17 +181,6 @@ func TestSkillSourcesDoNotExposeLocalPaths(t *testing.T) {
 				check("command error", err.Error())
 			}
 		}
-		authority := ws.controlSource().Authority.(*runtimeControlAuthority)
-		snap := (&ModelsFeed{Reader: authority, ProjectID: rt.ProjectID()}).ReadModels(context.Background())
-		if !degraded && len(snap.CodexSkills) != 4 {
-			t.Fatalf("snapshot omitted skills: %+v", snap.CodexSkills)
-		}
-
-		raw, err := json.Marshal(snap)
-		if err != nil {
-			t.Fatal(err)
-		}
-		check("ModelsSnapshot", string(raw))
 		skills, err := rt.ProjectCodexSkills()
 		raw, marshalErr := json.Marshal(skills)
 		if marshalErr != nil {

@@ -90,9 +90,6 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 
 	tmuxRoot := c.canonicalRoot(ctx)
 	workspace.InitTmux(tmuxRoot)
-	// This launcher execs `marshal tui SESSION-ID` when the operator opens
-	// another session (relaunchSession), so the workspace may offer it.
-	workspace.EnableSessionRelaunch()
 
 	return workspace.Run(ctx, c.stdin, c.stdout)
 }

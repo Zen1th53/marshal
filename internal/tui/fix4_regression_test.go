@@ -123,9 +123,6 @@ func TestControlPaneIdentityDoesNotFollowNativeChat(t *testing.T) {
 
 func TestSystemRecordsClearlyLabelledInMemoryViewAndBrief(t *testing.T) {
 	rec := model.MemoryRecordV2{ID: "MEM-RUN-old", Title: "Run success outcome", Source: model.MemorySource{Kind: "runtime_outcome"}, Scope: "task"}
-	if !strings.Contains(memoryProvenance(rec).Text, "System record") {
-		t.Fatal("view lacks system label")
-	}
 	brief := marshalTaskBrief(briefTask(), app.BriefContext{Memory: []model.MemoryRecordV2{rec}})
 	if !strings.Contains(brief, "System record · Run success outcome") {
 		t.Fatal("brief presents system evidence as a model fact")

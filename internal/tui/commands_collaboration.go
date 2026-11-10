@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/google/uuid"
 )
@@ -41,4 +42,23 @@ func (h *CommandHandler) handleCollaboration(ctx context.Context, operation stri
 		to = "the whole team"
 	}
 	return fmt.Sprintf("Message %s sent to %s.", result.MessageID, to), nil
+}
+
+// MenuCollaborate is the call handleCollaboration makes for /msg and /handoff.
+func (a *runtimeControlAuthority) MenuCollaborate(ctx context.Context, operation, target, content string, expectedTurn int64, idempotencyKey string) (app.CollaborationResult, error) {
+	if a == nil || a.runtime == nil || a.localControl == nil {
+		return app.CollaborationResult{}, errors.New("authenticated runtime authorization is required")
+	}
+	input := app.CollaborationCommand{Operation: operation, Content: RedactContent(content, nil)}
+	target = strings.TrimSpace(target)
+	if operation == "message" {
+		if !strings.EqualFold(target, "all") {
+			input.To = target
+		}
+	} else {
+		input.TargetRole = model.Role(strings.ToLower(target))
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: a.sessionID,
+		ExpectedVersion: expectedTurn, IdempotencyKey: idempotencyKey}
+	return a.runtime.CommandCollaboration(a.localControl.Context(ctx), e, input)
 }

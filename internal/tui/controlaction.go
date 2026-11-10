@@ -199,8 +199,8 @@ type Binding struct {
 	// the visual safety class as an approval requirement lets an unrelated
 	// approval be attached to the wrong action.
 	RequiresApproval bool
-	// Gap, when set, means no canonical binding exists. The action renders
-	// disabled with this reason and cannot be executed.
+	// Gap, when set, means the action has no bound authority. The action
+	// renders disabled with this reason and cannot be executed.
 	Gap string
 	// Requires names a precondition the caller must satisfy, shown when the
 	// action is unavailable for a reason other than a gap.
@@ -211,7 +211,7 @@ type Binding struct {
 func (b Binding) Bound() bool { return b.Gap == "" && b.Execute != nil }
 
 // ErrNoBinding is returned when an action has no canonical authority behind it.
-var ErrNoBinding = errors.New("tui: no canonical binding exists for this action")
+var ErrNoBinding = errors.New("tui: this action has no bound authority")
 
 // ErrApprovalRequired is returned when a governed action lacks a valid
 // approval. It is a refusal, not a failure.

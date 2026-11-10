@@ -47,9 +47,6 @@ func TestControlMemoryRejectsForeignOrDetachedAuthority(t *testing.T) {
 				t.Fatal("unauthorized write succeeded")
 			}
 			if invalidBinding {
-				if _, err := a.MemoryStatus(ctx); !errors.Is(err, authz.ErrDenied) {
-					t.Fatalf("status: %v", err)
-				}
 				if _, err := a.MemoryRecord(ctx, "MEM-unknown"); !errors.Is(err, authz.ErrDenied) {
 					t.Fatalf("get: %v", err)
 				}

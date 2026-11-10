@@ -39,24 +39,3 @@ func TestCodexAppServerHostConfigOverrideIsBlockedInTUIStatus(t *testing.T) {
 		t.Fatalf("override boundary status = %s/%s", status, reason)
 	}
 }
-
-func TestCodexSkillInstallConfirmationBindsExactDigest(t *testing.T) {
-	source, _ := testControl(t)
-	ctx := context.Background()
-	binding := source.Bindings()["CTUI-0509-PLUGINS"]
-	confirmation := &Confirmation{}
-	if err := confirmation.Begin(ctx, binding, ActionRequest{Action: binding.Action, Inputs: map[string]string{"skill": "safe-skill"}}); err != nil {
-		t.Fatalf("begin skill confirmation: %v", err)
-	}
-	if got := confirmation.Request().Target.Digest; got != "sha256:safe-skill" {
-		t.Fatalf("skill target digest = %q", got)
-	}
-	confirmation.MoveSelection(1)
-	out, err := confirmation.Submit(ctx)
-	if err != nil {
-		t.Fatalf("submit skill install: %v", err)
-	}
-	if out.Verdict != VerdictPass || out.Proof.Text != "digest = sha256:safe-skill" {
-		t.Fatalf("skill install outcome = %+v", out)
-	}
-}

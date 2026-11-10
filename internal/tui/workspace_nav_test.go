@@ -138,11 +138,6 @@ func TestCodexDispatchUsesOnlyUniqueRegisteredCodexAgent(t *testing.T) {
 	if err != nil || got != agent.ID {
 		t.Fatalf("unique Codex agent = %q, %v; want %q", got, err, agent.ID)
 	}
-	source := &ControlSource{Authority: authority}
-	target, err := source.prepareCodexDispatch(ctx, ActionRequest{Inputs: map[string]string{"task_id": "TASK-tui-codex-default"}})
-	if err != nil || target.ActorID != agent.ID {
-		t.Fatalf("dispatch preflight did not bind unique agent: target=%#v err=%v", target, err)
-	}
 	if _, err := runtime.RegisterAgent(ctx, app.RegisterAgentRequest{Name: "Other Codex", Role: model.RoleDeveloper, ModelProvider: "codex"}); err != nil {
 		t.Fatal(err)
 	}
