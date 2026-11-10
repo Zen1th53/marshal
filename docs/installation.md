@@ -13,7 +13,7 @@ Before installing Marshal, make sure your system has:
 
 - **Linux OS**: amd64 or arm64 architecture.
 - **Git**: Required for project initialization, branch management, and worktree isolation.
-- **tmux 3.3a or newer**: Required by `marshal` and `marshal tui` for window management, docked chat, and interactive popups.
+- **tmux 3.3a or newer**: Required by `marshal` and `marshal tui` for window management and the docked chat.
 - **Provider CLIs**: Install and log into the AI agent tools you plan to use:
   - Claude Code (`claude`)
   - OpenAI Codex (`codex`)

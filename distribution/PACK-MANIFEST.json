@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "cc288d3822885dff445b335e3c41ffac9310f35e5bb809eb7ff8e6dc63b27057",
-      "bytes": 12531
+      "sha256": "2ffccf5d15e3e3d3bd01b9049caa10256ddd4605714533363f266fffd755cff2",
+      "bytes": 12729
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -511,33 +511,33 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "7f6f17a57c978ab5fd65323c88a150f89d8eba64ee9100f0ba0fde2b36852527",
-      "bytes": 6829
+      "sha256": "a67b083a50c939d0b37faa8a6c17265cf5676c364ce005861beb0cfb923ddb9d",
+      "bytes": 6871
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "72bc2f116df69202bf5dd5f74e6881720631c317a4fab33e35de4921da0a7c45",
-      "bytes": 3570
+      "sha256": "1708798d485cdffb68450ddeb76760a8c457bfa844afbfeef79ecc8319477bd8",
+      "bytes": 3564
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "3476a6e880b092143512e801622a5743a93ffda3ee252237b9d8caa55abb000b",
-      "bytes": 4946
+      "sha256": "b0a0157d0d86c9f3bcfe1ad42acc6fb92a3f8ad83d1ee20a61da74a19d4b6a02",
+      "bytes": 5043
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "e135824dd4e7165ec0db3d3e8dc851173bae7e60cfc5c9a03e3395b35fa2a60d",
-      "bytes": 4070
+      "sha256": "6c1f09c5022d780b1483163385960afcb9901365f9385edd75d988698136f1e3",
+      "bytes": 4273
     },
     {
       "path": "docs/index.md",
-      "sha256": "be910d9e5b58d02c092df80d05fe21d21ce003e948e44e14d38484d40d1becd1",
-      "bytes": 3930
+      "sha256": "640ae62394b82b74f82fb0917ae987f37c245bbe0bc220b0bbcf46d9dc80617c",
+      "bytes": 4096
     },
     {
       "path": "docs/installation.md",
-      "sha256": "ee92f83e92630a7c1b536b3fdd4eac185a30395c736f14ec67d62e05686d7907",
-      "bytes": 3175
+      "sha256": "d217beb077bf27de2a83e80231e63bb185636d0a6b451a16d6a32d132bb3d1fc",
+      "bytes": 3158
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -606,8 +606,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "d57f4e0d7f3041d85c486925137e921218cc9def002a9860803dd08ddeee9285",
-      "bytes": 4005
+      "sha256": "51faf094c90da2081c091523632a231fa67f1eac83ad8c6f7d1690b2ae23a899",
+      "bytes": 3985
     },
     {
       "path": "docs/upgrading.md",
@@ -15681,8 +15681,8 @@
     },
     {
       "path": "release/INSTALL.md",
-      "sha256": "2a71209e5961c15e0a55e01c8a9cbb2f0f181aaf54e83899a273a7b471ca0c49",
-      "bytes": 1903
+      "sha256": "d30d3ea58d78999cd6b08e68a2b0196357972fbf7a3d43a3a26a9109a69ff8ed",
+      "bytes": 2029
     },
     {
       "path": "release/RELEASE_NOTES_0.2.0.md",

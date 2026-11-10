@@ -1,6 +1,6 @@
 # Install Marshal
 
-Marshal release binaries support Linux on amd64 and arm64.
+Marshal release binaries support Linux and macOS on amd64 and arm64. On Windows, use WSL2.
 
 The quickest route is the installer, which does all of the below and refuses to
 install a download whose checksum does not match:
@@ -16,13 +16,13 @@ To do it by hand instead:
 2. Verify the archive:
 
    ```bash
-   sha256sum -c checksums.txt --ignore-missing
+   sha256sum -c checksums.txt --ignore-missing   # macOS: shasum -a 256 -c checksums.txt --ignore-missing
    ```
 
 3. Extract and install the binary:
 
    ```bash
-   tar -xzf marshal_<version>_linux_amd64.tar.gz
+   tar -xzf marshal_<version>_<os>_<arch>.tar.gz   # e.g. linux_amd64, darwin_arm64
    install -Dm755 marshal "$HOME/.local/bin/marshal"
    marshal version
    ```

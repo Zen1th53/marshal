@@ -27,8 +27,8 @@ marshal
 
 Once inside the Board:
 1. **State your goal**: Press `s` to type your request directly to the Marshal, or focus the chat pane with `F11` or `Alt+←`.
-2. **Accept the architecture**: The Marshal clarifies requirements and drafts a project contract. When the `NEEDS YOU` gate appears, press `y` to accept the architecture.
-3. **Approve the plan**: The Marshal decomposes your goal into discrete tasks with verifiable criteria. Press `y` to approve the plan.
+2. **Accept the architecture**: The Marshal clarifies requirements and drafts a project contract. When the `NEEDS YOU` gate appears, press `y` and then `Enter` to accept the architecture (or type `accept architecture` in the chat).
+3. **The Marshal plans**: The Marshal decomposes your goal into discrete tasks with verifiable criteria and approves the plan itself. If it asks you instead, the Board shows `NEEDS YOU` with `[y] approve the plan`: press `y`, then `Enter`.
 4. **Watch the run**: Worker agents execute tasks in parallel branches, a cross-provider reviewer inspects the diffs, an independent verifier runs checks, and accepted changes are closed to `main`.
 
 ---

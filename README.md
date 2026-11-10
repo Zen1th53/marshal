@@ -58,8 +58,9 @@ marshal
 
 Then, in the chat on the left, say what you want built. The Marshal asks a few
 questions and proposes an architecture. When the Board shows **NEEDS YOU**,
-press `y` to accept it. Workers start, and you watch the run on the Board until
-it closes to `main`.
+press `y`, then `Enter`, to accept it (or type `accept architecture` in the
+chat). The Marshal then plans the tasks, approves the plan itself and starts
+the workers. You watch the run on the Board until it closes to `main`.
 
 You need at least one provider CLI installed and signed in
 ([requirements](#requirements)). Marshal uses your existing accounts and plans;
@@ -70,7 +71,7 @@ it has no model costs of its own.
 ## How it works
 
 ```text
-  you ──goal──▶ MARSHAL ──architecture──▶ you accept (y)
+  you ──goal──▶ MARSHAL ──architecture──▶ you accept (y, Enter)
                    │
                    ▼
                  plan: small tasks, each with files, criteria and a check
@@ -115,9 +116,9 @@ Marshal turns that into a process:
 - **One conversation, a whole team.** You talk to one Marshal. It plans,
   dispatches and checks; you make the decisions that matter.
 - **Cross-provider review.** Claude reviews Codex, Codex reviews Claude.
-  Self-approval is not possible.
-- **Isolation by default.** A worktree and branch per task, a declared file
-  scope, and a hand-in with commit digests and check results.
+  No model reviews its own work.
+- **A separate worktree per task.** A worktree and branch per task, a declared
+  file scope, and a hand-in with commit digests and check results.
 - **Live and honest state.** The Board shows tasks, lanes, decisions and
   activity as they happen. Nothing is marked done without its check.
 - **Shared memory.** What one agent learns about your project is recorded and
@@ -136,7 +137,7 @@ the right.
 |---|---|
 | `Alt+←` / `Alt+→` (or `F11`) | Move between the chat and the Board |
 | `s` | Say something to the Marshal from the Board |
-| `y` | Accept what a **NEEDS YOU** gate asks (architecture, plan) |
+| `y` | Answer a **NEEDS YOU** gate (accept the architecture); `Enter` sends it |
 | `Enter` | Inspect the highlighted task; on a lane, open the worker's session |
 | `v` | Verify a provider |
 | `1`–`8` | Views: Board, Host, Memory, Providers, Verify, Security, Plan, Architecture |
@@ -170,8 +171,9 @@ go build -o marshal ./cmd/marshal && install -Dm755 marshal ~/.local/bin/marshal
 > [!WARNING]
 > **Workers run on your machine, as you.** Worktrees isolate Git changes, not
 > processes: workers have your user's file and network access. Use a dedicated
-> project directory and review the architecture and plan before you accept
-> them. Marshal refuses `/` and your home directory as a project root.
+> project directory and review the architecture before you accept it; the
+> Marshal approves the plan itself. Marshal refuses `/` and your home
+> directory as a project root.
 
 ---
 
@@ -179,8 +181,9 @@ go build -o marshal ./cmd/marshal && install -Dm755 marshal ~/.local/bin/marshal
 
 **How is this different from running Claude Code or Codex directly?**
 You still use them, through their own CLIs. Marshal adds what a single agent
-session lacks: a plan you approve, isolation per task, review by a different
-model, an independent check before merge, and one Board to watch it all.
+session lacks: an architecture you accept, a separate worktree per task, review
+by a different model, an independent check before merge, and one Board to watch
+it all.
 
 **Does Marshal send my code anywhere?**
 No. Your code goes only to the providers you choose, through their CLIs.

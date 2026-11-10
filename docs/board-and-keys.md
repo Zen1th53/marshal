@@ -72,7 +72,7 @@ When a run reaches a step that requires human authorization, the Board header di
   ```text
   [y] accept architecture · [b] open details
   ```
-- **Plan Approval Gate**: When tasks and verification criteria are ready:
+- **Plan Approval Gate**: Only when the Marshal asks you to approve its plan (usually it approves the plan itself):
   ```text
   [y] approve the plan · [7] open the plan
   ```
