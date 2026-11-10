@@ -4895,6 +4895,11 @@
       "bytes": 1402
     },
     {
+      "path": "internal/cli/startup_isolation_extreme_test.go",
+      "sha256": "cd31087cedb200385994f942b8bb38dfa81474da4cdfd391c9715dc94c3b040e",
+      "bytes": 970
+    },
+    {
       "path": "internal/cli/startup_ultra_default.go",
       "sha256": "46546002b2455c678017536f4b3c8abe2d24fc1a18dbe4a42b7a1fc44b4da6b4",
       "bytes": 84
@@ -6658,6 +6663,16 @@
       "path": "internal/integration/process05_fixture_tools_test.go",
       "sha256": "329c945ed5f0bc271b1e2a8367a6b18555c0c3e5f94a41b02e5cc327cddfeb75",
       "bytes": 1251
+    },
+    {
+      "path": "internal/integration/project_adversarial_default_test.go",
+      "sha256": "a2656b6c8d6e9135d40cf8dfac606b3a18348ff89a3fb2590f9c86c6e6f66fa5",
+      "bytes": 931
+    },
+    {
+      "path": "internal/integration/project_adversarial_extreme_test.go",
+      "sha256": "3882ad848cc4909f26df73226a462af3fbe73b9ade7e8f1cc1d59e876991e59d",
+      "bytes": 853
     },
     {
       "path": "internal/integration/project_adversarial_test.go",
@@ -9838,6 +9853,26 @@
       "path": "internal/startup/help.go",
       "sha256": "3861174e1261ca37a165eab85e14ab82495d478f159bda31043044d541a758b1",
       "bytes": 4812
+    },
+    {
+      "path": "internal/startup/isolation_default.go",
+      "sha256": "7ab29144a0315f9e98283acb7d62d0152987008d5d6b1a773a733718df303d94",
+      "bytes": 2529
+    },
+    {
+      "path": "internal/startup/isolation_default_test.go",
+      "sha256": "e7a5e1e3dd83f8b9b7df6f915ff8adcf7de9db5c33807669b18eb5c2a321fb0f",
+      "bytes": 3014
+    },
+    {
+      "path": "internal/startup/isolation_extreme.go",
+      "sha256": "8037260c5fe26d413d08ab7d59a044650c68a0c830cc0c19e7ffa211da1beb26",
+      "bytes": 1386
+    },
+    {
+      "path": "internal/startup/isolation_extreme_test.go",
+      "sha256": "b5b8cda1cb701e66ae9333af7d68780dcfa1b4b03dc35517e97b5acd9bad00c3",
+      "bytes": 2786
     },
     {
       "path": "internal/startup/landing.go",
