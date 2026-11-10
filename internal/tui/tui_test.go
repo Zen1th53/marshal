@@ -170,7 +170,7 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute /goal error: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if !strings.HasPrefix(out, msgNothingChanged+"\n") {
 		t.Fatalf("unexpected goal output: %s", out)
 	}
 
@@ -206,7 +206,7 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute /rollback error: %v", err)
 	}
-	if !strings.Contains(out, "NOT performed") {
+	if out != msgNothingChanged {
 		t.Fatalf("unexpected rollback output: %s", out)
 	}
 

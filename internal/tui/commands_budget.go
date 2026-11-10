@@ -50,7 +50,7 @@ func (h *CommandHandler) budgetLimitsAndRuns(ctx context.Context) string {
 func (h *CommandHandler) handleBudgetSet(ctx context.Context, args []string) (string, error) {
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Budget limits were NOT changed: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	if len(args) > 0 && strings.EqualFold(args[0], "set") {
 		args = args[1:]

@@ -239,14 +239,14 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 	const key = "MARSHAL_CHAT_PERMISSION_CONFIG"
 	if err := setClaudeMCPServerEnv(dir, key, brokerPath); err != nil {
 		closeBroker()
-		return "", fmt.Errorf("Marshal not started: chat permission binding failed: %w", err)
+		return "", marshalNotStarted(provider, fmt.Errorf("chat permission binding failed: %w", err))
 	}
 	// From here the launch belongs to the native chat; the tmux chat, if a
 	// surviving one is still running, must not answer as a second Marshal.
 	if err := w.stopTmuxChat(ctx); err != nil {
 		_ = setClaudeMCPServerEnv(dir, key, "")
 		closeBroker()
-		return "", fmt.Errorf("Marshal not started: the tmux chat could not be closed: %w", err)
+		return "", marshalNotStarted(provider, fmt.Errorf("the tmux chat could not be closed: %w", err))
 	}
 	args, opening := stripMarshalKickoff(provider, root, args)
 	saved := loadChatBinding(root)
@@ -265,7 +265,7 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 		if errors.Is(err, chattransport.ErrUnqualified) {
 			return "", err
 		}
-		return "", fmt.Errorf("Marshal not started: %w", err)
+		return "", marshalNotStarted(provider, fmt.Errorf("%w", err))
 	}
 	history := loadNativeChatHistory(root, resume, 200)
 

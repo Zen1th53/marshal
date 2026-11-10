@@ -106,7 +106,7 @@ func (h *CommandHandler) handleCheckpointRead(ctx context.Context, args []string
 func (h *CommandHandler) handleCheckpointCreate(ctx context.Context, reason string) (string, error) {
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Checkpoint creation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "checkpoint:new", IdempotencyKey: uuid.NewString()}
 	cp, err := a.runtime.CommandCaptureCheckpoint(a.localControl.Context(ctx), e, reason)
@@ -124,7 +124,7 @@ func (h *CommandHandler) handleRollback(ctx context.Context, args []string) (str
 	id := strings.TrimPrefix(args[0], "#")
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return fmt.Sprintf("Rollback to %s was NOT performed: authenticated runtime authorization is required.", id), nil
+		return msgNothingChanged, nil
 	}
 	engine := a.runtime.Execution().Engine()
 	check, diff, err := engine.PreviewRestore(ctx, id)

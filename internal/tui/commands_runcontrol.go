@@ -20,7 +20,7 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 		return "", fmt.Errorf("read runs: %w", err)
 	}
 	if a == nil || a.localControl == nil {
-		return verb + " was NOT performed: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	var target *execution.ExecutionRun
 	if len(args) == 1 {

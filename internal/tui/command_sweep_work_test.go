@@ -74,24 +74,24 @@ func TestCommandSweepWorkRoots(t *testing.T) {
 	useCodexByDefault(t, empty.workDir)
 	cases := []struct{ command, bare, valid, want, bad string }{
 		{"/status", "CANONICAL STATUS DETAIL", "/status", "NO ACTIVE GOAL", "/status extra"},
-		{"/goal", "No active goal", "/goal desired outcome", "unavailable", "/goal constraints extra"},
+		{"/goal", "No active goal", "/goal desired outcome", msgNothingChanged, "/goal constraints extra"},
 		{"/mode", "Current mode", "/mode auto", "AUTO", "/mode manual extra"},
 		{"/claims", "No claims", "/claims", "No claims", "/claims extra"},
 		{"/inspect", "Usage:", "/inspect task missing", "", "/inspect typo id"},
-		{"/approve", "unavailable", "/approve approval", "unavailable", "/approve id extra"},
-		{"/reject", "unavailable", "/reject approval reason", "unavailable", ""},
+		{"/approve", msgNothingChanged, "/approve approval", msgNothingChanged, "/approve id extra"},
+		{"/reject", msgNothingChanged, "/reject approval reason", msgNothingChanged, ""},
 		{"/route", "ADVISORY", "/route role=qa risk=R2 harness=codex", "ADVISORY", "/route typo"},
 		{"/agents", "TEAM ROSTER", "/agents", "unavailable", "/agents extra"},
 		{"/evidence", "Usage:", "/evidence missing", "NOT FOUND", "/evidence id extra"},
 		{"/why", "entitlement", "/why", "entitlement", "/why extra"},
-		{"/msg", "Usage:", "/msg all guidance", "unavailable", "/msg all"},
-		{"/handoff", "Usage:", "/handoff qa review it", "unavailable", "/handoff typo summary"},
-		{"/checkpoint", "unavailable", "/checkpoint create name", "unavailable", "/checkpoint typo"},
-		{"/rollback", "Usage:", "/rollback cp", "NOT performed", "/rollback cp extra"},
+		{"/msg", "Usage:", "/msg all guidance", msgNothingChanged, "/msg all"},
+		{"/handoff", "Usage:", "/handoff qa review it", msgNothingChanged, "/handoff typo summary"},
+		{"/checkpoint", "unavailable", "/checkpoint create name", msgNothingChanged, "/checkpoint typo"},
+		{"/rollback", "Usage:", "/rollback cp", msgNothingChanged, "/rollback cp extra"},
 		{"/budget", "BUDGET CONSUMED", "/budget", "UNKNOWN", "/budget 123"},
-		{"/pause", "NOT performed", "/pause", "NOT performed", "/pause extra"},
-		{"/resume", "NOT performed", "/resume --last", "authority unavailable", ""},
-		{"/cancel", "NOT performed", "/cancel", "NOT performed", "/cancel extra"},
+		{"/pause", msgNothingChanged, "/pause", msgNothingChanged, "/pause extra"},
+		{"/resume", msgNothingChanged, "/resume --last", "authority unavailable", ""},
+		{"/cancel", msgNothingChanged, "/cancel", msgNothingChanged, "/cancel extra"},
 		{"/tasks", "", "/tasks list", "", "/tasks typo"},
 		{"/task", "", "/task ownership", "", "/task typo"},
 	}
@@ -152,7 +152,7 @@ func TestCommandSweepWorkSubcommands(t *testing.T) {
 			sweepWorkRun(t, ws, line, "")
 			sweepWorkRun(t, ws, line+arg, "")
 			sweepWorkRun(t, ws, line+" extra unknown", "")
-			sweepWorkRun(t, ws, line+"typo", "unavailable") // free-text fallback, tracked as a decision
+			sweepWorkRun(t, ws, line+"typo", msgNothingChanged) // free-text fallback, tracked as a decision
 		})
 	}
 	sweepWorkRun(t, ws, "/goal", "Keep outcome")
@@ -167,7 +167,11 @@ func TestCommandSweepWorkSubcommands(t *testing.T) {
 			case "diff":
 				arg = " cp-sweep cp-other"
 			}
-			sweepWorkRun(t, ws, "/checkpoint "+sub+arg, "unavailable")
+			checkpointWant := "unavailable"
+			if sub == "create" {
+				checkpointWant = msgNothingChanged
+			}
+			sweepWorkRun(t, ws, "/checkpoint "+sub+arg, checkpointWant)
 			sweepWorkRun(t, ws, "/checkpoint "+sub+" id extra", "")
 			sweepWorkRun(t, ws, "/checkpoint "+sub+"typo", "Usage:")
 		})
@@ -219,7 +223,7 @@ func TestCommandSweepWorkInspectAndDiscovery(t *testing.T) {
 	sweepWorkRun(t, ws, "/inspect #claim-sweep", "CLAIM claim-sweep")
 	sweepWorkRun(t, ws, "/evidence #ev-sweep", "supports Claim claim-sweep")
 	sweepWorkRun(t, ws, "/inspect evidence #ev-sweep", "supports Claim claim-sweep")
-	sweepWorkRun(t, ws, "/rollback #cp-sweep", "Rollback to cp-sweep")
+	sweepWorkRun(t, ws, "/rollback #cp-sweep", msgNothingChanged)
 	sweepWorkRun(t, ws, "/inspect missing", "No canonical record")
 	for _, kind := range []string{"claim", "evidence", "checkpoint", "task", "handoff", "approval", "agent"} {
 		sweepWorkRun(t, ws, "/inspect "+kind, "Usage:")
@@ -244,7 +248,7 @@ func TestCommandSweepWorkInspectAndDiscovery(t *testing.T) {
 		sweepWorkRun(t, ws, c.line, c.want)
 	}
 	for _, cmd := range []string{"/approve", "/reject"} {
-		sweepWorkRun(t, ws, cmd+" approval-sweep", "unavailable")
+		sweepWorkRun(t, ws, cmd+" approval-sweep", msgNothingChanged)
 		record, err := st.GetApproval(ctx, "approval-sweep")
 		if err != nil || record.Status != model.ApprovalRequested {
 			t.Fatalf("refused approval changed: %#v %v", record, err)
@@ -285,8 +289,8 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 	}
 	cases := []struct{ line, want string }{
 		{"/status", "CANONICAL STATUS DETAIL"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},
-		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Error: not found"},
-		{"/reject apr", "Error: not found"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
+		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "didn't work: nothing by that name was found."},
+		{"/reject apr", "didn't work: nothing by that name was found."}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
 		{"/evidence missing", "NOT FOUND"}, {"/why", whyExpected}, {"/msg all guidance", "nothing was sent"},
 		{"/handoff qa review", "nothing was sent"}, {"/checkpoint list", "No execution snapshots in this project"},
 		{"/rollback cp", "NOT performed"}, {"/budget", "BUDGET CONSUMED"}, {"/pause", "Pause was NOT performed"},
@@ -405,7 +409,7 @@ func TestCommandSweepWorkEntitlement(t *testing.T) {
 	sweepWorkRun(t, ws, "/mode ultra", "switched to ULTRA")
 	sweepWorkRun(t, ws, "/why", "ADVISORY ROUTING EXPLANATION (NOT APPLIED)")
 	for _, line := range []string{"/goal create outcome", "/approve id", "/reject id", "/msg all guidance", "/handoff qa review", "/task create title", "/checkpoint create name"} {
-		sweepWorkRun(t, ws, line, "unavailable")
+		sweepWorkRun(t, ws, line, msgNothingChanged)
 	}
 	ws.AttachULTRA(nil, false)
 	sweepWorkRun(t, ws, "/mode ultra", "unavailable")

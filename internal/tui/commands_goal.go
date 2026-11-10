@@ -59,7 +59,7 @@ func (h *CommandHandler) handleGoalMutation(ctx context.Context, verb, text stri
 	source := h.ws.controlSource()
 	authority, ok := source.Authority.(*runtimeControlAuthority)
 	if !ok || authority == nil || authority.runtime == nil {
-		return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.\n" + goalUsage, nil
+		return msgNothingChanged + "\n" + goalUsage, nil
 	}
 	if authority.localControlErr != nil {
 		return "", authority.localControlErr
@@ -127,7 +127,7 @@ func (h *CommandHandler) handleGoalCancel(ctx context.Context, reason string) (s
 	}
 	source := h.ws.controlSource()
 	if _, ok := source.Authority.(goalCancellationAuthority); !ok {
-		return "Goal cancellation is unavailable: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	goal, err := source.Authority.CurrentGoal(ctx)
 	if err != nil && !errors.Is(err, model.ErrGoalNotFound) {

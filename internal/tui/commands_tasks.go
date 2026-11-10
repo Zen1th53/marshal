@@ -21,7 +21,7 @@ func (h *CommandHandler) handleTaskMutation(ctx context.Context, args []string) 
 	}
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Task mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, IdempotencyKey: uuid.NewString()}
 	if input.Operation == "create" {

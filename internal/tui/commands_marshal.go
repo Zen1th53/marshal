@@ -20,6 +20,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
@@ -607,9 +608,9 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("canonical Process 04 plan ready: %d tasks · review %s and the approval scope", len(run.Tasks), packDir)))
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan ready: %d tasks", len(run.Tasks))))
 	w.queueMarshalPlanApproval()
-	return result + "\nCanonical Process 04 plan drafted. " + note + " Review the plan in " + packDir + " and the exact provider, model, checks, and destination in the approval popup before authorizing execution.", nil
+	return result + "\n" + fmt.Sprintf("A plan with %d tasks is ready. Review it and approve it in the popup.", len(run.Tasks)), nil
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {
@@ -961,9 +962,9 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "planning failed: " + err.Error()})
 			return
 		}
-		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks · governed work needs a canonical Process 04 review before approval", len(run.Tasks))))
+		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks", len(run.Tasks))))
 	})
-	return "Marshal is preparing and drafting a plan for: " + goal, nil
+	return "The Marshal is drafting a plan for: " + goal, nil
 }
 
 func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.MarshalService, string, string, error) {
@@ -1037,6 +1038,9 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 		return "", err
 	}
 	run, err := service.BindApprovedPlan(ctx, runID)
+	if errors.Is(err, plan.ErrPlanNotFound) {
+		return "", plainSentence("There is no approved plan to run yet.", err)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -1044,7 +1048,7 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved Process 04 plan · running through Process 05"))
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "running the approved plan"))
 	if err := w.bindCurrentMarshalChatRun(service.Repository, runID); err != nil {
 		w.RecordActivity("Marshal chat recovery binding could not be saved: " + err.Error())
 	}
@@ -1054,7 +1058,7 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
 	})
-	return "Marshal is executing the approved Process 04 plan through Process 05.", nil
+	return "The Marshal is carrying out the approved plan.", nil
 }
 
 func (w *Workspace) bindCurrentMarshalChatRun(root, runID string) error {
@@ -1102,7 +1106,7 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	if err := execService.Approve(ctx, args[0], marshalOperator(), "approved in Marshal TUI"); err != nil {
 		return "", err
 	}
-	return "Process 05 task approved. Use /marshal resume to continue.", nil
+	return "Task approved. The run continues when you press Enter on the Board's inbox.", nil
 }
 
 func marshalProcess05ApprovalBound(run marshal.Run, p05 execution.ExecutionRun, projectID, approvalID string) bool {
@@ -1149,7 +1153,7 @@ func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.Pl
 			if err := w.queueMarshalRunProposal(marshalProposal{action: "approve"}); err != nil {
 				return "", err
 			}
-			return "Review the exact Process 04 Goal, project contract, routes, producers, checks, plan pack, and destination in the approval popup.", nil
+			return "Review the plan and what it will change, then approve or deny it in the popup.", nil
 		}
 	}
 	runCtx, cancel, err := w.reserveMarshalOperation(ctx)

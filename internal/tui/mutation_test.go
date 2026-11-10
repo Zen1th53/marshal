@@ -68,7 +68,7 @@ func TestModelSelectFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/model select: %v", err)
 	}
-	if !strings.Contains(out, "NOT applied") {
+	if out != msgNothingChanged {
 		t.Errorf("expected fail-closed response, got %q", out)
 	}
 	if after, err := st.GetHarnessProfile(ctx, harness); err == nil && after != nil && after.DefaultModel == "audit-model-XYZ" {
@@ -86,7 +86,7 @@ func TestEffortFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/effort: %v", err)
 	}
-	if !strings.Contains(out, "NOT applied") {
+	if out != msgNothingChanged {
 		t.Fatalf("expected fail-closed response, got %q", out)
 	}
 	for _, pr := range ProbeHarnesses() {
@@ -157,7 +157,7 @@ func TestGoalMutationFailsClosedWithoutRuntimeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/goal add-constraint: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if !strings.HasPrefix(out, msgNothingChanged+"\n") {
 		t.Errorf("expected authenticated runtime requirement, got %q", out)
 	}
 	if _, err := st.GetActiveGoalContract(ctx, "sess-mut"); err == nil {

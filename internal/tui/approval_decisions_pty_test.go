@@ -52,7 +52,7 @@ func TestPTYGoalApprovalAndRejection(t *testing.T) {
 				t.Fatalf("canonical read-back: %+v %v", read, err)
 			}
 			terminal.sendLine(line)
-			terminal.mustSee("conflict")
+			terminal.mustSee("/" + verb + " didn't work: something changed at the same moment. Try again.")
 			terminal.sendLine("/quit")
 			if err := terminal.cmd.Wait(); err != nil {
 				t.Fatal(err)

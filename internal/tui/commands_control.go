@@ -93,7 +93,7 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 
 func (h *CommandHandler) handleVerification(ctx context.Context, id string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical verification store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	session, err := h.ws.store.GetVerificationSession(ctx, id)
 	if err != nil {
@@ -107,7 +107,7 @@ func (h *CommandHandler) handleVerification(ctx context.Context, id string) (str
 // operator can paste an identifier without first knowing what it refers to.
 func (h *CommandHandler) handleInspect(ctx context.Context, kind, id string) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
+		return msgNoProjectData, nil
 	}
 
 	id = strings.TrimPrefix(id, "#")
@@ -268,7 +268,7 @@ func (h *CommandHandler) handleReject(ctx context.Context, approvalID string) (s
 
 func (h *CommandHandler) resolveApproval(ctx context.Context, approvalID string, approve bool) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return msgNoProjectData, nil
 	}
 
 	verb := "reject"

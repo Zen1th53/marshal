@@ -28,7 +28,7 @@ import (
 func TestPTYMarshalUsePlanRequiresApprovedPlan(t *testing.T) {
 	s := startCommandTUI(t, 40, 160)
 	s.sendLine("/marshal use-plan")
-	s.mustSee("execution plan not found")
+	s.mustSee("There is no approved plan to run yet.")
 }
 
 func TestPTYMarshalUsePlanReachesProcess05Approval(t *testing.T) {
@@ -129,10 +129,10 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 	if len(match) != 2 {
 		t.Fatalf("approval ID not shown: %s", tail(s.output(), 3000))
 	}
-	approvedCount := strings.Count(s.output(), "Process 05 task approved")
+	approvedCount := strings.Count(s.output(), "Task approved. The run continues")
 	s.sendLine("/marshal approve-task " + match[1])
-	if !s.waitForCount("Process 05 task approved", approvedCount+1, 8*time.Second) {
-		t.Fatalf("Process 05 approval was not acknowledged: %s", tail(s.output(), 3000))
+	if !s.waitForCount("Task approved. The run continues", approvedCount+1, 8*time.Second) {
+		t.Fatalf("task approval was not acknowledged: %s", tail(s.output(), 3000))
 	}
 	return s
 }

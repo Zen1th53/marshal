@@ -418,6 +418,9 @@ func NewActivityLine(e events.Event) (ActivityLine, bool) {
 			line.Detail = map[bool]string{true: "major change", false: "in scope"}[major]
 		}
 	}
+	if e.Type == events.EventTypeMarshalTaskAccepted {
+		line.Detail = "checks passed"
+	}
 	return line, true
 }
 

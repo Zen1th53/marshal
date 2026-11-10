@@ -16,7 +16,7 @@ import (
 // learning look more successful than it was.
 func (h *CommandHandler) handleMemoryCommit(ctx context.Context, id string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	record, err := h.ws.store.GetMemoryCommit(ctx, id)
 	if err != nil {
@@ -46,7 +46,7 @@ func (h *CommandHandler) handleMemoryCommit(ctx context.Context, id string) (str
 // is labelled, so nothing here reads as a settled fact when it is not.
 func (h *CommandHandler) handleMemorySearch(ctx context.Context, projectID string, terms []string, includeStale bool) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	items, err := h.ws.store.ListMemoryItems(ctx, projectID, true)
 	if err != nil {
@@ -84,7 +84,7 @@ func (h *CommandHandler) handleMemorySearch(ctx context.Context, projectID strin
 // believed before a revision stays visible.
 func (h *CommandHandler) handleMemoryProvenance(ctx context.Context, itemID string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	history, err := h.ws.store.ItemRevisions(ctx, itemID)
 	if err != nil {
@@ -115,7 +115,7 @@ func (h *CommandHandler) handleMemoryProvenance(ctx context.Context, itemID stri
 // successes, and an unmeasured cost prints as "unmeasured" rather than zero.
 func (h *CommandHandler) handleRoutingTrust(ctx context.Context, taskClass string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	observations, err := h.ws.store.RoutingObservations(ctx, taskClass)
 	if err != nil {
@@ -151,7 +151,7 @@ func renderMeasured(v *int64) string {
 // handleFingerprints renders bounded failure fingerprints.
 func (h *CommandHandler) handleFingerprints(ctx context.Context, projectID string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	prints, err := h.ws.store.FailureFingerprints(ctx, projectID)
 	if err != nil {
@@ -178,7 +178,7 @@ func (h *CommandHandler) handleFingerprints(ctx context.Context, projectID strin
 // handlePlaybookCandidates renders candidate procedures awaiting review.
 func (h *CommandHandler) handlePlaybookCandidates(ctx context.Context, projectID string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	candidates, err := h.ws.store.PlaybookCandidates(ctx, projectID)
 	if err != nil {
@@ -200,7 +200,7 @@ func (h *CommandHandler) handlePlaybookCandidates(ctx context.Context, projectID
 // handleReplayIndex renders the reproducibility index for one run.
 func (h *CommandHandler) handleReplayIndex(ctx context.Context, runID string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical learning store unavailable.", nil
+		return msgNoProjectData, nil
 	}
 	records, err := h.ws.store.ReplayRecords(ctx, runID)
 	if err != nil {

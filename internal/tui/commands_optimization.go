@@ -14,7 +14,7 @@ import (
 // roll back a cycle outside the governed runtime boundary.
 func (h *CommandHandler) handleOptimizationCycle(ctx context.Context, id string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical optimization store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
+		return msgNoProjectData, nil
 	}
 	cycle, err := h.ws.store.GetOptimizationCycle(ctx, id)
 	if errors.Is(err, optimization.ErrNotFound) {

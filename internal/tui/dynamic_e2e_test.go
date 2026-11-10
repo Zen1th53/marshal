@@ -183,7 +183,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/goal set failed: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if !strings.HasPrefix(out, msgNothingChanged+"\n") {
 		t.Fatalf("unexpected /goal response: %s", out)
 	}
 	if err := st.SaveGoalContract(ctx, model.GoalContract{ID: "goal-e2e", SessionID: sessionID, DesiredOutcome: "Complete authorization refactoring safely", Risk: model.R1, AuthoritySource: "test", UnderstandingState: model.GoalReady}, 0); err != nil {
@@ -216,7 +216,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/task create failed: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if out != msgNothingChanged {
 		t.Fatalf("unexpected /task create response: %s", out)
 	}
 	if _, err := st.ImportTasks(ctx, []model.Task{{ID: "TASK-E2E", Title: "Verify token expiration boundary", Status: model.TaskReady, Risk: model.R1}}); err != nil {
@@ -316,7 +316,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/approve failed: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if out != msgNothingChanged {
 		t.Fatalf("unexpected /approve output: %s", out)
 	}
 
