@@ -12256,8 +12256,8 @@
     },
     {
       "path": "internal/tui/board_e2e_test.go",
-      "sha256": "5964002e5963a084bb4fb7dc8b9a35b93a3c18aa844610a2f97e6e614d49aeba",
-      "bytes": 25376
+      "sha256": "a4d12db53a4bef63b0fef09d62d503e09fb19e98b23ea84aacaeca344c24907b",
+      "bytes": 25728
     },
     {
       "path": "internal/tui/board_empty.go",
