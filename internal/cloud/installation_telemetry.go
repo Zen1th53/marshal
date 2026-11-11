@@ -2,6 +2,9 @@ package cloud
 
 import (
 	"context"
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -260,4 +263,25 @@ func PrepareEntitlementRequest(ctx context.Context, cfg Config, dir, version str
 		return nil, State{}, "", err
 	}
 	return client, st, session, nil
+}
+
+// TelemetryActive reports whether this machine sends anonymous telemetry
+// now: an endpoint is configured and the owner has not disabled it. It only
+// reads; a missing identity counts as on, because the next start creates
+// one with telemetry on. An unreadable identity counts as off, because the
+// reporter stops on it too.
+func TelemetryActive() bool {
+	if !LoadConfig().Enabled() {
+		return false
+	}
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return false
+	}
+	store := NewStore(filepath.Join(base, machineConfigName))
+	if _, err := os.Stat(store.Path()); errors.Is(err, fs.ErrNotExist) {
+		return true
+	}
+	st, err := store.Load()
+	return err == nil && !st.TelemetryDisabled
 }

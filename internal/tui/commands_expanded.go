@@ -262,7 +262,7 @@ func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (strin
 
 // handleSandbox reports the bubblewrap sandbox status.
 func (h *CommandHandler) handleSandbox(ctx context.Context) (string, error) {
-	return "Sandbox status: NOT VERIFIED. Isolation is established and reported per runtime execution, not by the TUI.", nil
+	return sandboxStatusText, nil
 }
 
 // handleMemory handles epistemic memory inspection and search.
@@ -641,7 +641,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
 			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
-			b.WriteString("    Egress:  governed cells use --unshare-net and a per-run Unix proxy (requires working bubblewrap and trusted socat); unapproved endpoints BLOCKED_BY_POLICY (/egress); native sessions opened directly by the operator OUT_OF_SCOPE\n")
+			b.WriteString(providerEgressLine)
 		}
 		return b.String(), nil
 	}

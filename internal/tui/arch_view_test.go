@@ -26,9 +26,7 @@ func demoArchOverview() store.ArchitectureOverview {
 	}
 }
 
-// demoArchRules is the rules the goldens paint, the same in either build.
-var demoArchRules = append([]string{"Marshal: local ULTRA, anonymous opt-out telemetry"}, archRules...)
-
+// demoArchPaint is what the goldens paint; demoArchRules comes from the claims test file.
 func demoArchPaint(now time.Time) archPaint {
 	return archPaint{Snap: archSnapshot{Overview: demoArchOverview(), Loaded: true, At: now.Add(-4 * time.Second)}, Edition: "Marshal 0.0.9", Rules: demoArchRules}
 }
@@ -80,7 +78,7 @@ func TestArchViewGoldens(t *testing.T) {
 			v.archView = true
 			l := layout.Compute(tc.w, tc.h, layout.Split)
 			frame := paintBodyView(l, th, v, archPane, func(w, h int) []string { return v.archRender(demoArchPaint(now), w, h) })
-			checkViewGolden(t, "arch", tc.name, frame, tc.w)
+			checkViewGolden(t, archGoldenName, tc.name, frame, tc.w)
 			plain := StripANSI(strings.Join(frame, "\n"))
 			for _, want := range []string{"ARCHITECTURE", "contract rev 7", "a3f1c9e2", "owner 2026-11-02 13:38", "Marshal 0.0.9", "BUSINESS PROCESS", "now at D3", "▸ D3", "[o]", "[d]", "COMPONENTS", "RULES IN FORCE"} {
 				if !strings.Contains(plain, want) {
@@ -99,7 +97,7 @@ func TestArchViewGoldens(t *testing.T) {
 				}
 			}
 			if tc.w >= 100 {
-				for _, want := range []string{"accepted by owner 2026-11-02 13:38", "U5 owner accepts the result", "under ULTRA, independent tasks loop", "short per-task leases; no auth files in lanes"} {
+				for _, want := range []string{"accepted by owner 2026-11-02 13:38", "U5 " + bpU5, "under ULTRA, independent tasks loop", archComponents[1][1]} {
 					if !strings.Contains(plain, want) {
 						t.Errorf("wide Architecture view lacks %q", want)
 					}
@@ -241,10 +239,10 @@ func TestArchViewContent(t *testing.T) {
 	for _, want := range []string{
 		"ARCHITECTURE contract rev 7 · a3f1c9e2 · accepted by owner 2026-11-02 13:38 · Marshal 0.0.9",
 		"in force       rev 7 accepted · Marshal acts only inside it",
-		"▸ D3 interim approval due? → owner reviews",
+		"▸ D3 " + bpD3,
 		"✓ M5 runtime dispatches approved tasks",
 		"· D4 more tasks? → M5",
-		"Credential broker",
+		"Memory / MCP",
 		"● hard gates need the typed canonical id",
 	} {
 		if !strings.Contains(text, want) {

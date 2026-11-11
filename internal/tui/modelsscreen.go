@@ -174,7 +174,7 @@ func modelsScreens() map[string]func(ModelsSnapshot) ScreenContent {
 				{Label: "Open canonical Process 05 execution", Value: val},
 				{Label: "Active Model", Value: knownOrUnknown(m.CodexSelectedModel, "using provider default", modelsBinding)},
 				{Label: "Execution owner", Value: Known("Control / Execution / Start approved plan run", modelsBinding)},
-				{Label: "Safety Policy", Value: Known("Process 05 re-injects policy, sandbox, approval, and evidence constraints", modelsBinding)},
+				{Label: "Safety Policy", Value: Known(modelsSafetyPolicy, modelsBinding)},
 			}
 			return ScreenContent{ReadOnly: true, Fields: fields}
 		},

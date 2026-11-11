@@ -32,8 +32,8 @@ func (h *CommandHandler) handleEgress(ctx context.Context, args []string) (strin
 		return fmt.Sprintf("Egress %s recorded for %s: %s. The worker may retry a refused request.", args[0], args[1], args[2]), nil
 	}
 	var b strings.Builder
-	b.WriteString("Governed workers: isolated network namespace; per-run Unix proxy; exact endpoints; operator grants only.\nNative sessions opened directly by the operator: out of scope.\n")
-	if !app.EgressEnforcementAvailable() {
+	b.WriteString(egressStatusHeader)
+	if egressReportsEnforcement && !app.EgressEnforcementAvailable() {
 		b.WriteString("Network work is refused here: bubblewrap network isolation or the trusted socat bridge is unavailable.\n")
 	}
 	rows, err := a.runtime.OperatorEgressStatus(ctx)

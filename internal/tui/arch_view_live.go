@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
@@ -93,7 +94,7 @@ func (w *Workspace) archSrc() archViewSource {
 func (w *Workspace) paintArchState() archPaint {
 	w.arch.mu.Lock()
 	defer w.arch.mu.Unlock()
-	return archPaint{Snap: w.arch.snap, Edition: archEdition(), Rules: archRulesInForce()}
+	return archPaint{Snap: w.arch.snap, Edition: archEdition(), Rules: archRulesInForce(w.arch.snap.Telemetry)}
 }
 
 // archChipState is what the Board header's chip paints from: whether a
@@ -182,8 +183,10 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 		return
 	}
 	loaded, rev := w.archChipState()
+	telemetry := cloud.TelemetryActive()
 	w.arch.mu.Lock()
 	w.arch.snap.At = time.Now()
+	w.arch.snap.Telemetry = telemetry
 	if err != nil {
 		w.arch.snap.Err = err.Error()
 	} else {
@@ -269,6 +272,7 @@ func (w *Workspace) openArchPage() {
 	}
 	w.arch.busy = true
 	o := w.arch.snap.Overview
+	telemetry := w.arch.snap.Telemetry
 	w.arch.mu.Unlock()
 	inbox := w.boardInbox()
 	w.mu.RLock()
@@ -283,7 +287,7 @@ func (w *Workspace) openArchPage() {
 	if o.Accepted != nil {
 		name = fmt.Sprintf("rev-%d.html", o.Accepted.Revision)
 	}
-	page := archPage(o, archEdition(), archRulesInForce(), cur, why, time.Now())
+	page := archPage(o, archEdition(), archRulesInForce(telemetry), cur, why, time.Now())
 	w.memoryAnswer("Opening the architecture in the browser…", false)
 	started := w.startBackground(context.Background(), func(ctx context.Context) {
 		path, err := src.OpenPage(ctx, name, page)
