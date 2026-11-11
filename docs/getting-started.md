@@ -77,7 +77,7 @@ After receiving your goal, the Marshal reviews your repository structure, asks c
 When the draft is ready:
 1. The Board header alerts with an orange **`NEEDS YOU`** banner:
    ```text
-   ⚑ architecture · architecture waits for you in the browser
+   ⚑ architecture · waits for you in the browser
        [y] open in browser
    ```
 2. Press `y` on the Board. The architecture opens in your browser.

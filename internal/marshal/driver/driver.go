@@ -187,7 +187,7 @@ func wait(ctx context.Context, h *Handle) error {
 // are kept apart and never count as acceptance evidence.
 func assemble(ctx context.Context, req Request, id identity, observed, reported []marshal.CommandRecord, checkTimeout time.Duration) (marshal.HandIn, error) {
 	wt := req.Worktree
-	result, err := recordResult(ctx, wt, req.Task.PlanTaskID)
+	result, err := recordResult(ctx, wt, req.Task.PlanTaskID, req.Task.Title)
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
@@ -235,10 +235,24 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 	}, nil
 }
 
+// handInSubject is the plain commit subject that lands in the owner's git
+// history: the task and its title, no run or lane identifiers.
+func handInSubject(taskID, title string) string {
+	title = strings.TrimSpace(strings.SplitN(title, "\n", 2)[0])
+	if title == "" || title == taskID {
+		title = "work handed in"
+	}
+	subject := taskID + ": " + title
+	if r := []rune(subject); len(r) > 72 {
+		subject = strings.TrimSpace(string(r[:71])) + "…"
+	}
+	return subject
+}
+
 // recordResult commits whatever the worker left in the worktree and returns
 // the result commit. The commit uses the repository's own identity: a
 // runtime that invented an author would falsify who made the change.
-func recordResult(ctx context.Context, wt, taskID string) (string, error) {
+func recordResult(ctx context.Context, wt, taskID, title string) (string, error) {
 	status, err := git(ctx, wt, "status", "--porcelain=v1", "--untracked-files=normal")
 	if err != nil {
 		return "", err
@@ -252,7 +266,7 @@ func recordResult(ctx context.Context, wt, taskID string) (string, error) {
 		if _, err := git(ctx, wt, "add", "-A"); err != nil {
 			return "", err
 		}
-		if _, err := git(ctx, wt, "commit", "--no-verify", "-m", "marshal: hand-in for "+taskID); err != nil {
+		if _, err := git(ctx, wt, "commit", "--no-verify", "-m", handInSubject(taskID, title)); err != nil {
 			return "", err
 		}
 	}

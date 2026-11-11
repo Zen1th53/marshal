@@ -310,7 +310,11 @@ func (w *Workspace) confirmPicker(i int) {
 		w.logTUIError("save the Marshal model", err)
 		w.RecordActivity("The Marshal model was not saved. The details are in .marshal/logs/tui-errors.log.")
 	}
-	w.RecordActivity("Marshal: " + p + ".")
+	name := neutralProviderNames[canonicalNeutralProvider(p)]
+	if name == "" {
+		name = p
+	}
+	w.RecordActivity(name + " is the Marshal for this project.")
 	w.requestRepaint()
 	w.releaseLaunchPending()
 }

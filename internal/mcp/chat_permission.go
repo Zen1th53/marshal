@@ -50,7 +50,7 @@ func (s *Server) callChatPermission(ctx context.Context, req jsonRPCRequest) (js
 	for {
 		out, err := s.chatPermission(ctx, params.Arguments)
 		if err != nil {
-			resp.Error = &rpcErr{Code: -32000, Message: err.Error()}
+			resp.Error = toolError(params.Name, err)
 			return resp, true
 		}
 		var pending struct {

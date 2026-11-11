@@ -75,7 +75,24 @@ func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task
 	return wt.Path, err
 }
 
-func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string, error) {
+// handInCommitMessage is the worker commit that lands in the owner's git
+// history: a plain subject naming the task, and the run only in the body.
+func handInCommitMessage(runID, taskID, title string) string {
+	title = strings.TrimSpace(strings.SplitN(title, "\n", 2)[0])
+	if title == "" || title == taskID {
+		title = "work handed in"
+	}
+	subject := taskID + ": " + title
+	if r := []rune(subject); len(r) > 72 {
+		subject = strings.TrimSpace(string(r[:71])) + "…"
+	}
+	if runID == "" {
+		return subject
+	}
+	return subject + "\n\nRecorded by Marshal for run " + runID + "."
+}
+
+func commitTaskWorktree(ctx context.Context, path, runID, taskID, title string) (string, error) {
 	git := func(args ...string) (string, error) {
 		cmd, err := hostgit.Command(ctx, path, args...)
 		if err != nil {
@@ -103,7 +120,7 @@ func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string
 				return "", fmt.Errorf("git commit requires %s; configure it in the repository or git configuration", key)
 			}
 		}
-		if _, err := git("commit", "--no-verify", "-m", fmt.Sprintf("marshal: hand-in for %s (run %s)", taskID, runID)); err != nil {
+		if _, err := git("commit", "--no-verify", "-m", handInCommitMessage(runID, taskID, title)); err != nil {
 			return "", err
 		}
 	}

@@ -301,3 +301,16 @@ func TestBrowserAcceptNudgeAcceptsNothing(t *testing.T) {
 		t.Fatalf("the nudge let the Marshal accept the contract: %+v", receipt)
 	}
 }
+
+// After the browser Accept the footer no longer says the page is opening.
+func TestBrowserAcceptClearsTheOpeningAnswer(t *testing.T) {
+	w, _, _ := liveMCPFixture(t)
+	w.memoryAnswer(architectureOpening, false)
+	w.browserAccepted(browserAcceptState(1))
+	w.mu.RLock()
+	answer := w.answer
+	w.mu.RUnlock()
+	if answer == architectureOpening {
+		t.Fatalf("footer still says %q after Accept", answer)
+	}
+}

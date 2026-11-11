@@ -108,7 +108,13 @@ func (w *Workspace) keepUnansweredImportCandidate(ctx context.Context, req permi
 	delete(w.permissions.outstanding, req.Key())
 	delete(w.permissions.build.redeliver, req.Key())
 	w.permissions.mu.Unlock()
-	w.RecordActivity("Imported session history kept as a candidate (" + cause + "): " + req.Object)
+	// Activity says what happened in plain words; the record ID and the
+	// cause stay in the event below.
+	from := "an earlier chat"
+	if provider != "" {
+		from = "an earlier " + providerDisplayName(provider) + " chat"
+	}
+	w.RecordActivity("The Marshal did not review a memory imported from " + from + ", so it is not kept as project memory yet. Review it with /memory review.")
 	if w.store == nil {
 		return
 	}

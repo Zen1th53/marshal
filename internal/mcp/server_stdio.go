@@ -180,7 +180,7 @@ func (s *Server) handleStdioRequest(ctx context.Context, req jsonRPCRequest) jso
 		}
 		res, err := s.callTool(knowledgeRequestContext(ctx, req.ID), caller, params.Name, params.Arguments)
 		if err != nil {
-			resp.Error = &rpcErr{Code: -32000, Message: err.Error()}
+			resp.Error = toolError(params.Name, err)
 			return resp
 		}
 		resp.Result = map[string]any{

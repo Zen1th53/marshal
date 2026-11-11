@@ -65,6 +65,7 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 		// The inbox is read on the Marshal's next turn; wake an idle one.
 		w.wakeMarshalAfterAccept()
 	}
+	w.clearAnswer(architectureOpening)
 	w.RecordActivity(fmt.Sprintf("Architecture accepted in the browser (rev %d).", n))
 	if w.archView.Load() {
 		w.closeArchView()
@@ -77,10 +78,34 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 // openArchitectureReview opens the architecture in the browser. Opening a page
 // is not a decision, so it neither arms nor confirms.
 func (w *Workspace) openArchitectureReview() {
+	// The answer is set first: the page may open before marshalArchitecture
+	// returns, and its clear must find this text to remove.
+	w.memoryAnswer(architectureOpening, false)
 	if _, err := w.marshalArchitecture(w.workers.context(), "", ""); err != nil {
 		w.memoryAnswer("The architecture could not be opened: "+plainArchitectureError(err), true)
-	} else {
-		w.memoryAnswer("Opening the architecture in your browser…", false)
+	}
+}
+
+// architectureOpening is the footer answer while the browser opens; it is
+// cleared once the page has opened or the owner accepted it, so it never
+// outlives what it describes.
+const architectureOpening = "Opening the architecture in your browser…"
+
+// clearAnswer removes the footer answer only while it is still text, so a
+// newer answer to something else is never wiped.
+func (w *Workspace) clearAnswer(text string) {
+	w.mu.Lock()
+	cleared := w.answer == text
+	if cleared {
+		w.answer, w.answerIsError = "", false
+		if w.state.LastOutput == text {
+			w.state.LastOutput, w.state.LastOutputIsError = "", false
+		}
+	}
+	w.mu.Unlock()
+	if cleared {
+		w.outputSeq.Add(1)
+		w.requestRepaint()
 	}
 }
 

@@ -57,7 +57,7 @@ func (s *Server) callStdioProposal(ctx context.Context, req jsonRPCRequest) (jso
 		}
 		result, err := s.proposalCall(ctx, rawParams.Name, rawParams.Arguments)
 		if err != nil {
-			resp.Error = &rpcErr{Code: -32000, Message: err.Error()}
+			resp.Error = toolError(rawParams.Name, err)
 			return resp, true
 		}
 		resp.Result = map[string]any{"content": []map[string]any{{"type": "text", "text": string(result)}}}

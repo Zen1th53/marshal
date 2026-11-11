@@ -41,7 +41,7 @@ func (w *Workspace) wakeMarshalAfterAccept() {
 	if w.sayPane() == "" && !w.nativeChatShown() {
 		return
 	}
-	w.sayToMarshal(w.workers.context(), browserAcceptNudge)
+	w.noticeToMarshal(w.workers.context(), browserAcceptNudge)
 }
 
 // browserContractChanged refuses an Accept of a page built from a contract

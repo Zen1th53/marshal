@@ -35,12 +35,12 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	if !strings.Contains(head, "NEEDS YOU") || strings.Contains(head, "NO RUN YET") || !strings.Contains(head, "inbox 1") {
 		t.Fatalf("header does not say the Marshal needs the owner: %q", head)
 	}
-	for _, want := range []string{"the Marshal waits for your reply", "architecture · architecture waits for you in the browser", "Build hello-uz", "[y] open in browser", "Tell the Marshal what to build"} {
+	for _, want := range []string{"the Marshal waits for your reply", "architecture · waits for you in the browser", "Build hello-uz", "[y] open in browser", "Tell the Marshal what to build"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("first-use Board misses %q:\n%s", want, text)
 		}
 	}
-	for _, gone := range []string{"accept architecture", "[b] open details"} {
+	for _, gone := range []string{"accept architecture", "[b] open details", "architecture · architecture"} {
 		if strings.Contains(text, gone) {
 			t.Errorf("first-use Board still shows %q:\n%s", gone, text)
 		}

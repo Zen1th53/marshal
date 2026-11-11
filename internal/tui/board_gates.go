@@ -114,7 +114,7 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 		g := ownerGate{
 			key:     fmt.Sprintf("architecture:%s:%d:%s", c.ID, c.Revision, c.Digest),
 			kind:    "architecture",
-			title:   "architecture waits for you in the browser",
+			title:   "waits for you in the browser",
 			summary: firstLine(c.Purpose),
 			reply:   "",
 			details: 'y',
