@@ -20,20 +20,23 @@ func stuckTaskUnderKeyboard(w *Workspace) (string, bool) {
 	if !w.boardVisible() || w.anyBodyView() {
 		return "", false
 	}
+	p := w.marshalPanel()
+	if p == nil {
+		return "", false
+	}
+	// The focus handleBoardKey uses: an empty focus is the inbox while it
+	// holds a request or the run's stop entry, the tasks otherwise.
+	_, stopped := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice()
 	var id string
 	switch {
 	case ui.inspect != "":
 		id = ui.inspect
-	case ui.pane(len(w.boardInbox()) > 0) == layout.Tasks:
+	case ui.pane(len(w.boardInbox()) > 0 || stopped) == layout.Tasks:
 		id = ui.task
 	default:
 		return "", false
 	}
 	if id == "" {
-		return "", false
-	}
-	p := w.marshalPanel()
-	if p == nil {
 		return "", false
 	}
 	row, ok := taskRow(p.Board, id)

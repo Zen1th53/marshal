@@ -142,3 +142,27 @@ func TestPlainRetryError(t *testing.T) {
 		})
 	}
 }
+
+// While the run is stopped an unset focus is the inbox's stop entry, as
+// handleBoardKey reads it, so the stuck task is not the one under the
+// keyboard until the Tasks pane is focused.
+func TestBoardRetryFollowsTheStopFocus(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	w.permissions.mu.Lock()
+	w.permissions.inbox = nil
+	w.permissions.mu.Unlock()
+	w.mu.Lock()
+	stopped := *w.state.Marshal
+	stopped.Note, stopped.Stopped = "stopped: worker exited 2", true
+	w.state.Marshal = &stopped
+	w.mu.Unlock()
+	w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = "", "T-023", ""
+	if id, ok := stuckTaskUnderKeyboard(w); ok {
+		t.Fatalf("the stop entry has the keyboard, yet %q reads as under it", id)
+	}
+	w.boardUI.focus = layout.Tasks
+	if id, ok := stuckTaskUnderKeyboard(w); !ok || id != "T-023" {
+		t.Fatalf("with the Tasks pane focused got %q, %v; want T-023", id, ok)
+	}
+}
