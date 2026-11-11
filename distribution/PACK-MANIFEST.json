@@ -2671,8 +2671,8 @@
     },
     {
       "path": "internal/app/marshal_reword_extreme_test.go",
-      "sha256": "1420e47a1c6a14ca65c25d73bd0218580548869c3468f41c9c3f4c3462b6f79b",
-      "bytes": 3265
+      "sha256": "94adef694c808d56ad5ef98edceeb2b6f1b831d96f49a32783d3277a49cbefe1",
+      "bytes": 3319
     },
     {
       "path": "internal/app/marshal_rework_lane_default_test.go",

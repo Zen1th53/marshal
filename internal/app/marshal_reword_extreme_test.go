@@ -67,7 +67,8 @@ func TestInfraRetryLimitPauseIsPlain(t *testing.T) {
 }
 
 func TestFailoverQuotaPauseShowsLocalTime(t *testing.T) {
-	loc := time.FixedZone("test", 5*60*60)
+	// The helper shows times in the machine's own zone, so build them there.
+	loc := time.Local
 	now := time.Date(2026, time.January, 2, 12, 4, 0, 0, loc)
 	until := now.Add(3 * time.Hour)
 	if got := formatLocalUntil(until, now); got != "15:04" {
