@@ -9,6 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/store"
 	"os"
 	"path/filepath"
@@ -52,6 +53,22 @@ func TestContinuationReadRequiresRecordedOperatorGrant(t *testing.T) {
 	}
 	if _, err := r.ReadGranted(ctx, path); !errors.Is(err, authz.ErrDenied) {
 		t.Fatal("denied read retained")
+	}
+}
+
+func TestEarlierWorkFolderClaudeSlug(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", "/tmp/x")
+	r := &Runtime{layout: project.Layout{Root: "/a/b.c"}}
+	if got, want := r.EarlierWorkFolder("claude"), "/tmp/x/projects/-a-b-c"; got != want {
+		t.Fatalf("EarlierWorkFolder(claude) = %q, want %q", got, want)
+	}
+}
+
+func TestEarlierWorkFolderCodex(t *testing.T) {
+	t.Setenv("CODEX_HOME", "/tmp/codex-home")
+	r := &Runtime{layout: project.Layout{Root: "/a/b.c"}}
+	if got, want := r.EarlierWorkFolder("codex"), "/tmp/codex-home/sessions"; got != want {
+		t.Fatalf("EarlierWorkFolder(codex) = %q, want %q", got, want)
 	}
 }
 func TestContinuationCandidatesDropSecretsAndWriteOnlyAfterAllow(t *testing.T) {

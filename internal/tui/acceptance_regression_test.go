@@ -115,26 +115,20 @@ func TestAcceptancePermissionTargetsClientAndDefersHistory(t *testing.T) {
 	}
 }
 
-func TestAcceptanceHistoryProposalRequiresEarlierWorkYes(t *testing.T) {
+func TestAcceptanceEarlierHistoryPopupForFoundFolder(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-history-intake")
-	proposal := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"read","path":"/tmp/earlier"}`}}}
-	w.observeMarshalProposals(proposal)
-	if !w.permissions.queue.Empty() {
-		t.Fatal("history request before earlier-work answer")
-	}
-	emitMarshalIntakeFile(t, w, "Uzbek", "no")
-	w.observeMarshalProposals(proposal)
-	if !w.permissions.queue.Empty() {
-		t.Fatal("history request after no")
-	}
-	emitMarshalIntakeFile(t, w, "Uzbek", "yes")
+	folder := rt.EarlierWorkFolder("claude")
+	w.launch.mu.Lock()
+	w.launch.scan = projectScan{Sessions: []scanSessions{{Provider: "claude", Found: 1}}}
+	w.launch.mu.Unlock()
+	proposal := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"continue","provider":"claude","path":"` + folder + `"}`}}}
 	w.observeMarshalProposals(proposal)
 	batch := w.permissions.queue.Take(false)
 	if len(batch) != 1 || batch[0].Kind != "read" {
-		t.Fatalf("yes did not enable explicit history request: %v", batch)
+		t.Fatalf("found-folder history request not queued: %v", batch)
 	}
-	if rt.HasReadGrant("/tmp/earlier") {
-		t.Fatal("intake yes granted history without popup")
+	if rt.HasReadGrant(folder) {
+		t.Fatal("history proposal granted access without popup")
 	}
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "tmux")

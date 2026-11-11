@@ -22,6 +22,13 @@ import (
 
 const buildMarker = "Marshal — approval authority"
 
+// launchEarlierWorkThroughQueue: the launch scan loads earlier sessions by
+// queueing the ordinary read request (shipped decides it automatically);
+// governed loads directly only under an operator grant already on record.
+const launchEarlierWorkThroughQueue = true
+
+const continuationMemoryHint = "Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate by atomically writing {\"action\":\"memory\",\"id\":\"candidate-id\"} to a fresh .marshal/proposals/<unique-request-id>.json file; do not print the payload in chat. MARSHAL applies your own memory proposals directly.\n"
+
 // buildRoleAuthority is the private authority protocol exactly as delivered:
 // the Marshal build serves private state from its own directory, so the
 // protocol's state paths name that directory rather than ".marshal/".

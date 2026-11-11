@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
@@ -40,9 +41,10 @@ type scanRun struct {
 }
 
 type scanSessions struct {
-	Provider string
-	Loaded   int
-	Found    int
+	Provider   string
+	Loaded     int
+	Found      int
+	NeedsGrant bool
 }
 
 type scanLimit struct {
@@ -451,13 +453,167 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 		scan.Knowledge, scan.KnowledgeErr = "", err
 	})
 
+	// Earlier provider history is loaded within one shared launch budget. In
+	// governed builds, inspect only whether the project folder exists until a
+	// stored read grant authorizes inventory and transcript reads.
+	type sessionsResult struct{ sessions []scanSessions }
+	sessionsDone := make(chan sessionsResult, 1)
+	go func() {
+		sessionsDone <- sessionsResult{sessions: w.scanEarlierSessions(ctx, root)}
+	}()
+
 	wg.Wait()
+	select {
+	case result := <-sessionsDone:
+		scan.Sessions = result.sessions
+	case <-ctx.Done():
+	}
 	if w != nil {
 		w.launch.mu.Lock()
 		w.launch.scan = scan
 		w.launch.mu.Unlock()
 	}
 	return scan
+}
+
+func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scanSessions {
+	if w == nil || w.runtime == nil {
+		return nil
+	}
+	budget, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	providers := []string{"claude", "codex"}
+	out := make([]scanSessions, 0, len(providers))
+	for _, provider := range providers {
+		if budget.Err() != nil {
+			break
+		}
+		folder := w.runtime.EarlierWorkFolder(provider)
+		if folder == "" {
+			continue
+		}
+		if !w.runtime.HasReadGrant(folder) {
+			if launchEarlierWorkThroughQueue {
+				// Shipped passes undecided reads, so a refusal here is an
+				// explicit operator denial, which wins: never queue past it.
+				continue
+			}
+			if _, err := os.Stat(folder); err != nil {
+				continue
+			}
+			sess := scanSessions{Provider: provider, NeedsGrant: true}
+			out = append(out, sess)
+			w.permissions.mu.Lock()
+			if w.permissions.continuations == nil {
+				w.permissions.continuations = make(map[string]string)
+			}
+			w.permissions.continuations[filepath.Clean(folder)] = provider
+			w.permissions.mu.Unlock()
+			w.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "Marshal", Reason: "Load earlier " + provider + " work for this project", ContinuationProvider: provider})
+			continue
+		}
+		listCtx, listCancel := context.WithTimeout(budget, 10*time.Second)
+		inventory, err := w.runtime.Sessions(listCtx, provider)
+		listCancel()
+		if err != nil {
+			w.RecordActivity(fmt.Sprintf("Couldn't list earlier %s sessions: %s.", provider, shortLaunchError(err)))
+			continue
+		}
+		found := 0
+		for _, session := range inventory.Native {
+			if session.Provider == provider {
+				found++
+			}
+		}
+		if found == 0 {
+			continue
+		}
+		sess := scanSessions{Provider: provider, Found: found}
+		out = append(out, sess)
+		if !launchEarlierWorkThroughQueue {
+			// Governed: a stored operator grant already decided this read, as
+			// for /continue; queueing it again would re-ask the operator.
+			if _, err := w.continueEarlierWork(budget, provider, folder); err == nil {
+				out[len(out)-1].Loaded = found
+				w.RecordActivity(loadedEarlierSessionsLine(provider, found))
+			}
+			continue
+		}
+		wait := make(chan error, 1)
+		w.permissions.mu.Lock()
+		if w.permissions.continuationDone == nil {
+			w.permissions.continuationDone = make(map[string]chan error)
+		}
+		w.permissions.continuationDone[filepath.Clean(folder)] = wait
+		w.permissions.mu.Unlock()
+		w.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "Marshal", Reason: "Load earlier " + provider + " work for this project", ContinuationProvider: provider})
+		select {
+		case err := <-wait:
+			if err == nil {
+				for i := range out {
+					if out[i].Provider == provider {
+						out[i].Loaded = found
+					}
+				}
+				w.RecordActivity(loadedEarlierSessionsLine(provider, found))
+			}
+		case <-budget.Done():
+			return out
+		}
+	}
+	return out
+}
+
+func shortLaunchError(err error) string {
+	if err == nil {
+		return "unavailable"
+	}
+	message := strings.Join(strings.Fields(err.Error()), " ")
+	if message == "" {
+		return "unavailable"
+	}
+	if len(message) > 120 {
+		message = message[:120]
+	}
+	return message
+}
+
+func loadedEarlierSessionsLine(provider string, count int) string {
+	name := "Claude"
+	if provider == "codex" {
+		name = "Codex"
+	}
+	noun := "sessions"
+	if count == 1 {
+		noun = "session"
+	}
+	return fmt.Sprintf("Loaded %d earlier %s %s for this project.", count, name, noun)
+}
+
+func (w *Workspace) finishEarlierContinuation(folder string, err error) {
+	key := filepath.Clean(folder)
+	w.permissions.mu.Lock()
+	done := w.permissions.continuationDone[key]
+	delete(w.permissions.continuationDone, key)
+	w.permissions.mu.Unlock()
+	if done != nil {
+		done <- err
+	}
+}
+
+func (w *Workspace) earlierWorkFolderFound(path string) bool {
+	if w == nil || w.runtime == nil {
+		return false
+	}
+	clean := filepath.Clean(path)
+	w.launch.mu.Lock()
+	defer w.launch.mu.Unlock()
+	for _, session := range w.launch.scan.Sessions {
+		if (session.Found > 0 || session.NeedsGrant) && clean == filepath.Clean(w.runtime.EarlierWorkFolder(session.Provider)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s projectScan) briefingBlock(doctorWarnings []string) string {
@@ -531,13 +687,17 @@ func (s projectScan) briefingBlock(doctorWarnings []string) string {
 	if len(s.Sessions) > 0 {
 		var sessParts []string
 		for _, sess := range s.Sessions {
-			if sess.Loaded > 0 {
+			if sess.NeedsGrant {
+				sessParts = append(sessParts, fmt.Sprintf("%s earlier sessions: needs your OK", sess.Provider))
+			} else if sess.Loaded > 0 {
 				sessParts = append(sessParts, fmt.Sprintf("%s %d loaded", sess.Provider, sess.Loaded))
-			} else {
-				sessParts = append(sessParts, fmt.Sprintf("%s 0", sess.Provider))
+			} else if sess.Found > 0 {
+				sessParts = append(sessParts, fmt.Sprintf("%s %d found, not loaded", sess.Provider, sess.Found))
 			}
 		}
-		lines = append(lines, "- earlier sessions: "+strings.Join(sessParts, ", "))
+		if len(sessParts) > 0 {
+			lines = append(lines, "- earlier sessions: "+strings.Join(sessParts, ", "))
+		}
 	}
 
 	// limits:
