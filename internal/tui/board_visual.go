@@ -1179,23 +1179,24 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		out = append(out, lines...)
 		out = out[:min(len(out), h)]
 	}
-	// The requirements card is the first inbox entry: the a–h lines the
-	// Marshal filled, Enter to confirm, e to edit (board_requirements.go).
+	// A question the Marshal asked the owner is the first inbox entry: its
+	// keys come first too, so it sits on top. One key or one click sends the
+	// chosen answer to the chat (board_ask.go).
+	if v.ask != nil && len(out) < h {
+		lines := v.askEntry(*v.ask, p.Rect.X, p.Rect.Y+len(out), w)
+		if len(out)+len(lines) > h {
+			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
+		}
+		out = append(out, lines...)
+		out = out[:min(len(out), h)]
+	}
+	// The requirements card comes next: the a–h lines the Marshal filled,
+	// Enter to confirm, e to edit (board_requirements.go).
 	if v.req != nil && len(out) < h {
 		lines := v.requirementsEntry(*v.req, p.Rect.X, p.Rect.Y+len(out), w)
 		for len(out)+len(lines) > h && len(lines) > 0 {
 			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
 			lines = lines[:len(lines)-1]
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	// A question the Marshal asked the owner comes next: one key or one
-	// click sends the chosen answer to the chat (board_ask.go).
-	if v.ask != nil && len(out) < h {
-		lines := v.askEntry(*v.ask, p.Rect.X, p.Rect.Y+len(out), w)
-		if len(out)+len(lines) > h {
-			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
 		}
 		out = append(out, lines...)
 		out = out[:min(len(out), h)]
