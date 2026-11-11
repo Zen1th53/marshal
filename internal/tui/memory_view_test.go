@@ -32,10 +32,6 @@ func demoMemoryOverview(now time.Time) store.MemoryOverview {
 			{ID: "MEM-41be", Kind: "episodic", Title: "recall ranking prefers durable semantic records over episodic ones", Confidence: "medium", Authority: "agent", CreatedAt: at(5 * time.Minute)},
 			{ID: "MEM-9d02", Kind: "episodic", Title: "restore preview must list records before confirmation", Confidence: "medium", Authority: "agent", CreatedAt: at(9 * time.Minute)},
 		},
-		EditionTags: store.MemoryEditionTags{ExtremeCount: 14, CommunityCount: 9, SharedCount: 3,
-			ExtremeAreas:   []string{"mcp", "memory", "tui", "broker"},
-			CommunityAreas: []string{"cloud", "license"},
-			SharedAreas:    []string{"store"}},
 		RecentRecalls: store.MemoryRecentRecalls{TotalReceipts: 1943, Recent: []store.MemoryReceiptSummary{
 			{CallerID: "claude-1", TaskID: "T-018", QueryDigest: "3fa9c1d2e4b5a6f7", OutcomeStatus: "served", CreatedAt: now.Add(-14 * time.Second)},
 			{CallerID: "codex-1", TaskID: "T-017", QueryDigest: "a01b2c3d4e5f6071", OutcomeStatus: "served", CreatedAt: now.Add(-48 * time.Second)},
@@ -145,7 +141,7 @@ func TestMemoryViewGoldens(t *testing.T) {
 				}
 			}
 			plain := StripANSI(got)
-			order := []string{"MEMORY", "REVIEW QUEUE", "BY EDITION", "RECENT RECALLS", "MCP TOOLS"}
+			order := []string{"MEMORY", "REVIEW QUEUE", "RECENT RECALLS", "MCP TOOLS"}
 			if tc.w < layout.TwoColumns {
 				order = order[:2]
 				if !strings.Contains(plain, "PgDn scroll") {
@@ -190,7 +186,6 @@ func TestMemoryViewContent(t *testing.T) {
 		"12 restore points · last 41m ago",
 		"MEM-c7a1 finding · confidence high · agent · 2m ago",
 		"[a] keep as durable  [r] reject  [i] evidence",
-		"broker, mcp, memory, tui",
 		"claude-1   T-018    3fa9c1d2 → served",
 		"→ served · 1 denied",
 		"memory_recall",
@@ -213,15 +208,10 @@ func TestMemoryViewContent(t *testing.T) {
 	if !strings.Contains(strings.Join(lines, "\n"), "Enter to reject MEM-c7a1 · Esc cancels") {
 		t.Error("a pending rejection does not ask for Enter")
 	}
-	// Narrow areas give way to a count rather than a cut name.
-	edition := strings.Join(v.memEditions(m, 44), "\n")
-	if strings.Contains(edition, "brok") && !strings.Contains(edition, "broker") {
-		t.Fatalf("an area name was cut:\n%s", edition)
-	}
 	empty := memoryPaint{Snap: memorySnapshot{Loaded: true, At: now}}
 	lines, _ = v.memoryLines(empty, 100)
 	text = strings.Join(lines, "\n")
-	for _, want := range []string{"nothing waiting review", "no tagged records yet", "no recalls yet", "no gateway calls recorded"} {
+	for _, want := range []string{"nothing waiting review", "no recalls yet", "no gateway calls recorded"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("empty Memory view lacks %q", want)
 		}

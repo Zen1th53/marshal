@@ -20,7 +20,6 @@ type MemoryOverviewLimits struct {
 type MemoryOverview struct {
 	Counts        MemoryOverviewCounts
 	ReviewQueue   []MemoryReviewQueueItem
-	EditionTags   MemoryEditionTags
 	RecentRecalls MemoryRecentRecalls
 	MCPTools      MemoryMCPTools
 	Snapshots     MemorySnapshots
@@ -40,16 +39,6 @@ type MemoryReviewQueueItem struct {
 	Confidence model.MemoryConfidence
 	Authority  model.MemoryAuthority
 	CreatedAt  *time.Time
-}
-
-// MemoryEditionTags contains counts of edition-tagged records and distinct area names.
-type MemoryEditionTags struct {
-	ExtremeCount   int
-	CommunityCount int
-	SharedCount    int
-	ExtremeAreas   []string
-	CommunityAreas []string
-	SharedAreas    []string
 }
 
 // MemoryRecentRecalls contains the newest retrieval receipts and total count.
@@ -167,67 +156,7 @@ func (s *Store) MemoryOverview(ctx context.Context, projectID string, limits Mem
 		return MemoryOverview{}, fmt.Errorf("iterate memory review queue: %w", err)
 	}
 
-	// 3. EditionTags: titles starting with [extreme/, [community/, [shared/
-	// Extract edition prefix and area name between '/' and ']'
-	tagRows, err := s.db.QueryContext(ctx, `
-		SELECT
-			CASE
-				WHEN title LIKE '[extreme/%' THEN 'extreme'
-				WHEN title LIKE '[community/%' THEN 'community'
-				WHEN title LIKE '[shared/%' THEN 'shared'
-			END AS edition,
-			CASE
-				WHEN instr(title, ']') > instr(title, '/')
-				THEN substr(title, instr(title, '/') + 1, instr(title, ']') - instr(title, '/') - 1)
-				ELSE ''
-			END AS area
-		FROM memory_records_v2
-		WHERE project_id = ? AND (
-			title LIKE '[extreme/%' OR
-			title LIKE '[community/%' OR
-			title LIKE '[shared/%'
-		)
-	`, projectID)
-	if err != nil {
-		return MemoryOverview{}, fmt.Errorf("query memory edition tags: %w", err)
-	}
-	defer tagRows.Close()
-
-	extremeAreas := make(map[string]bool)
-	communityAreas := make(map[string]bool)
-	sharedAreas := make(map[string]bool)
-
-	for tagRows.Next() {
-		var edition, area string
-		if err := tagRows.Scan(&edition, &area); err != nil {
-			return MemoryOverview{}, fmt.Errorf("scan memory edition tags: %w", err)
-		}
-		switch edition {
-		case "extreme":
-			overview.EditionTags.ExtremeCount++
-			if area != "" && !extremeAreas[area] {
-				extremeAreas[area] = true
-				overview.EditionTags.ExtremeAreas = append(overview.EditionTags.ExtremeAreas, area)
-			}
-		case "community":
-			overview.EditionTags.CommunityCount++
-			if area != "" && !communityAreas[area] {
-				communityAreas[area] = true
-				overview.EditionTags.CommunityAreas = append(overview.EditionTags.CommunityAreas, area)
-			}
-		case "shared":
-			overview.EditionTags.SharedCount++
-			if area != "" && !sharedAreas[area] {
-				sharedAreas[area] = true
-				overview.EditionTags.SharedAreas = append(overview.EditionTags.SharedAreas, area)
-			}
-		}
-	}
-	if err := tagRows.Err(); err != nil {
-		return MemoryOverview{}, fmt.Errorf("iterate memory edition tags: %w", err)
-	}
-
-	// 4. RecentRecalls: total count and up to limits.Recalls newest rows
+	// 3. RecentRecalls: total count and up to limits.Recalls newest rows
 	var totalReceipts int
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*)
@@ -277,7 +206,7 @@ func (s *Store) MemoryOverview(ctx context.Context, projectID string, limits Mem
 		return MemoryOverview{}, fmt.Errorf("iterate memory retrieval receipts: %w", err)
 	}
 
-	// 5. MCPTools: call counts grouped by tool name from mcp_gateway_logs
+	// 4. MCPTools: call counts grouped by tool name from mcp_gateway_logs
 	overview.MCPTools.ToolCalls = make(map[string]int)
 	mcpRows, err := s.db.QueryContext(ctx, `
 		SELECT m.tool, COUNT(*)
@@ -305,7 +234,7 @@ func (s *Store) MemoryOverview(ctx context.Context, projectID string, limits Mem
 	overview.MCPTools.CandidatesCount = candCount
 	overview.MCPTools.ProposalsCount = propCount
 
-	// 6. Snapshots: count of memory_restore_snapshots and the newest snapshot time
+	// 5. Snapshots: count of memory_restore_snapshots and the newest snapshot time
 	var snapCount int
 	var newestSnapStr sql.NullString
 	err = s.db.QueryRowContext(ctx, `

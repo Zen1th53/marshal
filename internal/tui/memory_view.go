@@ -77,10 +77,9 @@ func (v boardVisual) memoryRender(m memoryPaint, w, h, scroll int, follow bool) 
 	return out, scroll, maxScroll
 }
 
-// memoryLines lays the sections out as the prototype does: MEMORY across
-// the top, then REVIEW QUEUE beside BY EDITION and RECENT RECALLS beside
-// MCP TOOLS when there is room for two columns. It also returns the line
-// the selected candidate starts on, or -1.
+// memoryLines lays the sections out: MEMORY across the top, then REVIEW QUEUE beside RECENT RECALLS
+// when there is room for two columns, then MCP TOOLS. It also returns the line the selected candidate
+// starts on, or -1.
 func (v boardVisual) memoryLines(m memoryPaint, w int) ([]string, int) {
 	var out []string
 	selAt := -1
@@ -98,12 +97,11 @@ func (v boardVisual) memoryLines(m memoryPaint, w int) ([]string, int) {
 		lw := (w - 2) / 2
 		rw := w - 2 - lw
 		queue, sel := v.memQueue(m, lw)
-		add(sideBySide(queue, v.memEditions(m, rw), lw, rw), sel)
-		add(sideBySide(v.memRecalls(m, lw), v.memTools(m, rw), lw, rw), -1)
+		add(sideBySide(queue, v.memRecalls(m, rw), lw, rw), sel)
+		add(v.memTools(m, w), -1)
 	} else {
 		queue, sel := v.memQueue(m, w)
 		add(queue, sel)
-		add(v.memEditions(m, w), -1)
 		add(v.memRecalls(m, w), -1)
 		add(v.memTools(m, w), -1)
 	}
@@ -222,53 +220,6 @@ func (v boardVisual) memQueue(m memoryPaint, w int) ([]string, int) {
 		out = append(out, lines...)
 	}
 	return out, sel
-}
-
-func (v boardVisual) memEditions(m memoryPaint, w int) []string {
-	e := m.Snap.Overview.EditionTags
-	out := []string{v.title("BY EDITION", "records tagged [edition/area]", false, w)}
-	rows := []struct {
-		name  string
-		n     int
-		areas []string
-	}{{"Marshal", e.ExtremeCount, e.ExtremeAreas}, {"community", e.CommunityCount, e.CommunityAreas}, {"shared", e.SharedCount, e.SharedAreas}}
-	total := e.ExtremeCount + e.CommunityCount + e.SharedCount
-	for _, r := range rows {
-		suffix := fmt.Sprintf("%3d", r.n)
-		areas := slices.Clone(r.areas)
-		slices.Sort(areas)
-		label := PadCell(r.name, 10)
-		bw := max(4, min(16, w-VisibleLen(label)-VisibleLen(suffix)-2))
-		line := label + " " + v.bar(float64(r.n), float64(max(1, total)), "verify", nil, bw) + " " + suffix
-		if len(areas) > 0 {
-			// Areas only when they fit whole: a cut name reads as another.
-			room := w - VisibleLen(line) - 3
-			var shown []string
-			for i, a := range areas {
-				more := ""
-				if rest := len(areas) - i - 1; rest > 0 {
-					more = fmt.Sprintf(" +%d", rest)
-				}
-				if VisibleLen(strings.Join(append(slices.Clone(shown), cleanBoard(a)), ", ")+more) > room {
-					break
-				}
-				shown = append(shown, cleanBoard(a))
-			}
-			switch {
-			case len(shown) > 0 && len(shown) < len(areas):
-				line += " · " + v.fg("dim", strings.Join(shown, ", ")+fmt.Sprintf(" +%d", len(areas)-len(shown)))
-			case len(shown) > 0:
-				line += " · " + v.fg("dim", strings.Join(shown, ", "))
-			case room >= 8:
-				line += " · " + v.fg("dim", fmt.Sprintf("%d areas", len(areas)))
-			}
-		}
-		out = append(out, PadCell(line, w))
-	}
-	if total == 0 {
-		out = append(out, v.fg("dim", PadCell("  no tagged records yet", w)))
-	}
-	return out
 }
 
 func (v boardVisual) memRecalls(m memoryPaint, w int) []string {

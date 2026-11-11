@@ -52,12 +52,6 @@ func TestMemoryOverviewEmptyStore(t *testing.T) {
 	if len(overview.ReviewQueue) != 0 {
 		t.Errorf("expected empty ReviewQueue, got %d items", len(overview.ReviewQueue))
 	}
-	if overview.EditionTags.ExtremeCount != 0 || overview.EditionTags.CommunityCount != 0 || overview.EditionTags.SharedCount != 0 {
-		t.Errorf("expected 0 edition counts, got %+v", overview.EditionTags)
-	}
-	if len(overview.EditionTags.ExtremeAreas) != 0 || len(overview.EditionTags.CommunityAreas) != 0 || len(overview.EditionTags.SharedAreas) != 0 {
-		t.Errorf("expected empty edition areas, got %+v", overview.EditionTags)
-	}
 	if overview.RecentRecalls.TotalReceipts != 0 || len(overview.RecentRecalls.Recent) != 0 {
 		t.Errorf("expected 0 receipts, got %+v", overview.RecentRecalls)
 	}
@@ -242,85 +236,6 @@ func TestMemoryOverviewCandidateQueueOrderingAndLimit(t *testing.T) {
 		if overview.ReviewQueue[i].CreatedAt == nil {
 			t.Errorf("queue[%d]: expected non-nil CreatedAt", i)
 		}
-	}
-}
-
-func TestMemoryOverviewEditionTagParsing(t *testing.T) {
-	st := setupTestStore(t, "proj-tags")
-	ctx := t.Context()
-
-	baseTime := time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC)
-	titles := []string{
-		"[extreme/routing] Route requests",
-		"[extreme/routing] Secondary route",
-		"[extreme/auth] Token verification",
-		"[community/storage] Disk store",
-		"[shared/net] Socket handler",
-		"[shared/net] Proxy handler",
-		"plain untagged record",
-		"[unrecognized/prefix] Something else",
-		"[extreme/] empty area",
-	}
-
-	for i, title := range titles {
-		rec := model.MemoryRecordV2{
-			ID:         fmt.Sprintf("tag-%d", i),
-			ProjectID:  "proj-tags",
-			Kind:       model.MemoryKindSemantic,
-			Lifecycle:  model.MemoryDurable,
-			Confidence: model.ConfidenceVerified,
-			Authority:  model.AuthorityOperator,
-			Title:      title,
-			Body:       "Body",
-			Scope:      "project",
-			ScopeID:    "proj-tags",
-			ObservedAt: baseTime,
-			IngestedAt: baseTime,
-			ValidFrom:  baseTime,
-			CreatedAt:  baseTime,
-		}
-		if err := st.WriteMemoryV2(ctx, rec); err != nil {
-			t.Fatalf("WriteMemoryV2 tag-%d: %v", i, err)
-		}
-	}
-
-	overview, err := st.MemoryOverview(ctx, "proj-tags", MemoryOverviewLimits{Queue: 10, Recalls: 10})
-	if err != nil {
-		t.Fatalf("MemoryOverview failed: %v", err)
-	}
-
-	// 3 extreme ([extreme/routing], [extreme/routing], [extreme/auth]) + 1 with empty area [extreme/] = 4
-	if overview.EditionTags.ExtremeCount != 4 {
-		t.Errorf("expected 4 extreme records, got %d", overview.EditionTags.ExtremeCount)
-	}
-	if overview.EditionTags.CommunityCount != 1 {
-		t.Errorf("expected 1 community record, got %d", overview.EditionTags.CommunityCount)
-	}
-	if overview.EditionTags.SharedCount != 2 {
-		t.Errorf("expected 2 shared records, got %d", overview.EditionTags.SharedCount)
-	}
-
-	// Areas
-	hasArea := func(areas []string, target string) bool {
-		for _, a := range areas {
-			if a == target {
-				return true
-			}
-		}
-		return false
-	}
-
-	if !hasArea(overview.EditionTags.ExtremeAreas, "routing") || !hasArea(overview.EditionTags.ExtremeAreas, "auth") {
-		t.Errorf("extreme areas mismatch: %+v", overview.EditionTags.ExtremeAreas)
-	}
-	if len(overview.EditionTags.ExtremeAreas) != 2 {
-		t.Errorf("expected 2 distinct extreme areas, got %d: %+v", len(overview.EditionTags.ExtremeAreas), overview.EditionTags.ExtremeAreas)
-	}
-	if !hasArea(overview.EditionTags.CommunityAreas, "storage") || len(overview.EditionTags.CommunityAreas) != 1 {
-		t.Errorf("community areas mismatch: %+v", overview.EditionTags.CommunityAreas)
-	}
-	if !hasArea(overview.EditionTags.SharedAreas, "net") || len(overview.EditionTags.SharedAreas) != 1 {
-		t.Errorf("shared areas mismatch: %+v", overview.EditionTags.SharedAreas)
 	}
 }
 
