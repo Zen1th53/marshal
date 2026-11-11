@@ -56,6 +56,9 @@ const (
 	// hitChange is an action on a change card (board_change.go): a click
 	// applies the change or keeps the current goal, as its key does.
 	hitChange boardHitKind = "change"
+	// hitPicker is a candidate on the launch Marshal picker (board_picker.go):
+	// a click picks-and-confirms it. id is its index.
+	hitPicker boardHitKind = "picker"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -145,6 +148,15 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 	}
 	h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1)
 	if !ok {
+		return true
+	}
+	// The launch picker is modal: only a click on one of its candidates acts.
+	if w.pickerOpen() {
+		if h.kind == hitPicker {
+			if i, err := strconv.Atoi(h.id); err == nil {
+				w.confirmPicker(i)
+			}
+		}
 		return true
 	}
 	w.mu.RLock()

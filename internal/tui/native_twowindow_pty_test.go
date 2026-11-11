@@ -124,6 +124,11 @@ func TestPTYTwoWindowsShareOneProjectMemory(t *testing.T) {
 	claudeDir := filepath.Join(claudeHome, "projects", regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(resolved, "-"))
 	os.MkdirAll(claudeDir, 0700)
 	double("claude", "CLAUDE", "MARSHAL_TEST_CLAUDE_HISTORY", filepath.Join(claudeDir, "session.jsonl"))
+	// A returning owner: the Marshal model is already chosen, so the launch
+	// picker (two CLIs installed) does not open.
+	if err := saveDefaultProvider(project, "codex"); err != nil {
+		t.Fatal(err)
+	}
 	// Neither window passes --session, so both take the default identity.
 	first := startInProject(t, project, 40, 160)
 	second := startInProject(t, project, 40, 160)

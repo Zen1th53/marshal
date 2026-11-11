@@ -749,7 +749,7 @@ func (w *Workspace) chooseMarshalProvider(ctx context.Context) (string, string) 
 		if err := saveDefaultProvider(root, provider); err != nil {
 			note += " The choice was not saved: " + err.Error()
 		} else {
-			note += " Saved as this project's default provider; change it with /marshal model."
+			note = "Marshal model selected automatically."
 		}
 	}
 	return provider, note

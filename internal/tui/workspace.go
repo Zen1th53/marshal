@@ -313,6 +313,9 @@ type Workspace struct {
 	// opening is the first-paint wordmark animation (P2-03), shown on the
 	// Board home with no active run while motion is allowed.
 	opening openingState
+	// picker is the Marshal-provider picker shown at launch when the saved
+	// provider is missing or out of limit (board_picker.go).
+	picker pickerState
 }
 
 // AttachULTRASession applies authorization and the build's startup preference.
