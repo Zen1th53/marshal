@@ -20,7 +20,7 @@ func TestHeaderStateWords(t *testing.T) {
 		want string
 	}{
 		{"waiting-stop", boardVisual{theme: th, board: model.Board{Run: model.RunHead{State: marshal.AwaitingUser}}}, "waiting for you"},
-		{"paused", boardVisual{theme: th, note: "stopped: worker exited 2", board: model.Board{Run: model.RunHead{State: marshal.Dispatching}}}, "paused"},
+		{"paused", boardVisual{theme: th, note: "stopped: worker exited 2", stopped: true, board: model.Board{Run: model.RunHead{State: marshal.Dispatching}}}, "paused"},
 		{"owner-waits", boardVisual{theme: th, guard: &guardAlert{}, board: model.Board{Run: model.RunHead{State: marshal.Dispatching}}}, "waiting for you"},
 		{"done", boardVisual{theme: th, board: model.Board{Run: model.RunHead{State: marshal.Closed}}}, "done"},
 		{"planning", boardVisual{theme: th, board: model.Board{Run: model.RunHead{State: marshal.Drafting}}}, "planning"},
