@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -43,7 +44,10 @@ func (w *Workspace) appendProjectKnowledge(root, brief string) string {
 	cachedErr := w.launch.scan.KnowledgeErr
 	w.launch.mu.Unlock()
 
-	if cachedRoot != "" && cachedRoot == root {
+	// A prefetch that ran out of time is not a value: fetch again with the
+	// full budget rather than reporting the knowledge unavailable.
+	timedOut := errors.Is(cachedErr, context.DeadlineExceeded) || errors.Is(cachedErr, context.Canceled)
+	if cachedRoot != "" && cachedRoot == root && !timedOut {
 		knowledge, err = cachedKnowledge, cachedErr
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

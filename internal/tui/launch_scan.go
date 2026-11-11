@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +84,10 @@ var languageByExt = map[string]string{
 
 var launchScanPartTimeout = 5 * time.Second
 
+// scanTitleMaxRunes bounds the active run's title in the briefing; the title
+// is the first line of the owner's request and can be a whole paragraph.
+const scanTitleMaxRunes = 80
+
 var launchScanParts = struct {
 	git       func(ctx context.Context, root string) (scanGit, error)
 	files     func(ctx context.Context, root string) (scanFiles, error)
@@ -105,22 +108,26 @@ var launchScanParts = struct {
 	knowledge: defaultScanKnowledge,
 }
 
-func defaultScanGit(ctx context.Context, root string) (scanGit, error) {
-	cmdBranch, err := hostgit.Command(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
+// scanGitOutput runs one read-only Git query for the launch scan. Optional
+// locks are off, so git status never refreshes or rewrites the index.
+func scanGitOutput(ctx context.Context, root string, args ...string) ([]byte, error) {
+	cmd, err := hostgit.Command(ctx, root, args...)
 	if err != nil {
-		return scanGit{}, err
+		return nil, err
 	}
-	outBranch, err := cmdBranch.Output()
+	cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0")
+	cmd.WaitDelay = 100 * time.Millisecond
+	return cmd.Output()
+}
+
+func defaultScanGit(ctx context.Context, root string) (scanGit, error) {
+	outBranch, err := scanGitOutput(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return scanGit{}, err
 	}
 	branch := strings.TrimSpace(string(outBranch))
 
-	cmdStatus, err := hostgit.Command(ctx, root, "status", "--porcelain")
-	if err != nil {
-		return scanGit{}, err
-	}
-	outStatus, err := cmdStatus.Output()
+	outStatus, err := scanGitOutput(ctx, root, "status", "--porcelain")
 	if err != nil {
 		return scanGit{}, err
 	}
@@ -135,55 +142,39 @@ func defaultScanGit(ctx context.Context, root string) (scanGit, error) {
 }
 
 func defaultScanFiles(ctx context.Context, root string) (scanFiles, error) {
-	cmd, err := hostgit.Command(ctx, root, "ls-files")
+	out, err := scanGitOutput(ctx, root, "ls-files", "-z")
 	if err != nil {
 		return scanFiles{}, err
 	}
-	out, err := cmd.Output()
-	if err != nil {
-		return scanFiles{}, err
-	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return scanFiles{Language: "mixed", Files: 0}, nil
-	}
-	lines := strings.Split(raw, "\n")
 	counts := make(map[string]int)
 	total := 0
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	for _, line := range strings.Split(string(out), "\x00") {
 		if line == "" {
 			continue
 		}
 		total++
-		ext := strings.ToLower(filepath.Ext(line))
-		lang, ok := languageByExt[ext]
-		if !ok {
-			lang = "mixed"
+		if lang, ok := languageByExt[strings.ToLower(filepath.Ext(line))]; ok {
+			counts[lang]++
 		}
-		counts[lang]++
 	}
-	if total == 0 {
-		return scanFiles{Language: "mixed", Files: 0}, nil
-	}
+	return scanFiles{Language: dominantLanguage(counts), Files: total}, nil
+}
 
-	bestLang := "mixed"
-	bestCount := 0
+// dominantLanguage is the mapped language with the most files, ties broken
+// by name so the result is stable. Files with other extensions (docs,
+// configuration) do not outvote the code; with no mapped file it is mixed.
+func dominantLanguage(counts map[string]int) string {
+	best, bestCount := "mixed", 0
 	for lang, count := range counts {
-		if count > bestCount {
-			bestCount = count
-			bestLang = lang
+		if count > bestCount || (count == bestCount && lang < best) {
+			best, bestCount = lang, count
 		}
 	}
-	return scanFiles{Language: bestLang, Files: total}, nil
+	return best
 }
 
 func defaultScanWorktrees(ctx context.Context, root string) (int, error) {
-	cmd, err := hostgit.Command(ctx, root, "worktree", "list", "--porcelain")
-	if err != nil {
-		return 0, err
-	}
-	out, err := cmd.Output()
+	out, err := scanGitOutput(ctx, root, "worktree", "list", "--porcelain")
 	if err != nil {
 		return 0, err
 	}
@@ -198,11 +189,7 @@ func defaultScanWorktrees(ctx context.Context, root string) (int, error) {
 }
 
 func defaultScanUnmerged(ctx context.Context, root string) ([]string, error) {
-	cmd, err := hostgit.Command(ctx, root, "for-each-ref", "--format=%(refname:short)", "refs/heads", "--no-merged", "HEAD")
-	if err != nil {
-		return nil, err
-	}
-	out, err := cmd.Output()
+	out, err := scanGitOutput(ctx, root, "for-each-ref", "--format=%(refname:short)", "refs/heads", "--no-merged", "HEAD")
 	if err != nil {
 		return nil, err
 	}
@@ -272,16 +259,25 @@ func defaultScanRun(ctx context.Context, w *Workspace, root string) (*scanRun, e
 		}
 	}
 
-	title := extractPlanTitle(r)
 	return &scanRun{
-		Title: title,
+		Title: extractPlanTitle(r),
 		Done:  done,
 		Total: total,
 		State: r.State,
 	}, nil
 }
 
+// extractPlanTitle is the run's title for the briefing, at most
+// scanTitleMaxRunes long.
 func extractPlanTitle(r marshal.Run) string {
+	title := planTitleLine(r)
+	if runes := []rune(title); len(runes) > scanTitleMaxRunes {
+		title = strings.TrimSpace(string(runes[:scanTitleMaxRunes])) + "…"
+	}
+	return title
+}
+
+func planTitleLine(r marshal.Run) string {
 	if r.GoalBinding != "" {
 		line := strings.TrimSpace(strings.Split(r.GoalBinding, "\n")[0])
 		line = strings.TrimPrefix(line, "#")
@@ -341,7 +337,7 @@ func defaultScanLimits(ctx context.Context, w *Workspace) ([]scanLimit, error) {
 		}
 		limits = append(limits, scanLimit{
 			Provider:    q.Provider,
-			LeftPercent: int(math.Floor(win.LeftPercent)),
+			LeftPercent: usageLeft(win),
 			Known:       true,
 		})
 	}
@@ -365,6 +361,7 @@ func defaultScanKnowledge(ctx context.Context, w *Workspace, root string) (strin
 func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan {
 	var scan projectScan
 	scan.KnowledgeRoot = root
+	parts := launchScanParts
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -374,171 +371,85 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 		timeout = 5 * time.Second
 	}
 
-	runPart := func(action func(context.Context) error, onResult func(), onUnknown func()) {
+	// runPart runs one part in its own goroutine with its own timeout. The
+	// part hands back a function that applies its result; it is applied only
+	// when the part finished in time, so a part still running after its
+	// timeout never touches the scan. A failed or timed-out part is unknown.
+	runPart := func(action func(context.Context) (func(), error), onUnknown func(error)) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			partCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			done := make(chan error, 1)
-			go func() {
-				done <- action(partCtx)
-			}()
-			select {
-			case err := <-done:
-				mu.Lock()
-				defer mu.Unlock()
-				if err != nil {
-					onUnknown()
-				} else {
-					onResult()
-				}
-			case <-partCtx.Done():
-				mu.Lock()
-				defer mu.Unlock()
-				onUnknown()
+			type outcome struct {
+				apply func()
+				err   error
 			}
+			done := make(chan outcome, 1)
+			go func() {
+				apply, err := action(partCtx)
+				done <- outcome{apply, err}
+			}()
+			var got outcome
+			select {
+			case got = <-done:
+			case <-partCtx.Done():
+				got.err = partCtx.Err()
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if got.err != nil || got.apply == nil {
+				onUnknown(got.err)
+				return
+			}
+			got.apply()
 		}()
 	}
 
-	// 1. git
-	var gitRes scanGit
-	runPart(
-		func(c context.Context) error {
-			var err error
-			scanGitFn := launchScanParts.git
-			gitRes, err = scanGitFn(c, root)
-			return err
-		},
-		func() {
-			scan.Branch = gitRes.Branch
-			scan.Changed = gitRes.Changed
-		},
-		func() {
-			scan.Branch = "unknown"
-			scan.Changed = -1
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.git(c, root)
+		return func() { scan.Branch, scan.Changed = res.Branch, res.Changed }, err
+	}, func(error) { scan.Branch, scan.Changed = "unknown", -1 })
 
-	// 2. files
-	var filesRes scanFiles
-	runPart(
-		func(c context.Context) error {
-			var err error
-			filesRes, err = launchScanParts.files(c, root)
-			return err
-		},
-		func() {
-			scan.Language = filesRes.Language
-			scan.Files = filesRes.Files
-		},
-		func() {
-			scan.Language = "unknown"
-			scan.Files = -1
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.files(c, root)
+		return func() { scan.Language, scan.Files = res.Language, res.Files }, err
+	}, func(error) { scan.Language, scan.Files = "unknown", -1 })
 
-	// 3. worktrees
-	var wtRes int
-	runPart(
-		func(c context.Context) error {
-			var err error
-			wtRes, err = launchScanParts.worktrees(c, root)
-			return err
-		},
-		func() {
-			scan.Worktrees = wtRes
-		},
-		func() {
-			scan.Worktrees = -1
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.worktrees(c, root)
+		return func() { scan.Worktrees = res }, err
+	}, func(error) { scan.Worktrees = -1 })
 
-	// 4. unmerged
-	var unmergedRes []string
-	runPart(
-		func(c context.Context) error {
-			var err error
-			unmergedRes, err = launchScanParts.unmerged(c, root)
-			return err
-		},
-		func() {
-			scan.Unmerged = unmergedRes
-		},
-		func() {
-			scan.Unmerged = []string{"unknown"}
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.unmerged(c, root)
+		return func() { scan.Unmerged = res }, err
+	}, func(error) { scan.Unmerged = []string{"unknown"} })
 
-	// 5. run
-	var runRes *scanRun
-	runPart(
-		func(c context.Context) error {
-			var err error
-			runRes, err = launchScanParts.run(c, w, root)
-			return err
-		},
-		func() {
-			scan.ActiveRun = runRes
-		},
-		func() {
-			scan.ActiveRun = &scanRun{State: "unknown"}
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.run(c, w, root)
+		return func() { scan.ActiveRun = res }, err
+	}, func(error) { scan.ActiveRun = &scanRun{State: "unknown"} })
 
-	// 6. runs
-	var runsRes int
-	runPart(
-		func(c context.Context) error {
-			var err error
-			runsRes, err = launchScanParts.runs(c, root)
-			return err
-		},
-		func() {
-			scan.EarlierRuns = runsRes
-		},
-		func() {
-			scan.EarlierRuns = -1
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.runs(c, root)
+		return func() { scan.EarlierRuns = res }, err
+	}, func(error) { scan.EarlierRuns = -1 })
 
-	// 7. limits
-	var limitsRes []scanLimit
-	runPart(
-		func(c context.Context) error {
-			var err error
-			limitsRes, err = launchScanParts.limits(c, w)
-			return err
-		},
-		func() {
-			scan.Limits = limitsRes
-		},
-		func() {
-			scan.Limits = nil
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.limits(c, w)
+		return func() { scan.Limits = res }, err
+	}, func(error) { scan.Limits = nil })
 
-	// 8. knowledge
-	var knowRes string
-	var knowErr error
-	runPart(
-		func(c context.Context) error {
-			knowRes, knowErr = launchScanParts.knowledge(c, w, root)
-			return knowErr
-		},
-		func() {
-			scan.Knowledge = knowRes
-			scan.KnowledgeErr = nil
-		},
-		func() {
-			scan.Knowledge = ""
-			if knowErr != nil {
-				scan.KnowledgeErr = knowErr
-			} else {
-				scan.KnowledgeErr = context.DeadlineExceeded
-			}
-		},
-	)
+	runPart(func(c context.Context) (func(), error) {
+		res, err := parts.knowledge(c, w, root)
+		return func() { scan.Knowledge, scan.KnowledgeErr = res, nil }, err
+	}, func(err error) {
+		if err == nil {
+			err = context.DeadlineExceeded
+		}
+		scan.Knowledge, scan.KnowledgeErr = "", err
+	})
 
 	wg.Wait()
 	if w != nil {
