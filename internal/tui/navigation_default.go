@@ -2,8 +2,6 @@
 
 package tui
 
-const buildNavigationReleased = false
-
 var buildResolvedGapIDs = []ActionID{}
 
 func buildModelsGap(*Node) bool { return true }

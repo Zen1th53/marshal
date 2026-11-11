@@ -389,7 +389,6 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	var hits []boardHit
 	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, hits: &hits}
-	v.noNav = w.navigationRefusal() != ""
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.guard, v.guardPrefix, v.guardArmed, v.guardUndo = w.guardPaint()

@@ -147,10 +147,6 @@ func activitySectionWithNotices(s UIState, th *Theme, cols int, authNotices []st
 			th.Colorize(th.Active, "[F3]"), th.Colorize(th.Active, "[F11]")), cols))
 		shortcuts := fmt.Sprintf("   %s Status   %s Models",
 			th.Colorize(th.Active, "[F4]"), th.Colorize(th.Active, "[F5]"))
-		if s.NavigationAvailable {
-			shortcuts += "   " + th.Colorize(th.Active, "[Ctrl+N]") + " Menu (every action)   " +
-				th.Colorize(th.Active, "[Esc]") + " Navigation"
-		}
 		out = append(out, PadCell(shortcuts, cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Active, "[F7] Codex · [F8] Claude · [F9] OpenCode · [F12] Antigravity"), "Native sessions · automatic memory"), cols))

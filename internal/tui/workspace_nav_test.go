@@ -21,8 +21,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
-// Drive the REAL Workspace: construct it as the CLI does, open navigation the
-// way Ctrl+N does, and confirm the frozen IA renders through the actual paint
+// Drive the REAL Workspace: construct it as the CLI does, open navigation
+// directly for these internal menu tests, and confirm the frozen IA renders through the actual paint
 // path with truthful values.
 func TestWorkspaceNavigationEndToEnd(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
@@ -313,10 +313,8 @@ func TestRealKeyDispatchOpensAndOwnsNavigation(t *testing.T) {
 		t.Fatal("the navigation dispatch consumed an arrow key while closed")
 	}
 
-	// Ctrl+N opens it.
-	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N was not consumed by the navigation dispatch")
-	}
+	// This test exercises the menu directly; public key entry points are tested separately.
+	ws.openNavigation(ctx)
 	if !ws.navView.IsOpen() {
 		t.Fatal("Ctrl+N did not open navigation")
 	}
@@ -346,27 +344,11 @@ func TestRealKeyDispatchOpensAndOwnsNavigation(t *testing.T) {
 	}
 }
 
-// The nil-view path in the real dispatch must not panic and must explain
-// itself, since a failed manifest load still has to leave a usable workspace.
+// A failed manifest load leaves a nil view; the workspace must stay usable and
+// the interrupt must not be consumed by navigation.
 func TestRealKeyDispatchHandlesAMissingView(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
-	// Entitled, so the dispatch reaches the missing-view branch rather than
-	// stopping at the ULTRA gate in front of it.
-	entitleULTRA(t, ws)
 	ws.navView = nil
-
-	var out strings.Builder
-	ws.out = &out
-
-	if !ws.dispatchNavigationKey(context.Background(), KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N was not consumed when the view was missing")
-	}
-	if !strings.Contains(ws.state.LastOutput, "Navigation is unavailable") || !ws.state.LastOutputIsError {
-		t.Fatalf("the missing view was not explained in the renderer state: %q", ws.state.LastOutput)
-	}
-	if out.Len() != 0 {
-		t.Fatalf("navigation wrote outside the renderer: %q", out.String())
-	}
 	if ws.interruptNavigation() {
 		t.Fatal("a nil view consumed the interrupt")
 	}
@@ -381,10 +363,7 @@ func TestControlThroughTheRealWorkspaceRefusesWithoutARuntime(t *testing.T) {
 	ctx := context.Background()
 	entitleULTRA(t, ws)
 
-	// Ctrl+N through the same dispatch the interactive loop calls.
-	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N was not consumed")
-	}
+	ws.openNavigation(ctx)
 	ws.navView.Refresh(ctx)
 
 	// A Control action, reached by keyboard alone.
@@ -414,7 +393,7 @@ func TestControlThroughTheRealWorkspaceRefusesWithoutARuntime(t *testing.T) {
 	if c.Phase() == PhaseConfirming {
 		t.Fatal("a confirmation opened with no authority to submit to")
 	}
-	if buildNavigationReleased && c.Phase() == PhaseIdle {
+	if editionExtreme && c.Phase() == PhaseIdle {
 		node, _ := ws.navView.Nav().ia.Node("CTUI-0046")
 		av := ws.navView.buildActionAvailability(node)
 		if av.Enabled || ws.navView.formOpen() || ws.navView.confirmOpen() || !strings.Contains(ws.navView.status, av.Reason) {
@@ -465,7 +444,7 @@ func TestInterruptClosesAConfirmationWithoutSubmitting(t *testing.T) {
 	source, auth := testControl(t)
 	entitleULTRA(t, ws)
 
-	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN})
+	ws.openNavigation(ctx)
 	ws.navView.AttachControl(source)
 	ws.navView.Refresh(ctx)
 
@@ -530,9 +509,7 @@ func realControlWorkspace(t *testing.T, sessionID string, navigation ...bool) (*
 	if len(navigation) > 0 && !navigation[0] {
 		return ws, runtime
 	}
-	if !ws.dispatchNavigationKey(context.Background(), KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N did not open the real workspace navigation")
-	}
+	ws.openNavigation(context.Background())
 	ws.navView.Refresh(context.Background())
 	return ws, runtime
 }
@@ -751,9 +728,7 @@ func TestControlGoalRevisionThroughRealWorkspaceAndCanonicalAuthority(t *testing
 	ws := NewWorkspace(runtime.Store(), runtime.ProjectID(), sessionID)
 	ws.AttachRuntime(runtime, projectid.ID(runtime.ProjectIdentity()))
 	entitleULTRA(t, ws)
-	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("navigation did not open")
-	}
+	ws.openNavigation(ctx)
 	now := time.Now().UTC()
 	goal := model.GoalContract{ID: "GOAL-tui-revise", SessionID: sessionID, ProjectID: runtime.ProjectIdentity(),
 		OriginalRequest: "correct the documented wording", RequestDigest: "sha256:revise-v1", ConstitutionVersion: constitution.Current.String(),
@@ -860,78 +835,5 @@ func TestControlClaimAndCancelTaskThroughRealWorkspace(t *testing.T) {
 	}
 	if cancelled.Status != model.TaskCancelled {
 		t.Fatalf("cancelled task state = %s", cancelled.Status)
-	}
-}
-
-// Navigation is an ULTRA surface. Both keyboard entry points and the exported
-// entry must refuse a Standard session rather than opening a screen it is not
-// entitled to. The entitled path is exercised by the cloud package, which owns
-// lease construction; here the gate is genuinely absent.
-func TestNavigationRefusedWithoutULTRA(t *testing.T) {
-	ws := NewWorkspace(nil, "proj", "sess-1")
-	ctx := context.Background()
-	if editionExtreme {
-		if ws.navigationEntitled() {
-			t.Fatal("Marshal navigation bypass granted a ULTRA entitlement")
-		}
-		if got := ws.navigationRefusal(); got != "" {
-			t.Fatalf("extreme Standard navigation refusal = %q, want empty", got)
-		}
-		if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) || !ws.navView.IsOpen() {
-			t.Fatal("extreme Standard session could not open navigation")
-		}
-		return
-	}
-
-	if ws.navigationEntitled() {
-		t.Fatal("a workspace with no gate reported an ULTRA entitlement")
-	}
-
-	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N was not consumed")
-	}
-	if ws.navView.IsOpen() {
-		t.Fatal("Ctrl+N opened navigation without an entitlement")
-	}
-	if !strings.Contains(ws.state.LastOutput, "ULTRA") {
-		t.Errorf("the refusal did not explain itself: %q", ws.state.LastOutput)
-	}
-	if ws.state.LastOutputIsError {
-		t.Error("a missing entitlement is a mode, not an error")
-	}
-
-	if ws.OpenNavigation(ctx) {
-		t.Fatal("OpenNavigation reported success without an entitlement")
-	}
-	if ws.navView.IsOpen() {
-		t.Fatal("OpenNavigation opened navigation without an entitlement")
-	}
-}
-
-// Until the navigation surface is verified it is closed to every session,
-// including one holding a verified ULTRA entitlement.
-func TestNavigationClosedUntilReleasedEvenWithULTRA(t *testing.T) {
-	ws := NewWorkspace(nil, "proj", "sess-closed")
-	ws.navReleased = false
-	ws.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), true)
-	ctx := context.Background()
-	if editionExtreme {
-		if got := ws.navigationRefusal(); got != "" {
-			t.Fatalf("extreme navigation refusal with navReleased=false = %q, want empty", got)
-		}
-		return
-	}
-
-	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N was not consumed")
-	}
-	if ws.navView.IsOpen() || !strings.Contains(ws.state.LastOutput, "not available yet") {
-		t.Fatalf("Ctrl+N opened an unreleased navigation surface: %q", ws.state.LastOutput)
-	}
-	if ws.OpenNavigation(ctx) || ws.navView.IsOpen() {
-		t.Fatal("OpenNavigation opened an unreleased navigation surface")
-	}
-	if navigationReleased != true {
-		t.Fatal("the tests no longer exercise the navigation surface")
 	}
 }

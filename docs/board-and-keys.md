@@ -142,7 +142,6 @@ At the bottom of the inspector, the **Action Row** provides contextual one-key a
 |---|---|
 | `/` | Open the command-line prompt for slash commands |
 | `Ctrl+P` | Open the interactive Command Palette |
-| `Ctrl+N` | Open navigation switcher |
 | `Ctrl+X` | Stop all active workers immediately (preserves the Marshal) |
 | `Ctrl+C` | Interrupt active command; press twice to exit Marshal |
 | `?` | Toggle the in-app help overlay |

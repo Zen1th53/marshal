@@ -284,7 +284,7 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 	useCodexByDefault(t, project)
 
 	whyExpected := "No ULTRA route explanation"
-	if buildNavigationReleased {
+	if editionExtreme {
 		whyExpected = "ADVISORY ROUTING EXPLANATION (NOT APPLIED):"
 	}
 	cases := []struct{ line, want string }{

@@ -5,7 +5,7 @@ package tui
 import "testing"
 
 func TestCommunityNavigationReleaseAndTaskGapsUnchanged(t *testing.T) {
-	if buildNavigationReleased || len(buildTaskControlOperations) != 0 {
+	if len(buildTaskControlOperations) != 0 {
 		t.Fatal("private navigation configuration leaked into Community")
 	}
 	ia, err := FrozenIA()

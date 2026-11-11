@@ -152,7 +152,7 @@ func TestIntegrationKeyboardAndMouseParityThroughWorkspaceDispatch(t *testing.T)
 				// q intentionally closes the view. Reopen via the same dispatch
 				// path before testing the next globally listed key.
 				if !ws.navView.IsOpen() {
-					ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN})
+					ws.openNavigation(ctx)
 				}
 			}
 			if got := integrationMutationCount(auth); got != 0 {
@@ -314,9 +314,7 @@ func integrationWorkspace(t *testing.T) (*Workspace, *fakeAuthority) {
 	ws := NewWorkspace(nil, "integration-project", "integration-session")
 	ctx := context.Background()
 	entitleULTRA(t, ws)
-	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
-		t.Fatal("Ctrl+N did not enter navigation")
-	}
+	ws.openNavigation(ctx)
 	source, auth := testControl(t)
 	ws.navView.AttachControl(source)
 	ws.navView.Refresh(ctx)

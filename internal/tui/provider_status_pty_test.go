@@ -36,29 +36,6 @@ func TestPTYProviderStatusEvidence(t *testing.T) {
 	terminal.sendLine("/status")
 	terminal.mustSee("STATUS")
 
-	// Open navigation tree
-	terminal.send("\x0e")
-	terminal.mustSee("Continue Work")
-
-	// Search for Status / Providers & Usage or Models
-	terminal.send("\x0b")
-	terminal.send("Providers & Usage")
-	terminal.send("\r")
-
-	// Verify that if Integrator I has not updated manifest.json yet, the PTY
-	// clearly reflects the current gap/hold status without failing or crashing.
-	// After I updates manifest.json, this navigates to the bound screen.
-	if terminal.waitFor("IMPLEMENTATION GAP", 2*time.Second) {
-		t.Log("integration prerequisite: Integrator I must update manifest.json from GAP to BOUND for CTUI-0144/0148/0149/0150/0151/0157/0523/0557")
-	} else {
-		// Once wired by I, the screen displays provider rows
-		terminal.mustSee("Providers")
-	}
-
-	// Exit menu back to composer
-	terminal.send("\x1b")
-	terminal.mustSee("Marshal")
-
 	// Clean up terminal process
 	if terminal.cmd != nil && terminal.cmd.Process != nil {
 		_ = terminal.cmd.Process.Kill()

@@ -253,7 +253,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://[invalid")
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
 	ultraStatus := "ULTRA status: INACTIVE"
-	if buildNavigationReleased {
+	if editionExtreme {
 		ultraStatus = "ULTRA: ACTIVE (Marshal build, no cloud check)"
 	}
 	for _, c := range []struct{ line, want string }{{"/help all", "MARSHAL Terminal Workspace Commands:"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", ultraStatus}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
@@ -277,17 +277,8 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	}
 	s.send("\x15")
 	s.send("\x0e")
-	if buildNavigationReleased {
-		s.mustSee("Help & Navigation")
-		if !strings.Contains(s.screenText(50, 140), "[read-only screen]") {
-			t.Fatal("private navigation did not render the actual advanced menu")
-		}
-		s.send("\x1b")
-	} else {
-		s.mustSee("not available yet")
-		s.send("\x1b")
-		s.mustSee("not available yet")
-	}
+	s.mustNotSee("Help & Navigation")
+	s.mustNotSee("not available yet")
 	// Give F2 an uncommitted target so its missing-provider path is exercised.
 	if err := os.WriteFile(filepath.Join(project, "review-change.txt"), []byte("uncommitted"), 0600); err != nil {
 		t.Fatal(err)
