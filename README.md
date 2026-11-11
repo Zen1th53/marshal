@@ -18,18 +18,93 @@ and only verified work lands on `main`.**
 
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
 
+[Set up](#set-up-with-your-agent) ·
+[How it works](#how-it-works) ·
+[Why Marshal](#why-marshal) ·
+[The Board](#the-board) ·
+[FAQ](docs/faq.md) ·
+[Docs](#documentation)
+
+</div>
+
+## Set up with your agent
+
+Paste this into Claude Code or Codex. It installs Marshal, checks Git, tmux and your coding
+agents, fixes what is safe to fix, and tells you what is left. It does not create a project
+and does not touch your repositories.
+
+<!-- setup-prompt:start -->
+````text
+Set up Marshal (https://github.com/Zen1th53/marshal) on this computer. Marshal is a terminal tool that runs coding agents (Claude Code, Codex, OpenCode, Antigravity) as one team. Install it, check that everything it needs is present, fix what is safe to fix, and tell me what is left.
+
+Rules for this job:
+- Do not create a test project. Do not run `marshal init`, `marshal doctor` or `marshal` itself, and do not change any Git repository.
+- Never use sudo or install system packages without first showing me the exact command and getting my yes.
+- Do not sign in to anything for me, and do not read, print or copy credentials or tokens.
+- Do not run `claude auth status`: it rewrites Claude Code's settings file. Use only the read-only checks below.
+- Run every check from a new empty folder: cd "$(mktemp -d)"
+- If your sandbox blocks network access or installing into my home folder, ask me to allow it for this job.
+
+1. Platform. Run `uname -s`, `uname -m` and `uname -r`.
+   - Supported: Linux or macOS (Darwin) on x86_64/amd64 or arm64/aarch64.
+   - If `uname -r` contains "microsoft" (any case), this is Windows WSL. It must be WSL2 ("WSL2" in `uname -r`). Everything below happens inside this Linux system; tools installed on the Windows side do not count.
+   - Anything else (plain Windows, another CPU): stop and tell me there is no Marshal release for it.
+
+2. Install. Run exactly:
+   curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+   It downloads the release for this machine, verifies its checksum and installs `marshal` into ~/.local/bin (or $MARSHAL_INSTALL_DIR if I set it). It never uses sudo. Ignore its "Next:" lines; this job replaces them. If it fails, show me its last lines and stop.
+
+3. PATH. Run `command -v marshal`. If it prints nothing:
+   - for this session: export PATH="$HOME/.local/bin:$PATH"
+   - to keep it: add the line export PATH="$HOME/.local/bin:$PATH" to my shell's startup file (~/.zshrc for zsh, the macOS default; ~/.bashrc for bash), only if that file does not already contain it. Tell me which file you changed.
+   Then `marshal version` must print a line that starts with "Marshal v".
+
+4. Readiness. Run `marshal setup status`. It only reports and changes nothing. In this empty folder "No project is open" and "This directory is not part of a Git repository" are expected; ignore them. Tell me about any other line whose status is not READY or OPTIONAL.
+
+5. Git. `git --version` must work. If Git is missing:
+   - macOS: ask me to run `xcode-select --install` (it opens a dialog), or run `brew install git` if Homebrew is installed.
+   - Linux: show me the command for this system (apt: sudo apt install git · dnf: sudo dnf install git · pacman: sudo pacman -S git · zypper: sudo zypper install git) and run it only after I say yes.
+
+6. tmux 3.3a or newer. Run `tmux -V`. If tmux is missing or older than 3.3a:
+   - macOS with Homebrew: run `brew install tmux` (or `brew upgrade tmux`); it needs no sudo.
+   - Linux: show me the command (same package managers as step 5, package tmux) and run it only after I say yes. Check `tmux -V` again afterwards.
+   - If the system's tmux is still older than 3.3a (Ubuntu 22.04 ships 3.2a), do not build it from source. Tell me I need Ubuntu 24.04 or newer, Debian 12 or newer, or a tmux built from source.
+
+7. Coding agents. For each of claude, codex, opencode and agy: run `command -v <name>` and, if found, `<name> --version`. Marshal needs at least one; with two or more, a different model reviews each result. Do not install any of them unless I ask.
+   Sign-in, read-only only:
+   - codex: run `codex login status`.
+   - claude, opencode, agy: there is no read-only check. Report "installed, sign-in not checked" and tell me how to sign in: Claude Code: run `claude` and use /login. OpenCode: run `opencode auth login`. Antigravity: sign in inside the Antigravity app.
+
+8. Telemetry. Run `marshal telemetry status`. Tell me in one line: Marshal sends anonymous usage telemetry (a random install ID, the version, OS and CPU type, and timestamps; never code, prompts or file paths), and `marshal telemetry disable` turns it off. Do not change it yourself.
+
+9. Report. Finish with this short report and nothing after it:
+   Marshal: <version> at <path> (PATH: ok | added to <file> | needs fixing)
+   Platform: <Linux | macOS | WSL2> <cpu>
+   Git: <version | missing>
+   tmux: <version> (<ok | too old | missing>)
+   Agents: <name: version, signed in | not signed in | sign-in not checked>, one per installed agent; "none found" if none
+   Fixed: <what you changed, or "nothing">
+   Needs you: <one line per remaining step, or "nothing">
+   Telemetry: <on | off> (marshal telemetry disable turns it off)
+   Next: in one of your Git repositories run `marshal init`, then `marshal`.
+````
+<!-- setup-prompt:end -->
+
+Or install it yourself (Linux, macOS, Windows via WSL2; checksum-verified, no sudo):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-[One-minute start](#one-minute-start) ·
-[How it works](#how-it-works) ·
-[Why Marshal](#why-marshal) ·
-[The Board](#the-board) ·
-[FAQ](#faq) ·
-[Docs](#documentation)
+Then, in a Git repository of yours, run `marshal init` and then `marshal`. Say what you want
+built in the chat on the left; when the Board shows **NEEDS YOU**, press `y` to open the
+architecture in your browser and click **Accept architecture** there. The Marshal then plans
+the tasks, approves the plan itself and starts the workers. You need at least one coding agent CLI, installed and signed in
+([requirements](#requirements)); Marshal has no model costs of its own.
 
-</div>
+**Telemetry:** Marshal sends anonymous usage telemetry (a random install ID, version,
+OS/architecture, mode and timestamps; never code, prompts, paths or commands).
+`marshal telemetry disable` turns it off. [Exactly what is sent →](docs/telemetry.md)
 
 <br>
 
@@ -38,33 +113,6 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
   <br>
   <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → Codex → say the goal → requirements card, <code>Enter</code> confirms → accept the architecture in the browser → Codex, Claude, Antigravity and OpenCode build in parallel → each hand-in reviewed by a different provider → verify → merge → <b>What next?</b></sub>
 </p>
-
----
-
-## One-minute start
-
-```bash
-# 1. Install (Linux & macOS, amd64/arm64, checksum-verified)
-curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
-
-# 2. Any Git repository
-mkdir my-app && cd my-app && git init -q
-echo "# my-app" > README.md && git add . && git commit -qm init
-
-# 3. Prepare it and open the Board
-marshal init
-marshal
-```
-
-Then, in the chat on the left, say what you want built. The Marshal asks a few
-questions and proposes an architecture. When the Board shows **NEEDS YOU**,
-press `y` to open it in your browser and click **Accept architecture** there.
-The Marshal then plans the tasks, approves the plan itself and starts
-the workers. You watch the run on the Board until it closes to `main`.
-
-You need at least one provider CLI installed and signed in
-([requirements](#requirements)). Marshal uses your existing accounts and plans;
-it has no model costs of its own.
 
 ---
 
@@ -177,112 +225,18 @@ go build -o marshal ./cmd/marshal && install -Dm755 marshal ~/.local/bin/marshal
 
 ---
 
-## FAQ
+## Questions
 
-**How is this different from running Claude Code or Codex directly?**
-You still use them, through their own CLIs. Marshal adds what a single agent
-session lacks: an architecture you accept, a separate worktree per task, review
-by a different model, an independent check before merge, and one Board to watch
-it all.
-
-**Does Marshal send my code anywhere?**
-No. Your code goes only to the providers you choose, through their CLIs.
-Marshal's own anonymous telemetry sends a random installation ID, version,
-OS/architecture, mode and timestamps, never code, prompts, paths or commands.
-Turn it off with `marshal telemetry disable` or `MARSHAL_CLOUD_ENDPOINT=off`.
-
-<details>
-<summary><b>Exactly what telemetry sends, on the wire</b></summary>
-
-Telemetry is anonymous and opt-out. It goes to `https://marshal.blackhat.uz`
-over HTTPS as JSON. There are exactly two requests, and every field either
-party sees is listed below — there is no other payload.
-
-**1. Registration** — once per install, over HTTPS:
-
-```json
-{
-  "installation_id": "inst-xxxxxxxxxxxxxxxx",
-  "public_key": "b3zH1Qc9ukE2y0rW...",
-  "client_version": "0.2.4",
-  "os": "linux",
-  "arch": "amd64"
-}
-```
-
-- `installation_id` — a random local ID (`inst-` + 16–64 hex). Not tied to you,
-  your machine, or your projects; delete `.marshal`/the state dir and it is gone.
-- `public_key` — the base64url ed25519 **public** key generated on your machine.
-  The private key never leaves it. Used only to authenticate this install's
-  own later requests.
-- `client_version`, `os`, `arch` — describe the build, e.g. `0.2.4`,
-  `linux`, `amd64`. They say nothing about who runs it.
-
-**2. Events** — on start, then a heartbeat every 2 minutes while running,
-over HTTPS, as a batched JSON array:
-
-```json
-[
-  {
-    "kind": "app_start",
-    "installation_id": "inst-xxxxxxxxxxxxxxxx",
-    "client_version": "0.2.4",
-    "os": "linux",
-    "arch": "amd64",
-    "mode": "standard",
-    "occurred_at": "2026-11-09T06:23:46Z"
-  }
-]
-```
-
-| Field | Always sent | What it is |
-|---|---|---|
-| `kind` | yes | One of: `registration`, `app_start`, `heartbeat`, `mode_change`, `activation_success`, `activation_failure`, `renewal_success`, `renewal_failure`, `error_class` |
-| `installation_id` | yes | The same random ID as above |
-| `client_version` | yes | Build version, e.g. `0.2.4` |
-| `os`, `arch` | yes | e.g. `linux`, `amd64` |
-| `mode` | when known | `standard` or `ultra` |
-| `occurred_at` | yes | RFC 3339 UTC timestamp of the event |
-| `session_id` | optional | A random per-run ID (`sess-…`), when a run is active |
-| `error_class` | only on `error_class` | A **coarse category only** — one of `network`, `auth`, `lease_expired`, `lease_invalid`, `rate_limited`, `server`, `client`, `sandbox`, `unknown`. Never a message, stack trace, or detail |
-
-The only request header beyond `Content-Type` is `MARSHAL-Client-Version`.
-No cookies, no account, no auth token for telemetry. A failed or timed-out
-send is silently dropped; it never blocks or changes what Marshal does.
-
-**Never sent, in any field:** source code or file contents, prompts,
-instructions or goals, model output or conversation text, file names, paths or
-repository URLs, commit messages, diffs or author identities, environment
-variables, API keys or credentials, and terminal commands or their output.
-
-Inspect or turn it off: `marshal telemetry status` · `marshal telemetry disable`
-· `MARSHAL_CLOUD_ENDPOINT=off`. [Full policy →](docs/telemetry.md)
-
-</details>
-
-**What does it cost?**
-Marshal is free. Agents run on your existing provider accounts and plans.
-
-**Which platforms?**
-Linux and macOS. Prebuilt, checksum-verified binaries for amd64 and arm64
-(Apple Silicon included); the one-line install picks the right one. On Windows,
-run it inside **WSL2** — the Linux binary installs and runs there as usual.
-There is no native Windows build: the TUI requires tmux, which has no native
-Windows build.
-
-**Is it production-ready?**
-It is young (v0.2). The run loop above is tested end to end on fresh
-projects with real providers. Expect rough edges, read what you accept, and
-[open an issue](https://github.com/Zen1th53/marshal/issues) when something
-breaks.
+How Marshal differs from running one agent directly, what it costs, which platforms it runs on
+and how ready it is: [FAQ →](docs/faq.md)
 
 ---
 
 ## Documentation
 
-- [Installation](docs/installation.md) · [Getting started](docs/getting-started.md) · [How a run works](docs/how-it-works.md)
+- [Set up with your agent](docs/SETUP-PROMPT.md) · [Installation](docs/installation.md) · [Getting started](docs/getting-started.md) · [How a run works](docs/how-it-works.md)
 - [The Board and keys](docs/board-and-keys.md) · [Providers](docs/providers.md) · [Memory and MCP](docs/memory-and-mcp.md)
-- [Configuration](docs/configuration.md) · [Telemetry](docs/telemetry.md) · [Troubleshooting](docs/troubleshooting.md)
+- [Configuration](docs/configuration.md) · [Telemetry](docs/telemetry.md) · [FAQ](docs/faq.md) · [Troubleshooting](docs/troubleshooting.md)
 - [Upgrading from v0.0.x](docs/upgrading.md) · [Changelog](docs/CHANGELOG.md)
 
 ## Contributing
