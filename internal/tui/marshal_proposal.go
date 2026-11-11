@@ -90,7 +90,10 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	var keys []string
 	switch p.action {
 	case "intake":
-		keys = []string{"action", "language", "earlier_work"}
+		keys = []string{"action", "language"}
+		if _, ok := fields["earlier_work"]; ok {
+			keys = append(keys, "earlier_work")
+		}
 		if strings.TrimSpace(p.language) == "" || len(p.language) > 100 || (p.earlierWork != "" && p.earlierWork != "yes" && p.earlierWork != "no") {
 			return p, invalid
 		}
@@ -928,7 +931,11 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 			w.permissions.mu.Unlock()
 			return
 		}
-		w.RecordActivity(fmt.Sprintf("%s: intake updated (language %s, earlier work %s)", p.requester(), p.language, p.earlierWork))
+		note := fmt.Sprintf("%s: intake updated (language %s", p.requester(), p.language)
+		if p.earlierWork != "" {
+			note += ", earlier work " + p.earlierWork
+		}
+		w.RecordActivity(note + ")")
 		if w.store != nil {
 			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 		}
