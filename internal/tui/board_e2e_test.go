@@ -259,9 +259,9 @@ type countedArch struct {
 	n *atomic.Int64
 }
 
-func (c countedArch) ArchitectureOverview(ctx context.Context, projectID string) (store.ArchitectureOverview, error) {
+func (c countedArch) ArchitectureStatus(ctx context.Context) (app.ArchitectureStatus, error) {
 	c.n.Add(1)
-	return c.archViewSource.ArchitectureOverview(ctx, projectID)
+	return c.archViewSource.ArchitectureStatus(ctx)
 }
 
 // countViewReads puts a counter in front of each view's current source.
@@ -436,7 +436,7 @@ func TestBoardEndToEnd(t *testing.T) {
 		{"Verify", []rune{'5'}, w.verView.Load, []string{"VERIFY", "T-103", "1/2 claude-1", "verifier       pass · agy-v (agy)"}},
 		{"Security", []rune{'6'}, w.secView.Load, []string{"SECURITY", "registry.npmjs.org"}},
 		{"Plan", []rune{'7'}, w.planView.Load, []string{"PLAN plan v2", "T-107"}},
-		{"Architecture", []rune{'b', '8'}, w.archView.Load, []string{"ARCHITECTURE", "rev 7", "a3f1c9e2"}},
+		{"Architecture", []rune{'b', '8'}, w.archView.Load, []string{"Architecture ·"}},
 	}
 	for _, v := range views {
 		for _, k := range v.keys {

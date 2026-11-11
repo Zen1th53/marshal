@@ -47,7 +47,6 @@ func TestViewsLoadFailureIsPlain(t *testing.T) {
 		name  string
 		lines []string
 	}{
-		{"arch", v.archLines(archPaint{Snap: archSnapshot{Err: errText}}, 120, 30)},
 		{"memory", v.memTop(memoryPaint{Snap: memorySnapshot{Err: errText, StorePath: "/mem"}}, 120)},
 		{"plan", v.planLines(planPaint{Snap: planSnapshot{Err: errText}}, 120, 30)},
 		{"provider", first(v.providerLines(providerPaint{Snap: providerSnapshot{Err: errText}}, 120))},

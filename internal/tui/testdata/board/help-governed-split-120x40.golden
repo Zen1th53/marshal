@@ -11,29 +11,29 @@
 [2m  T-02[0m│  [38;5;15m6          [0m security: egress, leases and audit       [38;5;15ma  d       [0m security: allow, deny, then Enter      │[2mework…[0m
 [2m  T-02[0m│  [38;5;15m7          [0m plan: task graph and plan versions       [38;5;15mEnter      [0m plan: inspect the selected task        │[2mdit  …[0m
 [2m  T-02[0m│  [38;5;15m8  b       [0m architecture and business process        [38;5;15mo          [0m architecture: open in the browser      │[2mrobe …[0m
-[2m  T-03[0m│                                                       [38;5;15md          [0m architecture: diff since accepted      │[2m      [0m
-[2m  T-03[0m│ [1m[38;5;111mBOARD[0m[0m                                                                                                    │[2m      [0m
-[2m  T-03[0m│  [38;5;15mj k  ↑ ↓   [0m move in the focused pane, scroll        [1m[38;5;111mMARSHAL[0m[0m                                             │[2m      [0m
-[2m      [0m│  [38;5;15mEnter      [0m inspect a task; a lane: its worker       [38;5;15mm  F11     [0m chat; F11 or Alt+arrow switch          │[2m      [0m
-[2m      [0m│  [38;5;15mt  i  l    [0m focus tasks, inbox, lanes                [38;5;15ms          [0m say it to the Marshal, Enter           │[2mctor  [0m
-[2m      [0m│  [38;5;15mEsc        [0m close the inspector, a view, help        [38;5;15m/          [0m command; /notify on|off alerts         │[2m7 evi…[0m
-[2m      [0m│  [38;5;15me          [0m inspector: toggle all events             [38;5;15mCtrl+P     [0m command palette                        │[2mrg ou…[0m
-[2m      [0m│  [38;5;15mEnter  ⌫   [0m inspector: child task, parent task       [38;5;15m?          [0m this help                              │[2m      [0m
-[2m      [0m│  [38;5;15md  D       [0m diff; D: the task against base           [38;5;15mCtrl+X     [0m stop all workers, never the Marshal    │[2m      [0m
-[2m      [0m│                                                       [38;5;15mCtrl+C     [0m interrupt; twice to exit               │[2m      [0m
-[2m      [0m│ [1m[38;5;111mINBOX[0m[0m                                                                                                    │[2m      [0m
-[2m      [0m│  [38;5;15my  u  K    [0m reply; changed files: undo, keep        [1m[38;5;111mFUNCTION KEYS[0m[0m                                       │[2m      [0m
-[2m      [0m│  [38;5;15ma  A  d  r [0m allow once, for the run, deny, return    [38;5;15mF1         [0m help overview                          │[2m      [0m
-[2m      [0m│  [38;5;15mi  Enter   [0m show the request's reason                [38;5;15mF2         [0m review                                 │[2m      [0m
-[2m      [0m│  [38;5;15mEnter      [0m run stopped: do what it suggests         [38;5;15mF3         [0m diff                                   │[2m      [0m
-[2m      [0m│  [38;5;15mx          [0m cancel the decision being typed          [38;5;15mF4         [0m status                                 │[2m      [0m
-[2m      [0m│  [38;5;15mhard gate  [0m type the canonical id, then Enter        [38;5;15mF5         [0m models                                 │[2m      [0m
-[2m      [0m│                                                       [38;5;15mF6         [0m MCP                                    │[2m      [0m
-[2m      [0m│ [1m[38;5;111mMOUSE[0m[0m[38;5;243m left click; never decides[0m                       [38;5;15mF7         [0m native Codex                           │[2m      [0m
-[2m      [0m│  [38;5;15mtask  lane    [0m select; again: inspect or show        [38;5;15mF8         [0m native Claude                          │[2m      [0m
-[2m      [0m│  [38;5;15mheader chip   [0m focus its pane or open its view       [38;5;15mF9         [0m native OpenCode                        │[2m      [0m
-[2mINBOX [0m│  [38;5;15m[a] [d] [y]…  [0m open its confirmation                 [38;5;15mF10        [0m update: check or install               │[2m      [0m
-[2m⚑ T-02[0m│  [38;5;15m[Enter]       [0m run stopped: do what it suggests      [38;5;15mF12        [0m native Antigravity                     │[2m      [0m
+[2m  T-03[0m│                                                                                                          │[2m      [0m
+[2m  T-03[0m│ [1m[38;5;111mBOARD[0m[0m                                                [1m[38;5;111mMARSHAL[0m[0m                                             │[2m      [0m
+[2m  T-03[0m│  [38;5;15mj k  ↑ ↓   [0m move in the focused pane, scroll         [38;5;15mm  F11     [0m chat; F11 or Alt+arrow switch          │[2m      [0m
+[2m      [0m│  [38;5;15mEnter      [0m inspect a task; a lane: its worker       [38;5;15ms          [0m say it to the Marshal, Enter           │[2m      [0m
+[2m      [0m│  [38;5;15mt  i  l    [0m focus tasks, inbox, lanes                [38;5;15m/          [0m command; /notify on|off alerts         │[2mctor  [0m
+[2m      [0m│  [38;5;15mEsc        [0m close the inspector, a view, help        [38;5;15mCtrl+P     [0m command palette                        │[2m7 evi…[0m
+[2m      [0m│  [38;5;15me          [0m inspector: toggle all events             [38;5;15m?          [0m this help                              │[2mrg ou…[0m
+[2m      [0m│  [38;5;15mEnter  ⌫   [0m inspector: child task, parent task       [38;5;15mCtrl+X     [0m stop all workers, never the Marshal    │[2m      [0m
+[2m      [0m│  [38;5;15md  D       [0m diff; D: the task against base           [38;5;15mCtrl+C     [0m interrupt; twice to exit               │[2m      [0m
+[2m      [0m│                                                                                                          │[2m      [0m
+[2m      [0m│ [1m[38;5;111mINBOX[0m[0m                                                [1m[38;5;111mFUNCTION KEYS[0m[0m                                       │[2m      [0m
+[2m      [0m│  [38;5;15my  u  K    [0m reply; changed files: undo, keep         [38;5;15mF1         [0m help overview                          │[2m      [0m
+[2m      [0m│  [38;5;15ma  A  d  r [0m allow once, for the run, deny, return    [38;5;15mF2         [0m review                                 │[2m      [0m
+[2m      [0m│  [38;5;15mi  Enter   [0m show the request's reason                [38;5;15mF3         [0m diff                                   │[2m      [0m
+[2m      [0m│  [38;5;15mEnter      [0m run stopped: do what it suggests         [38;5;15mF4         [0m status                                 │[2m      [0m
+[2m      [0m│  [38;5;15mx          [0m cancel the decision being typed          [38;5;15mF5         [0m models                                 │[2m      [0m
+[2m      [0m│  [38;5;15mhard gate  [0m type the canonical id, then Enter        [38;5;15mF6         [0m MCP                                    │[2m      [0m
+[2m      [0m│                                                       [38;5;15mF7         [0m native Codex                           │[2m      [0m
+[2m      [0m│ [1m[38;5;111mMOUSE[0m[0m[38;5;243m left click; never decides[0m                       [38;5;15mF8         [0m native Claude                          │[2m      [0m
+[2m      [0m│  [38;5;15mtask  lane    [0m select; again: inspect or show        [38;5;15mF9         [0m native OpenCode                        │[2m      [0m
+[2m      [0m│  [38;5;15mheader chip   [0m focus its pane or open its view       [38;5;15mF10        [0m update: check or install               │[2m      [0m
+[2mINBOX [0m│  [38;5;15m[a] [d] [y]…  [0m open its confirmation                 [38;5;15mF12        [0m native Antigravity                     │[2m      [0m
+[2m⚑ T-02[0m│  [38;5;15m[Enter]       [0m run stopped: do what it suggests                                                         │[2m      [0m
 [2m⚑ T-03[0m│                                                                                                          │[2m      [0m
 [2m    co[0m╰─[38;5;243m Esc or ? closes · j/k scroll · 1 more lines [0m────────────────────────────────────────────────────────────╯[2m      [0m
 [2m                                                                  │                                                     [0m

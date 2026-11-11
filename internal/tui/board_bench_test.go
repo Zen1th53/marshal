@@ -84,7 +84,7 @@ func benchWorkspace(tb testing.TB, tasks, decisions int) (*Workspace, *fakeDecis
 	w.verSource = &fakeVerifyView{overview: demoVerifyOverview(now)}
 	w.secSource = &fakeSecurityView{overview: demoSecurityOverview(now)}
 	w.planSource = &fakePlanView{overview: demoPlanOverview(now)}
-	w.archSource = &fakeArchView{overview: demoArchOverview()}
+	w.archSource = &fakeArchView{status: demoArchStatus()}
 	ctx := context.Background()
 	w.refreshMemory(ctx)
 	w.refreshProviders(ctx)

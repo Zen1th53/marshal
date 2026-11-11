@@ -201,7 +201,7 @@ func viewsWorkspace(t *testing.T) (*Workspace, *fakePlanView, *fakeArchView) {
 	t.Helper()
 	w, _ := securityWorkspace(t)
 	p := &fakePlanView{overview: demoPlanOverview(time.Now())}
-	a := &fakeArchView{overview: demoArchOverview()}
+	a := &fakeArchView{status: demoArchStatus()}
 	w.planSource, w.archSource = p, a
 	return w, p, a
 }

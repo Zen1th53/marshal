@@ -80,7 +80,6 @@ var boardKeymap = []boardKey{
 	{Group: "IN A VIEW", Keys: "a  d", What: "security: allow, deny, then Enter", Class: KeyConfirm},
 	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen},
 	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen},
-	{Group: "IN A VIEW", Keys: "d", What: "architecture: diff since accepted", Class: KeyOpen},
 
 	{Group: "MARSHAL", Keys: "m  F11", What: "chat; F11 or Alt+arrow switch", Press: pressRune('m'), Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen},

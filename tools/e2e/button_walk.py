@@ -165,7 +165,7 @@ class Board:
                 self.keys("Escape")
             elif not first.lstrip().startswith("MARSHAL"):
                 self.keys("Escape")
-            elif not re.search(r"(^|\s)> TASKS\b|^TASKS\b", s, re.M) and re.search(r"^(HOST|MEMORY|PROVIDERS|VERIFY|SECURITY|PLAN|ARCHITECTURE)\b", s, re.M):
+            elif not re.search(r"(^|\s)> TASKS\b|^TASKS\b", s, re.M) and re.search(r"^(HOST|MEMORY|PROVIDERS|VERIFY|SECURITY|PLAN|ARCHITECTURE)\b|^Architecture ·", s, re.M):
                 self.keys("1")
             else:
                 self.clear_composer()
@@ -224,7 +224,7 @@ def focus(name):
 
 
 def view(name):
-    return has(r"^%s\b" % name)
+    return has(r"^%s(?:\b|\s|$)" % name)
 
 
 def first_line(rx):
@@ -343,7 +343,7 @@ def walk_board(bd):
 
 def walk_views(bd):
     g = "views"
-    views = [("2", "HOST"), ("h", "HOST"), ("3", "MEMORY"), ("4", "PROVIDERS"), ("5", "VERIFY"), ("6", "SECURITY"), ("7", "PLAN"), ("8", "ARCHITECTURE"), ("b", "ARCHITECTURE")]
+    views = [("2", "HOST"), ("h", "HOST"), ("3", "MEMORY"), ("4", "PROVIDERS"), ("5", "VERIFY"), ("6", "SECURITY"), ("7", "PLAN"), ("8", "Architecture ·"), ("b", "Architecture ·")]
     for key, name in views:
         bd.home()
         step(bd, "V-%s-%s" % (key, name.lower()), g, [key], view(name), "%s opens the %s view" % (key, name))
@@ -360,7 +360,7 @@ def walk_views(bd):
         "5": ["x", "j", "k"],
         "6": ["a", "d", "j", "k"],
         "7": ["j", "k", "Enter"],
-        "8": ["o", "d", "j", "k"],
+        "8": ["o"],
         # The prototype's c (clean build cache) and s (simulate heavy
         # build) were never built and are not offered as hints.
         "2": ["j", "k"],
@@ -478,8 +478,8 @@ def walk_mouse(bd):
     spans = header_spans(s)
     expect = {
         "brand": focus("TASKS"), "run": focus("TASKS"), "state": focus("TASKS"), "done": focus("TASKS"),
-        "lanes": focus("LANES"), "inbox": focus("INBOX"), "health": view("PROVIDERS"), "arch": view("ARCHITECTURE"),
-        "host": view("HOST"), "step": view("ARCHITECTURE"),
+        "lanes": focus("LANES"), "inbox": focus("INBOX"), "health": view("PROVIDERS"),
+        "host": view("HOST"),
     }
     for name, col in spans.items():
         bd.home()
