@@ -5,27 +5,27 @@
 [38;5;243mchanges       [0m a new revision needs "accept architecture" from the owner                                                
 [38;5;243mopen          [0m [48;5;239m[o][0m full architecture and business process in the browser  [48;5;239m[d][0m diff since accepted                       
                                                                                                                         
-[1m[38;5;15mBUSINESS PROCESS[0m[0m [38;5;243mnow at D3 · waiting on owner: 2 de…[0m  [1m[38;5;15mCOMPONENTS[0m[0m [38;5;243mwhat each part may do in this revision[0m                 
- [38;5;114m✓[0m [38;5;111mM1[0m Marshal introduces itself                        Workspace / TUI    [38;5;243mBoard, chat dock, inbox; owner input only[0m     
- [38;5;114m✓[0m [38;5;111mL1[0m language chosen                                  Marshal            [38;5;243mplans, reviews, never edits task files[0m        
- [38;5;114m✓[0m [38;5;111mU1[0m owner states the goal                            Runtime            [38;5;243mstarts a worker per task, then review and che…[0m
- [38;5;114m✓[0m [38;5;111mS1[0m Marshal reads state and earlier runs             Worktrees          [38;5;243mone per task; only verified work merges[0m       
- [38;5;114m✓[0m [38;5;111mM2[0m clarify: requirements and limits recorded        Memory / MCP       [38;5;243mdurable only after review; recalls audited[0m    
- [38;5;114m✓[0m [38;5;111mU2[0m owner picks mode and control level               Audit              [38;5;243mappend-only records[0m                           
- [38;5;114m✓[0m [38;5;111mM3[0m mode and authority fixed                         Host watch         [38;5;243mthermal, disk, memory policy every second[0m     
- [38;5;114m✓[0m [38;5;111mM4[0m plan: tasks, workers, acceptance criteria                                                                         
- [38;5;114m✓[0m [38;5;111mD1[0m the Marshal approves the plan (or asks you: y)  [1m[38;5;15mRULES IN FORCE[0m[0m                                                    
- [38;5;114m✓[0m [38;5;111mM5[0m runtime dispatches approved tasks                [38;5;114m●[0m Marshal: local ULTRA, anonymous telemetry on                   
- [38;5;114m✓[0m [38;5;111mA1[0m workers do the tasks                             [38;5;114m●[0m main never moves during a run                                  
- [38;5;114m✓[0m [38;5;111mA2[0m workers hand in results                          [38;5;114m●[0m hard gates need the typed canonical id                         
- [38;5;114m✓[0m [38;5;111mM6[0m Marshal checks each result                       [38;5;114m●[0m architecture acceptance is owner-only                          
- [38;5;114m✓[0m [38;5;111mD2[0m defects? → back to A1 with reasons               [38;5;114m●[0m publishing is owner-only                                       
-[48;5;237m [38;5;179m▸[0m[48;5;237m [38;5;111mD3[0m[48;5;237m decision due? → Marshal decides or asks you   [0m                                                                    
- [38;5;243m·[0m [38;5;243mD4[0m [38;5;243mmore tasks? → M5[0m                                                                                                  
- [38;5;243m·[0m [38;5;243mM7[0m [38;5;243massemble the result and report[0m                                                                                    
- [38;5;243m·[0m [38;5;243mU5[0m [38;5;243mthe Marshal delivers the verified result[0m                                                                          
-[38;5;243m under ULTRA, independent tasks loop M5–M6 in       [0m                                                                    
-[38;5;243m parallel                                           [0m                                                                    
+[1m[38;5;15mBUSINESS PROCESS[0m[0m [38;5;243mnow: waiting on owner: 2 decisions…[0m  [1m[38;5;15mCOMPONENTS[0m[0m [38;5;243mwhat each part may do in this revision[0m                 
+ [38;5;114m✓[0m Marshal introduces itself                           Workspace / TUI    [38;5;243mBoard, chat dock, inbox; owner input only[0m     
+ [38;5;114m✓[0m language chosen                                     Marshal            [38;5;243mplans, reviews, never edits task files[0m        
+ [38;5;114m✓[0m owner states the goal                               Runtime            [38;5;243mProcess 05 governed lanes, approvals R2/R3[0m    
+ [38;5;114m✓[0m Marshal reads state and earlier runs                Worktrees          [38;5;243mone per lane; merge to integration on accept[0m  
+ [38;5;114m✓[0m clarify: requirements and limits recorded           Egress broker      [38;5;243mmanifest hosts only; others go to inbox[0m       
+ [38;5;114m✓[0m owner picks mode and control level                  Credential broker  [38;5;243mshort per-task leases; no auth files in lanes[0m 
+ [38;5;114m✓[0m mode and authority fixed                            Memory / MCP       [38;5;243mdurable only after review; recalls audited[0m    
+ [38;5;114m✓[0m plan: tasks, workers, acceptance criteria           Audit              [38;5;243mappend-only records[0m                           
+ [38;5;114m✓[0m plan approved? (/marshal approve)                   Host watch         [38;5;243mthermal, disk, memory policy every second[0m     
+ [38;5;114m✓[0m runtime dispatches approved tasks                                                                                    
+ [38;5;114m✓[0m workers do the tasks                               [1m[38;5;15mRULES IN FORCE[0m[0m                                                    
+ [38;5;114m✓[0m workers hand in results                             [38;5;114m●[0m Marshal: local ULTRA, anonymous opt-out telemetry              
+ [38;5;114m✓[0m Marshal checks each result                          [38;5;114m●[0m main never moves during a run                                  
+ [38;5;114m✓[0m defects? → back to the workers with reasons         [38;5;114m●[0m hard gates need the typed canonical id                         
+[48;5;237m [38;5;179m▸[0m[48;5;237m interim approval due? → owner reviews            [0m   [38;5;114m●[0m architecture acceptance is owner-only                          
+ [38;5;243m·[0m [38;5;243mmore tasks? → hand out the next ones[0m                [38;5;114m●[0m publishing is owner-only                                       
+ [38;5;243m·[0m [38;5;243massemble the result and report[0m                                                                                       
+ [38;5;243m·[0m [38;5;243mowner accepts the result[0m                                                                                             
+[38;5;243m independent tasks run and are checked in parallel  [0m                                                                    
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

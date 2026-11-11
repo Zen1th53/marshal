@@ -49,8 +49,8 @@ var businessProcess = []bpStep{
 	{"M1", "Marshal introduces itself"}, {"L1", "language chosen"}, {"U1", "owner states the goal"}, {"S1", "Marshal reads state and earlier runs"},
 	{"M2", "clarify: requirements and limits recorded"}, {"U2", "owner picks mode and control level"}, {"M3", "mode and authority fixed"},
 	{"M4", "plan: tasks, workers, acceptance criteria"}, {"D1", bpD1}, {"M5", "runtime dispatches approved tasks"},
-	{"A1", "workers do the tasks"}, {"A2", "workers hand in results"}, {"M6", "Marshal checks each result"}, {"D2", "defects? → back to A1 with reasons"},
-	{"D3", bpD3}, {"D4", "more tasks? → M5"}, {"M7", "assemble the result and report"}, {"U5", bpU5},
+	{"A1", "workers do the tasks"}, {"A2", "workers hand in results"}, {"M6", "Marshal checks each result"}, {"D2", "defects? → back to the workers with reasons"},
+	{"D3", bpD3}, {"D4", "more tasks? → hand out the next ones"}, {"M7", "assemble the result and report"}, {"U5", bpU5},
 }
 
 // archRules is the rules in force. Static text from the Board prototype
@@ -94,10 +94,16 @@ type bpPos struct{ Step, Why, Flag string }
 // bpNow is bpAt's step and reason, the reason prefixed by its flag.
 func bpNow(b model.Board, now time.Time) (string, string) {
 	p := bpAt(b, now)
-	if p.Flag != "" {
+	switch p.Flag {
+	case "stale":
+		return p.Step, "no recent update: " + p.Why
+	case "recovered":
+		return p.Step, "restored after a restart: " + p.Why
+	case "":
+		return p.Step, p.Why
+	default:
 		return p.Step, p.Flag + ": " + p.Why
 	}
-	return p.Step, p.Why
 }
 
 // bpAt derives the step from the run's own state, the canonical phase the
@@ -442,9 +448,9 @@ func (f *archFit) fit(h int, wide bool, top, packed int) {
 
 // archProcess is the BUSINESS PROCESS section: each step done, current or
 // to come, in at most rows step rows that keep the current step in view,
-// and the ULTRA note under them when note is set.
+// and the note under them when note is set.
 func (v boardVisual) archProcess(cur, why string, w, rows int, note bool) []string {
-	out := []string{v.title("BUSINESS PROCESS", "now at "+cur+" · "+cleanBoard(why), false, w)}
+	out := []string{v.title("BUSINESS PROCESS", "now: "+cleanBoard(why), false, w)}
 	ix := slices.IndexFunc(businessProcess, func(s bpStep) bool { return s.ID == cur })
 	first := 0
 	if rows < len(businessProcess) {
@@ -452,14 +458,14 @@ func (v boardVisual) archProcess(cur, why string, w, rows int, note bool) []stri
 	}
 	for i := first; i < min(len(businessProcess), first+rows); i++ {
 		s := businessProcess[i]
-		mark, col, text := v.fg("dim", "·"), "dim", v.fg("dim", s.Text)
+		mark, text := v.fg("dim", "·"), v.fg("dim", s.Text)
 		switch {
 		case i < ix:
-			mark, col, text = v.fg("merged", "✓"), "accent", s.Text
+			mark, text = v.fg("merged", "✓"), s.Text
 		case i == ix:
-			mark, col, text = v.fg("waiting", "▸"), "accent", s.Text
+			mark, text = v.fg("waiting", "▸"), s.Text
 		}
-		line := PadCell(" "+mark+" "+v.fg(col, s.ID)+" "+text, w)
+		line := PadCell(" "+mark+" "+text, w)
 		if i == ix {
 			line = v.bg("sel", line)
 		}
@@ -473,10 +479,10 @@ func (v boardVisual) archProcess(cur, why string, w, rows int, note bool) []stri
 	return out
 }
 
-// archNote is the ULTRA note under the process, wrapped to a column w
-// cells wide with its leading space.
+// archNote is the note under the process, wrapped to a column w cells wide
+// with its leading space.
 func archNote(w int) []string {
-	return wrap("under ULTRA, independent tasks loop M5–M6 in parallel", max(1, w-1))
+	return wrap("independent tasks run and are checked in parallel", max(1, w-1))
 }
 
 // archPage is the static page o opens: the accepted architecture, the
@@ -486,10 +492,10 @@ func archPage(o store.ArchitectureOverview, edition string, rules []string, cur,
 	e := html.EscapeString
 	var b strings.Builder
 	b.WriteString(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MARSHAL architecture</title>
-<style>body{background:#0b0e14;color:#c9d1e3;font:14px/1.5 ui-monospace,monospace;margin:24px}h1,h2{color:#fff;font-size:15px;margin:20px 0 6px}.dim{color:#6b7489}.ok{color:#7fd69a}.now{background:#1d2433;color:#e6c35c}.id{color:#8fb3ff}li{list-style:none}td{padding:0 16px 0 0;vertical-align:top}</style></head><body>`)
+<style>body{background:#0b0e14;color:#c9d1e3;font:14px/1.5 ui-monospace,monospace;margin:24px}h1,h2{color:#fff;font-size:15px;margin:20px 0 6px}.dim{color:#6b7489}.ok{color:#7fd69a}.now{background:#1d2433;color:#e6c35c}li{list-style:none}td{padding:0 16px 0 0;vertical-align:top}</style></head><body>`)
 	b.WriteString("<h1>ARCHITECTURE</h1><p>" + e(archAccepted(o, edition, now)) + "</p>")
 	b.WriteString(`<p class="dim">` + e(archDiffAnswer(o)) + "</p>")
-	b.WriteString("<h2>BUSINESS PROCESS</h2><p class=\"dim\">now at " + e(cur) + " · " + e(why) + "</p><ul>")
+	b.WriteString("<h2>BUSINESS PROCESS</h2><p class=\"dim\">now: " + e(why) + "</p><ul>")
 	ix := slices.IndexFunc(businessProcess, func(s bpStep) bool { return s.ID == cur })
 	for i, s := range businessProcess {
 		class, mark := "dim", "·"
@@ -499,9 +505,9 @@ func archPage(o store.ArchitectureOverview, edition string, rules []string, cur,
 		case i == ix:
 			class, mark = "now", "▸"
 		}
-		b.WriteString(`<li class="` + class + `">` + mark + ` <span class="id">` + e(s.ID) + "</span> " + e(s.Text) + "</li>")
+		b.WriteString(`<li class="` + class + `">` + mark + ` ` + e(s.Text) + `</li>`)
 	}
-	b.WriteString(`</ul><p class="dim">under ULTRA, independent tasks loop M5–M6 in parallel</p><h2>COMPONENTS</h2><table>`)
+	b.WriteString(`</ul><p class="dim">independent tasks run and are checked in parallel</p><h2>COMPONENTS</h2><table>`)
 	for _, c := range archComponents {
 		b.WriteString("<tr><td>" + e(c[0]) + `</td><td class="dim">` + e(c[1]) + "</td></tr>")
 	}
