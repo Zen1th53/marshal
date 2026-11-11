@@ -282,6 +282,9 @@ type Workspace struct {
 	// launch is the per-start project check: the doctor runs at every start,
 	// safe fixes apply, and the Marshal chat waits until it is ready.
 	launch launchState
+	// opening is the first-paint wordmark animation (P2-03), shown on the
+	// Board home with no active run while motion is allowed.
+	opening openingState
 }
 
 // AttachULTRASession applies authorization and the build's startup preference.
@@ -900,6 +903,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// returned to its own window before the workspace closes.
 	w.startDock(ctx)
 	defer w.endDock()
+	// The opening animation plays on the first paint when the Board home has
+	// no active run and motion is allowed; it never blocks the doctor or the
+	// chat start running underneath it.
+	w.startOpening(ctx)
 	w.renderFullView()
 	if w.nativeOnStart != nil {
 		args := *w.nativeOnStart

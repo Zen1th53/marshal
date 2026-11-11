@@ -1,12 +1,9 @@
  Marshal . project demo .  NO RUN YET  . inbox 0 . * ~ x o                      |
                                                                                 |
+                                                                                |
+                                                                                |
   [> Tell the Marshal what to build   Enter]                                    |
    Enter or m: type it in the Marshal chat . s: say it from here                |
-                                                                                |
-  HOW A RUN STARTS                                                              |
-  1  Give a goal              say what to build; the Marshal asks what it needs |
-  2  Accept the architecture  review the plan it proposes (b), then accept it   |
-  3  Watch the run            tasks, lanes and decisions show here, live        |
                                                                                 |
   PROVIDERS v verifies the next unverified . click one to verify it             |
   * codex verified   ~ claude unverified   x agy limited until 14:42            |
@@ -14,6 +11,9 @@
                                                                                 |
   ACTIVITY what you said to the Marshal                                         |
   14:02:11 you -> marshal "build a todo app with a RES." . queued . chat is busy|
+                                                                                |
+                                                                                |
+                                                                                |
                                                                                 |
                                                                                 |
                                                                                 |

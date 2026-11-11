@@ -482,7 +482,17 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
+	// The opening animation (P2-03) owns the body on the first paints of a
+	// fresh Board, before the first-use card or the Blocked screen.
+	var openingShow, openingChecking bool
+	var openingFrame int
+	if empty {
+		openingShow, openingFrame, openingChecking = w.openingPaint()
+	}
 	switch {
+	case openingShow:
+		ui.insp, ui.inspFor = nil, ""
+		lines = w.paintOpening(l, th, v, openingFrame, openingChecking)
 	case w.launchBlocked():
 		// A problem the Marshal can't fix safely replaces the Board body with
 		// the Blocked screen until a retry clears it.
@@ -560,6 +570,13 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		p = &MarshalPanel{}
 	}
 	ui := &w.boardUI
+	// A key during the opening animation (P2-03) ends it and is consumed, so
+	// it never reaches the Board; q and Ctrl+C still quit (Ctrl+C is handled
+	// before this path). A mouse click ends it too (board_mouse.go).
+	if w.openingAnimating() {
+		w.endOpening()
+		return !(event.Type == KeyRune && event.Rune == 'q')
+	}
 	// Project files changed outside a run: u arms the undo, which Enter
 	// runs and any other key cancels; K keeps them (board_guard.go).
 	if w.handleGuardKey(event) {

@@ -61,7 +61,7 @@ func TestFirstUseBoardGolden(t *testing.T) {
 				}
 			}
 			text := StripANSI(strings.Join(frame, "\n"))
-			for _, want := range []string{"Marshal", "demo", "NO RUN", "Tell the Marshal what to build", "Give a goal", "Accept the architecture", "Watch the run", "PROVIDERS", "codex", "claude"} {
+			for _, want := range []string{"Marshal", "demo", "NO RUN", "Tell the Marshal what to build", "PROVIDERS", "codex", "claude"} {
 				if !strings.Contains(text, want) {
 					t.Fatalf("missing %q:\n%s", want, text)
 				}
@@ -242,7 +242,6 @@ func TestPTYFreshProjectOpensOnTheBoard(t *testing.T) {
 	s := startBoardTUIInProject(t, 40, 140, bin, project, "tui")
 	s.mustSee("NO RUN YET")
 	s.mustSee("Tell the Marshal what to build")
-	s.mustSee("HOW A RUN STARTS")
 	s.mustSee("PROVIDERS")
 	s.mustNotSee("Native sessions")
 	s.send("s")

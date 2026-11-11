@@ -6,11 +6,6 @@
   [▸ Tell the Marshal what to build   ⏎]                                                                                                                                  |
    Enter or m: type it in the Marshal chat · s: say it from here                                                                                                          |
                                                                                                                                                                           |
-  HOW A RUN STARTS                                                                                                                                                        |
-  1  Give a goal              say what to build; the Marshal asks what it needs                                                                                           |
-  2  Accept the architecture  review the plan it proposes (b), then accept it                                                                                             |
-  3  Watch the run            tasks, lanes and decisions show here, live                                                                                                  |
-                                                                                                                                                                          |
   PROVIDERS v verifies the next unverified · click one to verify it                                                                                                       |
   ● codex verified   ◐ claude unverified   × agy limited until 14:42   ○ opencode not installed                                                                           |
                                                                                                                                                                           |
@@ -42,4 +37,9 @@
                                                                                                                                                                           |
                                                                                                                                                                           |
                                                                                                                                                                           |
- ⏎ tell the marshal  m chat  s say  v verify  / command  ^P palette  ? help                                                                                               |
+                                                                                                                                                                          |
+                                                                                                                                                                          |
+                                                                                                                                                                          |
+                                                                                                                                                                          |
+                                                                                                                                                                          |
+ ⏎ tell the marshal  m chat  s say  v verify  / command  ^P palette  ^N advanced  ? help                                                                                  |

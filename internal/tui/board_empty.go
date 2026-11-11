@@ -422,24 +422,6 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 	}
 	gap()
 
-	// The three steps from a goal to a running plan.
-	add(pad + v.title("HOW A RUN STARTS", "", false, w-len(pad)))
-	steps := [][2]string{
-		{"Give a goal", "say what to build; the Marshal asks what it needs"},
-		{"Accept the architecture", "review the plan it proposes (b), then accept it"},
-		{"Watch the run", "tasks, lanes and decisions show here, live"},
-	}
-	for i, s := range steps {
-		num := v.fg("accent", fmt.Sprintf("%d", i+1))
-		head := v.bold(v.fg("white", s[0]))
-		line := pad + num + "  " + head
-		if room := w - VisibleLen(pad) - 3 - 24 - 1; room >= 24 {
-			line = pad + num + "  " + PadCell(head, 24) + " " + v.fg("dim", v.trunc(s[1], room))
-		}
-		add(line)
-	}
-	gap()
-
 	// Providers: readiness of each, and v to verify the next one.
 	summary := "v verifies the next unverified · click one to verify it"
 	if armed := v.armed; armed != "" {

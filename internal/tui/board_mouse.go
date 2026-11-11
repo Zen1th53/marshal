@@ -116,6 +116,11 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 	if event.MouseRelease || event.MouseButton != 0 {
 		return true
 	}
+	// A click during the opening animation (P2-03) ends it, as any key does.
+	if w.openingAnimating() {
+		w.endOpening()
+		return true
+	}
 	if w.boardHelp.Load() {
 		// As any key does, a click closes the help.
 		w.boardHelp.Store(false)

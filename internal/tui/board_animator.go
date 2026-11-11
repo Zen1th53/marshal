@@ -23,7 +23,12 @@ func (w *Workspace) animate(p *MarshalPanel) {
 
 // startAnimator gives the raw terminal a tick source fed with the panel the
 // workspace already holds. Animation runs only on a screen that repaints.
+// With animation turned off (MARSHAL_REDUCED_MOTION or --no-animation) it is a
+// no-op, so the Board's spinners never move.
 func (w *Workspace) startAnimator() {
+	if w.theme == nil || !w.theme.AnimationEnabled {
+		return
+	}
 	a := anim.New(w.repaint, anim.RealClock{})
 	w.mu.Lock()
 	w.animator.Store(a)

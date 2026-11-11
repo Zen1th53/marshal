@@ -17,6 +17,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv("MARSHAL_NO_UPDATE_CHECK") == "" {
 		_ = os.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
 	}
+	// The PTY tests drive the real binary with keys sent right after start;
+	// the opening animation would consume the first one (as it must for a
+	// person). Its own tests clear this with t.Setenv.
+	if os.Getenv("MARSHAL_REDUCED_MOTION") == "" {
+		_ = os.Setenv("MARSHAL_REDUCED_MOTION", "1")
+	}
 	// Never reach a person's tmux server. The PTY and tmux tests start real
 	// sessions; a worker or developer running this suite inside Marshal (or
 	// any tmux) would otherwise create and respawn panes in that live server.

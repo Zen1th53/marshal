@@ -140,6 +140,12 @@ func parseWorkspaceArgs(args []string) workspaceOptions {
 			options.sessionID = arg
 		}
 	}
+	// A reduced-motion environment turns animation off, the way --no-animation
+	// does; plain `marshal` relaunches with no args, so this is the only reach
+	// the setting has from the normal launch.
+	if v := os.Getenv("MARSHAL_REDUCED_MOTION"); v != "" && v != "0" {
+		options.animation = false
+	}
 	return options
 }
 
