@@ -55,6 +55,9 @@ const (
 	// hitQuota is a button of the all-providers-at-limit card
 	// (board_quota.go): r arms auto-resume, s stops here.
 	hitQuota boardHitKind = "quota"
+	// hitChange is an action on a change card (board_change.go): a click
+	// applies the change or keeps the current goal, as its key does.
+	hitChange boardHitKind = "change"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -199,6 +202,8 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		w.clickRequirements(h.id)
 	case hitQuota:
 		w.clickQuota(h.action)
+	case hitChange:
+		w.clickChange(h.id)
 	case hitInspect:
 		// The same paths the inspector's keys take: a decision button
 		// opens the inbox's confirmation, never decides; o shows the pane.

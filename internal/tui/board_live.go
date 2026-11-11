@@ -393,6 +393,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
 	v.req = w.currentReq()
+	v.change = w.currentChange()
 	v.guard, v.guardPrefix, v.guardArmed, v.guardUndo = w.guardPaint()
 	v.quotaArmed = w.quotaCard.isArmed()
 	if empty {
@@ -593,6 +594,12 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	// The requirements card's keys come next, after any ask card: Enter
 	// confirms once every line is filled, e edits a line.
 	if w.handleRequirementsKey(event) {
+		return true
+	}
+	// An open change card takes its keys after the ask and requirements
+	// cards: Enter applies the change, k keeps the current goal; other keys
+	// fall through.
+	if w.handleChangeKey(event) {
 		return true
 	}
 	// An owner gate's armed reply takes the next key: Enter sends it,

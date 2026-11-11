@@ -89,8 +89,12 @@ type boardVisual struct {
 	// for none; it renders before the gates, one key or click per answer.
 	ask *askCard
 	// req is the requirements card the Marshal filled (board_requirements.go),
-	// nil for none; it is the first inbox entry, Enter confirms, e edits.
+	// nil for none; it renders after the ask card, Enter confirms, e edits.
 	req *reqCard
+	// change is the owner's open mid-run change (board_change.go), nil for
+	// none; it renders after the ask and requirements cards, one key or
+	// click per action.
+	change *changeCard
 	// guard is the plan-only guard's alert (board_guard.go), nil for
 	// none; guardArmed is set while its undo waits for Enter, guardUndo
 	// what it would do; guardPrefix the project's directory in its
@@ -1133,6 +1137,14 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		summary = "empty · no decision waiting"
 	}
 	stop, stopped := v.stopNotice()
+	// The topmost open card names the summary: ask over requirements over
+	// change, as they render.
+	if v.change != nil && !stopped {
+		summary = "the Marshal paused the affected tasks"
+		if m := len(v.board.Inbox); m > 0 {
+			summary += fmt.Sprintf(" · %d more waiting", m)
+		}
+	}
 	if v.req != nil && !stopped {
 		summary = "the Marshal filled the requirements · you confirm or edit"
 		if m := len(v.board.Inbox); m > 0 {
@@ -1203,6 +1215,16 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		for len(out)+len(lines) > h && len(lines) > 0 {
 			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
 			lines = lines[:len(lines)-1]
+		}
+		out = append(out, lines...)
+		out = out[:min(len(out), h)]
+	}
+	// The owner's open mid-run change comes after the ask and requirements
+	// cards: apply it, or keep the current goal (board_change.go).
+	if v.change != nil && len(out) < h {
+		lines := v.changeEntry(*v.change, p.Rect.X, p.Rect.Y+len(out), w)
+		if len(out)+len(lines) > h {
+			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
 		}
 		out = append(out, lines...)
 		out = out[:min(len(out), h)]

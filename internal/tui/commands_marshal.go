@@ -75,6 +75,12 @@ type marshalSession struct {
 	architectureOccurrences []string
 	architectureStart       func(context.Context, string, string) (*app.ArchitectureReviewSession, error)
 	architectureBrowser     func(context.Context, string) error
+	// held is the set of plan task IDs the owner's open change holds, keyed
+	// by heldRunID so a hold never touches another run's tasks. It lives in
+	// memory only (never persisted); dispatchReady skips a held task that has
+	// not started (board_change.go).
+	heldRunID string
+	held      map[string]bool
 }
 
 type marshalAmendment struct {
@@ -778,6 +784,7 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	}
 	service.RecordActivity = w.RecordActivity
 	service.QuotaLeft = w.providerLeft
+	service.HeldTask = func(planTaskID string) bool { return m.isHeldFor(runID, planTaskID) }
 	return service, provider, note, nil
 }
 
@@ -1570,41 +1577,52 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	}
 	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
-		draft, major, err := service.ProposeAmend(runCtx, runID, reason)
-		if err != nil {
-			w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
-			return
-		}
-		note := "amended in scope"
-		if major {
-			run, err := service.Resume(runCtx, runID)
-			if err != nil {
-				w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
-				return
-			}
-			m.mu.Lock()
-			m.amended = true
-			m.pending = &marshalAmendment{draft: draft, reason: reason, planVersion: run.PlanVersion}
-			m.mu.Unlock()
-			note = "major amendment proposed · /marshal amend approve or deny"
-			preview := run
-			preview.Tasks = draft.Tasks
-			preview.State = marshal.Drafting
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, preview, note))
-			return
-		}
-		run, err := service.ApplyAmendDraft(runCtx, runID, reason, draft)
-		if err != nil {
-			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "amendment failed: "+err.Error()))
-			return
-		}
-		if run.CloseAuthorization != nil && run.CloseAuthorization.Voided {
-			note += " · standing delivery cancelled because approval changed; confirm delivery again"
-			_ = w.queueMarshalRunProposal(marshalProposal{action: "deliver"})
-		}
-		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
+		_, _ = w.runAmend(runCtx, m, service, runID, provider, reason)
 	})
 	return "Amendment started; the panel will show the result.", nil
+}
+
+// runAmend is the body of an amendment once the Marshal operation is reserved:
+// it proposes the amendment, then either applies a minor (scoped) change or
+// records a major one as pending for approval. It reports whether the
+// amendment was major, so the busy-apply change path (board_change.go) knows
+// not to resume the run until a major amendment is approved. The caller owns
+// the reservation.
+func (w *Workspace) runAmend(runCtx context.Context, m *marshalSession, service *app.MarshalService, runID, provider, reason string) (bool, error) {
+	draft, major, err := service.ProposeAmend(runCtx, runID, reason)
+	if err != nil {
+		w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
+		return false, err
+	}
+	note := "amended in scope"
+	if major {
+		run, err := service.Resume(runCtx, runID)
+		if err != nil {
+			w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
+			return true, err
+		}
+		m.mu.Lock()
+		m.amended = true
+		m.pending = &marshalAmendment{draft: draft, reason: reason, planVersion: run.PlanVersion}
+		m.mu.Unlock()
+		note = "major amendment proposed · /marshal amend approve or deny"
+		preview := run
+		preview.Tasks = draft.Tasks
+		preview.State = marshal.Drafting
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, preview, note))
+		return true, nil
+	}
+	run, err := service.ApplyAmendDraft(runCtx, runID, reason, draft)
+	if err != nil {
+		w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "amendment failed: "+err.Error()))
+		return false, err
+	}
+	if run.CloseAuthorization != nil && run.CloseAuthorization.Voided {
+		note += " · standing delivery cancelled because approval changed; confirm delivery again"
+		_ = w.queueMarshalRunProposal(marshalProposal{action: "deliver"})
+	}
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
+	return false, nil
 }
 
 func (w *Workspace) marshalAmendApprove(ctx context.Context) (string, error) {

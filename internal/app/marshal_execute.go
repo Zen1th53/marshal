@@ -327,6 +327,12 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
 			continue
 		}
+		// The owner's mid-run change holds this task: skip it so it does not
+		// launch until the hold is released. A task already running is past
+		// this point and is never held.
+		if s.HeldTask != nil && s.HeldTask(t.PlanTaskID) {
+			continue
+		}
 		if !marshalDepsMerged(run, t) {
 			continue
 		}

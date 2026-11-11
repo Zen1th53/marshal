@@ -218,10 +218,24 @@ type Workspace struct {
 		card *askCard
 	}
 	// req is the open requirements card the Marshal filled from the code
-	// and memory, shown as the first inbox entry (board_requirements.go).
+	// and memory, shown after the ask card in the inbox (board_requirements.go).
 	req struct {
 		mu   sync.Mutex
 		card *reqCard
+	}
+	// change is the owner's open mid-run change card: the Marshal held the
+	// affected tasks and the owner chooses to apply the change or keep the
+	// current goal (board_change.go). seams replace the stop/busy/amend/resume
+	// steps of the busy-apply sequence in tests.
+	change struct {
+		mu       sync.Mutex
+		card     *changeCard
+		stopFn   func() string
+		busyFn   func() bool
+		amendFn  func(ctx context.Context, reason string) (bool, error)
+		resumeFn func(ctx context.Context) (string, error)
+		poll     time.Duration
+		timeout  time.Duration
 	}
 	// guard is the plan-only guard's baseline and alert (board_guard.go);
 	// guardSource replaces git status and guardTell the delivery to the
