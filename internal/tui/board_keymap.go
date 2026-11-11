@@ -434,7 +434,7 @@ func (w *Workspace) openBoardHelp() {
 // screen. It reports whether it consumed the key and whether the key asked the
 // workspace to exit.
 func (w *Workspace) handleBlockedBoardKey(event KeyEvent) (handled, exit bool) {
-	if !w.launchBlocked() || !w.boardVisible() || w.navView.IsOpen() || w.palette.IsOpen() || w.diffViewer.IsOpen() || w.completionOpen {
+	if !w.launchBlocked() || !w.boardVisible() || w.palette.IsOpen() || w.diffViewer.IsOpen() || w.completionOpen {
 		return false, false
 	}
 	switch {

@@ -12426,8 +12426,8 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "90c6917c0ce59c8fb5d3e8fc2346248f4299cfcde963a2f0d76539c328fdb356",
-      "bytes": 18422
+      "sha256": "e706d77076983cf9a83d13860bfb9c3be678988c004c810ccb81434285d2f733",
+      "bytes": 18400
     },
     {
       "path": "internal/tui/board_keymap_test.go",
