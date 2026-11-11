@@ -420,7 +420,9 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	// Marshal answers with an amend proposal. If the run operation is busy,
 	// reserveContext would refuse the amend. Instead of failing, the TUI
 	// pauses the run briefly, applies the amendment and resumes (board_change.go).
-	if p.action == "amend" && busy && w.currentChange() != nil {
+	// Only in the shipped build, where amend applies without a popup anyway;
+	// the governed edition keeps its operator approval path unchanged.
+	if editionExtreme && p.action == "amend" && busy && w.currentChange() != nil {
 		w.beginChangeApply(p)
 		return nil
 	}
