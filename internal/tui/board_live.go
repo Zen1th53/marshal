@@ -274,13 +274,14 @@ func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p 
 // boardUI is the Board's own navigation state. Focus empty means the inbox
 // when it holds a decision and the tasks otherwise.
 type boardUI struct {
-	focus   layout.PaneID
-	task    string // selected task
-	lane    string // selected lane's worker
-	inspect string // task open in the inspector
-	ack     string // command answer already seen; the footer stops showing it
-	ackSeq  uint64 // output sequence when ack was taken: a repeated answer is new
-	note    string // run note last painted
+	focus     layout.PaneID
+	stopArmed bool
+	task      string // selected task
+	lane      string // selected lane's worker
+	inspect   string // task open in the inspector
+	ack       string // command answer already seen; the footer stops showing it
+	ackSeq    uint64 // output sequence when ack was taken: a repeated answer is new
+	note      string // run note last painted
 	// hostScroll is how far the Host view is scrolled down; hostMax is
 	// the furthest it could go at the last paint.
 	hostScroll, hostMax int
@@ -382,13 +383,14 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	b.Inbox = items
 	ui := &w.boardUI
 	ui.clamp(b)
-	focus := ui.pane(len(items) > 0)
+	_, stopped := (boardVisual{board: b, note: p.Note, stopped: p.Stopped}).stopNotice()
+	focus := ui.pane(len(items) > 0 || stopped)
 	var frame anim.Frame
 	if a := w.animator.Load(); a != nil {
 		frame = a.Frame()
 	}
 	var hits []boardHit
-	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, hits: &hits}
+	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stopArmed: ui.stopArmed, hits: &hits}
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
@@ -587,6 +589,15 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		w.endOpening()
 		return !(event.Type == KeyRune && event.Rune == 'q')
 	}
+	if ui.stopArmed {
+		ui.stopArmed = false
+		if event.Type == KeyEnter && len(w.boardInbox()) == 0 {
+			if stop, ok := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice(); ok {
+				w.actOnStop(context.Background(), stop)
+			}
+		}
+		return true
+	}
 	// Project files changed outside a run: u arms the undo, which Enter
 	// runs and any other key cancels; K keeps them (board_guard.go).
 	if w.handleGuardKey(event) {
@@ -689,7 +700,8 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	}
 	ui.clamp(p.Board)
 	inbox := len(w.boardInbox()) > 0
-	focus := ui.pane(inbox)
+	_, stopped := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice()
+	focus := ui.pane(inbox || stopped)
 	move := 0
 	switch {
 	case event.Type == KeyUp || event.Type == KeyRune && event.Rune == 'k':
@@ -789,16 +801,70 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		if move != 0 && !inbox {
 			return true
 		}
-		// With no request waiting, Enter on a stopped run's notice types
-		// its command into the composer; Enter there runs it.
 		if event.Type == KeyEnter && !inbox {
-			if stop, ok := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice(); ok {
-				w.composer.SetText(stop.commands[0])
+			if _, ok := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice(); ok {
+				ui.stopArmed = true
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func (w *Workspace) actOnStop(ctx context.Context, stop runStop) {
+	if stop.action == marshal.PauseUsePlan {
+		w.openSay()
+		return
+	}
+	commands := append([]string(nil), stop.commands...)
+	if len(commands) == 0 {
+		commands = []string{"/marshal resume"}
+	}
+	run := func(ctx context.Context) {
+		var cmd, resp string
+		var err error
+		for _, cmd = range commands {
+			resp, err = boardStopHandle(w, ctx, cmd)
+			if err != nil {
+				break
+			}
+		}
+		_ = w.RefreshState(ctx)
+		w.recordCommandResult(cmd, resp, err)
+	}
+	if w.uiEvents == nil {
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		run(ctx)
+		return
+	}
+	if !w.commandBusy.CompareAndSwap(false, true) {
+		w.RecordActivity("A command is still running; Ctrl+C cancels it.")
+		return
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	w.commandCancelMu.Lock()
+	w.commandCancel = cancel
+	w.commandCancelMu.Unlock()
+	w.workers.start(commandCtx, &w.commandWG, func(workerCtx context.Context) {
+		defer cancel()
+		var cmd, resp string
+		var err error
+		for _, cmd = range commands {
+			resp, err = boardStopHandle(w, workerCtx, cmd)
+			if err != nil {
+				break
+			}
+		}
+		_ = w.RefreshState(workerCtx)
+		if !w.postUI(workerCtx, func() { w.recordCommandResult(cmd, resp, err); w.commandBusy.Store(false) }) {
+			w.commandBusy.Store(false)
+		}
+	})
+}
+
+var boardStopHandle = func(w *Workspace, ctx context.Context, cmd string) (string, error) {
+	return w.cmd.Handle(ctx, cmd)
 }
 
 // boardInTmux and boardFocusPane are the lane Enter key's tmux seams; tests

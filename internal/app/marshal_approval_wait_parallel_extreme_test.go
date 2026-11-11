@@ -91,7 +91,7 @@ func TestExtremeParallelDispatchPassesTaskApprovalWait(t *testing.T) {
 		t.Fatalf("execute: %v", err)
 	}
 	// a and b fill both lanes; a's wait frees its lane, so c still runs.
-	if run.State != marshal.AwaitingUser || run.Pause == nil || !strings.Contains(run.Pause.Reason, "approval-a") || run.Pause.ResumeState != marshal.Dispatching {
+	if run.State != marshal.AwaitingUser || run.Pause == nil || !strings.Contains(run.Pause.Detail, "approval-a") || run.Pause.Reason != "A task is waiting for the Marshal's go-ahead." || run.Pause.ResumeState != marshal.Dispatching {
 		t.Fatalf("run did not pause on the remaining wait: %+v", run)
 	}
 	a, b, c := run.Tasks[0], run.Tasks[1], run.Tasks[2]
@@ -129,7 +129,7 @@ func TestExtremeParallelResumeContinuesDecidedWaitPastPendingOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if run.State != marshal.AwaitingUser || !strings.Contains(run.Pause.Reason, "approval-a") || !strings.Contains(run.Pause.Reason, "approval-b") {
+	if run.State != marshal.AwaitingUser || run.Pause == nil || !strings.Contains(run.Pause.Detail, "approval-a") || !strings.Contains(run.Pause.Detail, "approval-b") || run.Pause.Reason != "2 tasks are waiting for the Marshal's go-ahead." {
 		t.Fatalf("pause does not name both waits: %+v", run.Pause)
 	}
 	mu.Lock()
@@ -146,8 +146,8 @@ func TestExtremeParallelResumeContinuesDecidedWaitPastPendingOne(t *testing.T) {
 	if run.State != marshal.AwaitingUser || run.Tasks[1].State != marshal.Accepted || run.Tasks[0].State != marshal.Queued || run.Tasks[0].Process05WaitApprovalID != "approval-a" {
 		t.Fatalf("decided lane did not continue past the pending one: %+v", run)
 	}
-	if strings.Contains(run.Pause.Reason, "approval-b") || !strings.Contains(run.Pause.Reason, "approval-a") {
-		t.Fatalf("pause names a decided wait: %s", run.Pause.Reason)
+	if strings.Contains(run.Pause.Detail, "approval-b") || !strings.Contains(run.Pause.Detail, "approval-a") {
+		t.Fatalf("pause detail names a decided wait: %s", run.Pause.Detail)
 	}
 }
 

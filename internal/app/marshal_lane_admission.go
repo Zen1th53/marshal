@@ -12,6 +12,13 @@ import (
 
 const laneAdmissionEscalation = "task lane admission refused"
 
+func firstNonEmpty(first, fallback string) string {
+	if first != "" {
+		return first
+	}
+	return fallback
+}
+
 // isTaskLaneAdmissionRefusal reports a dispatch the execution engine refused
 // while opening the task's lane, before any worker ran. The error may arrive
 // wrapped or as text through a driver, so the sentinel text is matched too.
@@ -45,19 +52,26 @@ func isTaskLaneAdmissionRefusal(err error) bool {
 // repeats on every attempt therefore cannot exhaust the rework limit. The task
 // is escalated once and the run pauses until the operator retries it.
 func (s *MarshalService) escalateTaskLaneAdmission(ctx context.Context, runID string, run marshal.Run, rev int64, i int, cause error) error {
-	reason := cause.Error()
-	if len(reason) > 300 {
-		reason = reason[:300]
+	machine := cause.Error()
+	if len(machine) > 300 {
+		machine = machine[:300]
 	}
-	reason = laneAdmissionEscalation + ": " + reason
-	taskID := run.Tasks[i].PlanTaskID
+	machine = laneAdmissionEscalation + ": " + machine
+	t := run.Tasks[i]
+	taskID := t.PlanTaskID
 	run.Operation = nil
 	run.Tasks[i].State = marshal.Escalated
-	run.Tasks[i].EscalationReason = reason
-	run.Tasks[i].EscalationCode = escalationCode(marshal.CodeLaneAdmission, reason)
-	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"resolve the lane refusal, then /marshal retry " + taskID + " and /marshal resume"}, Code: marshal.CodeLaneAdmission, Action: marshal.PauseRetryTask, TaskID: taskID})
+	run.Tasks[i].EscalationReason = machine
+	run.Tasks[i].EscalationCode = escalationCode(marshal.CodeLaneAdmission, machine)
+	capacity := errors.Is(cause, execution.ErrRunBlocked) && strings.Contains(cause.Error(), "capacity exhausted")
+	reason, summary := "A task couldn't start: its workspace didn't match the approved plan. Nothing ran.", firstNonEmpty(strings.TrimSpace(t.Title), taskID)+" couldn't start: its workspace didn't match the plan."
+	if capacity {
+		reason = "A task couldn't start because too many tasks were running. Nothing ran."
+		summary = firstNonEmpty(strings.TrimSpace(t.Title), taskID) + " couldn't start yet: too many tasks were running."
+	}
+	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"Press Enter to try it again."}, Detail: machine, Code: marshal.CodeLaneAdmission, Action: marshal.PauseRetryTask, TaskID: taskID})
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
-	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, map[string]any{"reason": reason, "counted": false})
+	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, map[string]any{"reason": machine, "summary": summary, "counted": false})
 }

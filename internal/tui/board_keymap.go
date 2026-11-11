@@ -68,7 +68,7 @@ var boardKeymap = []boardKey{
 	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}},
 	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm},
 	{Group: "INBOX", Keys: "i  Enter", What: "show the request's reason", Class: KeyOpen},
-	{Group: "INBOX", Keys: "Enter", What: "run stopped: type its command", Class: KeyOpen, Listed: true},
+	{Group: "INBOX", Keys: "Enter", What: "run stopped: do what it suggests", Class: KeyOpen, Listed: true},
 	{Group: "INBOX", Keys: "x", What: "cancel the decision being typed", Class: KeyOpen},
 	{Group: "INBOX", Keys: "hard gate", What: "type the canonical id, then Enter", Class: KeyConfirm, Listed: true},
 
@@ -297,7 +297,7 @@ var boardMouseHelp = []struct{ Where, What string }{
 	{"task  lane", "select; again: inspect or show"},
 	{"header chip", "focus its pane or open its view"},
 	{"[a] [d] [y]…", "open its confirmation"},
-	{"type › cmd", "run stopped: fill command line"},
+	{"[Enter]", "run stopped: do what it suggests"},
 	{"footer key", "press it; any click closes help"},
 }
 

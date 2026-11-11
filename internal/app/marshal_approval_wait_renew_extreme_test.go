@@ -70,7 +70,7 @@ func TestExtremeParallelExpiredApprovalWaitRelaunchesOnlyThatTask(t *testing.T) 
 			t.Fatalf("task %s ended %s (returns %v)", task.PlanTaskID, task.State, task.ReturnsByAgent)
 		}
 	}
-	if final.Pause != nil && strings.Contains(final.Pause.Reason, "approval-a") {
+	if final.Pause != nil && strings.Contains(final.Pause.Detail, "approval-a") {
 		t.Fatalf("run still paused on the expired approval: %+v", final.Pause)
 	}
 }

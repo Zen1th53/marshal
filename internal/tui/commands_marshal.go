@@ -1279,6 +1279,9 @@ func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, servi
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, r, "running"))
 		}
 	})
+	if err != nil {
+		w.logTUIError("run stopped", err)
+	}
 	panel := newMarshalPanel(runID, provider, run, marshalOutcomeNote(run, err))
 	panel.Stopped = err != nil
 	w.marshalPublish(m, runID, panel)
@@ -1319,7 +1322,10 @@ func (w *Workspace) marshalNativeApprovalWaiting(service *app.MarshalService, ru
 // marshalOutcomeNote says what the run is waiting for once Execute returns.
 func marshalOutcomeNote(run marshal.Run, err error) string {
 	if err != nil {
-		return "stopped: " + err.Error()
+		if approvalRequiredRE.MatchString(err.Error()) {
+			return "stopped: " + err.Error()
+		}
+		return "The run stopped unexpectedly."
 	}
 	switch run.State {
 	case marshal.Verifying:
@@ -1328,7 +1334,7 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 		if run.Pause != nil && run.Pause.Kind == "quota" {
 			return "waiting for a provider limit to free up"
 		}
-		return "waiting for you · see the escalated task, then /marshal amend or /marshal resume"
+		return "waiting for you"
 	case marshal.Closed:
 		return "closed"
 	default:

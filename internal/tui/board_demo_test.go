@@ -99,7 +99,7 @@ func TestBoardDemoGoldens(t *testing.T) {
 		// inspector docked, alone and beside the Marshal chat.
 		{"home-200x60", 200, 60, layout.Home, false, false}, {"split-200x60", 200, 60, layout.Split, false, false}, {"inspector-200x60", 200, 60, layout.Home, true, false}, {"chips-home-200x60", 200, 60, layout.Home, false, true},
 		// The run waits for the operator: the header says so, the footer
-		// gives the reason and the command, the inbox leads with it.
+		// gives the reason and Enter action, the inbox leads with it.
 		{"stop-home-170x30", 170, 30, layout.Home, false, false}, {"stop-home-80x24", 80, 24, layout.Home, false, false}, {"stop-split-100x30", 100, 30, layout.Split, false, false}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,7 +114,7 @@ func TestBoardDemoGoldens(t *testing.T) {
 			if strings.HasPrefix(tc.name, "stop-") {
 				v.board.Run.State = marshal.AwaitingUser
 				v.board.Run.Paused = "verification stopped: go test ./internal/netpolicy/... failed (exit 1)"
-				v.board.Run.Next = []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification"}
+				v.board.Run.Next = []string{"Press Enter to continue."}
 			}
 			l := layout.ComputeFor(tc.w, tc.h, tc.mode, v.layoutCounts())
 			if tc.chips {

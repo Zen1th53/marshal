@@ -94,7 +94,12 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 	s.mustSee("The Marshal now uses " + reviewer + ".")
 	s.sendLine("/marshal use-plan")
 	if requiredLegacyFixtureRefusal && os.Getenv("MARSHAL_REAL_MODEL") != "1" {
-		s.mustSee("REQUIRED_CONTEXT_REVIEW_PENDING")
+		// The Board says the run stopped in plain words; the refusal code
+		// goes to the TUI error log, written before the stop is shown.
+		s.mustSee("The run stopped unexpectedly.")
+		if logData, e := os.ReadFile(statepath.Path(project, "logs", "tui-errors.log")); e != nil || !strings.Contains(string(logData), "REQUIRED_CONTEXT_REVIEW_PENDING") {
+			t.Fatalf("stop cause not logged: %v %q", e, logData)
+		}
 		state, e := readProcess05PTYState(project)
 		if e != nil {
 			t.Fatal(e)

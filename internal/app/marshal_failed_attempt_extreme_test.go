@@ -135,7 +135,7 @@ func TestProcess05IdentityAdmissionDoesNotConsumeInfraRetries(t *testing.T) {
 		return nil, errors.New("process 05: invalid Marshal task branch")
 	}}
 	run := executeUntil(t, s, "par", func(run marshal.Run) bool { return run.Pause != nil })
-	if run.Tasks[0].InfraRetries != 0 || run.Tasks[0].State != marshal.Escalated || run.Pause == nil || !strings.Contains(run.Pause.Reason, "invalid Marshal task branch") {
+	if run.Tasks[0].InfraRetries != 0 || run.Tasks[0].State != marshal.Escalated || run.Pause == nil || run.Pause.Reason != "A task couldn't start: its workspace didn't match the approved plan. Nothing ran." || !strings.Contains(run.Pause.Detail, "invalid Marshal task branch") {
 		t.Fatalf("admission retried as infrastructure: %+v", run)
 	}
 }
@@ -211,7 +211,7 @@ func TestInfraFailureRetainsDirtyAttemptWithActionablePause(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := mustSnapshot(t, s, "par")
-	if run.State != marshal.AwaitingUser || run.Pause == nil || !strings.Contains(run.Pause.Reason, "dirty") || run.Tasks[0].State != marshal.Escalated {
+	if run.State != marshal.AwaitingUser || run.Pause == nil || run.Pause.Reason != "A failed attempt left work behind, and Marshal kept it." || !strings.Contains(run.Pause.Detail, "dirty") || run.Tasks[0].State != marshal.Escalated {
 		t.Fatalf("dirty failure lost recovery reason: %+v", run)
 	}
 	path := filepath.Join(s.Worktrees, taskArtifactID("par", run.Tasks[0]), "precious")

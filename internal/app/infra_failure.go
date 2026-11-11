@@ -40,3 +40,22 @@ func classifyInfraFailure(text string) (kind, reason string) {
 	}
 	return "worker process failure", reason
 }
+
+func plainInfraKind(kind string) string {
+	switch kind {
+	case "provider quota or rate limit":
+		return "usage limit"
+	case "provider sign-in or credentials":
+		return "sign-in problem"
+	case "provider cooldown or failover refusal":
+		return "provider problem"
+	case "transport or network":
+		return "network problem"
+	case "harness context or tool output":
+		return "tool output problem"
+	case "worker process failure":
+		return "crash"
+	default:
+		return "problem"
+	}
+}

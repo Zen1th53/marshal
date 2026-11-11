@@ -12,7 +12,7 @@
                                                                                                     
 [1m[38;2;255;255;255mINBOX[0m[0m [38;2;107;116;137mthe run needs you · 2 waiting[0m                                                                 
 [38;2;230;195;92m⚑ run[0m[38;2;107;116;137m waits for you · [0m[1m[38;2;255;255;255mverification stopped: go test ./internal/netpolicy/... failed (exit 1)[0m[0m        
-    [38;2;107;116;137mtype › [0m[48;2;38;45;60m[38;2;255;255;255m/marshal resume[0m[48;2;38;45;60m[0m[38;2;107;116;137m  inspect the retained verification error and artifacts; resolve the repo…[0m
+    [48;2;38;45;60m[Enter][0m continue   [38;2;107;116;137mPress Enter to continue.[0m                                                     
 [48;2;29;36;51m[38;2;240;148;63m⚑ [0m[48;2;29;36;51m[38;2;240;148;63mT-023[0m[48;2;29;36;51m[38;2;107;116;137m egress → [0m[48;2;29;36;51m[1m[38;2;255;255;255mregistry.npmjs.org:443[0m[48;2;29;36;51m[0m[48;2;29;36;51m  [38;2;107;116;137mtaint U · outside manifest · blast: 1 task, 0 files[0m[48;2;29;36;51m        [0m
 [48;2;29;36;51m    [48;2;38;45;60m[a][0m[48;2;29;36;51m allow once  [48;2;38;45;60m[A][0m[48;2;29;36;51m allow for run  [48;2;38;45;60m[d][0m[48;2;29;36;51m deny  [48;2;38;45;60m[i][0m[48;2;29;36;51m inspect                                        [0m
 [38;2;242;103;122m⚑ [0m[38;2;242;103;122mT-031[0m[38;2;107;116;137m hard gate · [0m[1m[38;2;255;255;255mgit push --force origin main[0m[0m  [38;2;107;116;137mirreversible · type canonical id to confirm[0m       
@@ -27,4 +27,4 @@
 [1m[38;2;255;255;255mACTIVITY[0m[0m [38;2;107;116;137mstate changes only · full log in inspector[0m                                                 
 [38;2;107;116;137m14:02:29[0m [38;2;143;179;255mT-009[0m [38;2;127;214;154mmerged[0m [38;2;107;116;137m· → integration a91f2c · 7 evidence refs[0m                                      
 [38;2;107;116;137m14:02:14[0m [38;2;143;179;255mT-023[0m [38;2;230;195;92mparked[0m [38;2;107;116;137m· egress registry.npmjs.org outside manifest (taint U)[0m                        
- [38;2;230;195;92m▮ run waits for you[0m[38;2;107;116;137m · type [0m[1m/marshal resume[0m[38;2;107;116;137m · [0mverification stopped: go test ./internal/netpolicy/..…[0m
+ [38;2;230;195;92m▮ waits for you[0m[38;2;107;116;137m · [0mverification stopped: go test ./internal/netpolicy/... failed (exit 1)[38;2;107;116;137m · Enter: [0m[1m…[0m

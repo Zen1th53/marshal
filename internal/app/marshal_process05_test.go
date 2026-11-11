@@ -349,7 +349,7 @@ func assertMarshalProcess05Pause(t *testing.T, s *MarshalService, runID, taskID 
 	}
 	task := waiting.Tasks[taskIndex(waiting, taskID)]
 	approvalID := actual.Tasks[taskID].ApprovalID
-	if cause != nil || waiting.State != marshal.AwaitingUser || waiting.Pause == nil || waiting.Pause.ResumeState != marshal.Dispatching || waiting.Pause.Reason != fmt.Sprintf("process 05: approval %s required; use /marshal approve-task %s, then /marshal resume", approvalID, approvalID) || task.State != marshal.Queued || task.Process05WaitRunID != actual.RunID || task.Process05WaitApprovalID != approvalID || len(task.ReturnsByAgent) != 0 {
+	if cause != nil || waiting.State != marshal.AwaitingUser || waiting.Pause == nil || waiting.Pause.ResumeState != marshal.Dispatching || waiting.Pause.Reason != "A task is waiting for the Marshal's go-ahead." || waiting.Pause.Detail != fmt.Sprintf("process 05: approval %s required; use /marshal approve-task %s, then /marshal resume", approvalID, approvalID) || task.State != marshal.Queued || task.Process05WaitRunID != actual.RunID || task.Process05WaitApprovalID != approvalID || len(task.ReturnsByAgent) != 0 {
 		t.Fatalf("private pause is not bound to exact canonical approval: %+v %v", waiting, cause)
 	}
 	canonical, _, err := s.load(t.Context(), runID)

@@ -136,7 +136,7 @@ func TestExtremeInfraRetryLimitEscalatesWithReason(t *testing.T) {
 	if n := taskReturns(b) - b.LaneReworkBase; n != 0 {
 		t.Fatalf("infra failures spent %d rework", n)
 	}
-	if run.Pause == nil || !strings.Contains(run.Pause.Reason, infraRetryEscalation) {
+	if run.Pause == nil || run.Pause.Reason != "Worker failed 7 times in a row (tool output problem)." || !strings.HasPrefix(run.Pause.Detail, infraRetryEscalation+": ") {
 		t.Fatalf("run not paused for the exhausted infra retries: %+v", run.Pause)
 	}
 	mu.Lock()

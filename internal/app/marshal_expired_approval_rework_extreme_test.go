@@ -100,7 +100,7 @@ func TestExpiredApprovalReworksRequeuesTaskWithoutPausingRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute round 1: %v", err)
 	}
-	if run.State != marshal.AwaitingUser || run.Pause == nil || !strings.Contains(run.Pause.Reason, "approval-a-0") {
+	if run.State != marshal.AwaitingUser || run.Pause == nil || !strings.Contains(run.Pause.Detail, "approval-a-0") || run.Pause.Reason != "A task is waiting for the Marshal's go-ahead." {
 		t.Fatalf("run did not pause on task a pending approval: %+v", run)
 	}
 	taskA := run.Tasks[0]
@@ -183,7 +183,7 @@ func TestExpiredApprovalReworksRequeuesTaskWithoutPausingRun(t *testing.T) {
 	}
 
 	// - verify the run was not paused for the expired task itself (now waiting on the fresh approval)
-	if run.Pause == nil || !strings.Contains(run.Pause.Reason, "approval-a-1") {
+	if run.Pause == nil || !strings.Contains(run.Pause.Detail, "approval-a-1") || run.Pause.Reason != "A task is waiting for the Marshal's go-ahead." {
 		t.Fatalf("run pause reason = %v, want fresh approval-a-1", run.Pause)
 	}
 
