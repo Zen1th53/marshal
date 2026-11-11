@@ -8,6 +8,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -61,8 +62,8 @@ const marshalKickoffContinue = "Continue."
 
 // marshalOpening is the single opening cue for one launch. It is Continue when
 // the project already carries saved intake or the launch scan found an active
-// run, and Start otherwise. Every call site computes it from the same root, so
-// a strip and a later insert in the same launch can never disagree.
+// run, and Start otherwise. A launch computes it once, where the cue is
+// appended; later steps read that cue back from argv (trailingMarshalCue).
 func marshalOpening(root string) string {
 	if root == "" {
 		return marshalKickoff
@@ -85,6 +86,11 @@ func marshalKickoffArgs(provider string, roots ...string) []string {
 	if len(roots) > 0 {
 		opening = marshalOpening(roots[0])
 	}
+	return marshalCueArgs(provider, opening)
+}
+
+// marshalCueArgs is the argv form of one opening cue for provider.
+func marshalCueArgs(provider, opening string) []string {
 	switch provider {
 	case "opencode":
 		return []string{"--prompt", opening}
@@ -93,6 +99,20 @@ func marshalKickoffArgs(provider string, roots ...string) []string {
 	default:
 		return []string{opening}
 	}
+}
+
+// trailingMarshalCue is the opening cue this launch already appended to args,
+// or nil. The steps that insert provider options before the cue or strip it
+// read it back from argv instead of recomputing it, so an intake saved or a
+// scan finished mid-launch can never make them disagree with what was sent.
+func trailingMarshalCue(provider string, args []string) []string {
+	for _, opening := range []string{marshalKickoff, marshalKickoffContinue} {
+		k := marshalCueArgs(provider, opening)
+		if len(args) >= len(k) && slices.Equal(args[len(args)-len(k):], k) {
+			return k
+		}
+	}
+	return nil
 }
 
 // marshalStartError is a Marshal launch that did not happen. Its text is for

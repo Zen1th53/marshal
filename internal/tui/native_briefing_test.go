@@ -393,6 +393,38 @@ func TestResumeLaunchHasNoCue(t *testing.T) {
 	}
 }
 
+// The cue is chosen once, when a launch appends it. An intake saved after that
+// must not stop later steps recognising it: options still go before it and
+// stripping still finds it.
+func TestKickoffRecognisedAfterIntakeChangesMidLaunch(t *testing.T) {
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		root := t.TempDir()
+		args := append([]string{"-x"}, marshalKickoffArgs(provider, root)...) // Start.
+		if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(`{"language":"English"}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if marshalOpening(root) != marshalKickoffContinue {
+			t.Fatal("fixture: intake did not change the opening")
+		}
+		got := insertBeforeKickoff(provider, root, args, []string{"--flag", "v"})
+		want := append([]string{"-x", "--flag", "v"}, marshalCueArgs(provider, marshalKickoff)...)
+		if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+			t.Fatalf("%s insert = %q, want %q", provider, got, want)
+		}
+		stripped, opening := stripMarshalKickoff(provider, root, args)
+		if len(marshalCueArgs(provider, "")) == 1 {
+			if opening != marshalKickoff || strings.Join(stripped, "\x00") != "-x" {
+				t.Fatalf("%s strip = %q %q", provider, stripped, opening)
+			}
+		} else if opening != "" {
+			t.Fatalf("%s strip removed a two-part cue: %q", provider, opening)
+		}
+	}
+}
+
 func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 	protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {

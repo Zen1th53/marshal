@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -80,17 +81,48 @@ func welcomeClause(b boardmodel.Board) string {
 // by its first scope file when it has one, since that is what the owner reviews;
 // otherwise the task's title stands in.
 func welcomeTaskName(t boardmodel.TaskRow, preferScope bool) string {
+	var candidates []string
 	if preferScope {
-		for _, f := range t.Scope {
-			if f = strings.TrimSpace(f); f != "" {
-				return f
-			}
+		candidates = append(candidates, t.Scope...)
+	}
+	candidates = append(candidates, t.Title)
+	for _, c := range candidates {
+		if name := welcomeSafeName(c); name != "" {
+			return name
 		}
 	}
-	if title := strings.TrimSpace(t.Title); title != "" {
-		return title
-	}
 	return "a task"
+}
+
+const welcomeNameMaxRunes = 60
+
+var (
+	// welcomeIDPrefix and welcomeHexDigest are what must never reach the
+	// owner: run, plan, instance and constitution ids, and a hex digest.
+	welcomeIDPrefix  = regexp.MustCompile(`(?i)\b(RUN|PLAN|INSTANCE|CONST)[-_]`)
+	welcomeHexDigest = regexp.MustCompile(`(?i)\b[0-9a-f]{7,}\b`)
+)
+
+// welcomeSafeName is a task title or scope path cleaned the way the Board
+// cleans what it paints (control and format characters out) and passed
+// through the shared redaction. A name that redaction would change, or that
+// still carries an internal id or a hex digest, is unusable and yields "".
+func welcomeSafeName(s string) string {
+	s = strings.Join(strings.Fields(cleanBoard(s)), " ")
+	if s == "" || RedactContent(s, nil) != s || welcomeIDPrefix.MatchString(s) {
+		return ""
+	}
+	for _, m := range welcomeHexDigest.FindAllString(s, -1) {
+		// A hex-only word with a digit is a digest; a plain word such as
+		// "defaced" is not.
+		if strings.ContainsAny(m, "0123456789") {
+			return ""
+		}
+	}
+	if r := []rune(s); len(r) > welcomeNameMaxRunes {
+		s = strings.TrimSpace(string(r[:welcomeNameMaxRunes])) + "…"
+	}
+	return s
 }
 
 func isAre(total int) string {

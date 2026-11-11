@@ -138,6 +138,57 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 	}
 }
 
+// A chat started on a saved conversation of the same provider resumes it and
+// takes no fresh opening cue; without a saved conversation it opens with one.
+func TestStartMarshalChatResumeHasNoCue(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		t.Run(map[bool]string{false: "fresh", true: "saved"}[saved], func(t *testing.T) {
+			setupFakeTmux(t)
+			marshalSwitchEnvironment(t)
+			w := NewWorkspace(nil, "project", "test-session")
+			w.workDir = t.TempDir()
+			cleanupTmuxWorkspace(t, w)
+			root := w.providerRoot()
+			w.tmuxSession = fixtureTmuxNamespace(t, root)
+			w.tmuxMarshalWin = "marshal"
+			w.tmuxPath = "tmux"
+			w.tmuxActiveWins = make(map[string]*activeTmuxAgent)
+			if err := saveDefaultProvider(root, "codex"); err != nil {
+				t.Fatal(err)
+			}
+			setLaunchActiveRun(root, true) // a fresh opening here is Continue.
+			if saved {
+				if err := saveChatBinding(root, chatBinding{Provider: "codex", SessionID: "saved-conversation"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := w.startMarshalChat(context.Background(), root); err != nil {
+				t.Fatal(err)
+			}
+			chat := w.tmuxActiveWins["marshal-chat"]
+			if chat == nil {
+				t.Fatal("no chat started")
+			}
+			cues := 0
+			for _, a := range chat.args {
+				if a == marshalKickoff || a == marshalKickoffContinue {
+					cues++
+				}
+			}
+			joined := strings.Join(chat.args, "\x00")
+			if saved {
+				if !strings.HasPrefix(joined, strings.Join(marshalResumeArgs("codex", "saved-conversation"), "\x00")) || cues != 0 {
+					t.Fatalf("resumed chat: cues=%d args=%q", cues, chat.args)
+				}
+				return
+			}
+			if cues != 1 || chat.args[len(chat.args)-1] != marshalKickoffContinue || strings.Contains(joined, "saved-conversation") {
+				t.Fatalf("fresh chat: cues=%d args=%q", cues, chat.args)
+			}
+		})
+	}
+}
+
 func TestMarshalModelMissingCLILeavesChatRunning(t *testing.T) {
 	_, logFile := setupFakeTmux(t)
 	t.Setenv("PATH", t.TempDir())

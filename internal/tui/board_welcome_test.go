@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -108,6 +110,64 @@ func TestWelcomeLineNoIDs(t *testing.T) {
 		if regexp.MustCompile(re).MatchString(line) {
 			t.Fatalf("welcome line %q matched forbidden pattern %q", line, re)
 		}
+	}
+}
+
+// Titles and scope paths are owner and model text: control characters are
+// cleaned, and a name carrying an internal id, a hex digest or a secret is
+// replaced, never shown.
+func TestWelcomeLineCleansTaskNames(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		task boardmodel.TaskRow
+		want string
+	}{
+		{"control chars", boardmodel.TaskRow{Title: "fix\x07 the\tlogin", State: boardmodel.TaskParked}, "; fix the login needs you"},
+		{"run id title", boardmodel.TaskRow{Title: "redo RUN-1794393904851065755", State: boardmodel.TaskParked}, "; a task needs you"},
+		{"plan id scope falls back to title", boardmodel.TaskRow{Title: "page", Scope: []string{"PLAN-abc/notes.md"}, State: boardmodel.TaskReview}, "; page is under review"},
+		{"hex digest", boardmodel.TaskRow{Title: "revert 017b2d0f", State: boardmodel.TaskParked}, "; a task needs you"},
+		{"secret", boardmodel.TaskRow{Title: "use ghp_" + strings.Repeat("A1b2C3d4E5", 4), State: boardmodel.TaskParked}, "; a task needs you"},
+		{"plain hex word stays", boardmodel.TaskRow{Title: "defaced banner", State: boardmodel.TaskParked}, "; defaced banner needs you"},
+	} {
+		b := boardmodel.Board{Run: boardmodel.RunHead{ID: "RUN-1", Total: 1}, Tasks: []boardmodel.TaskRow{tc.task}}
+		got := welcomeLine(b, nil)
+		want := "Welcome back. 0 of 1 task is done" + tc.want + "."
+		if got != want {
+			t.Errorf("%s: welcomeLine = %q, want %q", tc.name, got, want)
+		}
+		for _, re := range []string{`RUN-`, `PLAN-`, `INSTANCE-`, `[\x00-\x1f]`, `ghp_`} {
+			if regexp.MustCompile(re).MatchString(got) {
+				t.Errorf("%s: %q matched %q", tc.name, got, re)
+			}
+		}
+		// A digest is seven or more hex characters with at least one digit.
+		for _, m := range regexp.MustCompile(`[0-9a-f]{7,}`).FindAllString(got, -1) {
+			if strings.ContainsAny(m, "0123456789") {
+				t.Errorf("%s: %q shows a hex digest %q", tc.name, got, m)
+			}
+		}
+	}
+}
+
+// Close saves the Board as it stands after every Board-updating worker has
+// stopped, not the snapshot from before shutdown began.
+func TestCloseSavesFinalBoardSeen(t *testing.T) {
+	w := NewWorkspace(nil, "project", "session")
+	w.workDir = t.TempDir()
+	run := marshal.Run{State: marshal.Dispatching, Tasks: []marshal.Task{{PlanTaskID: "a", State: marshal.Merged}, {PlanTaskID: "b", State: marshal.Dispatched}}}
+	w.setMarshalPanel(newMarshalPanel("RUN-close", "codex", run, ""))
+	final := run
+	final.Tasks = []marshal.Task{{PlanTaskID: "a", State: marshal.Merged}, {PlanTaskID: "b", State: marshal.Merged}}
+	if !w.startBackground(context.Background(), func(ctx context.Context) {
+		<-ctx.Done()
+		w.setMarshalPanel(newMarshalPanel("RUN-close", "codex", final, ""))
+	}) {
+		t.Fatal("worker not started")
+	}
+	w.Close()
+	got := loadBoardSeen(w.workDir)
+	if got == nil || got.Run != "RUN-close" || got.Done != 2 {
+		t.Fatalf("board-seen after Close = %+v, want run RUN-close done 2", got)
 	}
 }
 
