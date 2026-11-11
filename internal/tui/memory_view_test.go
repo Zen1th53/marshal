@@ -111,6 +111,7 @@ func TestMemoryViewGoldens(t *testing.T) {
 	}{{"split-120x40", 120, 40}, {"split-80x24", 80, 24}} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}, memory: true, memView: true}
+			v.hints = goldenHints(v)
 			frame, _, _ := paintMemory(layout.Compute(tc.w, tc.h, layout.Split), th, v, demoMemoryPaint(now), 0, true, nil)
 			got := strings.Join(frame, "\n") + "\n"
 			path := filepath.Join("testdata", "board", "memory-"+tc.name+".golden")

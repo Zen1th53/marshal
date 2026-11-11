@@ -267,24 +267,3 @@ func TestBoardLaneMoreRowIsNotClickable(t *testing.T) {
 		t.Fatalf("%d lane regions for %d lane rows", len(rows), len(lines)-3)
 	}
 }
-
-// TestBoardMouseFooterHintsPressTheirKey: the footer's key hints are
-// buttons, as in the prototype: a click presses the key the hint names.
-func TestBoardMouseFooterHintsPressTheirKey(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	w.boardUI.focus = layout.Tasks
-	row, col := cellOf(t, w, 170, 45, "l lanes", 0)
-	if !click(w, row, col) || w.boardUI.pane(true) != layout.Lanes {
-		t.Fatalf("click on 'l lanes': focus %s", w.boardUI.pane(true))
-	}
-	row, col = cellOf(t, w, 170, 45, "? help", 0)
-	if !click(w, row, col) || !w.boardHelp.Load() {
-		t.Fatal("click on '? help' did not open the help")
-	}
-	w.boardHelp.Store(false)
-	row, col = cellOf(t, w, 170, 45, "j/k move", 0)
-	focus := w.boardUI.pane(true)
-	if !click(w, row, col) || w.boardUI.pane(true) != focus || w.composer.Text() != "" {
-		t.Fatal("click on 'j/k move' did something")
-	}
-}

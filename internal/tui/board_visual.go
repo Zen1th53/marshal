@@ -36,9 +36,13 @@ type boardVisual struct {
 	note      string
 	stopped   bool
 	stopArmed bool
-	// status replaces the footer's keys: the composer while typing, or the
-	// last command's answer until the next key.
+	// status leads the footer instead of the run's note: the composer while
+	// typing, an armed retry, or the last command's answer until the next
+	// key.
 	status string
+	// hints is the hint bar: registry IDs in display order (boardHints),
+	// each a button for its action.
+	hints []string
 	// inboxPrompt replaces the selected inbox item's action line while a
 	// confirmation is in progress or the item is inspected.
 	inboxPrompt  string
@@ -367,9 +371,7 @@ func (v boardVisual) renderLines(p layout.Pane) []string {
 	case layout.Footer:
 		line, spans := v.footerSpans(p.Rect.W)
 		for _, sp := range spans {
-			if _, ok := footerKeyEvent(sp.key); ok {
-				v.hit(boardHit{row: p.Rect.Y, x0: p.Rect.X + sp.x0, x1: p.Rect.X + min(sp.x1, p.Rect.W), kind: hitKey, id: sp.key})
-			}
+			v.hit(boardHit{row: p.Rect.Y, x0: p.Rect.X + sp.x0, x1: p.Rect.X + min(sp.x1, p.Rect.W), kind: hitAction, id: sp.id})
 		}
 		return []string{line}
 	case layout.Tasks:
@@ -553,99 +555,80 @@ func (v boardVisual) footer(w int) string {
 	return line
 }
 
-// footerSpan is where one key hint of the footer landed, for the mouse.
+// footerSpan is where one hint of the footer landed, for the mouse: the
+// registry action a click on it runs.
 type footerSpan struct {
 	x0, x1 int
-	key    string
+	id     string
 }
 
-// footerSpans is footer with the cells each key hint takes: the hints are
-// buttons, as in the prototype, and a click presses the key they name.
+// footerSpans is footer with the cells each hint takes. The hints are
+// v.hints, each written as its key and its registry Hint, and every one is a
+// button for its action. The run's note or stop notice leads; a status line
+// (typing, an armed retry, a command's answer) leads instead, with the lead
+// of a confirmation, picker or composer right-aligned after it, or help after
+// an answer, while they fit beside it.
 func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
-	if v.status != "" {
-		return PadCell(" "+v.status, w), nil
-	}
-	// The prototype's footer: moves and focus keys, then the views by
-	// number, then the command line, palette, advanced menu and help.
-	items := [][2]string{{"j/k", "move"}, {"⏎", "inspect"}, {"m", "Marshal"}, {"i", "inbox"}, {"t", "tasks"}, {"l", "lanes"}}
-	if !v.unicode() {
-		items[1][0] = "Enter"
-	}
-	if v.empty {
-		// The first-use card: talk to the Marshal, verify a provider.
-		items = [][2]string{{"⏎", "tell the marshal"}, {"F11", "chat"}, {"s", "say"}, {"v", "verify"}}
-		if !v.unicode() {
-			items[0][0] = "Enter"
+	type item struct{ id, key, hint string }
+	var items []item
+	for _, id := range v.hints {
+		if k, ok := boardAction(id); ok && k.Hint != "" {
+			items = append(items, item{id, v.hintKey(k.Keys), k.Hint})
 		}
 	}
-	if waitingGates(v.gates) > 0 {
-		// An owner gate's reply comes first: it is what the Marshal waits
-		// for.
-		items = append([][2]string{{"y", "reply"}}, items...)
+	chip := func(it item) string {
+		return v.bg("rule", v.fg("white", it.key)) + " " + v.fg("dim", it.hint)
 	}
-	if v.guard != nil {
-		// Project files changed outside a run: undo or keep them.
-		items = append([][2]string{{"u", "undo"}, {"K", "keep"}}, items...)
-	}
-	if v.docked {
-		// F11 (or Alt+arrow) switches between the chat and the Board
-		// from either side; tmux takes it before the Board sees it. m
-		// stays the Marshal picker; F11 is the chat-switch key beside it.
-		for i := range items {
-			if items[i][0] == "m" {
-				ins := [][2]string{{"F11", "chat"}}
-				if !v.empty {
-					ins = append(ins, [2]string{"s", "say"})
+	width := func(it item) int { return VisibleLen(it.key) + 1 + VisibleLen(it.hint) }
+	if v.status != "" {
+		// The status wins: the items beside it drop from the right until
+		// they fit at least three cells after it.
+		var side []item
+		if len(items) > 0 && hintHoldsKeyboard(items[0].id) {
+			side = items
+		} else if i := slices.IndexFunc(items, func(it item) bool { return it.id == "help" }); i >= 0 {
+			side = items[i : i+1]
+		}
+		for len(side) > 0 {
+			n := 0
+			for i, it := range side {
+				n += width(it)
+				if i > 0 {
+					n += 2
 				}
-				items = slices.Insert(items, i+1, ins...)
+			}
+			if 1+VisibleLen(v.status)+3+n+1 <= w {
 				break
 			}
+			side = side[:len(side)-1]
 		}
-	}
-	var views [][2]string
-	if v.host != nil {
-		views = append(views, [2]string{"2", "host"})
-	}
-	for _, view := range []struct {
-		on        bool
-		key, name string
-	}{{v.memory, "3", "memory"}, {v.providers, "4", "providers"}, {v.verify, "5", "verify"}, {v.security, "6", "security"}, {v.plan, "7", "plan"}, {v.arch, "b", "architecture"}} {
-		if view.on {
-			views = append(views, [2]string{view.key, view.name})
+		if len(side) == 0 {
+			return PadCell(" "+v.status, w), nil
 		}
-	}
-	if len(views) > 0 {
-		items = append(items, [2]string{"1", "board"})
-		items = append(items, views...)
-	}
-	items = append(items, [][2]string{{"/", "command"}, {"^K", "palette"}, {"?", "help"}}...)
-	if v.hostView {
-		items = [][2]string{{"j/k", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.memView {
-		items = [][2]string{{"j/k", "select"}, {"a", "keep"}, {"r", "reject"}, {"i", "evidence"}, {"PgDn", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.provView {
-		items = [][2]string{{"j/k", "select"}, {"v", "verify"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.verView {
-		items = [][2]string{{"j/k", "select"}, {"x", "return unsupported"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.secView {
-		items = [][2]string{{"j/k", "select"}, {"a", "allow for run"}, {"d", "deny"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.planView {
-		items = [][2]string{{"j/k", "select"}, {"⏎", "inspect"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.viewNoRun && (v.verView || v.secView || v.planView) {
-		items = [][2]string{{"esc", "board"}, {"s", "tell the Marshal"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
-	}
-	if v.archView {
-		items = [][2]string{{"o", "open in browser"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
+		n := 0
+		for i, it := range side {
+			n += width(it)
+			if i > 0 {
+				n += 2
+			}
+		}
+		x := w - 1 - n
+		s := " " + v.status + strings.Repeat(" ", max(0, x-1-VisibleLen(v.status)))
+		var spans []footerSpan
+		for i, it := range side {
+			if i > 0 {
+				s += "  "
+				x += 2
+			}
+			spans = append(spans, footerSpan{x0: x, x1: x + width(it), id: it.id})
+			s += chip(it)
+			x += width(it)
+		}
+		return PadCell(s, w), spans
 	}
 	// The run's note leads the footer, which is full width, so an id it
-	// carries for the operator to type is shown whole; keys follow while
-	// they fit.
+	// carries for the operator to type is shown whole; the hints follow
+	// while they fit.
 	// A stopped run's notice takes the note's place: why it stopped and
 	// the exact command that moves it on.
 	var s string
@@ -660,45 +643,17 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 			s += part
 		}
 	}
-	chip := func(it [2]string) string {
-		return v.bg("rule", v.fg("white", it[0])) + " " + v.fg("dim", it[1]) + "  "
-	}
-	// When the Board's keys do not all fit, the moves, the command keys and
-	// help stay before the focus and view keys; the kept keys keep their
-	// order. A view's own footer keeps its keys in order.
-	inView := v.hostView || v.memView || v.provView || v.verView || v.secView || v.planView || v.archView
-	rank := func(key string) int {
-		if inView {
-			return 0
-		}
-		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "F11", "s", "v", "i", "?", "/", "^K", "l", "t"} {
-			if k == key {
-				return i
-			}
-		}
-		return 100
-	}
-	order := make([]int, len(items))
-	for i := range order {
-		order[i] = i
-	}
-	slices.SortStableFunc(order, func(a, b int) int { return rank(items[a][0]) - rank(items[b][0]) })
-	keep := make([]bool, len(items))
-	used := VisibleLen(" " + s)
-	for _, i := range order {
-		if n := VisibleLen(chip(items[i])); used+n <= w {
-			keep[i], used = true, used+n
-		} else {
+	// The hints are lead then tail, so stopping at the first that does not
+	// fit drops the tail's end first, then the lead's, and the first lead
+	// item last.
+	var spans []footerSpan
+	for _, it := range items {
+		if VisibleLen(" "+s)+width(it)+2 > w {
 			break
 		}
-	}
-	var spans []footerSpan
-	for i, it := range items {
-		if keep[i] {
-			x := 1 + VisibleLen(s)
-			spans = append(spans, footerSpan{x0: x, x1: x + VisibleLen(it[0]) + 1 + VisibleLen(it[1]), key: it[0]})
-			s += chip(it)
-		}
+		x := 1 + VisibleLen(s)
+		spans = append(spans, footerSpan{x0: x, x1: x + width(it), id: it.id})
+		s += chip(it) + "  "
 	}
 	return PadCell(" "+s, w), spans
 }

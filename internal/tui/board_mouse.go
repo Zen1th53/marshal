@@ -23,7 +23,6 @@ const (
 	hitLane  boardHitKind = "lane"  // a lane row or chip: focus, then show
 	hitChip  boardHitKind = "chip"  // a header chip: its view
 	hitInbox boardHitKind = "inbox" // an inbox row, or one of its action buttons
-	hitKey   boardHitKind = "key"   // a footer key hint: presses that key
 	// hitInspect is a button of the inspector's action row: the key it
 	// names, pressed in the inspector on that task.
 	hitInspect boardHitKind = "inspect"
@@ -149,12 +148,19 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		w.boardHelp.Store(false)
 		return true
 	}
+	h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1)
+	// The hint bar's lead for the confirmation, picker or composer that has
+	// the keyboard is that owner's own key (board_hints.go); it acts even
+	// where every other click is held back below.
+	if ok && h.kind == hitAction && hintHoldsKeyboard(h.id) {
+		w.runBoardAction(ctx, h.id)
+		return true
+	}
 	// A confirmation in progress, or a command being typed, keeps the
 	// keyboard: a click must not move the decision under it.
 	if w.inboxView.Confirming() || w.composing() {
 		return true
 	}
-	h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1)
 	// The mid-run Marshal picker is an overlay: a click on a row picks and
 	// applies it, a click anywhere else closes it (choosing is reversible and
 	// never acts mid-step, so a click may decide here).
@@ -247,12 +253,6 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 	case hitAction:
 		// A registry button runs its action the one way its key does.
 		w.runBoardAction(ctx, h.id)
-	case hitKey:
-		// A footer hint is a button for its key: the click is that key,
-		// through the same path a keypress takes.
-		if ev, ok := footerKeyEvent(h.id); ok {
-			w.handleTerminalKey(ctx, ev)
-		}
 	case hitInbox:
 		want := slices.IndexFunc(items, func(it boardmodel.InboxItem) bool { return it.Request.Key() == h.id })
 		if want < 0 {
@@ -311,25 +311,4 @@ func boardChipClickable(name string) bool {
 	}
 	_, ok := boardChipViews[name]
 	return ok
-}
-
-// footerKeyEvent is the key a footer hint names. j/k names two keys and is
-// not a button.
-func footerKeyEvent(label string) (KeyEvent, bool) {
-	switch label {
-	case "⏎", "Enter":
-		return KeyEvent{Type: KeyEnter}, true
-	case "esc":
-		return KeyEvent{Type: KeyEsc}, true
-	case "^K":
-		return KeyEvent{Type: KeyCtrlK}, true
-	case "PgDn":
-		return KeyEvent{Type: KeyPgDn}, true
-	case "F11":
-		return KeyEvent{Type: KeyF11}, true
-	}
-	if r := []rune(label); len(r) == 1 {
-		return KeyEvent{Type: KeyRune, Rune: r[0]}, true
-	}
-	return KeyEvent{}, false
 }

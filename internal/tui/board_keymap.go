@@ -59,6 +59,11 @@ type boardKey struct {
 	// the palette's disabled rows and when a click lands on an off hint. It
 	// is required whenever When is set.
 	Why func(*Workspace) string
+	// Run, when set, is what runBoardAction does for the action instead of
+	// the palette's path: the hint bar's rows route a click to the same
+	// handler the key reaches (board_hints.go). It adds no behaviour of its
+	// own.
+	Run func(*Workspace, context.Context)
 }
 
 func pressRune(r rune) *KeyEvent { return &KeyEvent{Type: KeyRune, Rune: r} }
@@ -101,10 +106,10 @@ var boardKeymap = []boardKey{
 	{Group: "IN A VIEW", Keys: "PgUp PgDn", What: "memory: scroll", Class: KeyMove, ID: "memory.scroll", When: func(w *Workspace) bool { return w.memView.Load() }, Why: reason("Open the Memory view first.")},
 	{Group: "IN A VIEW", Keys: "v", What: "providers: verify harness, Enter", Press: pressRune('v'), Class: KeyConfirm, ID: "providers.verify", Hint: "verify", When: func(w *Workspace) bool { return w.provView.Load() }, Why: reason("Open the Providers view first.")},
 	{Group: "IN A VIEW", Keys: "r", What: "providers: route around, then Enter", Class: KeyConfirm, ID: "providers.route", When: func(w *Workspace) bool { return w.provView.Load() }, Why: reason("Open the Providers view first.")},
-	{Group: "IN A VIEW", Keys: "x", What: "verify: return claims, then Enter", Press: pressRune('x'), Class: KeyConfirm, ID: "verify.return", When: func(w *Workspace) bool { return w.verView.Load() }, Why: reason("Open the Verify view first.")},
+	{Group: "IN A VIEW", Keys: "x", What: "verify: return claims, then Enter", Press: pressRune('x'), Class: KeyConfirm, ID: "verify.return", Hint: "return unsupported", When: func(w *Workspace) bool { return w.verView.Load() }, Why: reason("Open the Verify view first.")},
 	{Group: "IN A VIEW", Keys: "a  d", What: "security: allow, deny, then Enter", Class: KeyConfirm, ID: "security.decide", When: func(w *Workspace) bool { return w.secView.Load() }, Why: reason("Open the Security view first.")},
 	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen, ID: "plan.inspect", When: func(w *Workspace) bool { return w.planView.Load() }, Why: reason("Open the Plan view first.")},
-	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen, ID: "arch.open", When: func(w *Workspace) bool { return w.archView.Load() }, Why: reason("Open the Architecture view first.")},
+	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen, ID: "arch.open", Hint: "open in browser", When: func(w *Workspace) bool { return w.archView.Load() }, Why: reason("Open the Architecture view first.")},
 
 	{Group: "MARSHAL", Keys: "m", What: "change the Marshal", Hint: "Marshal", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.pick"},
 	{Group: "MARSHAL", Keys: "F11", What: "chat ⇄ Board (Alt+← / Alt+→ in tmux)", Hint: "chat", Press: &KeyEvent{Type: KeyF11}, Class: KeyOpen, ID: "marshal.chat"},
@@ -199,11 +204,14 @@ func (k boardKey) available(w *Workspace) (bool, string) {
 	return false, ""
 }
 
-// boardAction is the registry entry with id; ok is false for an unknown id.
+// boardAction is the registry entry with id, a key's or a hint bar row's
+// (boardHintKeymap); ok is false for an unknown id.
 func boardAction(id string) (boardKey, bool) {
-	for _, k := range boardKeymap {
-		if k.ID == id {
-			return k, true
+	for _, table := range [][]boardKey{boardKeymap, boardHintKeymap} {
+		for _, k := range table {
+			if k.ID == id {
+				return k, true
+			}
 		}
 	}
 	return boardKey{}, false
@@ -244,6 +252,10 @@ func (w *Workspace) runBoardAction(ctx context.Context, id string) {
 	}
 	if run, why := k.available(w); !run {
 		w.setOutput(why, false)
+		return
+	}
+	if k.Run != nil {
+		k.Run(w, ctx)
 		return
 	}
 	w.runPaletteAction(ctx, k.action())

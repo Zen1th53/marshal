@@ -123,6 +123,7 @@ func TestBoardDemoGoldens(t *testing.T) {
 				host := demoHost(t)
 				v.host = &host
 			}
+			v.hints = goldenHints(v)
 			var frame []string
 			if tc.inspect {
 				frame = paintBoardInspector(l, th, inspector.New(b, "T-023"), v.render, nil)

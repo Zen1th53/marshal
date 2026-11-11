@@ -163,6 +163,7 @@ func TestHostViewGoldens(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}, host: &snap, hostView: true}
 			ui := &boardUI{}
+			v.hints = goldenHints(v)
 			frame := paintHost(layout.Compute(tc.w, tc.h, layout.Split), th, v, ui)
 			got := strings.Join(frame, "\n") + "\n"
 			path := filepath.Join("testdata", "board", "host-"+tc.name+".golden")

@@ -426,7 +426,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 	if v.code("accent", true) == "" {
 		button = "[" + strings.TrimSpace(label) + "]"
 	}
-	hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(label), kind: hitKey, id: "⏎"})
+	hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(label), kind: hitAction, id: "marshal.chat"})
 	add(pad + button)
 	how := "Enter or F11: type it in the Marshal chat  ·  s: say it from here"
 	for _, line := range wrapWords(how, w-len(pad)-1) {

@@ -95,6 +95,7 @@ func TestVerifyViewGoldens(t *testing.T) {
 	}{{"split-120x40", 120, 40}, {"split-80x24", 80, 24}} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}, memory: true, providers: true, verify: true, verView: true}
+			v.hints = goldenHints(v)
 			frame := paintVerify(layout.Compute(tc.w, tc.h, layout.Split), th, v, demoVerifyPaint(now))
 			got := strings.Join(frame, "\n") + "\n"
 			path := filepath.Join("testdata", "board", "verify-"+tc.name+".golden")

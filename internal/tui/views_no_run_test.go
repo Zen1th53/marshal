@@ -66,24 +66,30 @@ func TestViewsLoadFailureIsPlain(t *testing.T) {
 
 // TestViewFooterWithoutRunOffersOnlyWorkingKeys: in the no-run Verify,
 // Security and Plan views the footer offers only keys that act, led by
-// "s tell the Marshal", and drops the per-view keys that have nothing to
+// "esc board" and "s say", and drops the per-view keys that have nothing to
 // act on.
 func TestViewFooterWithoutRunOffersOnlyWorkingKeys(t *testing.T) {
 	th := NewTheme(ThemeNoColor, true, true)
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
 	cases := []struct {
 		name   string
 		v      boardVisual
+		open   func(bool)
 		absent string
 	}{
-		{"verify", boardVisual{theme: th, verView: true, viewNoRun: true}, "return unsupported"},
-		{"security", boardVisual{theme: th, secView: true, viewNoRun: true}, "allow for run"},
-		{"plan", boardVisual{theme: th, planView: true, viewNoRun: true}, "inspect"},
+		{"verify", boardVisual{theme: th, verView: true, viewNoRun: true}, w.verView.Store, "return unsupported"},
+		{"security", boardVisual{theme: th, secView: true, viewNoRun: true}, w.secView.Store, "allow for run"},
+		{"plan", boardVisual{theme: th, planView: true, viewNoRun: true}, w.planView.Store, "inspect"},
 	}
 	for _, c := range cases {
+		c.open(true)
+		c.v.hints = w.boardHints(c.v)
+		c.open(false)
 		line, _ := c.v.footerSpans(160)
 		got := StripANSI(line)
-		if !strings.Contains(got, "tell the Marshal") {
-			t.Errorf("%s: footer lacks 'tell the Marshal': %q", c.name, got)
+		if !strings.HasPrefix(got, " esc board  s say") {
+			t.Errorf("%s: footer does not lead with esc board, s say: %q", c.name, got)
 		}
 		if strings.Contains(got, c.absent) {
 			t.Errorf("%s: footer still offers %q: %q", c.name, c.absent, got)

@@ -121,6 +121,7 @@ func TestPlanViewGoldens(t *testing.T) {
 			v := boardViewVisual(now, th)
 			v.planView = true
 			l := layout.Compute(tc.w, tc.h, layout.Split)
+			v.hints = goldenHints(v)
 			frame := paintBodyView(l, th, v, planPane, func(w, h int) []string { return v.planRender(demoPlanPaint(now), w, h) })
 			checkViewGolden(t, "plan", tc.name, frame, tc.w)
 			plain := StripANSI(strings.Join(frame, "\n"))

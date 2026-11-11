@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,13 @@ func TestFirstUseBoardGolden(t *testing.T) {
 			th := NewTheme(ThemeNoColor, tc.unicode, false)
 			v := firstUseVisual(th, now)
 			v.docked = tc.docked
+			// What boardHints gives this card (rule 4 and the tail), fixed
+			// here so the golden does not read the host's PATH;
+			// TestBoardHintsFollowState checks the live list.
+			v.hints = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick", "palette", "help"}
+			if tc.docked {
+				v.hints = slices.Insert(v.hints, 5, "marshal.chat")
+			}
 			var hits []boardHit
 			v.hits = &hits
 			l := layout.ComputeFor(tc.cols, tc.rows, tc.mode, v.layoutCounts())
@@ -69,11 +77,11 @@ func TestFirstUseBoardGolden(t *testing.T) {
 			if !tc.unicode && strings.ContainsFunc(text, func(r rune) bool { return r > 127 }) {
 				t.Fatalf("ASCII theme drew a non-ASCII cell:\n%s", text)
 			}
-			// The call to action is a button for m, and the unverified
-			// provider is a button that arms its verify.
+			// The call to action is a button for the chat, and the
+			// unverified provider is a button that arms its verify.
 			var cta, verify bool
 			for _, h := range hits {
-				cta = cta || h.kind == hitKey && h.id == "⏎" && strings.Contains(StripANSI(frame[h.row]), "Tell the Marshal")
+				cta = cta || h.kind == hitAction && h.id == "marshal.chat" && strings.Contains(StripANSI(frame[h.row]), "Tell the Marshal")
 				verify = verify || h.kind == hitVerify && h.id == "claude"
 				if h.row < 0 || h.row >= tc.rows {
 					t.Fatalf("click region off the frame: %+v", h)
@@ -210,25 +218,35 @@ func TestFirstUseVerifyKeysAndClick(t *testing.T) {
 	}
 }
 
-// The footer of the first-use Board leads with talking to the Marshal and
+// The footer of the first-use Board leads with saying what to build and
 // shows the switch key when the chat is docked.
 func TestFirstUseFooterShowsSwitchHint(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
 	th := NewTheme(ThemeNoColor, true, false)
 	v := firstUseVisual(th, time.Now())
 	v.docked = true
+	v.hints = w.boardHints(v)
 	footer := StripANSI(v.footer(120))
-	for _, want := range []string{"⏎ tell the marshal", "F11 chat", "v verify"} {
+	if !strings.HasPrefix(footer, " s say what to build") {
+		t.Fatalf("footer %q does not lead with s say what to build", footer)
+	}
+	for _, want := range []string{"⏎ chat", "m Marshal", "F11 chat"} {
 		if !strings.Contains(footer, want) {
 			t.Fatalf("footer %q lacks %q", footer, want)
 		}
 	}
 	// A run's Board names the switch key too while docked.
+	rw := runHintWorkspace(t, "T-017")
+	defer rw.Close()
 	run := boardVisual{theme: th, now: time.Now(), docked: true}
+	run.hints = rw.boardHints(run)
 	if f := StripANSI(run.footer(160)); !strings.Contains(f, "F11 chat") {
 		t.Fatalf("run footer %q", f)
 	}
-	if ev, ok := footerKeyEvent("F11"); !ok || ev.Type != KeyF11 {
-		t.Fatal("a click on F11 is not F11")
+	// A click on F11 chat takes F11's own path.
+	if k, ok := boardAction("marshal.chat"); !ok || k.Run == nil {
+		t.Fatal("F11 chat is no button for F11")
 	}
 }
 

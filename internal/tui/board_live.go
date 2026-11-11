@@ -501,6 +501,8 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 			v.status = v.fg("failed", v.status)
 		}
 	}
+	// The hint bar follows the state this paint shows (board_hints.go).
+	v.hints = w.boardHints(v)
 	v.tails = w.laneTailFor
 	v.tailWant = w.laneTailWant()
 	pickerOpen := w.pickerOpen()
@@ -582,11 +584,13 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		lines = overlayBoard(lines, l, th, 0, popup)
 	}
 	if len(popup) > 0 || (ui.inspect != "" && !docked) {
-		// Something covers the body: only the header and the inspector's
-		// own buttons stay clickable; a popup covers those too. The Marshal
-		// picker overlay keeps its own rows clickable.
+		// Something covers the body: only the header, the hint bar and the
+		// inspector's own buttons stay clickable; a popup covers those too.
+		// The Marshal picker overlay keeps its own rows clickable, and the
+		// hint bar's row is never covered.
+		footer, _ := l.Pane(layout.Footer)
 		hits = slices.DeleteFunc(hits, func(h boardHit) bool {
-			if marshalPickerPopup && h.kind == hitPicker {
+			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && h.row == footer.Rect.Y {
 				return false
 			}
 			return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0)
