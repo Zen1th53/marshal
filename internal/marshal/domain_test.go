@@ -223,3 +223,24 @@ func TestRunTaskControl(t *testing.T) {
 		}
 	}
 }
+
+// A per-task control the runtime does not know is never read as free.
+func TestTaskControlUnknownFailsClosed(t *testing.T) {
+	run := Run{Settings: Settings{Control: ControlFree}}
+	if got := run.TaskControl(Task{Control: "streect"}); got != ControlStrict {
+		t.Fatalf("unknown task control read as %q", got)
+	}
+	if got := run.TaskControl(Task{}); got != ControlFree {
+		t.Fatalf("empty task control read as %q", got)
+	}
+	for _, c := range []Control{"", ControlFree, ControlStrict} {
+		if !c.ValidTaskControl() {
+			t.Fatalf("%q refused", c)
+		}
+	}
+	for _, c := range []Control{"streect", "Strict", " free"} {
+		if c.ValidTaskControl() {
+			t.Fatalf("%q accepted", c)
+		}
+	}
+}

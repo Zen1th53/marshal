@@ -197,3 +197,60 @@ func TestMarshalNativeLaunchConfiguresMarshalMCPOnce(t *testing.T) {
 		})
 	}
 }
+
+// A Marshal launch that resumes a saved chat in the tmux dock, directly or
+// after the native chat falls back to it, carries no opening cue: the saved
+// conversation already has its history and must not get a fresh turn.
+func TestMarshalNativeLaunchResumedChatHasNoCue(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		native   bool
+	}{{"codex", false}, {"codex", true}, {"claude", false}} {
+		t.Run(tc.provider+map[bool]string{false: "/tmux", true: "/native-fallback"}[tc.native], func(t *testing.T) {
+			w := recoveryChatWorkspace(t)
+			bin := t.TempDir()
+			for _, name := range []string{"codex", "claude"} {
+				if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\necho '0.159.2'\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+			root := w.providerRoot()
+			if tc.native {
+				if err := saveChatView(root, "native"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			setLaunchActiveRun(root, true) // a fresh opening here is Continue.
+			t.Cleanup(func() { setLaunchActiveRun(root, false) })
+			if err := saveChatBinding(root, chatBinding{Provider: tc.provider, SessionID: "saved-conversation"}); err != nil {
+				t.Fatal(err)
+			}
+			protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.runNativeAgent(t.Context(), tc.provider, nil, protocol); err != nil {
+				t.Fatal(err)
+			}
+			w.tmuxMu.Lock()
+			a := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])
+			w.tmuxMu.Unlock()
+			if a == nil || len(a.args) == 0 {
+				t.Fatal("no Marshal launch")
+			}
+			if !strings.HasPrefix(strings.Join(a.args, "\x00"), strings.Join(marshalResumeArgs(tc.provider, "saved-conversation"), "\x00")) {
+				t.Fatalf("saved chat not resumed: %q", a.args)
+			}
+			for _, arg := range a.args {
+				if arg == marshalKickoff || arg == marshalKickoffContinue {
+					t.Fatalf("resumed chat carried a cue %q: %q", arg, a.args)
+				}
+			}
+			if last := a.args[len(a.args)-1]; last == "--" {
+				t.Fatalf("resumed chat ends with a dangling separator: %q", a.args)
+			}
+		})
+	}
+}

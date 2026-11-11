@@ -115,6 +115,20 @@ func trailingMarshalCue(provider string, args []string) []string {
 	return nil
 }
 
+// dropMarshalCue is args without the opening cue this launch appended, and
+// without the separator that was inserted only to keep that cue positional.
+func dropMarshalCue(provider string, args []string) []string {
+	k := trailingMarshalCue(provider, args)
+	if k == nil {
+		return args
+	}
+	args = slices.Clone(args[:len(args)-len(k)])
+	if n := len(args); n > 0 && args[n-1] == "--" {
+		args = args[:n-1]
+	}
+	return args
+}
+
 // marshalStartError is a Marshal launch that did not happen. Its text is for
 // people; the cause is logged.
 type marshalStartError struct {
