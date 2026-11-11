@@ -38,7 +38,22 @@ type ArchitectureReviewHooks struct {
 	BeforeAccept  func(context.Context, json.RawMessage) error
 	AcceptBlocked func() string
 	Accepted      func(json.RawMessage)
+	// fromContract, set only by StartArchitectureReviewFromContract, opens
+	// the review on the pending project contract itself: no model turn.
+	fromContract *contractReviewSeed
 }
+
+// contractReviewSeed is a browser review built from a pending project
+// contract: the architecture graph, its display overlay and the contract it
+// stands for (architecture.source_contract).
+type contractReviewSeed struct {
+	Architecture, UI json.RawMessage
+	Source           contractReviewSource
+}
+
+// contractRequestsClosed answers requests on a review built from a pending
+// project contract: no Marshal model turn may run before it is accepted.
+var contractRequestsClosed = errors.New("The Marshal can answer requests here once you accept this project summary. To change it now, tell the Marshal in the chat; it will send a new summary.")
 
 type ArchitectureReviewOwnedError struct{ URL string }
 
@@ -116,6 +131,12 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	var architecture json.RawMessage
 	reuseUI := false
 	file := filepath.Join(directory, "state.json")
+	seed := hooks.fromContract
+	if seed != nil {
+		if err := replaceSupersededContractReview(directory, seed); err != nil {
+			return nil, err
+		}
+	}
 	info, err := os.Lstat(file)
 	if err == nil {
 		if goal != "" {
@@ -147,6 +168,13 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
+	} else if seed != nil {
+		config.Proposal = seed.Architecture
+		config.Layouts, err = architecturereview.GenericLayouts(config.Proposal)
+		if err != nil {
+			return nil, err
+		}
+		architecture = config.Proposal
 	} else {
 		if goal == "" {
 			goal = "Derive the current imported project's architecture from its observed purpose, tracked code and interfaces. Cite evidence for every existing component and connection. Identify unknown facts explicitly; do not guess topology or implementation. Prepare the browser draft for the owner to review."
@@ -163,7 +191,9 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		}
 		architecture = config.Proposal
 	}
-	if !reuseUI {
+	if !reuseUI && seed != nil {
+		config.UI = seed.UI
+	} else if !reuseUI {
 		modelCtx, cancel := context.WithTimeout(ctx, 600*time.Second)
 		config.UI, err = cli.GenerateArchitectureUI(modelCtx, language, architecture)
 		cancel()
@@ -229,6 +259,10 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		turnCtx, turnCancel := context.WithTimeout(serverCtx, 600*time.Second)
 		defer turnCancel()
 		return cli.GenerateArchitectureUI(turnCtx, language, architecture)
+	}
+	if seed != nil {
+		config.Feedback = func(context.Context, json.RawMessage) (json.RawMessage, error) { return nil, contractRequestsClosed }
+		config.Localize = func(context.Context, string, json.RawMessage) (json.RawMessage, error) { return nil, contractRequestsClosed }
 	}
 	review, err := architecturereview.New(config)
 	if err != nil {
