@@ -47,6 +47,11 @@ func (w *Workspace) startUsage(ctx context.Context) {
 		for {
 			if w.boardVisible() {
 				w.storeUsage(read(time.Now()))
+				// The chat's title carries its provider's limit; a reading, or
+				// a reset countdown that moved, reaches it within one read.
+				if w.dock.docked.Load() {
+					w.kickDock()
+				}
 			}
 			select {
 			case <-ctx.Done():
