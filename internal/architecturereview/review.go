@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/architecturecodec"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,15 @@ type Config struct {
 	Localize                          func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 	Feedback                          func(context.Context, json.RawMessage) (json.RawMessage, error)
 	OnApprove                         func(json.RawMessage) error
+	Builders                          func(context.Context) []BuilderOption
+}
+
+// BuilderOption is one provider the owner may pick for a part, as the
+// browser shows it. Limit and Reason are plain English.
+type BuilderOption struct {
+	ID, Glyph     string
+	Available     bool
+	Limit, Reason string
 }
 
 type Review struct {
@@ -35,6 +45,8 @@ type Review struct {
 	layoutDigest string
 	writeFile    func(string, any) error
 	work         sync.WaitGroup
+	optionsAt    time.Time
+	options      []BuilderOption
 }
 
 // Wait blocks until every background feedback worker has finished and written
@@ -78,7 +90,7 @@ func New(config Config) (*Review, error) {
 		if err = validateArchitecture(architecture); err != nil {
 			return nil, err
 		}
-		r.state = map[string]any{"protocol_version": Version, "project": config.Project, "architecture_id": config.ArchitectureID, "revision": json.Number("1"), "architecture": architecture, "comments": []any{}, "approved": false}
+		r.state = map[string]any{"protocol_version": Version, "project": config.Project, "architecture_id": config.ArchitectureID, "revision": json.Number("1"), "architecture": architecture, "comments": []any{}, "approved": false, "builders": map[string]any{}}
 	}
 	architecture, ok := r.state["architecture"].(map[string]any)
 	if !ok {
@@ -89,6 +101,17 @@ func New(config Config) (*Review, error) {
 	}
 	if revision, ok := integer(r.state["revision"]); !ok || revision < 1 {
 		return nil, errors.New("stored architecture revision is invalid")
+	}
+	if _, exists := r.state["builders"]; !exists {
+		r.state["builders"] = map[string]any{}
+	} else {
+		builders, ok := r.state["builders"].(map[string]any)
+		if !ok {
+			return nil, errors.New("stored architecture builders are invalid")
+		}
+		if err = architecturecodec.ValidateBuilders(builders, architecture); err != nil {
+			return nil, err
+		}
 	}
 	var storedLayouts json.RawMessage
 	if len(config.Layouts) == 0 {
@@ -230,11 +253,84 @@ func (r *Review) commit(next map[string]any) error {
 	}
 	next["digest"] = digest
 	next["layout_digest"] = r.layoutDigest
+	buildersDigest, err := architecturecodec.BuildersDigest(next["builders"].(map[string]any))
+	if err != nil {
+		return err
+	}
+	next["builders_digest"] = buildersDigest
 	if err = r.writeFile(filepath.Join(r.config.StateDir, "state.json"), next); err != nil {
 		return err
 	}
 	r.state = next
 	return nil
+}
+
+// builderOptions returns the providers the owner may pick for a part, or nil
+// when this build has no per-part builder. The callback result is cached for
+// 10 seconds. Callers hold r.mu; the callback must not take r.mu.
+func (r *Review) builderOptions(ctx context.Context) []BuilderOption {
+	if r.config.Builders == nil {
+		return nil
+	}
+	now := time.Now()
+	if r.options != nil && now.Sub(r.optionsAt) < 10*time.Second {
+		return r.options
+	}
+	r.options = r.config.Builders(ctx)
+	r.optionsAt = now
+	return r.options
+}
+
+// setBuilder records the owner's builder for one component. The caller holds
+// r.mu. Choosing a builder never changes the architecture, its digest or its
+// revision, and is refused once the architecture is accepted.
+func (r *Review) setBuilder(ctx context.Context, next, q map[string]any) (json.RawMessage, error) {
+	options := r.builderOptions(ctx)
+	if options == nil {
+		return nil, errors.New("Choosing a builder is not available in this edition.")
+	}
+	if next["approved"] == true {
+		return nil, errors.New("The architecture is accepted; builders are fixed for this run.")
+	}
+	componentID, _ := q["component_id"].(string)
+	architecture := next["architecture"].(map[string]any)
+	known := false
+	for _, value := range architecture["components"].([]any) {
+		if value.(map[string]any)["id"] == componentID {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return nil, errors.New("That part is no longer in the architecture. Select it again.")
+	}
+	builder, _ := q["builder"].(string)
+	builders := next["builders"].(map[string]any)
+	if builder == "auto" {
+		delete(builders, componentID)
+		if err := r.commit(next); err != nil {
+			return nil, err
+		}
+		return r.publicState()
+	}
+	var chosen *BuilderOption
+	for i := range options {
+		if options[i].ID == builder {
+			chosen = &options[i]
+			break
+		}
+	}
+	if chosen == nil {
+		return nil, errors.New("Unknown builder.")
+	}
+	if !chosen.Available {
+		return nil, errors.New(builder + " is unavailable: " + chosen.Reason)
+	}
+	builders[componentID] = builder
+	if err := r.commit(next); err != nil {
+		return nil, err
+	}
+	return r.publicState()
 }
 
 func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
@@ -247,7 +343,7 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if q["protocol_version"] != Version || !onlyKeys(q, "protocol_version", "action", "revision", "digest", "ui_digest", "language", "target", "request_type", "comment", "followup_to", "request_id", "reason") {
+	if q["protocol_version"] != Version || !onlyKeys(q, "protocol_version", "action", "revision", "digest", "ui_digest", "language", "target", "request_type", "comment", "followup_to", "request_id", "reason", "component_id", "builder", "builders_digest", "design_digest") {
 		return nil, errors.New("review protocol or request fields are invalid")
 	}
 	revision, valid := integer(q["revision"])
@@ -268,14 +364,20 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 	if err != nil {
 		return nil, err
 	}
+	if action == "builder" {
+		return r.setBuilder(ctx, next, q)
+	}
 	if action == "approve" {
+		if q["builders_digest"] != next["builders_digest"] {
+			return nil, errors.New("Builders changed. Check them and press Accept again.")
+		}
 		for _, value := range next["comments"].([]any) {
 			if value.(map[string]any)["resolved"] != true {
 				return nil, errors.New("unresolved feedback prevents approval")
 			}
 		}
 		next["approved"] = true
-		next["approval"] = map[string]any{"source": "browser_operator", "revision": next["revision"], "digest": next["digest"], "architecture_id": next["architecture_id"], "view_version": "kiss-v1", "layout_digest": r.layoutDigest, "language": next["language"], "ui_digest": next["ui_digest"]}
+		next["approval"] = map[string]any{"source": "browser_operator", "revision": next["revision"], "digest": next["digest"], "architecture_id": next["architecture_id"], "view_version": "kiss-v1", "layout_digest": r.layoutDigest, "language": next["language"], "ui_digest": next["ui_digest"], "builders_digest": next["builders_digest"]}
 		if r.config.OnApprove != nil {
 			accepted, _ := canonicalJSON(next)
 			if err = r.config.OnApprove(accepted); err != nil {

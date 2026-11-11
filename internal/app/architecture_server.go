@@ -99,6 +99,7 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		return nil, err
 	}
 	config := architecturereview.Config{Project: r.ProjectIdentity(), ArchitectureID: "architecture-" + r.ProjectIdentity(), StateDir: directory}
+	config.Builders = r.architectureBuilders()
 	language, err := r.ApprovedMarshalLanguage()
 	if err != nil {
 		return nil, err

@@ -51,7 +51,7 @@ func requestFixture(t *testing.T, r *Review, action string) map[string]any {
 		diagram = id
 		break
 	}
-	return map[string]any{"protocol_version": Version, "action": action, "revision": state["revision"], "digest": state["digest"], "ui_digest": state["ui_digest"], "language": state["language"], "target": map[string]any{"kind": "component", "id": "capture", "diagram_id": diagram, "layout_version": layouts[diagram].(map[string]any)["version"]}, "request_type": "comment", "comment": "Explain this capture component"}
+	return map[string]any{"protocol_version": Version, "action": action, "revision": state["revision"], "digest": state["digest"], "ui_digest": state["ui_digest"], "language": state["language"], "builders_digest": state["builders_digest"], "target": map[string]any{"kind": "component", "id": "capture", "diagram_id": diagram, "layout_version": layouts[diagram].(map[string]any)["version"]}, "request_type": "comment", "comment": "Explain this capture component"}
 }
 
 func applyFixture(t *testing.T, r *Review, request map[string]any) error {

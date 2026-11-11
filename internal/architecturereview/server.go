@@ -47,8 +47,33 @@ func (r *Review) Handler(token string) http.Handler {
 			_, _ = io.WriteString(w, page)
 			return
 		}
-		if q.URL.Path != "/api/review" || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
+		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
 			reply(http.StatusForbidden, map[string]any{"error": "Review access denied"})
+			return
+		}
+		if q.URL.Path == "/api/builders" {
+			if q.Method != http.MethodGet {
+				reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported review method"})
+				return
+			}
+			r.mu.Lock()
+			options := r.builderOptions(q.Context())
+			r.mu.Unlock()
+			list := []any{}
+			if options != nil {
+				list = append(list, map[string]any{"id": "auto", "glyph": "", "available": true})
+				for _, option := range options {
+					entry := map[string]any{"id": option.ID, "glyph": option.Glyph, "available": option.Available}
+					if option.Limit != "" {
+						entry["limit"] = option.Limit
+					}
+					if option.Reason != "" {
+						entry["reason"] = option.Reason
+					}
+					list = append(list, entry)
+				}
+			}
+			reply(http.StatusOK, map[string]any{"supported": options != nil, "options": list})
 			return
 		}
 		if q.Method == http.MethodGet {

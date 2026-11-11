@@ -3,7 +3,10 @@ package architecturereview
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/architecturecodec"
 )
 
 func localizedFixture(t *testing.T, language string, architecture json.RawMessage) json.RawMessage {
@@ -31,6 +34,78 @@ func localizedFixture(t *testing.T, language string, architecture json.RawMessag
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestUIStringTablesMatchAcrossPackages(t *testing.T) {
+	if !reflect.DeepEqual(EnglishUIStrings(), architecturecodec.EnglishUIStrings()) {
+		t.Fatal("architecturereview and architecturecodec UI string tables differ")
+	}
+}
+
+func TestTranslationMustKeepPlaceholders(t *testing.T) {
+	ui, err := decodeObject(localizedFixture(t, "Owner approved test language", proposalFixture()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range ui["strings"].([]any) {
+		entry := value.(map[string]any)
+		if entry["key"] == "accept_summary" {
+			entry["text"] = "a plain translation with no tokens"
+		}
+	}
+	raw, err := canonicalJSON(ui)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateUI(raw, "Owner approved test language", proposalFixture()); err == nil || !contains(err.Error(), "must keep its placeholders") {
+		t.Fatalf("dropped placeholder accepted: %v", err)
+	}
+}
+
+func contains(haystack, needle string) bool {
+	return len(haystack) >= len(needle) && (haystack == needle || indexOf(haystack, needle) >= 0)
+}
+func indexOf(haystack, needle string) int {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return i
+		}
+	}
+	return -1
+}
+
+func legacyNormalizedUI(a map[string]any, keys []string) map[string]any {
+	texts := map[string]any{}
+	english := EnglishUIStrings()
+	for _, key := range keys {
+		texts[key] = english[key]
+	}
+	components, connections := map[string]any{}, map[string]any{}
+	for _, value := range a["components"].([]any) {
+		c := value.(map[string]any)
+		components[c["id"].(string)] = map[string]any{"name": c["name"], "responsibility": c["responsibility"]}
+	}
+	for _, value := range a["connections"].([]any) {
+		e := value.(map[string]any)
+		connections[e["id"].(string)] = map[string]any{"label": e["label"], "caption": e["label"]}
+	}
+	return map[string]any{"language": "English", "strings": texts, "components": components, "connections": connections}
+}
+
+func TestLegacyTranslationStaysValid(t *testing.T) {
+	a, err := decodeObject(proposalFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateNormalizedUI(legacyNormalizedUI(a, legacyUIStringKeys), "English", a); err != nil {
+		t.Fatalf("legacy 34-key translation rejected: %v", err)
+	}
+	if err := validateNormalizedUI(legacyNormalizedUI(a, uiStringKeys()), "English", a); err != nil {
+		t.Fatalf("current full translation rejected: %v", err)
+	}
+	if err := validateNormalizedUI(legacyNormalizedUI(a, legacyUIStringKeys[:10]), "English", a); err == nil {
+		t.Fatal("a translation covering neither key set was accepted")
+	}
 }
 
 func TestReviewDefaultsToEnglishAndSendsExactVisibleLanguage(t *testing.T) {
