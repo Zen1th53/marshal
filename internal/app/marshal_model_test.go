@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -291,6 +292,118 @@ func TestDraftFromProposalAcceptsComponents(t *testing.T) {
 	}
 	if len(draft.Tasks) != 1 || len(draft.Tasks[0].Components) != 1 || draft.Tasks[0].Components[0] != "capture" {
 		t.Fatalf("components not materialized: %+v", draft.Tasks)
+	}
+}
+
+func TestDraftSchemaRequiresControl(t *testing.T) {
+	var schema struct {
+		Properties struct {
+			Tasks struct {
+				Items struct {
+					Properties map[string]struct {
+						Type string   `json:"type"`
+						Enum []string `json:"enum"`
+					} `json:"properties"`
+					Required []string `json:"required"`
+				} `json:"items"`
+			} `json:"tasks"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(marshalDraftSchema), &schema); err != nil {
+		t.Fatal(err)
+	}
+	control, ok := schema.Properties.Tasks.Items.Properties["control"]
+	if !ok {
+		t.Fatal("task schema lacks control property")
+	}
+	if control.Type != "string" || !slices.Equal(control.Enum, []string{"strict", "free"}) {
+		t.Fatalf("control schema: %+v", control)
+	}
+	if !slices.Contains(schema.Properties.Tasks.Items.Required, "control") {
+		t.Fatal("task schema does not require control")
+	}
+}
+
+// A strict task drafted through the schema reaches the run as strict, and a
+// free task in a free run stays free.
+func TestDraftedStrictControlReachesRunTaskControl(t *testing.T) {
+	proposal := `{"tasks":[` +
+		`{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"components":[],"worker":"codex","mode":"governed","type":"change","checks":[{"command":"true","criteria":["c"]}],"instructions":"do a exactly","expected_output":"a.txt","control":"strict"},` +
+		`{"id":"b","title":"t","criteria":["c"],"paths":["b.txt"],"depends_on":[],"components":[],"worker":"codex","mode":"governed","type":"change","checks":[{"command":"true","criteria":["c"]}],"instructions":"do b","expected_output":"b.txt","control":"free"}]}`
+	// The reply conforms to the draft schema: every task property is known,
+	// every required property is present and control is in its enum.
+	var schema struct {
+		Properties struct {
+			Tasks struct {
+				Items struct {
+					Properties map[string]struct {
+						Enum []string `json:"enum"`
+					} `json:"properties"`
+					Required []string `json:"required"`
+				} `json:"items"`
+			} `json:"tasks"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(marshalDraftSchema), &schema); err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Tasks []map[string]any `json:"tasks"`
+	}
+	if err := json.Unmarshal([]byte(proposal), &raw); err != nil {
+		t.Fatal(err)
+	}
+	items := schema.Properties.Tasks.Items
+	for _, task := range raw.Tasks {
+		for key := range task {
+			if _, ok := items.Properties[key]; !ok {
+				t.Fatalf("reply has property %q the schema forbids", key)
+			}
+		}
+		for _, key := range items.Required {
+			if _, ok := task[key]; !ok {
+				t.Fatalf("reply misses required property %q", key)
+			}
+		}
+		if !slices.Contains(items.Properties["control"].Enum, task["control"].(string)) {
+			t.Fatalf("control %v outside the schema enum", task["control"])
+		}
+	}
+
+	root := t.TempDir()
+	reply := filepath.Join(root, "reply.json")
+	event, err := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": proposal}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(reply, event, 0600); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	if err = os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\ncat \"$MARSHAL_TEST_REPLY\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MARSHAL_TEST_REPLY", reply)
+	cli := &MarshalCLI{Provider: "codex", Dir: root}
+	var out marshalTaskProposal
+	if err = cli.turn(requiredMarshalTestContext(t, cli), "test", marshalDraftSchema, &out); err != nil {
+		t.Fatal(err)
+	}
+	cli.ProjectID = "PROJECT-0123456789abcdef0123456789abcdef"
+	draft, err := cli.materialize(out, "", 1, []string{"codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(draft.Tasks) != 2 || draft.Plan.Tasks[0].Control != "strict" {
+		t.Fatalf("drafted control not carried: %+v", draft.Plan.Tasks)
+	}
+	run := marshal.Run{Settings: marshal.Settings{Control: marshal.ControlFree}, Tasks: draft.Tasks}
+	if got := run.TaskControl(run.Tasks[0]); got != marshal.ControlStrict {
+		t.Fatalf("strict drafted task reads %q in a free run", got)
+	}
+	if got := run.TaskControl(run.Tasks[1]); got != marshal.ControlFree {
+		t.Fatalf("free drafted task reads %q in a free run", got)
 	}
 }
 
