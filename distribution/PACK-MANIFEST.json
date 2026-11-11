@@ -4966,8 +4966,8 @@
     },
     {
       "path": "internal/cli/tui_cli_test.go",
-      "sha256": "a59425eebf26fefc17cd9bae4a53b0c341661dbe11803bbdfb6c6e630069505b",
-      "bytes": 5817
+      "sha256": "c47df0bc70717e227119b6807ad3f73aebeaab6dee6e7551c06ddbcdbff20580",
+      "bytes": 5833
     },
     {
       "path": "internal/cli/tui_relaunch_test.go",
@@ -6751,8 +6751,8 @@
     },
     {
       "path": "internal/integration/v15_release_e2e_test.go",
-      "sha256": "6fffaf1b31e4a5ed0b1e6c1f3a1efe3d6b0c83ffe4ed140f1602b5f53b1cf917",
-      "bytes": 17207
+      "sha256": "0e79443c373d1e9976a81af82357050a40d78ee7694dcd0280886d8e4b95f5d0",
+      "bytes": 17208
     },
     {
       "path": "internal/interpretation/collector.go",
