@@ -318,8 +318,17 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 		}
 		before := len(s.output())
 		s.send(key.raw)
-		s.mustSee(key.want)
-		if len(s.output()) == before || !strings.Contains(s.screenText(50, 140), key.want) {
+		// The transcript retains earlier screens, so mustSee alone can match
+		// text from /help all or a previous key. Wait for this key to repaint
+		// the active screen as well as producing fresh terminal output.
+		deadline := time.Now().Add(ptyWait(8 * time.Second))
+		for time.Now().Before(deadline) {
+			if len(s.output()) > before && strings.Contains(s.screenText(50, 140), key.want) {
+				break
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+		if len(s.output()) <= before || !strings.Contains(s.screenText(50, 140), key.want) {
 			t.Fatalf("key %q produced no new %q output", key.raw, key.want)
 		}
 		if key.raw == "\x1bOR" {

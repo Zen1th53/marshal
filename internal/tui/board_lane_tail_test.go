@@ -234,7 +234,7 @@ func TestLaneTailStopsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	w.startLaneTail(ctx)
 	deadline := time.Now().Add(5 * time.Second)
-	for f.total() < 2 {
+	for f.total() < 2 || !slices.Equal(w.laneTailFor("%3"), []string{"tick"}) {
 		if time.Now().After(deadline) {
 			t.Fatal("sampler never ran")
 		}

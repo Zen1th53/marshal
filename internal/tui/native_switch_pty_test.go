@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestPTYSwitchBetweenProviders drives the real switch: open one agent, leave it,
@@ -80,7 +81,9 @@ cp "$MARSHAL_TEST_CODEX_HISTORY" "$CODEX_HOME/sessions/rollout.jsonl"
 
 	// F8 opens Claude.
 	s.send("\x1b[19~")
-	s.mustSee("CLAUDE-READY")
+	if !s.waitForCount("CLAUDE-READY", 1, 8*time.Second) {
+		t.Fatalf("Claude did not become ready on first launch:\n%s", tail(s.output(), 3000))
+	}
 	s.sendLine("first")
 	s.mustSee("CLAUDE-INPUT:<first>")
 	s.mustSee("Claude exited.")
@@ -96,7 +99,9 @@ cp "$MARSHAL_TEST_CODEX_HISTORY" "$CODEX_HOME/sessions/rollout.jsonl"
 
 	// And back again, with Codex's work now in Claude's briefing.
 	s.send("\x1b[19~")
-	s.mustSee("CLAUDE-READY")
+	if !s.waitForCount("CLAUDE-READY", 2, 8*time.Second) {
+		t.Fatalf("Claude did not become ready on second launch:\n%s", tail(s.output(), 3000))
+	}
 	s.sendLine("third")
 	s.mustSee("CLAUDE-INPUT:<third>")
 	s.mustSee("Claude exited.")
@@ -112,7 +117,17 @@ cp "$MARSHAL_TEST_CODEX_HISTORY" "$CODEX_HOME/sessions/rollout.jsonl"
 	}
 
 	// The slash commands are the other route to the same switch.
-	s.sendLine("/codex cli --marshal-switch-test")
+	command := "/codex cli --marshal-switch-test"
+	s.send(command)
+	deadline := time.Now().Add(ptyWait(8 * time.Second))
+	draft := func() string { return strings.TrimSpace(strings.TrimPrefix(s.composerLine(40, 160), "❯")) }
+	for time.Now().Before(deadline) && draft() != command {
+		time.Sleep(25 * time.Millisecond)
+	}
+	if got := draft(); got != command {
+		t.Fatalf("slash command draft = %q, want %q", got, command)
+	}
+	s.send("\r")
 	s.mustSee("CODEX-ARG:<--marshal-switch-test>")
 	s.sendLine("fourth")
 	s.mustSee("CODEX-INPUT:<fourth>")
