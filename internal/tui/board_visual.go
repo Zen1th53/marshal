@@ -108,6 +108,9 @@ type boardVisual struct {
 	// quotaArmed is set while the all-providers-at-limit card's auto-resume
 	// is armed (board_quota.go).
 	quotaArmed bool
+	// pick is the launch Marshal picker's candidates and selection, painted
+	// in the body when the picker is open (board_picker.go).
+	pick pickerView
 	// docked is set while the Marshal chat is docked beside the Board.
 	docked bool
 	// echo is what the operator said to the Marshal from the composer,

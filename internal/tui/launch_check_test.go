@@ -122,6 +122,9 @@ func TestLaunchRetryStartsChatOnce(t *testing.T) {
 	launchDoctor = func(context.Context, string, doctor.Options) doctor.Report { return report }
 	defer func() { launchDoctor = orig }()
 
+	// One CLI installed: the launch picker has a single candidate and stays
+	// closed, so the retry releases the chat start directly.
+	fakeProviderCLIs(t, "codex")
 	w := &Workspace{workDir: root}
 	count := 0
 	w.afterLaunchCheck(func() { count++ })

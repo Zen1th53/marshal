@@ -237,6 +237,9 @@ func TestFirstUseFooterShowsSwitchHint(t *testing.T) {
 // the Board's first-use card, never the classic screen, and s then typing
 // writes a message to the Marshal, not Board keys.
 func TestPTYFreshProjectOpensOnTheBoard(t *testing.T) {
+	// One coding CLI is installed: the launch picker has a single candidate,
+	// saves it and stays closed, so the first-use card owns the keys.
+	fakeProviderCLIs(t, "codex")
 	bin := buildMarshalBinary(t)
 	project := initProject(t, bin)
 	s := startBoardTUIInProject(t, 40, 140, bin, project, "tui")

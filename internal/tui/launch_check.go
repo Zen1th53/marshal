@@ -102,21 +102,39 @@ func (w *Workspace) runLaunchCheck(ctx context.Context) {
 }
 
 // finishLaunchCheck records the result, moves to the ready or blocked phase,
-// repaints, and runs the pending chat-start callbacks when ready.
+// repaints, and runs the pending chat-start callbacks when ready. When ready it
+// first decides the Marshal picker (protocol v2 step 1): if the picker opens,
+// the callbacks are held until confirmPicker releases them.
 func (w *Workspace) finishLaunchCheck(blockers, warnings []string) {
-	var ready []func()
 	w.launch.mu.Lock()
 	w.launch.blockers = blockers
 	w.launch.warnings = warnings
-	if len(blockers) > 0 {
-		w.launch.phase = launchBlocked
-	} else {
+	ready := len(blockers) == 0
+	if ready {
 		w.launch.phase = launchReady
-		ready = w.launch.pending
-		w.launch.pending = nil
+	} else {
+		w.launch.phase = launchBlocked
 	}
 	w.launch.mu.Unlock()
 	w.requestRepaint()
+	if !ready {
+		return
+	}
+	if w.decideMarshalPicker(context.Background()) {
+		// The picker holds the chat start; confirmPicker releases it.
+		return
+	}
+	w.releaseLaunchPending()
+}
+
+// releaseLaunchPending runs and clears the queued chat-start callbacks. It is
+// called once the start is settled: the check turned ready with no picker, or
+// the picker was answered.
+func (w *Workspace) releaseLaunchPending() {
+	w.launch.mu.Lock()
+	ready := w.launch.pending
+	w.launch.pending = nil
+	w.launch.mu.Unlock()
 	for _, fn := range ready {
 		fn()
 	}
@@ -139,7 +157,7 @@ func (w *Workspace) afterLaunchCheck(fn func()) {
 		return
 	}
 	w.launch.mu.Lock()
-	if w.launch.phase == launchReady {
+	if w.launch.phase == launchReady && !w.pickerOpen() {
 		w.launch.mu.Unlock()
 		fn()
 		return

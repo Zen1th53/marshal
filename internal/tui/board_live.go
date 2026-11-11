@@ -490,6 +490,10 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	v.tails = w.laneTailFor
 	v.tailWant = w.laneTailWant()
+	pickerOpen := w.pickerOpen()
+	if pickerOpen {
+		v.pick = w.pickerPaint()
+	}
 	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
@@ -508,6 +512,10 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		// A problem the Marshal can't fix safely replaces the Board body with
 		// the Blocked screen until a retry clears it.
 		lines = w.paintBlocked(l, th, v)
+	case pickerOpen:
+		// The launch Marshal picker owns the body until it is answered.
+		ui.insp, ui.inspFor = nil, ""
+		lines = w.paintPicker(l, th, v)
 	case v.archView:
 		lines = w.paintArch(l, th, v)
 	case v.planView:
@@ -622,7 +630,14 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	if w.handleGuardKey(event) {
 		return true
 	}
-	// An open ask card takes its keys first: Enter picks the recommended
+	// The launch Marshal picker is modal while it is open: it must be
+	// answered before the chat starts.
+	if w.pickerOpen() {
+		if w.handlePickerKey(event) {
+			return true
+		}
+	}
+	// An open ask card takes its keys next: Enter picks the recommended
 	// choice, each letter picks its own; the card closes when one sends.
 	if w.handleAskKey(event) {
 		return true
