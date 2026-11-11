@@ -299,6 +299,7 @@ func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, 
 		return nil, errors.New("architecture builders digest is stale")
 	}
 	status := "draft"
+	var designDigest any
 	comments, ok := s["comments"].([]any)
 	if !ok {
 		return nil, errors.New("architecture request history is invalid")
@@ -332,9 +333,20 @@ func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, 
 		} else if len(builders) != 0 {
 			return nil, errors.New("architecture acceptance builders are stale")
 		}
+		if raw, present := approval["design_digest"]; present {
+			bound, ok := raw.(string)
+			if !ok || !digestPattern.MatchString(bound) {
+				return nil, errors.New("architecture acceptance design binding is invalid")
+			}
+			designDigest = bound
+		}
 		status = "accepted"
 	}
-	return canonicalJSON(map[string]any{"status": status, "project": project, "architecture_id": s["architecture_id"], "revision": s["revision"], "digest": digest, "layout_digest": s["layout_digest"], "architecture": a, "language": language, "ui_digest": uiDigest, "display": displayFor(ui), "builders": builders})
+	packet := map[string]any{"status": status, "project": project, "architecture_id": s["architecture_id"], "revision": s["revision"], "digest": digest, "layout_digest": s["layout_digest"], "architecture": a, "language": language, "ui_digest": uiDigest, "display": displayFor(ui), "builders": builders}
+	if designDigest != nil {
+		packet["design_digest"] = designDigest
+	}
+	return canonicalJSON(packet)
 }
 
 type ArchitectureTarget struct {

@@ -42,7 +42,7 @@ func TestReviewPageRendersInHeadlessChromium(t *testing.T) {
 		t.Fatalf("chromium dump failed: %v\n%s", err, out)
 	}
 	dom := string(out)
-	for _, want := range []string{`data-id="capture"`, `tabindex="0"`, "✳ claude"} {
+	for _, want := range []string{`data-id="capture"`, `tabindex="0"`, "✳ claude", "rev 1 · first draft"} {
 		if !strings.Contains(dom, want) {
 			t.Errorf("dumped DOM does not contain %q\n%s", want, dom)
 		}

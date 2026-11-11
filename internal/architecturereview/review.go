@@ -31,6 +31,9 @@ type Config struct {
 	// and refuses Accept. OnAccepted runs after an acceptance was saved.
 	AcceptBlocked func() string
 	OnAccepted    func(json.RawMessage)
+	// Design reads the design review of the current goal (nil = none). Its
+	// result is untrusted model-written memory and is normalised strictly.
+	Design func(context.Context) (json.RawMessage, error)
 }
 
 // BuilderOption is one provider the owner may pick for a part, as the
@@ -51,6 +54,10 @@ type Review struct {
 	work         sync.WaitGroup
 	optionsAt    time.Time
 	options      []BuilderOption
+	changes      map[string]any
+	designAt     time.Time
+	designValue  map[string]any
+	designDigest string
 }
 
 // Wait blocks until every background feedback worker has finished and written
@@ -238,6 +245,9 @@ func New(config Config) (*Review, error) {
 	if err = r.commit(r.state); err != nil {
 		return nil, err
 	}
+	// A failure reading the previous snapshot leaves the bar at its first-draft
+	// text; it never prevents the review from opening.
+	r.changes, _ = r.revisionChanges()
 	return r, nil
 }
 
@@ -252,6 +262,9 @@ func (r *Review) publicState() (json.RawMessage, error) {
 		return nil, err
 	}
 	state["layouts"] = r.layouts
+	if r.changes != nil {
+		state["changes"] = r.changes
+	}
 	if r.config.AcceptBlocked != nil {
 		if reason := r.config.AcceptBlocked(); reason != "" {
 			state["accept_blocked"] = reason
@@ -292,6 +305,196 @@ func (r *Review) builderOptions(ctx context.Context) []BuilderOption {
 	r.options = r.config.Builders(ctx)
 	r.optionsAt = now
 	return r.options
+}
+
+// revisionChanges compares the current architecture with the previous
+// revision's snapshot. It returns nil for the first revision or when no
+// snapshot exists. Revisions only ever change existing objects.
+func (r *Review) revisionChanges() (map[string]any, error) {
+	current, _ := integer(r.state["revision"])
+	if current <= 1 {
+		return nil, nil
+	}
+	prev := current - 1
+	data, err := readPrivate(filepath.Join(r.config.StateDir, "revisions", fmt.Sprintf("%d.json", prev)))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	snapshot, err := decodeObject(data)
+	if err != nil {
+		return nil, err
+	}
+	previous, ok := snapshot["architecture"].(map[string]any)
+	if !ok {
+		return nil, errors.New("previous revision architecture is invalid")
+	}
+	architecture := r.state["architecture"].(map[string]any)
+	changes := map[string]any{"since": json.Number(fmt.Sprintf("%d", prev))}
+	for _, collection := range []string{"components", "connections"} {
+		before := map[string]any{}
+		if list, ok := previous[collection].([]any); ok {
+			for _, value := range list {
+				object := value.(map[string]any)
+				before[object["id"].(string)] = object
+			}
+		}
+		ids := []any{}
+		for _, value := range architecture[collection].([]any) {
+			object := value.(map[string]any)
+			id := object["id"].(string)
+			if prior, exists := before[id]; !exists || !equalJSON(prior, object) {
+				ids = append(ids, id)
+			}
+		}
+		changes[collection] = ids
+	}
+	return changes, nil
+}
+
+// design reads and normalises the current goal's design review, cached for 5
+// seconds. The callback result is untrusted memory, so hostile shapes are
+// rejected; a callback error serves {"present":false} because the design is
+// optional and must never block the architecture. Callers hold r.mu; the
+// callback must not take r.mu.
+func (r *Review) design(ctx context.Context) (map[string]any, string, error) {
+	if r.config.Design == nil {
+		return map[string]any{"present": false}, "", nil
+	}
+	now := time.Now()
+	if r.designValue != nil && now.Sub(r.designAt) < 5*time.Second {
+		return r.designValue, r.designDigest, nil
+	}
+	raw, err := r.config.Design(ctx)
+	if err != nil {
+		output := map[string]any{"present": false}
+		r.designValue, r.designDigest, r.designAt = output, "", now
+		return output, "", nil
+	}
+	output, digest, err := normaliseDesign(raw)
+	if err != nil {
+		return nil, "", err
+	}
+	r.designValue, r.designDigest, r.designAt = output, digest, now
+	return output, digest, nil
+}
+
+// normaliseDesign strictly validates model-written design memory into the
+// page's shape. Every text is cut to 20 000 runes; present requires at least
+// one finding. The digest is computed over the output for Accept binding.
+func normaliseDesign(raw json.RawMessage) (map[string]any, string, error) {
+	input, err := decodeObject(raw)
+	if err != nil {
+		return nil, "", err
+	}
+	if !onlyKeys(input, "brief", "findings", "resolutions") {
+		return nil, "", errors.New("design record is invalid")
+	}
+	item := func(object map[string]any, withProvider bool) (map[string]any, error) {
+		allowed := []string{"text"}
+		if withProvider {
+			allowed = append(allowed, "provider")
+		}
+		if !onlyKeys(object, allowed...) {
+			return nil, errors.New("design record is invalid")
+		}
+		out := map[string]any{}
+		if withProvider {
+			provider, ok := designProvider(object["provider"])
+			if !ok {
+				return nil, errors.New("design record is invalid")
+			}
+			out["provider"] = provider
+		}
+		text, ok := object["text"].(string)
+		if !ok {
+			return nil, errors.New("design record is invalid")
+		}
+		cut, shortened := shortenRunes(text, 20000)
+		out["text"] = cut
+		if shortened {
+			out["shortened"] = true
+		}
+		return out, nil
+	}
+	var brief map[string]any
+	if value, exists := input["brief"]; exists {
+		object, ok := value.(map[string]any)
+		if !ok {
+			return nil, "", errors.New("design record is invalid")
+		}
+		if brief, err = item(object, true); err != nil {
+			return nil, "", err
+		}
+	}
+	collect := func(key string, withProvider bool) ([]any, error) {
+		out := []any{}
+		value, exists := input[key]
+		if !exists {
+			return out, nil
+		}
+		list, ok := value.([]any)
+		if !ok {
+			return nil, errors.New("design record is invalid")
+		}
+		for _, element := range list {
+			object, ok := element.(map[string]any)
+			if !ok {
+				return nil, errors.New("design record is invalid")
+			}
+			entry, err := item(object, withProvider)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, entry)
+		}
+		return out, nil
+	}
+	findings, err := collect("findings", true)
+	if err != nil {
+		return nil, "", err
+	}
+	resolutions, err := collect("resolutions", false)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(findings) == 0 {
+		return map[string]any{"present": false}, "", nil
+	}
+	output := map[string]any{"present": true, "findings": findings, "resolutions": resolutions}
+	if brief != nil {
+		output["brief"] = brief
+	}
+	digest, err := digestValue(output)
+	if err != nil {
+		return nil, "", err
+	}
+	return output, digest, nil
+}
+
+func designProvider(value any) (string, bool) {
+	text, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	if text == "" {
+		return "", true
+	}
+	for _, provider := range architecturecodec.BuilderProviders {
+		if text == provider {
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func shortenRunes(text string, limit int) (string, bool) {
+	if utf8.RuneCountInString(text) <= limit {
+		return text, false
+	}
+	return string([]rune(text)[:limit]), true
 }
 
 // setBuilder records the owner's builder for one component. The caller holds
@@ -394,8 +597,16 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 				return nil, errors.New("unresolved feedback prevents approval")
 			}
 		}
+		_, designDigest, _ := r.design(ctx)
+		if sent, _ := q["design_digest"].(string); sent != designDigest {
+			return nil, errors.New("The design changed. Check it and press Accept again.")
+		}
 		next["approved"] = true
-		next["approval"] = map[string]any{"source": "browser_operator", "revision": next["revision"], "digest": next["digest"], "architecture_id": next["architecture_id"], "view_version": "kiss-v1", "layout_digest": r.layoutDigest, "language": next["language"], "ui_digest": next["ui_digest"], "builders_digest": next["builders_digest"]}
+		approval := map[string]any{"source": "browser_operator", "revision": next["revision"], "digest": next["digest"], "architecture_id": next["architecture_id"], "view_version": "kiss-v1", "layout_digest": r.layoutDigest, "language": next["language"], "ui_digest": next["ui_digest"], "builders_digest": next["builders_digest"]}
+		if designDigest != "" {
+			approval["design_digest"] = designDigest
+		}
+		next["approval"] = approval
 		if r.config.OnApprove != nil {
 			accepted, _ := canonicalJSON(next)
 			if err = r.config.OnApprove(accepted); err != nil {
@@ -688,7 +899,13 @@ func (r *Review) applyResult(id string, envelope, result map[string]any) error {
 			}
 		}
 	}
-	return r.commit(next)
+	if err := r.commit(next); err != nil {
+		return err
+	}
+	if changed {
+		r.changes, _ = r.revisionChanges()
+	}
+	return nil
 }
 
 func checkResult(envelope, result map[string]any, layouts map[string]Layout) error {

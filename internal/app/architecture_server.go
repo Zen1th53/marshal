@@ -41,6 +41,9 @@ type ArchitectureReviewHooks struct {
 	// fromContract, set only by StartArchitectureReviewFromContract, opens
 	// the review on the pending project contract itself: no model turn.
 	fromContract *contractReviewSeed
+	// design, set by StartArchitectureReviewForSession, reads the session's
+	// design review for the browser; nil when there is no session.
+	design func(context.Context) (json.RawMessage, error)
 }
 
 // contractReviewSeed is a browser review built from a pending project
@@ -88,6 +91,7 @@ func (r *Runtime) StartArchitectureReviewForSession(ctx context.Context, provide
 	// The review model gets bounded source observation, never recalled facts.
 	reviewModel := *service.Model.(*MarshalCLI)
 	reviewModel.ProjectContext = r.MarshalArchitectureDiscoveryContext
+	hooks.design = r.architectureDesign(sessionID)
 	return r.startArchitectureReview(ctx, &reviewModel, goal, hooks)
 }
 
@@ -208,6 +212,7 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	}
 	config.AcceptBlocked = hooks.AcceptBlocked
 	config.OnAccepted = hooks.Accepted
+	config.Design = hooks.design
 	var turns sync.WaitGroup
 	var mu sync.Mutex
 	closed := false
