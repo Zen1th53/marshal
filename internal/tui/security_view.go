@@ -23,6 +23,8 @@ type securitySnapshot struct {
 	Loaded bool
 	At     time.Time
 	Err    string
+	// NoRun is set when there is no Marshal run to read; nothing failed.
+	NoRun bool
 }
 
 // securityPaint is what one frame of the Security view needs.
@@ -98,6 +100,9 @@ func (v boardVisual) securityLines(m securityPaint, w int) ([]string, int) {
 	s := m.Snap
 	ed := m.Edition
 	out := []string{v.title("SECURITY", ed.Mode+" · "+ed.Headline, false, w)}
+	if s.NoRun {
+		return append(out, PadCell(viewNoRunLine, w)), -1
+	}
 	if !s.Loaded {
 		read := "reading the store…"
 		if s.Err != "" {

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -154,16 +153,23 @@ func (w *Workspace) refreshPlan(ctx context.Context) {
 		return
 	}
 	runID := w.currentRunID()
-	var o store.PlanOverview
-	err := errors.New("no Marshal run")
-	if runID != "" {
-		o, err = src.PlanOverview(ctx, runID)
+	if runID == "" {
+		w.plan.mu.Lock()
+		w.plan.snap = planSnapshot{NoRun: true, At: time.Now()}
+		w.plan.clampLocked()
+		w.plan.mu.Unlock()
+		if w.planView.Load() && w.boardVisible() {
+			w.requestRepaint()
+		}
+		return
 	}
+	o, err := src.PlanOverview(ctx, runID)
 	if ctx.Err() != nil {
 		return
 	}
 	w.plan.mu.Lock()
 	w.plan.snap.At = time.Now()
+	w.plan.snap.NoRun = false
 	if err != nil {
 		w.plan.snap.Err = err.Error()
 	} else {

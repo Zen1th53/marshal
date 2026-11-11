@@ -24,6 +24,8 @@ type verifySnapshot struct {
 	Loaded bool
 	At     time.Time
 	Err    string
+	// NoRun is set when there is no Marshal run to read; nothing failed.
+	NoRun bool
 }
 
 // verifyPaint is what one frame of the Verify view needs.
@@ -100,6 +102,9 @@ func (v boardVisual) verifyLines(m verifyPaint, w int) ([]string, int) {
 		summary = "claims merge only when SUPPORTED by evidence"
 	}
 	out := []string{v.title("VERIFY", summary, false, w)}
+	if s.NoRun {
+		return append(out, PadCell(viewNoRunLine, w)), -1
+	}
 	if !s.Loaded {
 		read := "reading the store…"
 		if s.Err != "" {

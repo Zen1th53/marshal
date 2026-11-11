@@ -429,7 +429,7 @@ func TestBoardEndToEnd(t *testing.T) {
 		{"Providers", []rune{'4'}, w.provView.Load, []string{"PROVIDERS", "codex", "gpt-5.5"}},
 		{"Verify", []rune{'5'}, w.verView.Load, []string{"VERIFY", "T-103", "1/2 claude-1", "verifier       pass · agy-v (agy)"}},
 		{"Security", []rune{'6'}, w.secView.Load, []string{"SECURITY", "registry.npmjs.org"}},
-		{"Plan", []rune{'7'}, w.planView.Load, []string{"PLAN " + e2eRunID, "T-107"}},
+		{"Plan", []rune{'7'}, w.planView.Load, []string{"PLAN plan v2", "T-107"}},
 		{"Architecture", []rune{'b', '8'}, w.archView.Load, []string{"ARCHITECTURE", "rev 7", "a3f1c9e2"}},
 	}
 	for _, v := range views {
@@ -561,7 +561,7 @@ func TestBoardEndToEnd(t *testing.T) {
 	if w.palette.IsOpen() || !w.planView.Load() {
 		t.Fatal("the palette did not open the Plan view")
 	}
-	waitFrame(t, w, 120, 40, "PLAN "+e2eRunID)
+	waitFrame(t, w, 120, 40, "PLAN plan v2")
 	press(KeyEvent{Type: KeyEsc})
 
 	// Help: ?, scroll at 80x24, any other key closes it.
