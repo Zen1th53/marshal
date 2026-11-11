@@ -353,7 +353,7 @@ func TestExtremeFailover_Audit(t *testing.T) {
 	}
 	foundActivity := false
 	for _, msg := range activityLog {
-		if strings.Contains(msg, "codex") && strings.Contains(msg, "agy") && strings.Contains(msg, "Failover") {
+		if strings.Contains(msg, "codex") && strings.Contains(msg, "agy") && strings.Contains(msg, "reached its limit") {
 			foundActivity = true
 			break
 		}

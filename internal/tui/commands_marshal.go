@@ -777,6 +777,7 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 		w.wrapServiceDriversForTmux(service)
 	}
 	service.RecordActivity = w.RecordActivity
+	service.QuotaLeft = w.providerLeft
 	return service, provider, note, nil
 }
 
@@ -1317,6 +1318,9 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 	case marshal.Verifying:
 		return "verified · /marshal close to move the target branch"
 	case marshal.AwaitingUser:
+		if run.Pause != nil && run.Pause.Kind == "quota" {
+			return "waiting for a provider limit to free up"
+		}
 		return "waiting for you · see the escalated task, then /marshal amend or /marshal resume"
 	case marshal.Closed:
 		return "closed"

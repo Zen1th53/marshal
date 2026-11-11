@@ -7,6 +7,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Tier selects the run's worker and review policy.
@@ -273,6 +274,12 @@ type Pause struct {
 	Action      PauseAction `json:",omitempty"`
 	TaskID      string      `json:",omitempty"` // the plan task id Action names
 	Detail      string      `json:",omitempty"` // technical cause for the log and inspector
+	// Kind names a pause the Board handles specially; "quota" is the
+	// all-providers-at-limit pause whose card offers resume-when-available.
+	Kind string `json:",omitempty"`
+	// Until is the earliest a provider limit is expected to free up, for a
+	// "quota" pause; zero when unknown.
+	Until time.Time `json:",omitempty"`
 }
 
 // PauseAction is what moves a paused run on. The Board's Enter key and the

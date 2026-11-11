@@ -81,6 +81,11 @@ type RunHead struct {
 	PauseAction marshal.PauseAction
 	PauseTask   string
 	PauseCode   string
+	// PauseKind names a pause the Board handles specially ("quota" is the
+	// all-providers-at-limit pause); PauseUntil is when a limit is expected
+	// to free up, zero when unknown.
+	PauseKind  string
+	PauseUntil time.Time
 }
 
 // TaskState is the operator's word for where a task is. It folds the
@@ -447,6 +452,7 @@ func Project(s Snapshot, evs []events.Event) Board {
 	if s.Run.State == marshal.AwaitingUser && s.Run.Pause != nil {
 		b.Run.Paused, b.Run.Next = s.Run.Pause.Reason, slices.Clone(s.Run.Pause.Resolutions)
 		b.Run.PauseAction, b.Run.PauseTask, b.Run.PauseCode = s.Run.Pause.Action, s.Run.Pause.TaskID, s.Run.Pause.Code
+		b.Run.PauseKind, b.Run.PauseUntil = s.Run.Pause.Kind, s.Run.Pause.Until
 	}
 	for _, t := range s.Run.Tasks {
 		row := NewTaskRow(t, s.Run.Settings)

@@ -52,6 +52,9 @@ const (
 	// (board_requirements.go): the Enter or e button, or a line row; a click
 	// confirms, starts an edit, or edits that line, as the keys do.
 	hitRequirements boardHitKind = "requirements"
+	// hitQuota is a button of the all-providers-at-limit card
+	// (board_quota.go): r arms auto-resume, s stops here.
+	hitQuota boardHitKind = "quota"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -194,6 +197,8 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		}
 	case hitRequirements:
 		w.clickRequirements(h.id)
+	case hitQuota:
+		w.clickQuota(h.action)
 	case hitInspect:
 		// The same paths the inspector's keys take: a decision button
 		// opens the inbox's confirmation, never decides; o shows the pane.

@@ -72,6 +72,10 @@ type MarshalService struct {
 	// AfterLifecycleEffect injects a failure after the effect but before completion.
 	AfterLifecycleEffect          func(kind, operationID string) error
 	RecordActivity                func(string)
+	// QuotaLeft reports a provider's percent quota left and whether it is
+	// known, from the local limits reader. Failover ranks eligible workers
+	// by it; a nil hook leaves failover at the failover order.
+	QuotaLeft func(provider string) (left int, known bool)
 	workerRecall                  func(context.Context, authz.Principal, RecallRequest) (RecallResponse, error)
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error
