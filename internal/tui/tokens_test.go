@@ -58,7 +58,7 @@ func TestNeedsColourOnlyForOwner(t *testing.T) {
 	th := NewTheme(ThemeDefault, true, false)
 
 	wait := boardVisual{theme: th, guard: &guardAlert{}}
-	if chip := wait.stateChip("run"); !strings.Contains(chip, "\x1b[38;5;215m") {
+	if chip := wait.stateChip(); !strings.Contains(chip, "\x1b[38;5;215m") {
 		t.Errorf("owner-wait chip lacks the needs colour: %q", chip)
 	}
 

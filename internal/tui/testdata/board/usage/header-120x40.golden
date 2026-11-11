@@ -1,16 +1,16 @@
  Marshal · "MCP memory PoC" · running · 12/53 done · ⣾ 9 lanes · budget ▰▰▰▰▰▱▱▱ 61% · inbox 2 · 14:02:31               |
-TASKS 53 tasks · 9 running · 2 parked · 12 merged                 │LANES 9 running · codex 4/4 · claude 2/2 · agy 2/2 ·…|
+TASKS 53 tasks · 9 running · 2 parked · 12 merged                 │LANES 9 running · ⬡ codex 4/4 · ✳ claude 2/2 · ◆ agy…|
   ID     state       worker       scope               sent back   │  worker       task    elapsed tokens        last ac…|
-  T-009  ✓ merged    opencode-1   …mcp/events_list.go             │⣾ codex-1      T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …|
-  T-011  ◆ verifying codex-2      …mcp/run_digest*.go             │⣾ claude-1     T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …|
-  T-017  ⣾ working   codex-1      …p/memory_recall.go             │⣾ agy-1        T-019   03:41   ▁▃▂▅▄▇▆█  19k  read  …|
-  T-018  ⣾ working   claude-1     …ory_candidates*.go             │◆ codex-2      T-011   09:03   ▁▃▂▅▄▇▆█  63k  verify…|
-  T-019  ⣾ working   agy-1        …/memory_restore.go             │⣾ codex-1      T-020   06:20   ▁▃▂▅▄▇▆█  52k  review…|
-  T-020  ⣾ review    codex-1      …p/memory_bridge.go             │▮ codex-3      T-023   —       ▁▃▂▅▄▇▆█  12k  parked…|
-  T-023  ▮ parked    codex-3      …licy/broker_npm.go             │↻ claude-2     T-024   07:55   ▁▃▂▅▄▇▆█  52k  rework…|
-  T-024  ↻ rework    claude-2     …redential_lease.go sent back 1×│⣾ opencode-2   T-027   01:12   ▁▃▂▅▄▇▆█  11k  edit  …|
-  T-027  ⣾ working   opencode-2   …_review_extreme.go             │▮ agy-2        T-031   —       ▁▃▂▅▄▇▆█   4k  probe …|
-  T-031  ▮ parked    agy-2        …lease/push_tags.sh             │                                                     |
+  T-009  ✓ merged    ● opencode-1 …mcp/events_list.go             │⣾ ⬡ codex-1    T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …|
+  T-011  ◎ verifying ⬡ codex-2    …mcp/run_digest*.go             │⣾ ✳ claude-1   T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …|
+  T-017  ⣾ working   ⬡ codex-1    …p/memory_recall.go             │⣾ ◆ agy-1      T-019   03:41   ▁▃▂▅▄▇▆█  19k  read  …|
+  T-018  ⣾ working   ✳ claude-1   …ory_candidates*.go             │◎ ⬡ codex-2    T-011   09:03   ▁▃▂▅▄▇▆█  63k  verify…|
+  T-019  ⣾ working   ◆ agy-1      …/memory_restore.go             │⣾ ⬡ codex-1    T-020   06:20   ▁▃▂▅▄▇▆█  52k  review…|
+  T-020  ⣾ review    ⬡ codex-1    …p/memory_bridge.go             │▮ ⬡ codex-3    T-023   —       ▁▃▂▅▄▇▆█  12k  parked…|
+  T-023  ▮ parked    ⬡ codex-3    …licy/broker_npm.go             │↻ ✳ claude-2   T-024   07:55   ▁▃▂▅▄▇▆█  52k  rework…|
+  T-024  ↻ rework    ✳ claude-2   …redential_lease.go sent back 1×│⣾ ● opencode-2 T-027   01:12   ▁▃▂▅▄▇▆█  11k  edit  …|
+  T-027  ⣾ working   ● opencode-2 …_review_extreme.go             │▮ ◆ agy-2      T-031   —       ▁▃▂▅▄▇▆█   4k  probe …|
+  T-031  ▮ parked    ◆ agy-2      …lease/push_tags.sh             │                                                     |
   T-033  · queued    —            …tions_canonical.go             │ACTIVITY state changes only · full log in inspector  |
   T-034  · queued    —            docs/mcp-memory.md              │14:02:29 T-009 merged · → integration a91f2c · 7 evi…|
                                                                   │14:02:14 T-023 parked · egress registry.npmjs.org ou…|
