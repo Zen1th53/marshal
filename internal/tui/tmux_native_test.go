@@ -999,10 +999,15 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 			launchScript = string(data)
 		}
 	}
-	if launchScript == "" || !strings.Contains(launchScript, "'codex' '-c' 'developer_instructions=MARSHAL PROTOCOL") ||
-		!strings.Contains(launchScript, "'resume' 'session-test-resume-456'") ||
-		!strings.Contains(launchScript, "'"+marshalKickoff+"'\n") {
+	// With no opening cue on resume, the MCP options lead as global options,
+	// so the developer instructions follow them rather than the binary.
+	if launchScript == "" || !strings.Contains(launchScript, "'codex' '-c' ") || !strings.Contains(launchScript, "'-c' 'developer_instructions=MARSHAL PROTOCOL") ||
+		!strings.Contains(launchScript, "'resume' 'session-test-resume-456'") {
 		t.Fatalf("respawn lost hidden instructions or bound resume: %q", restartStr)
+	}
+	// A resumed conversation gets no fresh opening turn.
+	if strings.Contains(launchScript, "'"+marshalKickoff+"'") || strings.Contains(launchScript, "'"+marshalKickoffContinue+"'") {
+		t.Fatalf("resumed respawn carried an opening cue: %q", launchScript)
 	}
 
 	// Verify input was re-enabled on the respawned window

@@ -39,27 +39,17 @@ func marshalMCPServerArgs(root, role, taskID string) []string {
 	return args
 }
 
-func insertBeforeKickoff(provider, root string, args, flags []string) []string {
+func insertBeforeKickoff(provider, _ string, args, flags []string) []string {
 	if len(flags) == 0 {
 		return args
 	}
-	kickoff := marshalKickoffArgs(provider, root)
-	kLen := len(kickoff)
-	if kLen > 0 && len(args) >= kLen {
-		matches := true
-		for i := 0; i < kLen; i++ {
-			if args[len(args)-kLen+i] != kickoff[i] {
-				matches = false
-				break
-			}
+	// The cue was chosen once, when the launch appended it; read it back.
+	if kickoff := trailingMarshalCue(provider, args); kickoff != nil {
+		prefix := append([]string(nil), args[:len(args)-len(kickoff)]...)
+		if provider == "claude" && len(flags) >= 2 && flags[len(flags)-2] == "--mcp-config" {
+			flags = append(append([]string(nil), flags...), "--")
 		}
-		if matches {
-			prefix := append([]string(nil), args[:len(args)-kLen]...)
-			if provider == "claude" && len(flags) >= 2 && flags[len(flags)-2] == "--mcp-config" {
-				flags = append(append([]string(nil), flags...), "--")
-			}
-			return append(append(prefix, flags...), kickoff...)
-		}
+		return append(append(prefix, flags...), kickoff...)
 	}
 	// Global options precede the user's own subcommand and arguments, so the
 	// provider never parses them as arguments of that subcommand.

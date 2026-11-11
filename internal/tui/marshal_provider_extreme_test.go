@@ -127,7 +127,10 @@ func TestExtremeOpenCodeMarshalSelectionProtocolKickoffAndResume(t *testing.T) {
 			w.tmuxMu.Lock()
 			resumed := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])
 			w.tmuxMu.Unlock()
-			if !reflect.DeepEqual(resumed.args, []string{"--session", "ses-bound", "--prompt", opening}) {
+			// A resumed conversation already carries its history, so it takes no
+			// opening cue: it is just the session resume, with the rebuilt hidden
+			// briefing delivered out of band.
+			if !reflect.DeepEqual(resumed.args, []string{"--session", "ses-bound"}) {
 				t.Fatalf("resume: %q", resumed.args)
 			}
 			if resumed.briefingDir.file() == a.briefingDir.file() {

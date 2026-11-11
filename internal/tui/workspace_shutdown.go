@@ -137,4 +137,7 @@ func (w *Workspace) Close() {
 	w.cancelCommand()
 	w.cancelGovernedDispatches()
 	w.workers.wg.Wait()
+	// Every Board-updating worker has stopped and joined, so this is the final
+	// snapshot; the caller closes the runtime and store only after Close.
+	w.saveBoardSeen()
 }

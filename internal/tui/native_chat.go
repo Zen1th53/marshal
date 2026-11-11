@@ -154,9 +154,10 @@ func (w *Workspace) nativeChatAsker() chatAsker {
 
 // stripMarshalKickoff removes the opening turn runNativeAgent appended for
 // the interactive CLI; the native chat sends it as its first message.
-func stripMarshalKickoff(provider, root string, args []string) ([]string, string) {
-	k := marshalKickoffArgs(provider, root)
-	if len(k) != 1 || len(args) == 0 || args[len(args)-1] != k[0] {
+func stripMarshalKickoff(provider, _ string, args []string) ([]string, string) {
+	// The cue was chosen once, when the launch appended it; read it back.
+	k := trailingMarshalCue(provider, args)
+	if len(k) != 1 {
 		return args, ""
 	}
 	args = slices.Clone(args[:len(args)-1])

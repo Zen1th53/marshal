@@ -86,6 +86,9 @@ type Workspace struct {
 	// marshal holds the active Marshal run and the approvals the person gave
 	// for it in this session. Guarded by mu for creation.
 	marshal *marshalSession
+	// welcomeShown guards the one "Welcome back" notice a resumed run shows, so
+	// a chat pane the dock relaunches never prints a second opening cue.
+	welcomeShown atomic.Bool
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool

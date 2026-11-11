@@ -86,6 +86,30 @@ var languageByExt = map[string]string{
 
 var launchScanPartTimeout = 5 * time.Second
 
+// launchActiveRuns records, per project root, whether the launch scan found a
+// non-closed run in the store. marshalOpening reads it so a resumed project
+// opens with Continue even before any intake is saved.
+var launchActiveRuns sync.Map // root (string) -> bool
+
+func setLaunchActiveRun(root string, active bool) {
+	if root == "" {
+		return
+	}
+	launchActiveRuns.Store(root, active)
+}
+
+// launchActiveRun reports whether the last launch scan of root found an active
+// run. It is false until a scan has run and false when the scan could not
+// read the run, so an unknown scan never forces a resume cue.
+func launchActiveRun(root string) bool {
+	v, ok := launchActiveRuns.Load(root)
+	if !ok {
+		return false
+	}
+	active, _ := v.(bool)
+	return active
+}
+
 // scanTitleMaxRunes bounds the active run's title in the briefing; the title
 // is the first line of the owner's request and can be a whole paragraph.
 const scanTitleMaxRunes = 80
@@ -468,6 +492,9 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 		scan.Sessions = result.sessions
 	case <-ctx.Done():
 	}
+	// The run part reports an active run only as a real non-closed run; its
+	// failure sentinel carries State "unknown" and must not open with Continue.
+	setLaunchActiveRun(root, scan.ActiveRun != nil && scan.ActiveRun.State != "unknown")
 	if w != nil {
 		w.launch.mu.Lock()
 		w.launch.scan = scan
