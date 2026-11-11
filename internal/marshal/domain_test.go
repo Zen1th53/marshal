@@ -203,3 +203,23 @@ func TestCloseAuthorizationRequiresExactDeliveryBinding(t *testing.T) {
 		t.Fatal("unbound legacy authority accepted")
 	}
 }
+
+func TestRunTaskControl(t *testing.T) {
+	for _, tc := range []struct {
+		runControl, taskControl, want Control
+	}{
+		{ControlFree, "", ControlFree},
+		{ControlFree, ControlFree, ControlFree},
+		{ControlFree, ControlStrict, ControlStrict},
+		{"", "", ControlFree},
+		{"", ControlStrict, ControlStrict},
+		{ControlStrict, "", ControlStrict},
+		{ControlStrict, ControlFree, ControlStrict},
+		{ControlStrict, ControlStrict, ControlStrict},
+	} {
+		r := Run{Settings: Settings{Control: tc.runControl}}
+		if got := r.TaskControl(Task{Control: tc.taskControl}); got != tc.want {
+			t.Fatalf("run=%q task=%q: got %q, want %q", tc.runControl, tc.taskControl, got, tc.want)
+		}
+	}
+}

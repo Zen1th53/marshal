@@ -132,7 +132,7 @@ func (s *MarshalService) canonicalBoundRun(ctx context.Context, runID string, p 
 			Mode: marshal.Governed, State: marshal.Queued, BaseCommit: old.BaseCommit,
 			Branch: marshalTaskBranch(runID, pt.ID, old.ArtifactRevision),
 			Files:  append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...),
-			DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
+			DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, Control: marshal.Control(pt.Control), ExpectedOutput: pt.ExpectedOutput}
 		for _, command := range p.Checks[pt.ID] {
 			task.Checks = append(task.Checks, marshal.Check{Command: command, Criteria: append([]string(nil), pt.Criteria...)})
 		}
@@ -141,7 +141,7 @@ func (s *MarshalService) canonicalBoundRun(ctx context.Context, runID string, p 
 		}
 		run.Tasks = append(run.Tasks, task)
 	}
-	if err := instructionsPresent(run.Settings, run.Tasks); err != nil {
+	if err := instructionsPresent(run, run.Tasks); err != nil {
 		return marshal.Run{}, err
 	}
 	return run, nil

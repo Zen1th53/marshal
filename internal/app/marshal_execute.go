@@ -45,7 +45,7 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 }
 
 func (s *MarshalService) briefContextFromTask(ctx context.Context, runID string, run marshal.Run, t marshal.Task, baseResolved bool) (BriefContext, error) {
-	bc := BriefContext{Control: run.Settings.EffectiveControl()}
+	bc := BriefContext{Control: run.TaskControl(t)}
 	if run.Pack != nil {
 		bc.Requirements, bc.Index, bc.Note = run.Pack.Requirements, run.Pack.Index, run.Pack.Tasks[t.PlanTaskID]
 	}

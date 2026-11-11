@@ -55,7 +55,7 @@ func (m *MarshalCLI) SetMarshalConversationID(id string) {
 	}
 }
 
-const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"components":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"mode":{"type":"string","enum":["native","governed"]},"type":{"type":"string","enum":["change","inspection","verification"]},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","components","worker","mode","type","checks","instructions","expected_output"]}}},"required":["tasks"]}`
+const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"components":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"mode":{"type":"string","enum":["native","governed"]},"type":{"type":"string","enum":["change","inspection","verification"]},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"},"control":{"type":"string","enum":["strict","free"]}},"required":["id","title","criteria","paths","depends_on","components","worker","mode","type","checks","instructions","expected_output","control"]}}},"required":["tasks"]}`
 const marshalReviewSchema = `{"type":"object","additionalProperties":false,"properties":{"Verdict":{"type":"string","enum":["accept","return","reassign","escalate"]},"Reviewer":{"type":"string"},"Reasons":{"type":"array","items":{"type":"string"}},"EvidenceRefs":{"type":"array","items":{"type":"string"}}},"required":["Verdict","Reviewer","Reasons","EvidenceRefs"]}`
 const marshalVerifySchema = `{"type":"object","additionalProperties":false,"properties":{"head":{"type":"string"},"verdict":{"type":"string","enum":["pass","fail"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["head","verdict","findings"]}`
 
@@ -413,7 +413,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		m.AllowNativeException = false
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". "+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". "+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -500,6 +500,9 @@ type marshalProposedTask struct {
 	// task. Strict control requires instructions for every task.
 	Instructions   string `json:"instructions,omitempty"`
 	ExpectedOutput string `json:"expected_output,omitempty"`
+	// Control is the per-task control level: "strict" or "free". Empty means
+	// free. Any other value refuses the draft.
+	Control string `json:"control,omitempty"`
 }
 
 type marshalProposedCheck struct {
@@ -637,8 +640,12 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		if kind != marshal.TaskChange && kind != marshal.TaskInspection && kind != marshal.TaskVerification {
 			return MarshalDraft{}, errors.New("invalid task type")
 		}
-		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Type: string(kind), Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
-		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Components: append([]string(nil), item.Components...), Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
+		control := marshal.Control(item.Control)
+		if control != "" && control != marshal.ControlStrict && control != marshal.ControlFree {
+			return MarshalDraft{}, fmt.Errorf("task %s: control must be strict or free", item.ID)
+		}
+		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Type: string(kind), Mutating: true, Weight: 1, Instructions: item.Instructions, Control: item.Control, ExpectedOutput: item.ExpectedOutput})
+		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Components: append([]string(nil), item.Components...), Instructions: item.Instructions, Control: control, ExpectedOutput: item.ExpectedOutput}
 		for _, check := range item.Checks {
 			task.Checks = append(task.Checks, marshal.Check{Command: check.Command, Criteria: check.Criteria})
 			draft.Plan.Checks[item.ID] = append(draft.Plan.Checks[item.ID], check.Command)

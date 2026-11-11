@@ -97,3 +97,40 @@ func TestMarshalChatProposalRefusesWhatTheBriefingDidNotAskFor(t *testing.T) {
 		}
 	}
 }
+
+// A draft task may set "control": "free" or "strict"; the level is carried
+// into both the plan task and the run task.
+func TestDraftTaskControlParsed(t *testing.T) {
+	fakeWorkerOnPath(t, "codex")
+	s, _ := marshalFixture(t, 1)
+	proposal := `{"tasks":[
+		{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"codex","control":"strict","instructions":"do a","checks":[{"command":"true","criteria":["c"]}]},
+		{"id":"b","title":"t","criteria":["c"],"paths":["b.txt"],"depends_on":[],"worker":"codex","control":"free","checks":[{"command":"true","criteria":["c"]}]}
+	]}`
+	draft, err := s.DraftFromProposal([]byte(proposal), "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.Plan.Tasks[0].Control != "strict" || draft.Plan.Tasks[1].Control != "free" {
+		t.Fatalf("plan task control: %q %q", draft.Plan.Tasks[0].Control, draft.Plan.Tasks[1].Control)
+	}
+	if draft.Tasks[0].Control != marshal.ControlStrict || draft.Tasks[1].Control != marshal.ControlFree {
+		t.Fatalf("run task control: %q %q", draft.Tasks[0].Control, draft.Tasks[1].Control)
+	}
+}
+
+// Empty control is accepted (reads as free); any other value refuses the draft.
+func TestDraftTaskControlInvalid(t *testing.T) {
+	fakeWorkerOnPath(t, "codex")
+	s, _ := marshalFixture(t, 1)
+	proposal := `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"codex","control":"loose","checks":[{"command":"true","criteria":["c"]}]}]}`
+	_, err := s.DraftFromProposal([]byte(proposal), "claude")
+	if err == nil || !strings.Contains(err.Error(), "control must be strict or free") {
+		t.Fatalf("expected control refusal, got %v", err)
+	}
+	// An empty control field is accepted.
+	empty := `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"true","criteria":["c"]}]}]}`
+	if _, err := s.DraftFromProposal([]byte(empty), "claude"); err != nil {
+		t.Fatalf("empty control refused: %v", err)
+	}
+}

@@ -17,7 +17,7 @@ func TestExtremeRunBriefUsesImplementedAuthority(t *testing.T) {
 		}
 	}
 	brief, err := marshalRoleBriefing([]string{"codex", "claude", "opencode"}, marshal.DefaultSettings(), marshal.Ultra)
-	if err != nil || !strings.Contains(brief, "Codex, Claude and OpenCode support governed tasks") || !strings.Contains(brief, "acceptance mode marshal.") || !strings.HasSuffix(brief, buildRoleAuthority) {
+	if err != nil || !strings.Contains(brief, "Codex, Claude and OpenCode support governed tasks") || !strings.Contains(brief, "acceptance mode marshal (the Marshal leads).") || !strings.HasSuffix(brief, buildRoleAuthority) {
 		t.Fatalf("private run briefing invalid: %v", err)
 	}
 }

@@ -76,11 +76,35 @@ func TestOwnerGatesFromTheSeededStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.setMarshalPanel(newMarshalPanel(runID, "codex", rec.Value, "awaiting plan approval; /marshal approve"))
+	// The shipped Marshal approves its own plan, so no owner plan gate is shown.
+	if g := w.ownerGates(w.state.Marshal); len(g) != 0 {
+		t.Fatalf("shipped build shows a plan gate: %+v", g)
+	}
 	text = frameText(w, 120, 34)
-	for _, want := range []string{"waiting for you", "drafted plan waits for your approval · 1 task", "[y] approve the plan", "[7] open the plan"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("Board misses %q:\n%s", want, text)
+	for _, absent := range []string{"drafted plan waits for your approval", "[y] approve the plan"} {
+		if strings.Contains(text, absent) {
+			t.Errorf("shipped Board shows removed plan gate %q:\n%s", absent, text)
 		}
 	}
-	writeGateANS(t, w, "plan-gate", 120, 34)
+}
+
+// TestNoOwnerPlanGateInShippedBuild confirms the shipped build never offers
+// the owner plan gate: the Marshal approves its own plan.
+func TestNoOwnerPlanGateInShippedBuild(t *testing.T) {
+	if ownerPlanGate {
+		t.Fatal("ownerPlanGate must be false in the shipped build")
+	}
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	w.planSource = fakePlanSource{}
+	w.setMarshalPanel(draftingPanel("awaiting plan approval; /marshal approve"))
+	if g := w.ownerGates(w.state.Marshal); len(g) != 0 {
+		t.Fatalf("shipped build shows a plan gate: %+v", g)
+	}
+	text := frameText(w, 170, 40)
+	for _, absent := range []string{"drafted plan waits for your approval", "[y] approve the plan", "[7] open the plan"} {
+		if strings.Contains(text, absent) {
+			t.Errorf("shipped Board shows removed plan gate %q:\n%s", absent, text)
+		}
+	}
 }

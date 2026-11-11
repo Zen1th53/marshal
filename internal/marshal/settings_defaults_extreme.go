@@ -6,5 +6,5 @@ package marshal
 // Saved settings, approved task scopes and running execution budgets remain
 // authoritative; selecting this default never grants a worker extra authority.
 func buildDefaultSettings() Settings {
-	return Settings{ExecutionRights: RightsSmallTasks, AcceptanceMode: AcceptMarshal, ReworkLimit: 2, UltraConcurrency: 4, Control: ControlFree, WorkerStallMinutes: 15}
+	return Settings{ExecutionRights: RightsReadOnly, AcceptanceMode: AcceptMarshal, ReworkLimit: 2, UltraConcurrency: 4, Control: ControlFree, WorkerStallMinutes: 15}
 }

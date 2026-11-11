@@ -86,8 +86,10 @@ func TestAttentionSnapshot(t *testing.T) {
 	p.Note, p.Stopped = "", false
 	p.Board.Run.State = marshal.Drafting
 	p.Board.Run.Total = 1
-	if s := w.attentionNow(); !s.needsYou {
-		t.Fatalf("owner gate: %+v", s)
+	// A drafted plan is an owner gate only in the governed build; the
+	// shipped Marshal approves its own plan.
+	if s := w.attentionNow(); s.needsYou != ownerPlanGate {
+		t.Fatalf("owner gate (ownerPlanGate=%v): %+v", ownerPlanGate, s)
 	}
 }
 
