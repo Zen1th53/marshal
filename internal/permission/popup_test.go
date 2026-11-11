@@ -134,6 +134,20 @@ func TestPermissionPopupContinuationIdentity(t *testing.T) {
 	}
 }
 
+func TestRequestKeyIncludesDetail(t *testing.T) {
+	req := Request{Kind: "marshal-command", Object: "/marshal approve", Scope: "The plan the Marshal drafted (version 2)."}
+	other := req
+	other.Detail = "run RUN-abc, plan PLAN-def version 2, state revision 14"
+	if req.Key() == other.Key() {
+		t.Fatal("requests differing only in Detail share a decision key")
+	}
+	third := other
+	third.Detail = "run RUN-abc, plan PLAN-def version 2, state revision 15"
+	if other.Key() == third.Key() {
+		t.Fatal("requests differing only in Detail revision share a decision key")
+	}
+}
+
 func TestPopupNavigationPreservesRequest(t *testing.T) {
 	for _, version := range []string{"3.3a", "3.2a"} {
 		for _, key := range []struct{ sequence, name string }{{"\x1b[18~", "F7"}, {"\x1b[19~", "F8"}, {"\x1b[20~", "F9"}, {"\x1b[23~", "F11"}, {"\x1b[24~", "F12"}} {

@@ -210,7 +210,7 @@ func TestProcess05PartialAppliedTransportCannotQueuePrematureResume(t *testing.T
 // these fixture answers are not real model judgments or release acceptance.
 func TestProcess05AllAppliedNativeReviewsQueueOneCurrentResumeSnapshot(t *testing.T) {
 	w, resume := appliedProcess05QuestionFixture(t, false, false)
-	if resume.Object == "" || resume.ApprovalBinding == "" || !strings.Contains(resume.Scope, "ParentState") || !strings.Contains(resume.Reason, "pre-execution") {
+	if resume.Object == "" || resume.ApprovalBinding == "" || !strings.Contains(resume.Detail, "ParentState") || !strings.Contains(resume.Reason, "pre-execution") {
 		t.Fatalf("current readiness was not visible: %+v", resume)
 	}
 	var snapshot process05ResumeSnapshot

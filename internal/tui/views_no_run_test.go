@@ -38,6 +38,33 @@ func TestViewsWithoutRunSayNoRunYet(t *testing.T) {
 // first returns the lines of a (lines, sel) return pair.
 func first(lines []string, _ int) []string { return lines }
 
+// TestViewsLoadFailureIsPlain: a failed first read shows the plain
+// viewLoadFailed line in every view, never the raw store error.
+func TestViewsLoadFailureIsPlain(t *testing.T) {
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true)}
+	const errText = "open /x/state.db: no such file"
+	cases := []struct {
+		name  string
+		lines []string
+	}{
+		{"arch", v.archLines(archPaint{Snap: archSnapshot{Err: errText}}, 120, 30)},
+		{"memory", v.memTop(memoryPaint{Snap: memorySnapshot{Err: errText, StorePath: "/mem"}}, 120)},
+		{"plan", v.planLines(planPaint{Snap: planSnapshot{Err: errText}}, 120, 30)},
+		{"provider", first(v.providerLines(providerPaint{Snap: providerSnapshot{Err: errText}}, 120))},
+		{"security", first(v.securityLines(securityPaint{Snap: securitySnapshot{Err: errText}}, 120))},
+		{"verify", first(v.verifyLines(verifyPaint{Snap: verifySnapshot{Err: errText}}, 120))},
+	}
+	for _, c := range cases {
+		body := StripANSI(strings.Join(c.lines, "\n"))
+		if !strings.Contains(body, viewLoadFailed) {
+			t.Errorf("%s: want %q in %q", c.name, viewLoadFailed, body)
+		}
+		if strings.Contains(body, "state.db") {
+			t.Errorf("%s: shows raw error: %q", c.name, body)
+		}
+	}
+}
+
 // TestViewFooterWithoutRunOffersOnlyWorkingKeys: in the no-run Verify,
 // Security and Plan views the footer offers only keys that act, led by
 // "s tell the Marshal", and drops the per-view keys that have nothing to

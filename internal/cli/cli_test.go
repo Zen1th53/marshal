@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
@@ -47,8 +48,29 @@ func TestMutatingCommandFailsUnavailableWithoutDaemon(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code := Execute(context.Background(), repo.Path(), []string{"agent", "register", "--name", "codex", "--role", "developer"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 6 || !strings.Contains(stderr.String(), "unavailable") {
+	if code != 6 || !strings.Contains(stderr.String(), "background service isn't running") {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+// TestCLIRuntimeNotRunningMessage: a command that needs the daemon prints the
+// plain background-service sentence in text mode and keeps the unavailable exit
+// code.
+func TestCLIRuntimeNotRunningMessage(t *testing.T) {
+	repo := cliRepo(t)
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatal(stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code := Execute(context.Background(), repo.Path(), []string{"status"}, strings.NewReader(""), &stdout, &stderr)
+	want := "Marshal's background service isn't running in this project. Start it with `marshal daemon` in another terminal, then try again.\n"
+	if stderr.String() != want {
+		t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+	}
+	if code != exitCode(model.ErrUnavailable) {
+		t.Fatalf("code = %d, want %d", code, exitCode(model.ErrUnavailable))
 	}
 }
 

@@ -1,14 +1,52 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
+
+// TestValidateProjectMessages: the three validation failures each read as a
+// plain sentence, and the two project-file failures stay invalid-input errors.
+func TestValidateProjectMessages(t *testing.T) {
+	// No Git repository at all.
+	if _, err := ValidateProject(t.Context(), t.TempDir()); err == nil || !strings.Contains(err.Error(), "This folder isn't a Git project with a first commit yet.") {
+		t.Fatalf("no-git message = %v", err)
+	}
+
+	// A Git repository with a commit but no `marshal init`.
+	repo := testgit.New(t)
+	_, err := ValidateProject(t.Context(), repo.Path())
+	if err == nil || !strings.Contains(err.Error(), "Marshal isn't set up in this project yet.") {
+		t.Fatalf("not-set-up message = %v", err)
+	}
+	if !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("not-set-up error is not ErrInvalid: %v", err)
+	}
+
+	// An initialized project with a corrupted CAPABILITIES.yaml.
+	init := runtimeRepo(t)
+	if _, err := Bootstrap(t.Context(), init.Path()); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(statepath.Path(init.Path(), "runtime-owner.lock"))
+	if err := os.WriteFile(filepath.Join(init.Path(), "CAPABILITIES.yaml"), []byte("invalid"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = ValidateProject(t.Context(), init.Path())
+	if err == nil || !strings.Contains(err.Error(), "are damaged") {
+		t.Fatalf("damaged message = %v", err)
+	}
+	if !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("damaged error is not ErrInvalid: %v", err)
+	}
+}
 
 func TestOpenUninitializedProjectDoesNotBootstrap(t *testing.T) {
 	repo := testgit.New(t)
@@ -18,7 +56,7 @@ func TestOpenUninitializedProjectDoesNotBootstrap(t *testing.T) {
 	if rt, err := Open(t.Context(), repo.Path()); err == nil {
 		rt.Close()
 		t.Fatal("opened an uninitialized project")
-	} else if !strings.Contains(err.Error(), "run `marshal init` here") {
+	} else if !strings.Contains(err.Error(), "Marshal isn't set up in this project yet") {
 		t.Fatal(err)
 	}
 	for _, path := range []string{statepath.Path(repo.Path(), "state.db"), statepath.Path(repo.Path(), "runtime-owner.lock"), filepath.Join(repo.Path(), "PACK-VERSION.yaml")} {
@@ -47,7 +85,7 @@ func TestInvalidProjectRefusedBeforeRuntimeWrites(t *testing.T) {
 			if rt, err := Open(t.Context(), repo.Path()); err == nil {
 				rt.Close()
 				t.Fatal("opened an invalid project")
-			} else if !strings.Contains(err.Error(), name) {
+			} else if !strings.Contains(err.Error(), "are damaged") {
 				t.Fatal(err)
 			}
 			after, err := os.ReadFile(statepath.Path(repo.Path(), "state.db"))

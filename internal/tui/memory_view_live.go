@@ -208,6 +208,7 @@ func (w *Workspace) refreshMemory(ctx context.Context) {
 	w.mem.mu.Lock()
 	w.mem.snap.At = time.Now()
 	w.mem.snap.StorePath = memoryStorePath()
+	logErr := err != nil && err.Error() != w.mem.snap.Err
 	if err != nil {
 		w.mem.snap.Err = err.Error()
 	} else {
@@ -215,6 +216,9 @@ func (w *Workspace) refreshMemory(ctx context.Context) {
 	}
 	w.mem.clampLocked()
 	w.mem.mu.Unlock()
+	if logErr {
+		w.logTUIError("Memory view", err)
+	}
 	if w.memView.Load() && w.boardVisible() {
 		w.requestRepaint()
 	}
@@ -398,6 +402,9 @@ func (w *Workspace) openMemoryEvidence(id string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	rec, err := src.MemoryRecord(ctx, id)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		w.logTUIError("memory evidence", err)
+	}
 	w.mu.RLock()
 	secrets := slices.Clone(w.state.KnownSecrets)
 	w.mu.RUnlock()
@@ -418,7 +425,7 @@ func memoryEvidenceLines(id string, rec model.MemoryRecordV2, err error, secrets
 		if errors.Is(err, model.ErrNotFound) {
 			return append(out, "  the record is gone from the store", "", "esc closes")
 		}
-		return append(out, "  not readable: "+clean(err.Error()), "", "esc closes")
+		return append(out, "  Couldn't load the evidence.", "", "esc closes")
 	}
 	kv := func(k, v string) {
 		if strings.TrimSpace(v) != "" {

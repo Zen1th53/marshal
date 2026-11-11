@@ -182,6 +182,7 @@ func (w *Workspace) refreshVerify(ctx context.Context) {
 	w.ver.mu.Lock()
 	w.ver.snap.At = time.Now()
 	w.ver.snap.NoRun = false
+	logErr := err != nil && err.Error() != w.ver.snap.Err
 	if err != nil {
 		w.ver.snap.Err = err.Error()
 	} else {
@@ -189,6 +190,9 @@ func (w *Workspace) refreshVerify(ctx context.Context) {
 	}
 	w.ver.clampLocked()
 	w.ver.mu.Unlock()
+	if logErr {
+		w.logTUIError("Verify view", err)
+	}
 	if w.verView.Load() && w.boardVisible() {
 		w.requestRepaint()
 	}

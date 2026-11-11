@@ -222,6 +222,7 @@ func (w *Workspace) refreshProviders(ctx context.Context) {
 	}
 	w.prov.mu.Lock()
 	w.prov.snap.At = time.Now()
+	logErr := err != nil && err.Error() != w.prov.snap.Err
 	if err != nil {
 		w.prov.snap.Err = err.Error()
 	} else {
@@ -229,6 +230,9 @@ func (w *Workspace) refreshProviders(ctx context.Context) {
 	}
 	w.prov.clampLocked()
 	w.prov.mu.Unlock()
+	if logErr {
+		w.logTUIError("Providers view", err)
+	}
 	if w.provView.Load() && w.boardVisible() {
 		w.requestRepaint()
 	}

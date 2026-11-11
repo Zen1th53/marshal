@@ -48,7 +48,7 @@ esac
 			if code == 0 {
 				t.Fatalf("child failure returned success: %q %q", stdout, stderr)
 			}
-			for _, want := range []string{"TUI child exited with status", dir, "missing CAPABILITIES.yaml", "run `marshal init` here", "marshal doctor"} {
+			for _, want := range []string{"TUI child exited with status", "Marshal isn't set up in this project yet.", "Run `marshal init` here."} {
 				if !strings.Contains(stderr, want) {
 					t.Fatalf("missing %q in stderr: %s", want, stderr)
 				}

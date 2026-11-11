@@ -221,6 +221,7 @@ func (w *Workspace) refreshSecurity(ctx context.Context) {
 	w.sec.mu.Lock()
 	w.sec.snap.At = time.Now()
 	w.sec.snap.NoRun = false
+	logErr := err != nil && err.Error() != w.sec.snap.Err
 	if err != nil {
 		w.sec.snap.Err = err.Error()
 	} else {
@@ -228,6 +229,9 @@ func (w *Workspace) refreshSecurity(ctx context.Context) {
 	}
 	w.sec.clampLocked()
 	w.sec.mu.Unlock()
+	if logErr {
+		w.logTUIError("Security view", err)
+	}
 	if w.secView.Load() && w.boardVisible() {
 		w.requestRepaint()
 	}
