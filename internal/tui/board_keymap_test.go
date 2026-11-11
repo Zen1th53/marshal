@@ -373,3 +373,39 @@ func TestBoardHelpGoldens(t *testing.T) {
 		})
 	}
 }
+
+// run.stopped is on exactly when the inbox's Enter would arm the stop: a
+// run whose execution ended (Stopped) counts, as it does for that Enter, and
+// the same run not marked stopped does not.
+func TestBoardStopWaitingFollowsStoppedRuns(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	w.permissions.mu.Lock()
+	w.permissions.inbox = nil // an empty inbox: Enter is the stop's
+	w.permissions.mu.Unlock()
+	set := func(p *MarshalPanel) {
+		w.mu.Lock()
+		w.state.Marshal = p
+		w.mu.Unlock()
+	}
+	set(&MarshalPanel{Note: "stopped: worker exited 2", Stopped: true})
+	if !w.boardStopWaiting() {
+		t.Error("a stopped run with an empty inbox is not waiting")
+	}
+	if ok, why := mustAction(t, "run.stopped").available(w); !ok {
+		t.Errorf("run.stopped is off for a stopped run: %q", why)
+	}
+	set(&MarshalPanel{Note: "stopped: worker exited 2"})
+	if w.boardStopWaiting() {
+		t.Error("a run not marked stopped reads as waiting")
+	}
+}
+
+func mustAction(t *testing.T, id string) boardKey {
+	t.Helper()
+	k, ok := boardAction(id)
+	if !ok {
+		t.Fatalf("%s is not in the registry", id)
+	}
+	return k
+}

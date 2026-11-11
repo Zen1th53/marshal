@@ -1,6 +1,31 @@
  [38;5;243m✳[0m [38;5;243mclaude …[0m[38;5;238m · [0m[38;5;243m⬡[0m [38;5;243mcodex …[0m[38;5;238m · [0m[38;5;243m◆[0m [38;5;243magy …[0m[38;5;238m · [0m[38;5;243m●[0m [38;5;243mopencode …[0m                                                              [38;5;111m9[0m[38;5;243m running[0m 
 [48;5;235m [1m[38;5;15mMarshal[0m[48;5;235m[0m[48;5;235m[38;5;238m · [0m[48;5;235m[38;5;111m"MCP memory PoC"[0m[48;5;235m[38;5;238m · [0m[48;5;235m[1m[38;5;111mrunning[0m[48;5;235m[0m[48;5;235m[38;5;238m · [0m[48;5;235m[38;5;179m12[0m[48;5;235m[38;5;243m/53 done[0m[48;5;235m[38;5;238m · [0m[48;5;235m[38;5;243mbudget [0m[48;5;235m[38;5;179m▰▰▰▰▰[0m[48;5;235m[38;5;243m▱▱▱[0m[48;5;235m 61%[38;5;238m · [0m[48;5;235m[38;5;243minbox [0m[48;5;235m[38;5;203m2[0m[48;5;235m[38;5;238m · [0m[48;5;235m[38;5;243m14:02:31[0m[48;5;235m                           [0m
-[38;5;243mArchitecture · rev 7 · [0m[38;5;179mwaiting for you[0m[38;5;243m · [0m[48;5;239m[o][0m open                                                                       
+[1m[38;5;15mARCHITECTURE[0m[0m [38;5;243mcontract rev 7 · a3f1c9e2 · accepted by owner 2026-11-02 13:38 · Marshal 0.0.9[0m                             
+[38;5;243mupdated       [0m read 4s ago · every 10 s while open                                                                      
+[38;5;243min force      [0m [38;5;114mrev 7 accepted · Marshal acts only inside it[0m                                                             
+[38;5;243mchanges       [0m a new revision needs "accept architecture" from the owner                                                
+[38;5;243mopen          [0m [48;5;239m[o][0m full architecture and business process in the browser  [48;5;239m[d][0m diff since accepted                       
+                                                                                                                        
+[1m[38;5;15mBUSINESS PROCESS[0m[0m [38;5;243mnow: waiting on owner: 2 decisions…[0m  [1m[38;5;15mCOMPONENTS[0m[0m [38;5;243mwhat each part may do in this revision[0m                 
+ [38;5;114m✓[0m Marshal introduces itself                           Workspace / TUI    [38;5;243mBoard, chat dock, inbox; owner input only[0m     
+ [38;5;114m✓[0m language chosen                                     Marshal            [38;5;243mplans, reviews, never edits task files[0m        
+ [38;5;114m✓[0m owner states the goal                               Runtime            [38;5;243mstarts a worker per task, then review and che…[0m
+ [38;5;114m✓[0m Marshal reads state and earlier runs                Worktrees          [38;5;243mone per task; only verified work merges[0m       
+ [38;5;114m✓[0m clarify: requirements and limits recorded           Memory / MCP       [38;5;243mdurable only after review; recalls audited[0m    
+ [38;5;114m✓[0m owner picks mode and control level                  Audit              [38;5;243mappend-only records[0m                           
+ [38;5;114m✓[0m mode and authority fixed                            Host watch         [38;5;243mthermal, disk, memory policy every second[0m     
+ [38;5;114m✓[0m plan: tasks, workers, acceptance criteria                                                                            
+ [38;5;114m✓[0m the Marshal approves the plan (or asks you: y)     [1m[38;5;15mRULES IN FORCE[0m[0m                                                    
+ [38;5;114m✓[0m runtime dispatches approved tasks                   [38;5;114m●[0m Marshal: local ULTRA, anonymous telemetry on                   
+ [38;5;114m✓[0m workers do the tasks                                [38;5;114m●[0m main never moves during a run                                  
+ [38;5;114m✓[0m workers hand in results                             [38;5;114m●[0m hard gates need the typed canonical id                         
+ [38;5;114m✓[0m Marshal checks each result                          [38;5;114m●[0m architecture acceptance is owner-only                          
+ [38;5;114m✓[0m defects? → back to the workers with reasons         [38;5;114m●[0m publishing is owner-only                                       
+[48;5;237m [38;5;179m▸[0m[48;5;237m decision due? → Marshal decides or asks you      [0m                                                                    
+ [38;5;243m·[0m [38;5;243mmore tasks? → hand out the next ones[0m                                                                                 
+ [38;5;243m·[0m [38;5;243massemble the result and report[0m                                                                                       
+ [38;5;243m·[0m [38;5;243mthe Marshal delivers the verified result[0m                                                                             
+[38;5;243m independent tasks run and are checked in parallel  [0m                                                                    
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -12,29 +37,4 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
- [48;5;239m[38;5;15mo[0m[48;5;239m[0m [38;5;243mopen in browser[0m  [48;5;239m[38;5;15mesc[0m[48;5;239m[0m [38;5;243mboard[0m  [48;5;239m[38;5;15mm[0m[48;5;239m[0m [38;5;243mmarshal[0m  [48;5;239m[38;5;15m/[0m[48;5;239m[0m [38;5;243mcommand[0m  [48;5;239m[38;5;15m^P[0m[48;5;239m[0m [38;5;243mpalette[0m  [48;5;239m[38;5;15m?[0m[48;5;239m[0m [38;5;243mhelp[0m                                                 
+ [48;5;239m[38;5;15mj/k[0m[48;5;239m[0m [38;5;243mscroll[0m  [48;5;239m[38;5;15mo[0m[48;5;239m[0m [38;5;243mopen in browser[0m  [48;5;239m[38;5;15md[0m[48;5;239m[0m [38;5;243mdiff since accepted[0m  [48;5;239m[38;5;15mesc[0m[48;5;239m[0m [38;5;243mboard[0m  [48;5;239m[38;5;15mm[0m[48;5;239m[0m [38;5;243mmarshal[0m  [48;5;239m[38;5;15m/[0m[48;5;239m[0m [38;5;243mcommand[0m  [48;5;239m[38;5;15m^K[0m[48;5;239m[0m [38;5;243mpalette[0m  [48;5;239m[38;5;15m?[0m[48;5;239m[0m [38;5;243mhelp[0m              

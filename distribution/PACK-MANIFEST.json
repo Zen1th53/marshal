@@ -12446,8 +12446,8 @@
     },
     {
       "path": "internal/tui/board_keymap_test.go",
-      "sha256": "064bba7022bab89b7c60dc8cabdca7b28f98c962dd74a715de19f52fa1185dd8",
-      "bytes": 11745
+      "sha256": "23bc4a068c52953c50b0397cd818ca6076c337aed2024700b716522d926eddfa",
+      "bytes": 12842
     },
     {
       "path": "internal/tui/board_lane_chips.go",
@@ -14546,7 +14546,7 @@
     },
     {
       "path": "internal/tui/testdata/board/arch-governed-split-120x40.golden",
-      "sha256": "eba034869e4538347916be41297364570765a4f25114b3e00663953b699f96fa",
+      "sha256": "6bfbd6b35e5318ce4e810f3cad07bce3d9470b2d44153b99039de9774aaec587",
       "bytes": 6870
     },
     {
@@ -14556,7 +14556,7 @@
     },
     {
       "path": "internal/tui/testdata/board/arch-split-120x40.golden",
-      "sha256": "7b9eec413fd8a690d8005159fcdff033f12071ee7a5882c363a0a9519d79226d",
+      "sha256": "f6e1f40df8700d59b580dd46b7064109bafa4615572d2c7c3a31b4dec4ebcbad",
       "bytes": 6842
     },
     {
@@ -14566,57 +14566,57 @@
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-home-200x60.golden",
-      "sha256": "d7d8f67c5f375481526847c40a05ee53925e82598671faf347860a15a5b5b83c",
+      "sha256": "d3d408c2e29c8fabef50f707fb1b274818df66d0f27c7d4c2a14a7a2cacc82ad",
       "bytes": 20130
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-split-120x40.golden",
-      "sha256": "56f4472da2a60596dbb9d92c6a88b0dacd54912284edf8ba9e696bcab8fa5afa",
+      "sha256": "f17c938132c079a08ce4918d79026712959a3b8779c88df9edd0e7b06e7c3a33",
       "bytes": 11037
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-split-80x24.golden",
-      "sha256": "d2e15d36c9b2c8ca529bd5aa008d2e0688029f674452534241df963bd0f8748a",
+      "sha256": "87ce049c4cc0050237764e4be4954f2c0e7a62e950fb8619c3e3cb2b1897aa9d",
       "bytes": 5411
     },
     {
       "path": "internal/tui/testdata/board/demo-home-100x30.golden",
-      "sha256": "1215e9bd0da94173422baed0f0c1ef3ff5992558ed68fa5b434a329b389f4232",
+      "sha256": "bc6c21efb47ee945fb7e14e8aa8d4830f770787ff1c21b0515208d0ef265dec1",
       "bytes": 6680
     },
     {
       "path": "internal/tui/testdata/board/demo-home-120x40.golden",
-      "sha256": "41a345773608de4df2387d81ad15949155e6de5de0a657c8cd4ba91cf277f252",
+      "sha256": "78f4ceb3020df82447afc6a829a324faae9ba75530797ece35473da0d9a8d9e2",
       "bytes": 10677
     },
     {
       "path": "internal/tui/testdata/board/demo-home-170x45.golden",
-      "sha256": "231a308799a16ffd2d505383b54e5efd318d8923b194ac3d089e9d7da970c411",
+      "sha256": "4afe766ffe7605f4e966ef8134135aedf03b05c9bda2031314c9fe9c7482b1a1",
       "bytes": 14076
     },
     {
       "path": "internal/tui/testdata/board/demo-home-200x50.golden",
-      "sha256": "c42471cd7ccd742956d6156d3a0f3a37e39103a643d4c7f9044bc0a23581db82",
+      "sha256": "6d9436339d687889232483a46c3a4dcbc48f3637cc9982f755a24e6c381bce93",
       "bytes": 17338
     },
     {
       "path": "internal/tui/testdata/board/demo-home-200x60.golden",
-      "sha256": "89d0a7f877f3d0a46ff84fb9a3f1b20bdc8a4a186ae3ecc719d08b25b2946c87",
+      "sha256": "79ba5c565c28b70a5aa9178c3e5058992d1c768472e72daa5aa79af60ca492d2",
       "bytes": 19688
     },
     {
       "path": "internal/tui/testdata/board/demo-home-80x24.golden",
-      "sha256": "040e81674993e7d5ab5e5b49ad954a8b536d7afcfa05bbe0a44f634605fb765e",
+      "sha256": "d2cb6ca2523e2d389b9d082c7dac0160f8267de428207fe677934adc82d3b87c",
       "bytes": 5318
     },
     {
       "path": "internal/tui/testdata/board/demo-inspector-120x40.golden",
-      "sha256": "2138644a5289bca89251ba302df037735209313d70b59a9fb40a4426ba4a74f7",
+      "sha256": "850d52eeecdf3a429ac267217f0bf9f9a3854d309a407f27de3371d4c8a95024",
       "bytes": 8744
     },
     {
       "path": "internal/tui/testdata/board/demo-inspector-200x60.golden",
-      "sha256": "c80a6bdb69c15bde6ec9c92a017f95303d4fa3425e5bf13d2bd5d374230bef0d",
+      "sha256": "3444c6d0c32f2073ae57eace9e7f4d04eaf3cd9bff914f9a0f56626a67f88ba8",
       "bytes": 20037
     },
     {
@@ -14626,27 +14626,27 @@
     },
     {
       "path": "internal/tui/testdata/board/demo-split-100x30.golden",
-      "sha256": "a4d026780ac36c9b8b5540ba4edab99e9e8587ccacd9752e654c6a943d3c8e28",
+      "sha256": "4212530736d9188d7dc9954b53343a45d3a1910e9d03a9f941dc2c945f4f4755",
       "bytes": 7010
     },
     {
       "path": "internal/tui/testdata/board/demo-split-120x40.golden",
-      "sha256": "41a345773608de4df2387d81ad15949155e6de5de0a657c8cd4ba91cf277f252",
+      "sha256": "78f4ceb3020df82447afc6a829a324faae9ba75530797ece35473da0d9a8d9e2",
       "bytes": 10677
     },
     {
       "path": "internal/tui/testdata/board/demo-split-170x45.golden",
-      "sha256": "231a308799a16ffd2d505383b54e5efd318d8923b194ac3d089e9d7da970c411",
+      "sha256": "4afe766ffe7605f4e966ef8134135aedf03b05c9bda2031314c9fe9c7482b1a1",
       "bytes": 14076
     },
     {
       "path": "internal/tui/testdata/board/demo-split-200x50.golden",
-      "sha256": "8d95c3170046858967657c0bbcc37865573a6c62a2f8bd457538eca861e47206",
+      "sha256": "5c4df5ee4e814a9521146725ade305c8bdb5b475734b9d9593af76288f33357b",
       "bytes": 16500
     },
     {
       "path": "internal/tui/testdata/board/demo-split-200x60.golden",
-      "sha256": "81e4480cae5a08511458e41f4aca26374b310287788a9523a01f00406bd3e3dd",
+      "sha256": "85de5cb0a781ecf202446ab8c2c0d4ddbf4ca82eed5dec27f7f0ac162d2cccea",
       "bytes": 18680
     },
     {
@@ -14666,7 +14666,7 @@
     },
     {
       "path": "internal/tui/testdata/board/demo-split-80x24.golden",
-      "sha256": "fa632abc91448e6d5e8025cd2e36787e20cf35284f52562e3af49f736ec4fd0b",
+      "sha256": "de3bc8e6c341c60f599e56268ef8875ff1383b229bd3246744069db333adbc16",
       "bytes": 5215
     },
     {
@@ -14696,27 +14696,27 @@
     },
     {
       "path": "internal/tui/testdata/board/first-use-home-120x40.golden",
-      "sha256": "ad39abaaf3f57fa090063c868579f6647ea93deac0f477537a6c92bede5541dd",
+      "sha256": "0eb027c27b1f56b926e309448b8162e1aec2769817c599b9f1de4b0b69705c06",
       "bytes": 4915
     },
     {
       "path": "internal/tui/testdata/board/first-use-home-170x45.golden",
-      "sha256": "ff3af940d0240ea06faedbbaf46e40396f2ac174a549a6d04096aba16aea6943",
+      "sha256": "9ca7b617fbe09f7d5f2a597be57f74cbf2e59efcd2a5b298019567f6fb9d596e",
       "bytes": 7775
     },
     {
       "path": "internal/tui/testdata/board/first-use-split-085x45.golden",
-      "sha256": "190deb05f9680a28f08a799e080dead294d67661c33ff0f407204c12d9690184",
+      "sha256": "3260ecd32f8e42f71734772246adc5b655ea1295ca11328667b6ac70f92dbc6c",
       "bytes": 3952
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-120x40.golden",
-      "sha256": "b3ada699ee847e32a5dd95003e5945a7e724e7f54b9a5d4dec0124cddb4dba6f",
+      "sha256": "185d42b1d6b235432a82c044c3e63131d6f484d8b8cbcee771bab75dbc820506",
       "bytes": 8210
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-80x24.golden",
-      "sha256": "8483ae3c2d355e56a2cc120ae8f4e7405af78d064bd990253a1153a28b30d4cf",
+      "sha256": "c3d0dbfbb781c12e97793dbb87cecb6602e8773396ed07318fffcbba7bfcf6e6",
       "bytes": 3887
     },
     {
@@ -14726,7 +14726,7 @@
     },
     {
       "path": "internal/tui/testdata/board/help-split-80x24.golden",
-      "sha256": "724bd10753a1955d58d3440cd48e4ff0b6aef3085170f3fb65592e231bcdef0f",
+      "sha256": "a5fac3ed56aa1083c4947def2d649791c4f34555299756ef0dbf67ea1a451407",
       "bytes": 3887
     },
     {
@@ -14756,12 +14756,12 @@
     },
     {
       "path": "internal/tui/testdata/board/host-split-120x40.golden",
-      "sha256": "5ee510f4fb65e8369a1585afe96451afdfe227d6e1613a9901037b06e9a28fec",
+      "sha256": "401999db55078fef8dbf0056f8a27f7e111716c294ce8a20a5dfd7b4e61b06b7",
       "bytes": 12697
     },
     {
       "path": "internal/tui/testdata/board/host-split-80x24.golden",
-      "sha256": "777705450096b6dc3897cf20aa5c83a10bada8787074205ebd163d110ffa0305",
+      "sha256": "cdc3af886e8f8ab6140866b6cc3ee3b2563961d7302baf470e1d0184ee306e35",
       "bytes": 7799
     },
     {
@@ -14776,12 +14776,12 @@
     },
     {
       "path": "internal/tui/testdata/board/lane-tail/home-120x40.golden",
-      "sha256": "3e053cf4db4808a1a307708ef9932b4738c8702e5d8bf87c41ce0d8f6340563b",
+      "sha256": "323a009c896262da8a7549af68aa07fd062378a6628f5bb5cdea93fcd406bbb6",
       "bytes": 5151
     },
     {
       "path": "internal/tui/testdata/board/memory-split-120x40.golden",
-      "sha256": "921b9b654609288d1470030791a8106cee4bd689950904ac358b317a419fd38f",
+      "sha256": "8feea06ea45dacff52c5d7922b5fcfdb23313eb5cc2dc40f50bfc9e8b2af8e73",
       "bytes": 6919
     },
     {
@@ -14801,27 +14801,27 @@
     },
     {
       "path": "internal/tui/testdata/board/plan-split-120x40.golden",
-      "sha256": "76c31ef4d0dbf893cb41725e41fa8b9c5966d4fe407e95a157a716059d511cba",
+      "sha256": "47c888220561c4af623b41a339bb5cc64c6da720b6ec8640f2d834e3baf34802",
       "bytes": 6632
     },
     {
       "path": "internal/tui/testdata/board/plan-split-80x24.golden",
-      "sha256": "18c1a194c115bd983246afe4ec9a3647825bc54d0c01b008f0784fe501ff9411",
+      "sha256": "955598d46376ec870ef19c33a4f766e100373eaf539c5aa9a8762e3c55244f2b",
       "bytes": 3635
     },
     {
       "path": "internal/tui/testdata/board/providers-split-120x40.golden",
-      "sha256": "46d368b6c74ac29cb6acc70d6370a7430b85d80a42d26363da69088d8cd70e88",
+      "sha256": "5fe8c9dbe3f1604be9310b1ace4df404c3a727d3133a35a240fc2ee79ab7d437",
       "bytes": 6487
     },
     {
       "path": "internal/tui/testdata/board/providers-split-80x24.golden",
-      "sha256": "99a98bdfa7a5224e8eea702c4e044b9570203e036742736bf1ae4e4f25eb6da4",
+      "sha256": "1159b8470fa83a86fbd83edb4ad330f7a0ee39f8a491a876d7d84b5db4102156",
       "bytes": 3495
     },
     {
       "path": "internal/tui/testdata/board/security-split-120x40.golden",
-      "sha256": "ac807c19a26cadf2c667c6c5a22331e40171ae2aa34fa69e87554e3de7db2256",
+      "sha256": "20ae38b4281dbfe60734a4bc8c5252921863ffbbfce12769638e16b087c53115",
       "bytes": 6885
     },
     {
@@ -14841,12 +14841,12 @@
     },
     {
       "path": "internal/tui/testdata/board/verify-split-120x40.golden",
-      "sha256": "2b713bdb3b6af113a13b86d9e294b8b55475f6ebf0ef3b641adba58d9b220a22",
+      "sha256": "9ef58df7ccbd74f1a5049331f4c1905f7b33b9f1d09b1a0aa648f5ffa3dc4b72",
       "bytes": 6790
     },
     {
       "path": "internal/tui/testdata/board/verify-split-80x24.golden",
-      "sha256": "f6737a853795ec2307191650b5ca6753eff4ccd529b17d00bc4be0db92e4f06f",
+      "sha256": "81cf8cfc857f4a868b9ef7c462280caddbf2318a2f3c15fcc4fd8f0bd362679a",
       "bytes": 3693
     },
     {
