@@ -16036,8 +16036,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "061e9edb88265c1a826804b98800bd179503ddbb1ec1c07c95f658e8410f031b",
-      "bytes": 399801
+      "sha256": "b9a09a15abd030e8b980e0098fbdc655956043d08f03db7a1dc86f42606a9af0",
+      "bytes": 399916
     },
     {
       "path": "tools/extreme/prq/main_default.go",
