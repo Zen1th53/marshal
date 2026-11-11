@@ -102,6 +102,23 @@ func TestBoardRetryRunsRetryThenResume(t *testing.T) {
 	}
 }
 
+// A retry that succeeds followed by a resume that fails is not reported as
+// a failed retry: the answer says the task starts again and the run waits.
+func TestBoardRetryResumeFailureSaysTheRunWaits(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	w.mu.Lock()
+	w.state.Marshal.State = marshal.Dispatching
+	w.mu.Unlock()
+	ans, err := retryContinuation(w, "T-023", func() error { return errors.New("resume refused") })
+	if err != nil {
+		t.Fatalf("err %v, want an answer", err)
+	}
+	if want := "T-023 starts again in a fresh session. The run is still paused: resume it from the stop notice."; ans != want {
+		t.Fatalf("answer %q, want %q", ans, want)
+	}
+}
+
 // Each RetryTask service error becomes one plain sentence; the catch-all logs
 // the raw error to Activity and tells the operator nothing of it.
 func TestPlainRetryError(t *testing.T) {

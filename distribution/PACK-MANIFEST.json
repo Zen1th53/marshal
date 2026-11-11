@@ -12551,13 +12551,13 @@
     },
     {
       "path": "internal/tui/board_retry.go",
-      "sha256": "c75db5d04dc313c0a0d8eca18427b46a865263985d91eabfbdf07f2e9b744c4a",
-      "bytes": 5351
+      "sha256": "bf42b34b37a0cb9bfda755d6a53249d0a5f3339a3458b12bc392c24fceb0b461",
+      "bytes": 5614
     },
     {
       "path": "internal/tui/board_retry_test.go",
-      "sha256": "0e5bb36c58159541d934aa2e2d73b4b5625ffb6abc8bcec8409d13f5f600ede4",
-      "bytes": 4806
+      "sha256": "54ab7bbdc3cb593dd35bee9dd73b5a603e4720237fb69fc98de44a1631be76c0",
+      "bytes": 5473
     },
     {
       "path": "internal/tui/board_rows_test.go",

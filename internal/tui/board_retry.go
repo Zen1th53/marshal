@@ -103,7 +103,10 @@ func retryContinuation(w *Workspace, id string, resume func() error) (string, er
 	answer := cleanBoard(id) + " starts again in a fresh session."
 	if w.marshalPanel().State != marshal.AwaitingUser {
 		if err := resume(); err != nil {
-			return "", err
+			// The retry happened; only the resume failed. Say so rather
+			// than reporting the retry as failed.
+			w.RecordActivity("resume after retrying " + cleanBoard(id) + " failed: " + err.Error())
+			return answer + " The run is still paused: resume it from the stop notice.", nil
 		}
 		return answer + " The run continues.", nil
 	}
