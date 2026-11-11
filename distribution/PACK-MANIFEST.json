@@ -14146,13 +14146,13 @@
     },
     {
       "path": "internal/tui/plain_errors.go",
-      "sha256": "b1fef6d2e256648ca3b4b9e860b69f531f2e97ffa4ca790763cad1a3cefa103f",
-      "bytes": 4723
+      "sha256": "7568215e5193a9f4cb29f671cc00bf9e5263c1e338828e62fa0fc4906c24c09c",
+      "bytes": 4957
     },
     {
       "path": "internal/tui/plain_errors_test.go",
-      "sha256": "0f205b9bfa2e42c6bce5df786acd1337cb7a1d8ce842ef6953eb8eb37fee4d66",
-      "bytes": 6477
+      "sha256": "35067af61436b0aeb5fa11c1ba56fce3d5998b0aa0438ea15840fa821b67f4ef",
+      "bytes": 7065
     },
     {
       "path": "internal/tui/plain_prompt_test.go",
@@ -16306,8 +16306,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "f7bc03528805d2f3d994f6038c8cbe4f2dee9a7c9dafa4adec0046df3ff536a5",
-      "bytes": 399227
+      "sha256": "061e9edb88265c1a826804b98800bd179503ddbb1ec1c07c95f658e8410f031b",
+      "bytes": 399801
     },
     {
       "path": "tools/extreme/prq/main_default.go",

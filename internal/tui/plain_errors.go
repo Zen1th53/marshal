@@ -45,7 +45,10 @@ func (w *Workspace) logTUIError(what string, err error) {
 		text += " (cause: " + plain.cause.Error() + ")"
 	}
 	detail := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", " | ")
-	_, _ = fmt.Fprintf(f, "%s %s: %s\n", time.Now().Format(time.RFC3339), what, detail)
+	// The log is local and private (0600), but a command line or a raw error
+	// can still carry a secret or Marshal protocol text: redact both, as every
+	// other place the TUI writes them does.
+	_, _ = fmt.Fprintf(f, "%s %s: %s\n", time.Now().Format(time.RFC3339), RedactContent(what, nil), RedactContent(detail, nil))
 }
 
 // plainSentenceError is an error whose text is already written for people;

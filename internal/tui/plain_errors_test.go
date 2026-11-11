@@ -131,6 +131,23 @@ func TestCommandErrorIsLogged(t *testing.T) {
 	}
 }
 
+// The error log never stores a secret from the command line or the error.
+func TestCommandErrorLogIsRedacted(t *testing.T) {
+	tmp := t.TempDir()
+	ws := NewWorkspace(nil, "project", "session")
+	ws.workDir = tmp
+	ws.logTUIError("/login password=hunter2", fmt.Errorf("refused: api_key=abc"))
+	data, err := os.ReadFile(statepath.Path(tmp, "logs", "tui-errors.log"))
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	for _, leaked := range []string{"hunter2", "api_key=abc"} {
+		if strings.Contains(string(data), leaked) {
+			t.Fatalf("log %q contains %q", string(data), leaked)
+		}
+	}
+}
+
 // A Marshal launch that did not happen reads as a plain sentence; the cause is
 // still reachable through Unwrap for the log.
 func TestMarshalStartErrorIsPlain(t *testing.T) {
