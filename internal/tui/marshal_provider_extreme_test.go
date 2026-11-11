@@ -66,7 +66,7 @@ func TestExtremeOpenCodeMarshalSelectionProtocolKickoffAndResume(t *testing.T) {
 			opening := "Start."
 			if saved {
 				opening = "Continue."
-				if err := w.saveMarshalIntake(marshalIntake{Language: "Uzbek", EarlierWork: "no"}); err != nil {
+				if err := w.saveMarshalIntake(marshalIntake{Language: "Uzbek"}); err != nil {
 					t.Fatal(err)
 				}
 			}

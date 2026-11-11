@@ -72,10 +72,10 @@ func TestAcceptanceOwnChatWithoutHistoryGrant(t *testing.T) {
 
 func TestAcceptanceIntakeSurvivesProviderSwitch(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-intake")
-	emitMarshalIntakeFile(t, w, "Uzbek", "no")
+	emitMarshalIntakeFile(t, w, "Uzbek")
 	fresh := NewWorkspace(nil, "project", "session")
 	brief := fresh.marshalContinuityBriefing(rt.ProjectRoot(), "protocol")
-	if !strings.Contains(brief, "Uzbek") || !strings.Contains(brief, `"earlier_work":"no"`) || !strings.Contains(brief, "Do not repeat") {
+	if !strings.Contains(brief, "Uzbek") || !strings.Contains(brief, "Work in the saved language from your first message.") {
 		t.Fatalf("intake lost: %s", brief)
 	}
 	if !w.permissions.queue.Empty() {

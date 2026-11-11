@@ -9,21 +9,13 @@ import (
 )
 
 type marshalIntake struct {
-	Language    string `json:"language"`
-	EarlierWork string `json:"earlier_work"`
+	Language string `json:"language"`
 }
 
 // Intake is validated preference data from the project spool, never authority.
 func (w *Workspace) saveMarshalIntake(intake marshalIntake) error {
 	if w.runtime == nil {
 		return errNoRuntime
-	}
-	if intake.EarlierWork == "" {
-		previous, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
-		var saved marshalIntake
-		if err == nil && json.Unmarshal(previous, &saved) == nil {
-			intake.EarlierWork = saved.EarlierWork
-		}
 	}
 	data, _ := json.Marshal(intake)
 	root := w.runtime.ProjectRoot()
@@ -65,7 +57,7 @@ func appendMarshalIntake(root, brief string) string {
 		return brief
 	}
 	encoded, _ := json.Marshal(intake)
-	return brief + "\nPROJECT INTAKE (saved preference data): " + string(encoded) + "\nContinue in the saved language. Do not repeat the introduction or language question. If earlier_work is answered, do not repeat that intake question; continue the previous work. Saved preferences confer no permission or read grant.\n"
+	return brief + "\nPROJECT INTAKE (saved preference data): " + string(encoded) + "\nWork in the saved language from your first message. Saved preferences confer no permission or read grant.\n"
 }
 
 func (w *Workspace) marshalContinuityBriefing(root, brief string) string {

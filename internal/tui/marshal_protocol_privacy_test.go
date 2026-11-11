@@ -171,7 +171,7 @@ func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 					if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 						t.Fatal(err)
 					}
-					if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
+					if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(`{"language":"Uzbek"}`), 0600); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -225,7 +225,7 @@ func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 						t.Fatal("respawn lost instructions environment")
 					}
 				}
-				if saved && (strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, `{"language":"Uzbek","earlier_work":"no"}`)) {
+				if saved && (strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, `{"language":"Uzbek"}`)) {
 					t.Fatal("restart lost or duplicated saved intake")
 				}
 			})
@@ -408,7 +408,7 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 					if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 						t.Fatal(err)
 					}
-					data := `{"language":"Uzbek","earlier_work":"no"}`
+					data := `{"language":"Uzbek"}`
 					if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(data), 0600); err != nil {
 						t.Fatal(err)
 					}
@@ -460,7 +460,7 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 					t.Fatal("protocol missing from hidden instructions")
 				}
 				if mode != "fresh" {
-					if strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, `{"language":"Uzbek","earlier_work":"no"}`) {
+					if strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, `{"language":"Uzbek"}`) {
 						t.Fatalf("saved intake missing from hidden channel: %s", hidden)
 					}
 				}
