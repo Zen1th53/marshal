@@ -331,6 +331,9 @@ type Workspace struct {
 	// picker is the Marshal-provider picker shown at launch when the saved
 	// provider is missing or out of limit (board_picker.go).
 	picker pickerState
+	// marshalPicker is the mid-run Marshal picker opened with m
+	// (board_marshal_picker.go): an overlay for changing the Marshal.
+	marshalPicker marshalPickerState
 }
 
 // AttachULTRASession applies authorization and the build's startup preference.
@@ -1113,6 +1116,12 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 			w.renderFullView()
 			return false
 		}
+		if w.marshalPickerOpen() {
+			w.closeMarshalPicker()
+			w.interruptArmed = false
+			w.renderFullView()
+			return false
+		}
 		if w.diffViewer.IsOpen() {
 			w.diffViewer.Close()
 			w.interruptArmed = false
@@ -1171,8 +1180,16 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 			w.renderFullView()
 			return false
 		}
-		// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL
-		// it leaves the workspace and any in-progress composer draft alone.
+		// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL,
+		// with nothing open over the Board, it moves the keyboard to the
+		// Marshal chat (native focuses the widget; tmux docks and focuses
+		// it). While docked in tmux, tmux takes F11 before the Board, so
+		// this runs only when the chat is not docked.
+		if w.boardVisible() && !w.marshalPickerOpen() && !w.boardHelp.Load() && !w.completionOpen {
+			w.focusChatFromBoard(ctx)
+			w.renderFullView()
+			return false
+		}
 		return false
 	}
 	if event.Type == KeyF12 {
@@ -1190,6 +1207,10 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 			w.clearTerminal()
 			return true
 		}
+		w.renderFullView()
+		return false
+	}
+	if w.handleMarshalPickerKey(ctx, event) {
 		w.renderFullView()
 		return false
 	}
@@ -1472,21 +1493,13 @@ func (w *Workspace) handleShortcut(ctx context.Context, event KeyEvent) bool {
 	if event.Type == KeyRune && !w.composing() && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
 		switch event.Rune {
 		case 'm':
-			// The native chat takes the keyboard in its composer; Esc
-			// gives it back.
-			if w.nativeChatShown() && !w.inboxView.Confirming() {
-				w.focusNativeChat(true)
-				return true
-			}
-			// The chat is always docked beside the Board; m moves the
-			// keyboard there and F11 brings it back. With no Board on
-			// screen m is ordinary composer input.
+			// m opens the Marshal picker on the Board; chat focus is F11.
+			// With no Board, an inbox confirmation or the inspector open, m
+			// is ordinary composer input.
 			if !w.boardVisible() || w.inboxView.Confirming() || w.inboxView.Inspecting() || w.boardUI.inspect != "" {
 				return false
 			}
-			if err := w.focusMarshalChat(ctx); err != nil {
-				w.setOutput(err.Error(), true)
-			}
+			w.openMarshalPicker(ctx)
 			return true
 		case 'd':
 			w.runCommand(ctx, "/diff")

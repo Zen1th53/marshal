@@ -567,13 +567,13 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	}
 	// The prototype's footer: moves and focus keys, then the views by
 	// number, then the command line, palette, advanced menu and help.
-	items := [][2]string{{"j/k", "move"}, {"⏎", "inspect"}, {"m", "marshal"}, {"i", "inbox"}, {"t", "tasks"}, {"l", "lanes"}}
+	items := [][2]string{{"j/k", "move"}, {"⏎", "inspect"}, {"m", "Marshal"}, {"i", "inbox"}, {"t", "tasks"}, {"l", "lanes"}}
 	if !v.unicode() {
 		items[1][0] = "Enter"
 	}
 	if v.empty {
 		// The first-use card: talk to the Marshal, verify a provider.
-		items = [][2]string{{"⏎", "tell the marshal"}, {"m", "chat"}, {"s", "say"}, {"v", "verify"}}
+		items = [][2]string{{"⏎", "tell the marshal"}, {"F11", "chat"}, {"s", "say"}, {"v", "verify"}}
 		if !v.unicode() {
 			items[0][0] = "Enter"
 		}
@@ -589,13 +589,15 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	}
 	if v.docked {
 		// F11 (or Alt+arrow) switches between the chat and the Board
-		// from either side; tmux takes it before the Board sees it.
+		// from either side; tmux takes it before the Board sees it. m
+		// stays the Marshal picker; F11 is the chat-switch key beside it.
 		for i := range items {
 			if items[i][0] == "m" {
-				items[i] = [2]string{"m/F11", "chat"}
+				ins := [][2]string{{"F11", "chat"}}
 				if !v.empty {
-					items = slices.Insert(items, i+1, [2]string{"s", "say"})
+					ins = append(ins, [2]string{"s", "say"})
 				}
+				items = slices.Insert(items, i+1, ins...)
 				break
 			}
 		}
@@ -669,7 +671,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		if inView {
 			return 0
 		}
-		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "m/F11", "s", "v", "i", "?", "/", "^K", "l", "t"} {
+		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "F11", "s", "v", "i", "?", "/", "^K", "l", "t"} {
 			if k == key {
 				return i
 			}

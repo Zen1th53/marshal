@@ -73,7 +73,7 @@ func TestFirstUseBoardGolden(t *testing.T) {
 			// provider is a button that arms its verify.
 			var cta, verify bool
 			for _, h := range hits {
-				cta = cta || h.kind == hitKey && h.id == "m" && strings.Contains(StripANSI(frame[h.row]), "Tell the Marshal")
+				cta = cta || h.kind == hitKey && h.id == "⏎" && strings.Contains(StripANSI(frame[h.row]), "Tell the Marshal")
 				verify = verify || h.kind == hitVerify && h.id == "claude"
 				if h.row < 0 || h.row >= tc.rows {
 					t.Fatalf("click region off the frame: %+v", h)
@@ -217,18 +217,18 @@ func TestFirstUseFooterShowsSwitchHint(t *testing.T) {
 	v := firstUseVisual(th, time.Now())
 	v.docked = true
 	footer := StripANSI(v.footer(120))
-	for _, want := range []string{"⏎ tell the marshal", "m/F11 chat", "v verify"} {
+	for _, want := range []string{"⏎ tell the marshal", "F11 chat", "v verify"} {
 		if !strings.Contains(footer, want) {
 			t.Fatalf("footer %q lacks %q", footer, want)
 		}
 	}
 	// A run's Board names the switch key too while docked.
 	run := boardVisual{theme: th, now: time.Now(), docked: true}
-	if f := StripANSI(run.footer(160)); !strings.Contains(f, "m/F11 chat") {
+	if f := StripANSI(run.footer(160)); !strings.Contains(f, "F11 chat") {
 		t.Fatalf("run footer %q", f)
 	}
-	if ev, ok := footerKeyEvent("m/F11"); !ok || ev.Rune != 'm' {
-		t.Fatal("a click on m/F11 is not m")
+	if ev, ok := footerKeyEvent("F11"); !ok || ev.Type != KeyF11 {
+		t.Fatal("a click on F11 is not F11")
 	}
 }
 

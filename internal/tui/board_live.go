@@ -562,6 +562,14 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		popup, ui.helpMax = v.helpOverlay(r.W, r.H, ui.helpScroll)
 		ui.helpScroll = min(ui.helpScroll, ui.helpMax)
 	}
+	// The mid-run Marshal picker (m) is an overlay like help; its rows record
+	// click regions kept past the popup hit sweep below.
+	marshalPickerPopup := false
+	if len(popup) == 0 && w.marshalPickerOpen() {
+		r := l.Overlay(0)
+		popup = v.marshalPickerOverlay(r, w.marshalPickerPaint())
+		marshalPickerPopup = true
+	}
 	// Only the answer to the operator's own command opens the overlay: a
 	// background message is never one (RecordActivity leaves answer and
 	// outputSeq alone).
@@ -575,8 +583,14 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	if len(popup) > 0 || (ui.inspect != "" && !docked) {
 		// Something covers the body: only the header and the inspector's
-		// own buttons stay clickable; a popup covers those too.
-		hits = slices.DeleteFunc(hits, func(h boardHit) bool { return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0) })
+		// own buttons stay clickable; a popup covers those too. The Marshal
+		// picker overlay keeps its own rows clickable.
+		hits = slices.DeleteFunc(hits, func(h boardHit) bool {
+			if marshalPickerPopup && h.kind == hitPicker {
+				return false
+			}
+			return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0)
+		})
 	}
 	w.boardHits.set(hits)
 	return lines, cursorRow, cursorCol

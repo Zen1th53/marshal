@@ -95,8 +95,8 @@ func TestRealTmuxDockFocusCyclesDoNotLeak(t *testing.T) {
 	}
 	cycle := func() {
 		w.kickDock()
-		if w.handleTerminalKey(loopCtx, KeyEvent{Type: KeyRune, Rune: 'm'}) {
-			t.Fatal("m asked the workspace to exit")
+		if w.handleTerminalKey(loopCtx, KeyEvent{Type: KeyF11}) {
+			t.Fatal("F11 asked the workspace to exit")
 		}
 		waitFor(t, func() bool { return active() == chatPane }, active)
 		if _, err := master.Write([]byte("\x1b[23~")); err != nil { // F11

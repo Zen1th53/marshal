@@ -91,7 +91,7 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 
 	s := startFrozenTUIInProject(t, 40, 160, bin, project, "tui")
 	s.sendLine("/marshal model " + reviewer)
-	s.mustSee("The Marshal now uses " + reviewer + ".")
+	s.mustSee("The Marshal is now " + marshalDisplayName(reviewer) + ".")
 	s.sendLine("/marshal use-plan")
 	if requiredLegacyFixtureRefusal && os.Getenv("MARSHAL_REAL_MODEL") != "1" {
 		// The Board says the run stopped in plain words; the refusal code

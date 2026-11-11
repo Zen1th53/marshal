@@ -65,7 +65,12 @@ type marshalSession struct {
 	draftCancel             context.CancelFunc
 	draftDone               chan struct{}
 	busy                    bool
-	integrityAlertRunID     string
+	// nextProvider is a Marshal switch chosen while a step was running; it is
+	// applied when the step finishes (onIdle → applyQueuedMarshal).
+	nextProvider string
+	// onIdle runs after a reserved step finishes when a switch is queued.
+	onIdle              func()
+	integrityAlertRunID string
 	approving               bool
 	amended                 bool
 	pending                 *marshalAmendment
@@ -134,6 +139,11 @@ func (w *Workspace) marshalSession() *marshalSession {
 	defer w.mu.Unlock()
 	if w.marshal == nil {
 		w.marshal = &marshalSession{}
+		// A Marshal switch chosen mid-step drains once the step releases its
+		// reservation, on the UI goroutine so the switch runs like a key.
+		w.marshal.onIdle = func() {
+			w.postUI(context.Background(), func() { w.applyQueuedMarshal(context.Background()) })
+		}
 	}
 	return w.marshal
 }
@@ -638,20 +648,28 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	if !slices.Contains(app.MarshalProviders(), provider) {
 		return "", fmt.Errorf("unknown Marshal model provider %q; use %s", provider, marshalProviderNames)
 	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	before := m.provider
+	m.mu.Unlock()
+	cur := "the current one"
+	if before != "" {
+		cur = marshalDisplayName(before)
+	}
+	name := marshalDisplayName(provider)
 	// Validate before persisting or touching the current chat.
 	if _, err := project.FindBinary(provider); err != nil {
-		return "", fmt.Errorf("Marshal unchanged: %s CLI is missing. Install %s and make it available on PATH, then retry /marshal model %s. The existing chat has been left running.", provider, provider, provider)
+		return "", fmt.Errorf("The Marshal stays %s: %s is not installed. Install it and try again.", cur, name)
 	}
-	m := w.marshalSession()
 	m.mu.Lock()
 	busy := m.busy
 	m.mu.Unlock()
 	if busy {
-		return "", errors.New("a Marshal operation is already running")
+		return "", errors.New("The Marshal is in the middle of a step; try again when it finishes.")
 	}
 	root := w.providerRoot()
 	if err := saveDefaultProvider(root, provider); err != nil {
-		return "", fmt.Errorf("Marshal provider was not saved: %w", err)
+		return "", fmt.Errorf("The Marshal stays %s: the choice could not be saved in this project.", cur)
 	}
 	w.tmuxMu.Lock()
 	chat := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])
@@ -708,6 +726,7 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	if replace {
 		m.conversationID = ""
 	}
+	runID := m.runID
 	m.mu.Unlock()
 	if replace {
 		background := context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)
@@ -723,10 +742,38 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 		w.tmuxMu.Unlock()
 		_ = tmux.SelectWindow(ctx, target)
 		if err != nil {
-			return "", fmt.Errorf("Marshal provider saved as %s, but the new chat could not start: %w; retry /marshal chat", provider, err)
+			return "", fmt.Errorf("The Marshal is now %s, but its chat did not start. Press m and choose it again.", name)
 		}
 	}
-	return "The Marshal now uses " + provider + ".", nil
+	answer := "The Marshal is now " + name + "."
+	// An open run keeps the service wired with the old Marshal until it is
+	// rebuilt: re-wire it from the new provider, the way a TUI restart does.
+	if runID != "" && w.runtime != nil {
+		service, _, _, err := w.marshalService(ctx, runID)
+		if err != nil {
+			answer += " The current run keeps its Marshal until the next restart."
+		} else {
+			m.mu.Lock()
+			m.service = service
+			m.mu.Unlock()
+			if run, serr := service.Snapshot(ctx, runID); serr == nil {
+				w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "the Marshal is now "+name))
+			}
+		}
+	}
+	// In native chat mode the old provider keeps chatting until it is
+	// restarted on the new one, the same restart /view chat native uses.
+	w.chat.mu.Lock()
+	nativeActive := w.chat.tr != nil
+	chatProvider := w.chat.provider
+	w.chat.mu.Unlock()
+	if nativeActive && canonicalNeutralProvider(chatProvider) != provider {
+		w.stopNativeChat()
+		if _, err := w.marshalChat(context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)); err != nil {
+			return "", fmt.Errorf("The Marshal is now %s, but its chat did not start. Press m and choose it again.", name)
+		}
+	}
+	return answer, nil
 }
 
 // marshalRecommend chooses the Marshal provider when the project has no
@@ -859,9 +906,16 @@ func (m *marshalSession) finishWithNativeTurn(cancel context.CancelFunc, nativeT
 		// independently of any later resume operation's cancellation context.
 		m.nativeCancels = append(m.nativeCancels, cancel)
 	}
+	drain := m.onIdle
+	queued := m.nextProvider != ""
 	m.mu.Unlock()
-	if !nativeTurnWaiting {
+	if !nativeTurnWaiting && cancel != nil {
 		cancel()
+	}
+	// A Marshal switch queued while this step ran takes over now that the
+	// reservation is released and nothing else is running.
+	if queued && drain != nil {
+		drain()
 	}
 }
 

@@ -3,7 +3,7 @@
                                                                                 |
                                                                                 |
   [▸ Tell the Marshal what to build   ⏎]                                        |
-   Enter or m: type it in the Marshal chat · s: say it from here                |
+   Enter or F11: type it in the Marshal chat · s: say it from here              |
                                                                                 |
   PROVIDERS v verifies the next unverified · click one to verify it             |
   ● ⬡ codex verified   ◐ ✳ claude unverified   × ◆ agy limited until 14:42      |
@@ -21,4 +21,4 @@
                                                                                 |
                                                                                 |
                                                                                 |
- ⏎ tell the marshal  m chat  s say  v verify  / command  ^K palette  ? help     |
+ ⏎ tell the marshal  F11 chat  s say  v verify  / command  ^K palette  ? help   |

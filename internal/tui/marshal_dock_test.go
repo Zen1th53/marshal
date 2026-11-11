@@ -471,31 +471,25 @@ func TestMarshalKeyFocusesDockedChat(t *testing.T) {
 	w, _ := dockWorkspace(t)
 	f.pane("%7", "@1", 200)
 	ctx := context.Background()
-	// No Board on screen: m is composer input.
-	if w.handleShortcut(ctx, KeyEvent{Type: KeyRune, Rune: 'm'}) {
-		t.Fatal("m was taken without a Board")
+	// No Board on screen: F11 is left to tmux and focuses nothing here.
+	if w.handleTerminalKey(ctx, KeyEvent{Type: KeyF11}) {
+		t.Fatal("F11 asked the workspace to exit without a Board")
 	}
+	mustNotContain(t, f.take(), "select-pane -t %7")
 	w.screen = NewScreen(nil)
 	w.mu.Lock()
 	w.state.Marshal = &MarshalPanel{RunID: "run"}
 	w.mu.Unlock()
 	for range 3 {
-		if !w.handleShortcut(ctx, KeyEvent{Type: KeyRune, Rune: 'm'}) {
-			t.Fatal("m was not handled")
-		}
+		w.handleTerminalKey(ctx, KeyEvent{Type: KeyF11})
 		log := f.take()
 		mustContain(t, log, "select-pane -t %7")
 		mustNotContain(t, log, "break-pane")
 		if w.dockedChat() != "%7" {
-			t.Fatal("m closed the dock")
+			t.Fatal("F11 closed the dock")
 		}
 	}
 	// Esc is not a dock key either.
 	w.handleShortcut(ctx, KeyEvent{Type: KeyEsc})
 	mustNotContain(t, f.take(), "break-pane")
-	// With text in the composer, m is typed.
-	w.composer.SetText("hi")
-	if w.handleShortcut(ctx, KeyEvent{Type: KeyRune, Rune: 'm'}) {
-		t.Fatal("m was taken from a composer with text")
-	}
 }

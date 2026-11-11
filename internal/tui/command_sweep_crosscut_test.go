@@ -396,7 +396,7 @@ func TestCommandSweepCrosscutMarshalSettings(t *testing.T) {
 	}
 	// Explicit model switches require an installed CLI. Provider configuration
 	// may still name an absent CLI; asynchronous planning must fail visibly.
-	if _, err := w.cmd.Handle(ctx, "/marshal model codex"); err == nil || !strings.Contains(err.Error(), "CLI is missing") {
+	if _, err := w.cmd.Handle(ctx, "/marshal model codex"); err == nil || !strings.Contains(err.Error(), "Codex is not installed") {
 		t.Fatalf("missing CLI model switch: %v", err)
 	}
 	if _, err := w.cmd.Handle(ctx, "/provider use codex"); err != nil {

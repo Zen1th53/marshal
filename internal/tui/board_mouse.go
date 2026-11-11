@@ -155,6 +155,17 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		return true
 	}
 	h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1)
+	// The mid-run Marshal picker is an overlay: a click on a row picks and
+	// applies it, a click anywhere else closes it (choosing is reversible and
+	// never acts mid-step, so a click may decide here).
+	if w.marshalPickerOpen() {
+		if ok && h.kind == hitPicker {
+			w.clickMarshalPicker(ctx, h.id)
+		} else {
+			w.closeMarshalPicker()
+		}
+		return true
+	}
 	if !ok {
 		return true
 	}
@@ -314,8 +325,8 @@ func footerKeyEvent(label string) (KeyEvent, bool) {
 		return KeyEvent{Type: KeyCtrlK}, true
 	case "PgDn":
 		return KeyEvent{Type: KeyPgDn}, true
-	case "m/F11":
-		return KeyEvent{Type: KeyRune, Rune: 'm'}, true
+	case "F11":
+		return KeyEvent{Type: KeyF11}, true
 	}
 	if r := []rune(label); len(r) == 1 {
 		return KeyEvent{Type: KeyRune, Rune: r[0]}, true
