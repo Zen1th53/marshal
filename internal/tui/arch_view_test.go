@@ -94,8 +94,9 @@ func TestArchViewGoldens(t *testing.T) {
 				t.Errorf("Architecture view lacks %q", want)
 			}
 			// The body is one status line then blank rows: no section titles.
+			// Rows 0 and 1 are the vitals row and the header.
 			bodyLines := 0
-			for _, l := range frame[1 : len(frame)-1] {
+			for _, l := range frame[2 : len(frame)-1] {
 				if strings.TrimSpace(StripANSI(l)) != "" {
 					bodyLines++
 				}
