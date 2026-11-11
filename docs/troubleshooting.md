@@ -102,7 +102,7 @@ To resume where you left off:
    marshal
    ```
 2. Marshal automatically detects the latest unfinished run in `.marshal/state.db` and reloads the Board.
-3. If the run was waiting for you (for example, to accept the architecture), the amber **`NEEDS YOU`** gate reappears. Press **`y`** and **`Enter`** to continue.
+3. If the run was waiting for you (for example, to accept the architecture), the orange **`NEEDS YOU`** gate reappears. Press **`y`** and **`Enter`** to continue.
 4. If workers were stopped while dispatching, Marshal releases stale leases, reschedules incomplete tasks, and resumes execution.
 
 ---

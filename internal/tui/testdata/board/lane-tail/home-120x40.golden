@@ -1,16 +1,16 @@
  Marshal · "MCP memory PoC" · running · 12/53 done · ⣾ 2 lanes · budget ▰▰▰▰▰▱▱▱ 61% · inbox 2 · ● ● ◐ ●                |
-> TASKS 53 tasks · 2 running · 2 parked · 12 merged               │LANES 2 running · codex 1/1 · claude 1/1             |
+> TASKS 53 tasks · 2 running · 2 parked · 12 merged               │LANES 2 running · ⬡ codex 1/1 · ✳ claude 1/1         |
   ID     state       worker       scope               sent back   │  worker       task    elapsed tokens        last ac…|
-  T-009  ✓ merged    opencode-1   …mcp/events_list.go             │⣾ codex-1      T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …|
-  T-011  ◆ verifying codex-2      …mcp/run_digest*.go             │  $ go test ./internal/mcp/...                       |
-  T-017  ⣾ working   codex-1      …p/memory_recall.go             │  ok  internal/mcp        0.41s                      |
-  T-018  ⣾ working   claude-1     …ory_candidates*.go             │  === RUN   TestMemoryRecall                         |
-  T-019  ◌ stalled   agy-1        …/memory_restore.go             │⣾ claude-1     T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …|
-  T-020  ◌ stalled   codex-1      …p/memory_bridge.go             │  ● Reading internal/app/memory_candidates.go        |
-  T-023  ▮ parked    codex-3      …licy/broker_npm.go             │    token: [REDACTED]                                |
-  T-024  ↻ rework    claude-2     …redential_lease.go sent back 1×│  ● Editing memory_candidates.go                     |
-  T-027  ◌ stalled   opencode-2   …_review_extreme.go             │                                                     |
-  T-031  ▮ parked    agy-2        …lease/push_tags.sh             │ACTIVITY state changes only · full log in inspector  |
+  T-009  ✓ merged    ● opencode-1 …mcp/events_list.go             │⣾ ⬡ codex-1    T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …|
+  T-011  ◎ verifying ⬡ codex-2    …mcp/run_digest*.go             │  $ go test ./internal/mcp/...                       |
+  T-017  ⣾ working   ⬡ codex-1    …p/memory_recall.go             │  ok  internal/mcp        0.41s                      |
+  T-018  ⣾ working   ✳ claude-1   …ory_candidates*.go             │  === RUN   TestMemoryRecall                         |
+  T-019  ◌ stalled   ◆ agy-1      …/memory_restore.go             │⣾ ✳ claude-1   T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …|
+  T-020  ◌ stalled   ⬡ codex-1    …p/memory_bridge.go             │  ● Reading internal/app/memory_candidates.go        |
+  T-023  ▮ parked    ⬡ codex-3    …licy/broker_npm.go             │    token: [REDACTED]                                |
+  T-024  ↻ rework    ✳ claude-2   …redential_lease.go sent back 1×│  ● Editing memory_candidates.go                     |
+  T-027  ◌ stalled   ● opencode-2 …_review_extreme.go             │                                                     |
+  T-031  ▮ parked    ◆ agy-2      …lease/push_tags.sh             │ACTIVITY state changes only · full log in inspector  |
   T-033  · queued    —            …tions_canonical.go             │14:02:29 T-009 merged · → integration a91f2c · 7 evi…|
   T-034  · queued    —            docs/mcp-memory.md              │14:02:14 T-023 parked · egress registry.npmjs.org ou…|
                                                                   │                                                     |

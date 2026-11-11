@@ -153,7 +153,11 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 		if m.Busy == p.Provider {
 			state, col = "verifying", "working"
 		}
-		line := row(v.fg(col, "●"), cleanBoard(p.Provider), v.fg("dim", firstNonEmpty(cleanBoard(p.Model), "—")), verified, fmt.Sprint(p.ActiveLanes), limit, resets, v.fg(col, state))
+		glyph := providerGlyph(providerOf(p.Provider), v.unicode())
+		if glyph == "" {
+			glyph = "●"
+		}
+		line := row(v.fg(col, glyph), cleanBoard(p.Provider), v.fg("dim", firstNonEmpty(cleanBoard(p.Model), "—")), verified, fmt.Sprint(p.ActiveLanes), limit, resets, v.fg(col, state))
 		line = PadCell(line, w)
 		if p.Provider == m.Selected {
 			sel = len(out)

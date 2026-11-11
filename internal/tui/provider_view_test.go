@@ -149,8 +149,12 @@ func TestProviderViewContent(t *testing.T) {
 		}
 	}
 	row := func(name string) string {
+		glyph := providerGlyph(providerOf(name), v.unicode())
+		if glyph == "" {
+			glyph = "●"
+		}
 		for _, l := range lines {
-			if strings.HasPrefix(l, "● "+name+" ") {
+			if strings.HasPrefix(l, glyph+" "+name+" ") {
 				return l
 			}
 		}

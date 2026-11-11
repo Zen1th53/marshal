@@ -320,7 +320,7 @@ func (w *Workspace) forgetDockLocked(ctx context.Context) error {
 // selected pane's title is drawn on the accent colour with a marker, the
 // other dimmed, so where the keyboard is shows at a glance from either side.
 // The chat's title is @marshal_dock_title, the Board's @marshal_board_title.
-const dockBorderFormat = "#{?pane_active,#[fg=colour16#,bg=colour111#,bold] ▶ ,#[fg=colour245#,bg=default#,nobold]   }" +
+var dockBorderFormat = "#{?pane_active,#[fg=" + tmuxColour("ink") + "#,bg=" + tmuxColour("accent") + "#,bold] ▶ ,#[fg=" + tmuxColour("dim") + "#,bg=default#,nobold]   }" +
 	"#{?@marshal_dock_title,#{@marshal_dock_title},#{@marshal_board_title}}#[default]"
 
 // boardDockTitle is the Board pane's border title while the chat is docked:
@@ -334,8 +334,8 @@ func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 	for _, o := range [][2]string{
 		{"pane-border-format", dockBorderFormat},
 		{"pane-border-status", "top"},
-		{"pane-border-style", "fg=colour238"},
-		{"pane-active-border-style", "fg=colour111,bold"},
+		{"pane-border-style", "fg=" + tmuxColour("faint")},
+		{"pane-active-border-style", "fg=" + tmuxColour("accent") + ",bold"},
 	} {
 		if err := tmux.SetWindowOption(ctx, board, o[0], o[1]); err != nil {
 			return err

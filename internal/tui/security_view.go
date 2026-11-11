@@ -118,7 +118,7 @@ func (v boardVisual) securityLines(m securityPaint, w int) ([]string, int) {
 	out = append(out, v.kv("updated", read, w))
 	sandbox := v.fg("merged", ed.Sandbox)
 	if u := o.Unconfined; u != nil {
-		sandbox = v.fg("parked", "last lane unconfined: "+joinNonEmpty(" ", cleanBoard(u.Worker), cleanBoard(u.Task))) + v.fg("dim", " · "+hostAgo(v.now.Sub(u.At))+" · "+ed.Sandbox)
+		sandbox = v.fg("waiting", "last lane unconfined: "+joinNonEmpty(" ", cleanBoard(u.Worker), cleanBoard(u.Task))) + v.fg("dim", " · "+hostAgo(v.now.Sub(u.At))+" · "+ed.Sandbox)
 	}
 	out = append(out, v.kv("sandbox", sandbox, w), v.kv("secrets", ed.Secrets, w))
 	trips := v.fg("merged", "0 trips")

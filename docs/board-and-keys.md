@@ -66,7 +66,7 @@ Pressing **`v`** checks the health and readiness of your AI agent providers:
 
 ## NEEDS YOU Gates
 
-When a run reaches a step that requires human authorization, the Board header displays an amber **`NEEDS YOU`** alert:
+When a run reaches a step that requires human authorization, the Board header displays an orange **`NEEDS YOU`** alert:
 
 - **Architecture Gate**: When the Marshal drafts a project contract:
   ```text

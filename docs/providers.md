@@ -100,4 +100,4 @@ If an AI provider encounters rate limits, billing caps, or network errors during
 1. Marshal records the failure reason in `.marshal/state.db`.
 2. The affected provider lane is marked as limited.
 3. If an alternate verified provider is available, Marshal reassigns pending tasks according to the approved plan.
-4. If no eligible provider remains, the run pauses with an amber **`NEEDS YOU`** alert on the Board, allowing you to re-verify, select a different model, or resolve the quota before resuming.
+4. If no eligible provider remains, the run pauses with an orange **`NEEDS YOU`** alert on the Board, allowing you to re-verify, select a different model, or resolve the quota before resuming.

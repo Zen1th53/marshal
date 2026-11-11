@@ -1,9 +1,9 @@
 [48;2;22;27;38m [1m[38;2;255;255;255mMarshal[0m[48;2;22;27;38m[0m[48;2;22;27;38m[38;2;59;67;86m · [0m[48;2;22;27;38m[38;2;143;179;255m"MCP memory PoC"[0m[48;2;22;27;38m[38;2;59;67;86m · [0m[48;2;22;27;38m[1m[38;2;143;179;255mrunning[0m[48;2;22;27;38m[0m[48;2;22;27;38m[38;2;59;67;86m · [0m[48;2;22;27;38m[38;2;230;195;92m12[0m[48;2;22;27;38m[38;2;107;116;137m/53 done[0m[48;2;22;27;38m[38;2;59;67;86m · [0m[48;2;22;27;38m[38;2;111;168;255m⣾[0m[48;2;22;27;38m 9 lanes[38;2;59;67;86m · [0m[48;2;22;27;38m[38;2;107;116;137mbudget [0m[48;2;22;27;38m[38;2;230;195;92m▰▰▰▰▰[0m[48;2;22;27;38m[38;2;107;116;137m▱▱▱[0m[48;2;22;27;38m 61%[38;2;59;67;86m · [0m[48;2;22;27;38m[38;2;107;116;137minbox [0m[48;2;22;27;38m[38;2;242;103;122m2[0m[48;2;22;27;38m[38;2;59;67;86m · [0m[48;2;22;27;38m[38;2;127;214;154m●[0m[48;2;22;27;38m [38;2;127;214;154m●[0m[48;2;22;27;38m [38;2;230;195;92m◐[0m[48;2;22;27;38m [38;2;127;214;154m●[0m[48;2;22;27;38m                [0m
-[2m> TASKS 53 tasks · 9 running · 2 parked · 12 merged               │LANES 9 running · codex 4/4 · claude 2/2 · agy 2/2 ·…[0m
+[2m> TASKS 53 tasks · 9 running · 2 parked · 12 merged               │LANES 9 running · ⬡ codex 4/4 · ✳ claude 2/2 · ◆ agy…[0m
 [2m  ID     state       worker       scope               sent back   │  worker       task    elapsed tokens        last ac…[0m
-[2m  T-009  ✓ merged    opencode-1   …mcp/events_list.go             │⣾ codex-1      T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …[0m
-[2m  T-011  ◆ verifying codex-2      …mcp/run_digest*.go             │⣾ claude-1     T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …[0m
-[2m  T-017  ⣾ working   codex-1      …p/memory_recall.go             │⣾ agy-1        T-019   03:41   ▁▃▂▅▄▇▆█  19k  read  …[0m
+[2m  T-009  ✓ merged    ● opencode-1 …mcp/events_list.go             │⣾ ⬡ codex-1    T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …[0m
+[2m  T-011  ◎ verifying ⬡ codex-2    …mcp/run_digest*.go             │⣾ ✳ claude-1   T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …[0m
+[2m  T-017  ⣾ working   ⬡ codex-1    …p/memory_recall.go             │⣾ ◆ agy-1      T-019   03:41   ▁▃▂▅▄▇▆█  19k  read  …[0m
 [2m  T-018  ⣾ workin[0m[48;2;15;19;27m╭────────────────────────────────────────────────────────────────────────────────────╮[0m[2m▇▆█  63k  verify…[0m
 [2m  T-019  ⣾ workin[0m[48;2;15;19;27m│                                                                                    │[0m[2m▇▆█  52k  review…[0m
 [2m  T-020  ⣾ review[0m[48;2;15;19;27m│ R-7f3a › plan v2 › T-023 › codex-3                                                 │[0m[2m▇▆█  12k  parked…[0m

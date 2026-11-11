@@ -116,14 +116,14 @@ func (v boardVisual) stateChip() string {
 func (v boardVisual) runWord() (string, string) {
 	if s, ok := v.stopNotice(); ok {
 		if s.waiting {
-			return "waiting for you", "waiting"
+			return "waiting for you", "needs"
 		}
 		return "paused", "failed"
 	}
 	if v.ownerWaits() {
 		// The Marshal waits for the owner's reply (board_gates.go), or
 		// changed files wait for keep or undo (board_guard.go).
-		return "waiting for you", "waiting"
+		return "waiting for you", "needs"
 	}
 	switch v.board.Run.State {
 	case marshal.Closed:
