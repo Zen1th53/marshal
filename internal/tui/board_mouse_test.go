@@ -38,6 +38,19 @@ func click(w *Workspace, row, col int) bool {
 	return w.handleBoardMouse(nil, KeyEvent{Type: KeyMouse, MouseButton: 0, MouseRow: row, MouseColumn: col})
 }
 
+// A click on a registry-action region runs exactly what the row's key does:
+// the help button opens the help, as ? does.
+func TestBoardMouseActionHit(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	w.boardHits.set([]boardHit{{row: 0, x0: 0, x1: 4, kind: hitAction, id: "help"}})
+	if !click(w, 1, 1) {
+		t.Fatal("a click on an action region was not taken")
+	}
+	if !w.boardHelp.Load() {
+		t.Fatal("the help action did not open the help")
+	}
+}
+
 func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)

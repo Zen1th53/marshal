@@ -63,6 +63,10 @@ const (
 	// does the same as its key — n starts the next goal, d opens the Verify
 	// view, q quits.
 	hitNext boardHitKind = "next"
+	// hitAction is a button a painter draws for a registry action
+	// (board_keymap.go): its id is the action's ID, and a click runs that
+	// action the way its key would.
+	hitAction boardHitKind = "action"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -229,6 +233,9 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		} else {
 			w.inspectorDecision(h.id, h.action)
 		}
+	case hitAction:
+		// A registry button runs its action the one way its key does.
+		w.runBoardAction(ctx, h.id)
 	case hitKey:
 		// A footer hint is a button for its key: the click is that key,
 		// through the same path a keypress takes.
