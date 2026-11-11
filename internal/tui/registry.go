@@ -26,7 +26,7 @@ type Capability struct {
 	CLISurface    string     // CLI command equivalent
 	TUISurface    string     // TUI slash command or interactive view
 	KeyboardPath  string     // Keyboard shortcut or key sequence
-	PalettePath   string     // Ctrl+P searchable phrase
+	PalettePath   string     // palette searchable phrase
 	IsDestructive bool       // Requires explicit confirmation if true
 	RequiresDep   string     // Optional external dependency e.g. "agy"
 }

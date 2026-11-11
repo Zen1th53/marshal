@@ -551,10 +551,10 @@ func TestBoardEndToEnd(t *testing.T) {
 		t.Fatalf("decisions recorded %v", decided)
 	}
 
-	// The palette: Ctrl+P, search, Enter opens the view.
-	press(KeyEvent{Type: KeyCtrlP})
+	// The palette: Ctrl+K, search, Enter opens the view.
+	press(KeyEvent{Type: KeyCtrlK})
 	if !w.palette.IsOpen() {
-		t.Fatal("Ctrl+P did not open the palette")
+		t.Fatal("Ctrl+K did not open the palette")
 	}
 	for _, r := range "plan view" {
 		press(key(r))

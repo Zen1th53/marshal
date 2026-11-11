@@ -616,30 +616,30 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		items = append(items, [2]string{"1", "board"})
 		items = append(items, views...)
 	}
-	items = append(items, [][2]string{{"/", "command"}, {"^P", "palette"}, {"?", "help"}}...)
+	items = append(items, [][2]string{{"/", "command"}, {"^K", "palette"}, {"?", "help"}}...)
 	if v.hostView {
-		items = [][2]string{{"j/k", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"j/k", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.memView {
-		items = [][2]string{{"j/k", "select"}, {"a", "keep"}, {"r", "reject"}, {"i", "evidence"}, {"PgDn", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"j/k", "select"}, {"a", "keep"}, {"r", "reject"}, {"i", "evidence"}, {"PgDn", "scroll"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.provView {
-		items = [][2]string{{"j/k", "select"}, {"v", "verify"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"j/k", "select"}, {"v", "verify"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.verView {
-		items = [][2]string{{"j/k", "select"}, {"x", "return unsupported"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"j/k", "select"}, {"x", "return unsupported"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.secView {
-		items = [][2]string{{"j/k", "select"}, {"a", "allow for run"}, {"d", "deny"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"j/k", "select"}, {"a", "allow for run"}, {"d", "deny"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.planView {
-		items = [][2]string{{"j/k", "select"}, {"⏎", "inspect"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"j/k", "select"}, {"⏎", "inspect"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.viewNoRun && (v.verView || v.secView || v.planView) {
-		items = [][2]string{{"esc", "board"}, {"s", "tell the Marshal"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"esc", "board"}, {"s", "tell the Marshal"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	if v.archView {
-		items = [][2]string{{"o", "open in browser"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"o", "open in browser"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^K", "palette"}, {"?", "help"}}
 	}
 	// The run's note leads the footer, which is full width, so an id it
 	// carries for the operator to type is shown whole; keys follow while
@@ -669,7 +669,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		if inView {
 			return 0
 		}
-		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "m/F11", "s", "v", "i", "?", "/", "^P", "l", "t"} {
+		for i, k := range []string{"y", "j/k", "⏎", "Enter", "m", "m/F11", "s", "v", "i", "?", "/", "^K", "l", "t"} {
 			if k == key {
 				return i
 			}

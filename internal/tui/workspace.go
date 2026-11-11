@@ -590,7 +590,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	})
 
 	// The Board's keys and views lead the palette; the registry follows.
-	paletteActions := append(boardPaletteActions(nil), GlobalRegistry.ToPaletteActions()...)
+	paletteActions := append(boardPaletteActions(nil), paletteRegistryActions()...)
 	palette := NewCommandPalette(th, paletteActions)
 	diffViewer := NewDiffViewer(th, cwd)
 
@@ -629,10 +629,35 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	}
 	ws.completer.ctx.InstallableSkills = ws.readInstallableSkills
 	ws.cmd = NewCommandHandler(ws)
-	// The palette ranks by the Board's focus and selection as it opens.
+	// The palette ranks by the Board's focus and selection as it opens, and
+	// rebuilds its rows then so each one's availability is current.
 	ws.palette.context = ws.paletteContext
+	ws.palette.refresh = func() []PaletteAction {
+		return append(boardPaletteActions(ws), ws.registryPaletteActions()...)
+	}
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 	return ws
+}
+
+// paletteRegistryActions is the registry's actions for the palette, without
+// the per-provider Marshal-model rows: the Marshal picker (m) owns choosing
+// the model, so the palette does not list one row per provider as well.
+func paletteRegistryActions() []PaletteAction {
+	all := GlobalRegistry.ToPaletteActions()
+	out := make([]PaletteAction, 0, len(all))
+	for _, a := range all {
+		if strings.HasPrefix(a.ID, "marshal.model.") {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// registryPaletteActions is paletteRegistryActions for a live workspace's
+// refresh closure.
+func (w *Workspace) registryPaletteActions() []PaletteAction {
+	return paletteRegistryActions()
 }
 
 // SetTheme configures the active theme mode and animation setting. NO_COLOR
@@ -840,7 +865,7 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 }
 
 // Run starts the interactive terminal loop.
-// Supports full raw mode line editing, Tab autocomplete, Ctrl+P palette, diff viewer,
+// Supports full raw mode line editing, Tab autocomplete, Ctrl+K palette, diff viewer,
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -1196,10 +1221,20 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.renderFullView()
 		return false
 	}
-	// Handle Command Palette (Ctrl+P)
-	if event.Type == KeyCtrlP {
+	// Space and Ctrl+K open the one palette (P5-04). Ctrl+K edits text while
+	// the composer holds some; Space is a space anywhere but the bare Board.
+	if event.Type == KeyCtrlK && (w.palette.IsOpen() || !w.composing()) {
 		w.closeCompletion()
 		w.palette.Toggle()
+		w.syncMouseMode()
+		w.renderFullView()
+		return false
+	}
+	if event.Type == KeyRune && event.Rune == ' ' && !w.palette.IsOpen() && w.boardVisible() &&
+		!w.composing() && !w.completionOpen && !w.inboxView.Confirming() {
+		w.closeCompletion()
+		w.palette.Open()
+		w.syncMouseMode()
 		w.renderFullView()
 		return false
 	}

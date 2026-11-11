@@ -47,7 +47,7 @@ const (
 	rankOther     = 1
 )
 
-// CommandPalette manages the Ctrl+P command palette modal.
+// CommandPalette manages the actions palette modal (Space / Ctrl+K).
 type CommandPalette struct {
 	theme    *Theme
 	active   bool
@@ -59,6 +59,9 @@ type CommandPalette struct {
 	// one read.
 	context func() PaletteContext
 	ctx     PaletteContext
+	// refresh, when set, rebuilds the full list of actions each time the
+	// palette opens, so a row's availability is current.
+	refresh func() []PaletteAction
 }
 
 // NewCommandPalette creates a new CommandPalette with actions.
@@ -91,6 +94,9 @@ func (cp *CommandPalette) Open() {
 	cp.query = make([]rune, 0)
 	cp.selected = 0
 	cp.ctx = PaletteContext{}
+	if cp.refresh != nil {
+		cp.actions = cp.refresh()
+	}
 	if cp.context != nil {
 		cp.ctx = cp.context()
 	}
@@ -123,7 +129,7 @@ func (cp *CommandPalette) HandleKey(k KeyEvent) (*PaletteAction, bool) {
 	}
 
 	switch k.Type {
-	case KeyEsc, KeyCtrlP:
+	case KeyEsc, KeyCtrlK:
 		cp.Close()
 		return nil, false
 
@@ -273,8 +279,8 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	}
 
 	var lines []string
-	// Header: ╭─ Command Palette ─────────────────────────────────╮
-	title := " Command Palette "
+	// Header: ╭─ Actions ─────────────────────────────────────────╮
+	title := " Actions "
 	remainingWidth := boxWidth - VisibleLen(title) - 3
 	if remainingWidth < 0 {
 		remainingWidth = 0
@@ -337,11 +343,11 @@ func (cp *CommandPalette) Render(width, height int) []string {
 
 			catBadge := fmt.Sprintf("[%s]", act.Category)
 			title := act.Title
-			cmd := act.Command
-			if cmd == "" || act.Key != nil || act.View {
-				// A Board key shows the key it stands for.
-				cmd = act.Shortcut
-			}
+			// The right column shows the row's key; a row with none shows
+			// nothing. It never shows the row's /command text: the palette
+			// lists actions, and typing still filters on the command
+			// (paletteMatch), so it stays findable.
+			cmd := act.Shortcut
 
 			// Every row is the same visible width: a two-column marker followed
 			// by rowText. Padding rowText to a width that already excludes the
@@ -375,8 +381,12 @@ func (cp *CommandPalette) Render(width, height int) []string {
 		}
 	}
 
-	// Footer: ╰─ [Enter] Execute  [↑/↓] Navigate  [Esc] Dismiss ─╯
-	footerText := " [Enter] Run  [↑/↓] Select  [Esc] Close "
+	// Footer: the keys when the selected row can run, or that row's reason
+	// when it cannot.
+	footerText := " Enter run · ↑↓ choose · type to filter · Esc close "
+	if cp.selected >= 0 && cp.selected < len(cp.filtered) && cp.filtered[cp.selected].Disabled {
+		footerText = " " + cp.filtered[cp.selected].Reason + " "
+	}
 	footerPad := boxWidth - VisibleLen(footerText) - 3
 	if footerPad < 0 {
 		footerPad = 0

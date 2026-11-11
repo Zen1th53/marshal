@@ -43,7 +43,7 @@ func TestBoardKeymapClasses(t *testing.T) {
 		{"IN A VIEW", "a", KeyConfirm}, {"IN A VIEW", "r", KeyConfirm}, {"IN A VIEW", "i", KeyOpen},
 		{"IN A VIEW", "PgUp", KeyMove}, {"IN A VIEW", "PgDn", KeyMove},
 		{"IN A VIEW", "v", KeyConfirm}, {"IN A VIEW", "x", KeyConfirm}, {"IN A VIEW", "o", KeyOpen},
-		{"MARSHAL", "m", KeyOpen}, {"MARSHAL", "?", KeyOpen}, {"MARSHAL", "Ctrl+P", KeyOpen}, {"MARSHAL", "Ctrl+X", KeyConfirm},
+		{"MARSHAL", "m", KeyOpen}, {"MARSHAL", "?", KeyOpen}, {"MARSHAL", "space", KeyOpen}, {"MARSHAL", "Ctrl+K", KeyOpen}, {"MARSHAL", "Ctrl+X", KeyConfirm},
 		{"FUNCTION KEYS", "F1", KeyOpen}, {"FUNCTION KEYS", "F7", KeyOpen}, {"FUNCTION KEYS", "F10", KeyConfirm}, {"FUNCTION KEYS", "F12", KeyOpen},
 	} {
 		if got, ok := boardKeyClass(c.group, c.key); !ok || got != c.want {

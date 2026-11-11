@@ -310,8 +310,8 @@ func footerKeyEvent(label string) (KeyEvent, bool) {
 		return KeyEvent{Type: KeyEnter}, true
 	case "esc":
 		return KeyEvent{Type: KeyEsc}, true
-	case "^P":
-		return KeyEvent{Type: KeyCtrlP}, true
+	case "^K":
+		return KeyEvent{Type: KeyCtrlK}, true
 	case "PgDn":
 		return KeyEvent{Type: KeyPgDn}, true
 	case "m/F11":

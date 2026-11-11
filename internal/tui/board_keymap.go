@@ -107,7 +107,7 @@ var boardKeymap = []boardKey{
 	{Group: "MARSHAL", Keys: "m  F11", What: "chat; F11 or Alt+arrow switch", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() }, Why: reason("The Marshal chat opens on the Board.")},
 	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", When: func(w *Workspace) bool { return w.boardVisible() && w.boardUI.inspect == "" }, Why: reason("Leave the inspector to speak to the Marshal.")},
 	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen, ID: "command.line", Hint: "command"},
-	{Group: "MARSHAL", Keys: "Ctrl+P", What: "command palette", Class: KeyOpen, ID: "palette", Hint: "palette"},
+	{ID: "palette", Group: "MARSHAL", Keys: "space  Ctrl+K", What: "all actions; type to filter", Hint: "actions", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "?", What: "this help", Press: pressRune('?'), Class: KeyOpen, ID: "help", Hint: "help"},
 	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)", ID: "workers.stop"},
 	{Group: "MARSHAL", Keys: "Ctrl+C", What: "interrupt; twice to exit", Class: KeyConfirm, Direct: "spec: ^C unchanged, it interrupts; a second press exits", ID: "interrupt"},
@@ -430,7 +430,9 @@ func (v boardVisual) boardHelpRows(w int) [][]string {
 			groups = append(groups, []string{v.bold(v.fg("accent", k.Group))})
 		}
 		g := &groups[len(groups)-1]
-		*g = append(*g, PadCell(" "+v.fg("white", PadCell(k.Keys, 11))+" "+k.What, w))
+		// PadRight pads the common keys to a column but never clips a wider
+		// entry ("space  Ctrl+K"), so every key still shows in full.
+		*g = append(*g, PadCell(" "+v.fg("white", PadRight(k.Keys, 11))+" "+k.What, w))
 	}
 	mouse := []string{v.bold(v.fg("accent", "MOUSE")) + v.fg("dim", " left click; never decides")}
 	for _, m := range boardMouseHelp {

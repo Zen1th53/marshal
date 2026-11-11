@@ -104,7 +104,7 @@ func TestInputKeyInteractions(t *testing.T) {
 		t.Fatalf("expected /inspect C-21 , got %q", newText)
 	}
 
-	// 5. Command Palette (Ctrl+P)
+	// 5. Actions palette (Space / Ctrl+K)
 	actions := GlobalRegistry.ToPaletteActions()
 	pal := NewCommandPalette(th, actions)
 	pal.Open()
