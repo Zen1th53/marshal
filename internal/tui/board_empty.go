@@ -384,7 +384,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		pad = " "
 	}
 	// A decision already waiting comes before anything else.
-	if n := len(v.board.Inbox) + len(v.gates) + v.guardCount(); n > 0 {
+	if n := len(v.board.Inbox) + len(v.gates) + v.guardCount() + v.askCount(); n > 0 {
 		rows := min(h/2, 2+3*n)
 		p := layout.Pane{ID: layout.Inbox, Rect: layout.Rect{X: 0, Y: y, W: w, H: rows}, Density: layout.Compact}
 		if w >= layout.FullDensity {

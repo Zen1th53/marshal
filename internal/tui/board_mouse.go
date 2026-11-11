@@ -44,6 +44,10 @@ const (
 	// (board_guard.go): undo arms, a second click or Enter runs it; keep
 	// dismisses it.
 	hitGuard boardHitKind = "guard"
+	// hitAsk is a choice on an ask card (board_ask.go): a click sends that
+	// choice's label to the Marshal chat and closes the card, as its key
+	// does. There is no arm step.
+	hitAsk boardHitKind = "ask"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -180,6 +184,10 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		w.clickGate(h.id, h.action)
 	case hitGuard:
 		w.clickGuard(h.action)
+	case hitAsk:
+		if i, err := strconv.Atoi(h.id); err == nil {
+			w.answerAsk(i)
+		}
 	case hitInspect:
 		// The same paths the inspector's keys take: a decision button
 		// opens the inbox's confirmation, never decides; o shows the pane.

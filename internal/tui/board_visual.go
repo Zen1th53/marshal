@@ -85,6 +85,9 @@ type boardVisual struct {
 	// for Enter.
 	gates     []ownerGate
 	gateArmed string
+	// ask is the question the Marshal asked the owner (board_ask.go), nil
+	// for none; it renders before the gates, one key or click per answer.
+	ask *askCard
 	// guard is the plan-only guard's alert (board_guard.go), nil for
 	// none; guardArmed is set while its undo waits for Enter, guardUndo
 	// what it would do; guardPrefix the project's directory in its
@@ -1126,6 +1129,12 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		summary = "empty · no decision waiting"
 	}
 	stop, stopped := v.stopNotice()
+	if v.ask != nil && !stopped {
+		summary = "the Marshal waits for your answer"
+		if m := len(v.board.Inbox); m > 0 {
+			summary += fmt.Sprintf(" · %d more waiting", m)
+		}
+	}
 	if n := waitingGates(v.gates); n > 0 && !stopped {
 		summary = "the Marshal waits for your reply"
 		if m := len(v.board.Inbox); m > 0 {
@@ -1157,6 +1166,16 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		lines := v.guardEntry(p.Rect.X, p.Rect.Y+len(out), w)
 		if len(out)+len(lines) > h {
 			v.unhit(p.Rect.Y + len(out) + 1)
+		}
+		out = append(out, lines...)
+		out = out[:min(len(out), h)]
+	}
+	// A question the Marshal asked the owner comes first: one key or one
+	// click sends the chosen answer to the chat (board_ask.go).
+	if v.ask != nil && len(out) < h {
+		lines := v.askEntry(*v.ask, p.Rect.X, p.Rect.Y+len(out), w)
+		if len(out)+len(lines) > h {
+			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
 		}
 		out = append(out, lines...)
 		out = out[:min(len(out), h)]
@@ -1348,7 +1367,7 @@ func (v boardVisual) activityLine(a model.ActivityLine) string {
 // inboxCount is what the header's inbox chip counts: pending requests and
 // the owner gates still waiting for a reply.
 func (v boardVisual) inboxCount() int {
-	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount()
+	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount() + v.askCount()
 }
 
 func boolInt(b bool) int {
