@@ -211,6 +211,11 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			}
 			return run, fmt.Errorf("marshal run %s cannot progress: no task is ready, handed in or accepted", runID)
 		}
+		// The launched tasks are dispatched now: show them working while
+		// their workers run, not as the queued tasks this round started from.
+		if observe != nil {
+			_, _ = current()
+		}
 		policy := marshal.TierPolicy(s.Gate, run.Settings)
 		if policy.Tier == marshal.Ultra && len(launched) > 1 {
 			if err := s.collectAndReviewUltra(ctx, runID, launched, observe, current); err != nil {

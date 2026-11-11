@@ -77,6 +77,9 @@ type boardVisual struct {
 	// empty is set when no run is open: the body is the first-use card
 	// (board_empty.go) and the header names the project instead of a run.
 	empty bool
+	// goalGiven is set once the person has given the Marshal a goal (the
+	// active Goal): the first-use card stops asking for one.
+	goalGiven bool
 	// project is the project's name, for the first-use header.
 	project string
 	// chips is each provider's readiness for the first-use card; armed is
@@ -762,11 +765,7 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		// A long scope keeps its end, where the file name is.
 		scope := truncateLeft(cleanBoard(strings.Join(t.Scope, ",")), scopeW)
 		elapsed := "—"
-		if !t.Since.IsZero() {
-			d := v.now.Sub(t.Since)
-			if d < 0 {
-				d = 0
-			}
+		if d, ok := t.Elapsed(v.now); ok {
 			elapsed = fmt.Sprintf("%02d:%02d", int(d.Minutes()), int(d.Seconds())%60)
 		}
 		rw := ""
@@ -1357,10 +1356,18 @@ func (v boardVisual) activityLine(a model.ActivityLine) string {
 	return line
 }
 
-// inboxCount is what the header's inbox chip counts: pending requests and
-// the owner gates still waiting for a reply.
+// inboxCount is what the header's inbox chip counts: every entry the inbox
+// lists that waits for the person — pending requests, the owner gates still
+// waiting for a reply and each open card (guard, ask, requirements, change,
+// "what next?"). It is the one count the header and the layout read.
 func (v boardVisual) inboxCount() int {
-	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount() + v.askCount() + v.nextCount()
+	return len(v.board.Inbox) + waitingGates(v.gates) + v.cardCount()
+}
+
+// cardCount is the open inbox cards: guard, ask, requirements, change and
+// "what next?".
+func (v boardVisual) cardCount() int {
+	return v.guardCount() + v.askCount() + v.reqCount() + v.changeCount() + v.nextCount()
 }
 
 func boolInt(b bool) int {

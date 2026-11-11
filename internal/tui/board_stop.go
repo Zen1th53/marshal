@@ -113,7 +113,9 @@ func stopVerb(action marshal.PauseAction) string {
 // stop is the inbox's first entry, two rows as a request is.
 func (v boardVisual) layoutCounts() layout.Counts {
 	b := v.board
-	inbox := len(b.Inbox) + len(v.gates)
+	// Room for every entry the inbox lists: requests, gates (a sent one
+	// still shows) and the open cards.
+	inbox := len(b.Inbox) + len(v.gates) + v.cardCount()
 	if _, stopped := v.stopNotice(); stopped {
 		inbox++
 	}
