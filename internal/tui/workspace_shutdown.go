@@ -128,6 +128,7 @@ func (w *Workspace) startMarshalBackground(ctx context.Context, fn func(context.
 // or store. Native tmux sessions remain open; only their local observers stop.
 // Close is safe to call repeatedly. A closed workspace cannot start new work.
 func (w *Workspace) Close() {
+	w.saveBoardSeen()
 	w.cmd.closeOperatorMemoryReads()
 	w.stopNativeChat()
 	w.closeProposalMCP()

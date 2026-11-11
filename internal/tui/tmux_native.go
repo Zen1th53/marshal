@@ -305,7 +305,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	if err != nil {
 		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}
-	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief))
+	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief), false)
 	if err == nil {
 		args, env, dir, err = w.prepareProposalMCP(provider, projectRoot, args, env, dir)
 	}
@@ -492,7 +492,7 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	if sessionID != "" {
 		base = marshalResumeArgs(provider, sessionID)
 	}
-	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief))
+	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief), sessionID != "")
 	if err == nil {
 		resumeArgs, env, dir, err = w.prepareProposalMCP(provider, root, resumeArgs, env, dir)
 	}

@@ -59,16 +59,31 @@ const marshalKickoff = "Start."
 // exists, delivered through the hidden instruction channel.
 const marshalKickoffContinue = "Continue."
 
+// marshalOpening is the single opening cue for one launch. It is Continue when
+// the project already carries saved intake or the launch scan found an active
+// run, and Start otherwise. Every call site computes it from the same root, so
+// a strip and a later insert in the same launch can never disagree.
+func marshalOpening(root string) string {
+	if root == "" {
+		return marshalKickoff
+	}
+	if launchActiveRun(root) {
+		return marshalKickoffContinue
+	}
+	data, err := os.ReadFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"))
+	var intake marshalIntake
+	if err == nil && json.Unmarshal(data, &intake) == nil && strings.TrimSpace(intake.Language) != "" {
+		return marshalKickoffContinue
+	}
+	return marshalKickoff
+}
+
 // marshalKickoffArgs are the arguments that give each CLI its opening turn in
 // an interactive session.
 func marshalKickoffArgs(provider string, roots ...string) []string {
 	opening := marshalKickoff
 	if len(roots) > 0 {
-		data, err := os.ReadFile(filepath.Join(roots[0], statepath.DirName, "marshal-intake.json"))
-		var intake marshalIntake
-		if err == nil && json.Unmarshal(data, &intake) == nil && strings.TrimSpace(intake.Language) != "" {
-			opening = marshalKickoffContinue
-		}
+		opening = marshalOpening(roots[0])
 	}
 	switch provider {
 	case "opencode":
@@ -98,7 +113,7 @@ func marshalNotStarted(provider string, cause error) error {
 // prepareMarshalLaunch delivers mandatory instructions separately from the
 // opening turn. Every fresh launch and resume must rebuild this delivery;
 // saved argv may belong to an older version that exposed the protocol.
-func prepareMarshalLaunch(provider, root string, args []string, protocol string) ([]string, []string, *briefingDir, error) {
+func prepareMarshalLaunch(provider, root string, args []string, protocol string, resume bool) ([]string, []string, *briefingDir, error) {
 	channel := hiddenChannel(provider)
 	if channel == injectOff || strings.TrimSpace(protocol) == "" {
 		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("%s has no usable hidden instruction channel", providerDisplayName(provider)))
@@ -107,7 +122,12 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 	if err := scrubMarshalInboxes(root); err != nil {
 		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("retained briefing cleanup failed: %w", err))
 	}
-	args = append(append([]string(nil), args...), marshalKickoffArgs(provider, root)...)
+	// A resumed conversation already carries its own history; appending a cue
+	// would spend a fresh user turn, so resume delivers only the instructions.
+	args = append([]string(nil), args...)
+	if !resume {
+		args = append(args, marshalKickoffArgs(provider, root)...)
+	}
 	if channel != injectMarshalDir {
 		updated, _, err := applyBriefing(provider, root, args, protocol, channel)
 		if err != nil {

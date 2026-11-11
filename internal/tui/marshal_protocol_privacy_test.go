@@ -31,7 +31,7 @@ func TestMarshalLaunchHiddenProtocolMatrix(t *testing.T) {
 				if resumed {
 					base = resumeArgsForProvider(provider, "bound-session")
 				}
-				args, env, dir, err := prepareMarshalLaunch(provider, root, base, protocol)
+				args, env, dir, err := prepareMarshalLaunch(provider, root, base, protocol, false)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -105,7 +105,7 @@ func TestMarshalLaunchRefusesMissingOrFailedHiddenDelivery(t *testing.T) {
 			if tc.badConfig {
 				t.Setenv("OPENCODE_CONFIG_CONTENT", "invalid")
 			}
-			args, env, dir, err := prepareMarshalLaunch(tc.provider, root, nil, "MARSHAL PROTOCOL\nprivate")
+			args, env, dir, err := prepareMarshalLaunch(tc.provider, root, nil, "MARSHAL PROTOCOL\nprivate", false)
 			var start *marshalStartError
 			if err == nil || !errors.As(err, &start) || containsMarshalProtocol(err.Error()) || containsMarshalProtocol(errors.Unwrap(err).Error()) {
 				t.Fatalf("unsafe refusal: %v", err)
@@ -167,9 +167,7 @@ func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 			t.Run(provider+map[bool]string{false: "/fresh", true: "/saved_intake"}[saved], func(t *testing.T) {
 				_, log := setupFakeTmux(t)
 				root := t.TempDir()
-				wantOpening := marshalKickoff
 				if saved {
-					wantOpening = marshalKickoffContinue
 					if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 						t.Fatal(err)
 					}
@@ -181,22 +179,35 @@ func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 				w.tmuxSession = "test-session"
 				a := &activeTmuxAgent{provider: provider, binary: provider, paneID: "%chat", window: "chat", sessionID: "bound-session", args: []string{"MARSHAL PROTOCOL\nlegacy visible kickoff"}}
 				w.restartMarshalChat(context.Background(), a, root)
-				if len(a.args) == 0 || a.args[len(a.args)-1] != wantOpening {
-					t.Fatal("restart reused legacy visible kickoff")
+				if len(a.args) == 0 {
+					t.Fatal("restart produced no arguments")
+				}
+				// The bound conversation is resumed: it takes no opening cue,
+				// and the legacy visible kickoff is never reused.
+				for _, arg := range a.args {
+					if arg == "MARSHAL PROTOCOL\nlegacy visible kickoff" {
+						t.Fatal("restart reused legacy visible kickoff")
+					}
+					if arg == marshalKickoff || arg == marshalKickoffContinue {
+						t.Fatalf("resumed restart carried an opening cue: %q", a.args)
+					}
 				}
 				if !strings.Contains(strings.Join(a.args, "\n"), "bound-session") {
 					t.Fatal("restart lost bound conversation")
 				}
 				var hidden string
 				switch provider {
+				// With no opening cue to insert before, the MCP options are
+				// global options placed first, so the hidden instructions are
+				// found by flag rather than by position.
 				case "codex":
-					hidden = a.args[1]
-					if a.args[0] != "-c" || !strings.Contains(a.args[1], "MARSHAL PROTOCOL") {
-						t.Fatal("restart lost developer instructions")
+					hidden = hiddenFlagValue(a.args, "-c", "developer_instructions=")
+					if !strings.Contains(hidden, "MARSHAL PROTOCOL") {
+						t.Fatalf("restart lost developer instructions: %q", a.args)
 					}
 				case "claude":
-					hidden = a.args[1]
-					if a.args[0] != "--append-system-prompt" || !strings.Contains(a.args[1], "MARSHAL PROTOCOL") {
+					hidden = hiddenFlagValue(a.args, "--append-system-prompt", "")
+					if !strings.Contains(hidden, "MARSHAL PROTOCOL") {
 						t.Fatal("restart lost system prompt")
 					}
 				default:
@@ -220,6 +231,16 @@ func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 			})
 		}
 	}
+}
+
+// hiddenFlagValue is the value following flag whose text starts with prefix, or "".
+func hiddenFlagValue(args []string, flag, prefix string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag && strings.HasPrefix(args[i+1], prefix) {
+			return args[i+1]
+		}
+	}
+	return ""
 }
 
 func TestMarshalRestartRefusesFailedHiddenDelivery(t *testing.T) {
@@ -253,7 +274,7 @@ func TestMarshalHiddenInstructionsSurviveLastProviderOverride(t *testing.T) {
 				flag, key = "-c", "developer_instructions="
 			}
 			base := []string{flag, key + "first", flag, key + "last"}
-			args, _, dir, err := prepareMarshalLaunch(provider, t.TempDir(), base, "MARSHAL PROTOCOL\nmandatory")
+			args, _, dir, err := prepareMarshalLaunch(provider, t.TempDir(), base, "MARSHAL PROTOCOL\nmandatory", false)
 			defer dir.remove()
 			if err != nil {
 				t.Fatal(err)
@@ -267,7 +288,7 @@ func TestMarshalHiddenInstructionsSurviveLastProviderOverride(t *testing.T) {
 
 func TestMarshalHiddenDeliveryRejectsNullOpenCodeConfig(t *testing.T) {
 	t.Setenv("OPENCODE_CONFIG_CONTENT", "null")
-	args, env, dir, err := prepareMarshalLaunch("opencode", t.TempDir(), nil, "MARSHAL PROTOCOL")
+	args, env, dir, err := prepareMarshalLaunch("opencode", t.TempDir(), nil, "MARSHAL PROTOCOL", false)
 	if err == nil || len(args) != 0 || len(env) != 0 || dir != nil || !strings.Contains(err.Error(), "couldn't start") {
 		t.Fatal("null config did not refuse hidden delivery")
 	}
@@ -331,7 +352,7 @@ func TestMarshalLaunchScrubsRetainedProtocolInboxes(t *testing.T) {
 	if err := os.WriteFile(ordinary, []byte("ordinary history"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, _, dir, err := prepareMarshalLaunch("codex", root, nil, "MARSHAL PROTOCOL\nmandatory")
+	_, _, dir, err := prepareMarshalLaunch("codex", root, nil, "MARSHAL PROTOCOL\nmandatory", false)
 	defer dir.remove()
 	if err != nil {
 		t.Fatal(err)
@@ -392,7 +413,7 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				args, _, dir, err := prepareMarshalLaunch(provider, root, base, protocol)
+				args, _, dir, err := prepareMarshalLaunch(provider, root, base, protocol, false)
 				if dir != nil {
 					defer dir.remove()
 				}

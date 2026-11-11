@@ -565,7 +565,11 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		}
 	}
 	if recoveringRun != nil {
-		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, *recoveringRun, "stored run recovered"))
+		p := newMarshalPanel(runID, provider, *recoveringRun, "stored run recovered")
+		w.marshalPublish(m, runID, p)
+		if launchActiveRun(root) {
+			w.showWelcome(root, p.Board)
+		}
 		return result, nil
 	}
 	data, exists, err := consumeMarshalDraft(root)

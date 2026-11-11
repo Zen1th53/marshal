@@ -330,6 +330,69 @@ func TestMarshalKickoffArgsPerProvider(t *testing.T) {
 	}
 }
 
+// An active run found by the launch scan opens with Continue even when no
+// intake is saved, and every call site agrees because each computes the cue
+// from marshalOpening for the same root.
+func TestOpeningContinueOnActiveRun(t *testing.T) {
+	root := t.TempDir()
+	// No intake file written: the only reason to continue is the active run.
+	if got := marshalOpening(root); got != marshalKickoff {
+		t.Fatalf("without an active run marshalOpening = %q, want %q", got, marshalKickoff)
+	}
+	setLaunchActiveRun(root, true)
+	if got := marshalOpening(root); got != marshalKickoffContinue {
+		t.Fatalf("with an active run marshalOpening = %q, want %q", got, marshalKickoffContinue)
+	}
+	// The four call sites all route through marshalKickoffArgs(provider, root),
+	// so they share the one cue for each provider.
+	for provider, want := range map[string][]string{
+		"codex":       {marshalKickoffContinue},
+		"claude":      {marshalKickoffContinue},
+		"opencode":    {"--prompt", marshalKickoffContinue},
+		"antigravity": {"--prompt-interactive", marshalKickoffContinue},
+	} {
+		if got := marshalKickoffArgs(provider, root); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+			t.Errorf("%s kickoff = %q, want %q", provider, got, want)
+		}
+	}
+}
+
+// A resumed launch (sessionID != "") appends no opening cue, matching the
+// native chat, even when the project would otherwise open with Continue.
+func TestResumeLaunchHasNoCue(t *testing.T) {
+	protocol, err := marshalRoleBriefing([]string{"claude"}, marshal.DefaultSettings(), marshal.Standard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	setLaunchActiveRun(root, true) // a fresh launch here would add Continue.
+
+	resumeArgs, _, dir, err := prepareMarshalLaunch("claude", root, nil, protocol, true)
+	if dir != nil {
+		defer dir.remove()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range resumeArgs {
+		if a == marshalKickoff || a == marshalKickoffContinue {
+			t.Fatalf("resume launch carried a cue %q: %q", a, resumeArgs)
+		}
+	}
+
+	// The control: a non-resume launch with the same root does add the cue.
+	freshArgs, _, dir2, err := prepareMarshalLaunch("claude", root, nil, protocol, false)
+	if dir2 != nil {
+		defer dir2.remove()
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if freshArgs[len(freshArgs)-1] != marshalKickoffContinue {
+		t.Fatalf("fresh launch opening = %q, want %q", freshArgs[len(freshArgs)-1], marshalKickoffContinue)
+	}
+}
+
 func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 	protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
@@ -345,7 +408,7 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(data), 0600); err != nil {
 				t.Fatal(err)
 			}
-			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol)
+			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol, false)
 			if dir != nil {
 				defer dir.remove()
 			}
@@ -403,7 +466,7 @@ func TestMarshalLaunchWithSavedIntakeRefusesMissingProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, protocol := range []string{"", " \n\t"} {
-		args, env, dir, err := prepareMarshalLaunch("codex", root, nil, protocol)
+		args, env, dir, err := prepareMarshalLaunch("codex", root, nil, protocol, false)
 		if err == nil || args != nil || env != nil || dir != nil {
 			t.Fatalf("protocol %q: launch material %v %v %v, err %v", protocol, args, env, dir, err)
 		}
