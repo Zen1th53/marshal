@@ -191,12 +191,12 @@ func (w *Workspace) handleArchKey(event KeyEvent) bool {
 }
 
 // paintArch paints the Architecture view through the workspace's state: the
-// one status line, with "[o] open" recorded as a click region that presses o.
+// one status line, with "[o] open" recorded as a click region for arch.open.
 func (w *Workspace) paintArch(l layout.Layout, th *Theme, v boardVisual) []string {
 	m := w.paintArchState()
 	line, open := v.archStatusLine(m.Snap)
 	if open >= 0 {
-		v.hit(boardHit{row: l.Body.Y, x0: l.Body.X + open, x1: l.Body.X + open + len("[o] open"), kind: hitKey, id: "o"})
+		v.hit(boardHit{row: l.Body.Y, x0: l.Body.X + open, x1: l.Body.X + open + len("[o] open"), kind: hitAction, id: "arch.open"})
 	}
 	return paintBodyView(l, th, v, archPane, func(width, height int) []string {
 		return v.archWindow([]string{line}, width, height)
