@@ -26,7 +26,7 @@ func TestLaunchEarlierSessionsNeedGrant(t *testing.T) {
 	if len(sessions) != 1 || !sessions[0].NeedsGrant || sessions[0].Found != 0 || sessions[0].Loaded != 0 {
 		t.Fatalf("sessions = %+v", sessions)
 	}
-	if line := (projectScan{Sessions: sessions}).briefingBlock(nil); !strings.Contains(line, "claude earlier sessions: needs your OK") {
+	if line := (projectScan{Sessions: sessions}).briefingBlock(nil); !strings.Contains(line, "claude needs your OK") {
 		t.Fatalf("grant notice missing: %s", line)
 	}
 	if runtime.HasReadGrant(folder) {

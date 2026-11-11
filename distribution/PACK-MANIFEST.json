@@ -13021,8 +13021,8 @@
     },
     {
       "path": "internal/tui/earlier_work_default_test.go",
-      "sha256": "f05c91f85843612016123b670cba7c6a5066bffacf1508046a813076bcf28186",
-      "bytes": 2839
+      "sha256": "cb269d8e53e487ddbc49d3d266931f3c52cc84ec8c0b5539f17d71dcb3e1e736",
+      "bytes": 2821
     },
     {
       "path": "internal/tui/earlier_work_extreme_test.go",
@@ -13231,8 +13231,8 @@
     },
     {
       "path": "internal/tui/launch_scan.go",
-      "sha256": "11c006d3bbe734edb2ca8bda5d52496e055ba5d327eedaeff379049a41a8cbc8",
-      "bytes": 20602
+      "sha256": "3fbdc1aefbd41e0436bba4e182ffd9e46fcf793ef3284429e1aa441844be35f9",
+      "bytes": 20584
     },
     {
       "path": "internal/tui/launch_scan_test.go",

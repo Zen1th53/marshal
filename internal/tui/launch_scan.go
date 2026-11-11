@@ -688,7 +688,7 @@ func (s projectScan) briefingBlock(doctorWarnings []string) string {
 		var sessParts []string
 		for _, sess := range s.Sessions {
 			if sess.NeedsGrant {
-				sessParts = append(sessParts, fmt.Sprintf("%s earlier sessions: needs your OK", sess.Provider))
+				sessParts = append(sessParts, fmt.Sprintf("%s needs your OK", sess.Provider))
 			} else if sess.Loaded > 0 {
 				sessParts = append(sessParts, fmt.Sprintf("%s %d loaded", sess.Provider, sess.Loaded))
 			} else if sess.Found > 0 {
