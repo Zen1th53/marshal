@@ -276,13 +276,15 @@ func (w *Workspace) pickMarshal(ctx context.Context, provider string) {
 
 // applyQueuedMarshal drains a switch queued while a step was running. It runs
 // after the step finishes (finishWithNativeTurn); if a new step has started it
-// puts the choice back and waits for the next idle.
+// puts the choice back and waits for the next idle. An ordinary command still
+// running would refuse the switch, so the choice also waits for that command
+// to finish (runCommandFunc drains it again then).
 func (w *Workspace) applyQueuedMarshal(ctx context.Context) {
 	m := w.marshalSession()
 	m.mu.Lock()
 	p := m.nextProvider
 	m.nextProvider = ""
-	if m.busy && p != "" {
+	if (m.busy || w.commandBusy.Load()) && p != "" {
 		m.nextProvider = p
 		m.mu.Unlock()
 		return

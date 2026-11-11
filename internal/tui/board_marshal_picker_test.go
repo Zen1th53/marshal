@@ -27,7 +27,7 @@ func recordBoardRunCommand(t *testing.T) *[]string {
 	return &recorded
 }
 
-func lastOutput(w *Workspace) string {
+func pickerLastOutput(w *Workspace) string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.state.LastOutput
@@ -67,7 +67,7 @@ func TestMarshalPickerRowsAndKeys(t *testing.T) {
 	if got := w.marshalSession().provider; got != "codex" {
 		t.Fatalf("Esc changed the Marshal to %q", got)
 	}
-	if got := lastOutput(w); got != "The Marshal stays Codex." {
+	if got := pickerLastOutput(w); got != "The Marshal stays Codex." {
 		t.Fatalf("Esc answered %q", got)
 	}
 
@@ -76,7 +76,7 @@ func TestMarshalPickerRowsAndKeys(t *testing.T) {
 		t.Fatal("m did not reopen the picker")
 	}
 	w.handleMarshalPickerKey(ctx, KeyEvent{Type: KeyRune, Rune: '3'})
-	if got := lastOutput(w); got != "OpenCode is out of limit until 15:40." {
+	if got := pickerLastOutput(w); got != "OpenCode is out of limit until 15:40." {
 		t.Fatalf("out-of-limit answer %q", got)
 	}
 }
@@ -103,7 +103,7 @@ func TestMarshalPickerQueuesWhileBusy(t *testing.T) {
 	if got := m.nextProvider; got != "claude" {
 		t.Fatalf("queued provider %q, want claude", got)
 	}
-	if got := lastOutput(w); got != "The Marshal is in the middle of a step. Claude Code takes over when it finishes." {
+	if got := pickerLastOutput(w); got != "The Marshal is in the middle of a step. Claude Code takes over when it finishes." {
 		t.Fatalf("queue answer %q", got)
 	}
 	if len(*recorded) != 0 {
@@ -114,6 +114,38 @@ func TestMarshalPickerQueuesWhileBusy(t *testing.T) {
 	m.finish(nil)
 	if len(*recorded) != 1 || (*recorded)[0] != "/marshal model claude" {
 		t.Fatalf("drained commands %v", *recorded)
+	}
+}
+
+// TestMarshalQueuedSwitchWaitsForRunningCommand: when the Marshal step ends
+// while an ordinary command still runs, the queued switch is kept (the busy
+// command lane would refuse it) and runs once that command finishes.
+func TestMarshalQueuedSwitchWaitsForRunningCommand(t *testing.T) {
+	marshalSwitchEnvironment(t)
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	recorded := recordBoardRunCommand(t)
+	m := w.marshalSession()
+	m.provider = "codex"
+	m.nextProvider = "claude"
+	ctx := t.Context()
+
+	release := make(chan struct{})
+	w.runCommandFunc(ctx, "slow", func(context.Context) (string, error) { <-release; return "done", nil })
+	w.applyQueuedMarshal(ctx)
+	if len(*recorded) != 0 {
+		t.Fatalf("switch ran while a command was still running: %v", *recorded)
+	}
+	m.mu.Lock()
+	queued := m.nextProvider
+	m.mu.Unlock()
+	if queued != "claude" {
+		t.Fatalf("queued provider after a refused drain = %q, want claude", queued)
+	}
+	close(release)
+	w.commandWG.Wait()
+	if len(*recorded) != 1 || (*recorded)[0] != "/marshal model claude" {
+		t.Fatalf("after the command finished, drained %v", *recorded)
 	}
 }
 

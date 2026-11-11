@@ -1582,7 +1582,12 @@ func (w *Workspace) runCommandFunc(ctx context.Context, label string, do func(co
 		defer cancel()
 		resp, err := do(commandCtx)
 		_ = w.RefreshState(commandCtx)
-		if !w.postUI(ctx, func() { w.recordCommandResult(label, resp, err); w.commandBusy.Store(false) }) {
+		if !w.postUI(ctx, func() {
+			w.recordCommandResult(label, resp, err)
+			w.commandBusy.Store(false)
+			// A Marshal switch queued while this command ran applies now.
+			w.applyQueuedMarshal(ctx)
+		}) {
 			w.commandBusy.Store(false)
 		}
 	})
