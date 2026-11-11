@@ -1173,3 +1173,22 @@ func fixtureTmuxNamespace(t *testing.T, root string) string {
 	t.Setenv("MARSHAL_FAKE_TMUX_CONTROL", statepath.Name)
 	return session
 }
+
+func TestTmuxNotesArePlain(t *testing.T) {
+	for _, note := range []struct {
+		name string
+		text string
+	}{
+		{"tmuxForeignSessionNote", tmuxForeignSessionNote},
+		{"tmuxStateRefusedNote", tmuxStateRefusedNote},
+	} {
+		for _, banned := range []string{"namespace", "dedicated", "/marshal"} {
+			if strings.Contains(note.text, banned) {
+				t.Errorf("%s must not contain %q: %q", note.name, banned, note.text)
+			}
+		}
+	}
+	if !strings.Contains(tmuxForeignSessionNote, "Ctrl+C") {
+		t.Errorf("tmuxForeignSessionNote must mention Ctrl+C: %q", tmuxForeignSessionNote)
+	}
+}
