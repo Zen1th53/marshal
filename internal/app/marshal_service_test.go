@@ -1357,3 +1357,36 @@ func TestInstructionsPresentPerTask(t *testing.T) {
 		t.Fatalf("strict run free task: %v", err)
 	}
 }
+
+// A closed run's work is merged and delivered: an amendment (here a major
+// one, a cleanup with a new task) is refused before it is proposed or
+// applied, so its merged task never goes back to the queue.
+func TestAmendmentRefusedOnClosedRun(t *testing.T) {
+	ctx := context.Background()
+	s := mergedRecoveryFixture(t)
+	if result, err := s.VerifyMerged(ctx, "run", knownCharge()); err != nil || result != verification.VerifiedComplete {
+		t.Fatalf("verify: %s %v", result, err)
+	}
+	marshalGit(t, s.Repository, "checkout", "--detach")
+	if err := s.Close(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	closed, _, err := s.load(ctx, "run")
+	if err != nil || closed.State != marshal.Closed || closed.Tasks[0].State != marshal.Merged {
+		t.Fatalf("fixture not closed with a merged task: %+v %v", closed, err)
+	}
+	original := s.Model.(marshalFakeModel).draft
+	changed := original
+	changed.Plan.Budget.MaxTasks = 2
+	s.Model = marshalFakeModel{draft: original, amend: changed}
+	if _, _, err := s.ProposeAmend(ctx, "run", "remove cache files"); err == nil || !strings.Contains(err.Error(), "start a new goal") {
+		t.Fatalf("a closed run took an amendment proposal: %v", err)
+	}
+	if _, err := s.ApplyAmendDraftBound(ctx, "run", "remove cache files", changed, closed.PlanVersion); err == nil {
+		t.Fatal("a closed run applied an amendment")
+	}
+	after, _, err := s.load(ctx, "run")
+	if err != nil || after.State != marshal.Closed || after.PlanVersion != closed.PlanVersion || after.Tasks[0].State != marshal.Merged {
+		t.Fatalf("the refused amendment changed the closed run: %+v %v", after, err)
+	}
+}

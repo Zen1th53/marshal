@@ -53,6 +53,10 @@ func (w *Workspace) queuePermissionChecked(req permission.Request) error {
 		w.RecordActivity("Proposal source binding failed: " + sourceErr.Error())
 		return sourceErr
 	}
+	if w.settledProposalMCP(req) {
+		// Already applied (or being applied) once: nothing left to decide.
+		return nil
+	}
 	if req.ProposalID != "" && w.store != nil {
 		data, err := json.Marshal(req)
 		if err == nil {

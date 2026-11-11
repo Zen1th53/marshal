@@ -110,12 +110,17 @@ func stopVerb(action marshal.PauseAction) string {
 }
 
 // layoutCounts is what the Board's panes hold, for the layout. A run's
-// stop is the inbox's first entry, two rows as a request is.
+// stop is the inbox's first entry, two rows as a request is. The open cards
+// (what next, changed files, ask, requirements, change) are entries too:
+// without them a Board beside the chat gives the inbox its one-row strip and
+// the card is never seen. The requirements card is tall, so it asks for
+// three entries' rows.
 func (v boardVisual) layoutCounts() layout.Counts {
 	b := v.board
 	// Room for every entry the inbox lists: requests, gates (a sent one
-	// still shows) and the open cards.
-	inbox := len(b.Inbox) + len(v.gates) + v.cardCount()
+	// still shows) and the open cards; the tall requirements card takes
+	// two more entries' rows.
+	inbox := len(b.Inbox) + len(v.gates) + v.cardCount() + 2*v.reqCount()
 	if _, stopped := v.stopNotice(); stopped {
 		inbox++
 	}
@@ -136,20 +141,36 @@ func (v boardVisual) runWord() (string, string) {
 		}
 		return "paused", "failed"
 	}
-	if v.ownerWaits() {
+	if v.ownerWaits() && !(v.board.Run.State == marshal.Closed && v.onlyNextWaits()) {
 		// The Marshal waits for the owner's reply (board_gates.go), or
-		// changed files wait for keep or undo (board_guard.go).
+		// changed files wait for keep or undo (board_guard.go). The "what
+		// next?" card of a closed run is no wait: the run is done.
 		return "waiting for you", "needs"
 	}
 	switch v.board.Run.State {
 	case marshal.Closed:
 		return "done", "merged"
+	case marshal.Merging:
+		return "merging", "accent"
+	case marshal.Verifying:
+		// The runtime's final check of the merged work runs here before the
+		// run closes. An independent verifier re-runs the checks, which can
+		// take minutes, so the header says so instead of "running".
+		return "final check", "accent"
 	case marshal.Drafting:
 		return "planning", "accent"
 	case "":
 		return "starting", "dim"
 	}
 	return "running", "accent"
+}
+
+// onlyNextWaits reports whether the "what next?" card is the only thing open
+// for the owner.
+func (v boardVisual) onlyNextWaits() bool {
+	rest := v
+	rest.next = nil
+	return v.next != nil && !rest.ownerWaits()
 }
 
 // stopLine is the footer's one-line notice and its Enter action.

@@ -1574,6 +1574,12 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 	return s.completeOperation(ctx, runID, rev, op)
 }
 
+// errAmendClosedRun refuses a change to a run that already closed. Its work
+// is merged and delivered, and a closed run never moves again: a major
+// amendment would put its merged tasks back in the queue and redo delivered
+// work. More work is a new goal.
+var errAmendClosedRun = errors.New("this run is finished and its work is delivered; start a new goal for more changes")
+
 func (s *MarshalService) Amend(ctx context.Context, runID, reason string) (marshal.Run, error) {
 	d, _, err := s.ProposeAmend(ctx, runID, reason)
 	if err != nil {
@@ -1588,6 +1594,9 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	run, _, err := s.load(ctx, runID)
 	if err != nil {
 		return MarshalDraft{}, false, err
+	}
+	if run.State == marshal.Closed {
+		return MarshalDraft{}, false, errAmendClosedRun
 	}
 	if s.Model == nil || strings.TrimSpace(reason) == "" {
 		return MarshalDraft{}, false, errors.New("missing amendment input")
@@ -1625,6 +1634,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	}
 	if err = unfinishedMarshalOperation(run); err != nil {
 		return run, err
+	}
+	if run.State == marshal.Closed {
+		return run, errAmendClosedRun
 	}
 	if expectedPlanVersion != 0 && run.PlanVersion != expectedPlanVersion {
 		return run, errors.New("amendment proposal is stale")

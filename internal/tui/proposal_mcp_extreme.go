@@ -453,6 +453,19 @@ func (w *Workspace) bindProposalMCPRequest(req permission.Request) (permission.R
 	req.SourceOccurrence = p.ID
 	return req, nil
 }
+
+// settledProposalMCP reports whether req is bound to a live MCP proposal whose
+// application already started or ended. Such a request can never be applied
+// again (beginProposalMCPApply refuses it), so queueing it a second time, as a
+// proposal recovery racing the first application does, only adds a second
+// "Marshal allowed" Activity line reading "application failed".
+func (w *Workspace) settledProposalMCP(req permission.Request) bool {
+	if req.SourceLaunch == "" || req.SourceOccurrence == "" || w.store == nil {
+		return false
+	}
+	p, err := w.store.MCPProposal(context.Background(), w.projectID, req.SourceOccurrence)
+	return err == nil && p.State != "admitted" && p.State != "answer_accepted"
+}
 func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, error) error, error) {
 	if req.SourceLaunch == "" {
 		return func(bool, error) error { return nil }, nil

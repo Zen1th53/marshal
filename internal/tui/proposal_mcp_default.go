@@ -22,6 +22,7 @@ func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, er
 	return func(bool, error) error { return nil }, nil
 }
 func (w *Workspace) staleProposalMCP(id string) bool                  { return false }
+func (w *Workspace) settledProposalMCP(permission.Request) bool       { return false }
 func (w *Workspace) recoverBoundMCPMemory(store.MarshalProposal) bool { return false }
 
 func (w *Workspace) activateNativeProposalMCP(*briefingDir) {}
