@@ -11966,8 +11966,8 @@
     },
     {
       "path": "internal/tui/arch_view.go",
-      "sha256": "15b5b04e6c949eb047187d5e64e2c3177461103770a17ba14178832344622c37",
-      "bytes": 19327
+      "sha256": "8544628e0aa6567855d73c68c30a7774b22dc98f197327f4b381ec22dee5f80c",
+      "bytes": 19332
     },
     {
       "path": "internal/tui/arch_view_live.go",
@@ -11976,8 +11976,8 @@
     },
     {
       "path": "internal/tui/arch_view_test.go",
-      "sha256": "f75a9734a75c3b5e65a033d96229fa864684ec9979d4357658a534121d8a2472",
-      "bytes": 16037
+      "sha256": "13ac21460b92f22732dcac625ad6a5434023a47b3037aab54796baccbdb596a5",
+      "bytes": 17097
     },
     {
       "path": "internal/tui/architecture_acceptance.go",
@@ -14751,23 +14751,23 @@
     },
     {
       "path": "internal/tui/testdata/board/arch-governed-split-120x40.golden",
-      "sha256": "fcbb4e1cb29ff71c58a62eb18aacb1212327ed5248f764d8b5feba5a4aac83e8",
-      "bytes": 7096
+      "sha256": "974a9fd69f6dca54cae435d0611dc72915312d9996c6f9539fc0d713873c9644",
+      "bytes": 6797
     },
     {
       "path": "internal/tui/testdata/board/arch-governed-split-80x24.golden",
-      "sha256": "bec0e205b6f4c8a8dcb9264cd34a1847527b5693bc42fc95d1c9161ac2f0277f",
-      "bytes": 3289
+      "sha256": "91f2261df34266a2dbb6e6092af94e3ad22eab01627d77f1798d2b2e0b5a79e0",
+      "bytes": 3232
     },
     {
       "path": "internal/tui/testdata/board/arch-split-120x40.golden",
-      "sha256": "1a4b56af68c364eaf6eb0ea52944956d00483b9a2528fc2cfbbcdb5dde289b9d",
-      "bytes": 7068
+      "sha256": "3abdba639525891122227a9d7a3313ebbf6d3c09617181e38c645ec1264e95dc",
+      "bytes": 6769
     },
     {
       "path": "internal/tui/testdata/board/arch-split-80x24.golden",
-      "sha256": "5e774fd63b5a0f4bca801577d3f1c6906b5b6a4b1818d9f5ebd994a24490ac25",
-      "bytes": 3337
+      "sha256": "a1993220de13555f357bc80669942c729445d69de4a268a337f1e70da84f3b81",
+      "bytes": 3250
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-home-200x60.golden",

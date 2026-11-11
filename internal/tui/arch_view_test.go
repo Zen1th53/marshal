@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -80,7 +81,7 @@ func TestArchViewGoldens(t *testing.T) {
 			frame := paintBodyView(l, th, v, archPane, func(w, h int) []string { return v.archRender(demoArchPaint(now), w, h) })
 			checkViewGolden(t, archGoldenName, tc.name, frame, tc.w)
 			plain := StripANSI(strings.Join(frame, "\n"))
-			for _, want := range []string{"ARCHITECTURE", "contract rev 7", "a3f1c9e2", "owner 2026-11-02 13:38", "Marshal 0.0.9", "BUSINESS PROCESS", "now at D3", "▸ D3", "[o]", "[d]", "COMPONENTS", "RULES IN FORCE"} {
+			for _, want := range []string{"ARCHITECTURE", "contract rev 7", "a3f1c9e2", "owner 2026-11-02 13:38", "Marshal 0.0.9", "BUSINESS PROCESS", "now: waiting on owner", "▸ " + bpD3, "[o]", "[d]", "COMPONENTS", "RULES IN FORCE"} {
 				if !strings.Contains(plain, want) {
 					t.Errorf("Architecture view lacks %q", want)
 				}
@@ -97,7 +98,7 @@ func TestArchViewGoldens(t *testing.T) {
 				}
 			}
 			if tc.w >= 100 {
-				for _, want := range []string{"accepted by owner 2026-11-02 13:38", "U5 " + bpU5, "under ULTRA, independent tasks loop", archComponents[1][1]} {
+				for _, want := range []string{"accepted by owner 2026-11-02 13:38", bpU5, "independent tasks run and are checked in parallel", archComponents[1][1]} {
 					if !strings.Contains(plain, want) {
 						t.Errorf("wide Architecture view lacks %q", want)
 					}
@@ -171,13 +172,16 @@ func TestBusinessProcessFlagsStaleAndRecoveredRuns(t *testing.T) {
 	}
 	stale := b
 	stale.Stale = true
-	if cur, why := bpNow(stale, now); cur != "M5" || !strings.HasPrefix(why, "stale: the store could not be read") {
+	if cur, why := bpNow(stale, now); cur != "M5" || !strings.HasPrefix(why, "no recent update: the store could not be read") {
 		t.Fatalf("unreadable store: %s %s", cur, why)
 	}
 	recovered := b
 	recovered.Activity, recovered.Seq = nil, 0
 	if p := bpAt(recovered, now); p.Flag != "recovered" {
 		t.Fatalf("restored run: %+v", p)
+	}
+	if cur, why := bpNow(recovered, now); cur != "M5" || !strings.HasPrefix(why, "restored after a restart: ") {
+		t.Fatalf("recovered run bpNow: %s %s", cur, why)
 	}
 	// A closed run is history, never stale.
 	closed := b
@@ -211,9 +215,9 @@ func TestArchViewContent(t *testing.T) {
 	for _, want := range []string{
 		"ARCHITECTURE contract rev 7 · a3f1c9e2 · accepted by owner 2026-11-02 13:38 · Marshal 0.0.9",
 		"in force       rev 7 accepted · Marshal acts only inside it",
-		"▸ D3 " + bpD3,
-		"✓ M5 runtime dispatches approved tasks",
-		"· D4 more tasks? → M5",
+		"▸ " + bpD3,
+		"✓ runtime dispatches approved tasks",
+		"· more tasks? → hand out the next ones",
 		"Memory / MCP",
 		"● hard gates need the typed canonical id",
 	} {
@@ -223,7 +227,7 @@ func TestArchViewContent(t *testing.T) {
 	}
 	// Narrow and short bodies keep the current step in view.
 	text = strings.Join(v.archLines(m, 80, 14), "\n")
-	if !strings.Contains(text, "▸ D3") {
+	if !strings.Contains(text, "▸ "+bpD3[:12]) {
 		t.Errorf("short view lost the current step:\n%s", text)
 	}
 	none := archPaint{Snap: archSnapshot{Loaded: true, At: now, Overview: store.ArchitectureOverview{ProjectID: "p"}}, Edition: "Community dev"}
@@ -314,7 +318,7 @@ func TestArchOpenAndDiffKeys(t *testing.T) {
 	f.mu.Lock()
 	page := f.pages["rev-7.html"]
 	f.mu.Unlock()
-	for _, want := range []string{"<title>MARSHAL architecture</title>", "contract rev 7", "now at D3", `class="now">▸ <span class="id">D3</span>`, "RULES IN FORCE", "changed since rev 7"} {
+	for _, want := range []string{"<title>MARSHAL architecture</title>", "contract rev 7", "now: waiting on owner", `class="now">▸ ` + bpD3 + `</li>`, "RULES IN FORCE", "changed since rev 7"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
@@ -327,7 +331,7 @@ func TestArchOpenAndDiffKeys(t *testing.T) {
 	memWaitFor(t, "the second page", func() bool {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		return strings.Contains(f.pages["rev-7.html"], `class="now">▸ <span class="id">M5</span>`)
+		return strings.Contains(f.pages["rev-7.html"], `class="now">▸ runtime dispatches approved tasks</li>`)
 	})
 	f.mu.Lock()
 	f.openErr = errors.New("xdg-open: not found")
@@ -431,5 +435,26 @@ func TestArchRefreshCadence(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 	if m := f.calls(); m != n {
 		t.Fatalf("read with the Board off screen: %d → %d", n, m)
+	}
+}
+
+func TestArchViewHasNoStepCodes(t *testing.T) {
+	re := regexp.MustCompile(`\b(M[1-7]|U[125]|D[1-4]|A[12]|S1|L1)\b`)
+
+	rendered := strings.Join(boardVisual{}.archProcess("D3", "waiting on owner", 80, 18, true), "\n")
+	plain := StripANSI(rendered)
+	if match := re.FindString(plain); match != "" {
+		t.Fatalf("archProcess contains step code %q:\n%s", match, plain)
+	}
+	if !strings.Contains(plain, "owner states the goal") {
+		t.Fatalf("archProcess missing goal step:\n%s", plain)
+	}
+
+	page := string(archPage(store.ArchitectureOverview{}, "Marshal", nil, "D3", "waiting on owner", time.Now()))
+	if match := re.FindString(page); match != "" {
+		t.Fatalf("archPage contains step code %q:\n%s", match, page)
+	}
+	if !strings.Contains(page, "owner states the goal") {
+		t.Fatalf("archPage missing goal step:\n%s", page)
 	}
 }
