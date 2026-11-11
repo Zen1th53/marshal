@@ -81,7 +81,7 @@ func TestArchViewGoldens(t *testing.T) {
 			frame := paintBodyView(l, th, v, archPane, func(w, h int) []string { return v.archRender(demoArchPaint(now), w, h) })
 			checkViewGolden(t, archGoldenName, tc.name, frame, tc.w)
 			plain := StripANSI(strings.Join(frame, "\n"))
-			for _, want := range []string{"ARCHITECTURE", "contract rev 7", "a3f1c9e2", "owner 2026-11-02 13:38", "Marshal 0.0.9", "BUSINESS PROCESS", "now: waiting on owner", "▸ interim approval due? → owner reviews", "[o]", "[d]", "COMPONENTS", "RULES IN FORCE"} {
+			for _, want := range []string{"ARCHITECTURE", "contract rev 7", "a3f1c9e2", "owner 2026-11-02 13:38", "Marshal 0.0.9", "BUSINESS PROCESS", "now: waiting on owner", "▸ " + bpD3, "[o]", "[d]", "COMPONENTS", "RULES IN FORCE"} {
 				if !strings.Contains(plain, want) {
 					t.Errorf("Architecture view lacks %q", want)
 				}
@@ -227,7 +227,7 @@ func TestArchViewContent(t *testing.T) {
 	}
 	// Narrow and short bodies keep the current step in view.
 	text = strings.Join(v.archLines(m, 80, 14), "\n")
-	if !strings.Contains(text, "▸ interim approval due?") {
+	if !strings.Contains(text, "▸ "+bpD3[:12]) {
 		t.Errorf("short view lost the current step:\n%s", text)
 	}
 	none := archPaint{Snap: archSnapshot{Loaded: true, At: now, Overview: store.ArchitectureOverview{ProjectID: "p"}}, Edition: "Community dev"}
@@ -318,7 +318,7 @@ func TestArchOpenAndDiffKeys(t *testing.T) {
 	f.mu.Lock()
 	page := f.pages["rev-7.html"]
 	f.mu.Unlock()
-	for _, want := range []string{"<title>MARSHAL architecture</title>", "contract rev 7", "now: waiting on owner", `class="now">▸ interim approval due? → owner reviews</li>`, "RULES IN FORCE", "changed since rev 7"} {
+	for _, want := range []string{"<title>MARSHAL architecture</title>", "contract rev 7", "now: waiting on owner", `class="now">▸ ` + bpD3 + `</li>`, "RULES IN FORCE", "changed since rev 7"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
