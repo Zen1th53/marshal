@@ -94,7 +94,8 @@ func TestAskCardRendersOnFirstUse(t *testing.T) {
 	w := askBoard(t)
 	defer w.Close()
 	text := frameText(w, 120, 40)
-	head := strings.SplitN(text, "\n", 2)[0]
+	// Row 0 is the vitals row; the Board header is row 1.
+	head := strings.SplitN(text, "\n", 3)[1]
 	if !strings.Contains(head, "NEEDS YOU") {
 		t.Fatalf("header does not say NEEDS YOU: %q", head)
 	}

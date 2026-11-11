@@ -171,7 +171,7 @@ func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
 	}
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyEnter})
 	waitForTmuxOutput(t, pane, "got:accept architecture")
-	if text := frameText(w, 120, 40); !strings.Contains(text, "sent “accept architecture” to the Marshal") || strings.Contains(strings.SplitN(text, "\n", 2)[0], "NEEDS YOU") {
+	if text := frameText(w, 120, 40); !strings.Contains(text, "sent “accept architecture” to the Marshal") || strings.Contains(strings.SplitN(text, "\n", 3)[1], "NEEDS YOU") {
 		t.Fatalf("the sent gate does not wait for the Marshal:\n%s", text)
 	}
 	// A sent gate is not armed again by y.

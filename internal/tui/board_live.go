@@ -561,7 +561,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	return lines, cursorRow, cursorCol
 }
 
-// providerDots returns the provider states shown in the Board header. It uses
+// providerDots returns each provider's state for /status, keyed by canonical name. It uses
 // the Providers view's last snapshot and never queries the store or probes a
 // provider executable.
 func (w *Workspace) providerDots(now time.Time) map[string]string {
