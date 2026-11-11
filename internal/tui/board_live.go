@@ -379,7 +379,9 @@ func (w *Workspace) fillVitals(v *boardVisual, state UIState) {
 	v.health = map[string]string{}
 	if snap := w.prov.paint().Snap; snap.Loaded {
 		for _, provider := range snap.Providers {
-			v.health[provider.Provider] = providerState(provider, v.now)
+			// Key by the canonical name the vitals row looks up, so an alias
+			// such as "antigravity" or "claude-code" keeps its state.
+			v.health[providerOf(provider.Provider)] = providerState(provider, v.now)
 		}
 	}
 	v.vitals.quotas, v.vitals.read = w.usageQuotas()

@@ -12366,8 +12366,8 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "b92d08e8aaaf9bf041c6bbd9b078a8f3fa460b49ce7d0f86a7f7e27a905edb8e",
-      "bytes": 32651
+      "sha256": "42bcf5f3877b75001ae25ac0c0dc6561194d2cb415184f061cf4770ccea114ee",
+      "bytes": 32794
     },
     {
       "path": "internal/tui/board_live_test.go",
