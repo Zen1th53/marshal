@@ -28,7 +28,7 @@ The Board screen is divided into synchronized operational areas:
 |                                    | ACTIVITY                                     |
 |                                    |   T-01 criteria passed (go test PASS)        |
 +------------------------------------+----------------------------------------------+
-| j/k move  ⏎ inspect  m/F11 chat  s say  v verify  1 board  / command  ^P palette  ?  |
+| j/k move  ⏎ inspect  m/F11 chat  s say  v verify  1 board  / command  ^K actions  ?  |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -145,7 +145,7 @@ At the bottom of the inspector, the **Action Row** provides contextual one-key a
 | Key | Action |
 |---|---|
 | `/` | Open the command-line prompt for slash commands |
-| `Ctrl+P` | Open the interactive Command Palette |
+| `Space` or `Ctrl+K` | All actions; type to filter |
 | `Ctrl+X` | Stop all active workers immediately (preserves the Marshal) |
 | `Ctrl+C` | Interrupt active command; press twice to exit Marshal |
 | `?` | Toggle the in-app help overlay |

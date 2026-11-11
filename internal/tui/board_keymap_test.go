@@ -11,9 +11,11 @@ import (
 // boardKeyEvents is the events one keymap entry's Keys stands for; ok is
 // false for a key the test cannot press (a description, not a key).
 func boardKeyEvents(keys string) (out []KeyEvent, ok bool) {
-	named := map[string]KeyType{"Esc": KeyEsc, "Enter": KeyEnter, "↑": KeyUp, "↓": KeyDown, "PgUp": KeyPgUp, "PgDn": KeyPgDn}
+	named := map[string]KeyType{"Esc": KeyEsc, "Enter": KeyEnter, "↑": KeyUp, "↓": KeyDown, "PgUp": KeyPgUp, "PgDn": KeyPgDn, "Ctrl+K": KeyCtrlK}
 	for _, k := range strings.Fields(keys) {
 		switch t, isNamed := named[k]; {
+		case k == "space":
+			out = append(out, KeyEvent{Type: KeyRune, Rune: ' '})
 		case isNamed:
 			out = append(out, KeyEvent{Type: t})
 		case len([]rune(k)) == 1:
@@ -34,7 +36,7 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 			listed[f] = true
 		}
 	}
-	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "q", "r", "i", "t", "l", "j", "k", "Tab", "F11", "Esc", "Enter", "?", "/", "Ctrl+P", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
+	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "q", "r", "i", "t", "l", "j", "k", "Tab", "F11", "Esc", "Enter", "?", "/", "space", "Ctrl+K", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
 		if !listed[want] {
 			t.Errorf("the keymap lacks %q", want)
 		}

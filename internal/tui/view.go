@@ -370,7 +370,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	}
 
 	// 8. FOOTER: Keybindings help
-	footerShortcuts := " [Ctrl+P] Palette  [Tab] Complete  [d] Diff  [/] Commands  [@] Agents  [?] Help "
+	footerShortcuts := " [Ctrl+K] Palette  [Tab] Complete  [d] Diff  [/] Commands  [@] Agents  [?] Help "
 	// corner + one rule + shortcuts + fill + corner = three fixed cells. On a
 	// narrow terminal the hint list alone can exceed the width, so clip it
 	// rather than let the bottom border overflow.

@@ -87,14 +87,14 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 					// Enqueue directly in the control pane before switching windows:
 					// the hidden palette cannot acknowledge attached-client input
 					// with a visible frame, unlike the palette-only cases below.
-					if _, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "C-p"); err != nil {
+					if _, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "C-k"); err != nil {
 						t.Fatal(err)
 					}
 				} else {
-					if _, err := master.Write([]byte("\x10")); err != nil {
+					if _, err := master.Write([]byte("\x0b")); err != nil {
 						t.Fatal(err)
 					}
-					waitForTmuxOutput(t, pane, "Command Palette")
+					waitForTmuxOutput(t, pane, " Actions ")
 				}
 			}
 			if tc.worker {
@@ -115,7 +115,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.TrimSpace(string(selected)) == pane && (strings.Contains(out, "MARSHAL") || strings.Contains(out, "Marshal")) && !strings.Contains(out, "Git Diff") && !strings.Contains(out, "Command Palette") {
+				if strings.TrimSpace(string(selected)) == pane && (strings.Contains(out, "MARSHAL") || strings.Contains(out, "Marshal")) && !strings.Contains(out, "Git Diff") && !strings.Contains(out, " Actions ") {
 					break
 				}
 				if time.Now().After(deadline) {
