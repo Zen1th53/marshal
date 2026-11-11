@@ -388,7 +388,7 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 			s.send("/status")
 			s.send("\x1b")
 			s.send("\r")
-			s.mustSee("CANONICAL STATUS DETAIL")
+			s.mustSee("Run:")
 		})
 	}
 }

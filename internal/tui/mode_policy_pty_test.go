@@ -20,22 +20,22 @@ func TestPTYModeIsAPreferenceNotAnAuthority(t *testing.T) {
 	if statepath.PublicEngine {
 		terminal.mustSee("ULTRA ACTIVE")
 		terminal.sendLine("/ultra stop")
-		terminal.mustSee("Do you really want")
+		terminal.mustSee(ultraFixedAnswer)
 		terminal.sendLine("/ultra stop confirm")
-		terminal.mustSee("ULTRA Execution is off")
+		terminal.mustSee(ultraFixedAnswer)
 	}
 	terminal.sendLine("/mode auto")
 	terminal.mustSee("grants no authority")
 	terminal.sendLine("/mode ultra")
 	if statepath.PublicEngine {
-		terminal.mustSee("ULTRA execution is still OFF")
+		terminal.mustSee("ULTRA execution is ON")
 		terminal.sendLine("/status")
-		terminal.mustSee("Runtime mode: ULTRA")
+		terminal.mustSee("Run: none yet.")
 		terminal.sendLine("/ultra status")
-		terminal.mustSee("ENTITLED, EXECUTION OFF")
+		terminal.mustSee(ultraFixedAnswer)
 	} else {
 		terminal.mustSee("ULTRA is unavailable")
 		terminal.sendLine("/status")
-		terminal.mustSee("Runtime mode: AUTO")
+		terminal.mustSee("Run: none yet.")
 	}
 }

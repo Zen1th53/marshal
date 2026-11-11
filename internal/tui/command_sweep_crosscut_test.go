@@ -81,7 +81,7 @@ func TestCommandSweepCrosscutCatalog(t *testing.T) {
 		if !dispatch[c] {
 			t.Errorf("completion lacks dispatch: %s", c)
 		}
-		if !helpCommands[c] {
+		if !helpCommands[c] && !(c == "/ultra" && !ultraSwitchable) {
 			t.Errorf("completion lacks help: %s", c)
 		}
 		// The update handler is called with a canceled context, before dialing.
@@ -99,8 +99,17 @@ func TestCommandSweepCrosscutCatalog(t *testing.T) {
 	// Commands deliberately hidden from help and completion because their
 	// subsystem is not available in this build; dispatch still answers them.
 	hidden := map[string]bool{"/blind": true}
+	if !ultraSwitchable {
+		hidden["/ultra"] = true
+	}
 	for c := range dispatch {
 		if hidden[c] {
+			if c == "/ultra" {
+				if out, _ := w.cmd.Handle(context.Background(), c); out != ultraFixedAnswer {
+					t.Errorf("fixed /ultra answer = %q, want %q", out, ultraFixedAnswer)
+				}
+				continue
+			}
 			if out, _ := w.cmd.Handle(context.Background(), c); !strings.Contains(out, "not available") {
 				t.Errorf("hidden command does not say it is unavailable: %s: %q", c, out)
 			}
@@ -254,7 +263,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
 	ultraStatus := "ULTRA status: INACTIVE"
 	if editionExtreme {
-		ultraStatus = "ULTRA: ACTIVE (Marshal build, no cloud check)"
+		ultraStatus = ultraFixedAnswer
 	}
 	for _, c := range []struct{ line, want string }{{"/help all", "MARSHAL Terminal Workspace Commands:"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", ultraStatus}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
 		s.sendLine(c.line)
@@ -286,7 +295,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	// A malformed proxy URL refuses HTTP before any network connection.
 	for _, key := range []struct{ raw, want string }{
 		{"\x1bOP", "Talk to the Marshal: /marshal chat"}, {"\x1bOQ", "Install Codex"},
-		{"\x1bOR", "Git Diff"}, {"\x1bOS", "CANONICAL STATUS DETAIL"},
+		{"\x1bOR", "Git Diff"}, {"\x1bOS", "Run:"},
 		{"\x1b[15~", "Discover models failed"}, {"\x1b[17~", "Install Codex"},
 		{"\x1b[18~", "Install Codex"}, {"\x1b[19~", "Install Claude"},
 		{"\x1b[20~", "OpenCode exited"}, {"\x1b[21~", "Update check failed"},
@@ -414,6 +423,19 @@ func TestCommandSweepCrosscutMemoryOverview(t *testing.T) {
 func TestCommandSweepCrosscutUltraTransitions(t *testing.T) {
 	sweepCrosscutEnvironment(t)
 	w := NewWorkspace(nil, "sweep", "sweep")
+	if !ultraSwitchable {
+		w.setUltraExecution(true)
+		before := w.ULTRAExecutionEnabled()
+		for _, line := range []string{"/ultra", "/ultra start", "/ultra stop", "/ultra stop confirm", "/ultra request"} {
+			if got, err := w.ExecuteCommand(context.Background(), line); err != nil || got != ultraFixedAnswer {
+				t.Errorf("%s = %q, %v; want fixed response", line, got, err)
+			}
+		}
+		if got := w.ULTRAExecutionEnabled(); got != before || !got {
+			t.Fatalf("fixed ULTRA execution changed: before=%t after=%t", before, got)
+		}
+		return
+	}
 	for _, delegates := range []bool{true, false} {
 		capabilities := []string{}
 		if delegates {

@@ -174,7 +174,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/status failed: %v", err)
 	}
-	if !strings.Contains(out, "CANONICAL STATUS DETAIL") {
+	if !strings.Contains(out, "Run:") {
 		t.Fatalf("unexpected /status output: %s", out)
 	}
 

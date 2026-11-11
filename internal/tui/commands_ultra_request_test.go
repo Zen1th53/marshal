@@ -1,3 +1,5 @@
+//go:build governed
+
 package tui
 
 import (

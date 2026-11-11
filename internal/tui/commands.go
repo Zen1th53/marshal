@@ -129,7 +129,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleGoalShortForm(ctx, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rawLine), parts[0])))
 
 	case "/mode":
-		const modeMeaning = "The mode is a supervision preference: it grants no authority, hard approvals always stay with you, and ULTRA execution is switched separately with /ultra start|stop."
+		modeMeaning := "The mode is a supervision preference: it grants no authority, hard approvals always stay with you."
+		if ultraSwitchable {
+			modeMeaning = "The mode is a supervision preference: it grants no authority, hard approvals always stay with you, and ULTRA execution is switched separately with /ultra start|stop."
+		}
 		if len(parts) < 2 {
 			gate, execution := h.ws.ultraGate()
 			h.ws.mu.RLock()
@@ -160,6 +163,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			h.ws.state.SessionMode = "ULTRA"
 			h.ws.mu.Unlock()
 			if !execution {
+				if !ultraSwitchable {
+					return "Operating mode switched to ULTRA. ULTRA execution is still OFF.", nil
+				}
 				return "Operating mode switched to ULTRA. ULTRA execution is still OFF; turn it on with /ultra start.", nil
 			}
 			return "Operating mode switched to ULTRA. ULTRA execution is ON.", nil
@@ -688,7 +694,7 @@ const helpOverview = `Talk to the Marshal: /marshal chat — plan and coordinate
   /help all         Full reference (PgUp/PgDn to page) · F1: This overview`
 
 func (h *CommandHandler) helpText() string {
-	return `MARSHAL Terminal Workspace Commands:
+	help := `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
   /goal                    View the active goal
   /goal constraints        List bound constraints
@@ -798,6 +804,10 @@ Composer:
   Paste                    Long or multi-line pastes collapse to a placeholder
                            and are restored in full when you submit
   Select & copy            Works with the terminal's own selection` + operatorMemoryReviewHelp()
+	if !ultraSwitchable {
+		help = strings.Replace(help, "  /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement\n", "", 1)
+	}
+	return help
 }
 
 // plainTextRunsNothing explains why a bare line did nothing, and names the ways

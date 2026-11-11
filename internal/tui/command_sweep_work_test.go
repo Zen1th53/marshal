@@ -73,7 +73,7 @@ func TestCommandSweepWorkRoots(t *testing.T) {
 	empty.workDir = t.TempDir()
 	useCodexByDefault(t, empty.workDir)
 	cases := []struct{ command, bare, valid, want, bad string }{
-		{"/status", "CANONICAL STATUS DETAIL", "/status", "NO ACTIVE GOAL", "/status extra"},
+		{"/status", "Run:", "/status", "Run: none yet.", "/status extra"},
 		{"/goal", "No active goal", "/goal desired outcome", msgNothingChanged, "/goal constraints extra"},
 		{"/mode", "Current mode", "/mode auto", "AUTO", "/mode manual extra"},
 		{"/claims", "No claims", "/claims", "No claims", "/claims extra"},
@@ -288,7 +288,7 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 		whyExpected = "ADVISORY ROUTING EXPLANATION (NOT APPLIED):"
 	}
 	cases := []struct{ line, want string }{
-		{"/status", "CANONICAL STATUS DETAIL"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},
+		{"/status", "Run:"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},
 		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "didn't work: nothing by that name was found."},
 		{"/reject apr", "didn't work: nothing by that name was found."}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
 		{"/evidence missing", "NOT FOUND"}, {"/why", whyExpected}, {"/msg all guidance", "nothing was sent"},
@@ -346,7 +346,7 @@ func TestCommandSweepWorkBudgetKnownZero(t *testing.T) {
 	sweepWorkEnvironment(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
 	ws.workDir = t.TempDir()
-	sweepWorkRun(t, ws, "/status", "tokens=UNKNOWN cost=UNKNOWN")
+	sweepWorkRun(t, ws, "/status", "Run: none yet.")
 	zeroTokens := int64(0)
 	zeroCost := float64(0)
 	ws.state.BudgetConsumed.TotalTokens = &zeroTokens

@@ -33,8 +33,8 @@ func TestModeLabelFollowsTheLiveGate(t *testing.T) {
 		t.Fatalf("/mode after withdrawal = %q", got)
 	}
 	got, _ = ws.ExecuteCommand(t.Context(), "/status")
-	if !strings.Contains(got, "Runtime mode: ULTRA (INACTIVE") {
-		t.Fatalf("/status after withdrawal = %q", got)
+	if !strings.Contains(got, "Run: none yet.") || strings.Contains(got, "Runtime mode:") {
+		t.Fatalf("/status after withdrawal should show the Board state without session details: %q", got)
 	}
 
 	got, _ = ws.ExecuteCommand(t.Context(), "/mode turbo")

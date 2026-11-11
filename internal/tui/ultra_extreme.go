@@ -4,6 +4,9 @@ package tui
 
 import "github.com/Zen1th53/marshal/internal/cloud"
 
+const ultraSwitchable = false
+const ultraFixedAnswer = "Everything is already on in this build; there is nothing to switch."
+
 func buildUltraStatus(gate *cloud.Gate, execution bool) string {
 	if !gate.Entitled() {
 		return ""

@@ -73,18 +73,8 @@ func TestStatusCommandReportsCanonicalState(t *testing.T) {
 		t.Fatalf("/status: %v", err)
 	}
 
-	for _, want := range []string{
-		"CANONICAL STATUS DETAIL",
-		"Harden the v1.5.0 release gates",
-		controlProjectID,
-		"sess-control",
-		"Termination:  RUNNING",
-		"Claims:       0 total",
-		"Approvals:    0 pending",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("expected %q in /status output:\n%s", want, out)
-		}
+	if !strings.Contains(out, "Run: none yet.") || strings.Contains(out, "Harden the v1.5.0 release gates") || strings.Contains(out, controlProjectID) || strings.Contains(out, "sess-control") {
+		t.Fatalf("/status should show the Board's no-run state without canonical IDs or goal details:\n%s", out)
 	}
 
 	// The TUI has no runtime cancellation handle and must fail closed without
@@ -100,13 +90,13 @@ func TestStatusCommandReportsCanonicalState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/status after cancel: %v", err)
 	}
-	if !strings.Contains(out, "Termination:  RUNNING") {
-		t.Fatalf("cancel refusal must leave canonical termination unchanged:\n%s", out)
+	if !strings.Contains(out, "Run: none yet.") {
+		t.Fatalf("cancel refusal must leave the Board's no-run state unchanged:\n%s", out)
 	}
 }
 
 // TestStatusCommandCountsPendingApprovals proves the approval count is live.
-func TestStatusCommandCountsPendingApprovals(t *testing.T) {
+func TestStatusCommandDoesNotShowCanonicalApprovalDetails(t *testing.T) {
 	st, ws, ctx := newControlWorkspace(t)
 	seedPendingApproval(t, st, ctx, "apr-status-1")
 
@@ -114,8 +104,8 @@ func TestStatusCommandCountsPendingApprovals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/status: %v", err)
 	}
-	if !strings.Contains(out, "Approvals:    1 pending") {
-		t.Fatalf("expected one pending approval in /status:\n%s", out)
+	if strings.Contains(out, "Approvals:") || strings.Contains(out, "apr-status-1") {
+		t.Fatalf("/status should show Board facts without canonical approval details:\n%s", out)
 	}
 }
 

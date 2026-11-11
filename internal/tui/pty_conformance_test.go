@@ -207,7 +207,7 @@ func TestPTYWorkspaceStartsInComposerAndHasNoMenu(t *testing.T) {
 
 	// The composer itself keeps working, which is the whole point of the refusal.
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 }
 
 func (s *ptySession) output() string {
@@ -382,10 +382,9 @@ func TestPTYWorkspacePaintsRealState(t *testing.T) {
 	s.sendLine("/goal create Prove the terminal is real")
 	s.mustSee("[rev 1] PENDING: Prove the terminal is real")
 
-	// /status must reflect the goal that was just persisted.
+	// /status shows the Board's facts: a goal alone is not a Marshal run.
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
-	s.mustSee("[rev 1] Prove the terminal is real")
+	s.mustSee("Run: none yet. Press s and tell the Marshal what to build.")
 }
 
 // TestPTYEveryRegisteredCommandDispatches drives every slash command the
@@ -454,7 +453,7 @@ func TestPTYKeyboardContract(t *testing.T) {
 
 	// The session must still be alive and accepting commands after all of that.
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 
 	if s.cmd.ProcessState != nil && s.cmd.ProcessState.Exited() {
 		t.Fatal("terminal session died while handling control keys")
@@ -492,7 +491,7 @@ func TestPTYCtrlCDoesNotKillSession(t *testing.T) {
 
 	// The workspace must still serve commands afterwards.
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 }
 
 // TestPTYResizeKeepsWorkspaceUsable resizes the terminal underneath a running
@@ -500,7 +499,7 @@ func TestPTYCtrlCDoesNotKillSession(t *testing.T) {
 func TestPTYResizeKeepsWorkspaceUsable(t *testing.T) {
 	s := startCommandTUI(t, 40, 160)
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 
 	for _, dim := range []struct{ rows, cols uint16 }{{24, 80}, {50, 200}, {24, 80}} {
 		setWinsize(s.master, dim.rows, dim.cols)
@@ -508,7 +507,7 @@ func TestPTYResizeKeepsWorkspaceUsable(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 
 		s.sendLine("/status")
-		if !s.waitFor("CANONICAL STATUS DETAIL", 8*time.Second) {
+		if !s.waitFor("Run:", 8*time.Second) {
 			t.Fatalf("workspace unusable at %dx%d", dim.cols, dim.rows)
 		}
 		if s.cmd.ProcessState != nil && s.cmd.ProcessState.Exited() {

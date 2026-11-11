@@ -123,5 +123,5 @@ func TestPTYInstalledNativeClaudeHelp(t *testing.T) {
 	s.mustSee("--permission-mode")
 	s.mustSee("Claude exited.")
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 }

@@ -508,9 +508,11 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"}
 	compCtx.Subcommands["/memory inject"] = []string{"auto", "system-prompt", "project-doc", "prompt", "off", "preview", "clear"}
 	compCtx.Subcommands["/memory inject preview"] = []string{"claude", "codex", "opencode", "agy", "antigravity"}
-	compCtx.Subcommands["/ultra stop"] = []string{"confirm"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
-	compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
+	if ultraSwitchable {
+		compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
+		compCtx.Subcommands["/ultra stop"] = []string{"confirm"}
+	}
 	compCtx.Subcommands["/provider"] = []string{"status", "use", "config"}
 	compCtx.Subcommands["/providers"] = compCtx.Subcommands["/provider"]
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
