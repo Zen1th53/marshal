@@ -92,3 +92,21 @@ func TestPageAcceptContract(t *testing.T) {
 		t.Error("review.html still labels the button Approve")
 	}
 }
+
+func TestPageRevisionAndDesignContract(t *testing.T) {
+	for _, want := range []string{
+		`id="revision-bar"`,
+		`id="design-open"`,
+		`id="design"`,
+		`/api/design`,
+		`design_digest:`,
+		`class:'changed-badge'`,
+	} {
+		if !strings.Contains(reviewHTML, want) {
+			t.Errorf("review.html does not contain %q", want)
+		}
+	}
+	if strings.Contains(reviewHTML, "innerHTML") {
+		t.Error("review.html must not use innerHTML")
+	}
+}
