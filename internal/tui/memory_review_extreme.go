@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -287,4 +288,20 @@ func (h *CommandHandler) operatorMemoryReviewPage(ctx context.Context, r *app.Ru
 		}
 	}
 	return text, nil
+}
+
+func memoryRestoreData(value string, limit int) string {
+	value = RedactContent(value, nil)
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+			return ' '
+		}
+		return r
+	}, value)
+	value = strings.Join(strings.Fields(value), " ")
+	runes := []rune(value)
+	if len(runes) > limit {
+		return string(runes[:limit]) + "…"
+	}
+	return value
 }

@@ -1397,66 +1397,6 @@ func TestConfirmationDowngradesAProoflessPass(t *testing.T) {
 // --- gaps ---
 
 // A gapped action never reaches an authority, and says exactly what is missing.
-func TestGappedActionsNeverReachAnAuthority(t *testing.T) {
-	source, auth := testControl(t)
-	bindings := source.Bindings()
-
-	// The eight Control actions that used to be implementation gaps are now
-	// bound to canonical operators. None may still report a gap; a missing
-	// narrow authority fails closed through Requires instead.
-	for _, id := range []ActionID{
-		"CTUI-0043", "CTUI-0044", "CTUI-0045", "CTUI-0048",
-		"CTUI-0051", "CTUI-0052", "CTUI-0071", "CTUI-0073",
-	} {
-		if _, implemented := buildTaskControlOperations[id]; implemented {
-			continue // Extreme task controls have their own canonical-bound tests.
-		}
-		binding, ok := bindings[id]
-		if !ok {
-			t.Fatalf("%s has no binding", id)
-		}
-		if binding.Gap != "" {
-			t.Fatalf("%s still reports an implementation gap: %q", id, binding.Gap)
-		}
-	}
-
-	// The only remaining implementation gaps are the two Status read-model
-	// screens that have no canonical binding yet. They must survive loading as
-	// gaps so they cannot read as decorative bound UI.
-	ia, err := FrozenIA()
-	if err != nil {
-		t.Fatalf("load IA: %v", err)
-	}
-	var remaining []string
-	for _, g := range ia.Gaps() {
-		remaining = append(remaining, g.SpecID)
-		if g.Binding != BindingGap {
-			t.Fatalf("%s is listed as a gap but its binding is %q", g.SpecID, g.Binding)
-		}
-	}
-	if editionExtreme {
-		// Extreme also keeps provider quota/status and entitlement request
-		// detail as honest gaps (see buildUnboundProviderGaps).
-		if len(remaining) != 17-len(buildResolvedGapIDs) || remaining[0] != "CTUI-0092" || remaining[1] != "CTUI-0100" {
-			t.Fatalf("remaining implementation gaps = %v", remaining)
-		}
-	} else if len(remaining) != 2 || remaining[0] != "CTUI-0092" || remaining[1] != "CTUI-0100" {
-		t.Fatalf("remaining implementation gaps = %v, want [CTUI-0092 CTUI-0100]", remaining)
-	}
-
-	// Not one canonical call was made by any of them.
-	for name, n := range map[string]int32{
-		"startRuns": atomic.LoadInt32(&auth.startRuns),
-		"executes":  atomic.LoadInt32(&auth.executes),
-		"cancels":   atomic.LoadInt32(&auth.cancels),
-		"decisions": atomic.LoadInt32(&auth.decisions),
-		"rollbacks": atomic.LoadInt32(&auth.rollbacks),
-	} {
-		if n != 0 {
-			t.Fatalf("gapped actions made %d %s calls", n, name)
-		}
-	}
-}
 
 // Budget edits are no longer blanket refusals. They route through
 // CommandPatchGoalBudget and must fail closed (Requires) when no goal budget
@@ -1919,7 +1859,7 @@ func TestAConfirmationDoesNotSurviveARestart(t *testing.T) {
 	before.MoveSelection(1)
 	before.Acknowledge()
 
-	// The process restarts: a new Confirmation, as NewNavView would build.
+	// The process restarts: a new Confirmation is built from scratch.
 	after := &Confirmation{}
 	if after.Phase() != PhaseIdle {
 		t.Fatalf("a fresh confirmation started in phase %s", after.Phase())
@@ -1995,57 +1935,6 @@ func TestMissingCheckpointRollbackDoesNotRecordSuccess(t *testing.T) {
 
 // An expired approval must not be decided. The canonical manager refuses it,
 // and the screen shows the expiry before the decision rather than after.
-func TestExpiredApprovalIsVisiblyUnusable(t *testing.T) {
-	_, auth := testControl(t)
-	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	past := now.Add(-time.Minute)
-
-	auth.mu.Lock()
-	auth.approvals["app-1"].ExpiresAt = &past
-	approval := auth.approvals["app-1"]
-	auth.mu.Unlock()
-
-	fields := ApprovalFields(approval, now)
-	var expiry Value
-	for _, f := range fields {
-		if f.Label == "Expiry" {
-			expiry = f.Value
-		}
-	}
-	if expiry.Status.IsSuccess() {
-		t.Fatalf("an expired approval renders a healthy expiry: %q", expiry.Display())
-	}
-	if expiry.Status != TruthStale {
-		t.Fatalf("an expired approval renders %s, want STALE", expiry.Status.Label())
-	}
-	if !strings.Contains(expiry.Reason, "expired") {
-		t.Fatalf("the expiry does not explain itself: %q", expiry.Reason)
-	}
-}
-
-// An approval with no recorded scope must not read as a small blast radius.
-func TestApprovalWithoutAScopeSaysSo(t *testing.T) {
-	_, auth := testControl(t)
-	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-
-	auth.mu.Lock()
-	auth.approvals["app-1"].Scope = ""
-	approval := auth.approvals["app-1"]
-	auth.mu.Unlock()
-
-	for _, f := range ApprovalFields(approval, now) {
-		if f.Label != "Scope" {
-			continue
-		}
-		if f.Value.Status.IsSuccess() {
-			t.Fatalf("an unstated scope renders as known: %q", f.Value.Display())
-		}
-		if f.Value.Status != TruthUnknown {
-			t.Fatalf("an unstated scope renders %s", f.Value.Status.Label())
-		}
-	}
-}
-
 // The evidence reference carries no payload — only bounded identifiers.
 func TestEvidenceReferencesCarryNoPayload(t *testing.T) {
 	source, auth := testControl(t)
@@ -2371,31 +2260,6 @@ func TestRollbackIsRefusedWhileWorkIsActive(t *testing.T) {
 
 // The integrity field must name which guarantee it is describing and who
 // provides it, rather than implying this screen checked anything.
-func TestCheckpointIntegrityFieldNamesItsGuarantee(t *testing.T) {
-	_, auth := testControl(t)
-	records, _ := auth.Checkpoints(context.Background())
-
-	found := false
-	for _, f := range CheckpointFields(records[0]) {
-		if f.Label != "Integrity" {
-			continue
-		}
-		found = true
-		// The claim must attribute verification to the canonical engine, not
-		// to this screen, and must say what the digests actually cover.
-		if !strings.Contains(f.Value.Display(), "canonical checkpoint engine") {
-			t.Fatalf("the integrity field does not attribute the guarantee: %q",
-				f.Value.Display())
-		}
-		if f.Value.Reason == "" {
-			t.Fatal("the integrity field does not say what the digests cover")
-		}
-	}
-	if !found {
-		t.Fatal("a checkpoint record renders no integrity field")
-	}
-}
-
 // Starting a run carries the exact approved plan binding into the canonical
 // service, so a plan that moved is refused there rather than by a TUI-side
 // preflight that could race the engine's own read.

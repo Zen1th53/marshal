@@ -541,7 +541,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 // runs while the composer holds text or an inbox confirmation is open, and
 // inside the inbox only t and l, which move focus away, are taken.
 func (w *Workspace) handleBoardKey(event KeyEvent) bool {
-	if !w.boardVisible() || w.navView.IsOpen() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
+	if !w.boardVisible() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
 		return false
 	}
 	w.mu.RLock()

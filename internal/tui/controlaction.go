@@ -108,18 +108,9 @@ func (s Safety) String() string {
 	return "action"
 }
 
-// SafetyOf maps a frozen node type to its safety class.
-func SafetyOf(t NodeType) Safety {
-	switch t {
-	case NodeGoverned:
-		return SafetyGoverned
-	case NodeSensitive:
-		return SafetySensitive
-	case NodeDestructive:
-		return SafetyDestructive
-	}
-	return SafetyPlain
-}
+// statusSubmitting is the transient status while a background submission runs.
+// It is dropped as soon as the confirmation reaches a result.
+const statusSubmitting = "submission in flight"
 
 // Outcome is what a canonical authority did.
 //

@@ -44,32 +44,6 @@ func TestWorkspaceCloseCancelsAndJoinsWorkers(t *testing.T) {
 	}
 }
 
-func TestWorkspaceCloseJoinsNavigationRefresh(t *testing.T) {
-	w := NewWorkspace(nil, "test", "test")
-	entered, release := make(chan struct{}), make(chan struct{})
-	w.navView.OnRepaint(func() { close(entered); <-release })
-	w.navView.Open(context.Background())
-	<-entered
-	closed := make(chan struct{})
-	go func() { w.Close(); close(closed) }()
-	select {
-	case <-w.navView.workers.context().Done():
-	case <-time.After(5 * time.Second):
-		t.Fatal("shutdown did not cancel navigation refresh")
-	}
-	select {
-	case <-closed:
-		t.Fatal("shutdown abandoned navigation refresh")
-	default:
-	}
-	close(release)
-	select {
-	case <-closed:
-	case <-time.After(5 * time.Second):
-		t.Fatal("shutdown did not join navigation refresh")
-	}
-}
-
 func TestWorkspaceCloseStopsNativeMonitor(t *testing.T) {
 	w := NewWorkspace(nil, "test", "test")
 	a := &activeTmuxAgent{doneChan: make(chan struct{})}

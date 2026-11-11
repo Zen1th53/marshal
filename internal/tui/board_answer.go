@@ -35,7 +35,7 @@ func multiLine(s string) bool {
 
 // handleBoardAnswerKey is the answer overlay's keys while it is open.
 func (w *Workspace) handleBoardAnswerKey(event KeyEvent) bool {
-	if !w.boardVisible() || w.navView.IsOpen() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen || w.composing() || w.inboxView.Confirming() {
+	if !w.boardVisible() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen || w.composing() || w.inboxView.Confirming() {
 		return false
 	}
 	out := w.boardAnswerText()

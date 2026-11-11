@@ -206,28 +206,6 @@ func TestExtremeMenuGoalControlsRefuseForeignAndRevokedAuthority(t *testing.T) {
 	}
 }
 
-func TestExtremeMenuBudgetThroughWorkspaceKeys(t *testing.T) {
-	ws, rt, goal := menuGoalFixture(t, "SESSION-menu-budget-keys", model.ConfirmationApproved)
-	ws.navView.Refresh(t.Context())
-	if err := ws.navView.Nav().DeepLink("CTUI-0080"); err != nil {
-		t.Fatal(err)
-	}
-	ws.dispatchNavigationKey(t.Context(), KeyEvent{Type: KeyEnter})
-	for _, r := range "7" {
-		ws.dispatchNavigationKey(t.Context(), runeKey(r))
-	}
-	ws.dispatchNavigationKey(t.Context(), KeyEvent{Type: KeyEnter})
-	if ws.navView.Confirmation().Phase() != PhaseConfirming {
-		t.Fatalf("budget form did not enter reviewed confirmation: %s", ws.navView.Confirmation().Phase())
-	}
-	ws.dispatchNavigationKey(t.Context(), KeyEvent{Type: KeyRight})
-	ws.dispatchNavigationKey(t.Context(), KeyEvent{Type: KeyEnter})
-	proof, err := rt.Store().GetActiveGoalContract(t.Context(), goal.SessionID)
-	if err != nil || proof.Revision != 2 || proof.Confirmation != model.ConfirmationPending || proof.BudgetLimits.MaxModelCalls != 7 || proof.BudgetLimits.MaxDuration != time.Minute {
-		t.Fatal(proof, err)
-	}
-}
-
 type unprovenGoalMenuAuthority struct{ *fakeAuthority }
 
 func (a *unprovenGoalMenuAuthority) SetGoalBudget(ctx context.Context, e app.CommandEnvelope, limits model.BudgetLimit) (model.GoalContract, error) {

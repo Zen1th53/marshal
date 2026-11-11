@@ -160,36 +160,6 @@ func TestMenuCollaborationMessageAndHandoff(t *testing.T) {
 	}
 }
 
-func TestMenuCaptureEpisodeAndExperienceThroughConfirmation(t *testing.T) {
-	ws, runtime := realControlWorkspace(t, "SESSION-menu-episode")
-	ctx := context.Background()
-	for id, kind := range map[ActionID]model.MemoryKind{"CTUI-0427": model.MemoryKindEpisodic, "CTUI-0428": model.MemoryKindProcedural} {
-		if err := ws.navView.Nav().DeepLink(string(id)); err != nil {
-			t.Fatal(err)
-		}
-		ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
-		for _, text := range []string{"build cache", "go test needs TMPDIR on the big disk"} {
-			for _, r := range text {
-				ws.dispatchNavigationKey(ctx, runeKey(r))
-			}
-			ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
-		}
-		if phase := ws.navView.Confirmation().Phase(); phase != PhaseConfirming {
-			t.Fatalf("%s: expected a confirmation, got %s", id, phase)
-		}
-		ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyRight})
-		ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
-		outcome := ws.navView.Confirmation().Outcome()
-		if !outcome.Succeeded() {
-			t.Fatalf("%s: %+v", id, outcome)
-		}
-		rec, err := runtime.Store().GetMemoryV2(ctx, runtime.ProjectID(), outcome.Target.ID)
-		if err != nil || rec.Kind != kind {
-			t.Fatalf("%s reread: %v %+v", id, err, rec.Kind)
-		}
-		ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEsc})
-	}
-}
 
 func TestMenuTombstoneRetiresTheExactRecord(t *testing.T) {
 	ws, runtime := realControlWorkspace(t, "SESSION-menu-tombstone", false)

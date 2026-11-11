@@ -177,16 +177,6 @@ func TestGoalProviderCapacityUsesIntakeEvidenceNotPlanRoutes(t *testing.T) {
 	if strings.Contains(got, "complexity") {
 		t.Fatalf("unrelated intake assessment leaked into provider capacity: %q", got)
 	}
-	content := providerCapacityScreen(snap)
-	if len(content.Fields) != 1 || content.Fields[0].Value.Display() != got {
-		t.Fatalf("provider-capacity screen does not use Process 03 evidence: %#v", content.Fields)
-	}
-}
-
-func TestWorkRendererRegistryNeverClaimsGovernedGoalAction(t *testing.T) {
-	if _, ok := workScreens()["CTUI-0239"]; ok {
-		t.Fatal("the governed persist-goal action was registered as a read-only Work screen")
-	}
 }
 
 // An empty task list is EMPTY; an unreadable one is not. Both render, and they
@@ -329,7 +319,7 @@ func TestUnboundWorkActionsExplainWhatIsMissing(t *testing.T) {
 
 	// Every Work action the frozen pack declares.
 	for _, id := range []ActionID{
-		"CTUI-0201", "CTUI-0202", "CTUI-0203", "CTUI-0210", "CTUI-0219",
+		"CTUI-0201", "CTUI-0202", "CTUI-0203", "CTUI-0210",
 		"CTUI-0229", "CTUI-0240", "CTUI-0248", "CTUI-0249", "CTUI-0266",
 		"CTUI-0317", "CTUI-0318", "CTUI-0319", "CTUI-0320", "CTUI-0321",
 	} {

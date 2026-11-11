@@ -102,25 +102,6 @@ func TestRefreshDoesNotHoldWorkspaceLockAcrossGit(t *testing.T) {
 	<-locked
 }
 
-func TestNavigationRefreshStormIsCoalesced(t *testing.T) {
-	v := testView(t)
-	var count atomic.Int32
-	release := make(chan struct{})
-	entered := make(chan struct{}, 1000)
-	v.OnRepaint(func() { count.Add(1); entered <- struct{}{}; <-release })
-	v.Open(context.Background())
-	<-entered
-	for i := 0; i < 100; i++ {
-		v.refreshInBackground(context.Background())
-	}
-	time.Sleep(50 * time.Millisecond)
-	close(release)
-	v.Wait()
-	if n := count.Load(); n > 2 {
-		t.Fatalf("100 refresh keys spawned %d refreshes", n)
-	}
-}
-
 func TestCommandDispatchDoesNotWaitForTmux(t *testing.T) {
 	w := NewWorkspace(nil, "test", "test")
 	w.workDir = t.TempDir()
@@ -148,43 +129,6 @@ func TestCommandDispatchDoesNotWaitForTmux(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatal("command never completed")
 		}
-	}
-}
-
-func TestControlPreparationAndSubmissionLeaveKeysResponsive(t *testing.T) {
-	v := testView(t)
-	v.asyncActions = true
-	c := &Confirmation{}
-	v.configureConfirmation(c)
-	release := make(chan struct{})
-	started := make(chan struct{}, 2)
-	b := Binding{Action: "test", Title: "test", Prepare: func(ctx context.Context) (Target, error) {
-		started <- struct{}{}
-		select {
-		case <-release:
-		case <-ctx.Done():
-			return Target{}, ctx.Err()
-		}
-		return Target{ID: "target"}, nil
-	}, Execute: func(ctx context.Context, r ActionRequest) (Outcome, error) {
-		started <- struct{}{}
-		<-release
-		return Outcome{Detail: "complete"}, nil
-	}}
-	begin := make(chan struct{})
-	go func() { c.Begin(context.Background(), b, ActionRequest{}); close(begin) }()
-	<-started
-	select {
-	case <-begin:
-	case <-time.After(100 * time.Millisecond):
-		t.Error("preparation blocked input")
-	}
-	c.Cancel()
-	close(release)
-	v.Wait()
-	<-begin
-	if c.Phase() != PhaseIdle {
-		t.Fatal("cancelled preparation resurrected confirmation")
 	}
 }
 
@@ -316,66 +260,6 @@ func TestIdleTerminalHasNoReadSpinOrReaderGrowth(t *testing.T) {
 	}
 }
 
-func TestControlSubmissionIsAsyncAndRunsOnce(t *testing.T) {
-	v := testView(t)
-	v.asyncActions = true
-	c := &Confirmation{}
-	v.configureConfirmation(c)
-	started := make(chan struct{})
-	release := make(chan struct{})
-	var calls atomic.Int32
-	b := Binding{Action: "test", Title: "test", Prepare: func(context.Context) (Target, error) { return Target{ID: "target"}, nil }, Execute: func(context.Context, ActionRequest) (Outcome, error) {
-		calls.Add(1)
-		close(started)
-		<-release
-		return Outcome{Detail: "complete"}, nil
-	}}
-	if err := c.Begin(context.Background(), b, ActionRequest{}); err != nil {
-		t.Fatal(err)
-	}
-	v.Wait()
-	c.MoveSelection(1)
-	start := time.Now()
-	if _, err := c.Submit(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if time.Since(start) > 100*time.Millisecond {
-		t.Error("submission blocked key loop")
-	}
-	<-started
-	for i := 0; i < 100; i++ {
-		if _, err := c.Submit(context.Background()); err == nil {
-			t.Error("repeated submit accepted")
-		}
-	}
-	close(release)
-	v.Wait()
-	if calls.Load() != 1 || c.Phase() != PhaseDone {
-		t.Fatalf("calls=%d phase=%v", calls.Load(), c.Phase())
-	}
-}
-
-func TestNavigationOpeningDoesNotWaitForComposition(t *testing.T) {
-	w := NewWorkspace(nil, "test", "test")
-	w.uiEvents = make(chan func(), 64)
-	w.repaint = make(chan struct{}, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	// Block the composition snapshot as a slow authority initialization would.
-	w.mu.Lock()
-	done := make(chan struct{})
-	go func() { w.openNavigation(ctx); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(100 * time.Millisecond):
-		t.Error("navigation opening blocked key handling")
-	}
-	w.mu.Unlock()
-	<-done
-	w.commandWG.Wait()
-	w.navView.Wait()
-}
-
 func TestIdleInboxRefreshDoesNotRewriteView(t *testing.T) {
 	root := t.TempDir()
 	s, err := openStream(root)
@@ -448,27 +332,6 @@ func TestIdleHistorySyncDoesNotRewriteIndex(t *testing.T) {
 	}
 	if !before.ModTime().Equal(after.ModTime()) {
 		t.Fatal("idle history sync fsynced unchanged index")
-	}
-}
-
-func TestNavigationDigitOutsideManifestDoesNotSpin(t *testing.T) {
-	v := testView(t)
-	ia := *v.nav.ia
-	ia.Sections = ia.Sections[:2]
-	v.nav.ia = &ia
-	v.open = true
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		v.HandleKey(context.Background(), runeKey('9'))
-	}()
-	select {
-	case <-done:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("out-of-range section shortcut spins with the navigation lock held")
-	}
-	if v.nav.sectionIndex() != 0 {
-		t.Fatal("invalid shortcut changed selection")
 	}
 }
 
@@ -611,22 +474,6 @@ func TestDirectTerminalOwnershipOnlyForNativeChildren(t *testing.T) {
 		if !w.directTerminalCommand(command) {
 			t.Errorf("native child lost stdin ownership: %s", command)
 		}
-	}
-}
-
-func TestCancelledNavigationCompositionDoesNotReopen(t *testing.T) {
-	w := NewWorkspace(nil, "test", "test")
-	w.uiEvents = make(chan func(), 64)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	w.mu.Lock()
-	w.openNavigation(ctx)
-	w.navView.Close()
-	w.mu.Unlock()
-	w.commandWG.Wait()
-	w.navView.Wait()
-	if w.navView.IsOpen() {
-		t.Fatal("cancelled navigation reopened after composition finished")
 	}
 }
 

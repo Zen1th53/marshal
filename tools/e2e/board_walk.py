@@ -76,7 +76,7 @@ def inspector_open(screen):
 
 
 def nav_open(screen):
-    """The Ctrl+N navigation owns the screen: its section bar is row one."""
+    """A full-screen section bar in row one: no longer reachable, still guarded against."""
     first = lines(screen)[0] if screen else ""
     return "Home" in first and "Control" in first and "System" in first
 

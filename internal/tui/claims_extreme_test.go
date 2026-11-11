@@ -28,7 +28,6 @@ func TestShippedClaimsMatchTheBuild(t *testing.T) {
 		"egressStatusHeader": egressStatusHeader,
 		"sandboxStatusText":  sandboxStatusText,
 		"providerEgressLine": providerEgressLine,
-		"modelsSafetyPolicy": modelsSafetyPolicy,
 	}
 	for name, val := range stringsToCheck {
 		lower := strings.ToLower(val)

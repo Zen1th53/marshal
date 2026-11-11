@@ -72,37 +72,6 @@ func TestModelsGapsAreAlwaysStated(t *testing.T) {
 // Provider detail (CTUI-0523) and entitlement request detail (CTUI-0557) are
 // now bound to provider_status.go / request_state.go and render their fields
 // through the Models node renderer, never a stale implementation-gap notice.
-func TestModelsGapNodesRenderAsGaps(t *testing.T) {
-	ia, err := FrozenIA()
-	if err != nil {
-		t.Fatalf("load IA: %v", err)
-	}
-	for _, id := range []string{"CTUI-0523", "CTUI-0557"} {
-		node, ok := ia.Node(id)
-		if !ok {
-			t.Fatalf("%s is not in the IA", id)
-		}
-		if editionExtreme {
-			// Extreme has no provider quota source and no cloud entitlement
-			// request; these nodes stay honest, read-only gaps there.
-			if node.Binding != BindingGap {
-				t.Fatalf("%s must stay an implementation gap in Marshal, reports %q", id, node.Binding)
-			}
-			continue
-		}
-		if node.Binding != BindingBound {
-			t.Fatalf("%s is bound in the pack but reports %q", id, node.Binding)
-		}
-		content, handled := RenderModelsNode(node, ModelsSnapshot{})
-		if !handled {
-			t.Fatalf("%s is not rendered", id)
-		}
-		if content.HasNotice && strings.Contains(content.Notice.Display(), "IMPLEMENTATION GAP") {
-			t.Fatalf("%s renders a gap notice despite being bound: %q", id, content.Notice.Display())
-		}
-	}
-}
-
 // A canary that was not promoted is NOT_RUN, never a silent success. Promotion
 // is a decision Process 08 records, not one inferred from a healthy canary.
 func TestUnpromotedCanaryIsNotRun(t *testing.T) {

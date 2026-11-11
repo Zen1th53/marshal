@@ -238,16 +238,6 @@ func TestUnassessedReadinessIsNotRunNeverReady(t *testing.T) {
 	if list.Readiness != VerdictNotRun {
 		t.Fatalf("an unassessed project reported %s, want NOT_RUN", list.Readiness)
 	}
-	v := readinessValue(list)
-	if v.Status.IsSuccess() {
-		t.Fatal("an unassessed project reported a successful readiness value")
-	}
-	if strings.Contains(strings.ToUpper(v.Display()), "READY") {
-		t.Fatalf("an unassessed project rendered as %q", v.Display())
-	}
-	if v.Reason == "" {
-		t.Fatal("NOT_RUN readiness gives no reason")
-	}
 }
 
 // A blocking check must surface as BLOCKED and name where to fix it.
@@ -746,17 +736,6 @@ func TestTruncatedEventFeedsDeclareWhatTheyOmit(t *testing.T) {
 	if !strings.Contains(feed.Status.Display(), "showing") {
 		t.Fatalf("the feed status does not say it was shortened: %q", feed.Status.Display())
 	}
-
-	// And a screen that shortens further says so too.
-	fields := eventFields(feed, 5)
-	last := fields[len(fields)-1]
-	if !strings.Contains(last.Value.Display(), "more recent event") {
-		t.Fatalf("a shortened screen does not declare the omission: %q",
-			last.Value.Display())
-	}
-	if !strings.Contains(last.Value.Display(), "7") {
-		t.Fatalf("the omission count is wrong: %q", last.Value.Display())
-	}
 }
 
 // An unshortened list must not claim an omission it did not make.
@@ -771,11 +750,6 @@ func TestCompleteEventFeedsClaimNoOmission(t *testing.T) {
 
 	if strings.Contains(feed.Status.Display(), "showing") {
 		t.Fatalf("a complete feed claimed to be shortened: %q", feed.Status.Display())
-	}
-	for _, f := range eventFields(feed, 12) {
-		if strings.Contains(f.Value.Display(), "more recent event") {
-			t.Fatalf("a complete screen claimed an omission: %q", f.Value.Display())
-		}
 	}
 }
 
@@ -871,70 +845,5 @@ func TestAFullDiskIsReportedAsFull(t *testing.T) {
 	}
 	if !strings.Contains(snap.Storage.Display(), "full") {
 		t.Fatalf("a full disk does not say so: %q", snap.Storage.Display())
-	}
-}
-
-// Sandbox and network blockers belong to Security, not Models.
-//
-// Routing by dimension alone sent a broken container sandbox to the model
-// provider screen, which cannot fix it.
-func TestEnvironmentBlockersRouteToTheScreenThatOwnsThem(t *testing.T) {
-	cases := map[string]string{
-		"env.sandbox": "Security / Sandbox",
-		"env.network": "Security / Network",
-		"env.ultra":   "Control / Mode & Autonomy",
-	}
-	ia, err := FrozenIA()
-	if err != nil {
-		t.Fatalf("load IA: %v", err)
-	}
-	for id, wantSuffix := range cases {
-		owner := ownerForCheck(startup.Check{
-			ID: id, Dimension: startup.DimensionEnvironment,
-		})
-		if !strings.HasSuffix(owner, wantSuffix) {
-			t.Fatalf("%s routes to %q, want a screen ending %q", id, owner, wantSuffix)
-		}
-		if _, ok := ia.NodeByMenuPath(owner); !ok {
-			t.Fatalf("%s routes to %q, which is not in the frozen IA", id, owner)
-		}
-	}
-
-	// An unrecognised environment check still lands somewhere plausible rather
-	// than at Models.
-	fallback := ownerForCheck(startup.Check{
-		ID: "env.something-new", Dimension: startup.DimensionEnvironment,
-	})
-	if strings.Contains(fallback, "Models") {
-		t.Fatalf("an unrecognised environment check routes to %q", fallback)
-	}
-	if _, ok := ia.NodeByMenuPath(fallback); !ok {
-		t.Fatalf("the environment fallback %q is not in the frozen IA", fallback)
-	}
-}
-
-// Every owner ownerForCheck can produce must exist in the frozen IA, or a
-// cross-link sends the user nowhere.
-func TestEveryCheckOwnerResolvesInTheIA(t *testing.T) {
-	ia, err := FrozenIA()
-	if err != nil {
-		t.Fatalf("load IA: %v", err)
-	}
-	dimensions := []startup.Dimension{
-		startup.DimensionCore, startup.DimensionEnvironment,
-		startup.DimensionProject, startup.DimensionExecution,
-	}
-	ids := []string{"env.sandbox", "env.network", "env.ultra", "core.store", "unknown.check"}
-
-	for _, d := range dimensions {
-		for _, id := range ids {
-			owner := ownerForCheck(startup.Check{ID: id, Dimension: d})
-			if owner == "" {
-				continue // an unmapped owner is stated on screen, not linked
-			}
-			if _, ok := ia.NodeByMenuPath(owner); !ok {
-				t.Fatalf("check %s/%s routes to %q, which is not in the IA", d, id, owner)
-			}
-		}
 	}
 }

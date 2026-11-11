@@ -7,83 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
 )
-
-func TestControlMemoryCanonicalDataIdentityAndReopen(t *testing.T) {
-	ctx := context.Background()
-	ws, runtime := realControlWorkspace(t, "SESSION-memory-data-identity")
-	if runtime.ProjectIdentity() == runtime.ProjectID() {
-		t.Fatal("fixture must exercise distinct admitted and data identities")
-	}
-	// Submit the typed form through the actual menu and confirmation path.
-	if err := ws.navView.Nav().DeepLink("CTUI-0424"); err != nil {
-		t.Fatal(err)
-	}
-	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
-	for _, text := range []string{"bounded source study", "Reviewed source declares canonical project memory services."} {
-		for _, r := range text {
-			ws.dispatchNavigationKey(ctx, runeKey(r))
-		}
-		ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
-	}
-	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyRight})
-	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
-	outcome := ws.navView.Confirmation().Outcome()
-	if !outcome.Succeeded() || outcome.Target.ID == "" {
-		t.Fatalf("confirmed menu write: %+v", outcome)
-	}
-	authority := ws.controlSource().Authority.(*runtimeControlAuthority)
-	assertMemoryIdentityReadback(t, ctx, authority, outcome.Target.ID, runtime.ProjectID())
-	root, identity := runtime.ProjectRoot(), runtime.ProjectIdentity()
-	ws.Close()
-	if err := runtime.Close(); err != nil {
-		t.Fatal(err)
-	}
-	reopened, err := app.Open(ctx, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = reopened.Close() })
-	if reopened.ProjectIdentity() != identity {
-		t.Fatal("reopen changed canonical admission")
-	}
-	next := NewWorkspace(reopened.Store(), reopened.ProjectID(), "SESSION-memory-fresh-reopen")
-	t.Cleanup(next.Close)
-	next.AttachRuntime(reopened, projectid.ID(identity))
-	assertMemoryIdentityReadback(t, ctx, next.controlSource().Authority.(*runtimeControlAuthority), outcome.Target.ID, reopened.ProjectID())
-	if rows, err := reopened.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: identity}); err != nil || len(rows) != 0 {
-		t.Fatalf("canonical admission must not create an alternate memory namespace: %d %v", len(rows), err)
-	}
-}
-
-func assertMemoryIdentityReadback(t *testing.T, ctx context.Context, a *runtimeControlAuthority, id, dataID string) {
-	t.Helper()
-	if string(a.projectID) != a.runtime.ProjectIdentity() {
-		t.Fatal("control identity was replaced with data identity")
-	}
-	status, err := a.MemoryStatus(ctx)
-	if err != nil || !status.Healthy || status.ProjectID != dataID {
-		t.Fatalf("memory status: %+v %v", status, err)
-	}
-	rec, err := a.MemoryRecord(ctx, id)
-	if err != nil || rec.ProjectID != dataID || rec.ScopeID != dataID || rec.Title != "bounded source study" {
-		t.Fatalf("exact authorized read: %+v %v", rec, err)
-	}
-	rows, err := a.RecallRecent(ctx, 1)
-	if err != nil || len(rows) != 1 || rows[0].ID != id {
-		t.Fatalf("bounded recent recall: %+v %v", rows, err)
-	}
-	snap := (&MemoryFeed{Reader: a, ProjectID: string(a.projectID), SessionID: a.sessionID}).ReadMemory(ctx)
-	if len(snap.Records) != 1 {
-		t.Fatalf("actual memory menu feed omitted record: %+v", snap)
-	}
-}
 
 func TestControlMemoryRejectsForeignOrDetachedAuthority(t *testing.T) {
 	ctx := context.Background()

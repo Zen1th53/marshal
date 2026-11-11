@@ -778,7 +778,7 @@ func (w *Workspace) nativeChatFrame(th *Theme, cols, rows int) ([]string, int, i
 // native chat docked it splits the window as the tmux dock does: chat on
 // the left, a rule, the Board on the right.
 func (w *Workspace) frameLines(cols, rows int) ([]string, int, int) {
-	if !w.nativeChatShown() || w.navView.IsOpen() || w.diffViewer.IsOpen() {
+	if !w.nativeChatShown() || w.diffViewer.IsOpen() {
 		return w.frameLinesFull(cols, rows)
 	}
 	chatW, boardW, _ := layout.SplitWidths(cols)

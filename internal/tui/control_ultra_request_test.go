@@ -75,24 +75,6 @@ func TestEntitlementRequestMenuRequiresDurableAttemptProof(t *testing.T) {
 	}
 }
 
-func TestEntitlementRequestDetailWrapsDisclaimerAt160Columns(t *testing.T) {
-	detail := "Local attempt " + strings.Repeat("a", 36) + " recorded; observed request state pending; server request ID UNKNOWN; this observation grants no ULTRA lease"
-	lines := renderOutcomeFields([]Field{
-		{Label: "Result", Value: Known("applied", controlSource)},
-		{Label: "Detail", Value: Known(detail, controlSource)},
-		{Label: "Proof", Value: Known("durable proof", controlSource)},
-	}, 160)
-	joined := strings.Join(lines, "\n")
-	if !strings.Contains(strings.Join(strings.Fields(joined), " "), detail) {
-		t.Fatalf("wrapped outcome lost disclaimer: %q", joined)
-	}
-	for _, line := range lines {
-		if len([]rune(line)) > 160 {
-			t.Fatalf("outcome line exceeds terminal width: %d: %q", len([]rune(line)), line)
-		}
-	}
-}
-
 func TestEntitlementRequestReaderAdaptsFPresentationWithoutFabricatingServerIdentity(t *testing.T) {
 	s := cloud.NewRequestStore(t.TempDir())
 	key := cloud.RequestKey{Endpoint: "http://127.0.0.1:18743", InstallationID: "installation", SessionID: "cloud-session"}

@@ -15,7 +15,6 @@ const (
 	egressStatusHeader = "Workers run on this computer and use your network connection directly. Marshal lists the network calls it records; it does not block them.\n"
 	sandboxStatusText  = "No sandbox: workers run on this computer as you, each task in its own Git worktree."
 	providerEgressLine = "    Network: the worker uses your normal network connection\n"
-	modelsSafetyPolicy = "workers run on this computer without a sandbox; a different model reviews each result and checks run before merge"
 
 	// egressReportsEnforcement: /egress probes and reports bubblewrap
 	// network isolation only where the build uses it.

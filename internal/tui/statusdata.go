@@ -91,7 +91,6 @@ type CloudReader interface {
 // render, saying truthfully that it has nothing to read rather than crashing or
 // showing zeros.
 type StatusSource struct {
-	lifecycle     func(context.Context) lifecycleSnapshot
 	Runtime       RuntimeReader
 	Assessment    AssessmentReader
 	Resources     ResourceReader

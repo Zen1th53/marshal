@@ -651,3 +651,21 @@ func writeSkillInstallHint(b *strings.Builder, skills []codex.SkillInfo) {
 		}
 	}
 }
+
+// safeCodexDisplay keeps discovered native metadata in a small identity
+// alphabet.  The adapter already normalizes CLI output, but snapshots can be
+// supplied by tests, a future reader, or a stale store; render defensively at
+// the final trust boundary as well.
+func safeCodexDisplay(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 128 {
+		return fallback
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("._@+:/-", r) {
+			continue
+		}
+		return fallback
+	}
+	return value
+}
