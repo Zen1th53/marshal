@@ -77,7 +77,7 @@ func TestOwnerGatesFromTheSeededStore(t *testing.T) {
 	}
 	w.setMarshalPanel(newMarshalPanel(runID, "codex", rec.Value, "awaiting plan approval; /marshal approve"))
 	text = frameText(w, 120, 34)
-	for _, want := range []string{"NEEDS YOU", "drafted plan waits for your approval · 1 task · run R", "[y] approve the plan", "[7] open the plan"} {
+	for _, want := range []string{"waiting for you", "drafted plan waits for your approval · 1 task", "[y] approve the plan", "[7] open the plan"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Board misses %q:\n%s", want, text)
 		}

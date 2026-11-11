@@ -137,7 +137,7 @@ func TestBoardIsTheDefaultScreenForARun(t *testing.T) {
 		}
 	}
 	got := StripANSI(strings.Join(lines, "\n"))
-	for _, want := range []string{"Marshal", "R-7f3a", "DISPATCHING", "TASKS", "LANES", "INBOX", "ACTIVITY", "T-017", "codex-1", "claude-1", "registry.npmjs.org:443", "› running"} {
+	for _, want := range []string{"Marshal", "current run", "running", "TASKS", "LANES", "INBOX", "ACTIVITY", "T-017", "codex-1", "claude-1", "registry.npmjs.org:443", "› running"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Board frame lacks %q:\n%s", want, got)
 		}

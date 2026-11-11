@@ -31,8 +31,8 @@ func TestBoardTasksHaveNoEvidenceColumn(t *testing.T) {
 		if strings.Contains(header, " ev ") || strings.Contains(header, " ev") {
 			t.Errorf("%dx%d: TASKS header still has an ev column: %q", tc.w, tc.h, header)
 		}
-		if !strings.Contains(header, "rework") {
-			t.Errorf("%dx%d: TASKS header lost the rework column: %q", tc.w, tc.h, header)
+		if !strings.Contains(header, "sent back") {
+			t.Errorf("%dx%d: TASKS header lost the sent back column: %q", tc.w, tc.h, header)
 		}
 	}
 }

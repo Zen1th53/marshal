@@ -433,9 +433,6 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.viewNoRun = w.currentRunID() == ""
 	v.arch = w.archSrc() != nil
 	v.archView = v.arch && w.archView.Load()
-	if v.arch {
-		v.archLoaded, v.archRev = w.archChipState()
-	}
 	if w.inboxView.Confirming() || w.inboxView.Inspecting() {
 		v.inboxPrompt = w.inboxView.Prompt()
 	}

@@ -105,13 +105,13 @@ func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 		t.Fatal("the fixture Board has no Architecture view to open")
 	}
 	{
-		row, col := cellOf(t, w, 170, 45, "arch", 0)
-		click(w, row, col)
+		// From a body view (opened by key, no header chip), the inbox chip
+		// returns to the Board on the inbox.
+		w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'b'})
 		if !w.archView.Load() {
-			t.Fatal("the arch chip did not open the Architecture view")
+			t.Fatal("key b did not open the Architecture view")
 		}
-		// From a view, the inbox chip returns to the Board on the inbox.
-		row, col = cellOf(t, w, 170, 45, "inbox ", 0)
+		row, col := cellOf(t, w, 170, 45, "inbox ", 0)
 		click(w, row, col)
 		if w.archView.Load() || w.boardUI.focus != layout.Inbox {
 			t.Fatalf("the inbox chip left the view open (%v) or focus %s", w.archView.Load(), w.boardUI.focus)

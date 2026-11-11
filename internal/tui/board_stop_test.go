@@ -21,13 +21,13 @@ func TestBoardRunStopNotice(t *testing.T) {
 	w.setMarshalPanel(p)
 	got := plainFrame(w, 170, 45)
 	lines := strings.Split(got, "\n")
-	if !strings.Contains(lines[0], "WAITING FOR YOU") {
+	if !strings.Contains(lines[0], "waiting for you") {
 		t.Fatalf("header: %s", lines[0])
 	}
 	if last := lines[len(lines)-1]; !strings.Contains(last, "run waits for you · type /marshal resume · verification stopped: exit 1") {
 		t.Fatalf("footer: %s", last)
 	}
-	if !strings.Contains(got, "⚑ run R-7f3a waits for you · verification stopped: exit 1") || !strings.Contains(got, "type › /marshal resume") {
+	if !strings.Contains(got, "⚑ run waits for you · verification stopped: exit 1") || !strings.Contains(got, "type › /marshal resume") {
 		t.Fatalf("inbox entry:\n%s", got)
 	}
 	r, c := cellOf(t, w, 170, 45, "type › /marshal resume", 0)
@@ -52,7 +52,7 @@ func TestBoardRunStoppedNotice(t *testing.T) {
 	p.Stopped = true
 	w.setMarshalPanel(p)
 	got := plainFrame(w, 170, 45)
-	if !strings.Contains(got, "STOPPED") || !strings.Contains(got, "run stopped · type /marshal resume · worker codex exited 2") {
+	if !strings.Contains(got, "paused") || !strings.Contains(got, "run stopped · type /marshal resume · worker codex exited 2") {
 		t.Fatalf("stopped notice:\n%s", got)
 	}
 }

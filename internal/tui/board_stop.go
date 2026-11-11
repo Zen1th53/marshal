@@ -106,21 +106,34 @@ func (v boardVisual) layoutCounts() layout.Counts {
 	return layout.Counts{Lanes: len(b.Lanes) + v.tailWant, Tasks: len(b.Tasks), Inbox: inbox, Activity: len(b.Activity)}
 }
 
-// stateChip is the header's run state: a stopped run says so in words, in
-// the colour of what it needs, instead of the raw state name.
-func (v boardVisual) stateChip(state string) string {
+// stateChip is the header's run state in the owner's words.
+func (v boardVisual) stateChip() string {
+	word, color := v.runWord()
+	return v.bold(v.fg(color, word))
+}
+
+// runWord is the run's state as the header says it, and its colour key.
+func (v boardVisual) runWord() (string, string) {
 	if s, ok := v.stopNotice(); ok {
 		if s.waiting {
-			return v.bold(v.fg("waiting", "WAITING FOR YOU"))
+			return "waiting for you", "waiting"
 		}
-		return v.bold(v.fg("failed", "STOPPED"))
+		return "paused", "failed"
 	}
 	if v.ownerWaits() {
 		// The Marshal waits for the owner's reply (board_gates.go), or
 		// changed files wait for keep or undo (board_guard.go).
-		return v.bold(v.fg("waiting", "NEEDS YOU"))
+		return "waiting for you", "waiting"
 	}
-	return v.fg("accent", state)
+	switch v.board.Run.State {
+	case marshal.Closed:
+		return "done", "merged"
+	case marshal.Drafting:
+		return "planning", "accent"
+	case "":
+		return "starting", "dim"
+	}
+	return "running", "accent"
 }
 
 // stopLine is the footer's one-line notice: why, then the command to type.
@@ -147,7 +160,7 @@ func (v boardVisual) stopEntry(s runStop, x, row, w int) []string {
 	if !v.unicode() {
 		flag = "! "
 	}
-	first := v.fg(color, flag+"run "+v.board.Run.ID) + v.fg("dim", what) + v.bold(v.fg("white", s.reason))
+	first := v.fg(color, flag+"run") + v.fg("dim", what) + v.bold(v.fg("white", s.reason))
 	second, at := "    ", 4
 	for i, c := range s.commands {
 		if i > 0 {

@@ -185,34 +185,6 @@ func TestBusinessProcessFlagsStaleAndRecoveredRuns(t *testing.T) {
 	if p := bpAt(closed, now.Add(72*time.Hour)); p.Step != "U5" || p.Flag != "" {
 		t.Fatalf("closed run: %+v", p)
 	}
-	// The chip carries the flag.
-	v := boardVisual{board: b, now: now.Add(time.Hour), archLoaded: true, archRev: 7}
-	if got := StripANSI(v.archChip(false)); got != "arch rev 7 · step M5 stale" {
-		t.Fatalf("chip: %q", got)
-	}
-}
-
-// Before the first read, or with no store to read, the chip still names the
-// step: "arch — · step S".
-func TestArchChipFallbackBeforeRead(t *testing.T) {
-	now := memEpoch
-	b := demoBoard(now)
-	b.Inbox = nil
-	v := boardVisual{board: b, now: now}
-	if got := StripANSI(v.archChip(false)); got != "arch — · step M5" {
-		t.Fatalf("full: %q", got)
-	}
-	if got := StripANSI(v.archChip(true)); got != "arch — M5" {
-		t.Fatalf("compact: %q", got)
-	}
-	w := NewWorkspace(nil, "project", "session")
-	src := w.archSrc()
-	if src == nil {
-		t.Fatal("no source without a store: the header would lose its chip")
-	}
-	if _, err := src.ArchitectureOverview(context.Background(), "project"); !errors.Is(err, errNoArchStore) {
-		t.Fatalf("storeless read: %v", err)
-	}
 }
 
 func TestBusinessProcessStepsComplete(t *testing.T) {
@@ -290,86 +262,6 @@ func TestArchViewContent(t *testing.T) {
 				t.Fatalf("ASCII line %d has %q: %s", i, r, l)
 			}
 		}
-	}
-}
-
-// The header carries arch rev N · step XX before the host chip, and keeps
-// both chips while anything else can give way: at 120 columns, and at the
-// 60 the Board has beside the docked chat in a 120-column window.
-func TestArchHeaderChip(t *testing.T) {
-	now := memEpoch
-	th := NewTheme(ThemeNoColor, true, true)
-	v := boardViewVisual(now, th)
-	host := hostSnapshot{}
-	v.host = &host
-	hostChip := StripANSI(v.hostChip(host.chip()))
-	wide := StripANSI(v.header(240))
-	a, h := strings.Index(wide, "arch rev 7 · step D3"), strings.Index(wide, hostChip)
-	if a < 0 || h < 0 || a > h {
-		t.Fatalf("wide header: %q", wide)
-	}
-	for _, want := range []string{"budget", "codex", "MCP memory PoC", "9 lanes", "12/53 done"} {
-		if !strings.Contains(wide, want) {
-			t.Fatalf("wide header lacks %q: %q", want, wide)
-		}
-	}
-	_, board, _ := layout.SplitWidths(120)
-	for _, w := range []int{200, 120, 100, 80, board} {
-		got := StripANSI(v.header(w))
-		if VisibleLen(got) != w {
-			t.Fatalf("header %d is %d wide", w, VisibleLen(got))
-		}
-		// The run's identity and state outrank the host chip: on a narrow
-		// Board the host gives way first, the architecture chip stays. At
-		// 100 columns or fewer the chip is "rev 7 D3" and the run is its id
-		// (owner decision 2026-11-06, mockups 05 and 06).
-		chip, run := "arch rev 7", "run R-7f3a"
-		if w <= 100 {
-			chip, run = "rev 7 D3", "R-7f3a"
-		}
-		if !strings.Contains(got, chip) || !strings.Contains(got, "D3") || !strings.Contains(got, run) || !strings.Contains(got, "Marshal") {
-			t.Fatalf("header %d dropped a chip: %q", w, got)
-		}
-		if w > 100 && !strings.Contains(got, "host —") {
-			t.Fatalf("header %d dropped the host chip: %q", w, got)
-		}
-		// A narrow header shows the host only while it is warm or guarded.
-		if w <= 100 && strings.Contains(got, "host") {
-			t.Fatalf("header %d shows a cool host: %q", w, got)
-		}
-	}
-	if at80 := StripANSI(v.header(80)); !strings.Contains(at80, "R-7f3a") || !strings.Contains(at80, "12/53") || !strings.Contains(at80, "▰") {
-		t.Fatalf("header 80 dropped the run, done or budget before the chips: %q", at80)
-	}
-	// At 120 the provider health, the budget and the clock give way first.
-	at120 := StripANSI(v.header(120))
-	for _, gone := range []string{"codex", "budget", now.Format("15:04:05")} {
-		if strings.Contains(at120, gone) {
-			t.Fatalf("header 120 kept %q before the chips: %q", gone, at120)
-		}
-	}
-	for _, kept := range []string{"DISPATCHING", "inbox 2", "arch rev 7 · step D3"} {
-		if !strings.Contains(at120, kept) {
-			t.Fatalf("header 120 lacks %q: %q", kept, at120)
-		}
-	}
-	// Too narrow for even the run: the architecture chip is what stays
-	// (owner rule: the header always shows the revision and the step).
-	tiny := StripANSI(v.header(24))
-	if !strings.Contains(tiny, "rev 7") || strings.Contains(tiny, "host") {
-		t.Fatalf("header 24: %q", tiny)
-	}
-	v.archRev = 0
-	if got := StripANSI(v.header(200)); !strings.Contains(got, "arch none · step D3") {
-		t.Fatalf("nothing accepted: %q", got)
-	}
-	v.archLoaded = false
-	if got := StripANSI(v.header(200)); !strings.Contains(got, "arch — · step D3") {
-		t.Fatalf("before a read the chip still names the step: %q", got)
-	}
-	v.arch = false
-	if got := StripANSI(v.header(200)); strings.Contains(got, "arch") {
-		t.Fatalf("no source: %q", got)
 	}
 }
 
@@ -470,9 +362,9 @@ func TestArchChipReadsAtStart(t *testing.T) {
 	w, _, f := viewsWorkspace(t)
 	defer w.Close()
 	th := NewTheme(ThemeNoColor, true, true)
-	frame, _, _ := w.boardFrame(w.state, th, nil, 200, 40)
-	if !strings.Contains(frame[0], "arch —") {
-		t.Fatalf("header before the first read: %s", frame[0])
+	w.boardFrame(w.state, th, nil, 200, 40)
+	if loaded, _ := w.archState(); loaded {
+		t.Fatalf("the store was read before the follower started")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
@@ -483,17 +375,10 @@ func TestArchChipReadsAtStart(t *testing.T) {
 	if w.archView.Load() {
 		t.Fatal("the start read opened the view")
 	}
-	memWaitFor(t, "the chip", func() bool {
-		frame, _, _ := w.boardFrame(w.state, th, nil, 200, 40)
-		return strings.Contains(frame[0], "arch rev 7 · step")
+	memWaitFor(t, "the accepted revision", func() bool {
+		loaded, rev := w.archState()
+		return loaded && rev == 7
 	})
-	// At 100 columns the narrow header shortens the chip to "rev 7 D3".
-	for cols, want := range map[int]string{120: "arch rev 7", 100: "rev 7 "} {
-		frame, _, _ := w.boardFrame(w.state, th, nil, cols, 40)
-		if !strings.Contains(frame[0], want) {
-			t.Fatalf("header %d: %s", cols, frame[0])
-		}
-	}
 	for range 5 {
 		w.boardFrame(w.state, th, nil, 120, 40)
 	}

@@ -118,8 +118,8 @@ func TestBoardDemoGoldens(t *testing.T) {
 			}
 			l := layout.ComputeFor(tc.w, tc.h, tc.mode, v.layoutCounts())
 			if tc.chips {
-				// The header with the architecture and host chips.
-				v.arch, v.archLoaded, v.archRev = true, true, 7
+				// The header with the host chip.
+				v.arch = true
 				host := demoHost(t)
 				v.host = &host
 			}
@@ -177,8 +177,8 @@ func TestBoardHeaderMockupWidths(t *testing.T) {
 		want  []string
 		omit  []string
 	}{
-		{80, []string{"Marshal", "R-7f3a", "DISPATCHING", "12/53", "▰▰▰▰▰▱▱▱", "⚑2"}, []string{"codex", "14:02:31"}},
-		{100, []string{"Marshal", "R-7f3a", "DISPATCHING", "12/53", "▰▰▰▰▰▱▱▱", "inbox 2"}, []string{"codex", "14:02:31"}},
+		{80, []string{"Marshal", "MCP memory PoC", "running", "12/53", "▰▰▰▰▰▱▱▱", "⚑2"}, []string{"codex", "14:02:31"}},
+		{100, []string{"Marshal", "MCP memory PoC", "running", "12/53", "▰▰▰▰▰▱▱▱", "inbox 2"}, []string{"codex", "14:02:31"}},
 		{170, []string{"12/53 done", "budget", "61%", "codex ●", "claude ●", "agy ◐", "opencode ●", "14:02:31"}, nil},
 		{200, []string{"12/53 done", "budget", "61%", "codex ●", "claude ●", "agy ◐", "opencode ●", "14:02:31"}, nil},
 	} {
