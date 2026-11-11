@@ -12741,8 +12741,8 @@
     },
     {
       "path": "internal/tui/command_sweep_crosscut_test.go",
-      "sha256": "de505cb9560cc9d935b1e4d9f211088c10fd7bcde5f45a44b82b33e74b077a86",
-      "bytes": 29143
+      "sha256": "c5329daec7673310c0f14368807e66321a990694db758cf5bf6ad8a3f6093733",
+      "bytes": 29566
     },
     {
       "path": "internal/tui/command_sweep_work_test.go",
@@ -13926,8 +13926,8 @@
     },
     {
       "path": "internal/tui/native_switch_pty_test.go",
-      "sha256": "40a5c7677e178cdfdc14ee31501aab11cbbd1667198129c4069ac6f1eb0a5b09",
-      "bytes": 3813
+      "sha256": "ccef3e75f7b119aebbe2689f20253531a2e81ff04d34b2ad0bccce18880611e1",
+      "bytes": 4447
     },
     {
       "path": "internal/tui/native_tmux_switch_pty_test.go",
