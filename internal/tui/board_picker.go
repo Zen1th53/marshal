@@ -59,7 +59,7 @@ func providerLeft(q usage.Quota) (left int, known bool, reset time.Time) {
 	if !ok {
 		return 0, false, time.Time{}
 	}
-	return 100 - win.UsedShown(), true, win.ResetsAt
+	return usageLeft(win), true, win.ResetsAt
 }
 
 // pickerOpen reports whether the launch picker is waiting for an answer.

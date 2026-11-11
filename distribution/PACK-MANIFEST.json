@@ -12511,8 +12511,8 @@
     },
     {
       "path": "internal/tui/board_picker.go",
-      "sha256": "3756f91d9b2cc9de25dc3b0afcd42c08788cb956beb47551a65a4ede9d8b918f",
-      "bytes": 11934
+      "sha256": "4f46b5e556d2ad036806f751cb0a1e87e0fdd28e146dd019721ebe49bc271146",
+      "bytes": 11927
     },
     {
       "path": "internal/tui/board_picker_test.go",
@@ -12581,8 +12581,8 @@
     },
     {
       "path": "internal/tui/board_usage.go",
-      "sha256": "14d08869c5526ef477ef7a502c2bdb2de65c6fae0e3dce3f5e4e48860915ff44",
-      "bytes": 4452
+      "sha256": "cfc0e0d40c42aeaaa7b7332b8c9190888cae48544dc4d4fb8127270429d7581a",
+      "bytes": 4568
     },
     {
       "path": "internal/tui/board_usage_test.go",
