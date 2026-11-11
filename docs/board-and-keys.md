@@ -6,9 +6,13 @@ The Board is Marshal's terminal command center. Built on top of tmux, it coordin
 
 ## Screen Layout and Navigation
 
+The top row is the same on every screen: each provider's usage limit (where its CLI reports one) and the machine's CPU, temperature, memory, disk and running lanes.
+
 The Board screen is divided into synchronized operational areas:
 
 ```text
++-----------------------------------------------------------------------------------+
+| ✳ 42% ·4d · ⬡ 12% ·3h · ◆ —       cpu 23% · 61°C · ram 48% · disk 71% · 3 running |
 +-----------------------------------------------------------------------------------+
 | MARSHAL  ·  run R-7f3a  ·  DISPATCHING  ·  3/5 done  ·  inbox 1  ·  NEEDS YOU     |
 +------------------------------------+----------------------------------------------+

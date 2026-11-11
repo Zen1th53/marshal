@@ -1,4 +1,5 @@
- Marshal · "MCP memory PoC" · running · 12/53 done · ⣾ 2 lanes · budget ▰▰▰▰▰▱▱▱ 61% · inbox 2 · ● ● ◐ ●                |
+ ✳ claude … · ⬡ codex … · ◆ agy … · ● opencode …                                                              2 running |
+ Marshal · "MCP memory PoC" · running · 12/53 done · budget ▰▰▰▰▰▱▱▱ 61% · inbox 2 · 14:02:31                           |
 > TASKS 53 tasks · 2 running · 2 parked · 12 merged               │LANES 2 running · ⬡ codex 1/1 · ✳ claude 1/1         |
   ID     state       worker       scope               sent back   │  worker       task    elapsed tokens        last ac…|
   T-009  ✓ merged    ● opencode-1 …mcp/events_list.go             │⣾ ⬡ codex-1    T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …|
@@ -18,7 +19,6 @@ INBOX 2 waiting · nothing blocks                                  │          
 ⚑ T-023 egress → registry.npmjs.org:443  taint U · outside manife…│                                                     |
 ⚑ T-031 hard gate · git push --force origin main  irreversible · …│                                                     |
     confirm › task.T-031.release-push [d] deny                    │                                                     |
-                                                                  │                                                     |
                                                                   │                                                     |
                                                                   │                                                     |
                                                                   │                                                     |

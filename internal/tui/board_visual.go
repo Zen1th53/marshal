@@ -20,7 +20,6 @@ import (
 type boardVisual struct {
 	tails                       func(string) []string
 	tailWant                    int
-	usageWide, usageNarrow      string
 	board                       model.Board
 	now                         time.Time
 	theme                       *Theme
@@ -29,6 +28,8 @@ type boardVisual struct {
 	gateInput                   string
 	focus                       layout.PaneID
 	health                      map[string]string
+	// vitals is the data the top-of-every-view vitals row paints.
+	vitals vitalsData
 	// edition is the build named in the header; empty names none.
 	edition string
 	// note is the run's latest note to the operator, shown in the footer.
@@ -321,6 +322,26 @@ func (v boardVisual) ascii(lines []string, w int) []string {
 }
 func (v boardVisual) renderLines(p layout.Pane) []string {
 	switch p.ID {
+	case layout.Vitals:
+		line, spans := v.vitalsLine(p.Rect.W)
+		for _, sp := range spans {
+			id := ""
+			switch {
+			case strings.HasPrefix(sp.name, "limit:"):
+				if !v.providers {
+					continue
+				}
+				id = "health"
+			case sp.name == "host":
+				id = "host"
+			case sp.name == "lanes":
+				id = "lanes"
+			default:
+				continue
+			}
+			v.hit(boardHit{row: p.Rect.Y, x0: p.Rect.X + sp.x0, x1: p.Rect.X + min(sp.x1, p.Rect.W), kind: hitChip, id: id})
+		}
+		return []string{line}
 	case layout.Header:
 		line, spans := v.headerLine(p.Rect.W)
 		if v.empty {
@@ -361,10 +382,10 @@ type headerPart struct {
 }
 
 // headerSteps is how a header too narrow for every part gives way, one
-// step at a time until it fits: a part is shortened ("-") or left out.
-// The host chip gives way before the run's own identity, state and inbox,
-// which stay longest, after the brand.
-var headerSteps = []string{"usage", "-run", "clock", "-health", "-budget", "-lanes", "-done", "-brand", "budget", "lanes", "done", "health", "-host", "host", "inbox", "run", "state", "brand"}
+// step at a time until it fits: a part is shortened ("-") or left out. The
+// provider limits, host vitals and running count moved to the vitals row;
+// the run's own identity, state and inbox stay longest, after the brand.
+var headerSteps = []string{"-run", "clock", "-budget", "-done", "-brand", "budget", "done", "-arch", "inbox", "run", "state", "arch", "brand"}
 
 // headerSpan is where one header part landed on the line, in cells.
 type headerSpan struct {
@@ -397,15 +418,6 @@ func (v boardVisual) header(w int) string {
 // headerLine is header with where each part landed, for the mouse.
 func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 	b := v.board
-	live := 0
-	for _, l := range b.Lanes {
-		if l.State != model.LaneIdle && l.State != model.LaneParked {
-			live++
-		}
-	}
-	if b.Run.ActiveLanes > 0 {
-		live = b.Run.ActiveLanes
-	}
 	title := firstLine(b.Run.Title)
 	if title == "" {
 		title = "current run"
@@ -424,7 +436,6 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 		{"run", run, shortRun},
 		{"state", v.stateChip(), ""},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d done", b.Run.Total)), v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total))},
-		{"lanes", v.fg("working", v.glyph(model.TaskWorking)) + fmt.Sprintf(" %d lanes", live), v.fg("working", v.glyph(model.TaskWorking)) + fmt.Sprint(live)},
 	}
 	if b.Run.TokenLimit > 0 && b.Run.Tokens.Known {
 		pct := int(b.Run.Tokens.Value * 100 / b.Run.TokenLimit)
@@ -442,41 +453,9 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 		inboxColor = "failed"
 	}
 	parts = append(parts, headerPart{"inbox", v.fg("dim", "inbox ") + v.fg(inboxColor, fmt.Sprint(v.inboxCount())), ""})
-	if len(v.health) > 0 {
-		var hs, dots []string
-		for _, p := range []string{"codex", "claude", "agy", "opencode"} {
-			if h, ok := v.health[p]; ok {
-				color := "merged"
-				switch h {
-				case "◐":
-					color = "waiting"
-				case "×":
-					color = "failed"
-				case "○":
-					color = "dim"
-				}
-				hs = append(hs, v.fg(color, p)+" "+v.fg(color, h))
-				dots = append(dots, v.fg(color, h))
-			}
-		}
-		if len(hs) > 0 {
-			parts = append(parts, headerPart{"health", strings.Join(hs, " "), strings.Join(dots, " ")})
-		}
-	}
-	// The host chip stays while anything else can go.
-	if v.host != nil {
-		c := v.host.chip()
-		parts = append(parts, headerPart{"host", v.hostChip(c), v.hostChipCompact(c)})
-	}
 	parts = append(parts, headerPart{"clock", v.fg("dim", v.now.Format("15:04:05")), ""})
-	if v.host != nil && w < 160 {
-		parts = slices.DeleteFunc(parts, func(p headerPart) bool { return p.name == "clock" })
-	}
 	if w <= 100 {
 		return v.narrowHeader(w, brand, full, run, shortRun, inboxColor)
-	}
-	if v.usageWide != "" {
-		parts = append(parts, headerPart{"usage", v.usageWide, ""})
 	}
 	kept := fitHeaderParts(parts, w, v.fg("faint", " · "))
 	return v.bg("band", PadCell(" "+joinHeader(kept, v.fg("faint", " · ")), w)), spansOf(kept, " · ", 1)
@@ -486,29 +465,18 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 // mockups 05 and 06 draw it: the edition and the inbox label go first, then
 // a warm host chip, the budget bar, the lanes and the done count; the run
 // and its state stay longest.
-var narrowHeaderSteps = []string{"usage", "-brand", "-inbox", "-host", "budget", "lanes", "done", "host", "inbox", "state", "run", "brand"}
+var narrowHeaderSteps = []string{"-brand", "-inbox", "budget", "done", "inbox", "state", "run", "brand"}
 
 // narrowHeader is the header at 100 columns or fewer (owner decision
-// 2026-11-06, mockups 05 and 06): the run, its state, the done count, the
-// lanes and the budget bar stay; the host chip shows only while the host is
-// warm or guarded.
+// 2026-11-06, mockups 05 and 06): the run, its state, the done count and the
+// budget bar stay; the provider limits and host vitals are on the vitals row.
 func (v boardVisual) narrowHeader(w int, brand, full, run, shortRun, inboxColor string) (string, []headerSpan) {
 	b := v.board
-	live := 0
-	for _, l := range b.Lanes {
-		if l.State != model.LaneIdle && l.State != model.LaneParked {
-			live++
-		}
-	}
-	if b.Run.ActiveLanes > 0 {
-		live = b.Run.ActiveLanes
-	}
 	parts := []headerPart{
 		{"brand", full, brand},
 		{"run", run, shortRun},
 		{"state", v.stateChip(), ""},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total)), ""},
-		{"lanes", v.fg("working", v.glyph(model.TaskWorking)) + fmt.Sprint(live), ""},
 	}
 	if b.Run.TokenLimit > 0 && b.Run.Tokens.Known {
 		pct := min(int(b.Run.Tokens.Value*100/b.Run.TokenLimit), 100)
@@ -519,15 +487,7 @@ func (v boardVisual) narrowHeader(w int, brand, full, run, shortRun, inboxColor 
 	if w <= 80 {
 		parts[len(parts)-1].text = parts[len(parts)-1].short
 	}
-	if v.host != nil {
-		if c := v.host.chip(); c.Guard || (c.TempKnown && c.Temp >= 70) {
-			parts = append(parts, headerPart{"host", v.hostChip(c), v.hostChipCompact(c)})
-		}
-	}
 	sep := v.fg("faint", " · ")
-	if v.usageNarrow != "" {
-		parts = append(parts, headerPart{"usage", v.usageNarrow, ""})
-	}
 	kept := fitHeaderPartsBy(parts, w, sep, narrowHeaderSteps)
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }
@@ -977,15 +937,7 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 			parts = append(parts, fmt.Sprintf("%s%s %d/%d", v.mark(n, ""), n, c[0], c[1]))
 		}
 	}
-	busy := 0
-	for _, l := range v.board.Lanes {
-		if l.State != model.LaneIdle && l.State != model.LaneParked {
-			busy++
-		}
-	}
-	if v.board.Run.ActiveLanes > 0 {
-		busy = v.board.Run.ActiveLanes
-	}
+	busy := v.liveLanes()
 	summary := "idle"
 	if busy > 0 {
 		summary = fmt.Sprintf("%d running", busy)

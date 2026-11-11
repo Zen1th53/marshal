@@ -21,8 +21,8 @@ func TestSeams(t *testing.T) {
 	if w.laneTailFor("pane") != nil || w.laneTailWant() != 0 || w.openTaskDiff("task") || w.taskDiff.HandleKey(w, KeyEvent{Type: KeyRune, Rune: 'D'}) || w.taskDiff.StatusLine(80) != "" {
 		t.Fatal("hooks must be inert")
 	}
-	if a, b := w.usageSegment(80); a != "" || b != "" {
-		t.Fatal("usage must be empty")
+	if _, ok := w.usageQuotas(); ok {
+		t.Fatal("usage must be unread")
 	}
 	t.Run("bell", func(t *testing.T) {
 		var out bytes.Buffer
@@ -66,7 +66,7 @@ func TestSeams(t *testing.T) {
 		hooked := v
 		hooked.tails = w.laneTailFor
 		hooked.tailWant = w.laneTailWant()
-		hooked.usageWide, hooked.usageNarrow = w.usageSegment(120)
+		hooked.vitals.quotas, hooked.vitals.read = w.usageQuotas()
 		pane := layout.Pane{Rect: layout.Rect{W: 120, H: 12}}
 		if !reflect.DeepEqual(v.lanes(pane), hooked.lanes(pane)) || !reflect.DeepEqual(v.layoutCounts(), hooked.layoutCounts()) {
 			t.Fatal("empty tails changed lanes")

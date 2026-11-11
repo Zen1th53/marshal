@@ -366,6 +366,26 @@ func boardEdition() string {
 	return ""
 }
 
+// fillVitals gathers the vitals row's data off the paint path: the host
+// snapshot, each provider's readiness word (ready / re-verify / limit) and
+// its last usage quota, plus the board for the live-lane count. The Providers
+// view's last snapshot feeds the readiness words; the frame path never queries
+// the store or probes an executable.
+func (w *Workspace) fillVitals(v *boardVisual, state UIState) {
+	if h := w.hostWatch.Load(); h != nil {
+		snap := h.snapshot()
+		v.host = &snap
+	}
+	v.health = map[string]string{}
+	if snap := w.prov.paint().Snap; snap.Loaded {
+		for _, provider := range snap.Providers {
+			v.health[provider.Provider] = providerState(provider, v.now)
+		}
+	}
+	v.vitals.quotas, v.vitals.read = w.usageQuotas()
+	v.vitals.installed = w.installedProviders()
+}
+
 // boardFrame paints the run on the Board with the composer, the inbox's
 // confirmation and any popup, and returns the frame with its cursor.
 func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, rows int) ([]string, int, int) {
@@ -405,16 +425,16 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	if focus == layout.Lanes {
 		v.selectedLane = ui.lane
 	}
-	if h := w.hostWatch.Load(); h != nil {
-		snap := h.snapshot()
-		v.host = &snap
+	// The vitals row's data: host, provider readiness and quota, gathered off
+	// the paint path (board_vitals.go).
+	w.fillVitals(&v, state)
+	if v.host != nil {
 		v.hostView = w.hostView.Load()
 	}
 	v.memory = w.memorySrc() != nil
 	v.memView = v.memory && w.memView.Load()
 	v.providers = w.providerSrc() != nil
 	v.provView = v.providers && w.provView.Load()
-	v.health = w.providerDots(v.now)
 	v.verify = w.verifySrc() != nil
 	v.verView = v.verify && w.verView.Load()
 	v.security = w.securitySrc() != nil
@@ -468,9 +488,6 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	v.tails = w.laneTailFor
 	v.tailWant = w.laneTailWant()
-	if !empty {
-		v.usageWide, v.usageNarrow = w.usageSegment(cols)
-	}
 	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
@@ -1040,7 +1057,7 @@ func paintHost(l layout.Layout, th *Theme, v boardVisual, ui *boardUI) []string 
 	hl.Rules = nil
 	hl.Panes = nil
 	for _, p := range l.Panes {
-		if p.ID == layout.Header || p.ID == layout.Footer {
+		if boardBar(p.ID) {
 			hl.Panes = append(hl.Panes, p)
 		}
 	}

@@ -71,13 +71,16 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 	}
 	w.palette.Close()
 
-	// The overlay at 120x40 lists every key and what it does, unscrolled.
+	// The overlay lists every key and what it does, unscrolled. The vitals
+	// row takes the top row of every screen, so the body (and the overlay in
+	// it) is one row shorter than the terminal: 41 rows give the overlay the
+	// same height it had before the vitals row existed.
 	th := NewTheme(ThemeNoColor, true, true)
 	v := boardViewVisual(memEpoch, th)
-	r := layout.Compute(120, 40, layout.Split).Overlay(0)
+	r := layout.Compute(120, 41, layout.Split).Overlay(0)
 	help, more := v.helpOverlay(r.W, r.H, 0)
 	if more != 0 {
-		t.Fatalf("help at 120x40 scrolls %d lines", more)
+		t.Fatalf("help at 120x41 scrolls %d lines", more)
 	}
 	plain := StripANSI(strings.Join(help, "\n"))
 	for _, k := range boardKeymap {

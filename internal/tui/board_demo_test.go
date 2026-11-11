@@ -179,8 +179,8 @@ func TestBoardHeaderMockupWidths(t *testing.T) {
 	}{
 		{80, []string{"Marshal", "MCP memory PoC", "running", "12/53", "▰▰▰▰▰▱▱▱", "⚑2"}, []string{"codex", "14:02:31"}},
 		{100, []string{"Marshal", "MCP memory PoC", "running", "12/53", "▰▰▰▰▰▱▱▱", "inbox 2"}, []string{"codex", "14:02:31"}},
-		{170, []string{"12/53 done", "budget", "61%", "codex ●", "claude ●", "agy ◐", "opencode ●", "14:02:31"}, nil},
-		{200, []string{"12/53 done", "budget", "61%", "codex ●", "claude ●", "agy ◐", "opencode ●", "14:02:31"}, nil},
+		{170, []string{"12/53 done", "budget", "61%", "14:02:31"}, []string{"codex ●", "lanes"}},
+		{200, []string{"12/53 done", "budget", "61%", "14:02:31"}, []string{"codex ●", "lanes"}},
 	} {
 		header := StripANSI(v.header(tc.width))
 		if got := VisibleLen(header); got != tc.width {
