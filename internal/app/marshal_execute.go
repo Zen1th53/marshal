@@ -199,6 +199,16 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			} else if again {
 				continue
 			}
+			// A task the owner's change holds can still run once the hold
+			// is released: wait for that instead of ending the run. The
+			// wait does not use up a round.
+			if waited, err := s.waitHeldTasks(ctx, run); err != nil {
+				after, _ := current()
+				return after, err
+			} else if waited {
+				round--
+				continue
+			}
 			return run, fmt.Errorf("marshal run %s cannot progress: no task is ready, handed in or accepted", runID)
 		}
 		policy := marshal.TierPolicy(s.Gate, run.Settings)
@@ -372,7 +382,20 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeWorkerNotGoverned, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
 		}
+		// The hold may have landed since the check above: claim the
+		// launch under the hold's own lock so the two cannot cross.
+		end := func() {}
+		if s.ClaimDispatch != nil {
+			claimEnd, ok := s.ClaimDispatch(t.PlanTaskID)
+			if !ok {
+				continue
+			}
+			if claimEnd != nil {
+				end = claimEnd
+			}
+		}
 		d, err := s.dispatchWithBrief(ctx, runID, t.PlanTaskID, "", brief)
+		end()
 		if err != nil {
 			return launched, err
 		}
@@ -382,6 +405,36 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		}
 	}
 	return launched, nil
+}
+
+// waitHeldTasks blocks while nothing else can move and a held task that has
+// not started would otherwise be ready (its dependencies are merged), until
+// the held set changes or ctx ends: only the hold stops the run, so it waits
+// rather than ends. A run stuck for any other reason still reports it. It
+// reports whether it waited, so Execute takes another round with the new
+// hold. The change channel is taken before the held check, so a release in
+// between is not missed.
+func (s *MarshalService) waitHeldTasks(ctx context.Context, run marshal.Run) (bool, error) {
+	if s.HeldTask == nil || s.HoldChanged == nil {
+		return false, nil
+	}
+	changed := s.HoldChanged()
+	held := false
+	for _, t := range run.Tasks {
+		if (t.State == marshal.Queued || t.State == marshal.Returned || t.State == marshal.Reassigned) && marshalDepsMerged(run, t) && s.HeldTask(t.PlanTaskID) {
+			held = true
+			break
+		}
+	}
+	if !held {
+		return false, nil
+	}
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-changed:
+		return true, nil
+	}
 }
 
 // finish verifies the integrated result and, when the user granted a

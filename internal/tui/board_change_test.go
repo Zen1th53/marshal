@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -338,5 +339,140 @@ func TestChangeCardBesideAskAndRequirements(t *testing.T) {
 	}
 	if card := w.currentChange(); card == nil || !card.applying {
 		t.Fatalf("the change card is not applying: %+v", card)
+	}
+}
+
+// A hold and a dispatch cannot cross. A task whose launch was already claimed
+// when the hold lands is counted as running, not paused; a task held first has
+// its claim refused, so it does not launch.
+func TestHoldAndDispatchClaimAreAtomic(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}, {"b", marshal.Queued}})
+	m := w.marshalSession()
+	end, ok := m.claimDispatch("run", "a")
+	if !ok {
+		t.Fatal("an unheld task's claim was refused")
+	}
+	hp, _ := parseMarshalProposal(holdProposalLine(`["a","b"]`, "switch to OAuth"))
+	w.applyHold(hp)
+	card := w.currentChange()
+	if card == nil || card.notStarted != 1 || card.running != 1 {
+		t.Fatalf("a task mid-launch was counted as paused: %+v", card)
+	}
+	end()
+	if _, ok := m.claimDispatch("run", "b"); ok {
+		t.Fatal("a held task's claim was granted")
+	}
+	if _, ok := m.claimDispatch("other", "b"); !ok {
+		t.Fatal("the hold refused another run's task")
+	}
+}
+
+// The service wiring gives dispatch the claim and Execute the hold-change
+// signal, and a hold change wakes a waiting run.
+func TestHoldChangeWakesWaitingRun(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
+	m := w.marshalSession()
+	changed := m.holdChanged()
+	hp, _ := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
+	w.applyHold(hp)
+	select {
+	case <-changed:
+	default:
+		t.Fatal("applying a hold did not signal a change")
+	}
+	changed = m.holdChanged()
+	w.releaseChange()
+	select {
+	case <-changed:
+	default:
+		t.Fatal("releasing the hold did not wake a waiting run")
+	}
+}
+
+func saysSent(w *Workspace) int {
+	w.say.mu.Lock()
+	defer w.say.mu.Unlock()
+	return w.say.next
+}
+
+// While the change is being applied a click on the card does nothing: it
+// neither sends "apply this change" again nor releases the hold.
+func TestChangeCardClickWhileApplyingSendsOnce(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
+	hp, _ := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
+	w.applyHold(hp)
+	before := saysSent(w)
+	w.clickChange("apply")
+	if saysSent(w) != before+1 {
+		t.Fatal("the first click did not send the apply message")
+	}
+	w.clickChange("apply")
+	w.clickChange("keep")
+	if got := saysSent(w); got != before+1 {
+		t.Fatalf("clicks while applying sent %d messages, want 1", got-before)
+	}
+	card := w.currentChange()
+	if card == nil || !card.applying {
+		t.Fatalf("the card is no longer applying: %+v", card)
+	}
+	if !w.marshalSession().isHeldFor("run", "a") {
+		t.Fatal("a click while applying released the hold")
+	}
+}
+
+// A second amend proposal while the change is already being applied is
+// refused: only one apply sequence runs.
+func TestBusyAmendApplyStartsOnce(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	w.change.card = &changeCard{runID: "run", notStarted: 1, applying: true}
+	release := make(chan struct{})
+	stopped := make(chan struct{}, 4)
+	var amends atomic.Int32
+	w.change.poll = time.Millisecond
+	w.change.stopFn = func() string { stopped <- struct{}{}; return "" }
+	w.change.busyFn = func() bool {
+		select {
+		case <-release:
+			return false
+		default:
+			return true
+		}
+	}
+	w.change.amendFn = func(context.Context, string) (bool, error) { amends.Add(1); return false, nil }
+	w.change.resumeFn = func(context.Context) (string, error) { return "", nil }
+	w.beginChangeApply(marshalProposal{action: "amend", reason: "a switch to OAuth"})
+	<-stopped
+	w.beginChangeApply(marshalProposal{action: "amend", reason: "a switch to OAuth"})
+	if !changeNoteSeen(w, "Ignored Marshal proposal: the change is already being applied.") {
+		t.Fatalf("the second amend was not refused: %v", w.noteList())
+	}
+	close(release)
+	chatWaitFor(t, "the card to close", func() bool { return w.currentChange() == nil })
+	if got := amends.Load(); got != 1 {
+		t.Fatalf("the change was amended %d times, want 1", got)
+	}
+	if len(stopped) != 0 {
+		t.Fatal("a second apply sequence stopped the run")
+	}
+}
+
+// If the run is no longer busy when the Marshal answers "apply" with an amend,
+// the ordinary amendment path runs; when it finishes the hold is released and
+// the card closes instead of staying on "Applying your change…".
+func TestAmendWhileIdleClosesChangeCard(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
+	hp, _ := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
+	w.applyHold(hp)
+	w.changeApply()
+	if card := w.currentChange(); card == nil || !card.applying {
+		t.Fatalf("the card is not applying: %+v", card)
+	}
+	if _, err := w.marshalAmend(context.Background(), "a switch to OAuth"); err != nil {
+		t.Fatalf("the amendment did not start: %v", err)
+	}
+	chatWaitFor(t, "the card to close", func() bool { return w.currentChange() == nil })
+	if w.marshalSession().heldCount() != 0 {
+		t.Fatal("the hold was not released after the amendment")
 	}
 }

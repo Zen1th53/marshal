@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,6 +63,113 @@ func TestDispatchReadySkipsHeldTask(t *testing.T) {
 	}
 	if len(launched) != 1 || launched[0].TaskID != "a" {
 		t.Fatalf("unheld task did not launch: %+v", launched)
+	}
+}
+
+// A held task does not end the run: once nothing else can move, Execute waits
+// for the hold to change instead of reporting that the run cannot progress,
+// and the released task then runs to the end.
+func TestExecuteWaitsForHeldTaskInsteadOfStopping(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s, _ := marshalUserCloseFixture(t, 2)
+	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	held := true
+	changed := make(chan struct{})
+	waiting := make(chan struct{}, 1)
+	s.HeldTask = func(id string) bool { mu.Lock(); defer mu.Unlock(); return held && id == "b" }
+	s.HoldChanged = func() <-chan struct{} {
+		select {
+		case waiting <- struct{}{}:
+		default:
+		}
+		return changed
+	}
+	type result struct {
+		run marshal.Run
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		run, err := s.Execute(ctx, "run", marshalBrief, nil)
+		done <- result{run, err}
+	}()
+	select {
+	case r := <-done:
+		t.Fatalf("Execute ended while a task was held: state %s, err %v", r.run.State, r.err)
+	case <-waiting:
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Tasks[0].State != marshal.Merged || run.Tasks[1].State != marshal.Queued {
+		t.Fatalf("before release: a=%s b=%s, want merged/queued", run.Tasks[0].State, run.Tasks[1].State)
+	}
+	mu.Lock()
+	held = false
+	mu.Unlock()
+	close(changed)
+	r := <-done
+	if r.err != nil {
+		t.Fatalf("Execute after release: %v", r.err)
+	}
+	if r.run.State != marshal.Verifying {
+		t.Fatalf("state = %s, want verifying", r.run.State)
+	}
+	for _, task := range r.run.Tasks {
+		if task.State != marshal.Merged {
+			t.Fatalf("task %s = %s, want merged", task.PlanTaskID, task.State)
+		}
+	}
+}
+
+// A hold that lands after the early check is still honoured: the dispatch
+// claim, taken under the same lock the hold uses, refuses the task and it is
+// not launched.
+func TestDispatchReadyHonoursRefusedClaim(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.HeldTask = func(string) bool { return false }
+	s.ClaimDispatch = func(string) (func(), bool) { return nil, false }
+	launched, err := s.dispatchReady(ctx, "run", run, marshalBrief)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(launched) != 0 {
+		t.Fatalf("a task whose claim was refused was launched: %+v", launched)
+	}
+	again, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Tasks[0].State != marshal.Queued {
+		t.Fatalf("refused task left %s, want queued", again.Tasks[0].State)
+	}
+	ended := 0
+	s.ClaimDispatch = func(string) (func(), bool) { return func() { ended++ }, true }
+	launched, err = s.dispatchReady(ctx, "run", again, marshalBrief)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(launched) != 1 || ended != 1 {
+		t.Fatalf("claimed task: %d launched, claim ended %d times", len(launched), ended)
 	}
 }
 
