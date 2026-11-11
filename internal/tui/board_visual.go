@@ -779,15 +779,15 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		// id and the scope, so neither is cut to a stub.
 		idW = min(idW, max(taskIDWidth, (w-37)/2+1))
 	}
-	scopeW := max(1, w-53-(idW-taskIDWidth))
+	scopeW := max(1, w-50-(idW-taskIDWidth))
 	if compact {
-		scopeW = max(1, w-44-(idW-taskIDWidth))
+		scopeW = max(1, w-41-(idW-taskIDWidth))
 	}
 	var head string
 	if compact {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("ev", 3) + "rework"
+		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " rework"
 	} else {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + PadCell("ev", 3) + "rework"
+		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + "rework"
 	}
 	out = append(out, v.fg("dim", PadCell(head, w)))
 	visible := max(0, h-2)
@@ -840,10 +840,6 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		}
 		// A long scope keeps its end, where the file name is.
 		scope := truncateLeft(cleanBoard(strings.Join(t.Scope, ",")), scopeW)
-		ev := "—"
-		if t.EvidenceKnown {
-			ev = fmt.Sprint(t.Evidence)
-		}
 		elapsed := "—"
 		if !t.Since.IsZero() {
 			d := v.now.Sub(t.Since)
@@ -860,9 +856,9 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		var line string
 		id := dim(PadCell(Truncate(t.ID, idW-1), idW))
 		if compact {
-			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(ev, 3)) + dim(PadCell(rw, 6))
+			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(rw, 6))
 		} else {
-			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(ev, 3)) + dim(PadCell(rw, 6))
+			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(rw, 6))
 		}
 		line = PadCell(line, w)
 		if v.frame.Pulsing(t.ID) {

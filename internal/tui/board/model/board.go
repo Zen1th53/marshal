@@ -146,8 +146,6 @@ type TaskRow struct {
 	AuthorizedTools          []string
 	EvidenceSummary          string // verifier's compact claim summary, when known
 	State                    TaskState
-	Evidence                 int // count supplied by the projection when evidence is available
-	EvidenceKnown            bool
 	// Since is when the task entered State: the latest event that moves a
 	// task into State. Zero when no event does, as for a task an amendment
 	// queued again.
