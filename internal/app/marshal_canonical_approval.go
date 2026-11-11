@@ -117,6 +117,9 @@ func (s *MarshalService) canonicalBoundRun(ctx context.Context, runID string, p 
 		State: marshal.Approved, Settings: old.Settings, Budget: old.Budget, Pack: old.Pack}
 	bindPrivateProcess05Tier(&run, p)
 	for _, pt := range ordered {
+		if !marshal.Control(pt.Control).ValidTaskControl() {
+			return marshal.Run{}, fmt.Errorf("approved task %s: control must be strict or free", pt.ID)
+		}
 		worker, err := marshalPlanTaskWorker(p, pt)
 		if err != nil {
 			return marshal.Run{}, err

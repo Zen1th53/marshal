@@ -84,6 +84,9 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		if len(pt.Criteria) != 1 {
 			return marshal.Run{}, fmt.Errorf("approved task %s needs explicit check criterion mapping; draft it with /marshal chat", pt.ID)
 		}
+		if !marshal.Control(pt.Control).ValidTaskControl() {
+			return marshal.Run{}, fmt.Errorf("approved task %s: control must be strict or free", pt.ID)
+		}
 		worker, err := marshalPlanTaskWorker(p, pt)
 		if err != nil {
 			return marshal.Run{}, err

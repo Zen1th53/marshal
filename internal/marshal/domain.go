@@ -390,11 +390,18 @@ type PlanPack struct {
 	Digest string
 }
 
+// ValidTaskControl reports whether c is a per-task control level: strict,
+// free, or empty (tasks written before per-task control, read as free).
+func (c Control) ValidTaskControl() bool {
+	return c == "" || c == ControlFree || c == ControlStrict
+}
+
 // TaskControl is the control level in force for one task: strict when the run
 // setting is strict or the task itself is strict, free otherwise. A strict run
-// keeps every task strict, so per-task control can only add strictness.
+// keeps every task strict, so per-task control can only add strictness. A
+// task control that is not a known level fails closed as strict.
 func (r Run) TaskControl(t Task) Control {
-	if r.Settings.EffectiveControl() == ControlStrict || t.Control == ControlStrict {
+	if r.Settings.EffectiveControl() == ControlStrict || t.Control == ControlStrict || !t.Control.ValidTaskControl() {
 		return ControlStrict
 	}
 	return ControlFree

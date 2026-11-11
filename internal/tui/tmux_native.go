@@ -836,7 +836,9 @@ func (w *Workspace) runNativeAgentInTmux(
 	if isChat {
 		saved := loadChatBinding(root)
 		if canonicalNeutralProvider(saved.Provider) == canonicalNeutralProvider(provider) && saved.SessionID != "" {
-			args = append(marshalResumeArgs(provider, saved.SessionID), args...)
+			// A resumed conversation already carries its history; the cue
+			// this launch appended would spend a fresh user turn.
+			args = append(marshalResumeArgs(provider, saved.SessionID), dropMarshalCue(provider, args)...)
 		}
 	}
 	// The driver owns native worker execution; tmux hosts its terminal relay.

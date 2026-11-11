@@ -365,3 +365,53 @@ func assertMarshalProcess05Pause(t *testing.T, s *MarshalService, runID, taskID 
 		t.Fatalf("pending retry changed its approval binding: %+v %v", repeated, err)
 	}
 }
+
+// Binding an approved plan fails closed on a per-task control it does not
+// know: only strict and free are levels, and an empty one (plans written
+// before per-task control) reads as free. A misspelt strict must never run as
+// free.
+func TestBindApprovedPlanRefusesUnknownTaskControl(t *testing.T) {
+	fixture, _ := marshalUserCloseFixture(t, 1)
+	runtime := requiredProcess05TestRuntime(t, fixture)
+	ctx := requiredTestOwnerContext(t, runtime, t.Context())
+	projectRecord, err := runtime.Store().Project(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goal := planGoal()
+	goal.ID, goal.SessionID, goal.ProjectID = "GOAL-bad-control", "SESSION-bad-control", requiredProcess05TestProjectID(runtime, projectRecord.ID)
+	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
+		t.Fatal(err)
+	}
+	request := requiredProcess05PlanRequest(planCreateRequest())
+	request.SessionID, request.ProjectID = goal.SessionID, projectid.ID(goal.ProjectID)
+	created, err := runtime.Plans().Create(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created.Checks = map[string][]string{"fix": {"true"}}
+	created.Tasks[0].Control, created.Tasks[0].Instructions = "streect", "write the file"
+	// The graph digest binds the task fields, so rebuild it after setting control.
+	if created.Graph, err = plan.BuildGraph(created.Tasks); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Store().SavePlan(ctx, created, created.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Plans().Approve(ctx, request.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	s, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every other bind requirement holds, so only the control can refuse.
+	worker := requiredProcess05TestHarnessName("test-harness")
+	s.GovernedDrivers[worker] = driver.Governed{Provider: worker, Run: runtime.marshalProcess05Run(s)}
+	if _, err := s.BindApprovedPlan(ctx, "bad-control"); err == nil || !strings.Contains(err.Error(), "control") {
+		t.Fatalf("unknown task control bind = %v", err)
+	}
+	if _, err := s.Snapshot(ctx, "bad-control"); err == nil {
+		t.Fatal("refused bind persisted a Marshal run")
+	}
+}
