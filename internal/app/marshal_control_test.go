@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/plan"
 )
 
 func setControl(t *testing.T, s *MarshalService, control marshal.Control) {
@@ -110,4 +111,51 @@ func TestReturnReasonsReachTheNextBriefAndBriefsAreRecorded(t *testing.T) {
 		}
 	}
 	t.Fatal("the sent brief was not recorded with its digest")
+}
+
+// Per-task control drives the brief: a strict task's brief holds workers to
+// the instructions, a free task's in the same run does not. A strict run
+// setting overrides a per-task free, keeping every task strict.
+func TestBriefControlPerTask(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 2)
+	draft := s.Model.(marshalFakeModel).draft
+	draft.Plan.Tasks[0].Control, draft.Tasks[0].Control = "strict", marshal.ControlStrict
+	draft.Plan.Tasks[0].Instructions, draft.Tasks[0].Instructions = "write the file", "write the file"
+	draft.Plan.Tasks[1].Control, draft.Tasks[1].Control = "free", marshal.ControlFree
+	// The graph digest binds the task fields, so rebuild it after setting control.
+	graph, err := plan.BuildGraph(draft.Plan.Tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft.Plan.Graph = graph
+	if _, err := s.StartPlanningFromDraft(ctx, "run", "goal", draft, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := run.TaskControl(run.Tasks[0]); got != marshal.ControlStrict {
+		t.Fatalf("strict task control: %q", got)
+	}
+	if got := run.TaskControl(run.Tasks[1]); got != marshal.ControlFree {
+		t.Fatalf("free task control: %q", got)
+	}
+	bc0, err := s.briefContext(ctx, "run", run, run.Tasks[0])
+	if err != nil || bc0.Control != marshal.ControlStrict {
+		t.Fatalf("strict brief control: %q %v", bc0.Control, err)
+	}
+	bc1, err := s.briefContext(ctx, "run", run, run.Tasks[1])
+	if err != nil || bc1.Control != marshal.ControlFree {
+		t.Fatalf("free brief control: %q %v", bc1.Control, err)
+	}
+	// A strict run keeps the free task strict.
+	run.Settings.Control = marshal.ControlStrict
+	if got := run.TaskControl(run.Tasks[1]); got != marshal.ControlStrict {
+		t.Fatalf("strict run should keep free task strict: %q", got)
+	}
 }

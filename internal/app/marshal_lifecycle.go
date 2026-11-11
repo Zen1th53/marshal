@@ -538,7 +538,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if s.Model == nil {
 		return "", errors.New("Marshal model is unavailable")
 	}
-	proposal, err := s.Model.Review(ctx, *t, h, run.Settings.EffectiveControl())
+	proposal, err := s.Model.Review(ctx, *t, h, run.TaskControl(*t))
 	if err != nil {
 		return "", err
 	}
@@ -565,7 +565,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if s.CrossReview == nil {
 			return "", errors.New("cross-review is unavailable")
 		}
-		crossReview, provider, reviewErr := s.CrossReview(ctx, *t, h, run.Settings.EffectiveControl())
+		crossReview, provider, reviewErr := s.CrossReview(ctx, *t, h, run.TaskControl(*t))
 		if reviewErr != nil {
 			return "", reviewErr
 		}
@@ -1596,7 +1596,7 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	if err = validateDraft(d); err != nil {
 		return MarshalDraft{}, false, err
 	}
-	if err = instructionsPresent(run.Settings, d.Tasks); err != nil {
+	if err = instructionsPresent(run, d.Tasks); err != nil {
 		return MarshalDraft{}, false, err
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
@@ -1632,7 +1632,7 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if err = validateDraft(d); err != nil {
 		return run, err
 	}
-	if err = instructionsPresent(run.Settings, d.Tasks); err != nil {
+	if err = instructionsPresent(run, d.Tasks); err != nil {
 		return run, err
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)

@@ -254,11 +254,11 @@ func validateDraft(d MarshalDraft) error {
 
 // instructionsPresent enforces strict control: every task must carry the
 // instructions its worker will be held to.
-func instructionsPresent(settings marshal.Settings, tasks []marshal.Task) error {
-	if settings.EffectiveControl() != marshal.ControlStrict {
-		return nil
-	}
+func instructionsPresent(run marshal.Run, tasks []marshal.Task) error {
 	for _, t := range tasks {
+		if run.TaskControl(t) != marshal.ControlStrict {
+			continue
+		}
 		if strings.TrimSpace(t.Instructions) == "" {
 			return fmt.Errorf("strict control needs instructions for task %s", t.PlanTaskID)
 		}
@@ -362,7 +362,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
-	if err := instructionsPresent(settings.Value, d.Tasks); err != nil {
+	if err := instructionsPresent(marshal.Run{Settings: settings.Value}, d.Tasks); err != nil {
 		return marshal.Run{}, err
 	}
 	base, err := gitMarshal(ctx, s.Repository, "rev-parse", "HEAD")

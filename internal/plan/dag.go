@@ -55,6 +55,10 @@ type Task struct {
 	// ExpectedOutput is what this task must produce. Left empty, the context
 	// package derives a general statement from whether the task mutates.
 	ExpectedOutput string `json:"expected_output,omitempty"`
+	// Control is the per-task control level: "strict" or "free". Empty reads as
+	// free. A strict task must carry instructions and its worker is held to
+	// them; a strict run makes every task strict.
+	Control string `json:"control,omitempty"`
 	// NeedsNetwork marks a task that genuinely requires network access.
 	//
 	// It defaults to false and must be set deliberately, because a capability
@@ -373,9 +377,15 @@ func graphDigest(ids []string, byID map[string]Task) string {
 		sort.Strings(dependencies)
 		paths := append([]string(nil), task.Paths...)
 		sort.Strings(paths)
-		fmt.Fprintf(h, "%s|%s|%s|%s|%t|%d\x00",
+		fmt.Fprintf(h, "%s|%s|%s|%s|%t|%d",
 			task.ID, task.Role, strings.Join(dependencies, ","),
 			strings.Join(paths, ","), task.Mutating, task.Weight)
+		// Control is appended only when set, so a control-less plan hashes
+		// exactly as it did before per-task control existed.
+		if task.Control != "" {
+			fmt.Fprintf(h, "|control=%s", task.Control)
+		}
+		h.Write([]byte{0})
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)[:16])
 }

@@ -15,7 +15,7 @@ import (
 // window, opencode not installed, and one message queued for a busy chat.
 func firstUseVisual(th *Theme, now time.Time) boardVisual {
 	return boardVisual{
-		now: now, theme: th, edition: "Marshal", empty: true, project: "demo", focus: layout.Tasks,
+		now: now, theme: th, edition: "Marshal", empty: true, marshalLeads: true, project: "demo", focus: layout.Tasks,
 		chips: []providerChip{
 			{name: "codex", state: "verified", model: "gpt-5"},
 			{name: "claude", state: "unverified"},

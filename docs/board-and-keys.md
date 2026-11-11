@@ -76,11 +76,9 @@ When a run reaches a step that requires human authorization, the Board header di
   ```text
   [y] accept architecture · [b] open details
   ```
-- **Plan Approval Gate**: Only when the Marshal asks you to approve its plan (usually it approves the plan itself):
-  ```text
-  [y] approve the plan · [7] open the plan
-  ```
 - **Inbox Decisions**: When a worker requests confirmation or clarification.
+
+The Marshal approves its own plan, so there is no plan-approval gate. You can stop the run at any time with `Ctrl+X`.
 
 ### Resolving Gates
 

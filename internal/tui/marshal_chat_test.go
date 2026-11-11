@@ -21,7 +21,7 @@ func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, app.MarshalPackRelativePath, "tasks/<id>.md", "Do not edit project files", "Only the person approves the plan", "/marshal approve", `{"tasks":[`, "codex, agy", "acceptance mode " + string(marshal.DefaultSettings().AcceptanceMode), "Current control level: free", "This run:\n- Tier: Standard.\n", "write the pack first, then plan-draft.json, then read back", "Do not read a planned path before its write succeeds", "Confirm each write succeeded", "exactly one success criterion", "current verified harness profile", "canonical Process 04"} {
+	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, app.MarshalPackRelativePath, "tasks/<id>.md", "Do not edit project files", "Only the person approves the plan", "/marshal approve", `{"tasks":[`, "codex, agy", "acceptance mode " + string(marshal.DefaultSettings().AcceptanceMode), "Run control level: free", "This run:\n- Tier: Standard.\n", "write the pack first, then plan-draft.json, then read back", "Do not read a planned path before its write succeeds", "Confirm each write succeeded", "exactly one success criterion", "current verified harness profile", "canonical Process 04"} {
 		if !strings.Contains(brief, phrase) {
 			t.Errorf("briefing lacks %q", phrase)
 		}

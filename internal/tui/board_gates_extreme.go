@@ -4,6 +4,11 @@ package tui
 
 import "context"
 
+// ownerPlanGate reports whether a drafted plan waits for the owner's
+// approval. The shipped Marshal approves its own plans, so no plan gate
+// is shown.
+const ownerPlanGate = false
+
 // readPendingContract is the project contract the live Marshal submitted
 // that waits for the owner's "accept architecture", nil when none does.
 // Without a live Marshal launch nothing can bind the owner's reply, so

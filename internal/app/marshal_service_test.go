@@ -1332,3 +1332,28 @@ func TestDispatchDeliversApprovedModelToDriver(t *testing.T) {
 		t.Fatalf("driver received model %q", got)
 	}
 }
+
+// instructionsPresent enforces strict control per task: a strict task (or any
+// task in a strict run) must carry instructions; a free task need not.
+func TestInstructionsPresentPerTask(t *testing.T) {
+	strictTask := marshal.Task{PlanTaskID: "a", Control: marshal.ControlStrict}
+	strictWithInstr := marshal.Task{PlanTaskID: "a", Control: marshal.ControlStrict, Instructions: "do it"}
+	freeTask := marshal.Task{PlanTaskID: "b", Control: marshal.ControlFree}
+	plainTask := marshal.Task{PlanTaskID: "c"}
+
+	freeRun := marshal.Run{Settings: marshal.Settings{Control: marshal.ControlFree}}
+	strictRun := marshal.Run{Settings: marshal.Settings{Control: marshal.ControlStrict}}
+
+	// A strict task without instructions is refused, naming the task.
+	if err := instructionsPresent(freeRun, []marshal.Task{strictTask}); err == nil || !strings.Contains(err.Error(), "strict control needs instructions for task a") {
+		t.Fatalf("strict task without instructions: %v", err)
+	}
+	// A strict task with instructions passes; a free task alongside it needs none.
+	if err := instructionsPresent(freeRun, []marshal.Task{strictWithInstr, freeTask, plainTask}); err != nil {
+		t.Fatalf("strict-with-instructions + free tasks refused: %v", err)
+	}
+	// A strict run makes every task strict: a free task without instructions is refused.
+	if err := instructionsPresent(strictRun, []marshal.Task{freeTask}); err == nil || !strings.Contains(err.Error(), "strict control needs instructions for task b") {
+		t.Fatalf("strict run free task: %v", err)
+	}
+}

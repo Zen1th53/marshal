@@ -244,3 +244,24 @@ func TestTaskIdentifiersAreSafeNames(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanDigestUnchangedWithoutControl pins the graph digest of a
+// control-less plan: adding the per-task "control" field must not change the
+// digest of a plan that does not use it, so existing approvals stay valid.
+func TestPlanDigestUnchangedWithoutControl(t *testing.T) {
+	tasks := []plan.Task{
+		{ID: "alpha", Title: "alpha", Weight: 1},
+		{ID: "beta", Title: "beta", DependsOn: []string{"alpha"}, Paths: []string{"b.go"}, Mutating: true, Weight: 1},
+	}
+	// Digest computed before per-task control was added to plan.Task.
+	const want = "sha256:6870e90b4138150b88ebb06ada758bbf"
+	if got := buildGraph(t, tasks...).Digest; got != want {
+		t.Fatalf("control-less plan digest changed: got %s, want %s", got, want)
+	}
+	// A task's control level is bound: setting it changes the digest.
+	strict := append([]plan.Task(nil), tasks...)
+	strict[1].Control = "strict"
+	if buildGraph(t, strict...).Digest == want {
+		t.Fatal("setting a task's control did not change the graph digest")
+	}
+}

@@ -71,7 +71,7 @@ func TestMarshalBriefingFollowsControlLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strict, `every task must add "instructions"`) || strings.Contains(free, "must add") || !strings.Contains(free, `may add "instructions"`) {
+	if !strings.Contains(strict, "Control is strict for this run: every task is strict and must carry instructions") || strings.Contains(free, "Control is strict for this run") || !strings.Contains(free, `may add "instructions"`) {
 		t.Fatalf("briefings do not follow the control level:\nstrict: %s\nfree: %s", strict, free)
 	}
 }

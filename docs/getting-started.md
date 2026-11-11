@@ -93,14 +93,7 @@ Next, the Marshal decomposes the architecture into discrete, small tasks. Each t
 - Scope of files to create or modify.
 - Concrete check criteria (e.g. `go test -v ./...` or `npm test`).
 
-When the plan is ready, the Marshal approves it itself and starts the workers. Press `7` to read the plan.
-
-If the Marshal asks you to approve it instead, a **`NEEDS YOU`** gate appears:
-```text
-drafted plan waits for your approval · 2 tasks · [y] approve the plan · [7] open the plan
-```
-
-Press `y` and then `Enter` to approve it.
+When the plan is ready, the Marshal approves it itself and starts the workers. Press `7` to read the plan. You can stop the run at any time with `Ctrl+X`.
 
 ---
 

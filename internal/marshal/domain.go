@@ -249,11 +249,14 @@ type Task struct {
 	EvidenceAttemptBase int      `json:",omitempty"`
 	// Instructions and ExpectedOutput are copied from the approved plan task;
 	// the worker's brief carries them.
-	Instructions        string `json:",omitempty"`
-	ExpectedOutput      string `json:",omitempty"`
-	EscalationReason    string `json:",omitempty"`
-	EscalationCode      string `json:",omitempty"`
-	FreshSessionRetries int    `json:",omitempty"`
+	Instructions string `json:",omitempty"`
+	// Control is the per-task control level from the approved plan. Empty reads
+	// as free; a strict run makes every task strict (see Run.TaskControl).
+	Control             Control `json:",omitempty"`
+	ExpectedOutput      string  `json:",omitempty"`
+	EscalationReason    string  `json:",omitempty"`
+	EscalationCode      string  `json:",omitempty"`
+	FreshSessionRetries int     `json:",omitempty"`
 	// Exact pending Process 05 continuation; private builds validate its
 	// canonical approval receipt before returning this task to dispatch.
 	Process05WaitRunID      string `json:",omitempty"`
@@ -385,6 +388,16 @@ type PlanPack struct {
 	// amendment has none.
 	Tasks  map[string]string `json:",omitempty"`
 	Digest string
+}
+
+// TaskControl is the control level in force for one task: strict when the run
+// setting is strict or the task itself is strict, free otherwise. A strict run
+// keeps every task strict, so per-task control can only add strictness.
+func (r Run) TaskControl(t Task) Control {
+	if r.Settings.EffectiveControl() == ControlStrict || t.Control == ControlStrict {
+		return ControlStrict
+	}
+	return ControlFree
 }
 
 // ValidCloseAuthorization requires current, unvoided user consent.

@@ -100,7 +100,7 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 				kind = marshal.TaskInspection
 			}
 		}
-		task := marshal.Task{Type: kind, PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: marshalTaskBranch(runID, pt.ID, 0), Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
+		task := marshal.Task{Type: kind, PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: marshalTaskBranch(runID, pt.ID, 0), Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, Control: marshal.Control(pt.Control), ExpectedOutput: pt.ExpectedOutput}
 		for _, command := range p.Checks[pt.ID] {
 			if strings.TrimSpace(command) == "" {
 				return marshal.Run{}, errors.New("approved plan contains an empty check")
@@ -109,7 +109,7 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		}
 		tasks = append(tasks, task)
 	}
-	if err := instructionsPresent(settings.Value, tasks); err != nil {
+	if err := instructionsPresent(marshal.Run{Settings: settings.Value}, tasks); err != nil {
 		return marshal.Run{}, err
 	}
 	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value, Budget: settings.Value.Budget}

@@ -87,7 +87,7 @@ func TestBoardDemoGoldens(t *testing.T) {
 	now := time.Date(2026, 11, 2, 14, 2, 31, 0, time.UTC)
 	b := demoBoard(now)
 	th := NewTheme(ThemeDefault, true, true)
-	v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, selectedTask: "T-023", selectedInbox: b.Inbox[0].Request.Key(), focus: layout.Tasks, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}}
+	v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, selectedTask: "T-023", selectedInbox: b.Inbox[0].Request.Key(), focus: layout.Tasks, edition: "Marshal", marshalLeads: true, health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}}
 	cases := []struct {
 		name    string
 		w, h    int
@@ -171,7 +171,7 @@ func boardCounts(b model.Board) layout.Counts {
 
 func TestBoardHeaderMockupWidths(t *testing.T) {
 	now := time.Date(2026, 11, 2, 14, 2, 31, 0, time.UTC)
-	v := boardVisual{board: demoBoard(now), now: now, theme: NewTheme(ThemeNoColor, true, true), edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}}
+	v := boardVisual{board: demoBoard(now), now: now, theme: NewTheme(ThemeNoColor, true, true), edition: "Marshal", marshalLeads: true, health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}}
 	for _, tc := range []struct {
 		width int
 		want  []string
@@ -202,7 +202,7 @@ func TestBoardHeaderMockupWidths(t *testing.T) {
 func TestBoardDemoASCIIAndNoColor(t *testing.T) {
 	now := time.Date(2026, 11, 2, 14, 2, 31, 0, time.UTC)
 	b := demoBoard(now)
-	v := boardVisual{board: b, now: now, theme: NewTheme(ThemeNoColor, false, false), selectedTask: "T-023", selectedInbox: b.Inbox[0].Request.Key(), focus: layout.Tasks, edition: "Marshal"}
+	v := boardVisual{board: b, now: now, theme: NewTheme(ThemeNoColor, false, false), selectedTask: "T-023", selectedInbox: b.Inbox[0].Request.Key(), focus: layout.Tasks, edition: "Marshal", marshalLeads: true}
 	l := layout.Compute(80, 24, layout.Split)
 	for y, line := range paintBoard(l, v.theme, v.render) {
 		if strings.Contains(line, "\x1b") {

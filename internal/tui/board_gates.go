@@ -126,7 +126,7 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 		}
 		out = append(out, g)
 	}
-	if p != nil && planAwaitsApproval(p) {
+	if ownerPlanGate && p != nil && planAwaitsApproval(p) {
 		b := p.Board
 		title := "drafted plan waits for your approval"
 		summary := fmt.Sprintf("%d task", b.Run.Total)

@@ -115,6 +115,10 @@ type boardVisual struct {
 	// pick is the launch Marshal picker's candidates and selection, painted
 	// in the body when the picker is open (board_picker.go).
 	pick pickerView
+	// marshalLeads is set when the Marshal leads acceptance (acceptance mode
+	// marshal). The shipped header then shows a dim "Marshal leads" part,
+	// which is the first to give way on a narrow header.
+	marshalLeads bool
 	// docked is set while the Marshal chat is docked beside the Board.
 	docked bool
 	// echo is what the operator said to the Marshal from the composer,
@@ -392,7 +396,8 @@ type headerPart struct {
 // step at a time until it fits: a part is shortened ("-") or left out. The
 // provider limits, host vitals and running count moved to the vitals row;
 // the run's own identity, state and inbox stay longest, after the brand.
-var headerSteps = []string{"-run", "clock", "-budget", "-done", "-brand", "budget", "done", "-arch", "inbox", "run", "state", "arch", "brand"}
+// The "Marshal leads" mode part gives way first.
+var headerSteps = []string{"mode", "-run", "clock", "-budget", "-done", "-brand", "budget", "done", "-arch", "inbox", "run", "state", "arch", "brand"}
 
 // headerSpan is where one header part landed on the line, in cells.
 type headerSpan struct {
@@ -440,10 +445,15 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 	shortRun := v.fg("accent", Truncate(title, 16))
 	parts := []headerPart{
 		{"brand", full, brand},
+	}
+	if v.marshalLeads {
+		parts = append(parts, headerPart{"mode", v.fg("dim", "Marshal leads"), v.fg("dim", "leads")})
+	}
+	parts = append(parts, []headerPart{
 		{"run", run, shortRun},
 		{"state", v.stateChip(), ""},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d done", b.Run.Total)), v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total))},
-	}
+	}...)
 	if b.Run.TokenLimit > 0 && b.Run.Tokens.Known {
 		pct := int(b.Run.Tokens.Value * 100 / b.Run.TokenLimit)
 		if pct > 100 {

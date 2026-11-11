@@ -500,6 +500,9 @@ type marshalProposedTask struct {
 	// task. Strict control requires instructions for every task.
 	Instructions   string `json:"instructions,omitempty"`
 	ExpectedOutput string `json:"expected_output,omitempty"`
+	// Control is the per-task control level: "strict" or "free". Empty means
+	// free. Any other value refuses the draft.
+	Control string `json:"control,omitempty"`
 }
 
 type marshalProposedCheck struct {
@@ -637,8 +640,12 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		if kind != marshal.TaskChange && kind != marshal.TaskInspection && kind != marshal.TaskVerification {
 			return MarshalDraft{}, errors.New("invalid task type")
 		}
-		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Type: string(kind), Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
-		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Components: append([]string(nil), item.Components...), Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
+		control := marshal.Control(item.Control)
+		if control != "" && control != marshal.ControlStrict && control != marshal.ControlFree {
+			return MarshalDraft{}, fmt.Errorf("task %s: control must be strict or free", item.ID)
+		}
+		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Type: string(kind), Mutating: true, Weight: 1, Instructions: item.Instructions, Control: item.Control, ExpectedOutput: item.ExpectedOutput})
+		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Components: append([]string(nil), item.Components...), Instructions: item.Instructions, Control: control, ExpectedOutput: item.ExpectedOutput}
 		for _, check := range item.Checks {
 			task.Checks = append(task.Checks, marshal.Check{Command: check.Command, Criteria: check.Criteria})
 			draft.Plan.Checks[item.ID] = append(draft.Plan.Checks[item.ID], check.Command)

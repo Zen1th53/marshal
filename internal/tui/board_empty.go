@@ -296,13 +296,18 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 	project := cleanBoard(v.project)
 	parts := []headerPart{
 		{"brand", full, brand},
-		{"project", v.fg("dim", "project ") + v.fg("accent", project), v.fg("accent", project)},
-		{"state", v.bg("sel", v.fg("waiting", " NO RUN YET ")), v.fg("waiting", "NO RUN")},
 	}
+	if v.marshalLeads {
+		parts = append(parts, headerPart{"mode", v.fg("dim", "Marshal leads"), v.fg("dim", "leads")})
+	}
+	parts = append(parts,
+		headerPart{"project", v.fg("dim", "project ") + v.fg("accent", project), v.fg("accent", project)},
+		headerPart{"state", v.bg("sel", v.fg("waiting", " NO RUN YET ")), v.fg("waiting", "NO RUN")},
+	)
 	if v.ownerWaits() {
 		// The Marshal waits for the owner before any run exists: the
 		// project contract to accept, or files changed to keep or undo.
-		parts[2] = headerPart{"state", v.bold(v.bg("sel", v.fg("needs", " NEEDS YOU "))), v.bold(v.fg("needs", "NEEDS YOU"))}
+		parts[len(parts)-1] = headerPart{"state", v.bold(v.bg("sel", v.fg("needs", " NEEDS YOU "))), v.bold(v.fg("needs", "NEEDS YOU"))}
 	}
 	inboxColor := "merged"
 	if v.inboxCount() > 0 {
@@ -313,8 +318,9 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 	sep := v.fg("faint", " · ")
 	// The edition and the project stay longest: they are what this
 	// header is for while no run is open. Provider readiness and host vitals
-	// are on the vitals row above.
-	steps := []string{"clock", "-inbox", "-project", "-state", "inbox", "-brand", "project", "state", "brand"}
+	// are on the vitals row above. The "Marshal leads" mode part gives way
+	// first.
+	steps := []string{"mode", "clock", "-inbox", "-project", "-state", "inbox", "-brand", "project", "state", "brand"}
 	kept := fitHeaderPartsBy(parts, w, sep, steps)
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }

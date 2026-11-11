@@ -413,6 +413,13 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	var hits []boardHit
 	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stopArmed: ui.stopArmed, hits: &hits}
+	// The shipped header shows "Marshal leads" when the Marshal leads
+	// acceptance. A fresh project has no run yet, so it reads the default.
+	accMode := p.run.Settings.AcceptanceMode
+	if empty {
+		accMode = marshal.DefaultSettings().AcceptanceMode
+	}
+	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
