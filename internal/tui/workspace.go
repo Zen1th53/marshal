@@ -241,6 +241,14 @@ type Workspace struct {
 		poll     time.Duration
 		timeout  time.Duration
 	}
+	// next is the "what next?" card shown when a run closes (board_next.go);
+	// shownFor is the run id it was shown for, so a later Closed publish does
+	// not re-open it.
+	next struct {
+		mu       sync.Mutex
+		card     *nextCard
+		shownFor string
+	}
 	// guard is the plan-only guard's baseline and alert (board_guard.go);
 	// guardSource replaces git status and guardTell the delivery to the
 	// Marshal chat in tests.
@@ -1148,6 +1156,11 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		return false
 	}
 	if w.handleBoardMouse(ctx, event) {
+		// A click can quit as its key does (the "what next?" card's q).
+		if w.commandExitRequested() {
+			w.clearTerminal()
+			return true
+		}
 		w.renderFullView()
 		return false
 	}

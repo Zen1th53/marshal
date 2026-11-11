@@ -387,7 +387,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		pad = " "
 	}
 	// A decision already waiting comes before anything else.
-	if n := len(v.board.Inbox) + len(v.gates) + v.guardCount() + v.askCount() + v.reqCount() + v.changeCount(); n > 0 {
+	if n := len(v.board.Inbox) + len(v.gates) + v.guardCount() + v.askCount() + v.reqCount() + v.changeCount() + v.nextCount(); n > 0 {
 		// The requirements card is tall: count it as 11 rows, not the
 		// 2+3*n estimate the shorter cards use.
 		est := 2 + 3*n

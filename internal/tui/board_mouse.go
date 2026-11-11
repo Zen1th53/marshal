@@ -59,6 +59,10 @@ const (
 	// hitPicker is a candidate on the launch Marshal picker (board_picker.go):
 	// a click picks-and-confirms it. id is its index.
 	hitPicker boardHitKind = "picker"
+	// hitNext is a button on the "what next?" card (board_next.go): a click
+	// does the same as its key — n starts the next goal, d opens the Verify
+	// view, q quits.
+	hitNext boardHitKind = "next"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -215,6 +219,8 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		w.clickQuota(h.action)
 	case hitChange:
 		w.clickChange(h.id)
+	case hitNext:
+		w.clickNext(h.id)
 	case hitInspect:
 		// The same paths the inspector's keys take: a decision button
 		// opens the inbox's confirmation, never decides; o shows the pane.

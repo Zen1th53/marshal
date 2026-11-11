@@ -97,6 +97,10 @@ type boardVisual struct {
 	// none; it renders after the ask and requirements cards, one key or
 	// click per action.
 	change *changeCard
+	// next is the "what next?" card after a run closes (board_next.go), nil
+	// for none; it opens only once the watched run closed and then renders
+	// first in the inbox, one key or click per action.
+	next *nextCard
 	// guard is the plan-only guard's alert (board_guard.go), nil for
 	// none; guardArmed is set while its undo waits for Enter, guardUndo
 	// what it would do; guardPrefix the project's directory in its
@@ -1093,8 +1097,8 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		summary = "empty · no decision waiting"
 	}
 	stop, stopped := v.stopNotice()
-	// The topmost open card names the summary: ask over requirements over
-	// change, as they render.
+	// The topmost open card names the summary, as they render: the "what
+	// next?" card over ask over requirements over change.
 	if v.change != nil && !stopped {
 		summary = "the Marshal paused the affected tasks"
 		if m := len(v.board.Inbox); m > 0 {
@@ -1111,6 +1115,12 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		summary = "the Marshal waits for your answer"
 		if m := len(v.board.Inbox); m > 0 {
 			summary += fmt.Sprintf(" · %d more waiting", m)
+		}
+	}
+	if v.next != nil && !stopped {
+		summary = "this run is done"
+		if m := len(v.board.Inbox); m > 0 {
+			summary += fmt.Sprintf(" · %d waiting", m)
 		}
 	}
 	if n := waitingGates(v.gates); n > 0 && !stopped {
@@ -1132,6 +1142,17 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		}
 	}
 	out := []string{v.title("INBOX", summary, v.focus == layout.Inbox, w)}
+	// The "what next?" card leads the inbox when a run has just closed: the
+	// run's report is in the chat, and this card states its counts and the
+	// one key for the next goal (board_next.go).
+	if v.next != nil && len(out) < h {
+		lines := v.nextEntry(*v.next, p.Rect.X, p.Rect.Y+len(out), w)
+		if len(out)+len(lines) > h {
+			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
+		}
+		out = append(out, lines...)
+		out = out[:min(len(out), h)]
+	}
 	if stopped && h > 1 {
 		// The run's stop leads the inbox: it is what holds everything
 		// else up. The all-providers-at-limit pause shows its own card
@@ -1372,7 +1393,7 @@ func (v boardVisual) activityLine(a model.ActivityLine) string {
 // inboxCount is what the header's inbox chip counts: pending requests and
 // the owner gates still waiting for a reply.
 func (v boardVisual) inboxCount() int {
-	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount() + v.askCount()
+	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount() + v.askCount() + v.nextCount()
 }
 
 func boolInt(b bool) int {

@@ -903,6 +903,10 @@ func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPa
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.runID == runID {
+		// A run that has just closed opens the "what next?" card, compared
+		// against the previously published panel so a re-publish of the
+		// closed run does not re-open it (board_next.go).
+		w.noteRunClosed(w.marshalPanel(), p)
 		w.setMarshalPanel(p)
 	}
 }
@@ -1340,7 +1344,7 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 		}
 		return "waiting for you"
 	case marshal.Closed:
-		return "closed"
+		return "done"
 	default:
 		return string(run.State)
 	}

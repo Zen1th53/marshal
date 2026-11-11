@@ -418,6 +418,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.ask = w.currentAsk()
 	v.req = w.currentReq()
 	v.change = w.currentChange()
+	v.next = w.currentNext()
 	v.guard, v.guardPrefix, v.guardArmed, v.guardUndo = w.guardPaint()
 	v.quotaArmed = w.quotaCard.isArmed()
 	if empty {
@@ -636,6 +637,12 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		if w.handlePickerKey(event) {
 			return true
 		}
+	}
+	// The "what next?" card after a run closes takes n, d and q while it is
+	// open, before the other cards: n starts the next goal, d opens the
+	// Verify view, q quits through the normal exit (board_next.go).
+	if w.handleNextKey(event) {
+		return true
 	}
 	// An open ask card takes its keys next: Enter picks the recommended
 	// choice, each letter picks its own; the card closes when one sends.

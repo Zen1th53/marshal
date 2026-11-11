@@ -719,8 +719,8 @@ func (v boardVisual) guardCount() int {
 }
 
 // ownerWaits reports whether something waits for the person: a gate's
-// reply, the guard's decision, an open ask card, a requirements card or an
-// open change card.
+// reply, the guard's decision, an open ask card, a requirements card, an
+// open change card, the quota card or the "what next?" card.
 func (v boardVisual) ownerWaits() bool {
-	return waitingGates(v.gates) > 0 || v.guard != nil || v.ask != nil || v.req != nil || v.change != nil || v.quotaCardActive()
+	return waitingGates(v.gates) > 0 || v.guard != nil || v.ask != nil || v.req != nil || v.change != nil || v.next != nil || v.quotaCardActive()
 }
