@@ -9,6 +9,19 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+type goalBudgetFake struct {
+	*fakeAuthority
+	revisions map[int64]model.GoalContract
+}
+
+func (f *goalBudgetFake) GoalRevision(ctx context.Context, id string, rev int64) (model.GoalContract, error) {
+	g, ok := f.revisions[rev]
+	if !ok || g.ID != id {
+		return g, model.ErrGoalNotFound
+	}
+	return g, nil
+}
+
 type goalCancelFake struct {
 	*goalBudgetFake
 	cancelCalls int
@@ -36,7 +49,7 @@ func TestGoalCancellationMenuDefaultsToCancelAndProvesTermination(t *testing.T) 
 	g := model.GoalContract{ID: "g", SessionID: "s", ProjectID: "p", Revision: 1, Confirmation: model.ConfirmationApproved, RequestDigest: "digest"}
 	f := &goalCancelFake{goalBudgetFake: &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: g}, revisions: map[int64]model.GoalContract{1: g}}}
 	s := &ControlSource{Authority: f, SessionID: "s", ProjectID: "p"}
-	b := goalActionBindings(s)["CTUI-0048"]
+	b := goalCancelBinding(s)
 	c := &Confirmation{}
 	if err := c.Begin(context.Background(), b, ActionRequest{Action: b.Action, ProjectID: "p", SessionID: "s", Inputs: map[string]string{"reason": "stop"}}); err != nil {
 		t.Fatal(err)

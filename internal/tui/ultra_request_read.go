@@ -12,27 +12,6 @@ type PersistedEntitlementRequestReader interface {
 	PersistedEntitlementRequest(context.Context) (cloud.RequestObservation, bool, error)
 }
 
-// StoredEntitlementRequestReader is composed with the exact identity of the
-// workspace; identities are never inferred from the latest file on disk.
-type StoredEntitlementRequestReader struct {
-	Store *cloud.RequestStore
-	Key   cloud.RequestKey
-}
-
-func (r StoredEntitlementRequestReader) PersistedEntitlementRequest(ctx context.Context) (cloud.RequestObservation, bool, error) {
-	if r.Store == nil {
-		return cloud.RequestObservation{}, false, cloud.ErrState
-	}
-	return r.Store.Read(ctx, r.Key)
-}
-
-// EntitlementRequest adapts E's persistence DTO to F's presentation DTO. A
-// zero server timestamp remains zero; it is never replaced with local time.
-func (r StoredEntitlementRequestReader) EntitlementRequest(ctx context.Context) (EntitlementRequestObservation, error) {
-	o, found, err := r.PersistedEntitlementRequest(ctx)
-	return requestPresentation(o, found), err
-}
-
 func requestPresentation(o cloud.RequestObservation, found bool) EntitlementRequestObservation {
 	if !found {
 		return EntitlementRequestObservation{State: "UNKNOWN", Error: "no locally recorded entitlement request"}

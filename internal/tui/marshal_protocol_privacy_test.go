@@ -126,7 +126,7 @@ func TestMarshalProtocolWithheldFromHistoricalSurfaces(t *testing.T) {
 		if got := RedactContent(text, nil); got != "[REDACTED]" {
 			t.Fatal("protocol redaction failed")
 		}
-		if got := memoryExcerpt(model.MemoryRecordV2{Body: text}).Display(); containsMarshalProtocol(got) {
+		if got := strings.Join(memoryEvidenceLines("MEM-private", model.MemoryRecordV2{Title: text, Body: text}, nil, nil), "\n"); containsMarshalProtocol(got) {
 			t.Fatal("memory leaked protocol")
 		}
 		if got := (briefingLine{text: text}).String(); containsMarshalProtocol(got) {

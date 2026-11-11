@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -29,10 +28,10 @@ func (a *runtimeControlAuthority) CancelGoal(ctx context.Context, e app.CommandE
 	return a.runtime.CommandCancelGoal(a.localControl.Context(ctx), e, reason)
 }
 
-// goalActionBindings replaces, rather than competes with, the old cancellation
-// GAP and six blanket budget refusals. Integration installs this map once.
-func goalActionBindings(s *ControlSource) map[ActionID]Binding {
-	bindings := budgetActionBindings(s)
+// goalCancelBinding builds the one goal action the composer runs through a
+// binding: CTUI-0048, goal cancellation. The shipped build rewrites its
+// Prepare/Execute to the pending-goal-only variant in goal_controls_extreme.go.
+func goalCancelBinding(s *ControlSource) Binding {
 	a, ok := s.Authority.(goalCancellationAuthority)
 	b := Binding{Action: "CTUI-0048", Title: "Cancel goal", Safety: SafetyDestructive, Prepare: s.prepareGoal, Inputs: []InputSpec{{Key: "reason", Label: "Reason for cancellation", Required: true}}}
 	if !ok {
@@ -73,8 +72,7 @@ func goalActionBindings(s *ControlSource) map[ActionID]Binding {
 		}
 		return Outcome{Verdict: VerdictPass, Detail: detail, Target: Target{Kind: "goal", ID: g.ID, Revision: g.Revision, Digest: g.RequestDigest}, Proof: Known("CANCELLED / USER_CANCELLED", "internal/store/goal_cancel.go")}, nil
 	}
-	bindings[b.Action] = b
-	return bindings
+	return b
 }
 
 func validateGoalActionTarget(ctx context.Context, s *ControlSource, req ActionRequest) error {
@@ -92,13 +90,4 @@ func validateGoalActionTarget(ctx context.Context, s *ControlSource, req ActionR
 		return model.ErrGoalConflict
 	}
 	return nil
-}
-
-func sameGoalLimits(a, b *model.BudgetLimit) bool {
-	aa, err := json.Marshal(a)
-	if err != nil {
-		return false
-	}
-	bb, err := json.Marshal(b)
-	return err == nil && string(aa) == string(bb)
 }

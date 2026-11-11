@@ -36,12 +36,15 @@ func TestPTYLocalControlProofReadbackAndSlashRefusal(t *testing.T) {
 	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 		t.Fatal(err)
 	}
-	workspace := NewWorkspace(runtime.Store(), projectID, session)
-	workspace.AttachRuntime(runtime, projectid.ID(projectID))
-	request := ActionRequest{Target: Target{Kind: "goal", ID: goal.ID, Revision: 1}, IdempotencyKey: "pty-local-proof", Inputs: map[string]string{"interpretation": "PTY canonical local proof wording", "reason": "owner clarified wording"}}
-	outcome, err := workspace.controlSource().executeReviseGoal(ctx, request)
-	if err != nil || outcome.Verdict != VerdictPass {
-		t.Fatalf("workspace proof mutation: %+v %v", outcome, err)
+	// The navigation menu that revised a goal in place is gone; seed the
+	// revised, pending revision directly so this test keeps covering the real
+	// binary's PTY readback and its slash-command refusal of goal mutation.
+	revised := goal
+	revised.Revision = 2
+	revised.DesiredOutcome = "PTY canonical local proof wording"
+	revised.Confirmation = model.ConfirmationPending
+	if err := runtime.Store().SaveGoalContract(ctx, revised, 1); err != nil {
+		t.Fatal(err)
 	}
 	if err := runtime.Close(); err != nil {
 		t.Fatal(err)

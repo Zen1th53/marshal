@@ -979,3 +979,12 @@ func (w *Workspace) inspectorWorkerPane(b boardmodel.Board, taskID string) {
 	w.boardUI.lane = b.Lanes[i].Worker
 	w.enterLane(b)
 }
+
+// TaskRow is one canonical task.
+type TaskRow struct {
+	ID       Value
+	Title    Value
+	Status   Value
+	Revision Value
+	Risk     Value
+}

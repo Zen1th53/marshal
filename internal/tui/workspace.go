@@ -133,13 +133,8 @@ type Workspace struct {
 	// interruptArmed records that a Ctrl+C arrived with nothing left to
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
-	interruptArmed bool
-	exitRequested  bool
-	// relaunchable is set by the launcher that execs `marshal tui
-	// SESSION-ID` when Run returns a SessionRelaunch; relaunchSession is
-	// the session the operator chose to open (CTUI-0219).
-	relaunchable          bool
-	relaunchSession       string
+	interruptArmed        bool
+	exitRequested         bool
 	nativeOnStart         *[]string
 	nativeStartupProvider string
 	// nativeProvider records which agent a session last opened. It is an
@@ -823,11 +818,6 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 		if err := w.runRawTerminal(ctx); err != nil {
 			return err
 		}
-		// The operator opened another session (CTUI-0219): the launcher
-		// starts it in this terminal once this workspace has closed.
-		if id := w.relaunchTarget(); id != "" {
-			return &SessionRelaunch{SessionID: id}
-		}
 		return nil
 	}
 
@@ -889,10 +879,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		w.terminal.LeaveAltScreen()
 		w.terminal.Restore()
 		w.reportActiveTmuxSessions()
-		if id := w.relaunchTarget(); id != "" {
-			fmt.Fprintf(w.out, "Leaving session %s for session %s. Any durable session data is preserved.\n", w.sessionID, id)
-			return
-		}
 		fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 	}()
 
@@ -2117,7 +2103,6 @@ func (w *Workspace) controlSource() *ControlSource {
 				defer w.mu.RUnlock()
 				return w.ultraExecution
 			},
-			relauncher: w,
 			requestExit: func() error {
 				w.mu.Lock()
 				defer w.mu.Unlock()

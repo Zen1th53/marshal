@@ -16,7 +16,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
@@ -364,28 +363,6 @@ type ControlSource struct {
 	ApproverID string
 	// Now is the clock, injectable for staleness tests.
 	Now func() time.Time
-
-	// mu guards the mutable selection below.
-	//
-	// These fields are written by a key press and read by a background
-	// refresh, which runs outside the view's lock so that a slow authority
-	// cannot freeze the paint path. That makes this lock necessary rather
-	// than redundant.
-	mu sync.Mutex
-	// selectedApproval and selectedCheckpoint name which record the actions
-	// apply to, so "approve" is never a generic "approve whatever is current".
-	selectedApproval   string
-	selectedCheckpoint string
-	selectedGrantID    string
-	// rationale is the operator's stated reason for the next decision.
-	rationale string
-}
-
-// selection returns the currently selected records under the lock.
-func (s *ControlSource) selection() (approval, checkpoint, rationale string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.selectedApproval, s.selectedCheckpoint, s.rationale
 }
 
 func (s *ControlSource) now() time.Time {
@@ -404,11 +381,3 @@ func (s *ControlSource) available() error {
 	}
 	return nil
 }
-
-// budgetContractOwner is why a budget screen cannot write a limit that the
-// canonical Goal contract does not enforce: contract editing requires a new
-// Goal revision, and consumption is recorded by the governed runtime.
-const budgetContractOwner = "BLOCKED (%s): budget limits are part of the Goal " +
-	"contract, and the canonical rule is that contract editing requires a " +
-	"new Goal revision. Consumption is recorded by the governed runtime and " +
-	"is shown here; the limit itself is changed by revising the Goal"

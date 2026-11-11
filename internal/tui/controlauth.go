@@ -26,7 +26,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/cloud"
-	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -35,7 +34,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/resources"
-	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
 	"github.com/Zen1th53/marshal/internal/worker"
@@ -73,52 +71,10 @@ type runtimeControlAuthority struct {
 	preference    func() bool
 	requestExit   func() error
 	exitRequested func() bool
-	// relauncher is the workspace's session hand-over (CTUI-0219).
-	relauncher sessionRelauncher
 	// replaceRuntime updates the workspace after a stopped-runtime restore.
 	// It does not perform the restore; it only swaps in the canonical runtime
 	// that app.Open produced after store.RestoreDatabase succeeded.
 	replaceRuntime func(*app.Runtime)
-}
-
-// Providers adapts the canonical runtime discovery result to the read-only TUI
-// contract. It carries no execution authority and never launches a harness.
-func (a *runtimeControlAuthority) Providers(ctx context.Context) ([]ProviderProbe, error) {
-	if a == nil || a.runtime == nil {
-		return nil, errNoRuntime
-	}
-	details, err := a.runtime.ProviderStatusDetails(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ProviderProbe, 0, len(details))
-	for _, d := range details {
-		probe := ProviderProbe{
-			Name:              d.Name,
-			Found:             d.Found,
-			Path:              d.Path,
-			Version:           d.Version,
-			Model:             d.Model,
-			Probed:            d.Found,
-			AuthStatus:        string(d.Auth.Status),
-			AuthReason:        d.Auth.Reason,
-			AuthSource:        d.Auth.Source,
-			AuthTime:          d.Auth.ObservedAt,
-			UsageReported:     d.Usage.Reported,
-			TotalTokens:       d.Usage.TotalTokens,
-			CostUSD:           d.Usage.CostUSD,
-			ModelCalls:        d.Usage.ModelCalls,
-			UsageDuration:     d.Usage.Duration,
-			CooldownActive:    d.Cooldown.Active,
-			CooldownRemaining: d.Cooldown.RetryAfter,
-			CooldownReason:    d.Cooldown.Reason,
-			QuotaReason:       d.QuotaReason,
-			ResetReason:       d.ResetReason,
-			AllowanceReason:   d.AllowanceReason,
-		}
-		out = append(out, probe)
-	}
-	return out, nil
 }
 
 var errNoRuntime = errors.New("no runtime is attached to this workspace")
@@ -798,59 +754,6 @@ func (a *runtimeControlAuthority) ULTRAEntitled() bool {
 	return gate.Entitled()
 }
 
-// --- Work reads ---
-//
-// The same adapter answers the Work section's reads. Sharing it keeps one set
-// of canonical handles rather than two that could disagree about which project
-// or session is current.
-
-func (a *runtimeControlAuthority) Layout(ctx context.Context) (WorkLayout, error) {
-	if a.runtime == nil {
-		return WorkLayout{}, errNoRuntime
-	}
-	// app.Runtime keeps its layout unexported, so the project row is the
-	// canonical source for the project's shape. Reaching into the runtime's
-	// internals would be a second view of the same thing.
-	out := WorkLayout{ProjectID: string(a.projectID)}
-	// The repository and pack version live on the canonical project row rather
-	// than on the layout, so they are read from there.
-	if a.store != nil {
-		if project, err := a.store.Project(ctx); err == nil {
-			out.Repository = project.Repository
-			out.Branch = project.DefaultBranch
-			out.Root = project.Repository
-			out.PackVersion = project.PackVersion
-			out.Initialized = true
-			if out.ProjectID == "" {
-				out.ProjectID = project.ID
-			}
-		} else {
-			out.Initialized = false
-			out.MissingPieces = append(out.MissingPieces, "canonical project record")
-		}
-	}
-	return out, nil
-}
-
-func (a *runtimeControlAuthority) Assessment(ctx context.Context) (startup.Assessment, error) {
-	// Readiness is assessed by the startup package at launch. A running
-	// workspace has no canonical way to re-run it, so this reports that rather
-	// than synthesising an assessment of its own.
-	return startup.Assessment{}, errors.New(
-		"readiness is assessed when MARSHAL starts; a running workspace cannot re-run it")
-}
-
-func (a *runtimeControlAuthority) Goal(ctx context.Context) (model.GoalContract, error) {
-	return a.CurrentGoal(ctx)
-}
-
-func (a *runtimeControlAuthority) GoalRevisions(ctx context.Context, goalID string) ([]model.GoalContract, error) {
-	if a.store == nil {
-		return nil, errors.New("no store is attached")
-	}
-	return a.store.ListGoalRevisions(ctx, goalID)
-}
-
 func (a *runtimeControlAuthority) Plan(ctx context.Context) (PlanState, error) {
 	return a.CurrentPlan(ctx)
 }
@@ -975,7 +878,7 @@ func (a *runtimeControlAuthority) Attestation(ctx context.Context, sessionID str
 // --- Work boundaries agy identified as existing ---
 
 // HandoffPlan hands the approved plan to Process 05 through Process 04's own
-// boundary, which is the operation the frozen spec names for CTUI-0259.
+// boundary, which is the operation the frozen spec names for the plan handoff.
 func (a *runtimeControlAuthority) HandoffPlan(ctx context.Context, sessionID string) (PlanHandoff, error) {
 	service, err := a.plans()
 	if err != nil {
@@ -1081,21 +984,6 @@ func (a *runtimeControlAuthority) MemoryRecord(ctx context.Context, memoryID str
 	return service.Get(ctx, a.memoryPrincipal(), a.runtime.ProjectID(), memoryID)
 }
 
-// MemoryStatus reports the service's own health, for the Memory section reads.
-func (a *runtimeControlAuthority) MemoryStatus(ctx context.Context) (MemoryStatus, error) {
-	service, err := a.memory()
-	if err != nil {
-		return MemoryStatus{}, err
-	}
-	status, err := service.Status(ctx, a.runtime.ProjectID())
-	if err != nil {
-		return MemoryStatus{}, err
-	}
-	return MemoryStatus{
-		Version: status.Version, Healthy: status.Healthy, ProjectID: status.ProjectID,
-	}, nil
-}
-
 // RecallRecent lists recent records.
 func (a *runtimeControlAuthority) RecallRecent(ctx context.Context, limit int) ([]model.MemoryRecordV2, error) {
 	service, err := a.memory()
@@ -1162,128 +1050,6 @@ func (a *runtimeControlAuthority) CaptureOutcome(ctx context.Context, taskID, st
 	})
 }
 
-// TaskSlots lists working-memory slots for a task.
-func (a *runtimeControlAuthority) TaskSlots(ctx context.Context, taskID string) ([]MemorySlot, error) {
-	return nil, errors.New(
-		"listing working-memory slots requires a principal this screen does not hold")
-}
-
-// --- Models: Process 08 reads ---
-
-func (a *runtimeControlAuthority) optimization() (*app.OptimizationService, error) {
-	if a == nil || a.runtime == nil {
-		return nil, errNoRuntime
-	}
-	service := a.runtime.Optimization()
-	if service == nil {
-		return nil, errors.New("the optimization service is unavailable in this runtime")
-	}
-	return service, nil
-}
-
-// Cycles lists Process 08 cycles.
-//
-// The service reads a cycle by id rather than listing them, so this reports
-// that rather than scanning the store behind its back.
-func (a *runtimeControlAuthority) Cycles(ctx context.Context) ([]OptimizationCycle, error) {
-	service, err := a.optimization()
-	if err != nil {
-		return nil, err
-	}
-	cycles, err := service.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]OptimizationCycle, 0, len(cycles))
-	for _, cycle := range cycles {
-		candidate := ""
-		if len(cycle.Candidates) > 0 {
-			candidate = cycle.Candidates[0].ID
-		}
-		// A durable Cycle has no terminal-state field. Presence proves it started,
-		// not that it completed, so expose the weakest truthful lifecycle state.
-		status := "STARTED"
-		if len(cycle.BlockedOptimization) > 0 {
-			status = "PENDING"
-		}
-		out = append(out, OptimizationCycle{
-			ID: cycle.ID, Status: status, StartedAt: cycle.CreatedAt, Candidate: candidate,
-		})
-	}
-	return out, nil
-}
-
-func (a *runtimeControlAuthority) CanariesFor(ctx context.Context, cycleID string) ([]OptimizationCanary, error) {
-	service, err := a.optimization()
-	if err != nil {
-		return nil, err
-	}
-	canaries, err := service.Canaries(ctx, cycleID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]OptimizationCanary, 0, len(canaries))
-	for _, canary := range canaries {
-		out = append(out, OptimizationCanary{
-			ID:     canary.ID,
-			Status: string(canary.State),
-		})
-	}
-	return out, nil
-}
-
-func (a *runtimeControlAuthority) CycleEvidence(ctx context.Context, cycleID string) (OptimizationEvidence, error) {
-	service, err := a.optimization()
-	if err != nil {
-		return OptimizationEvidence{}, err
-	}
-	candidates, err := service.Candidates(ctx, cycleID)
-	if err != nil {
-		return OptimizationEvidence{}, err
-	}
-	counterfactuals, err := service.Counterfactuals(ctx, cycleID)
-	if err != nil {
-		return OptimizationEvidence{}, err
-	}
-	manifests, err := service.Manifests(ctx, cycleID)
-	if err != nil {
-		return OptimizationEvidence{}, err
-	}
-	summary := OptimizationEvidence{
-		Candidates: len(candidates), Counterfactuals: len(counterfactuals), Benchmarks: len(manifests),
-	}
-	for _, candidate := range candidates {
-		results, readErr := service.ExperimentResults(ctx, cycleID, candidate.ID)
-		if readErr != nil {
-			return OptimizationEvidence{}, readErr
-		}
-		promotions, readErr := service.PromotionRecords(ctx, cycleID, candidate.ID)
-		if readErr != nil {
-			return OptimizationEvidence{}, readErr
-		}
-		summary.Results += len(results)
-		summary.Promotions += len(promotions)
-	}
-	return summary, nil
-}
-
-// LocalModels lists locally available models as the resource collector saw them.
-func (a *runtimeControlAuthority) LocalModels(ctx context.Context) ([]LocalModel, error) {
-	snapshot := resources.NewCollector().Collect(ctx, "")
-	out := make([]LocalModel, 0, len(snapshot.Ollama.Models))
-	for _, model := range snapshot.Ollama.Models {
-		out = append(out, LocalModel{
-			Name:   model.Name,
-			Family: model.Family,
-			// The collector's own fit assessment and its reason travel
-			// together, so a "may fit" is never read as a recommendation.
-			Compatibility: string(model.Compatibility),
-			Reason:        model.Reason,
-		})
-	}
-	return out, nil
-}
-
 // --- Security ---
 
 func (a *runtimeControlAuthority) RevokeGrant(ctx context.Context, bindingID string) error {
@@ -1300,47 +1066,6 @@ func (a *runtimeControlAuthority) Grant(ctx context.Context, bindingID string) (
 		return authz.RoleBinding{}, errors.New("no store is attached")
 	}
 	return a.store.GetRoleBinding(ctx, bindingID)
-}
-
-// ConstitutionVersion reports the constitution this build enforces.
-func (a *runtimeControlAuthority) ConstitutionVersion(ctx context.Context) (string, error) {
-	return constitution.Current.String(), nil
-}
-
-// RoleBindings lists capability and role grants.
-func (a *runtimeControlAuthority) RoleBindings(ctx context.Context) ([]authz.RoleBinding, error) {
-	// The store reads a binding by id and answers membership questions, but
-	// exposes no listing. Saying so is honest; scanning the table behind its
-	// back would be a second query path that could disagree with the checks
-	// the authorizer actually makes.
-	return nil, errors.New(
-		"the authorization store answers membership questions and reads a " +
-			"binding by id, but exposes no grant listing, so this build cannot " +
-			"enumerate who holds access")
-}
-
-// SandboxState reports whether isolation is enforceable here.
-func (a *runtimeControlAuthority) SandboxState(ctx context.Context) (SandboxState, error) {
-	if a.runtime == nil {
-		return SandboxState{}, errNoRuntime
-	}
-	// The runtime keeps its sandbox and egress predicates unexported, so this
-	// process cannot observe them. That is reported rather than guessed: the
-	// safe reading of "I cannot tell whether isolation is enforced" is not
-	// "it is", and the section renders it as unverified accordingly.
-	return SandboxState{}, errors.New(
-		"the runtime does not expose its sandbox or egress enforcement state to " +
-			"this process, so isolation cannot be confirmed from here")
-}
-
-// SecretLeases counts held leases without reading any of them.
-func (a *runtimeControlAuthority) SecretLeases(ctx context.Context) (int, error) {
-	// Lease content stays on the execution host by design, and the broker
-	// exposes no count, so this reports that rather than guessing zero — which
-	// would read as "no secrets are in play".
-	return 0, errors.New(
-		"the secret broker exposes no lease count; leases are held on the " +
-			"execution host and are not enumerable from this process")
 }
 
 // --- System reads ---

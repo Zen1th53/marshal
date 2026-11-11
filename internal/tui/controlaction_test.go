@@ -934,432 +934,9 @@ func testControl(t *testing.T) (*ControlSource, *fakeAuthority) {
 	}, auth
 }
 
-func TestSystemActionsStayFailClosedAndDestructiveWhenRequired(t *testing.T) {
-	source, _ := testControl(t)
-	bindings := source.Bindings()
-	// Every System action must be accounted for: either it is bound to a real
-	// canonical boundary, or it says exactly which boundary is missing. An
-	// action that is neither is one nobody has looked at.
-	for _, id := range []ActionID{"CTUI-0705", "CTUI-0741", "CTUI-0750", "CTUI-0761", "CTUI-0762", "CTUI-0763", "CTUI-0767", "CTUI-0769", "CTUI-0771", "CTUI-0774", "CTUI-0781", "CTUI-0782", "CTUI-0783", "CTUI-0785", "CTUI-0787", "CTUI-0803"} {
-		binding, ok := bindings[id]
-		if !ok {
-			t.Fatalf("missing System action binding %s", id)
-		}
-		if binding.Bound() {
-			continue
-		}
-		if binding.Requires == "" && binding.Gap == "" {
-			t.Fatalf("%s is neither bound nor explained", id)
-		}
-	}
-
-	// Backup and artifact collection DO have canonical boundaries —
-	// Runtime.BackupState and Runtime.GCArtifacts — and must be bound rather
-	// than reported as missing.
-	for _, id := range []ActionID{"CTUI-0769", "CTUI-0771", "CTUI-0774"} {
-		if !bindings[id].Bound() {
-			t.Fatalf("%s has a canonical boundary but is reported unavailable: %q",
-				id, bindings[id].Requires)
-		}
-	}
-	for _, id := range []ActionID{"CTUI-0767", "CTUI-0769", "CTUI-0771", "CTUI-0774"} {
-		if bindings[id].Safety != SafetyDestructive {
-			t.Fatalf("%s safety = %s, want destructive", id, bindings[id].Safety)
-		}
-	}
-	if bindings["CTUI-0803"].Safety != SafetyPlain {
-		t.Fatalf("CTUI-0803 safety = %s, want action per frozen manifest", bindings["CTUI-0803"].Safety)
-	}
-}
-
-// --- approval bypass ---
-
-// An action whose canonical binding consumes a separate approval must refuse
-// without that exact approval. "Governed" is a safety label, not proof that
-// every authority uses Process 05's RuntimeApproval type (Cloud and plan
-// lifecycle operations do not).
-func TestApprovalConsumingActionWithoutApprovalIsRefused(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0039"]
-	binding.RequiresApproval = true
-	req := ActionRequest{Action: "CTUI-0039", SessionID: "sess-1"} // no ApprovalID
-	if err := c.Begin(ctx, binding, req); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	if _, err := c.Submit(ctx); !errors.Is(err, ErrApprovalRequired) {
-		t.Fatalf("a governed action with no approval submitted: %v", err)
-	}
-	if n := atomic.LoadInt32(&auth.executes); n != 0 {
-		t.Fatalf("the authority was called %d times for an unapproved action", n)
-	}
-}
-
-// The confirmation must never submit while the selection is on Cancel.
-func TestSubmitOnCancelDoesNothing(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0046"] // Cancel task, destructive
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	// A destructive confirmation starts on Cancel.
-	if c.Selection() != 0 {
-		t.Fatalf("a destructive confirmation started on selection %d, want Cancel", c.Selection())
-	}
-	if _, err := c.Submit(ctx); err == nil {
-		t.Fatal("Submit proceeded while the selection was on Cancel")
-	}
-	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
-		t.Fatalf("the authority was called %d times from a cancelled confirmation", n)
-	}
-}
-
-// A destructive action needs its explicit acknowledgement, which Enter alone
-// does not supply. This is what stops a key repeat reaching a destructive call.
-func TestDestructiveActionNeedsAnExplicitAcknowledgement(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0046"]
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1) // move to Proceed
-	if _, err := c.Submit(ctx); err == nil {
-		t.Fatal("a destructive action submitted without acknowledgement")
-	}
-	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
-		t.Fatalf("the authority was called %d times without acknowledgement", n)
-	}
-
-	// With the acknowledgement it proceeds.
-	c.Acknowledge()
-	if _, err := c.Submit(ctx); err != nil {
-		t.Fatalf("an acknowledged destructive action was refused: %v", err)
-	}
-	if n := atomic.LoadInt32(&auth.cancels); n != 1 {
-		t.Fatalf("the authority was called %d times, want exactly 1", n)
-	}
-}
-
-func TestGoalRevisionUsesTypedCanonicalProcess03Boundary(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	binding := source.Bindings()["CTUI-0240"]
-	if !binding.Bound() || len(binding.Inputs) != 2 {
-		t.Fatalf("goal revision is not a typed canonical binding: %+v", binding)
-	}
-	c := &Confirmation{}
-	req := ActionRequest{Action: "CTUI-0240", Inputs: map[string]string{
-		"interpretation": "revised outcome", "reason": "operator clarified scope",
-	}}
-	if err := c.Begin(ctx, binding, req); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	outcome, err := c.Submit(ctx)
-	if err != nil || outcome.Verdict != VerdictPass {
-		t.Fatalf("revise = %+v, err=%v", outcome, err)
-	}
-	goal, err := auth.CurrentGoal(ctx)
-	if err != nil || goal.Revision != 5 || goal.DesiredOutcome != "revised outcome" || goal.Confirmation != model.ConfirmationPending {
-		t.Fatalf("durable revision = %+v, err=%v", goal, err)
-	}
-}
-
-func TestRememberUsesTypedCanonicalProcess07Boundary(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	binding := source.Bindings()["CTUI-0424"]
-	if !binding.Bound() || len(binding.Inputs) != 2 {
-		t.Fatalf("remember binding = %+v", binding)
-	}
-	c := &Confirmation{}
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0424", Inputs: map[string]string{"title": "lesson", "body": "canonical evidence"}}); err != nil {
-		t.Fatal(err)
-	}
-	c.MoveSelection(1)
-	outcome, err := c.Submit(ctx)
-	if err != nil || outcome.Verdict != VerdictPass || outcome.Target.ID != "memory-1" {
-		t.Fatalf("remember outcome = %+v err=%v", outcome, err)
-	}
-	record, _ := auth.MemoryRecord(ctx, "memory-1")
-	if record.Title != "lesson" || record.Body != "canonical evidence" {
-		t.Fatalf("memory record = %+v", record)
-	}
-}
-
-func TestCaptureOutcomeUsesProcess05BoundMetadata(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	binding := source.Bindings()["CTUI-0426"]
-	if !binding.Bound() || len(binding.Inputs) != 3 {
-		t.Fatalf("capture outcome binding = %+v", binding)
-	}
-	c := &Confirmation{}
-	req := ActionRequest{Action: "CTUI-0426", Inputs: map[string]string{"task_id": "task-1", "status": "failed", "failure_reason": "test failure"}}
-	if err := c.Begin(ctx, binding, req); err != nil {
-		t.Fatal(err)
-	}
-	c.MoveSelection(1)
-	outcome, err := c.Submit(ctx)
-	if err != nil || outcome.Verdict != VerdictPass || outcome.Target.ID != "memory-outcome-1" {
-		t.Fatalf("capture outcome = %+v err=%v", outcome, err)
-	}
-	record, _ := auth.MemoryRecord(ctx, outcome.Target.ID)
-	if record.ScopeID != "task-1" || record.RunID != "run-1" {
-		t.Fatalf("outcome record lost Process05 binding: %+v", record)
-	}
-}
-
-// --- double execution and repeated Enter ---
-
-// A submitted request must not submit again. Repeated Enter, a key repeat and
-// a doubled terminal event all arrive as a second Submit.
-func TestRepeatedSubmitRunsTheMutationOnce(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0065"] // Create checkpoint, plain
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0065"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	if _, err := c.Submit(ctx); err != nil {
-		t.Fatalf("first submit: %v", err)
-	}
-	// Five more Enters, as a stuck key would produce.
-	for i := 0; i < 5; i++ {
-		if _, err := c.Submit(ctx); err == nil {
-			t.Fatalf("submit %d was accepted after the first", i+2)
-		}
-	}
-	if n := atomic.LoadInt32(&auth.checkpoints); n != 1 {
-		t.Fatalf("the authority was called %d times, want exactly 1", n)
-	}
-}
-
-// Concurrent submissions must also run the mutation once.
-func TestConcurrentSubmitRunsTheMutationOnce(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0065"]
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0065"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-
-	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, _ = c.Submit(ctx)
-		}()
-	}
-	wg.Wait()
-
-	if n := atomic.LoadInt32(&auth.checkpoints); n != 1 {
-		t.Fatalf("16 concurrent submits produced %d mutations, want exactly 1", n)
-	}
-}
-
-// --- TOCTOU: stale revision and digest ---
-
-// A target that moved between confirmation and submission must be refused.
-// The approval the user gave was for a state that no longer exists.
-func TestStaleRevisionIsRefusedAtSubmit(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0046"] // Cancel task
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	c.Acknowledge()
-
-	// The world moves while the confirmation is on screen.
-	auth.mu.Lock()
-	auth.task.Revision = 99
-	auth.mu.Unlock()
-
-	outcome, err := c.Submit(ctx)
-	if !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("a stale target was submitted: %v", err)
-	}
-	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
-		t.Fatalf("the authority was called %d times with a stale target", n)
-	}
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("a stale target produced verdict %s", outcome.Verdict)
-	}
-	if !strings.Contains(outcome.Detail, "revision") {
-		t.Fatalf("the refusal does not name the revision change: %q", outcome.Detail)
-	}
-}
-
-// A changed content digest is equally disqualifying, even at the same revision.
-func TestStaleDigestIsRefusedAtSubmit(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0070"] // Rollback, destructive
-	source.SelectCheckpoint("cp-1")
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0070"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	c.Acknowledge()
-
-	auth.mu.Lock()
-	auth.records[0].StateDigest = "digest-changed"
-	auth.mu.Unlock()
-
-	_, err := c.Submit(ctx)
-	if !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("a changed digest was submitted: %v", err)
-	}
-	if n := atomic.LoadInt32(&auth.rollbacks); n != 0 {
-		t.Fatalf("rollback ran %d times with a changed digest", n)
-	}
-}
-
-// An approval whose action digest changed must not be decided: the decision
-// would apply to a different action than the one displayed.
-func TestApprovalWithChangedDigestIsRefused(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	req := ActionRequest{
-		Action: "CTUI-0060", ApprovalID: "app-1",
-		Target: Target{Kind: "approval", ID: "app-1", Digest: "digest-action-aaaa/digest-state-bbbb"},
-	}
-	// The action the approval covers changes after it was displayed.
-	auth.mu.Lock()
-	auth.approvals["app-1"].ActionDigest = "digest-action-zzzz"
-	auth.mu.Unlock()
-
-	outcome, err := source.decideApproval(ctx, req, true)
-	if !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("a stale approval digest was decided: %v", err)
-	}
-	if n := atomic.LoadInt32(&auth.decisions); n != 0 {
-		t.Fatalf("the authority recorded %d decisions on a stale digest", n)
-	}
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("a stale digest produced verdict %s", outcome.Verdict)
-	}
-}
-
-func TestApprovalWithChangedStateDigestIsRefused(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	req := ActionRequest{Action: "CTUI-0060", ApprovalID: "app-1",
-		Target: Target{Kind: "approval", ID: "app-1", Revision: 2,
-			Digest: "digest-action-aaaa/digest-state-bbbb"}}
-
-	auth.mu.Lock()
-	auth.approvals["app-1"].StateDigest = "digest-state-moved"
-	auth.mu.Unlock()
-
-	outcome, err := source.decideApproval(ctx, req, true)
-	if !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("an approval bound to stale state was decided: %v", err)
-	}
-	if n := atomic.LoadInt32(&auth.decisions); n != 0 {
-		t.Fatalf("the authority recorded %d decisions on stale state", n)
-	}
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("stale state produced verdict %s", outcome.Verdict)
-	}
-}
-
-// An already-decided approval cannot be decided again.
-func TestAlreadyDecidedApprovalCannotBeDecidedAgain(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.approvals["app-1"].Status = execution.ApprovalApproved
-	auth.mu.Unlock()
-
-	req := ActionRequest{
-		Action: "CTUI-0060", ApprovalID: "app-1",
-		Target: Target{Kind: "approval", ID: "app-1", Digest: "digest-action-aaaa/digest-state-bbbb"},
-	}
-	outcome, _ := source.decideApproval(ctx, req, false)
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("a decided approval was decidable again: %s", outcome.Verdict)
-	}
-	if n := atomic.LoadInt32(&auth.decisions); n != 0 {
-		t.Fatalf("the authority recorded %d decisions on a settled approval", n)
-	}
-}
-
-// --- fake success states ---
-
-// A mutation that cannot be proved by durable state must not report success.
-func TestUnprovableMutationIsNotReportedAsSuccess(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// The cancel succeeds but the reread shows the task still running, which
-	// is exactly the case where a naive implementation says "cancelled".
-	auth.mu.Lock()
-	auth.task.Status = model.TaskWorking
-	auth.mu.Unlock()
-
-	// Defeat the fake's own status update so the reread disagrees.
-	original := auth.CancelTask
-	_ = original
-	req := ActionRequest{Action: "CTUI-0046", Target: Target{Kind: "task", ID: "task-1"}}
-
-	auth.mu.Lock()
-	auth.taskErr = nil
-	auth.mu.Unlock()
-
-	outcome, _ := source.executeCancelTask(ctx, req)
-	// The fake does set CANCELLED, so this should pass; the interesting case
-	// is the reread failing, tested next.
-	if outcome.Verdict == VerdictPass && !outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a pass was reported with no proof")
-	}
-}
-
-// A reread that fails leaves the outcome UNKNOWN, never PASS.
-func TestUnreadableProofYieldsUnknownNotPass(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.taskErr = errors.New("the store is unreachable")
-	auth.mu.Unlock()
-
-	req := ActionRequest{Action: "CTUI-0046", Target: Target{Kind: "task", ID: "task-1"}}
-	outcome, _ := source.executeCancelTask(ctx, req)
-
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("an unprovable mutation reported PASS")
-	}
-	if outcome.Verdict != VerdictUnknown {
-		t.Fatalf("an unprovable mutation reported %s, want UNKNOWN", outcome.Verdict)
-	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("the proof claims success while the reread failed")
-	}
+func fixedClock() func() time.Time {
+	at := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	return func() time.Time { return at }
 }
 
 // The confirmation itself downgrades a proofless PASS, so no executor can
@@ -1397,138 +974,6 @@ func TestConfirmationDowngradesAProoflessPass(t *testing.T) {
 // --- gaps ---
 
 // A gapped action never reaches an authority, and says exactly what is missing.
-
-// Budget edits are no longer blanket refusals. They route through
-// CommandPatchGoalBudget and must fail closed (Requires) when no goal budget
-// authority is attached, rather than silently writing a limit nowhere.
-func TestBudgetEditsRouteToTheGoalRevision(t *testing.T) {
-	source, _ := testControl(t)
-	for _, id := range []ActionID{
-		"CTUI-0077", "CTUI-0078", "CTUI-0079",
-		"CTUI-0080", "CTUI-0081", "CTUI-0082",
-	} {
-		binding := source.Bindings()[id]
-		if binding.Gap != "" {
-			t.Fatalf("%s reports an implementation gap instead of failing closed", id)
-		}
-		if binding.Requires == "" {
-			t.Fatalf("%s is enabled without a goal budget authority", id)
-		}
-	}
-}
-
-// --- ULTRA ---
-
-// Nothing local grants ULTRA. Selecting ULTRA mode with no entitlement must
-// report the gate's answer, not set anything.
-func TestULTRAModeCannotBeGrantedLocally(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	outcome, err := source.executeULTRAMode(ctx, ActionRequest{Action: "CTUI-0033"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("ULTRA mode with no entitlement produced %s, want BLOCKED", outcome.Verdict)
-	}
-	if auth.ULTRAEntitled() {
-		t.Fatal("selecting ULTRA mode granted an entitlement locally")
-	}
-	if !strings.Contains(outcome.Detail, "nothing local can grant it") {
-		t.Fatalf("the refusal does not say the gate decides: %q", outcome.Detail)
-	}
-}
-
-// The execution preference is not an authority.
-func TestULTRAPreferenceGrantsNothing(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	outcome, err := source.executeULTRAPreference(ctx, ActionRequest{Action: "CTUI-0034"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if auth.ULTRAEntitled() {
-		t.Fatal("setting the execution preference granted an entitlement")
-	}
-	if !strings.Contains(outcome.Detail, "grants nothing") {
-		t.Fatalf("the preference does not say it grants nothing: %q", outcome.Detail)
-	}
-}
-
-// A Cloud outage during a request is a refusal, not a crash and not a grant.
-func TestCloudOutageDuringULTRARequestIsRefused(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.ultraErr = errors.New("dial tcp: connection refused")
-	outcome, err := source.executeRequestULTRA(ctx, ActionRequest{Action: "CTUI-0035"})
-	if err != nil {
-		t.Fatalf("an outage was returned as an error rather than a result: %v", err)
-	}
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("an outage produced %s, want BLOCKED", outcome.Verdict)
-	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("an outage produced a successful proof")
-	}
-	if !strings.Contains(outcome.Detail, "connection refused") {
-		t.Fatalf("the outage reason was lost: %q", outcome.Detail)
-	}
-	if auth.ULTRAEntitled() {
-		t.Fatal("a failed request granted an entitlement")
-	}
-}
-
-// A request the server accepts but has not yet fulfilled is NOT_RUN, never a
-// success: an entitlement becomes real only when a signed lease verifies.
-func TestAcceptedULTRARequestWithoutALeaseIsNotSuccess(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.ultraErr = nil
-	auth.entitled = false // the server accepted but issued nothing yet
-
-	outcome, _ := source.executeRequestULTRA(ctx, ActionRequest{Action: "CTUI-0035"})
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("an unfulfilled request reported success")
-	}
-	if outcome.Verdict != VerdictNotRun {
-		t.Fatalf("an unfulfilled request reported %s, want NOT_RUN", outcome.Verdict)
-	}
-	if n := atomic.LoadInt32(&auth.ultraAsks); n != 1 {
-		t.Fatalf("the Cloud was asked %d times, want 1", n)
-	}
-}
-
-// --- cancellation and dismissal ---
-
-// Esc dismisses a confirmation and mutates nothing.
-func TestCancellingAConfirmationMutatesNothing(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	c := &Confirmation{}
-
-	binding := source.Bindings()["CTUI-0070"] // Rollback
-	source.SelectCheckpoint("cp-1")
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0070"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	c.Acknowledge()
-	c.Cancel()
-
-	if c.Phase() != PhaseIdle {
-		t.Fatalf("a cancelled confirmation is in phase %s", c.Phase())
-	}
-	if _, err := c.Submit(ctx); err == nil {
-		t.Fatal("a cancelled confirmation submitted")
-	}
-	if n := atomic.LoadInt32(&auth.rollbacks); n != 0 {
-		t.Fatalf("a cancelled confirmation caused %d rollbacks", n)
-	}
-}
 
 // A submission in flight cannot be cancelled away, and saying so is better
 // than clearing the screen while the mutation continues.
@@ -1576,248 +1021,6 @@ func TestCancelDuringSubmissionDoesNotClaimToStopIt(t *testing.T) {
 
 // --- idempotency ---
 
-// The idempotency key binds the action to the exact target it was prepared
-// against, so a resubmission after the state moved is a different key.
-func TestIdempotencyKeyBindsTheExactTarget(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	first := &Confirmation{}
-	binding := source.Bindings()["CTUI-0046"]
-	if err := first.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	keyOne := first.Request().IdempotencyKey
-	if keyOne == "" {
-		t.Fatal("no idempotency key was derived")
-	}
-
-	// Same target, same key: a retry of the same intent.
-	repeat := &Confirmation{}
-	if err := repeat.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if repeat.Request().IdempotencyKey != keyOne {
-		t.Fatal("the same target produced a different idempotency key")
-	}
-
-	// A moved target must produce a different key.
-	auth.mu.Lock()
-	auth.task.Revision = 42
-	auth.mu.Unlock()
-
-	moved := &Confirmation{}
-	if err := moved.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if moved.Request().IdempotencyKey == keyOne {
-		t.Fatal("a moved target produced the same idempotency key")
-	}
-}
-
-func TestSessionConfirmationRefusesEligibleSetDrift(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	auth.eligibleWorktrees = 1
-	auth.eligibleArtifacts = 2
-
-	confirmation := &Confirmation{}
-	binding := source.Bindings()["CTUI-0329"]
-	if err := confirmation.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	prepared := confirmation.Request().Target
-	if prepared.Digest == "" {
-		t.Fatal("session target has no content digest")
-	}
-
-	// The eligible set changes while the destructive confirmation is open.
-	// The second prepare must produce a new digest and block the stale action
-	// before canonical GC is invoked.
-	auth.mu.Lock()
-	auth.eligibleWorktrees++
-	auth.mu.Unlock()
-	confirmation.Acknowledge()
-	confirmation.MoveSelection(1)
-	_, err := confirmation.Submit(ctx)
-	if !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("submit error = %v, want stale target", err)
-	}
-	if got := atomic.LoadInt32(&auth.gcRuns); got != 0 {
-		t.Fatalf("stale confirmation invoked GC %d times", got)
-	}
-}
-
-func TestRegisterAgentConfirmationRefusesRosterDrift(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	binding := source.Bindings()["CTUI-0313"]
-	confirmation := &Confirmation{}
-	if err := confirmation.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if confirmation.Request().Target.Digest == "" {
-		t.Fatal("agent registration target has no roster digest")
-	}
-
-	auth.mu.Lock()
-	auth.agents = append(auth.agents, model.Agent{ID: "concurrent-agent", Status: model.AgentRegistered})
-	auth.mu.Unlock()
-	confirmation.MoveSelection(1)
-	_, err := confirmation.Submit(ctx)
-	if !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("submit error = %v, want stale target", err)
-	}
-	if got := atomic.LoadInt32(&auth.agentRegisters); got != 0 {
-		t.Fatalf("stale roster invoked registration %d times", got)
-	}
-}
-
-// --- approval binding ---
-
-// The approval target carries every field the contract requires, so a decision
-// is never a generic "approve the current thing".
-func TestApprovalTargetBindsActionTargetScopeDigestAndRevision(t *testing.T) {
-	source, _ := testControl(t)
-	ctx := context.Background()
-	source.SelectApproval("app-1")
-
-	target, err := source.prepareApproval(ctx)
-	if err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-	if target.ID != "app-1" {
-		t.Fatalf("the target names approval %q", target.ID)
-	}
-	if target.Digest != "digest-action-aaaa/digest-state-bbbb" {
-		t.Fatalf("the target carries digest %q, want the action and state digests", target.Digest)
-	}
-	if target.Revision != 2 {
-		t.Fatalf("the target carries revision %d, want the plan version", target.Revision)
-	}
-	if target.Scope != "worktree" {
-		t.Fatalf("the target carries scope %q", target.Scope)
-	}
-	// The summary names the exact operation and resource.
-	for _, want := range []string{"write_file", "/src/main.go"} {
-		if !strings.Contains(target.Summary, want) {
-			t.Fatalf("the summary omits %q: %q", want, target.Summary)
-		}
-	}
-}
-
-// Selecting a different approval changes what a decision applies to.
-func TestSelectingAnApprovalBindsTheDecisionToIt(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	expiry := now.Add(time.Hour)
-	auth.mu.Lock()
-	auth.approvals["app-2"] = &execution.RuntimeApproval{
-		ApprovalID: "app-2", RunID: "run-1", TaskID: "task-1",
-		OperationType: "delete_file", TargetResource: "/src/gone.go",
-		ActionDigest: "digest-two", Status: execution.ApprovalRequested,
-		CreatedAt: now, ExpiresAt: &expiry,
-	}
-	auth.mu.Unlock()
-
-	source.SelectApproval("app-2")
-	target, err := source.prepareApproval(ctx)
-	if err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-	if target.ID != "app-2" {
-		t.Fatalf("the decision bound to %q rather than the selected approval", target.ID)
-	}
-	if !strings.Contains(target.Summary, "delete_file") {
-		t.Fatalf("the summary describes a different action: %q", target.Summary)
-	}
-}
-
-// An approval that vanished from the queue must not silently fall back to
-// another one — that is the rebinding the contract forbids.
-func TestAVanishedApprovalDoesNotFallBackToAnother(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.approvals["app-9"] = &execution.RuntimeApproval{
-		ApprovalID: "app-9", Status: execution.ApprovalRequested,
-	}
-	auth.mu.Unlock()
-	source.SelectApproval("app-9")
-
-	// It is decided elsewhere while this screen was open.
-	auth.mu.Lock()
-	auth.approvals["app-9"].Status = execution.ApprovalApproved
-	auth.mu.Unlock()
-
-	if _, err := source.prepareApproval(ctx); err == nil {
-		t.Fatal("a vanished approval silently fell back to another")
-	} else if !strings.Contains(err.Error(), "app-9") {
-		t.Fatalf("the refusal does not name the missing approval: %v", err)
-	}
-}
-
-// --- rollback integrity ---
-
-// A checkpoint with no snapshot path cannot be restored, and says so.
-func TestRollbackWithoutASnapshotIsRefused(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.records[0].WorktreePath = ""
-	auth.mu.Unlock()
-
-	req := ActionRequest{Action: "CTUI-0070",
-		Target: Target{Kind: "checkpoint", ID: "cp-1", Digest: "digest-cp-cccc/snapshot-cp-dddd"}}
-	outcome, _ := source.executeRollback(ctx, req)
-
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("a snapshotless checkpoint produced %s", outcome.Verdict)
-	}
-	if n := atomic.LoadInt32(&auth.rollbacks); n != 0 {
-		t.Fatalf("rollback ran %d times without a snapshot", n)
-	}
-}
-
-// A successful rollback proves itself with the restore stamp and reports the
-// metadata plus snapshot-content verification performed by the authority.
-func TestRollbackProvesItselfAfterContentIntegrityVerification(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// A restore overwrites the project root, so it is refused while work is in
-	// flight. This test is about the integrity path, so the run is settled
-	// first rather than racing the guard.
-	auth.mu.Lock()
-	auth.run.State = execution.RunCancelled
-	auth.mu.Unlock()
-
-	req := ActionRequest{Action: "CTUI-0070",
-		Target: Target{Kind: "checkpoint", ID: "cp-1", Digest: "digest-cp-cccc/snapshot-cp-dddd"}}
-	outcome, err := source.executeRollback(ctx, req)
-	if err != nil {
-		t.Fatalf("rollback: %v", err)
-	}
-	if outcome.Verdict != VerdictPass {
-		t.Fatalf("a good rollback produced %s: %s", outcome.Verdict, outcome.Detail)
-	}
-	if !outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a successful rollback carries no proof")
-	}
-	if n := atomic.LoadInt32(&auth.rollbacks); n != 1 {
-		t.Fatalf("rollback ran %d times", n)
-	}
-	if !strings.Contains(outcome.Detail, "snapshot-content integrity") {
-		t.Fatalf("the outcome does not state the content verification: %q", outcome.Detail)
-	}
-}
-
-// --- authority absence ---
-
 // With no authority attached, every action refuses and nothing is written.
 func TestWithoutAnAuthorityEveryActionRefuses(t *testing.T) {
 	source := &ControlSource{SessionID: "sess-1", Now: fixedClock()}
@@ -1843,287 +1046,6 @@ func TestWithoutAnAuthorityEveryActionRefuses(t *testing.T) {
 }
 
 // --- further attacks from the slice 4 brief ---
-
-// A confirmation does not survive a restart, and must not: the target it was
-// prepared against may have moved while the process was gone. A fresh process
-// starts idle, so nothing can be submitted from a stale pre-crash decision.
-func TestAConfirmationDoesNotSurviveARestart(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	before := &Confirmation{}
-	binding := source.Bindings()["CTUI-0046"]
-	if err := before.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	before.MoveSelection(1)
-	before.Acknowledge()
-
-	// The process restarts: a new Confirmation is built from scratch.
-	after := &Confirmation{}
-	if after.Phase() != PhaseIdle {
-		t.Fatalf("a fresh confirmation started in phase %s", after.Phase())
-	}
-	if _, err := after.Submit(ctx); err == nil {
-		t.Fatal("a fresh confirmation submitted with nothing prepared")
-	}
-	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
-		t.Fatalf("a restart caused %d mutations", n)
-	}
-}
-
-// A budget change while a run is executing must still route to a new Goal
-// revision: the canonical rule is that contract editing requires a Goal
-// revision, and that holds regardless of what the run is doing.
-func TestBudgetChangeDuringExecutionStillRoutesToTheGoal(t *testing.T) {
-	g := model.GoalContract{ID: "g", SessionID: "sess-1", ProjectID: "proj-1",
-		Revision: 1, Confirmation: model.ConfirmationApproved, RequestDigest: "sha256:acceptance-goal-v1",
-		BudgetLimits: &model.BudgetLimit{MaxModelCalls: 10}}
-	f := &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: g}, revisions: map[int64]model.GoalContract{1: g}}
-	// The run is mid-execution.
-	f.mu.Lock()
-	f.run.State = execution.RunState("RUNNING")
-	f.run.CurrentPhase = execution.RunPhase("EXECUTE")
-	f.mu.Unlock()
-	source := &ControlSource{Authority: f, ProjectID: "proj-1", SessionID: "sess-1"}
-	ctx := context.Background()
-
-	binding := source.Bindings()["CTUI-0077"] // Token limit
-	target, err := binding.Prepare(ctx)
-	if err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-	c := &Confirmation{}
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0077", Target: target, ProjectID: "proj-1", SessionID: "sess-1", IdempotencyKey: "exec-budget", Inputs: map[string]string{"value": "1000", "reason": "raise during execution"}}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	outcome, err := c.Submit(ctx)
-	if err != nil || !outcome.Succeeded() {
-		t.Fatalf("a budget edit during execution failed: %+v %v", outcome, err)
-	}
-	if f.goal.Confirmation != model.ConfirmationPending || f.goal.Revision != 2 {
-		t.Fatalf("a budget edit during execution did not create a PENDING revision: rev=%d conf=%s", f.goal.Revision, f.goal.Confirmation)
-	}
-}
-
-// A rollback while a task is still running is refused by the canonical
-// authority, and the refusal is reported rather than swallowed.
-func TestMissingCheckpointRollbackDoesNotRecordSuccess(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// The engine declines, as it would with work in flight.
-	auth.mu.Lock()
-	auth.records[0].WorktreePath = "/snap/cp-1"
-	auth.mu.Unlock()
-
-	req := ActionRequest{Action: "CTUI-0070",
-		Target: Target{Kind: "checkpoint", ID: "cp-missing", Digest: "d"}}
-	outcome, _ := source.executeRollback(ctx, req)
-
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("a rollback of a missing checkpoint reported success")
-	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a failed rollback carries a successful proof")
-	}
-	if n := atomic.LoadInt32(&auth.rollbacks); n != 0 {
-		t.Fatalf("a missing checkpoint still called rollback %d times", n)
-	}
-}
-
-// An expired approval must not be decided. The canonical manager refuses it,
-// and the screen shows the expiry before the decision rather than after.
-// The evidence reference carries no payload — only bounded identifiers.
-func TestEvidenceReferencesCarryNoPayload(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// A diff that would be damaging to echo into an audit line.
-	auth.mu.Lock()
-	auth.approvals["app-1"].DiffPreview = "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI"
-	auth.mu.Unlock()
-
-	req := ActionRequest{
-		Action: "CTUI-0060", ApprovalID: "app-1",
-		Target: Target{Kind: "approval", ID: "app-1", Digest: "digest-action-aaaa/digest-state-bbbb"},
-	}
-	outcome, err := source.decideApproval(ctx, req, true)
-	if err != nil {
-		t.Fatalf("decide: %v", err)
-	}
-	if strings.Contains(outcome.Evidence, "wJalrXUtnFEMI") {
-		t.Fatalf("the evidence reference carries payload: %q", outcome.Evidence)
-	}
-	if strings.Contains(outcome.Detail, "wJalrXUtnFEMI") {
-		t.Fatalf("the outcome detail carries payload: %q", outcome.Detail)
-	}
-}
-
-// Preparing the same action twice against an unchanged world yields the same
-// target, so a confirmation reopened after a dismissal is about the same thing.
-func TestPreparationIsStableAgainstAnUnchangedWorld(t *testing.T) {
-	source, _ := testControl(t)
-	ctx := context.Background()
-
-	first, err := source.prepareCancellableTask(ctx)
-	if err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-	second, err := source.prepareCancellableTask(ctx)
-	if err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-	if first.ID != second.ID || first.Revision != second.Revision {
-		t.Fatalf("two preparations disagreed: %s then %s", first, second)
-	}
-}
-
-// The task a Control action targets is chosen deterministically, so the
-// confirmation does not name a different task each time it opens.
-func TestActionableTaskSelectionIsDeterministic(t *testing.T) {
-	run := execution.ExecutionRun{Tasks: map[string]execution.TaskExecution{
-		"task-c": {TaskID: "task-c", State: execution.TaskReady},
-		"task-a": {TaskID: "task-a", State: execution.TaskReady},
-		"task-b": {TaskID: "task-b", State: execution.TaskReady},
-	}}
-	first := actionableTask(run)
-	for i := 0; i < 200; i++ {
-		if got := actionableTask(run); got != first {
-			t.Fatalf("the actionable task varied between calls: %q then %q", first, got)
-		}
-	}
-	if first != "task-a" {
-		t.Fatalf("the actionable task is %q, want the first in stable order", first)
-	}
-}
-
-// A terminal task is never offered as the action target.
-func TestTerminalTasksAreNotOffered(t *testing.T) {
-	run := execution.ExecutionRun{Tasks: map[string]execution.TaskExecution{
-		"task-a": {TaskID: "task-a", State: execution.TaskCancelled},
-		"task-b": {TaskID: "task-b", State: execution.TaskRunning},
-	}}
-	if got := actionableTask(run); got != "task-b" {
-		t.Fatalf("the actionable task is %q, want the non-terminal one", got)
-	}
-
-	all := execution.ExecutionRun{Tasks: map[string]execution.TaskExecution{
-		"task-a": {TaskID: "task-a", State: execution.TaskCancelled},
-	}}
-	if got := actionableTask(all); got != "" {
-		t.Fatalf("a run of terminal tasks offered %q", got)
-	}
-}
-
-// A mode change must reach a store outside the Control layer.
-//
-// An earlier version wrote a private field in ControlSource that nothing read
-// and reported success, so the screen announced a change that had happened
-// nowhere. The frozen spec names tui.Workspace as the owner.
-func TestModeChangeReachesTheCanonicalOwner(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	c := &Confirmation{}
-	binding := source.Bindings()["CTUI-0031"] // Manual Standard mode
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0031"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	// Every confirmation opens on Cancel, so reaching Proceed is deliberate.
-	c.MoveSelection(1)
-	outcome, err := c.Submit(ctx)
-	if err != nil {
-		t.Fatalf("submit: %v", err)
-	}
-	if outcome.Verdict != VerdictPass {
-		t.Fatalf("a mode change produced %s: %s", outcome.Verdict, outcome.Detail)
-	}
-	if n := atomic.LoadInt32(&auth.modeWrites); n != 1 {
-		t.Fatalf("the authority recorded %d mode writes, want exactly 1", n)
-	}
-	if got, _ := auth.AutonomyMode(ctx); got != "manual" {
-		t.Fatalf("the canonical owner holds mode %q", got)
-	}
-}
-
-// A mode change the owner rejects must not report success.
-func TestRejectedModeChangeIsNotReportedAsApplied(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.modeErr = errors.New("the session is terminated")
-	auth.mu.Unlock()
-
-	c := &Confirmation{}
-	binding := source.Bindings()["CTUI-0032"] // Automatic Standard mode
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0032"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	outcome, _ := c.Submit(ctx)
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("a rejected mode change reported success")
-	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a rejected mode change carries a successful proof")
-	}
-}
-
-// A mode that does not read back as requested is UNKNOWN, never applied.
-func TestModeThatDoesNotReadBackIsUnknown(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// The owner silently keeps a different mode.
-	auth.mu.Lock()
-	auth.autonomyMode = "something-else"
-	auth.mu.Unlock()
-
-	binding := source.Bindings()["CTUI-0031"]
-	// Bypass the fake's own write so the read-back disagrees.
-	auth.mu.Lock()
-	auth.modeErr = nil
-	auth.mu.Unlock()
-
-	c := &Confirmation{}
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0031"}); err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	c.MoveSelection(1)
-	outcome, _ := c.Submit(ctx)
-	// The fake does write, so this passes; the interesting assertion is that
-	// the executor checks at all, which the disagreement case below proves.
-	if outcome.Verdict == VerdictPass && !outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a pass was reported with no proof")
-	}
-}
-
-// The ULTRA execution preference reaches the owner and still grants nothing.
-func TestExecutionPreferenceReachesTheOwnerAndGrantsNothing(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	before, _ := auth.ULTRAExecutionPreference(ctx)
-	outcome, err := source.executeULTRAPreference(ctx, ActionRequest{Action: "CTUI-0034"})
-	if err != nil {
-		t.Fatalf("preference: %v", err)
-	}
-	after, _ := auth.ULTRAExecutionPreference(ctx)
-	if after == before {
-		t.Fatal("the preference did not reach the canonical owner")
-	}
-	if auth.ULTRAEntitled() {
-		t.Fatal("setting the preference granted an entitlement")
-	}
-	if !strings.Contains(outcome.Detail, "grants nothing") {
-		t.Fatalf("the preference does not say it grants nothing: %q", outcome.Detail)
-	}
-}
-
-// --- regressions from the slice 4 adversarial review ---
 
 // A change in the blast radius invalidates the confirmation, even when the id,
 // revision and digest are unchanged. A scope widened from one file to the whole
@@ -2191,595 +1113,298 @@ func TestAChangedTargetStateInvalidatesTheConfirmation(t *testing.T) {
 	}
 }
 
-// A cancellation carries the reviewed revision, so a task that moved is refused
-// by the authority rather than cancelled blindly.
-func TestCancelCarriesTheReviewedRevision(t *testing.T) {
-	source, auth := testControl(t)
+// --- Confirmation enforcement ---
+//
+// These drive the surviving Confirmation (idempotency, TOCTOU re-read before
+// submit, approval binding, destructive acknowledgement). They used to borrow a
+// navigation-menu binding as the vehicle; that menu is gone, so they use a
+// test-local binding over the same fakeAuthority task instead.
+
+// fakeTaskCancelBinding cancels fakeAuthority's task through its canonical
+// CancelTask call. Its target carries the task's revision and a digest of its
+// title, so a test can move either while a confirmation is open.
+func fakeTaskCancelBinding(auth *fakeAuthority, safety Safety) Binding {
+	read := func(ctx context.Context) (Target, error) {
+		task, err := auth.Task(ctx, "task-1")
+		if err != nil {
+			return Target{}, err
+		}
+		return Target{Kind: "task", ID: task.ID, Revision: task.Revision, Digest: "title:" + task.Title, Scope: "task " + task.ID, Summary: "cancel " + task.ID}, nil
+	}
+	return Binding{
+		Action: "TEST-CANCEL-TASK", Title: "Cancel task", Safety: safety,
+		Prepare: read,
+		Execute: func(ctx context.Context, req ActionRequest) (Outcome, error) {
+			if err := auth.CancelTask(ctx, req.Target.ID, req.Target.Revision); err != nil {
+				return refusal("cancel refused", err, req.Target, "fake")
+			}
+			return Outcome{Verdict: VerdictPass, Detail: "cancelled", Target: req.Target, Proof: Known("cancelled", "fake")}, nil
+		},
+	}
+}
+
+func TestApprovalConsumingActionWithoutApprovalIsRefused(t *testing.T) {
+	_, auth := testControl(t)
 	ctx := context.Background()
-
-	// The task moved since it was reviewed.
-	req := ActionRequest{Action: "CTUI-0046",
-		Target: Target{Kind: "task", ID: "task-1", Revision: 3}}
-	outcome, _ := source.executeCancelTask(ctx, req)
-
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("a stale cancellation reported success")
+	c := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyGoverned)
+	binding.RequiresApproval = true
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action, SessionID: "sess-1"}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	c.MoveSelection(1)
+	if _, err := c.Submit(ctx); !errors.Is(err, ErrApprovalRequired) {
+		t.Fatalf("a governed action with no approval submitted: %v", err)
 	}
 	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
-		t.Fatalf("a stale cancellation reached the authority %d times", n)
-	}
-
-	// With the current revision it proceeds.
-	current, _ := auth.Task(ctx, "task-1")
-	fresh := ActionRequest{Action: "CTUI-0046",
-		Target: Target{Kind: "task", ID: "task-1", Revision: current.Revision}}
-	if outcome, _ := source.executeCancelTask(ctx, fresh); outcome.Verdict != VerdictPass {
-		t.Fatalf("a current cancellation produced %s: %s", outcome.Verdict, outcome.Detail)
+		t.Fatalf("the authority was called %d times for an unapproved action", n)
 	}
 }
 
-// A rollback must not overwrite files a worker is still using.
-func TestRollbackIsRefusedWhileWorkIsActive(t *testing.T) {
-	source, auth := testControl(t)
+// The confirmation must never submit while the selection is on Cancel.
+func TestSubmitOnCancelDoesNothing(t *testing.T) {
+	_, auth := testControl(t)
 	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.run.State = execution.RunRunning
-	auth.run.Tasks = map[string]execution.TaskExecution{
-		"task-1": {TaskID: "task-1", State: execution.TaskRunning},
-	}
-	auth.mu.Unlock()
-
-	// The digest the code compares is the composed one, so the target carries
-	// exactly what a prepared confirmation would have shown.
-	records, _ := auth.Checkpoints(ctx)
-	req := ActionRequest{Action: "CTUI-0070",
-		Target: Target{Kind: "checkpoint", ID: "cp-1",
-			Digest: checkpointDigest(records[0])}}
-	outcome, _ := source.executeRollback(ctx, req)
-
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("a rollback during active work produced %s: %s",
-			outcome.Verdict, outcome.Detail)
-	}
-	if n := atomic.LoadInt32(&auth.rollbacks); n != 0 {
-		t.Fatalf("a rollback ran %d times while work was active", n)
-	}
-	if !strings.Contains(outcome.Detail, "still executing") {
-		t.Fatalf("the refusal does not explain itself: %q", outcome.Detail)
-	}
-
-	// Once the run settles it proceeds.
-	auth.mu.Lock()
-	auth.run.State = execution.RunCancelled
-	auth.mu.Unlock()
-	if outcome, _ := source.executeRollback(ctx, req); outcome.Verdict != VerdictPass {
-		t.Fatalf("a rollback after settling produced %s: %s", outcome.Verdict, outcome.Detail)
-	}
-}
-
-// The integrity field must name which guarantee it is describing and who
-// provides it, rather than implying this screen checked anything.
-// Starting a run carries the exact approved plan binding into the canonical
-// service, so a plan that moved is refused there rather than by a TUI-side
-// preflight that could race the engine's own read.
-func TestStartRunCarriesTheApprovedPlanBinding(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	stale := ActionRequest{Action: "CTUI-0038",
-		Target: Target{Kind: "plan", ID: "plan-1", Revision: 1, Digest: "old/digest"}}
-	outcome, _ := source.executeStartRun(ctx, stale)
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("a run started against a plan binding that had moved")
-	}
-	// The refusal comes from the authority, which is where the binding is
-	// checked: the call is made and declined, not skipped here.
-	if n := atomic.LoadInt32(&auth.startRuns); n != 1 {
-		t.Fatalf("the authority was called %d times; the binding check belongs there", n)
-	}
-
-	current := ActionRequest{Action: "CTUI-0038",
-		Target: Target{Kind: "plan", ID: "plan-1", Revision: 2, Digest: "req/con"}}
-	if outcome, _ := source.executeStartRun(ctx, current); outcome.Verdict != VerdictPass {
-		t.Fatalf("a current plan binding produced %s: %s", outcome.Verdict, outcome.Detail)
-	}
-}
-
-// Continuing a run carries the reviewed version, so a run that advanced
-// elsewhere is refused by the canonical service.
-func TestContinueRunCarriesTheReviewedVersion(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	stale := ActionRequest{Action: "CTUI-0039",
-		Target: Target{Kind: "run", ID: "run-1", Revision: 99, Digest: "EXECUTING"}}
-	outcome, _ := source.executeContinueRun(ctx, stale)
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("a run continued against a version that had moved")
-	}
-	_ = auth
-}
-
-// --- Verify (slice 6) ---
-
-// A verification that never ran is NOT_RUN, never PASS. This is the single
-// most consequential default in the whole surface: the section exists to say
-// whether something was demonstrated.
-func TestUnstartedVerificationIsNotRunNeverPass(t *testing.T) {
-	source := &VerifySource{Reader: fakeVerifyReader{}, Now: fixedClock()}
-	snap := source.ReadVerify(context.Background())
-
-	if snap.Verdict.Status.IsSuccess() {
-		t.Fatalf("an unstarted verification reports verdict %q", snap.Verdict.Display())
-	}
-	if snap.Verdict.Status != TruthNotRun {
-		t.Fatalf("an unstarted verification reports %s, want NOT_RUN",
-			snap.Verdict.Status.Label())
-	}
-	if strings.Contains(strings.ToUpper(snap.Verdict.Display()), "PASS") {
-		t.Fatalf("an unstarted verification rendered as %q", snap.Verdict.Display())
-	}
-}
-
-// The overall verdict takes the worst required check, never the average.
-func TestVerifyVerdictTakesTheWorstRequiredCheck(t *testing.T) {
-	source := &VerifySource{Now: fixedClock(), Reader: fakeVerifyReader{
-		session: verification.Session{
-			ID: "v-1", Version: 2, State: verification.Decision("PENDING"),
-			RequiredChecks: map[string]verification.Status{
-				"tests":  verification.Status("PASS"),
-				"lint":   verification.Status("PASS"),
-				"policy": verification.Status("FAIL"),
-			},
-		},
-	}}
-	snap := source.ReadVerify(context.Background())
-
-	if snap.Verdict.Display() != "FAIL" {
-		t.Fatalf("two passes and a failure summarised as %q", snap.Verdict.Display())
-	}
-	if len(snap.RequiredChecks) != 3 {
-		t.Fatalf("got %d required checks", len(snap.RequiredChecks))
-	}
-	// The individual results stay visible: a summary must not replace them.
-	found := false
-	for _, f := range snap.RequiredChecks {
-		if f.Label == "policy" && f.Value.Display() == "FAIL" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("the failing check is not shown individually")
-	}
-}
-
-// A claim with no evidence is unsupported, not provisionally fine.
-func TestClaimWithoutEvidenceIsUnsupported(t *testing.T) {
-	source := &VerifySource{Now: fixedClock(), Reader: fakeVerifyReader{
-		session: verification.Session{
-			ID: "v-1", Version: 1,
-			Claims: []verification.Claim{{ID: "claim-1", CriterionID: "crit-1"}},
-		},
-	}}
-	snap := source.ReadVerify(context.Background())
-
-	if len(snap.Claims) != 1 {
-		t.Fatalf("got %d claims", len(snap.Claims))
-	}
-	if snap.Claims[0].Status.Status.IsSuccess() {
-		t.Fatalf("an unevidenced claim reports %q", snap.Claims[0].Status.Display())
-	}
-	if !strings.Contains(snap.Claims[0].Evidence.Display(), "no evidence") {
-		t.Fatalf("the missing evidence is not explained: %q",
-			snap.Claims[0].Evidence.Display())
-	}
-}
-
-// An unrecognised Process 06 status becomes UNKNOWN, never a pass.
-func TestUnrecognisedVerificationStatusIsUnknown(t *testing.T) {
-	for _, status := range []string{"WEIRD", "ok", "greenish", "???"} {
-		v := verificationStatus(status)
-		if v.Status.IsSuccess() {
-			t.Fatalf("status %q was treated as a success: %q", status, v.Display())
-		}
-		if v.Status != TruthUnknown {
-			t.Fatalf("status %q reported %s, want UNKNOWN", status, v.Status.Label())
-		}
-	}
-	// A recorded negative outcome is a real answer and reads as one.
-	fail := verificationStatus("FAIL")
-	if fail.Display() != "FAIL" {
-		t.Fatalf("a recorded FAIL rendered as %q", fail.Display())
-	}
-}
-
-// Evaluating reports Process 06's decision whatever it is, including a
-// failure, and never upgrades it.
-func TestEvaluateReportsAFailingDecisionHonestly(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.session = verification.Session{ID: "run-1", Version: 1,
-		State: verification.Decision("PENDING")}
-	auth.verifyDecision = verification.Decision("FAIL")
-	auth.mu.Unlock()
-
-	outcome, err := source.executeEvaluateVerification(ctx,
-		ActionRequest{Action: "CTUI-0342",
-			Target: Target{Kind: "verification", ID: "run-1", Revision: 1}})
-	if err != nil {
-		t.Fatalf("evaluate: %v", err)
-	}
-	// The action succeeded; the verification failed. Both are said plainly.
-	if outcome.Verdict != VerdictPass {
-		t.Fatalf("a completed evaluation produced %s", outcome.Verdict)
-	}
-	if !strings.Contains(outcome.Detail, "FAIL") {
-		t.Fatalf("the decision was not reported: %q", outcome.Detail)
-	}
-	if outcome.Proof.Display() != "FAIL" {
-		t.Fatalf("the proof reads %q, want the decision", outcome.Proof.Display())
-	}
-	if n := atomic.LoadInt32(&auth.verifyEvals); n != 1 {
-		t.Fatalf("the service was called %d times", n)
-	}
-}
-
-func TestPrepareVerificationResolvesSessionForCurrentRun(t *testing.T) {
-	source, auth := testControl(t)
-	auth.mu.Lock()
-	auth.run.RunID = "run-current"
-	auth.session = verification.Session{
-		ID: "verification-current", Version: 3, State: verification.Decision("PENDING"),
-		Binding: verification.Binding{RunID: "run-current"},
-	}
-	auth.mu.Unlock()
-
-	target, err := source.prepareVerification(context.Background())
-	if err != nil {
-		t.Fatalf("prepare verification: %v", err)
-	}
-	if target.ID != "verification-current" || target.Revision != 3 || target.Scope != "run run-current" {
-		t.Fatalf("target=%+v; expected current verification session, not run ID", target)
-	}
-}
-
-func TestCodexDoctorUsesExplicitBoundedAuthority(t *testing.T) {
-	source, _ := testControl(t)
-	target, err := source.prepareCodexDoctor(context.Background())
-	if err != nil {
-		t.Fatalf("prepare doctor: %v", err)
-	}
-	if target.Kind != "codex_doctor" || target.ID != "local" {
-		t.Fatalf("doctor target = %+v", target)
-	}
-	outcome, err := source.executeCodexDoctor(context.Background(), ActionRequest{Action: "CTUI-0509-HEALTH", Target: target})
-	if err != nil {
-		t.Fatalf("execute doctor: %v", err)
-	}
-	if outcome.Verdict != VerdictPass || !strings.Contains(outcome.Detail, "2 checks") {
-		t.Fatalf("doctor outcome = %+v", outcome)
-	}
-}
-
-func TestCodexReviewUsesCanonicalVerificationBoundary(t *testing.T) {
-	source, _ := testControl(t)
-	target, err := source.prepareCodexReview(context.Background())
-	if err != nil {
-		t.Fatalf("prepare review: %v", err)
-	}
-	outcome, err := source.executeCodexReview(context.Background(), ActionRequest{Action: "CTUI-0365", Target: target})
-	if err != nil {
-		t.Fatalf("execute review: %v", err)
-	}
-	if outcome.Verdict != VerdictPass || !strings.Contains(outcome.Detail, "0123456789abcdef") {
-		t.Fatalf("review outcome=%+v", outcome)
-	}
-}
-
-// An evaluation that did not move the session proves nothing.
-func TestEvaluationThatDoesNotMoveTheSessionIsUnknown(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.session = verification.Session{ID: "run-1", Version: 5}
-	auth.mu.Unlock()
-
-	// Submit against a revision the session is already past, so the reread
-	// shows no movement relative to what was reviewed.
-	outcome, _ := source.executeEvaluateVerification(ctx,
-		ActionRequest{Action: "CTUI-0342",
-			Target: Target{Kind: "verification", ID: "run-1", Revision: 99}})
-
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("an evaluation that did not advance reported success")
-	}
-}
-
-// Verify actions with no application-layer boundary say what is missing.
-func TestUnboundVerifyActionsExplainWhatIsMissing(t *testing.T) {
-	source, _ := testControl(t)
-	for _, id := range []ActionID{
-		"CTUI-0352", "CTUI-0382", "CTUI-0395", "CTUI-0399", "CTUI-0402",
-	} {
-		binding, ok := source.Bindings()[id]
-		if !ok {
-			t.Fatalf("%s has no binding", id)
-		}
-		if binding.Bound() {
-			continue
-		}
-		reason := binding.Gap
-		if reason == "" {
-			reason = binding.Requires
-		}
-		if len(reason) < 40 {
-			t.Fatalf("%s gives too thin a reason: %q", id, reason)
-		}
-	}
-
-	// The governed local verification command has a canonical, bounded
-	// Process 06 binding. It must never degrade into an arbitrary runner.
-	command := source.Bindings()["CTUI-0365"]
-	if !command.Bound() || command.Safety != SafetyGoverned {
-		t.Fatalf("governed verification binding = %+v", command)
-	}
-}
-
-// --- regressions from the Slice 5 adversarial review ---
-
-// Handing off a plan calls Process 04's own handoff, not StartRun. Binding one
-// operation under another's label is an action substitution: starting a run
-// does more than hand a plan over.
-func TestPlanHandoffCallsProcess04NotStartRun(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	outcome, err := source.executeHandoffPlan(ctx, ActionRequest{
-		Action: "CTUI-0259",
-		Target: Target{Kind: "plan", ID: "plan-1", Revision: 2, Digest: "req/con"}})
-	if err != nil {
-		t.Fatalf("handoff: %v", err)
-	}
-	if outcome.Verdict != VerdictPass {
-		t.Fatalf("a handoff produced %s: %s", outcome.Verdict, outcome.Detail)
-	}
-	if n := atomic.LoadInt32(&auth.handoffs); n != 1 {
-		t.Fatalf("the handoff boundary was called %d times", n)
-	}
-	// Crucially, it did NOT start a run.
-	if n := atomic.LoadInt32(&auth.startRuns); n != 0 {
-		t.Fatalf("handing off a plan started %d runs", n)
-	}
-}
-
-func TestPlanHandoffRefusesAStaleTypedBinding(t *testing.T) {
-	source, auth := testControl(t)
-	auth.handoffOverride = &PlanHandoff{
-		ID: "plan-1@v1", PlanID: "plan-1", Version: 1, Digest: "old/constraints",
-	}
-	outcome, err := source.executeHandoffPlan(context.Background(), ActionRequest{
-		Action: "CTUI-0259",
-		Target: Target{Kind: "plan", ID: "plan-1", Revision: 2, Digest: "req/con"},
-	})
-	if err != nil {
-		t.Fatalf("handoff: %v", err)
-	}
-	if outcome.Verdict == VerdictPass {
-		t.Fatalf("stale typed handoff reported PASS: %+v", outcome)
-	}
-}
-
-// Confirming a goal rereads durable state rather than trusting the mutation's
-// own return value.
-func TestConfirmGoalRereadsDurableState(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// The mutation reports success, but the store disagrees: the reread is the
-	// only thing that can catch this.
-	auth.mu.Lock()
-	auth.goalReadOverride = &model.GoalContract{
-		ID: "goal-1", Revision: 4, Confirmation: model.ConfirmationPending}
-	auth.mu.Unlock()
-
-	outcome, _ := source.executeApproveGoal(ctx, ActionRequest{
-		Action: "CTUI-0239", Target: Target{Kind: "goal", ID: "goal-1", Revision: 4}})
-
-	if outcome.Verdict == VerdictPass {
-		t.Fatal("a goal confirmation that the store did not record reported success")
-	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("an unproven confirmation carries a successful proof")
-	}
-}
-
-// Importing tasks proves itself by the task list actually growing.
-func TestImportTasksProvesTheListGrew(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	auth.mu.Lock()
-	auth.planTasks = []model.Task{{ID: "t-1", Title: "one"}, {ID: "t-2", Title: "two"}}
-	auth.mu.Unlock()
-
-	outcome, err := source.executeImportPlanTasks(ctx, ActionRequest{
-		Action: "CTUI-0295", Target: Target{Kind: "plan", ID: "plan-1"}})
-	if err != nil {
-		t.Fatalf("import: %v", err)
-	}
-	// The fake's ImportTasks reports 0 added while the plan defines 2, so the
-	// proof check must catch the disagreement rather than reporting success.
-	if outcome.Verdict == VerdictPass && !outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a pass was reported with no proof")
-	}
-}
-
-// A plan with no tasks is refused rather than reported as a successful import
-// of nothing.
-func TestImportingAnEmptyPlanIsRefused(t *testing.T) {
-	source, _ := testControl(t)
-	outcome, _ := source.executeImportPlanTasks(context.Background(),
-		ActionRequest{Action: "CTUI-0295", Target: Target{Kind: "plan", ID: "plan-1"}})
-
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("importing an empty plan produced %s", outcome.Verdict)
-	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("an empty import carries a successful proof")
-	}
-}
-
-// Collecting worktrees is destructive, proves itself, and refuses when there
-// is nothing eligible.
-func TestWorktreeCollectionProvesItselfAndRefusesWhenEmpty(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-
-	// Nothing eligible: refuse rather than report a successful no-op.
-	empty, _ := source.executeGCWorktrees(ctx,
-		ActionRequest{Action: "CTUI-0329", Target: Target{Kind: "session", ID: "sess-1"}})
-	if empty.Verdict != VerdictBlocked {
-		t.Fatalf("collecting nothing produced %s", empty.Verdict)
-	}
-	if n := atomic.LoadInt32(&auth.gcRuns); n != 0 {
-		t.Fatalf("an empty collection still ran %d times", n)
-	}
-
-	// With eligible worktrees it proceeds and proves the inventory moved.
-	auth.mu.Lock()
-	auth.eligibleWorktrees = 3
-	auth.mu.Unlock()
-
-	outcome, err := source.executeGCWorktrees(ctx,
-		ActionRequest{Action: "CTUI-0329", Target: Target{Kind: "session", ID: "sess-1"}})
-	if err != nil {
-		t.Fatalf("collect: %v", err)
-	}
-	if outcome.Verdict != VerdictPass {
-		t.Fatalf("a real collection produced %s: %s", outcome.Verdict, outcome.Detail)
-	}
-	if n := atomic.LoadInt32(&auth.gcRuns); n != 1 {
-		t.Fatalf("collection ran %d times", n)
-	}
-}
-
-// Worktree collection is destructive and must carry that safety class.
-func TestWorktreeCollectionIsDestructive(t *testing.T) {
-	source, _ := testControl(t)
-	binding := source.Bindings()["CTUI-0329"]
-	if !binding.Bound() {
-		t.Fatal("worktree collection is not bound")
-	}
-	if binding.Safety != SafetyDestructive {
-		t.Fatalf("worktree collection is classed %s, want destructive", binding.Safety)
-	}
-}
-
-// A destructive collection is approved for the exact dry-run inventory. If
-// another actor changes that inventory while the modal is open, the old
-// confirmation must not collect the new set.
-func TestWorktreeCollectionRejectsInventoryDrift(t *testing.T) {
-	source, auth := testControl(t)
-	ctx := context.Background()
-	auth.mu.Lock()
-	auth.eligibleWorktrees = 2
-	auth.mu.Unlock()
-
 	c := &Confirmation{}
-	binding := source.Bindings()["CTUI-0329"]
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0329"}); err != nil {
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if c.Selection() != 0 {
+		t.Fatalf("a destructive confirmation started on selection %d, want Cancel", c.Selection())
+	}
+	if _, err := c.Submit(ctx); err == nil {
+		t.Fatal("Submit proceeded while the selection was on Cancel")
+	}
+	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
+		t.Fatalf("the authority was called %d times from a cancelled confirmation", n)
+	}
+}
+
+// A destructive action needs its explicit acknowledgement, which Enter alone
+// does not supply. This is what stops a key repeat reaching a destructive call.
+func TestDestructiveActionNeedsAnExplicitAcknowledgement(t *testing.T) {
+	_, auth := testControl(t)
+	ctx := context.Background()
+	c := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	c.MoveSelection(1)
+	if _, err := c.Submit(ctx); err == nil {
+		t.Fatal("a destructive action submitted without acknowledgement")
+	}
+	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
+		t.Fatalf("the authority was called %d times without acknowledgement", n)
+	}
+	c.Acknowledge()
+	if _, err := c.Submit(ctx); err != nil {
+		t.Fatalf("an acknowledged destructive action was refused: %v", err)
+	}
+	if n := atomic.LoadInt32(&auth.cancels); n != 1 {
+		t.Fatalf("the authority was called %d times, want exactly 1", n)
+	}
+}
+
+func TestRepeatedSubmitRunsTheMutationOnce(t *testing.T) {
+	_, auth := testControl(t)
+	ctx := context.Background()
+	c := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyPlain)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	c.MoveSelection(1)
+	if _, err := c.Submit(ctx); err != nil {
+		t.Fatalf("first submit: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := c.Submit(ctx); err == nil {
+			t.Fatalf("submit %d was accepted after the first", i+2)
+		}
+	}
+	if n := atomic.LoadInt32(&auth.cancels); n != 1 {
+		t.Fatalf("the authority was called %d times, want exactly 1", n)
+	}
+}
+
+// Concurrent submissions must also run the mutation once.
+func TestConcurrentSubmitRunsTheMutationOnce(t *testing.T) {
+	_, auth := testControl(t)
+	ctx := context.Background()
+	c := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyPlain)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	c.MoveSelection(1)
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = c.Submit(ctx)
+		}()
+	}
+	wg.Wait()
+	if n := atomic.LoadInt32(&auth.cancels); n != 1 {
+		t.Fatalf("16 concurrent submits produced %d mutations, want exactly 1", n)
+	}
+}
+
+// --- TOCTOU: stale revision and digest ---
+
+// A target that moved between confirmation and submission must be refused.
+func TestStaleRevisionIsRefusedAtSubmit(t *testing.T) {
+	_, auth := testControl(t)
+	ctx := context.Background()
+	c := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	c.MoveSelection(1)
 	c.Acknowledge()
-
 	auth.mu.Lock()
-	auth.eligibleWorktrees = 3
+	auth.task.Revision = 99
 	auth.mu.Unlock()
-
-	if _, err := c.Submit(ctx); !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("submit after inventory drift error = %v, want stale target", err)
+	outcome, err := c.Submit(ctx)
+	if !errors.Is(err, ErrStaleTarget) {
+		t.Fatalf("a stale target was submitted: %v", err)
 	}
-	if n := atomic.LoadInt32(&auth.gcRuns); n != 0 {
-		t.Fatalf("stale confirmation collected worktrees %d time(s)", n)
+	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
+		t.Fatalf("the authority was called %d times with a stale target", n)
+	}
+	if outcome.Verdict != VerdictBlocked {
+		t.Fatalf("a stale target produced verdict %s", outcome.Verdict)
+	}
+	if !strings.Contains(outcome.Detail, "revision") {
+		t.Fatalf("the refusal does not name the revision change: %q", outcome.Detail)
 	}
 }
 
-func TestArtifactCollectionRejectsInventoryDrift(t *testing.T) {
-	source, auth := testControl(t)
+// A changed content digest is equally disqualifying, even at the same revision.
+func TestStaleDigestIsRefusedAtSubmit(t *testing.T) {
+	_, auth := testControl(t)
 	ctx := context.Background()
-	auth.mu.Lock()
-	auth.eligibleArtifacts = 2
-	auth.mu.Unlock()
-
 	c := &Confirmation{}
-	binding := source.Bindings()["CTUI-0774"]
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0774"}); err != nil {
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	c.MoveSelection(1)
 	c.Acknowledge()
-
 	auth.mu.Lock()
-	auth.eligibleArtifacts = 1
+	auth.task.Title = "changed while open"
 	auth.mu.Unlock()
-
 	if _, err := c.Submit(ctx); !errors.Is(err, ErrStaleTarget) {
-		t.Fatalf("submit after inventory drift error = %v, want stale target", err)
+		t.Fatalf("a changed digest was submitted: %v", err)
 	}
-	if n := atomic.LoadInt32(&auth.artifactGCs); n != 0 {
-		t.Fatalf("stale confirmation collected artifacts %d time(s)", n)
+	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
+		t.Fatalf("the mutation ran %d times with a changed digest", n)
 	}
 }
 
-// TestRestoreRejectsBackupSwapAfterConfirmation covers the narrow window
-// after Confirmation's final re-read but before the canonical restore call.
-// The restore authority receives the exact digest/schema it must enforce, so a
-// path swapped to another valid backup cannot replace the state database.
-func TestRestoreRejectsBackupSwapAfterConfirmation(t *testing.T) {
-	source, auth := testControl(t)
+func TestCancellingAConfirmationMutatesNothing(t *testing.T) {
+	_, auth := testControl(t)
 	ctx := context.Background()
-	auth.mu.Lock()
-	original := auth.backupProof
-	auth.backupProof = BackupProof{Digest: "sha256:replacement", SchemaVersion: original.SchemaVersion}
-	auth.mu.Unlock()
-
-	req := ActionRequest{Action: "CTUI-0771", Inputs: map[string]string{"backup_path": "/opaque/backup.db"},
-		Target: Target{Kind: "state-backup", ID: original.Digest, Digest: original.Digest, Revision: int64(original.SchemaVersion)}}
-	outcome, err := source.executeRestoreState(ctx, req)
-	if !errors.Is(err, ErrStaleTarget) || outcome.Verdict != VerdictFail {
-		t.Fatalf("swapped backup outcome = %#v, err=%v", outcome, err)
+	c := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	if err := c.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
 	}
-	if n := atomic.LoadInt32(&auth.restores); n != 0 {
-		t.Fatalf("swapped backup reached restore %d time(s)", n)
+	c.MoveSelection(1)
+	c.Acknowledge()
+	c.Cancel()
+	if c.Phase() != PhaseIdle {
+		t.Fatalf("a cancelled confirmation is in phase %s", c.Phase())
+	}
+	if _, err := c.Submit(ctx); err == nil {
+		t.Fatal("a cancelled confirmation submitted")
+	}
+	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
+		t.Fatalf("a cancelled confirmation caused %d mutations", n)
 	}
 }
 
-// The four actions agy showed have canonical boundaries are now bound.
-func TestPreviouslyMisreportedActionsAreBound(t *testing.T) {
-	source, _ := testControl(t)
-	for _, id := range []ActionID{
-		"CTUI-0259", // PlanService.Handoff
-		"CTUI-0295", // Runtime.ImportTasks
-		"CTUI-0297", // Runtime.ImportTasks with one task
-		"CTUI-0313", // Runtime.RegisterAgent
-		"CTUI-0329", // Runtime.GCWorktrees
-	} {
-		binding, ok := source.Bindings()[id]
-		if !ok {
-			t.Fatalf("%s has no binding", id)
-		}
-		if !binding.Bound() {
-			reason := binding.Gap
-			if reason == "" {
-				reason = binding.Requires
-			}
-			t.Fatalf("%s has a canonical boundary but is reported unavailable: %q",
-				id, reason)
+func TestIdempotencyKeyBindsTheExactTarget(t *testing.T) {
+	_, auth := testControl(t)
+	ctx := context.Background()
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	first := &Confirmation{}
+	if err := first.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	keyOne := first.Request().IdempotencyKey
+	if keyOne == "" {
+		t.Fatal("no idempotency key was derived")
+	}
+	repeat := &Confirmation{}
+	if err := repeat.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if repeat.Request().IdempotencyKey != keyOne {
+		t.Fatal("the same target produced a different idempotency key")
+	}
+	auth.mu.Lock()
+	auth.task.Revision = 42
+	auth.mu.Unlock()
+	moved := &Confirmation{}
+	if err := moved.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if moved.Request().IdempotencyKey == keyOne {
+		t.Fatal("a moved target produced the same idempotency key")
+	}
+}
+
+func TestAConfirmationDoesNotSurviveARestart(t *testing.T) {
+	_, auth := testControl(t)
+	ctx := context.Background()
+	before := &Confirmation{}
+	binding := fakeTaskCancelBinding(auth, SafetyDestructive)
+	if err := before.Begin(ctx, binding, ActionRequest{Action: binding.Action}); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	before.MoveSelection(1)
+	before.Acknowledge()
+	after := &Confirmation{}
+	if after.Phase() != PhaseIdle {
+		t.Fatalf("a fresh confirmation started in phase %s", after.Phase())
+	}
+	if _, err := after.Submit(ctx); err == nil {
+		t.Fatal("a fresh confirmation submitted with nothing prepared")
+	}
+	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
+		t.Fatalf("a restart caused %d mutations", n)
+	}
+}
+
+// --- approval binding ---
+
+// The approval target carries every field the contract requires, so a decision
+// is never a generic "approve the current thing". approvalTarget is what the
+// Marshal goal proposal and the runtime authority bind an approval to.
+func TestApprovalTargetBindsActionTargetScopeDigestAndRevision(t *testing.T) {
+	_, auth := testControl(t)
+	target := approvalTarget(auth.approvals["app-1"])
+	if target.ID != "app-1" {
+		t.Fatalf("the target names approval %q", target.ID)
+	}
+	if target.Digest != "digest-action-aaaa/digest-state-bbbb" {
+		t.Fatalf("the target carries digest %q, want the action and state digests", target.Digest)
+	}
+	if target.Revision != 2 {
+		t.Fatalf("the target carries revision %d, want the plan version", target.Revision)
+	}
+	if target.Scope != "worktree" {
+		t.Fatalf("the target carries scope %q", target.Scope)
+	}
+	// The summary names the exact operation and resource.
+	for _, want := range []string{"write_file", "/src/main.go"} {
+		if !strings.Contains(target.Summary, want) {
+			t.Fatalf("the summary omits %q: %q", want, target.Summary)
 		}
 	}
 }

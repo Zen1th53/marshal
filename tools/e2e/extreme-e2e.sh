@@ -474,28 +474,6 @@ section_b() {
 		record B04-chat-start-no-native-prompt INFO 0 "no chat window auto-started"
 	fi
 
-	# Advanced menu
-	keys "$W0" C-n
-	if wait_for "$W0" '1 Home.*2 Control.*9 System' 5; then
-		record B10-ctrl-n-opens-menu PASS 0 "nine sections"
-	else
-		record B10-ctrl-n-opens-menu FAIL 0 "$(cap "$W0" | head -2)"
-	fi
-	save_cap "$W0" 03-menu-home
-	local n name
-	for n in 1 2 3 4 5 6 7 8 9; do
-		keys "$W0" "$n"
-		sleep 1.5
-		name=$(cap "$W0" | sed -n 2p | awk '{print $1}')
-		save_cap "$W0" "1${n}-section-$n-$name"
-		local scr
-		scr=$(cap "$W0")
-		if echo "$scr" | grep -Eqi 'panic|runtime error|nil pointer'; then
-			record "B1$n-section-$name" FAIL 0 "$(echo "$scr" | grep -Ei 'panic|runtime error' | head -1)"
-		else
-			record "B1$n-section-$name" PASS 0 "$(echo "$scr" | grep -E '^[▸ ] [A-Z]' | sed 's/│.*//' | tr -s ' ' | tr '\n' ',' | cut -c1-200)"
-		fi
-	done
 	keys "$W0" "/"
 	sleep 0.6
 	if cap "$W0" | grep -q 'Search:'; then record B20-palette-slash PASS 0 "/ opens search"; else record B20-palette-slash FAIL 0 "no palette"; fi
@@ -512,22 +490,6 @@ section_b() {
 	save_cap "$W0" 21-nav-help
 	keys "$W0" Escape
 	sleep 0.4
-
-	# Submit one safe action end to end and verify its durable effect.
-	t=$(now)
-	local tag="e2e-tui-$RUN_ID"
-	tui_submit "$W0" "remember semantic knowledge" "$tag" "Remembered through the advanced menu"
-	save_cap "$W0" 32-tui-memory-remember-result
-	mx "$FLOW_PROJ" memory recall "$tag"
-	if cap "$W0" | grep -q 'Result *applied' && printf '%s' "$MX_OUT" | grep -q 'results=[1-9]'; then
-		record B32-tui-memory-remember-effect PASS "$(elapsed "$t")" "TUI applied; CLI recall: $(printf '%s' "$MX_OUT" | tail -1)"
-	else
-		record B32-tui-memory-remember-effect FAIL "$(elapsed "$t")" "$(cap "$W0" | grep -E '^Result|^Detail' | head -2) / CLI: $MX_OUT"
-	fi
-	# Budget setter before a goal exists: the form takes input, then refuses.
-	tui_submit "$W0" "budgets token limit" "50000" "e2e budget"
-	save_cap "$W0" 33-tui-budget-before-goal
-	record B33-budget-submit-before-goal INFO 0 "$(cap "$W0" | grep -E '^Result +[A-Za-z]' | head -1)"
 
 	# Function-key screens from the workspace.
 	leave_nav "$W0"
@@ -601,36 +563,6 @@ leave_nav() { # TARGET
 		fi
 		sleep 0.5
 	done
-}
-
-# tui_submit TARGET QUERY FIELD... : palette to an action, fill its form
-# fields in order, move to Proceed and submit. Leaves the result on screen.
-tui_submit() {
-	local w=$1 q=$2 f
-	shift 2
-	leave_nav "$w"
-	keys "$w" C-n
-	sleep 1
-	keys "$w" /
-	sleep 0.4
-	lit "$w" "$q"
-	sleep 0.8
-	keys "$w" Enter
-	sleep 1
-	keys "$w" Enter
-	sleep 1.2
-	for f in "$@"; do
-		lit "$w" "$f"
-		sleep 0.3
-		keys "$w" Enter
-		sleep 0.8
-	done
-	if cap "$w" | grep -q Proceed; then
-		keys "$w" Right
-		sleep 0.4
-		keys "$w" Enter
-		sleep 3
-	fi
 }
 
 # Type a slash command into the workspace composer and wait for an answer.

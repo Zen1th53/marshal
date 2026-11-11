@@ -3,7 +3,6 @@
 package tui
 
 import (
-	"context"
 	"strings"
 )
 
@@ -20,22 +19,3 @@ func editionLabel(text string) string {
 		"Community Cloud / ULTRA", "Local ULTRA",
 	).Replace(text)
 }
-
-// editionHidesSpec reports entries that only make sense with the Community
-// Cloud. ULTRA is local in Extreme, so there is nothing to request.
-func editionHidesSpec(specID string) bool {
-	switch specID {
-	case "CTUI-0035", "CTUI-0157", "CTUI-0557", "CTUI-0562":
-		return true
-	}
-	return false
-}
-
-// readCloudForEdition replaces the Cloud reading: ULTRA is local in Extreme, so
-// there is no connection, entitlement or lease to report.
-func (s *StatusSource) readCloudForEdition(context.Context) CloudSnapshot {
-	return extremeCloudSnapshot()
-}
-
-// modeFieldLabel names the ULTRA mode row: nothing is entitled in Extreme.
-const modeFieldLabel = "Mode"

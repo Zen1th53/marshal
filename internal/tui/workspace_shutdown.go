@@ -3,7 +3,35 @@ package tui
 import (
 	"context"
 	"sync"
+
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/localserve"
 )
+
+// localHosts holds one server Host per open runtime. A Host is closed when
+// its workspace closes or its runtime is replaced by a restore.
+var localHosts = struct {
+	sync.Mutex
+	m map[*app.Runtime]*localserve.Host
+}{m: map[*app.Runtime]*localserve.Host{}}
+
+func closeLocalServers(r *app.Runtime) {
+	if r == nil {
+		return
+	}
+	localHosts.Lock()
+	h := localHosts.m[r]
+	delete(localHosts.m, r)
+	localHosts.Unlock()
+	h.Close()
+}
+
+func (w *Workspace) closeLocalServers() {
+	w.mu.RLock()
+	r := w.runtime
+	w.mu.RUnlock()
+	closeLocalServers(r)
+}
 
 // workerLifecycle serializes admission with shutdown so Add cannot race Wait.
 // It also works for workspaces and navigation views constructed by tests.

@@ -14,10 +14,9 @@ func fakeToken() string { return strings.Repeat("b", 26) }
 
 // A credential inside a memory record must not reach the screen.
 //
-// Memory records hold whatever an agent saw. Bounding the excerpt limits how
-// much of a record renders, but a token is shorter than the bound, so the
-// bound alone does not protect anything. The excerpt runs through the same
-// pattern redaction as the rest of the TUI, before the bound is applied.
+// Memory records hold whatever an agent saw. The Memory view's evidence overlay
+// (memoryEvidenceLines) is where a record's title and body are shown, and it
+// runs every field through the same pattern redaction as the rest of the TUI.
 func TestMemoryExcerptRedactsCredentials(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -30,29 +29,21 @@ func TestMemoryExcerptRedactsCredentials(t *testing.T) {
 		{"labelled api key", "api_key: AKIAIOSFODNN7EXAMPLE was echoed", "AKIAIOSFODNN7EXAMPLE"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got := memoryExcerpt(model.MemoryRecordV2{Title: "note", Body: c.body})
-			if strings.Contains(got.Text, c.secret) {
-				t.Errorf("the excerpt rendered the secret in cleartext:\n%s", got.Text)
-			}
-			if !got.Redacted {
-				t.Error("the excerpt is not marked redacted, so CopyText would not refuse it")
+			got := strings.Join(memoryEvidenceLines("MEM-1", model.MemoryRecordV2{Title: c.body, Body: c.body}, nil, nil), "\n")
+			if strings.Contains(got, c.secret) {
+				t.Errorf("the evidence overlay rendered the secret in cleartext:\n%s", got)
 			}
 		})
 	}
 }
 
-// Redaction runs before the length bound, not after.
-//
-// The patterns match on minimum lengths, so truncating first can leave a
-// fragment the pattern no longer recognises. A secret placed far enough into a
-// long body that truncation would cut it must still be redacted.
+// Redaction runs over the whole body before it is cut to the shown lines, so a
+// secret late in a long record is never left as a visible fragment.
 func TestMemoryExcerptRedactsBeforeTruncating(t *testing.T) {
-	// Push the key to just before the 120-rune bound so a truncate-then-redact
-	// order would cut it mid-token and leave the fragment visible.
 	body := strings.Repeat("a", 110) + " " + fakeKey()
 
-	got := memoryExcerpt(model.MemoryRecordV2{Body: body})
-	if strings.Contains(got.Text, "sk-aaaaaaaaaaaaaa") {
-		t.Errorf("a truncated secret fragment survived into the excerpt:\n%s", got.Text)
+	got := strings.Join(memoryEvidenceLines("MEM-1", model.MemoryRecordV2{Body: body}, nil, nil), "\n")
+	if strings.Contains(got, "sk-aaaaaaaaaaaaaa") {
+		t.Errorf("a secret fragment survived into the evidence overlay:\n%s", got)
 	}
 }
