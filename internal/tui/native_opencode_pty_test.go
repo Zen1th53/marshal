@@ -31,5 +31,5 @@ printf 'OPENCODE-INPUT:<%s>\n' "$answer"
 	s.mustSee("OPENCODE-INPUT:<FIRST-KEY-SURVIVES>")
 	s.mustSee("OpenCode exited.")
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 }

@@ -875,10 +875,13 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 // handleUltra reports ULTRA status and switches ULTRA Execution.
 //
 // No argument grants anything: entitlement is not a thing the client decides.
-// /ultra start and /ultra stop change only the person's preference for this
-// session, which does nothing without a verified entitlement. Every session
-// starts with execution off.
+// /ultra start and /ultra stop change only the person's preference in the
+// governed build, which does nothing without a verified entitlement. The
+// shipped build returns its fixed answer before reaching this path.
 func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
+	if !ultraSwitchable {
+		return ultraFixedAnswer, nil
+	}
 	sub := ""
 	if len(args) > 0 {
 		sub = strings.ToLower(args[0])
@@ -1190,7 +1193,6 @@ func (h *CommandHandler) handleRuntime(ctx context.Context) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString("RUNTIME STATUS (canonical store read-back; process liveness is not probed):\n")
-	fmt.Fprintf(&b, "  Instance:  %s\n", orNone(a.RuntimeInstanceID()))
 	fmt.Fprintf(&b, "  Schema:    v%d\n", status.SchemaVersion)
 	fmt.Fprintf(&b, "  Records:   %d agents, %d sessions, %d tasks, %d leases\n", status.AgentCount, status.SessionCount, status.TaskCount, status.LeaseCount)
 	fmt.Fprintf(&b, "  Session:   %s\n", h.ws.sessionID)

@@ -412,21 +412,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.memView = v.memory && w.memView.Load()
 	v.providers = w.providerSrc() != nil
 	v.provView = v.providers && w.provView.Load()
-	// Use the Providers view's last snapshot. The frame path must never
-	// query the store or probe an executable for header status dots.
-	v.health = map[string]string{"codex": "○", "claude": "○", "agy": "○", "opencode": "○"}
-	if snap := w.prov.paint().Snap; snap.Loaded {
-		for _, provider := range snap.Providers {
-			dot := "●"
-			switch providerState(provider, v.now) {
-			case "limit":
-				dot = "×"
-			case "re-verify":
-				dot = "◐"
-			}
-			v.health[provider.Provider] = dot
-		}
-	}
+	v.health = w.providerDots(v.now)
 	v.verify = w.verifySrc() != nil
 	v.verView = v.verify && w.verView.Load()
 	v.security = w.securitySrc() != nil
@@ -552,6 +538,26 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	w.boardHits.set(hits)
 	return lines, cursorRow, cursorCol
+}
+
+// providerDots returns the provider states shown in the Board header. It uses
+// the Providers view's last snapshot and never queries the store or probes a
+// provider executable.
+func (w *Workspace) providerDots(now time.Time) map[string]string {
+	dots := map[string]string{"codex": "○", "claude": "○", "agy": "○", "opencode": "○"}
+	if snap := w.prov.paint().Snap; snap.Loaded {
+		for _, provider := range snap.Providers {
+			dot := "●"
+			switch providerState(provider, now) {
+			case "limit":
+				dot = "×"
+			case "re-verify":
+				dot = "◐"
+			}
+			dots[provider.Provider] = dot
+		}
+	}
+	return dots
 }
 
 // handleBoardKey moves around the Board. It leaves every key it does not

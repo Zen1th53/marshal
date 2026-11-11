@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
 )
@@ -16,79 +18,51 @@ import (
 // so a granted approval is always time boxed.
 const defaultApprovalWindow = time.Hour
 
-// handleStatus renders the canonical session, runtime, goal, team, claim, budget
-// and termination status from refreshed store state. It reuses RenderScreen so the
-// command and the always-on dashboard can never drift apart, then appends the
-// termination and routing detail the one-screen header only summarises.
+// handleStatus renders the same run facts shown in the Board header.
 func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	if err := h.ws.RefreshState(ctx); err != nil {
 		return "", fmt.Errorf("refresh status: %w", err)
 	}
+	return h.ws.plainStatus(), nil
+}
 
-	h.ws.mu.RLock()
-	state := h.ws.liveStateLocked()
-	h.ws.mu.RUnlock()
-
-	var b strings.Builder
-	b.WriteString(RenderScreen(state, 90))
-	b.WriteString("\nCANONICAL STATUS DETAIL:\n")
-	if h.ws.store == nil {
-		b.WriteString("  Store:        UNAVAILABLE (initialize a project with marshal init, then reopen TUI)\n")
-	}
-	b.WriteString(fmt.Sprintf("  Project:      %s\n", orNone(state.ProjectID)))
-	b.WriteString(fmt.Sprintf("  Session:      %s\n", orNone(state.SessionID)))
-	b.WriteString(fmt.Sprintf("  Runtime mode: %s\n", state.SessionMode))
-
-	if state.Goal.ID == "" {
-		b.WriteString("  Goal:         (none set)\n")
-	} else {
-		b.WriteString(fmt.Sprintf("  Goal:         %s [rev %d] %s\n",
-			state.Goal.ID, state.Goal.Revision, RedactContent(state.Goal.DesiredOutcome, nil)))
-		b.WriteString(fmt.Sprintf("  Understanding:%s\n", " "+string(state.UnderstandingState)))
+func (w *Workspace) plainStatus() string {
+	w.mu.RLock()
+	state := w.liveStateLocked()
+	w.mu.RUnlock()
+	p := state.Marshal
+	var out strings.Builder
+	folder := filepath.Base(w.providerRoot())
+	fmt.Fprintf(&out, "Marshal %s · %s\n", BuildVersion, folder)
+	if p == nil {
+		out.WriteString("Run: none yet. Press s and tell the Marshal what to build.")
+		return out.String()
 	}
 
-	termination := string(state.TerminationState)
-	if termination == "" {
-		termination = "RUNNING (no terminal state recorded)"
-		if state.Goal.ID == "" {
-			termination = "NO ACTIVE GOAL (execution not verified)"
-		}
+	b := p.Board
+	b.Inbox = w.boardInbox()
+	v := boardVisual{board: b, now: time.Now(), note: p.Note}
+	v.gates = w.ownerGates(p)
+	v.guard, _, _, _ = w.guardPaint()
+	title := firstLine(b.Run.Title)
+	if title == "" {
+		title = "current run"
 	}
-	b.WriteString(fmt.Sprintf("  Termination:  %s\n", termination))
-
-	verified, contested := 0, 0
-	for _, c := range state.Claims {
-		switch c.State {
-		case model.ClaimStateVerified:
-			verified++
-		case model.ClaimStateContested:
-			contested++
-		}
+	word, _ := v.runWord()
+	fmt.Fprintf(&out, "Run: %q — %s\n", title, word)
+	fmt.Fprintf(&out, "Tasks: %d of %d done · %d running", b.Run.Done, b.Run.Total, b.Run.Running)
+	if count := v.inboxCount(); count > 0 {
+		fmt.Fprintf(&out, "\nWaiting for you: %d — look at the inbox on the Board.", count)
 	}
-	b.WriteString(fmt.Sprintf("  Claims:       %d total | %d verified | %d contested\n",
-		len(state.Claims), verified, contested))
-	b.WriteString(fmt.Sprintf("  Team:         %d participants | active turn: %s\n",
-		len(state.Participants), orNone(state.ActiveTurn)))
-
-	tokens := "UNKNOWN"
-	if state.BudgetConsumed.TotalTokens != nil {
-		tokens = fmt.Sprintf("%d", *state.BudgetConsumed.TotalTokens)
+	dots := w.providerDots(time.Now())
+	providers := []string{"codex", "claude", "agy", "opencode"}
+	labels := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		word := map[string]string{"●": "ready", "◐": "needs a check", "×": "at its limit", "○": "not checked"}[dots[provider]]
+		labels = append(labels, app.ProviderDisplayName(provider)+" "+word)
 	}
-	cost := "UNKNOWN"
-	if state.BudgetConsumed.CostUSD != nil {
-		cost = fmt.Sprintf("$%.4f", *state.BudgetConsumed.CostUSD)
-	}
-	b.WriteString(fmt.Sprintf("  Budget:       tokens=%s cost=%s calls=%d handoffs=%d\n",
-		tokens, cost, state.BudgetConsumed.ModelCalls, state.BudgetConsumed.Handoffs))
-
-	if h.ws.store != nil {
-		pending, err := h.ws.store.ListPendingApprovals(ctx, state.ProjectID)
-		if err == nil {
-			b.WriteString(fmt.Sprintf("  Approvals:    %d pending\n", len(pending)))
-		}
-	}
-
-	return b.String(), nil
+	fmt.Fprintf(&out, "\nProviders: %s", strings.Join(labels, " · "))
+	return out.String()
 }
 
 func (h *CommandHandler) handleVerification(ctx context.Context, id string) (string, error) {

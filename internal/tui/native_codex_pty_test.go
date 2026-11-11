@@ -62,7 +62,7 @@ exit 0
 	approvePTYMemory(t, s)
 	// Returning to MARSHAL must reclaim input and leave commands usable.
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 	// The first session already printed the ready marker, so wait for a second
 	// one: typing before the child reads its terminal hands the line to MARSHAL.
 	s.sendLine(`/codex cli --marshal-native-test`)
@@ -86,5 +86,5 @@ func TestPTYInstalledNativeCodexHelp(t *testing.T) {
 	s.mustSee("Codex CLI")
 	s.mustSee("Codex exited.")
 	s.sendLine("/status")
-	s.mustSee("CANONICAL STATUS DETAIL")
+	s.mustSee("Run:")
 }

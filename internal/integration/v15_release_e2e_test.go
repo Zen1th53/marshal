@@ -518,7 +518,7 @@ func TestE2E_13_TUIRuntimeSessionLifecycle(t *testing.T) {
 		t.Fatalf("TUI rejected a documented command:\n%s", rendered)
 	}
 	for _, want := range []string{
-		"CANONICAL STATUS DETAIL",
+		"Run:",
 		"Nothing was changed: this needs an open project.",
 		"No claims registered under the active goal.",
 		"ADVISORY ROUTE RECOMPUTED (role=qa)",

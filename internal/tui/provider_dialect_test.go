@@ -343,7 +343,7 @@ func TestProviderDialectPTY(t *testing.T) {
 				t.Fatalf("argv=%q want=%q err=%v\n%s", data, tc.argv, err, tail(s.output(), 5000))
 			}
 			s.sendLine("/status")
-			s.mustSee("CANONICAL STATUS DETAIL")
+			s.mustSee("Run:")
 		})
 	}
 }
