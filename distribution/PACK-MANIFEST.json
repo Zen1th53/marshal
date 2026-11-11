@@ -15951,8 +15951,8 @@
     },
     {
       "path": "tools/e2e/board_walk.py",
-      "sha256": "894491b67cd2262359b07399ff3c28d07159c7b746765d45e9d9c4d39ad8e213",
-      "bytes": 9196
+      "sha256": "e3346bffd04dd5df73c23158dcbd4ce266e56cdcf290f7e5fb6e360d4fa3a624",
+      "bytes": 9392
     },
     {
       "path": "tools/e2e/boardseed/main.go",
