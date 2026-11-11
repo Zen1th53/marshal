@@ -75,9 +75,7 @@ type MarshalService struct {
 	// QuotaLeft reports a provider's percent quota left and whether it is
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.
-	QuotaLeft            func(provider string) (left int, known bool)
-	AfterLifecycleEffect func(kind, operationID string) error
-	RecordActivity       func(string)
+	QuotaLeft func(provider string) (left int, known bool)
 	// HeldTask reports whether the owner's change is holding this plan task:
 	// a task the owner asked to pause while they decide a mid-run change.
 	// dispatchReady skips a held task that has not started yet, so it does

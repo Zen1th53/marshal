@@ -268,3 +268,75 @@ func TestBusyAmendTimeoutKeepsCard(t *testing.T) {
 		t.Fatalf("no try-again message: %q", w.state.LastOutput)
 	}
 }
+
+// The ask, requirements and change cards can be open together: they render in
+// that order, above the gates, and Enter goes to the topmost one still open.
+// Each answered card closes and leaves the others open.
+func TestChangeCardBesideAskAndRequirements(t *testing.T) {
+	w, tr := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
+	hp, err := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.applyHold(hp)
+	rp, err := parseMarshalProposal(reqProposalLine(fullReqCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.openRequirements(rp)
+	ap, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.openAsk(ap)
+	if w.currentChange() == nil || w.currentReq() == nil || w.currentAsk() == nil {
+		t.Fatal("the three cards are not all open")
+	}
+
+	text := frameText(w, 160, 80)
+	ask := strings.Index(text, "question · "+exampleAskQuestion)
+	req := strings.Index(text, "requirements · 8 of 8 filled")
+	change := strings.Index(text, "I paused 1 affected task")
+	if ask < 0 || req < 0 || change < 0 {
+		t.Fatalf("a card is missing (ask %d, requirements %d, change %d):\n%s", ask, req, change, text)
+	}
+	if !(ask < req && req < change) {
+		t.Fatalf("render order is not ask, requirements, change (%d, %d, %d):\n%s", ask, req, change, text)
+	}
+
+	// Enter answers the ask first.
+	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+		t.Fatal("Enter was not taken")
+	}
+	chatWaitFor(t, "the ask answer", func() bool { return len(tr.sentTurns()) == 1 })
+	if got := tr.sentTurns()[0]; got != "build on it" {
+		t.Fatalf("first Enter sent %q, want the ask's recommended choice", got)
+	}
+	if w.currentAsk() != nil || w.currentReq() == nil || w.currentChange() == nil {
+		t.Fatal("after the ask, only the ask card should have closed")
+	}
+
+	// Then the requirements card.
+	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+		t.Fatal("Enter was not taken")
+	}
+	chatWaitFor(t, "the confirmation", func() bool { return len(tr.sentTurns()) == 2 })
+	if got := tr.sentTurns()[1]; got != "confirm all" {
+		t.Fatalf("second Enter sent %q, want \"confirm all\"", got)
+	}
+	if w.currentReq() != nil || w.currentChange() == nil {
+		t.Fatal("after confirming, the change card should be the one still open")
+	}
+
+	// Then the change card.
+	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+		t.Fatal("Enter was not taken")
+	}
+	chatWaitFor(t, "the apply message", func() bool { return len(tr.sentTurns()) == 3 })
+	if got := tr.sentTurns()[2]; got != "apply this change" {
+		t.Fatalf("third Enter sent %q, want \"apply this change\"", got)
+	}
+	if card := w.currentChange(); card == nil || !card.applying {
+		t.Fatalf("the change card is not applying: %+v", card)
+	}
+}
