@@ -53,6 +53,7 @@ func (w *workerStallWatch) stalled(now time.Time) bool {
 		return false
 	}
 	files, err := w.scan()
+	scannedAt := time.Now()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if err != nil {
@@ -60,6 +61,9 @@ func (w *workerStallWatch) stalled(now time.Time) bool {
 		return false
 	} // A failed scan cannot prove inactivity.
 	if !sameStamps(w.files, files) {
+		if scannedAt.After(now) {
+			now = scannedAt
+		}
 		w.files, w.last = files, now
 		return false
 	}

@@ -12466,8 +12466,8 @@
     },
     {
       "path": "internal/tui/board_lane_tail_test.go",
-      "sha256": "bde774120607fa6352559bcd2bfe815b3eb31d32d638be7fc1f71ff0969ff8bc",
-      "bytes": 11626
+      "sha256": "f7870c2c07ece68e6f462c3ae399b5b851f9623ce4d466e9a6a9e79237e355b2",
+      "bytes": 11682
     },
     {
       "path": "internal/tui/board_live.go",
@@ -15436,8 +15436,8 @@
     },
     {
       "path": "internal/worker/stall_extreme.go",
-      "sha256": "9d85cdd24cdbe0e329a0d8bb3287994dec0fa1d22afb1e0bf490731f4d964837",
-      "bytes": 2363
+      "sha256": "1394f9b03164ed868e22cd36707060ac833d1ad2619182872b8e4737d1241049",
+      "bytes": 2439
     },
     {
       "path": "internal/worker/stall_extreme_test.go",
