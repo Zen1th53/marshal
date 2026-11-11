@@ -34,6 +34,7 @@ type Workspace struct {
 	taskDiff           taskDiffOverlay
 	attn               attentionState
 	usage              usageState
+	quotaCard          quotaCard
 	proposalMCP        proposalMCPState
 	chat               nativeChatState
 	workers            workerLifecycle

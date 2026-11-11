@@ -99,6 +99,9 @@ type boardVisual struct {
 	guardPrefix string
 	guardArmed  bool
 	guardUndo   guardUndo
+	// quotaArmed is set while the all-providers-at-limit card's auto-resume
+	// is armed (board_quota.go).
+	quotaArmed bool
 	// docked is set while the Marshal chat is docked beside the Board.
 	docked bool
 	// echo is what the operator said to the Marshal from the composer,
@@ -1165,8 +1168,13 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 	out := []string{v.title("INBOX", summary, v.focus == layout.Inbox, w)}
 	if stopped && h > 1 {
 		// The run's stop leads the inbox: it is what holds everything
-		// else up. Its button types the command, the operator runs it.
-		out = append(out, v.stopEntry(stop, p.Rect.X, p.Rect.Y+len(out), w)...)
+		// else up. The all-providers-at-limit pause shows its own card
+		// (board_quota.go); any other stop types the command to run.
+		if v.quotaCardActive() {
+			out = append(out, v.quotaEntry(p.Rect.X, p.Rect.Y+len(out), w)...)
+		} else {
+			out = append(out, v.stopEntry(stop, p.Rect.X, p.Rect.Y+len(out), w)...)
+		}
 		out = out[:min(len(out), h)]
 	}
 	// Project files changed outside a run come next: the Marshal plans

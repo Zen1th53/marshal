@@ -1273,6 +1273,18 @@ func (w *Workspace) returnFromExitedAgent(ctx context.Context, agent *activeTmux
 // overlay or replaces the footer, which answer only what the operator did.
 func (w *Workspace) RecordActivity(msg string) {
 	msg = hideMarshalProtocol(RedactContent(msg, nil))
+	// Consecutive reroutes of the same provider pair within a minute collapse
+	// into one line ("… I moved 2 tasks to …"); the newest entry is replaced
+	// in place (board_quota.go).
+	if collapsed, prev, ok := w.collapseReroute(msg); ok {
+		w.mu.Lock()
+		if w.state.LastOutput != "" && strings.HasSuffix(w.state.LastOutput, prev) {
+			w.state.LastOutput = strings.TrimSuffix(w.state.LastOutput, prev) + collapsed
+		}
+		w.mu.Unlock()
+		w.requestRepaint()
+		return
+	}
 	w.addNote(msg, false)
 	w.mu.Lock()
 	if w.state.LastOutput != "" {

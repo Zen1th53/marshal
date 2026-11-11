@@ -49,6 +49,38 @@ const maxQuotaWait = 5 * time.Minute
 // errWaitingOnQuota marks a task paused until a provider quota resets.
 var errWaitingOnQuota = errors.New("waiting_on_quota")
 
+// quotaWaitError is errWaitingOnQuota with the mode and the reset time the
+// pause records. Its message is unchanged; errors.Is(err, errWaitingOnQuota)
+// still holds, and handleWorkerLimit reads until with errors.As.
+type quotaWaitError struct {
+	mode  marshal.WorkerMode
+	until time.Time
+}
+
+func (e *quotaWaitError) Error() string {
+	return fmt.Sprintf("%v: every provider for %s mode is cooling down until %s", errWaitingOnQuota, e.mode, e.until.UTC().Format(time.RFC3339))
+}
+
+func (e *quotaWaitError) Is(target error) bool { return target == errWaitingOnQuota }
+
+// markKnownEmpty treats a provider the limits reader reports as known-empty
+// (0% left) as cooling: it marks it in providerHealth with its reset time
+// (the limits reader's when known, else defaultCooldown), so the existing
+// cooling, waiting and pausing logic applies to it unchanged.
+func (s *MarshalService) markKnownEmpty(provider string, now time.Time) {
+	if s.QuotaLeft == nil {
+		return
+	}
+	left, known := s.QuotaLeft(provider)
+	if !known || left > 0 {
+		return
+	}
+	if _, cooling := providerHealth.Cooling(provider, now); cooling {
+		return
+	}
+	markProviderUnavailable(provider, now.Add(defaultCooldown))
+}
+
 // selectFailoverWorker picks the next available provider from the failover order.
 // If all matching providers are in cooldown it waits out a short cooldown and
 // reports errWaitingOnQuota for a long one.
@@ -69,6 +101,10 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 		}
 		now := s.clock()
 		var earliest time.Time
+		// Collect every eligible candidate in failover order, then return the
+		// one with the most limit left: the highest known percent first,
+		// unknown candidates after, ties by failover order.
+		var cands []failoverCandidate
 		for offset := 1; offset <= len(order); offset++ {
 			cand := order[(currIdx+offset)%len(order)]
 			d := drivers[cand]
@@ -87,18 +123,34 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 			if s.InstalledVersion != nil && s.InstalledVersion(ctx, cand) == "" {
 				continue
 			}
+			// A provider the limits reader reports known-empty is cooling.
+			s.markKnownEmpty(cand, now)
 			until, limited := getProviderCooldownUntil(cand)
-			if !limited || !now.Before(until) {
-				if mode == marshal.Governed && s.InstalledVersion != nil && !s.workerGovernance(ctx, cand).Governed() {
-					if s.ProbeWorker == nil || s.ProbeWorker(ctx, cand) != nil || !s.workerGovernance(ctx, cand).Governed() {
-						continue
-					}
+			if limited && now.Before(until) {
+				if earliest.IsZero() || until.Before(earliest) {
+					earliest = until
 				}
-				return cand, nil
+				continue
 			}
-			if earliest.IsZero() || until.Before(earliest) {
-				earliest = until
+			if mode == marshal.Governed && s.InstalledVersion != nil && !s.workerGovernance(ctx, cand).Governed() {
+				if s.ProbeWorker == nil || s.ProbeWorker(ctx, cand) != nil || !s.workerGovernance(ctx, cand).Governed() {
+					continue
+				}
 			}
+			c := failoverCandidate{name: cand}
+			if s.QuotaLeft != nil {
+				c.left, c.known = s.QuotaLeft(cand)
+			}
+			cands = append(cands, c)
+		}
+		if len(cands) > 0 {
+			best := 0
+			for i := 1; i < len(cands); i++ {
+				if cands[i].betterThan(cands[best]) {
+					best = i
+				}
+			}
+			return cands[best].name, nil
 		}
 		if earliest.IsZero() {
 			return "", fmt.Errorf("no provider supports %s mode for failover", mode)
@@ -107,7 +159,7 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 		// quota) pauses the task as waiting_on_quota with its reset time
 		// instead of holding the run silently for hours.
 		if wait := earliest.Sub(now); wait > maxQuotaWait {
-			return "", fmt.Errorf("%w: every provider for %s mode is cooling down until %s", errWaitingOnQuota, mode, earliest.UTC().Format(time.RFC3339))
+			return "", &quotaWaitError{mode: mode, until: earliest}
 		}
 		timer := time.NewTimer(earliest.Sub(now))
 		select {
@@ -118,6 +170,28 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 		}
 	}
 
+}
+
+// failoverCandidate is one eligible failover provider and how much of its
+// limit is left, as the limits reader reports it.
+type failoverCandidate struct {
+	name  string
+	left  int
+	known bool
+}
+
+// betterThan ranks candidates for "most limit left": a known percent beats
+// an unknown one, a higher known percent beats a lower, and equal or both
+// unknown keep failover order (the caller holds them in it and takes the
+// first, so a later equal is never better).
+func (c failoverCandidate) betterThan(other failoverCandidate) bool {
+	if c.known != other.known {
+		return c.known
+	}
+	if c.known {
+		return c.left > other.left
+	}
+	return false
 }
 
 // handleWorkerLimit performs automatic provider failover under the Marshal build tag.
@@ -192,10 +266,16 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		t.EscalationCode = escalationCode(baseCode, t.EscalationReason)
 		run.Operation = nil
 		resolution := "retry after resolving provider availability"
+		pause := marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{resolution}, Code: baseCode, Action: marshal.PauseResume}
 		if errors.Is(err, errWaitingOnQuota) {
-			resolution = "resume after the provider quota resets"
+			pause.Resolutions = []string{"resume after the provider quota resets"}
+			pause.Kind = "quota"
+			var qerr *quotaWaitError
+			if errors.As(err, &qerr) {
+				pause.Until = qerr.until
+			}
 		}
-		pauseMarshal(&run, marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{resolution}, Code: baseCode, Action: marshal.PauseResume})
+		pauseMarshal(&run, pause)
 		return handin, errors.Join(err, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, run, rev, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": t.EscalationReason}))
 	}
 
@@ -261,10 +341,6 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	if run.Process05Parallel && run.Process05Bound && t.Mode == marshal.Governed {
 		t.LaneReworkBase++
 	}
-	// A failed lane is retained; the replacement opens the next attempt.
-	if run.Process05Parallel && run.Process05Bound && t.Mode == marshal.Governed {
-		t.LaneReworkBase++
-	}
 	t.ProviderFailovers++
 	t.ProviderFailoverPending = true
 	t.FailoverBrief = dispatch.Handle.Request().Brief
@@ -289,10 +365,9 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 
 	committed = true
 
-	// Show failover in activity
-	actMsg := fmt.Sprintf("Failover: provider %s hit limit (%s); reassigning task %s to %s (cooldown %v)", currentWorker, reason, dispatch.TaskID, nextWorker, cooldown)
+	// Show failover in activity, in one plain line.
 	if s.RecordActivity != nil {
-		s.RecordActivity(actMsg)
+		s.RecordActivity(rerouteActivity(currentWorker, 1, nextWorker))
 	}
 
 	elapsed := s.clock().Sub(dispatch.Started)
@@ -302,6 +377,17 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	_, chargeErr := s.Charge(context.WithoutCancel(ctx), runID, dispatch.TaskID, "failover_reassign", marshal.Charge{Tokens: marshal.Amount{Known: false}, Money: marshal.Amount{Known: false}, WallTime: elapsed})
 
 	return marshal.HandIn{}, chargeErr
+}
+
+// rerouteActivity is the one plain line a reroute shows: canonical provider
+// names, no task ids and no cooldown. The TUI collapses consecutive
+// identical-pair lines within a minute into one, so its wording is fixed.
+func rerouteActivity(from string, n int, to string) string {
+	noun := "task"
+	if n != 1 {
+		noun = "tasks"
+	}
+	return fmt.Sprintf("%s reached its limit — I moved %d %s to %s.", providerHealthKey(from), n, noun, providerHealthKey(to))
 }
 
 func isProviderFailover(t marshal.Task) bool {
@@ -331,7 +417,10 @@ func (s *MarshalService) saveFailoverDecision(ctx context.Context, runID string,
 // cooling provider, including calls made directly to Dispatch.
 func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string, run *marshal.Run, rev int64, index int, brief string) (int64, error) {
 	t := &run.Tasks[index]
-	if !isProviderUnavailable(t.Worker, s.clock()) {
+	now := s.clock()
+	// A worker the limits reader reports known-empty is cooling too.
+	s.markKnownEmpty(t.Worker, now)
+	if !isProviderUnavailable(t.Worker, now) {
 		return rev, nil
 	}
 	drivers := s.Drivers
@@ -368,7 +457,7 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 		return rev, err
 	}
 	if s.RecordActivity != nil {
-		s.RecordActivity(fmt.Sprintf("Failover: task %s skips cooling provider %s; assigned to %s", t.PlanTaskID, previous, next))
+		s.RecordActivity(rerouteActivity(previous, 1, next))
 	}
 	return rev + 1, nil
 }

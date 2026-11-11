@@ -394,6 +394,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.ask = w.currentAsk()
 	v.req = w.currentReq()
 	v.guard, v.guardPrefix, v.guardArmed, v.guardUndo = w.guardPaint()
+	v.quotaArmed = w.quotaCard.isArmed()
 	if empty {
 		v.project = filepath.Base(w.providerRoot())
 		v.chips, v.armed = w.firstUseChips(v.now), w.firstUseArmed()
@@ -597,6 +598,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	// An owner gate's armed reply takes the next key: Enter sends it,
 	// anything else cancels. y arms the first gate still waiting.
 	if w.handleGateKey(event, w.state.Marshal) {
+		return true
+	}
+	// The all-providers-at-limit card's keys: r arms auto-resume, s stops
+	// here (board_quota.go).
+	if w.handleQuotaKey(event, p.Board.Run) {
 		return true
 	}
 	// s opens the composer for a message to the Marshal, from the Board
