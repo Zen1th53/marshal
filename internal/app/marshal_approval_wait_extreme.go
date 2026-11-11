@@ -222,12 +222,19 @@ func (s *MarshalService) pausePrivateProcess05Approval(ctx context.Context, runI
 	// approval does not hold the others: Execute keeps dispatching and
 	// reviewing them, and pauses only when nothing but waits remain.
 	if pending && !parallelProcess05Waits(s.Gate, run) {
-		pauseMarshal(&run, marshal.Pause{Reason: wait.Error(), Resolutions: []string{process05WaitResolution}, ResumeState: marshal.Dispatching, Code: marshal.CodeApprovalWait, Action: marshal.PauseResume})
+		pauseMarshal(&run, marshal.Pause{Reason: approvalWaitReason(1), Resolutions: []string{process05WaitResolution}, Detail: wait.Error(), ResumeState: marshal.Dispatching, Code: marshal.CodeApprovalWait, Action: marshal.PauseResume})
 	}
 	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 }
 
-const process05WaitResolution = "let the bound Marshal decide the exact pending approval, then resume"
+const process05WaitResolution = "When the Marshal has decided, press Enter to continue."
+
+func approvalWaitReason(count int) string {
+	if count == 1 {
+		return "A task is waiting for the Marshal's go-ahead."
+	}
+	return fmt.Sprintf("%d tasks are waiting for the Marshal's go-ahead.", count)
+}
 
 // parallelProcess05Waits reports whether an approved ULTRA plan runs its
 // governed tasks in isolated lanes, where an approval wait is per task.
@@ -363,7 +370,7 @@ func (s *MarshalService) pausePrivateProcess05Waits(ctx context.Context, runID s
 	if cleared, err := s.clearExpiredProcess05Waits(ctx, runID, run, rev); cleared || err != nil {
 		return cleared, err
 	}
-	var reasons []string
+	var details []string
 	for _, task := range run.Tasks {
 		if task.Process05WaitApprovalID == "" || task.State != marshal.Queued {
 			continue
@@ -375,12 +382,12 @@ func (s *MarshalService) pausePrivateProcess05Waits(ctx context.Context, runID s
 		if !pending {
 			return true, nil // decided: the next round's dispatch continues it
 		}
-		reasons = append(reasons, (&process05ApprovalWait{task.Process05WaitRunID, task.PlanTaskID, task.Process05WaitApprovalID}).Error())
+		details = append(details, (&process05ApprovalWait{task.Process05WaitRunID, task.PlanTaskID, task.Process05WaitApprovalID}).Error())
 	}
-	if len(reasons) == 0 {
+	if len(details) == 0 {
 		return false, nil
 	}
-	pauseMarshal(&run, marshal.Pause{Reason: strings.Join(reasons, "; "), Resolutions: []string{process05WaitResolution}, ResumeState: marshal.Dispatching, Code: marshal.CodeApprovalWait, Action: marshal.PauseResume})
+	pauseMarshal(&run, marshal.Pause{Reason: approvalWaitReason(len(details)), Resolutions: []string{process05WaitResolution}, Detail: strings.Join(details, "; "), ResumeState: marshal.Dispatching, Code: marshal.CodeApprovalWait, Action: marshal.PauseResume})
 	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 }
 

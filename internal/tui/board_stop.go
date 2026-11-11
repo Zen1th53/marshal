@@ -2,7 +2,6 @@ package tui
 
 import (
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -25,43 +24,62 @@ type runStop struct {
 	next     string
 	commands []string
 	code     string
+	verb     string
+	action   marshal.PauseAction
 }
-
-// stopCommandRE finds the operator commands a pause resolution names.
-var stopCommandRE = regexp.MustCompile(`/marshal [a-z][a-z-]*`)
-
-// defaultStopNext is what resolves a pause that recorded no resolution:
-// the same advice the run's note gives (marshalOutcomeNote).
-const defaultStopNext = "see the escalated task, then /marshal amend or /marshal resume"
 
 // stopNotice is the run's stop, if it stopped.
 func (v boardVisual) stopNotice() (runStop, bool) {
 	run := v.board.Run
 	if run.State == marshal.AwaitingUser {
-		s := runStop{waiting: true, reason: firstLine(run.Paused), next: firstLine(strings.Join(run.Next, "; ")), code: run.PauseCode}
+		s := runStop{waiting: true, reason: firstLine(run.Paused), next: firstLine(strings.Join(run.Next, "; ")), code: run.PauseCode, action: run.PauseAction}
 		if s.reason == "" {
-			s.reason = "the run needs your decision"
+			s.reason = "The run needs your decision."
 		}
+		task := run.PauseTask
+		if s.action == "" {
+			// Paused by an older build: its resolution named the commands.
+			s.action, task = legacyPauseAction(strings.Join(run.Next, "; "))
+		}
+		s.verb = stopVerb(s.action)
+		s.commands = pauseCommands(s.action, task)
 		if s.next == "" {
-			s.next = defaultStopNext
-		}
-		if run.PauseAction != "" {
-			s.commands = pauseCommands(run.PauseAction, run.PauseTask)
-		} else {
-			s.commands = stopCommands(s.next) // paused by an older build
+			s.next = "Press Enter to " + s.verb + "."
 		}
 		return s, true
 	}
-	note := strings.TrimSpace(v.note)
 	if v.stopped && run.State != marshal.Closed {
-		reason := strings.TrimPrefix(note, "stopped: ")
-		s := runStop{reason: firstLine(reason), next: "fix the cause above, then /marshal resume", commands: []string{"/marshal resume"}}
-		if s.reason == "" {
-			s.reason = "the run's execution ended"
+		s := runStop{reason: "The run stopped unexpectedly.", next: "Press Enter to try again.", commands: []string{"/marshal resume"}, verb: "try again"}
+		if cause, ok := strings.CutPrefix(strings.TrimSpace(v.note), "stopped: "); ok {
+			if at := approvalRequiredRE.FindStringIndex(cause); at != nil {
+				s.reason = firstLine(cause[at[0]:])
+			}
 		}
 		return s, true
 	}
 	return runStop{}, false
+}
+
+// approvalRequiredRE matches the governed build's Process 05 approval
+// refusal (marshal_approval_wait_default.go). It stops execution instead of
+// pausing the run, and its approval id is what /marshal approve-task needs,
+// so the stop shows it instead of the generic sentence.
+var approvalRequiredRE = regexp.MustCompile(`process 05: approval [A-Za-z0-9-]+ required`)
+
+// legacyRetryRE finds the task an older build's resolution told the
+// operator to retry ("… then /marshal retry T-3 and /marshal resume").
+var legacyRetryRE = regexp.MustCompile(`/marshal retry ([A-Za-z0-9][A-Za-z0-9._-]*)`)
+
+// legacyPauseAction is the action a pause without one (written before
+// pauses carried an action) asks for, read from its resolution text.
+func legacyPauseAction(next string) (marshal.PauseAction, string) {
+	if m := legacyRetryRE.FindStringSubmatch(next); m != nil {
+		return marshal.PauseRetryTask, m[1]
+	}
+	if strings.Contains(next, "/marshal use-plan") {
+		return marshal.PauseUsePlan, ""
+	}
+	return marshal.PauseResume, ""
 }
 
 // pauseCommands is what Enter runs for a pause, from its action.
@@ -80,19 +98,15 @@ func firstLine(s string) string {
 	return cleanBoard(strings.TrimSpace(s))
 }
 
-// stopCommands is the distinct commands text names, "/marshal resume"
-// when it names none.
-func stopCommands(text string) []string {
-	var out []string
-	for _, c := range stopCommandRE.FindAllString(text, -1) {
-		if !slices.Contains(out, c) {
-			out = append(out, c)
-		}
+func stopVerb(action marshal.PauseAction) string {
+	switch action {
+	case marshal.PauseRetryTask:
+		return "retry the task"
+	case marshal.PauseUsePlan:
+		return "tell the Marshal what to change"
+	default:
+		return "continue"
 	}
-	if len(out) == 0 {
-		out = []string{"/marshal resume"}
-	}
-	return out
 }
 
 // layoutCounts is what the Board's panes hold, for the layout. A run's
@@ -136,21 +150,19 @@ func (v boardVisual) runWord() (string, string) {
 	return "running", "accent"
 }
 
-// stopLine is the footer's one-line notice: why, then the command to type.
+// stopLine is the footer's one-line notice and its Enter action.
 func (v boardVisual) stopLine(s runStop) string {
-	color, word := "failed", "run stopped: "
+	color, word := "failed", "stopped"
 	if s.waiting {
-		color, word = "waiting", "run waits for you: "
+		color, word = "waiting", "waits for you"
 	}
-	// The command comes first: a narrow footer cuts the reason, which the
-	// inbox's entry shows whole, never what to type.
-	return v.fg(color, "▮ "+strings.TrimSuffix(word, ": ")) + v.fg("dim", " · type ") + v.bold(strings.Join(s.commands, " or ")) + v.fg("dim", " · ") + s.reason
+	if v.stopArmed {
+		return v.fg("waiting", "Press Enter again to "+s.verb+". Any other key cancels.")
+	}
+	return v.fg(color, "▮ "+word) + v.fg("dim", " · ") + s.reason + v.fg("dim", " · Enter: ") + v.bold(s.verb)
 }
 
-// stopEntry is the stop as the inbox's first entry, two rows: what stopped
-// and why, then a button per command (a click types it into the composer,
-// never runs it) and the run's own advice. x is the inbox's first cell,
-// row its frame row.
+// stopEntry is the stop as the inbox's first entry, with one Enter button.
 func (v boardVisual) stopEntry(s runStop, x, row, w int) []string {
 	color, what := "failed", " stopped · "
 	if s.waiting {
@@ -161,18 +173,8 @@ func (v boardVisual) stopEntry(s runStop, x, row, w int) []string {
 		flag = "! "
 	}
 	first := v.fg(color, flag+"run") + v.fg("dim", what) + v.bold(v.fg("white", s.reason))
-	second, at := "    ", 4
-	for i, c := range s.commands {
-		if i > 0 {
-			second += v.fg("dim", " or ")
-			at += 4
-		}
-		second += v.fg("dim", "type › ") + v.bg("rule", v.fg("white", c))
-		v.hit(boardHit{row: row + 1, x0: x + at, x1: x + min(w, at+7+VisibleLen(c)), kind: hitCommand, id: c})
-		at += 7 + VisibleLen(c)
-	}
-	if rest := strings.TrimSpace(s.next); rest != "" && rest != strings.Join(s.commands, " or ") {
-		second += v.fg("dim", "  "+rest)
-	}
+	button := "[Enter]"
+	second := "    " + v.bg("rule", button) + " " + s.verb + "   " + v.fg("dim", s.next)
+	v.hit(boardHit{row: row + 1, x0: x + 4, x1: x + min(w, 4+VisibleLen(button)), kind: hitStop})
 	return []string{PadCell(first, w), PadCell(second, w)}
 }

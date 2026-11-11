@@ -81,6 +81,16 @@ func (s *MarshalService) markKnownEmpty(provider string, now time.Time) {
 	markProviderUnavailable(provider, now.Add(defaultCooldown))
 }
 
+// formatLocalUntil is a reset time in local time: the clock alone today,
+// the weekday and date otherwise.
+func formatLocalUntil(t time.Time, now time.Time) string {
+	local, current := t.Local(), now.Local()
+	if local.Year() == current.Year() && local.YearDay() == current.YearDay() {
+		return local.Format("15:04")
+	}
+	return local.Format("Mon 2 Jan 15:04")
+}
+
 // selectFailoverWorker picks the next available provider from the failover order.
 // If all matching providers are in cooldown it waits out a short cooldown and
 // reports errWaitingOnQuota for a long one.
@@ -209,11 +219,13 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 			return
 		}
 		r.Tasks[idx].State = marshal.Escalated
-		r.Tasks[idx].EscalationReason = "provider failover interrupted: " + retErr.Error()
+		machine := "provider failover interrupted: " + retErr.Error()
+		r.Tasks[idx].EscalationReason = machine
 		r.Tasks[idx].EscalationCode = escalationCode(marshal.CodeFailoverInterrupted, r.Tasks[idx].EscalationReason)
 		r.Operation = nil
-		pauseMarshal(&r, marshal.Pause{Reason: r.Tasks[idx].EscalationReason, Resolutions: []string{"inspect retained limited attempt and retry"}, Code: marshal.CodeFailoverInterrupted, Action: marshal.PauseResume})
-		retErr = errors.Join(retErr, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, r, v, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": r.Tasks[idx].EscalationReason}))
+		plain := "Moving a task to another AI provider was interrupted."
+		pauseMarshal(&r, marshal.Pause{Reason: plain, Resolutions: []string{"Press Enter to try again."}, Detail: machine, Code: marshal.CodeFailoverInterrupted, Action: marshal.PauseResume})
+		retErr = errors.Join(retErr, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, r, v, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": machine, "summary": plain}))
 	}()
 	run, rev, loadErr := s.load(context.WithoutCancel(ctx), runID)
 	if loadErr != nil {
@@ -258,25 +270,28 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	}
 	if err != nil {
 		t.State = marshal.Escalated
-		t.EscalationReason = "provider failover: " + err.Error()
+		machine := "provider failover: " + err.Error()
+		t.EscalationReason = machine
 		baseCode := marshal.CodeProviderFailover
 		if errors.Is(err, errWaitingOnQuota) {
 			baseCode = marshal.CodeProviderQuota
 		}
 		t.EscalationCode = escalationCode(baseCode, t.EscalationReason)
 		run.Operation = nil
-		resolution := "retry after resolving provider availability"
-		pause := marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{resolution}, Code: baseCode, Action: marshal.PauseResume}
+		reason := "No other AI provider can take this task."
+		pause := marshal.Pause{Resolutions: []string{"Add or check a provider on the Providers view (press 4), then press Enter to retry."}, Detail: machine, Code: baseCode, Action: marshal.PauseResume}
 		if errors.Is(err, errWaitingOnQuota) {
-			pause.Resolutions = []string{"resume after the provider quota resets"}
+			pause.Resolutions = []string{"Press Enter after that time to continue."}
 			pause.Kind = "quota"
 			var qerr *quotaWaitError
 			if errors.As(err, &qerr) {
 				pause.Until = qerr.until
+				reason = "All AI providers are at their usage limit until " + formatLocalUntil(qerr.until, s.clock()) + "."
 			}
 		}
+		pause.Reason = reason
 		pauseMarshal(&run, pause)
-		return handin, errors.Join(err, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, run, rev, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": t.EscalationReason}))
+		return handin, errors.Join(err, s.saveFailoverDecision(context.WithoutCancel(ctx), runID, run, rev, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": machine, "summary": reason}))
 	}
 
 	// Archive the limited attempt, including dirty files, while retaining the
@@ -348,6 +363,8 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
+	// The audit summary is the same plain line Activity shows.
+	actMsg := rerouteActivity(currentWorker, 1, nextWorker)
 
 	// Audit every failover
 	auditData := map[string]any{
@@ -355,6 +372,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		"previous_worker":   currentWorker,
 		"worker":            nextWorker,
 		"reason":            reason,
+		"summary":           actMsg,
 		"cooldown":          cooldown.String(),
 		"retained_worktree": archivePath,
 		"retained_ref":      ref,
@@ -367,7 +385,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 
 	// Show failover in activity, in one plain line.
 	if s.RecordActivity != nil {
-		s.RecordActivity(rerouteActivity(currentWorker, 1, nextWorker))
+		s.RecordActivity(actMsg)
 	}
 
 	elapsed := s.clock().Sub(dispatch.Started)

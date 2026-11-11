@@ -27,9 +27,7 @@ const (
 	// hitInspect is a button of the inspector's action row: the key it
 	// names, pressed in the inspector on that task.
 	hitInspect boardHitKind = "inspect"
-	// hitCommand is the command a stopped run's notice names: a click
-	// types it into the composer for the operator to run with Enter.
-	hitCommand boardHitKind = "command"
+	hitStop    boardHitKind = "stop"
 	// hitVerify is a provider on the first-use card: a click arms its
 	// verify, which Enter runs.
 	hitVerify boardHitKind = "verify"
@@ -182,8 +180,9 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		}
 	case hitChip:
 		w.openChip(h.id)
-	case hitCommand:
-		w.composer.SetText(h.id)
+	case hitStop:
+		w.boardUI.focus = layout.Inbox
+		w.handleBoardKey(KeyEvent{Type: KeyEnter})
 	case hitVerify:
 		w.armFirstUseVerify(h.id)
 	case hitNote:

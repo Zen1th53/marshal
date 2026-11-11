@@ -75,8 +75,8 @@ func TestAttentionSnapshot(t *testing.T) {
 		t.Fatalf("waiting: %+v", s)
 	}
 	p.Board.Run.State = marshal.Dispatching
-	p.Note, p.Stopped = "stopped: worker failed", true
-	if s := w.attentionNow(); s.needsYou || !s.stopped || s.stopNote != "worker failed" {
+	p.Note, p.Stopped = "The run stopped unexpectedly.", true
+	if s := w.attentionNow(); s.needsYou || !s.stopped || s.stopNote != "The run stopped unexpectedly." {
 		t.Fatalf("stop: %+v", s)
 	}
 	p.Board.Run.State = marshal.Closed

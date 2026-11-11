@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
@@ -82,6 +83,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	}
 	data := map[string]any{
 		"reason":                note,
+		"summary":               fmt.Sprintf("%s: %s hit a %s. Retrying (%d of %d); this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), ProviderDisplayName(t.Worker), plainInfraKind(kind), t.InfraRetries, infraRetryLimit),
 		"return_attempt":        fmt.Sprint(attempt),
 		"return_reasons":        []string{note},
 		"counted":               false,
@@ -98,17 +100,22 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	kindEvent := events.EventTypeMarshalTaskReturned
 	if recoveryErr != nil {
 		t.State = marshal.Escalated
-		t.EscalationReason = "failed attempt recovery: " + recoveryErr.Error()
+		machine := "failed attempt recovery: " + recoveryErr.Error()
+		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeFailedAttemptRecovery, t.EscalationReason)
-		pauseMarshal(&run, marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{"inspect and preserve the retained worktree; resolve its identity or dirty changes, then /marshal retry " + t.PlanTaskID + " and /marshal resume"}, Code: marshal.CodeFailedAttemptRecovery, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
-		data["reason"] = t.EscalationReason
+		plain := "A failed attempt left work behind, and Marshal kept it."
+		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{"Press Enter to retry the task; the kept work stays in its own branch."}, Detail: machine, Code: marshal.CodeFailedAttemptRecovery, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
+		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
 	} else if t.InfraRetries > infraRetryLimit {
 		t.State = marshal.Escalated
-		t.EscalationReason = fmt.Sprintf("%s: %d attempts ended without a hand-in; last on %s (%s): %s", infraRetryEscalation, t.InfraRetries, t.Worker, kind, reason)
+		machine := fmt.Sprintf("%s: %d attempts ended without a hand-in; last on %s (%s): %s", infraRetryEscalation, t.InfraRetries, t.Worker, kind, reason)
+		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
-		pauseMarshal(&run, marshal.Pause{Reason: t.EscalationReason, Resolutions: []string{"resolve the provider or tool failure, then /marshal retry " + t.PlanTaskID + " and /marshal resume"}, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
-		data["reason"] = t.EscalationReason
+		provider := ProviderDisplayName(t.Worker)
+		plain := fmt.Sprintf("%s failed %d times in a row (%s).", provider, t.InfraRetries, plainInfraKind(kind))
+		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{fmt.Sprintf("Check %s on the Providers view (press 4), then press Enter to retry.", provider)}, Detail: machine, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
+		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
 	} else {
 		t.State = marshal.Returned
@@ -123,7 +130,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		return err
 	}
 	if s.RecordActivity != nil {
-		s.RecordActivity(fmt.Sprintf("Task %s: %s (infra retry %d of %d)", t.PlanTaskID, note, t.InfraRetries, infraRetryLimit))
+		s.RecordActivity(data["summary"].(string))
 	}
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return err

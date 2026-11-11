@@ -32,8 +32,9 @@ type boardVisual struct {
 	// edition is the build named in the header; empty names none.
 	edition string
 	// note is the run's latest note to the operator, shown in the footer.
-	note    string
-	stopped bool
+	note      string
+	stopped   bool
+	stopArmed bool
 	// status replaces the footer's keys: the composer while typing, or the
 	// last command's answer until the next key.
 	status string

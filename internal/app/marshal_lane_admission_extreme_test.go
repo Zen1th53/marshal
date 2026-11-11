@@ -54,7 +54,7 @@ func TestExtremeLaneAdmissionRefusalEscalatesWithoutSpendingRework(t *testing.T)
 		t.Fatalf("a lane refusal spent %d rework", n)
 	}
 	// The sibling lane may still be merging; the pause holds the run either way.
-	if run.Pause == nil || !strings.Contains(run.Pause.Reason, laneAdmissionEscalation) {
+	if run.Pause == nil || run.Pause.Reason != "A task couldn't start: its workspace didn't match the approved plan. Nothing ran." || !strings.HasPrefix(run.Pause.Detail, laneAdmissionEscalation+": ") {
 		t.Fatalf("run was not paused for the refusal: %s %+v", run.State, run.Pause)
 	}
 	mu.Lock()

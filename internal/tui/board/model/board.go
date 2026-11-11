@@ -399,7 +399,10 @@ func NewActivityLine(e events.Event) (ActivityLine, bool) {
 	if !activityTypes[e.Type] {
 		return ActivityLine{}, false
 	}
-	detail, _ := e.Data["reason"].(string)
+	detail, _ := e.Data["summary"].(string)
+	if detail == "" {
+		detail, _ = e.Data["reason"].(string)
+	}
 	if detail == "" {
 		detail, _ = e.Data["worker"].(string)
 	}

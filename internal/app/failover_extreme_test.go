@@ -353,13 +353,16 @@ func TestExtremeFailover_Audit(t *testing.T) {
 	}
 	foundActivity := false
 	for _, msg := range activityLog {
-		if strings.Contains(msg, "codex") && strings.Contains(msg, "agy") && strings.Contains(msg, "reached its limit") {
+		if msg == "codex reached its limit — I moved 1 task to agy." {
 			foundActivity = true
 			break
 		}
 	}
 	if !foundActivity {
 		t.Fatalf("activity log did not describe failover: %v", activityLog)
+	}
+	if failoverEvent.Data["summary"] != "codex reached its limit — I moved 1 task to agy." {
+		t.Fatalf("failover summary is not the Activity line: %v", failoverEvent.Data["summary"])
 	}
 }
 
@@ -666,6 +669,8 @@ func TestExtremeFailover_LongQuotaPausesAsWaitingOnQuota(t *testing.T) {
 	t.Cleanup(ResetProviderCooldowns)
 
 	s, _ := marshalFixture(t, 1)
+	now := time.Date(2026, time.January, 2, 12, 4, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
 	startIntegrityRun(t, s, marshal.Budget{})
 	run, rev, _ := s.load(t.Context(), "run")
 	run.Tasks[0].Worker = "codex"
@@ -693,8 +698,15 @@ func TestExtremeFailover_LongQuotaPausesAsWaitingOnQuota(t *testing.T) {
 		t.Fatalf("want waiting_on_quota, got %v", err)
 	}
 	after, _, _ := s.load(t.Context(), "run")
-	if after.Tasks[0].State != marshal.Escalated || !strings.Contains(after.Tasks[0].EscalationReason, "waiting_on_quota") || after.Pause == nil {
+	wantTime := formatLocalUntil(now.Add(103*time.Hour), now)
+	if after.Tasks[0].State != marshal.Escalated || !strings.Contains(after.Tasks[0].EscalationReason, "waiting_on_quota") || after.Pause == nil || after.Pause.Reason != "All AI providers are at their usage limit until "+wantTime+"." {
 		t.Fatalf("task not paused as waiting_on_quota: %+v pause=%+v", after.Tasks[0], after.Pause)
+	}
+	if after.Pause.Detail != after.Tasks[0].EscalationReason {
+		t.Fatalf("machine detail changed: %+v", after.Pause)
+	}
+	if after.Pause.Kind != "quota" || !after.Pause.Until.Equal(now.Add(103*time.Hour)) {
+		t.Fatalf("quota pause lost its kind or reset time: %+v", after.Pause)
 	}
 }
 
