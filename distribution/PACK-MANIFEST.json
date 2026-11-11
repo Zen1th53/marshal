@@ -12626,8 +12626,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "0dd52e6f4709b90f37b17c583040ca3b2f4a70d10b252e22a3df48d6f8fd1487",
-      "bytes": 31282
+      "sha256": "c6d88fb32605082caf87eb16b6b330e31c164782c69485fa266c34445641fa42",
+      "bytes": 31656
     },
     {
       "path": "internal/tui/commands_alignment.go",
@@ -12721,13 +12721,13 @@
     },
     {
       "path": "internal/tui/commands_goal.go",
-      "sha256": "9a6187a0f86ca9533d0ef410169eba1600d23aeddb579d53170e7ed17576602a",
-      "bytes": 10103
+      "sha256": "34c983b7586d9710808ce9188d0c4058953a3599d0a2e9c0f86497c3b77d7de5",
+      "bytes": 10638
     },
     {
       "path": "internal/tui/commands_goal_cancel_test.go",
-      "sha256": "dbc00f62fd6fd37b07bd4987b3ac3d16731e7fc38043abb07e9310106b40f10c",
-      "bytes": 3213
+      "sha256": "4237c2d491f22ac3114c05f9860dc41640fcd05e56646cebd760a91494af6ea8",
+      "bytes": 5327
     },
     {
       "path": "internal/tui/commands_integrations.go",
@@ -15271,8 +15271,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "bff4b0c9bd7dbccc3337af09b2e15be63473fe2a941ca49991260d1a4718f980",
-      "bytes": 87859
+      "sha256": "1a010a20f98b87a6a671fc0a394eeae001b52b91b613abf65e6c4eaffeec2fd7",
+      "bytes": 88506
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

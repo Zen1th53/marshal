@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -116,10 +117,12 @@ func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, text st
 	return h.handleGoalMutation(ctx, "rm-constraint", text)
 }
 
-// handleGoalCancel routes /goal cancel through the same prepared, revision-bound
-// destructive confirmation the Control menu uses. It never cancels directly: the
-// reason is carried into the Cancel/Proceed dialog, and the goal is cancelled
-// only on an acknowledged Proceed against the exact revision that was reviewed.
+// handleGoalCancel confirms /goal cancel in the composer, the same two-step way
+// /ultra stop does. It never cancels directly: /goal cancel <reason> reads and
+// remembers the exact goal revision and asks the person to type /goal cancel
+// confirm, and only that confirmation submits the prepared, revision-bound
+// cancellation through the CTUI-0048 binding — the single governed path where
+// the re-read and the idempotency key keep the enforcement intact.
 func (h *CommandHandler) handleGoalCancel(ctx context.Context, reason string) (string, error) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -136,43 +139,55 @@ func (h *CommandHandler) handleGoalCancel(ctx context.Context, reason string) (s
 	if goal.ID == "" {
 		return "No active goal to cancel.", nil
 	}
-	if err := h.ws.openGoalCancellationConfirmation(ctx, reason); err != nil {
-		return fmt.Sprintf("Goal cancellation could not be prepared: %v", err), nil
+	binding, ok := source.Bindings()[ActionID("CTUI-0048")]
+	if !ok || !binding.Bound() {
+		return "Goal cancellation isn't available in this version.", nil
 	}
-	return "Goal cancellation needs confirmation.\n" +
-		"  In the dialog, press 'y' to acknowledge, then → or Tab to Proceed and Enter.\n" +
-		"  Esc keeps the goal.", nil
+
+	if strings.EqualFold(reason, "confirm") {
+		p := h.ws.takeGoalCancel()
+		if p == nil {
+			return "Nothing to confirm. Type /goal cancel <reason> first.", nil
+		}
+		current, err := binding.Prepare(ctx)
+		if err != nil {
+			return "The goal changed since you asked, so nothing was cancelled. Type /goal cancel <reason> again.", nil
+		}
+		if moved, _ := targetMoved(p.target, current); moved {
+			return "The goal changed since you asked, so nothing was cancelled. Type /goal cancel <reason> again.", nil
+		}
+		req := ActionRequest{Action: binding.Action, Title: binding.Title, Safety: binding.Safety, Target: current,
+			SessionID: source.SessionID, ProjectID: source.ProjectID, Inputs: map[string]string{"reason": p.reason},
+			IdempotencyKey: p.key, PreparedAt: time.Now()}
+		outcome, err := binding.Execute(ctx, req)
+		if err == nil && outcome.Succeeded() {
+			return "The goal was cancelled.", nil
+		}
+		detail := firstLine(outcome.Detail)
+		if detail == "" && err != nil {
+			detail = firstLine(err.Error())
+		}
+		return "The goal was not cancelled: " + detail, nil
+	}
+
+	target, err := binding.Prepare(ctx)
+	if err != nil {
+		return "The goal can't be cancelled right now: " + firstLine(err.Error()), nil
+	}
+	h.ws.askGoalCancel(&pendingGoalCancel{target: target, reason: reason, key: uuid.NewString()})
+	return fmt.Sprintf("This cancels the current goal: \"%s\".\n"+
+		"  Type /goal cancel confirm to cancel it. Any other command keeps the goal.",
+		goalCancelSummary(goal.DesiredOutcome)), nil
 }
 
-// openGoalCancellationConfirmation prepares the exact current goal revision and
-// opens the destructive Cancel/Proceed confirmation the Control menu uses, with
-// the reason pre-filled. Cancellation happens only on an acknowledged Proceed,
-// so the slash command and the menu share one governed path.
-func (w *Workspace) openGoalCancellationConfirmation(ctx context.Context, reason string) error {
-	if w.navView == nil {
-		return errors.New("the navigation surface is unavailable")
+// goalCancelSummary renders the goal statement for the confirmation prompt: its
+// first line, at most 80 runes, with a trailing … when it was cut.
+func goalCancelSummary(outcome string) string {
+	r := []rune(firstLine(outcome))
+	if len(r) <= 80 {
+		return string(r)
 	}
-	source := w.controlSource()
-	if source == nil || source.Authority == nil {
-		return errors.New("no execution authority is attached to this workspace")
-	}
-	binding, ok := source.Bindings()[ActionID("CTUI-0048")]
-	if !ok {
-		return errors.New("goal cancellation is unavailable in this build")
-	}
-	// Open navigation so the confirmation owns the screen and the keyboard.
-	w.openNavigation(ctx)
-	w.navView.AttachControl(source)
-	confirm := w.navView.Confirmation()
-	w.navView.configureConfirmation(confirm)
-	return confirm.Begin(ctx, binding, ActionRequest{
-		Action:    binding.Action,
-		Title:     binding.Title,
-		Safety:    binding.Safety,
-		SessionID: source.SessionID,
-		ProjectID: source.ProjectID,
-		Inputs:    map[string]string{"reason": reason},
-	})
+	return string(r[:79]) + "…"
 }
 
 // goalCommandText removes the command and verb, preserving the argument's
