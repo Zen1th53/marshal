@@ -149,7 +149,7 @@ func TestGuardTickDetectsOnceAndTellsOnce(t *testing.T) {
 	}
 
 	text := frameText(w, 120, 40)
-	head := strings.SplitN(text, "\n", 2)[0]
+	head := strings.Split(text, "\n")[1]
 	if !strings.Contains(head, "NEEDS YOU") || !strings.Contains(head, "inbox 1") {
 		t.Fatalf("header: %q", head)
 	}

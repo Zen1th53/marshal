@@ -251,6 +251,14 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 	}
 }
 
+// screenShown reports whether any TUI screen is up: the vitals row and the
+// provider quota behind it are kept live on every screen, not just the Board.
+func (w *Workspace) screenShown() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.screen != nil
+}
+
 func (w *Workspace) boardVisible() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()

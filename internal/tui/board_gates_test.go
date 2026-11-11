@@ -30,7 +30,7 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	w.refreshGates(t.Context())
 
 	text := frameText(w, 120, 40)
-	head := strings.SplitN(text, "\n", 2)[0]
+	head := strings.Split(text, "\n")[1]
 	if !strings.Contains(head, "NEEDS YOU") || strings.Contains(head, "NO RUN YET") || !strings.Contains(head, "inbox 1") {
 		t.Fatalf("header does not say the Marshal needs the owner: %q", head)
 	}
@@ -107,7 +107,7 @@ func TestOwnerGateShowsDraftedPlanAwaitingApproval(t *testing.T) {
 	w.planSource = fakePlanSource{}
 	w.setMarshalPanel(draftingPanel("awaiting plan approval; /marshal approve"))
 	text := frameText(w, 170, 40)
-	head := strings.SplitN(text, "\n", 2)[0]
+	head := strings.Split(text, "\n")[1]
 	if !strings.Contains(head, "waiting for you") || strings.Contains(head, "planning") {
 		t.Fatalf("header: %q", head)
 	}
@@ -171,7 +171,7 @@ func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
 	}
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyEnter})
 	waitForTmuxOutput(t, pane, "got:accept architecture")
-	if text := frameText(w, 120, 40); !strings.Contains(text, "sent “accept architecture” to the Marshal") || strings.Contains(strings.SplitN(text, "\n", 2)[0], "NEEDS YOU") {
+	if text := frameText(w, 120, 40); !strings.Contains(text, "sent “accept architecture” to the Marshal") || strings.Contains(strings.SplitN(text, "\n", 3)[1], "NEEDS YOU") {
 		t.Fatalf("the sent gate does not wait for the Marshal:\n%s", text)
 	}
 	// A sent gate is not armed again by y.

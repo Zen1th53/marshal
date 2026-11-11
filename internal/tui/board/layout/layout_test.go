@@ -32,26 +32,26 @@ func TestComputeAtEveryBreakpointAndMode(t *testing.T) {
 		mode       Mode
 		want       string
 	}{
-		{79, 24, Home, "notice:strip 0,0 79x1 | inbox:compact 0,1 79x23"},
-		{80, 23, Home, "notice:strip 0,0 80x1 | inbox:compact 0,1 80x22"},
-		{80, 24, Home, "header:compact 0,0 80x1 | footer:compact 0,23 80x1 | inbox:full 0,1 80x5 | tasks:brief 0,7 80x7 | lanes:strip 0,15 80x1 | activity:compact 0,17 80x2"},
-		{100, 30, Home, "header:compact 0,0 100x1 | footer:compact 0,29 100x1 | inbox:full 0,1 100x5 | tasks:brief 0,7 100x7 | lanes:strip 0,15 100x1 | activity:compact 0,17 100x3"},
-		{109, 30, Home, "header:compact 0,0 109x1 | footer:compact 0,29 109x1 | inbox:full 0,1 109x5 | tasks:brief 0,7 109x7 | lanes:strip 0,15 109x1 | activity:compact 0,17 109x3"},
-		{110, 30, Home, "header:compact 0,0 110x1 | footer:compact 0,29 110x1 | tasks:compact 0,1 60x22 | inbox:compact 0,24 60x5 | lanes:compact 61,1 49x14 | activity:compact 61,16 49x3 | rule 60"},
-		{120, 40, Home, "header:compact 0,0 120x1 | footer:compact 0,39 120x1 | tasks:compact 0,1 66x32 | inbox:compact 0,34 66x5 | lanes:compact 67,1 53x14 | activity:compact 67,16 53x3 | rule 66"},
-		{159, 40, Home, "header:full 0,0 159x1 | footer:full 0,39 159x1 | tasks:compact 0,1 87x32 | inbox:compact 0,34 87x5 | lanes:compact 88,1 71x14 | activity:compact 88,16 71x3 | rule 87"},
-		{160, 45, Home, "header:full 0,0 160x1 | footer:full 0,44 160x1 | tasks:full 0,1 88x35 | inbox:full 0,37 88x7 | lanes:full 89,1 71x14 | activity:full 89,16 71x5 | rule 88"},
-		{170, 45, Home, "header:full 0,0 170x1 | footer:full 0,44 170x1 | tasks:full 0,1 93x35 | inbox:full 0,37 93x7 | lanes:full 94,1 76x14 | activity:full 94,16 76x5 | rule 93"},
-		{199, 45, Home, "header:full 0,0 199x1 | footer:full 0,44 199x1 | tasks:full 0,1 110x35 | inbox:full 0,37 110x7 | lanes:full 111,1 88x14 | activity:full 111,16 88x5 | rule 110"},
-		{200, 60, Home, "header:full 0,0 200x1 | footer:full 0,59 200x1 | tasks:full 0,1 85x50 | inbox:full 0,52 85x7 | lanes:full 86,1 69x14 | activity:full 86,16 69x5 | inspector:full 156,1 44x58 | rule 85 | rule 155"},
-		{220, 60, Home, "header:full 0,0 220x1 | footer:full 0,59 220x1 | tasks:full 0,1 94x50 | inbox:full 0,52 94x7 | lanes:full 95,1 76x14 | activity:full 95,16 76x5 | inspector:full 172,1 48x58 | rule 94 | rule 171"},
-		{55, 40, Split, "notice:strip 0,0 55x1 | inbox:compact 0,1 55x39"},
-		{56, 24, Split, "header:compact 0,0 56x1 | footer:compact 0,23 56x1 | tasks:compact 0,1 56x10 | inbox:compact 0,12 56x5 | lanes:strip 0,18 56x1 | activity:compact 0,20 56x3"},
-		{56, 29, Split, "header:compact 0,0 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,1 56x13 | inbox:compact 0,15 56x5 | lanes:strip 0,21 56x1 | activity:compact 0,23 56x5"},
-		{60, 40, Split, "header:compact 0,0 60x1 | footer:compact 0,39 60x1 | tasks:compact 0,1 60x24 | inbox:compact 0,26 60x5 | lanes:strip 0,32 60x1 | activity:compact 0,34 60x5"},
-		{80, 24, Split, "header:compact 0,0 80x1 | footer:compact 0,23 80x1 | tasks:compact 0,1 80x10 | inbox:compact 0,12 80x5 | lanes:strip 0,18 80x1 | activity:compact 0,20 80x3"},
-		{109, 30, Split, "header:compact 0,0 109x1 | footer:compact 0,29 109x1 | tasks:compact 0,1 109x10 | inbox:compact 0,12 109x5 | lanes:compact 0,18 109x7 | activity:compact 0,26 109x3"},
-		{120, 40, Split, "header:compact 0,0 120x1 | footer:compact 0,39 120x1 | tasks:compact 0,1 66x32 | inbox:compact 0,34 66x5 | lanes:compact 67,1 53x14 | activity:compact 67,16 53x3 | rule 66"},
+		{79, 24, Home, "vitals:strip 0,0 79x1 | notice:strip 0,1 79x1 | inbox:compact 0,2 79x22"},
+		{80, 23, Home, "vitals:strip 0,0 80x1 | notice:strip 0,1 80x1 | inbox:compact 0,2 80x21"},
+		{80, 24, Home, "vitals:compact 0,0 80x1 | header:compact 0,1 80x1 | footer:compact 0,23 80x1 | inbox:full 0,2 80x5 | tasks:brief 0,8 80x7 | lanes:strip 0,16 80x1 | activity:compact 0,18 80x2"},
+		{100, 30, Home, "vitals:compact 0,0 100x1 | header:compact 0,1 100x1 | footer:compact 0,29 100x1 | inbox:full 0,2 100x5 | tasks:brief 0,8 100x7 | lanes:strip 0,16 100x1 | activity:compact 0,18 100x3"},
+		{109, 30, Home, "vitals:compact 0,0 109x1 | header:compact 0,1 109x1 | footer:compact 0,29 109x1 | inbox:full 0,2 109x5 | tasks:brief 0,8 109x7 | lanes:strip 0,16 109x1 | activity:compact 0,18 109x3"},
+		{110, 30, Home, "vitals:compact 0,0 110x1 | header:compact 0,1 110x1 | footer:compact 0,29 110x1 | tasks:compact 0,2 60x21 | inbox:compact 0,24 60x5 | lanes:compact 61,2 49x14 | activity:compact 61,17 49x3 | rule 60"},
+		{120, 40, Home, "vitals:compact 0,0 120x1 | header:compact 0,1 120x1 | footer:compact 0,39 120x1 | tasks:compact 0,2 66x31 | inbox:compact 0,34 66x5 | lanes:compact 67,2 53x14 | activity:compact 67,17 53x3 | rule 66"},
+		{159, 40, Home, "vitals:full 0,0 159x1 | header:full 0,1 159x1 | footer:full 0,39 159x1 | tasks:compact 0,2 87x31 | inbox:compact 0,34 87x5 | lanes:compact 88,2 71x14 | activity:compact 88,17 71x3 | rule 87"},
+		{160, 45, Home, "vitals:full 0,0 160x1 | header:full 0,1 160x1 | footer:full 0,44 160x1 | tasks:full 0,2 88x34 | inbox:full 0,37 88x7 | lanes:full 89,2 71x14 | activity:full 89,17 71x5 | rule 88"},
+		{170, 45, Home, "vitals:full 0,0 170x1 | header:full 0,1 170x1 | footer:full 0,44 170x1 | tasks:full 0,2 93x34 | inbox:full 0,37 93x7 | lanes:full 94,2 76x14 | activity:full 94,17 76x5 | rule 93"},
+		{199, 45, Home, "vitals:full 0,0 199x1 | header:full 0,1 199x1 | footer:full 0,44 199x1 | tasks:full 0,2 110x34 | inbox:full 0,37 110x7 | lanes:full 111,2 88x14 | activity:full 111,17 88x5 | rule 110"},
+		{200, 60, Home, "vitals:full 0,0 200x1 | header:full 0,1 200x1 | footer:full 0,59 200x1 | tasks:full 0,2 85x49 | inbox:full 0,52 85x7 | lanes:full 86,2 69x14 | activity:full 86,17 69x5 | inspector:full 156,2 44x57 | rule 85 | rule 155"},
+		{220, 60, Home, "vitals:full 0,0 220x1 | header:full 0,1 220x1 | footer:full 0,59 220x1 | tasks:full 0,2 94x49 | inbox:full 0,52 94x7 | lanes:full 95,2 76x14 | activity:full 95,17 76x5 | inspector:full 172,2 48x57 | rule 94 | rule 171"},
+		{55, 40, Split, "vitals:strip 0,0 55x1 | notice:strip 0,1 55x1 | inbox:compact 0,2 55x38"},
+		{56, 24, Split, "vitals:compact 0,0 56x1 | header:compact 0,1 56x1 | footer:compact 0,23 56x1 | tasks:compact 0,2 56x9 | inbox:compact 0,12 56x5 | lanes:strip 0,18 56x1 | activity:compact 0,20 56x3"},
+		{56, 29, Split, "vitals:compact 0,0 56x1 | header:compact 0,1 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,2 56x12 | inbox:compact 0,15 56x5 | lanes:strip 0,21 56x1 | activity:compact 0,23 56x5"},
+		{60, 40, Split, "vitals:compact 0,0 60x1 | header:compact 0,1 60x1 | footer:compact 0,39 60x1 | tasks:compact 0,2 60x23 | inbox:compact 0,26 60x5 | lanes:strip 0,32 60x1 | activity:compact 0,34 60x5"},
+		{80, 24, Split, "vitals:compact 0,0 80x1 | header:compact 0,1 80x1 | footer:compact 0,23 80x1 | tasks:compact 0,2 80x9 | inbox:compact 0,12 80x5 | lanes:strip 0,18 80x1 | activity:compact 0,20 80x3"},
+		{109, 30, Split, "vitals:compact 0,0 109x1 | header:compact 0,1 109x1 | footer:compact 0,29 109x1 | tasks:compact 0,2 109x10 | inbox:compact 0,13 109x5 | lanes:compact 0,19 109x6 | activity:compact 0,26 109x3"},
+		{120, 40, Split, "vitals:compact 0,0 120x1 | header:compact 0,1 120x1 | footer:compact 0,39 120x1 | tasks:compact 0,2 66x31 | inbox:compact 0,34 66x5 | lanes:compact 67,2 53x14 | activity:compact 67,17 53x3 | rule 66"},
 		{0, 24, Home, ""},
 		{80, 1, Home, "notice:strip 0,0 80x1"},
 	} {
@@ -72,15 +72,15 @@ func TestSplitFollowsContent(t *testing.T) {
 	}{
 		// The live Board beside the chat, before the run has lanes or
 		// decisions: three strips, the tasks it has and the inbox below.
-		{56, 29, Counts{Tasks: 5}, "header:compact 0,0 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,1 56x7 | inbox:strip 0,9 56x1 | lanes:strip 0,11 56x1 | activity:strip 0,13 56x1"},
-		{56, 29, Counts{}, "header:compact 0,0 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,1 56x3 | inbox:strip 0,5 56x1 | lanes:strip 0,7 56x1 | activity:strip 0,9 56x1"},
+		{56, 29, Counts{Tasks: 5}, "vitals:compact 0,0 56x1 | header:compact 0,1 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,2 56x7 | inbox:strip 0,10 56x1 | lanes:strip 0,12 56x1 | activity:strip 0,14 56x1"},
+		{56, 29, Counts{}, "vitals:compact 0,0 56x1 | header:compact 0,1 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,2 56x3 | inbox:strip 0,6 56x1 | lanes:strip 0,8 56x1 | activity:strip 0,10 56x1"},
 		// Lanes running: still chips at 56, tasks keep the middle.
-		{56, 29, Counts{Lanes: 9, Tasks: 11, Inbox: 2, Activity: 4}, "header:compact 0,0 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,1 56x13 | inbox:compact 0,15 56x5 | lanes:strip 0,21 56x1 | activity:compact 0,23 56x5"},
+		{56, 29, Counts{Lanes: 9, Tasks: 11, Inbox: 2, Activity: 4}, "vitals:compact 0,0 56x1 | header:compact 0,1 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,2 56x12 | inbox:compact 0,15 56x5 | lanes:strip 0,21 56x1 | activity:compact 0,23 56x5"},
 		// One decision asks for its two rows only.
-		{56, 29, Counts{Lanes: 3, Tasks: 40, Inbox: 1, Activity: 2}, "header:compact 0,0 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,1 56x17 | inbox:compact 0,19 56x3 | lanes:strip 0,23 56x1 | activity:compact 0,25 56x3"},
+		{56, 29, Counts{Lanes: 3, Tasks: 40, Inbox: 1, Activity: 2}, "vitals:compact 0,0 56x1 | header:compact 0,1 56x1 | footer:compact 0,28 56x1 | tasks:compact 0,2 56x16 | inbox:compact 0,19 56x3 | lanes:strip 0,23 56x1 | activity:compact 0,25 56x3"},
 		// Wide enough for lane rows: as many as there are lanes.
-		{100, 40, Counts{Lanes: 3, Tasks: 40, Inbox: 0, Activity: 4}, "header:compact 0,0 100x1 | footer:compact 0,39 100x1 | tasks:compact 0,1 100x24 | inbox:strip 0,26 100x1 | lanes:compact 0,28 100x5 | activity:compact 0,34 100x5"},
-		{100, 40, Counts{Lanes: 0, Tasks: 40, Inbox: 2, Activity: 4}, "header:compact 0,0 100x1 | footer:compact 0,39 100x1 | tasks:compact 0,1 100x24 | inbox:compact 0,26 100x5 | lanes:strip 0,32 100x1 | activity:compact 0,34 100x5"},
+		{100, 40, Counts{Lanes: 3, Tasks: 40, Inbox: 0, Activity: 4}, "vitals:compact 0,0 100x1 | header:compact 0,1 100x1 | footer:compact 0,39 100x1 | tasks:compact 0,2 100x23 | inbox:strip 0,26 100x1 | lanes:compact 0,28 100x5 | activity:compact 0,34 100x5"},
+		{100, 40, Counts{Lanes: 0, Tasks: 40, Inbox: 2, Activity: 4}, "vitals:compact 0,0 100x1 | header:compact 0,1 100x1 | footer:compact 0,39 100x1 | tasks:compact 0,2 100x23 | inbox:compact 0,26 100x5 | lanes:strip 0,32 100x1 | activity:compact 0,34 100x5"},
 	} {
 		if got := describe(ComputeFor(tc.cols, tc.rows, Split, tc.c)); got != tc.want {
 			t.Errorf("%dx%d %+v:\n got %s\nwant %s", tc.cols, tc.rows, tc.c, got, tc.want)
@@ -92,7 +92,7 @@ func TestSplitFollowsContent(t *testing.T) {
 	}
 	// A few tasks and lanes: inbox and activity follow their last rows,
 	// and the rows nobody fills stay blank at the bottom.
-	if got, want := describe(ComputeFor(170, 45, Home, Counts{Lanes: 9, Tasks: 12, Inbox: 2, Activity: 4})), "header:full 0,0 170x1 | footer:full 0,44 170x1 | tasks:full 0,1 93x14 | inbox:full 0,16 93x7 | lanes:full 94,1 76x11 | activity:full 94,13 76x5 | rule 93"; got != want {
+	if got, want := describe(ComputeFor(170, 45, Home, Counts{Lanes: 9, Tasks: 12, Inbox: 2, Activity: 4})), "vitals:full 0,0 170x1 | header:full 0,1 170x1 | footer:full 0,44 170x1 | tasks:full 0,2 93x14 | inbox:full 0,17 93x7 | lanes:full 94,2 76x11 | activity:full 94,14 76x5 | rule 93"; got != want {
 		t.Errorf("Home 170x45 demo:\n got %s\nwant %s", got, want)
 	}
 }
@@ -169,7 +169,7 @@ func checkLayout(t *testing.T, l Layout) {
 			}
 		}
 	}
-	if !seen[Inbox] && l.Rows > 1 {
+	if !seen[Inbox] && l.Rows > 2 {
 		t.Fatalf("%s: the inbox is never hidden", at)
 	}
 	if seen[Notice] {
@@ -184,7 +184,7 @@ func checkLayout(t *testing.T, l Layout) {
 	}
 	minWidth := map[PaneID]int{Tasks: MinTasks, Lanes: MinLanes, Inspector: MinInspector}
 	for _, p := range l.Panes {
-		bar := p.ID == Header || p.ID == Footer
+		bar := p.ID == Vitals || p.ID == Header || p.ID == Footer
 		// The activity of a narrow Home is its heading and one line at 80x24.
 		narrowActivity := p.ID == Activity && l.Mode == Home && l.Cols < FullOverlay && p.Rect.H == 2
 		if !bar && !narrowActivity && (p.Density == Strip && p.Rect.H != 1 || p.Density != Strip && p.Rect.H < minPaneRows) {
@@ -207,8 +207,31 @@ func checkLayout(t *testing.T, l Layout) {
 	if len(l.Rules) != wantRules || seen[Inspector] != (wantRules == 2) {
 		t.Fatalf("%s: %d columns, inspector docked %v", at, len(l.Rules)+1, seen[Inspector])
 	}
-	if !seen[Header] || !seen[Footer] || !seen[Tasks] || !seen[Lanes] || !seen[Activity] {
+	if !seen[Vitals] || !seen[Header] || !seen[Footer] || !seen[Tasks] || !seen[Lanes] || !seen[Activity] {
 		t.Fatalf("%s: %s", at, describe(l))
+	}
+}
+
+// TestVitalsRowOnTop: the vitals row is row 0 on every layout, nothing else
+// shares that row, and the body starts at row 2 (the header is row 1).
+func TestVitalsRowOnTop(t *testing.T) {
+	for _, tc := range []struct {
+		cols, rows int
+		mode       Mode
+	}{{80, 24, Home}, {56, 24, Split}, {200, 60, Home}, {40, 10, Home}} {
+		l := Compute(tc.cols, tc.rows, tc.mode)
+		v, ok := l.Pane(Vitals)
+		if !ok || v.Rect != (Rect{0, 0, tc.cols, 1}) {
+			t.Fatalf("%dx%d %s: vitals %+v ok=%v", tc.cols, tc.rows, tc.mode, v.Rect, ok)
+		}
+		for _, p := range l.Panes {
+			if p.ID != Vitals && p.Rect.Y == 0 {
+				t.Fatalf("%dx%d %s: %s also at row 0", tc.cols, tc.rows, tc.mode, p.ID)
+			}
+		}
+		if l.Body.Y != 2 {
+			t.Fatalf("%dx%d %s: body at row %d", tc.cols, tc.rows, tc.mode, l.Body.Y)
+		}
 	}
 }
 
@@ -276,7 +299,7 @@ func TestResizeKeepsSelection(t *testing.T) {
 	}
 	// Shrinking scrolls just enough to keep the selection, growing keeps the
 	// scroll until it would leave rows empty past the last task.
-	if want := []int{0, 25, 22, 25, 4}; !reflect.DeepEqual(tops, want) {
+	if want := []int{0, 25, 23, 25, 5}; !reflect.DeepEqual(tops, want) {
 		t.Fatalf("tops = %v, want %v", tops, want)
 	}
 }
@@ -323,7 +346,7 @@ func TestOverlayStacksInsideTheBody(t *testing.T) {
 		}
 	}
 	l := Compute(120, 40, Home)
-	if a, b := l.Overlay(0), l.Overlay(1); a != (Rect{6, 2, 108, 36}) || b != (Rect{8, 3, 104, 34}) {
+	if a, b := l.Overlay(0), l.Overlay(1); a != (Rect{6, 3, 108, 35}) || b != (Rect{8, 4, 104, 33}) {
 		t.Fatalf("overlays at 120x40: %+v, %+v", a, b)
 	}
 }

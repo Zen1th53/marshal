@@ -44,7 +44,7 @@ You can verify providers through several interfaces:
 
 ### 1. On the Board (TUI)
 
-- **First-Use Card**: When opening a fresh project, press **`v`** to arm verification for the next unverified provider shown in the header chips. Press **`Enter`** to run the probe.
+- **First-Use Card**: When opening a fresh project, press **`v`** to arm verification for the next unverified provider shown in the vitals row. Press **`Enter`** to run the probe.
 - **Providers View**: Press **`4`** to switch to the Providers view, select a provider with `j` / `k`, and press **`v`** then **`Enter`** to verify it.
 
 ### 2. From the TUI Command Line

@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -13,11 +12,11 @@ import (
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 
-// usageRefreshEvery is how often the header's provider quota is read again
-// while the Board is on screen.
+// usageRefreshEvery is how often the vitals row's provider quota is read
+// again while a TUI screen is on screen.
 const usageRefreshEvery = 30 * time.Second
 
-// usageState is the last provider quota read for the Board header. It holds
+// usageState is the last provider quota read for the vitals row. It holds
 // only what the providers wrote locally; nothing here is estimated.
 type usageState struct {
 	mu     sync.Mutex
@@ -29,8 +28,8 @@ type usageState struct {
 	every  time.Duration
 }
 
-// startUsage reads the providers' quota every usageRefreshEvery while the
-// Board is visible, until ctx is done. A read never runs on the render path.
+// startUsage reads the providers' quota every usageRefreshEvery while a TUI
+// screen is up, until ctx is done. A read never runs on the render path.
 func (w *Workspace) startUsage(ctx context.Context) {
 	w.usage.mu.Lock()
 	read, every := w.usage.readFn, w.usage.every
@@ -45,7 +44,7 @@ func (w *Workspace) startUsage(ctx context.Context) {
 		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
-			if w.boardVisible() {
+			if w.screenShown() {
 				w.storeUsage(read(time.Now()))
 				// The chat's title carries its provider's limit; a reading, or
 				// a reset countdown that moved, reaches it within one read.
@@ -87,83 +86,41 @@ func (w *Workspace) usageQuotas() (qs []usage.Quota, ok bool) {
 	return slices.Clone(w.usage.quotas), true
 }
 
-// storeUsage caches a reading and repaints the Board when the header text
-// it gives changed.
+// storeUsage caches a reading and repaints the screen when the figure the
+// vitals row shows changed.
 func (w *Workspace) storeUsage(qs []usage.Quota) {
-	before, _ := w.usageSegment(0)
+	now := time.Now()
+	after := usageKey(qs, now)
 	w.usage.mu.Lock()
+	before := ""
+	if w.usage.read {
+		before = usageKey(w.usage.quotas, now)
+	}
 	w.usage.quotas, w.usage.read = qs, true
 	w.usage.mu.Unlock()
-	if after, _ := w.usageSegment(0); after != before {
+	if after != before {
 		w.requestRepaint()
 	}
 }
 
-// usageSegment is the header's quota part, wide and narrow:
-//
-//	codex 5h 82% · wk 49% left · claude unknown · opencode unknown · agy unknown
-//	cx 82/49 · cl ? · oc ? · ag ?
-//
-// Both are empty until the first reading. The header drops the part first
-// when it does not fit, so width does not change it.
-func (w *Workspace) usageSegment(width int) (wide, narrow string) {
-	w.usage.mu.Lock()
-	qs, read := w.usage.quotas, w.usage.read
-	w.usage.mu.Unlock()
-	if !read {
-		return "", ""
-	}
-	return usageWide(qs), usageNarrow(qs)
-}
-
-var usageShort = map[string]string{"codex": "cx", "claude": "cl", "opencode": "oc", "agy": "ag"}
-
-func usageWide(qs []usage.Quota) string {
-	parts := make([]string, 0, len(qs))
+// usageKey is each quota's provider, the figure the vitals row would show
+// (or its reason when unknown) and whether it is stale, so a reading that
+// changes nothing the row shows does not repaint.
+func usageKey(qs []usage.Quota, now time.Time) string {
+	var b strings.Builder
 	for _, q := range qs {
-		if !q.Known {
-			parts = append(parts, q.Provider+" unknown")
-			continue
+		fig, _, ok := limitFigure(q, now)
+		if !ok {
+			fig = q.Reason
 		}
-		ws := make([]string, len(q.Windows))
-		for i, win := range q.Windows {
-			if win.Known() {
-				ws[i] = fmt.Sprintf("%s %d%%", win.Label, usageLeft(win))
-			} else {
-				ws[i] = win.Label + " unknown"
-			}
-		}
-		parts = append(parts, q.Provider+" "+strings.Join(ws, " · ")+" left")
+		fmt.Fprintf(&b, "%s|%s|%v;", q.Provider, fig, q.Stale)
 	}
-	return strings.Join(parts, " · ")
+	return b.String()
 }
 
-func usageNarrow(qs []usage.Quota) string {
-	parts := make([]string, 0, len(qs))
-	for _, q := range qs {
-		name := usageShort[q.Provider]
-		if name == "" {
-			name = q.Provider
-		}
-		if !q.Known {
-			parts = append(parts, name+" ?")
-			continue
-		}
-		ws := make([]string, len(q.Windows))
-		for i, win := range q.Windows {
-			if win.Known() {
-				ws[i] = fmt.Sprint(usageLeft(win))
-			} else {
-				ws[i] = "?"
-			}
-		}
-		parts = append(parts, name+" "+strings.Join(ws, "/"))
-	}
-	return strings.Join(parts, " · ")
-}
-
-// usageLeft rounds the percent left down, so the header never shows more
-// quota than the provider reported.
+// usageLeft is the percent a window has left. It is what the shown used
+// figure leaves, so the two always add to 100 wherever both appear (picker,
+// quota card, launch scan, vitals row).
 func usageLeft(win usage.Window) int {
-	return int(math.Floor(win.LeftPercent))
+	return 100 - win.UsedShown()
 }

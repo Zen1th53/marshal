@@ -24,8 +24,8 @@ func TestBoardRunStopNotice(t *testing.T) {
 	w.permissions.mu.Unlock()
 	got := plainFrame(w, 170, 45)
 	lines := strings.Split(got, "\n")
-	if !strings.Contains(lines[0], "waiting for you") {
-		t.Fatalf("header: %s", lines[0])
+	if !strings.Contains(lines[1], "waiting for you") {
+		t.Fatalf("header: %s", lines[1])
 	}
 	if last := lines[len(lines)-1]; !strings.Contains(last, "▮ waits for you · verification stopped: exit 1 · Enter: continue") {
 		t.Fatalf("footer: %s", last)

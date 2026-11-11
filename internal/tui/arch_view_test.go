@@ -73,7 +73,11 @@ func TestArchViewGoldens(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		w, h int
-	}{{"split-120x40", 120, 40}, {"split-80x24", 80, 24}} {
+		// 80x25: the always-on vitals row takes the top row of every screen,
+		// so the body is one row shorter than the terminal. The extra row
+		// gives the view the body height it had at 80x24 before the vitals
+		// row existed, so every component and rule still fits at the minimum.
+	}{{"split-120x40", 120, 40}, {"split-80x25", 80, 25}} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := boardViewVisual(now, th)
 			v.archView = true
@@ -86,7 +90,7 @@ func TestArchViewGoldens(t *testing.T) {
 					t.Errorf("Architecture view lacks %q", want)
 				}
 			}
-			// Every component and rule fits, at 80x24 too.
+			// Every component and rule fits, at 80x25 too.
 			for _, c := range archComponents {
 				if !strings.Contains(plain, c[0]) {
 					t.Errorf("Architecture view lacks component %q", c[0])

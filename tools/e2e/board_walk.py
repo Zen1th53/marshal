@@ -45,11 +45,15 @@ def lines(screen):
 
 
 def board_shown(screen):
-    """The Board's header and at least one of its panes are on screen."""
+    """The Board's header and at least one of its panes are on screen.
+
+    Row 0 is the vitals row on every view, so the header is row 1; a frame
+    too small for the vitals row still has the header on row 0."""
     ls = lines(screen)
-    if not ls or not ls[0].lstrip().startswith(("MARSHAL", "Marshal")):
+    head = next((i for i, l in enumerate(ls[:2]) if l.lstrip().startswith(("MARSHAL", "Marshal"))), -1)
+    if head < 0:
         return False
-    body = "\n".join(ls[1:])
+    body = "\n".join(ls[head + 1:])
     return bool(re.search(r"(^|[\s│>])(TASKS|LANES|INBOX)\b", body, re.M))
 
 

@@ -62,7 +62,7 @@ type hostWatcher struct {
 	facts     func() hostFacts                     // nil: no slow facts
 	cacheSize func(context.Context) (uint64, bool) // nil: not measured
 	guard     *hostLaneGuard                       // nil: no lane-cap action
-	changed   func(chipChanged bool)               // after each sample; may be nil
+	changed   func(keyChanged bool)                // after each sample; may be nil
 
 	mu      sync.Mutex
 	state   hostwatch.State
@@ -82,7 +82,7 @@ type hostWatcher struct {
 		since    time.Time
 		baseline bool
 	}
-	chip string
+	key  string
 	wg   sync.WaitGroup
 	done chan struct{}
 }
@@ -144,10 +144,10 @@ func (h *hostWatcher) step(ctx context.Context) {
 	for _, a := range actions {
 		h.act(a, window)
 	}
-	chip := h.snapshot().chipText()
+	key := h.snapshot().vitalsKey()
 	h.mu.Lock()
-	changed := chip != h.chip
-	h.chip = chip
+	changed := key != h.key
+	h.key = key
 	h.mu.Unlock()
 	if h.changed != nil {
 		h.changed(changed)
@@ -511,10 +511,10 @@ func (w *Workspace) startHostWatchWith(ctx context.Context, h *hostWatcher) bool
 	if h.guard == nil {
 		h.guard = &hostLaneGuard{sink: workspaceLaneCapSink{w}}
 	}
-	h.changed = func(chip bool) {
-		// The Board repaints for a changed chip; the Host view for
-		// every sample.
-		if (chip || w.hostView.Load()) && w.boardVisible() {
+	h.changed = func(keyChanged bool) {
+		// The vitals row sits on every screen, so a changed figure repaints
+		// whenever a screen is up; the Host view repaints for every sample.
+		if (keyChanged || w.hostView.Load()) && w.screenShown() {
 			w.requestRepaint()
 		}
 	}

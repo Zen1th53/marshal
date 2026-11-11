@@ -91,15 +91,23 @@ func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 	for _, c := range []struct {
 		chip string
 		want layout.PaneID
-	}{{"lanes", layout.Lanes}, {"inbox ", layout.Inbox}, {"done", layout.Tasks}} {
+	}{{"inbox ", layout.Inbox}, {"done", layout.Tasks}} {
 		row, col := cellOf(t, w, 170, 45, c.chip, 0)
-		if row != 1 {
+		if row != 2 {
 			t.Fatalf("%q found on row %d, not the header", c.chip, row)
 		}
 		w.boardUI.focus = ""
 		if !click(w, row, col) || w.boardUI.focus != c.want {
 			t.Fatalf("chip %q: focus %q, want %q", c.chip, w.boardUI.focus, c.want)
 		}
+	}
+	// The running count sits on the vitals row (frame row 0); a click on it
+	// focuses the Lanes pane.
+	w.boardUI.focus = ""
+	if row, col := cellOf(t, w, 170, 45, "running", 0); row != 1 {
+		t.Fatalf("running found on row %d, not the vitals row", row)
+	} else if !click(w, row, col) || w.boardUI.focus != layout.Lanes {
+		t.Fatalf("running click: focus %q", w.boardUI.focus)
 	}
 	if w.archSrc() == nil {
 		t.Fatal("the fixture Board has no Architecture view to open")

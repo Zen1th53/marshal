@@ -106,7 +106,7 @@ func plainFrame(w *Workspace, cols, rows int) string {
 	return StripANSI(strings.Join(lines, "\n"))
 }
 
-func TestLiveBoardHeaderUsesCachedProviderStatus(t *testing.T) {
+func TestLiveBoardVitalsUsesCachedProviderStatus(t *testing.T) {
 	w, _ := boardWorkspace(t)
 	now := time.Now()
 	w.prov.mu.Lock()
@@ -116,11 +116,20 @@ func TestLiveBoardHeaderUsesCachedProviderStatus(t *testing.T) {
 		{Provider: "agy", VerifiedAt: now, LimitUntil: now.Add(time.Minute)},
 	}}
 	w.prov.mu.Unlock()
-	lines, _, _ := w.frameLines(200, 40)
-	header := StripANSI(lines[0])
-	for _, want := range []string{"codex ●", "claude ◐", "agy ×", "opencode ○"} {
-		if !strings.Contains(header, want) {
-			t.Errorf("missing cached status %q in %q", want, header)
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, false), now: now}
+	w.mu.RLock()
+	state := w.liveStateLocked()
+	w.mu.RUnlock()
+	w.fillVitals(&v, state)
+	if v.health["codex"] != "ready" || v.health["claude"] != "re-verify" || v.health["agy"] != "limit" {
+		t.Fatalf("cached provider readiness words: %v", v.health)
+	}
+	// The vitals row carries each cached provider's glyph.
+	line, _ := v.vitalsLine(200)
+	plain := StripANSI(line)
+	for _, g := range []string{"✳", "⬡", "◆"} {
+		if !strings.Contains(plain, g) {
+			t.Errorf("vitals row lacks %q: %q", g, plain)
 		}
 	}
 }

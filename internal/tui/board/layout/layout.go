@@ -28,13 +28,14 @@ const (
 	Lanes     PaneID = "lanes"
 	Activity  PaneID = "activity"
 	Inspector PaneID = "inspector"
+	Vitals    PaneID = "vitals" // row 0: provider limits and host vitals, on every view
 	Header    PaneID = "header"
 	Footer    PaneID = "footer"
 	Notice    PaneID = "notice" // below the minimum size: says the terminal is too small
 )
 
-// priority is what survives when rows run out, most important first. Header
-// and footer are one row each and never collapse.
+// priority is what survives when rows run out, most important first. Vitals,
+// header and footer are one row each and never collapse.
 var priority = map[PaneID]int{Inbox: 0, Tasks: 1, Lanes: 2, Activity: 3, Inspector: 4}
 
 // Density is how much a pane shows per item. Width picks full or compact;
@@ -155,10 +156,16 @@ func ComputeFor(cols, rows int, mode Mode, counts Counts) Layout {
 	}
 	if cols < minCols || rows < MinRows {
 		// Too small to lay out the Board: what can still be decided is
-		// shown, and the notice says why the rest is not.
-		l.Panes = []Pane{{Notice, Rect{0, 0, cols, 1}, Strip}}
-		l.Body = Rect{0, 1, cols, rows - 1}
-		if rows > 1 {
+		// shown, and the notice says why the rest is not. The vitals row
+		// stays on top even here.
+		if rows == 1 {
+			l.Panes = []Pane{{Notice, Rect{0, 0, cols, 1}, Strip}}
+			l.Body = Rect{0, 1, cols, rows - 1}
+			return l
+		}
+		l.Panes = []Pane{{Vitals, Rect{0, 0, cols, 1}, Strip}, {Notice, Rect{0, 1, cols, 1}, Strip}}
+		l.Body = Rect{0, 2, cols, rows - 2}
+		if rows > 2 {
 			l.Panes = append(l.Panes, Pane{Inbox, l.Body, Compact})
 		}
 		return l
@@ -168,8 +175,8 @@ func ComputeFor(cols, rows int, mode Mode, counts Counts) Layout {
 	if cols >= LongBars {
 		bars = Full
 	}
-	l.Body = Rect{0, 1, cols, rows - 2}
-	l.Panes = []Pane{{Header, Rect{0, 0, cols, 1}, bars}, {Footer, Rect{0, rows - 1, cols, 1}, bars}}
+	l.Body = Rect{0, 2, cols, rows - 3}
+	l.Panes = []Pane{{Vitals, Rect{0, 0, cols, 1}, bars}, {Header, Rect{0, 1, cols, 1}, bars}, {Footer, Rect{0, rows - 1, cols, 1}, bars}}
 	if mode == Split && cols < TwoColumns {
 		l.Panes = append(l.Panes, split(l.Body, counts)...)
 		return l

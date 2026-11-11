@@ -430,7 +430,7 @@ func paintSecurity(l layout.Layout, th *Theme, v boardVisual, m securityPaint) [
 	hl.Rules = nil
 	hl.Panes = nil
 	for _, p := range l.Panes {
-		if p.ID == layout.Header || p.ID == layout.Footer {
+		if boardBar(p.ID) {
 			hl.Panes = append(hl.Panes, p)
 		}
 	}

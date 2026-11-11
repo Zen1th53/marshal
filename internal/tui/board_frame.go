@@ -9,6 +9,13 @@ import (
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inspector"
 )
 
+// boardBar reports whether a pane is one of the Board's full-width bars: the
+// vitals row, the header and the footer. The body views keep these and paint
+// their own content between them.
+func boardBar(id layout.PaneID) bool {
+	return id == layout.Vitals || id == layout.Header || id == layout.Footer
+}
+
 // paintBoard places each pane's lines in its rect and returns the frame, one
 // line per terminal row, each exactly l.Cols cells wide. A pane gets its rect
 // and nothing else: lines past its height are dropped and every line is cut

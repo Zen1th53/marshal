@@ -25,6 +25,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
+	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inbox"
 )
 
@@ -2217,9 +2218,15 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 	home := w.homeBoard
 	w.mu.RUnlock()
 
-	// The diff viewer and palette own the screen while open.
+	// The diff viewer and palette own the screen while open. The vitals row
+	// stays on top of the diff viewer too.
 	if w.diffViewer.IsOpen() {
-		height := rows - 1
+		inner, vitals := rows, ""
+		if rows >= 2 {
+			vitals = w.vitalsRow(th, cols)
+			inner = rows - 1
+		}
+		height := inner - 1
 		status := w.taskDiff.StatusLine(cols)
 		if status != "" {
 			height--
@@ -2228,8 +2235,11 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 		if status != "" {
 			lines = append(lines, status)
 		}
-		for len(lines) < rows {
+		for len(lines) < inner {
 			lines = append(lines, "")
+		}
+		if vitals != "" {
+			lines = append([]string{vitals}, lines...)
 		}
 		return lines, rows, 1
 	}
@@ -2247,14 +2257,37 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 		return w.boardFrame(state, th, popup, cols, rows)
 	}
 
-	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)
+	// The classic screen also carries the vitals row on top.
+	inner, vitals := rows, ""
+	if rows >= 2 {
+		vitals = w.vitalsRow(th, cols)
+		inner = rows - 1
+	}
+	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, inner)
 	if w.interruptArmed {
 		frame.Status = PadCell(th.Colorize(th.Warning, " Press Ctrl+C again to exit, or /quit. Durable session data is preserved."), cols)
 	}
 	frame.ScrollOffset = w.scrollOffset
 	frame.UnreadCount = w.unreadNew
-	lines, cursorRow := frame.Lines(cols, rows)
+	lines, cursorRow := frame.Lines(cols, inner)
+	if vitals != "" {
+		lines = append([]string{vitals}, lines...)
+		cursorRow++
+	}
 	return lines, cursorRow, frame.CursorCol
+}
+
+// vitalsRow is the vitals row for a screen that is not the Board.
+func (w *Workspace) vitalsRow(th *Theme, cols int) string {
+	w.mu.RLock()
+	state := w.liveStateLocked()
+	w.mu.RUnlock()
+	v := boardVisual{theme: th, now: time.Now()}
+	w.fillVitals(&v, state)
+	if state.Marshal != nil {
+		v.board = state.Marshal.Board
+	}
+	return v.render(layout.Pane{ID: layout.Vitals, Rect: layout.Rect{W: cols, H: 1}})[0]
 }
 
 // printBatchFrame writes the workspace once for a non-interactive stream.

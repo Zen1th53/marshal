@@ -62,6 +62,21 @@ func (w *Workspace) loadFirstUse(ctx context.Context) {
 	w.requestRepaint()
 }
 
+// installedProviders is a copy of which providers have an executable on this
+// machine, as loadFirstUse found them; nil before it has run.
+func (w *Workspace) installedProviders() map[string]bool {
+	w.firstUse.mu.Lock()
+	defer w.firstUse.mu.Unlock()
+	if w.firstUse.installed == nil {
+		return nil
+	}
+	out := make(map[string]bool, len(w.firstUse.installed))
+	for k, v := range w.firstUse.installed {
+		out[k] = v
+	}
+	return out
+}
+
 // providerChip is one provider as the card shows it.
 type providerChip struct {
 	name  string
@@ -294,25 +309,12 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 		inboxColor = "failed"
 	}
 	parts = append(parts, headerPart{"inbox", v.fg("dim", "inbox ") + v.fg(inboxColor, fmt.Sprint(v.inboxCount())), v.fg(inboxColor, "⚑"+fmt.Sprint(v.inboxCount()))})
-	var hs, dots []string
-	for _, c := range v.chips {
-		col := firstUseStateColor[c.state]
-		g := v.firstUseGlyph(c.state)
-		hs = append(hs, v.fg(col, c.name)+" "+v.fg(col, g))
-		dots = append(dots, v.fg(col, g))
-	}
-	if len(hs) > 0 {
-		parts = append(parts, headerPart{"health", strings.Join(hs, " "), strings.Join(dots, " ")})
-	}
-	if v.host != nil {
-		c := v.host.chip()
-		parts = append(parts, headerPart{"host", v.hostChip(c), v.hostChipCompact(c)})
-	}
 	parts = append(parts, headerPart{"clock", v.fg("dim", v.now.Format("15:04:05")), ""})
 	sep := v.fg("faint", " · ")
 	// The edition and the project stay longest: they are what this
-	// header is for while no run is open.
-	steps := []string{"clock", "-health", "-inbox", "-project", "-host", "host", "health", "-state", "inbox", "-brand", "project", "state", "brand"}
+	// header is for while no run is open. Provider readiness and host vitals
+	// are on the vitals row above.
+	steps := []string{"clock", "-inbox", "-project", "-state", "inbox", "-brand", "project", "state", "brand"}
 	kept := fitHeaderPartsBy(parts, w, sep, steps)
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }
@@ -334,6 +336,7 @@ func paintFirstUse(l layout.Layout, th *Theme, v boardVisual) []string {
 			}
 		}
 	}
+	place(layout.Vitals)
 	place(layout.Header)
 	place(layout.Footer)
 	body := l.Body

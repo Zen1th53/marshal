@@ -27,8 +27,8 @@ func tempColor(t float64) string {
 	return "merged"
 }
 
-// hostChip is the header chip's content.
-type hostChip struct {
+// hostFigures is the host figures the vitals row shows.
+type hostFigures struct {
 	Temp      float64
 	TempKnown bool
 	Guard     bool
@@ -37,8 +37,8 @@ type hostChip struct {
 	LowDisk   bool
 }
 
-func (s hostSnapshot) chip() hostChip {
-	var c hostChip
+func (s hostSnapshot) chip() hostFigures {
+	var c hostFigures
 	if last, ok := s.latest(); ok && last.CPUPackageTempCKnown {
 		c.Temp, c.TempKnown = last.CPUPackageTempC, true
 	}
@@ -51,41 +51,29 @@ func (s hostSnapshot) chip() hostChip {
 	return c
 }
 
-// chipText is the chip as plain text, with its warning state, so the
-// watcher repaints the Board only when the chip changes.
-func (s hostSnapshot) chipText() string {
+// vitalsKey is the vitals row's host figures as plain text — the rounded
+// cpu, ram and temperature, the thermal guard, the disk percent and the
+// low-disk flag, unknown as "-" — so the watcher repaints a screen only when
+// what the row shows changed.
+func (s hostSnapshot) vitalsKey() string {
+	cpu := "-"
+	if pct, ok := s.cpuBusy(); ok {
+		cpu = strconv.Itoa(int(math.Round(pct)))
+	}
+	ram := "-"
+	if last, ok := s.latest(); ok && last.MemTotalBytesKnown && last.MemAvailableBytesKnown && last.MemTotalBytes > 0 {
+		ram = strconv.Itoa(int(math.Round(float64(last.MemTotalBytes-last.MemAvailableBytes) / float64(last.MemTotalBytes) * 100)))
+	}
 	c := s.chip()
-	return fmt.Sprintf("%.0f|%v|%v|%d|%v|%v", c.Temp, c.TempKnown, c.Guard, c.DiskPct, c.DiskKnown, c.LowDisk)
-}
-
-// hostChip paints "host 65°C GUARD disk 94%".
-func (v boardVisual) hostChip(c hostChip) string {
-	s := v.fg("dim", "host")
+	temp := "-"
 	if c.TempKnown {
-		s += " " + v.fg(tempColor(c.Temp), fmt.Sprintf("%.0f°C", c.Temp))
-	} else {
-		s += " " + v.fg("dim", "—")
+		temp = strconv.Itoa(int(math.Round(c.Temp)))
 	}
-	if c.Guard {
-		s += " " + v.fg("failed", "GUARD")
-	}
+	disk := "-"
 	if c.DiskKnown {
-		col := "dim"
-		if c.LowDisk {
-			col = "waiting"
-		}
-		s += " " + v.fg(col, fmt.Sprintf("disk %d%%", c.DiskPct))
+		disk = strconv.Itoa(c.DiskPct)
 	}
-	return s
-}
-
-// hostChipCompact is the chip for a narrow header: the temperature and
-// the guard, and the disk only when it runs low.
-func (v boardVisual) hostChipCompact(c hostChip) string {
-	if !c.LowDisk {
-		c.DiskKnown = false
-	}
-	return v.hostChip(c)
+	return fmt.Sprintf("%s|%s|%s|%v|%s|%v", cpu, ram, temp, c.Guard, disk, c.LowDisk)
 }
 
 // hostRender paints the Host view into a w×h body, scrolled down by
