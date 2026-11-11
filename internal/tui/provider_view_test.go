@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 // demoProviders is the overview the Providers view goldens paint: the
@@ -22,12 +23,24 @@ func demoProviders(now time.Time) []store.ProviderStatus {
 		{Provider: "agy", Model: "gemini-3.8-flash-low", VerifiedAt: now.Add(-26 * time.Hour), ExpiresAt: now.Add(-2 * time.Hour), Expired: true, ActiveLanes: 2},
 		{Provider: "claude", Model: "claude-opus-5-5", VerifiedAt: now.Add(-4 * time.Hour), ExpiresAt: now.Add(20 * time.Hour), ActiveLanes: 2},
 		{Provider: "codex", Model: "gpt-5.5-codex", VerifiedAt: now.Add(-6 * time.Hour), ExpiresAt: now.Add(18 * time.Hour), ActiveLanes: 3, LastLimitAt: now.Add(-40 * time.Minute), LastLimitReason: "usage limit reached", LimitUntil: now.Add(5 * time.Hour)},
-		{Provider: "opencode", Model: "deepseek", VerifiedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(22 * time.Hour), ActiveLanes: 1, LastLimitAt: now.Add(-3 * time.Hour), LastLimitReason: "rate limit"},
+		{Provider: "opencode", Model: "deepseek", VerifiedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(22 * time.Hour), ActiveLanes: 1},
 	}
 }
 
 func demoProviderPaint(now time.Time) providerPaint {
-	return providerPaint{Snap: providerSnapshot{Providers: demoProviders(now), Loaded: true, At: now.Add(-3 * time.Second)}, Selected: "codex"}
+	return providerPaint{
+		Snap:     providerSnapshot{Providers: demoProviders(now), Loaded: true, At: now.Add(-3 * time.Second)},
+		Selected: "codex",
+		Quotas: map[string]usage.Quota{
+			"claude": {Provider: "claude", Known: true, AsOf: now.Add(-5 * time.Minute), Windows: []usage.Window{
+				{Label: "5h", LeftPercent: 88, ResetsAt: now.Add(3 * time.Hour)},
+				{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(4*24*time.Hour + 2*time.Hour)},
+			}},
+			"codex":    {Provider: "codex", Known: true, AsOf: now.Add(-5 * time.Minute), Windows: []usage.Window{{Label: "wk", LeftPercent: 42, ResetsAt: now.Add(4 * 24 * time.Hour)}}},
+			"agy":      {Provider: "agy", Reason: usage.NotExposed},
+			"opencode": {Provider: "opencode", Reason: usage.NotExposed},
+		},
+	}
 }
 
 // fakeProviderView is the Providers view's source in tests.
@@ -140,7 +153,6 @@ func TestProviderViewContent(t *testing.T) {
 		"usage limit reached",
 		until,
 		"26h00m ago",
-		"was 3h00m ago",
 		"waits for the limit to end",
 		"running codex lanes finish; new work waits for " + until + " or a ready one.",
 	} {
@@ -188,6 +200,26 @@ func TestProviderViewContent(t *testing.T) {
 			if r > 127 {
 				t.Fatalf("ASCII line %d has %q: %s", i, r, l)
 			}
+		}
+	}
+}
+
+func TestProvidersViewLimitColumn(t *testing.T) {
+	now := memEpoch
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true), now: now}
+	m := demoProviderPaint(now)
+	m.Selected = "agy"
+	m.Quotas["opencode"] = usage.Quota{Provider: "opencode", Known: true, AsOf: now.Add(-3 * time.Hour), Stale: true, Windows: []usage.Window{{Label: "wk", LeftPercent: 35, ResetsAt: now.Add(2 * 24 * time.Hour)}}}
+	lines, _ := v.providerLines(m, 120)
+	text := strings.Join(strings.Fields(StripANSI(strings.Join(lines, "\n"))), " ")
+	for _, want := range []string{
+		"codex", "usage limit reached", providerUntil(now.Add(5*time.Hour), now),
+		"claude", "▓▓░ 42% used · wk", providerUntil(now.Add(4*24*time.Hour+2*time.Hour), now),
+		"opencode", "▓▓░ 65% used · wk · 3h old", providerUntil(now.Add(2*24*time.Hour), now),
+		"agy", "unavailable", "agy does not write its usage limits where Marshal can read them.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("Providers view lacks %q:\n%s", want, text)
 		}
 	}
 }

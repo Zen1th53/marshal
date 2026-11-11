@@ -11,6 +11,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 // providerRefreshEvery is how often the open Providers view reads the
@@ -476,7 +477,14 @@ func (w *Workspace) routeProvider(r providerRoute) {
 
 // paintProviders paints the Providers view through the workspace's state.
 func (w *Workspace) paintProviders(l layout.Layout, th *Theme, v boardVisual) []string {
-	return paintProviders(l, th, v, w.prov.paint())
+	m := w.prov.paint()
+	if qs, ok := w.usageQuotas(); ok {
+		m.Quotas = make(map[string]usage.Quota, len(qs))
+		for _, q := range qs {
+			m.Quotas[q.Provider] = q
+		}
+	}
+	return paintProviders(l, th, v, m)
 }
 
 // paintProviders paints the Providers view in the Board's body with the
