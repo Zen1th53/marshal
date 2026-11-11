@@ -49,6 +49,26 @@ func TestIdleMarshalBoardAsksForNoFrames(t *testing.T) {
 	}
 }
 
+// With animation turned off, startAnimator is a no-op: no tick source is
+// created, so the Board's spinners never move (MARSHAL_REDUCED_MOTION,
+// --no-animation).
+func TestAnimatorOffWhenAnimationDisabled(t *testing.T) {
+	w := NewWorkspace(nil, "test", "test")
+	w.theme = NewTheme(ThemeDefault, true, false)
+	w.startAnimator()
+	defer w.stopAnimator()
+	if a := w.animator.Load(); a != nil {
+		t.Fatal("startAnimator created a tick source with animation disabled")
+	}
+	// The publish itself asks for one repaint; the disabled animator asks for
+	// none of its own after it.
+	w.setMarshalPanel(boardPanel(boardmodel.TaskWorking))
+	drainRepaints(w, 2*anim.Tick)
+	if n := drainRepaints(w, 6*anim.Tick); n != 0 {
+		t.Fatalf("a disabled animator asked for %d repaints", n)
+	}
+}
+
 func TestWorkingMarshalBoardAnimatesUntilItStops(t *testing.T) {
 	w := NewWorkspace(nil, "test", "test")
 	w.setMarshalPanel(boardPanel(boardmodel.TaskWorking))
