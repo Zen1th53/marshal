@@ -43,10 +43,11 @@ type Workspace struct {
 	inboxView          inbox.View
 	governedDispatches map[string]context.CancelFunc
 	governedDispatchWG sync.WaitGroup
-	// operatorInstructionsSeen holds the refs of owner transcript messages
-	// already observed as architecture instructions, so polling the same
-	// transcript never re-records, re-binds or re-refuses one message.
-	operatorInstructionsSeen sync.Map
+	// browserContract holds the owner instruction binding recorded inside the
+	// browser Accept for the pending project contract; the acceptance inbox
+	// message hands it to the Marshal.
+	browserContractMu sync.Mutex
+	browserContract   *app.OperatorInstructionBinding
 
 	egressGate ioGate
 	mu         sync.RWMutex

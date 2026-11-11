@@ -60,7 +60,7 @@ func TestBoundRuntimeMarshalProposalAttribution(t *testing.T) {
 
 func TestLocalIntakeUpdateIsVisible(t *testing.T) {
 	w, _ := realControlWorkspace(t, "SESSION-intake-visibility", false)
-	emitMarshalIntakeFile(t, w, "English", "no")
+	emitMarshalIntakeFile(t, w, "English")
 	if !strings.Contains(w.state.LastOutput, "Local request (unverified): intake updated") {
 		t.Fatalf("activity: %s", w.state.LastOutput)
 	}

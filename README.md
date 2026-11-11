@@ -58,8 +58,8 @@ marshal
 
 Then, in the chat on the left, say what you want built. The Marshal asks a few
 questions and proposes an architecture. When the Board shows **NEEDS YOU**,
-press `y`, then `Enter`, to accept it (or type `accept architecture` in the
-chat). The Marshal then plans the tasks, approves the plan itself and starts
+press `y` to open it in your browser and click **Accept architecture** there.
+The Marshal then plans the tasks, approves the plan itself and starts
 the workers. You watch the run on the Board until it closes to `main`.
 
 You need at least one provider CLI installed and signed in
@@ -71,7 +71,7 @@ it has no model costs of its own.
 ## How it works
 
 ```text
-  you ──goal──▶ MARSHAL ──architecture──▶ you accept (y, Enter)
+  you ──goal──▶ MARSHAL ──architecture──▶ you accept (in the browser)
                    │
                    ▼
                  plan: small tasks, each with files, criteria and a check
@@ -137,7 +137,7 @@ the right.
 |---|---|
 | `Alt+←` / `Alt+→` (or `F11`) | Move between the chat and the Board |
 | `s` | Say something to the Marshal from the Board |
-| `y` | Answer a **NEEDS YOU** gate (accept the architecture); `Enter` sends it |
+| `y` | Answer a **NEEDS YOU** gate; `Enter` sends it. On the architecture gate, `y` opens the browser page where you accept |
 | `Enter` | Inspect the highlighted task; on a lane, open the worker's session |
 | `v` | Verify a provider |
 | `1`–`8` | Views: Board, Host, Memory, Providers, Verify, Security, Plan, Architecture |

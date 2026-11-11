@@ -108,7 +108,7 @@ func TestMarshalNativeLaunchDeliversIntakeCueAllProviders(t *testing.T) {
 				t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 				want := "Start."
 				if saved {
-					if err := w.saveMarshalIntake(marshalIntake{Language: "Uzbek", EarlierWork: "no"}); err != nil {
+					if err := w.saveMarshalIntake(marshalIntake{Language: "Uzbek"}); err != nil {
 						t.Fatal(err)
 					}
 					want = "Continue."

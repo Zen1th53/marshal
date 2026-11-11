@@ -4,10 +4,8 @@ package tui
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"github.com/Zen1th53/marshal/internal/permission"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -25,11 +23,6 @@ func privateMarshalProposalKeys(p marshalProposal) ([]string, bool) {
 			return []string{"action", "value"}, true
 		}
 		return []string{"action", "value", "criteria"}, true
-	}
-	if p.action == "accept-architecture" {
-		revision, err := strconv.ParseInt(p.revision, 10, 64)
-		digest, digestErr := hex.DecodeString(p.digest)
-		return []string{"action", "id", "revision", "digest", "instruction_ref"}, err == nil && revision > 0 && strconv.FormatInt(revision, 10) == p.revision && digestErr == nil && len(digest) == 32 && strings.ToLower(p.digest) == p.digest && strings.TrimSpace(p.id) != "" && len(p.id) <= 200 && strings.TrimSpace(p.instructionRef) != "" && len(p.instructionRef) <= 200
 	}
 	if p.action != "approve-task" || p.id == "" || len(p.id) > 200 || strings.ContainsFunc(p.id, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.'

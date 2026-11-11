@@ -74,15 +74,17 @@ When a run reaches a step that requires human authorization, the Board header di
 
 - **Architecture Gate**: When the Marshal drafts a project contract:
   ```text
-  [y] accept architecture · [b] open details
+  [y] open in browser
   ```
+  `y` opens the architecture in your browser; click **Accept architecture** there and the run moves on by itself.
 - **Inbox Decisions**: When a worker requests confirmation or clarification.
 
 The Marshal approves its own plan, so there is no plan-approval gate. You can stop the run at any time with `Ctrl+X`.
 
 ### Resolving Gates
 
-- Press **`y`** to arm the affirmative response.
+- On the architecture gate, **`y`** opens the browser page; there is nothing to arm or confirm.
+- On other gates, press **`y`** to arm the affirmative response.
 - Press **`Enter`** to confirm and transmit the decision.
 - Press any other key to cancel the armed response.
 

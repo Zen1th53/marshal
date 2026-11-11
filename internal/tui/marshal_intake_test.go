@@ -12,9 +12,6 @@ import (
 func TestIntakeLanguageOnlyAccepted(t *testing.T) {
 	for _, valid := range []string{
 		`MARSHAL_PROPOSAL {"action":"intake","language":"Uzbek"}`,
-		`MARSHAL_PROPOSAL {"action":"intake","language":"Uzbek","earlier_work":""}`,
-		`MARSHAL_PROPOSAL {"action":"intake","language":"Uzbek","earlier_work":"yes"}`,
-		`MARSHAL_PROPOSAL {"action":"intake","language":"Uzbek","earlier_work":"no"}`,
 	} {
 		if _, err := parseMarshalProposal(valid); err != nil {
 			t.Fatalf("parseMarshalProposal rejected valid intake %s: %v", valid, err)
@@ -25,12 +22,12 @@ func TestIntakeLanguageOnlyAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseMarshalProposal rejected language-only intake: %v", err)
 	}
-	if proposal.action != "intake" || proposal.language != "Uzbek" || proposal.earlierWork != "" {
+	if proposal.action != "intake" || proposal.language != "Uzbek" {
 		t.Fatalf("parsed proposal mismatch: %+v", proposal)
 	}
 
 	w, rt := realControlWorkspace(t, "SESSION-intake-language-only")
-	if err := w.saveMarshalIntake(marshalIntake{Language: proposal.language, EarlierWork: proposal.earlierWork}); err != nil {
+	if err := w.saveMarshalIntake(marshalIntake{Language: proposal.language}); err != nil {
 		t.Fatalf("saveMarshalIntake failed: %v", err)
 	}
 
@@ -44,9 +41,6 @@ func TestIntakeLanguageOnlyAccepted(t *testing.T) {
 	}
 	if saved.Language != "Uzbek" {
 		t.Fatalf("saved language = %q, want Uzbek", saved.Language)
-	}
-	if saved.EarlierWork != "" {
-		t.Fatalf("saved earlier_work = %q, want empty", saved.EarlierWork)
 	}
 
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
@@ -78,45 +72,11 @@ func TestIntakeLanguageOnlyAccepted(t *testing.T) {
 	}
 }
 
-func TestIntakeLanguageOnlyKeepsEarlierWork(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-intake-keeps-earlier-work")
-	if err := w.saveMarshalIntake(marshalIntake{Language: "English", EarlierWork: "yes"}); err != nil {
-		t.Fatalf("initial saveMarshalIntake failed: %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(rt.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
-	if err != nil {
-		t.Fatalf("reading initial marshal-intake.json failed: %v", err)
-	}
-	var initial marshalIntake
-	if err := json.Unmarshal(data, &initial); err != nil {
-		t.Fatalf("unmarshal initial intake file failed: %v", err)
-	}
-	if initial.EarlierWork != "yes" {
-		t.Fatalf("initial earlier_work = %q, want yes", initial.EarlierWork)
-	}
-
-	proposal, err := parseMarshalProposal(`MARSHAL_PROPOSAL {"action":"intake","language":"Uzbek"}`)
-	if err != nil {
-		t.Fatalf("parseMarshalProposal rejected language-only intake: %v", err)
-	}
-	if err := w.saveMarshalIntake(marshalIntake{Language: proposal.language, EarlierWork: proposal.earlierWork}); err != nil {
-		t.Fatalf("second saveMarshalIntake failed: %v", err)
-	}
-
-	data, err = os.ReadFile(filepath.Join(rt.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
-	if err != nil {
-		t.Fatalf("reading updated marshal-intake.json failed: %v", err)
-	}
-	var updated marshalIntake
-	if err := json.Unmarshal(data, &updated); err != nil {
-		t.Fatalf("unmarshal updated intake file failed: %v", err)
-	}
-	if updated.Language != "Uzbek" {
-		t.Fatalf("updated language = %q, want Uzbek", updated.Language)
-	}
-	if updated.EarlierWork != "yes" {
-		t.Fatalf("updated earlier_work = %q, want yes", updated.EarlierWork)
+// earlier_work is no longer part of the intake schema; a proposal that carries
+// it is refused.
+func TestIntakeProposalRefusesEarlierWork(t *testing.T) {
+	if _, err := parseMarshalProposal(marshalProposalPrefix + `{"action":"intake","language":"English","earlier_work":"yes"}`); err == nil {
+		t.Fatal("parseMarshalProposal accepted an intake carrying earlier_work")
 	}
 }
 

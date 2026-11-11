@@ -367,7 +367,7 @@ func TestLiveMCPCodexBindingNotAddedWithoutAttachedMarshal(t *testing.T) {
 }
 func TestLiveMCPIntakeLanguageOnlyAccepted(t *testing.T) {
 	w, _, cfg := liveMCPFixture(t)
-	if err := w.saveMarshalIntake(marshalIntake{Language: "English", EarlierWork: "yes"}); err != nil {
+	if err := w.saveMarshalIntake(marshalIntake{Language: "English"}); err != nil {
 		t.Fatal(err)
 	}
 	r := submitMCP(t, cfg, `{"submission_id":"lang-only","proposal":{"action":"intake","language":"Uzbek"}}`)
@@ -379,8 +379,8 @@ func TestLiveMCPIntakeLanguageOnlyAccepted(t *testing.T) {
 		t.Fatal(err)
 	}
 	var saved marshalIntake
-	if err := json.Unmarshal(data, &saved); err != nil || saved.Language != "Uzbek" || saved.EarlierWork != "yes" {
-		t.Fatalf("saved intake = %+v %v, want Uzbek with earlier_work kept", saved, err)
+	if err := json.Unmarshal(data, &saved); err != nil || saved.Language != "Uzbek" {
+		t.Fatalf("saved intake = %+v %v, want Uzbek", saved, err)
 	}
 	if _, err := proposalmcp.Call(t.Context(), cfg, "submit", json.RawMessage(`{"submission_id":"lang-extra","proposal":{"action":"intake","language":"English","x":"1"}}`)); err == nil {
 		t.Fatal("intake with unknown key accepted over MCP")

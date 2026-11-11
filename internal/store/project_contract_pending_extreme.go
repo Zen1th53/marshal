@@ -27,6 +27,8 @@ type PendingProjectContract struct {
 	Purpose string
 	// Submitted is when the draft was admitted.
 	Submitted time.Time
+	// Contract is the canonical draft itself, as the Marshal submitted it.
+	Contract projectcontext.Contract
 }
 
 // ReadPendingProjectContract finds the draft an owner "accept architecture"
@@ -115,7 +117,7 @@ func (s *Store) ReadPendingProjectContract(ctx context.Context, project projectc
 		return PendingProjectContract{}, false, nil
 	}
 	at, _ := time.Parse(time.RFC3339Nano, found.at)
-	return PendingProjectContract{Occurrence: found.id, Launch: found.launch, ID: c.ID, Revision: c.Revision, Digest: digest, Purpose: strings.TrimSpace(c.Purpose), Submitted: at}, true, nil
+	return PendingProjectContract{Occurrence: found.id, Launch: found.launch, ID: c.ID, Revision: c.Revision, Digest: digest, Purpose: strings.TrimSpace(c.Purpose), Submitted: at, Contract: c}, true, nil
 }
 
 func noSuchTable(err error) bool {

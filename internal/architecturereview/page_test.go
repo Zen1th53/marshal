@@ -70,3 +70,25 @@ func TestPagePartPanelContract(t *testing.T) {
 		t.Error("review.html must not use innerHTML")
 	}
 }
+
+func TestPageAcceptContract(t *testing.T) {
+	for _, want := range []string{
+		`id="accept-summary"`,
+		`id="accepted-banner"`,
+		`>Accept architecture<`,
+		`builders_digest:state.builders_digest`,
+		`confirm(t('reopen_prompt'))`,
+		`>Accepted — the run continues in your terminal.<`,
+		`t('accept_wait_reply')`,
+		`t('accept_open_request')`,
+		`t('accept_unsent')`,
+		`state.accept_blocked`,
+	} {
+		if !strings.Contains(reviewHTML, want) {
+			t.Errorf("review.html does not contain %q", want)
+		}
+	}
+	if strings.Contains(reviewHTML, ">Approve<") {
+		t.Error("review.html still labels the button Approve")
+	}
+}

@@ -46,11 +46,6 @@ func registeredArchitectureOwner(t *testing.T) (*Store, SignedArchitectureReceip
 		ArchitectureTarget: ArchitectureTarget{ProjectID: string(binding.ID), Root: root, StorePath: filepath.Join(private, "state.db"), SourceRoot: root, Protocol: architecturecodec.Version, Policy: "community"},
 		Generation:         1, GitDirectory: filepath.Join(root, ".git"), Issuer: key.Public().(ed25519.PublicKey), EnrollmentID: "owner-enrollment",
 	}
-	if architecturecodec.ModelArchitectureApprovalAllowed() {
-		g.Policy = "private_extreme"
-		commandKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{18}, ed25519.SeedSize))
-		g.CommandIssuer = commandKey.Public().(ed25519.PublicKey)
-	}
 	payload, err := architectureSignedBytes("marshal.architecture.enrollment.v1", g)
 	if err != nil {
 		t.Fatal(err)

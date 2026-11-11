@@ -264,6 +264,10 @@ func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, 
 	if !ok {
 		return nil, errors.New("architecture approval status is invalid")
 	}
+	// A chat acceptance from before browser-only acceptance is not one.
+	if approval, _ := s["approval"].(map[string]any); approved && approval != nil && approval["source"] == "marshal_operator_command" {
+		approved = false
+	}
 	language, validLanguage := s["language"].(string)
 	ui, validUI := s["ui"].(map[string]any)
 	if !validLanguage || strings.TrimSpace(language) == "" || !validUI {

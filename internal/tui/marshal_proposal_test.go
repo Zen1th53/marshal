@@ -677,22 +677,22 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 		}
 		w.observeMarshalProposalFiles(rt.ProjectRoot())
 	}
-	emit("01", `{"action":"intake","language":"Uzbek","earlier_work":"no"}`)
-	emit("02", `{"action":"intake","language":"English","earlier_work":""}`)
+	emit("01", `{"action":"intake","language":"Uzbek"}`)
+	emit("02", `{"action":"intake","language":"English"}`)
 	for i, bad := range []string{
-		`{"action":"intake","language":"Bad","earlier_work":"maybe"}`,
-		`{"action":"intake","language":"Bad","earlier_work":"yes","command":"approve"}`,
-		`{"action":"intake","language":"Bad","language":"Other","earlier_work":"yes"}`,
-		`{"action":"intake","language":"","earlier_work":"yes"}`,
-		`{"action":"intake","language":"Bad\nInjected","earlier_work":"yes"}`,
+		`{"action":"intake","language":"English","earlier_work":"no"}`,
+		`{"action":"intake","language":"Bad","command":"approve"}`,
+		`{"action":"intake","language":"Bad","language":"Other"}`,
+		`{"action":"intake","language":""}`,
+		`{"action":"intake","language":"Bad\nInjected"}`,
 	} {
 		emit(fmt.Sprintf("bad-%d", i), bad)
 	}
 	// Replaying an old transcript must not overwrite the newer file preferences.
-	w.observeMarshalProposals(importer.SessionTranscript{Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"Old","earlier_work":"yes"}`}}})
+	w.observeMarshalProposals(importer.SessionTranscript{Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"Old"}`}}})
 	fresh := NewWorkspace(nil, "project", "session")
 	brief := fresh.marshalContinuityBriefing(rt.ProjectRoot(), "protocol")
-	if !strings.Contains(brief, `"language":"English"`) || !strings.Contains(brief, `"earlier_work":"no"`) {
+	if !strings.Contains(brief, `"language":"English"`) {
 		t.Fatalf("saved intake lost or invalid file accepted: %s", brief)
 	}
 	if !w.permissions.queue.Empty() {
@@ -701,7 +701,7 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		args := marshalKickoffArgs(provider, rt.ProjectRoot())
 		opening := args[len(args)-1]
-		if opening != marshalKickoffContinue || strings.Contains(opening, `"language":"English"`) || strings.Contains(opening, `"earlier_work":"no"`) || strings.Contains(opening, "Do not repeat") {
+		if opening != marshalKickoffContinue || strings.Contains(opening, `"language":"English"`) || strings.Contains(opening, "Do not repeat") {
 			t.Fatalf("%s reopened/switched opening leaked file intake into chat: %s", provider, opening)
 		}
 		pArgs, _, dir, err := prepareMarshalLaunch(provider, rt.ProjectRoot(), nil, "protocol", false)
@@ -718,10 +718,10 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 	if other := fresh.marshalContinuityBriefing(t.TempDir(), "protocol"); other != "protocol" {
 		t.Fatal("intake leaked into another project")
 	}
-	emit("03", `{"action":"intake","language":"Uzbek","earlier_work":"yes"}`)
+	emit("03", `{"action":"intake","language":"Uzbek"}`)
 }
 
-func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork string) {
+func emitMarshalIntakeFile(t *testing.T, w *Workspace, language string) {
 	t.Helper()
 	dir := filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -731,7 +731,7 @@ func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork str
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := json.Marshal(map[string]string{"action": "intake", "language": language, "earlier_work": earlierWork})
+	data, err := json.Marshal(map[string]string{"action": "intake", "language": language})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -810,7 +810,7 @@ func TestFailedIntakeAdmissionRemainsRecoverable(t *testing.T) {
 	if err := os.Mkdir(target, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "intake.json"), []byte(`{"action":"intake","language":"English","earlier_work":"no"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "intake.json"), []byte(`{"action":"intake","language":"English"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	w.observeMarshalProposalFiles(root)

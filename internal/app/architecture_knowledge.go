@@ -15,11 +15,6 @@ func (r *Runtime) ArchitectureAcceptance(ctx context.Context) (store.Architectur
 	if r == nil || r.store == nil {
 		return store.ArchitectureAcceptance{}, model.ErrPolicyDenied
 	}
-	if architecturecodec.ModelArchitectureApprovalAllowed() {
-		if accepted, err := r.store.MarshalArchitectureAcceptanceFor(ctx, r.ProjectIdentity()); err == nil {
-			return accepted, nil
-		}
-	}
 	observed, _, err := r.store.ObserveRegisteredArchitectureOwner(ctx)
 	if err != nil {
 		return store.ArchitectureAcceptance{}, err

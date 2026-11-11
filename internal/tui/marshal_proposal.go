@@ -28,8 +28,8 @@ type marshalProposal struct {
 	occurrence                                                            string
 	who                                                                   string
 	sourceSession, revision, digest, instructionRef, criteria             string
-	action, key, value, provider, path, id, reason, language, earlierWork string
-	taskID, targetWorker, model                                           string
+	action, key, value, provider, path, id, reason, language string
+	taskID, targetWorker, model                              string
 	question, choices, card                                               string
 	ids                                                                   string
 	freshSession                                                          bool
@@ -85,7 +85,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	if _, err = d.Token(); err != io.EOF {
 		return p, invalid
 	}
-	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
+	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
 	p.revision, p.digest, p.instructionRef, p.criteria = fields["revision"], fields["digest"], fields["instruction_ref"], fields["criteria"]
 	p.question, p.choices, p.card = fields["question"], fields["choices"], fields["card"]
 	p.ids = fields["ids"]
@@ -93,10 +93,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	switch p.action {
 	case "intake":
 		keys = []string{"action", "language"}
-		if _, ok := fields["earlier_work"]; ok {
-			keys = append(keys, "earlier_work")
-		}
-		if strings.TrimSpace(p.language) == "" || len(p.language) > 100 || (p.earlierWork != "" && p.earlierWork != "yes" && p.earlierWork != "no") {
+		if strings.TrimSpace(p.language) == "" || len(p.language) > 100 {
 			return p, invalid
 		}
 	case "ask":
@@ -300,9 +297,6 @@ func (w *Workspace) observeAuthenticatedMarshalProposals(tr importer.SessionTran
 
 func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, occurrence, who string) {
 	for messageIndex, message := range tr.Messages {
-		if who == "Marshal" && occurrence == "" && message.Role == "user" && message.Kind == importer.MessageKindText {
-			w.observeArchitectureOperatorInstruction(tr.SessionID, messageIndex, message.Timestamp, message.Content)
-		}
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
 		}
@@ -980,8 +974,6 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 			w.resolveArchitectureProposal(p.occurrence, openErr)
 			w.RecordActivity("Ignored Marshal architecture proposal: " + openErr.Error())
 		}
-	case "accept-architecture":
-		w.applyMarshalArchitectureAcceptance(p)
 	case "ask":
 		w.openAsk(p)
 	case "requirements":
@@ -991,17 +983,13 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 	case "release":
 		w.applyRelease(p)
 	case "intake":
-		if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
+		if err := w.saveMarshalIntake(marshalIntake{Language: p.language}); err != nil {
 			w.permissions.mu.Lock()
 			delete(w.permissions.proposalsSeen, p.occurrence)
 			w.permissions.mu.Unlock()
 			return
 		}
-		note := fmt.Sprintf("%s: intake updated (language %s", p.requester(), p.language)
-		if p.earlierWork != "" {
-			note += ", earlier work " + p.earlierWork
-		}
-		w.RecordActivity(note + ")")
+		w.RecordActivity(fmt.Sprintf("%s: intake updated (language %s)", p.requester(), p.language))
 		if w.store != nil {
 			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 		}

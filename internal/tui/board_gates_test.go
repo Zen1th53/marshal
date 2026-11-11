@@ -19,10 +19,10 @@ func walkContract() *gateContract {
 }
 
 // A project contract the Marshal submitted waits for the owner on the
-// Board itself, before any run: an inbox entry with the contract's id,
-// revision and purpose, its two buttons and NEEDS YOU in the header. y
-// only arms the reply; Esc cancels it and nothing is sent; the details
-// button opens the Architecture view.
+// Board itself, before any run: an inbox entry with the contract's purpose,
+// one button that opens the architecture in the browser and NEEDS YOU in the
+// header. y and a click open the browser: nothing is armed and nothing is
+// ever typed into the chat, because acceptance happens only in the browser.
 func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
@@ -34,46 +34,36 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	if !strings.Contains(head, "NEEDS YOU") || strings.Contains(head, "NO RUN YET") || !strings.Contains(head, "inbox 1") {
 		t.Fatalf("header does not say the Marshal needs the owner: %q", head)
 	}
-	for _, want := range []string{"the Marshal waits for your reply", "architecture · contract hello-uz rev 1 waits for your acceptance", "Build hello-uz", "[y] accept architecture", "[b] open details", "Tell the Marshal what to build"} {
+	for _, want := range []string{"the Marshal waits for your reply", "architecture · architecture waits for you in the browser", "Build hello-uz", "[y] open in browser", "Tell the Marshal what to build"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("first-use Board misses %q:\n%s", want, text)
 		}
 	}
-	if !strings.Contains(strings.Split(text, "\n")[39], "y reply") {
-		t.Errorf("footer does not offer y: %q", strings.Split(text, "\n")[39])
+	for _, gone := range []string{"accept architecture", "[b] open details"} {
+		if strings.Contains(text, gone) {
+			t.Errorf("first-use Board still shows %q:\n%s", gone, text)
+		}
 	}
 
 	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
-	if !key(KeyEvent{Type: KeyRune, Rune: 'y'}) || w.gateArmed() == "" {
-		t.Fatal("y did not arm the reply")
+	if !key(KeyEvent{Type: KeyRune, Rune: 'y'}) || w.gateArmed() != "" {
+		t.Fatal("y armed a reply instead of opening the browser")
 	}
-	if text := frameText(w, 120, 40); !strings.Contains(text, "send “accept architecture” to the Marshal as your reply?") || !strings.Contains(text, "[Enter] send") {
-		t.Fatalf("the armed reply does not say what Enter sends:\n%s", text)
+	if !strings.Contains(w.state.LastOutput, "architecture") {
+		t.Fatalf("y did not try to open the architecture: %q", w.state.LastOutput)
 	}
-	if !key(KeyEvent{Type: KeyEsc}) || w.gateArmed() != "" {
-		t.Fatal("Esc did not cancel the armed reply")
+	clickText(t, w, 120, 40, "[y] open in browser")
+	if w.gateArmed() != "" {
+		t.Fatal("a click armed a reply instead of opening the browser")
 	}
 	if len(w.sayEchoList()) != 0 {
-		t.Fatalf("a cancelled reply was sent: %+v", w.sayEchoList())
+		t.Fatalf("the architecture gate typed into the chat: %+v", w.sayEchoList())
 	}
-	// Any other key cancels too and is not the reply.
-	key(KeyEvent{Type: KeyRune, Rune: 'y'})
-	if !key(KeyEvent{Type: KeyRune, Rune: 'x'}) || w.gateArmed() != "" || len(w.sayEchoList()) != 0 {
-		t.Fatal("another key did not cancel the reply")
-	}
-
-	// The details button opens the architecture the gate is about.
-	w.archSource = &fakeArch{}
-	clickText(t, w, 120, 40, "[b] open details")
-	if !w.archView.Load() {
-		t.Fatal("open details did not open the Architecture view")
-	}
-	w.closeArchView()
 
 	// Accepted (or taken back): the gate goes with the canonical state.
 	w.gateContractSource = func(context.Context) (*gateContract, error) { return nil, nil }
 	w.refreshGates(t.Context())
-	if text := frameText(w, 120, 40); strings.Contains(text, "NEEDS YOU") || strings.Contains(text, "accept architecture") || !strings.Contains(text, "NO RUN YET") {
+	if text := frameText(w, 120, 40); strings.Contains(text, "NEEDS YOU") || strings.Contains(text, "open in browser") || !strings.Contains(text, "NO RUN YET") {
 		t.Fatalf("the gate stayed after the contract left the store:\n%s", text)
 	}
 	if key(KeyEvent{Type: KeyRune, Rune: 'y'}) {
@@ -104,9 +94,9 @@ func (fakePlanSource) PlanOverview(context.Context, string) (store.PlanOverview,
 	return store.PlanOverview{}, nil
 }
 
-// The reply buttons send the owner's exact words into the docked chat
-// through the Board's say path, only after the arm and the confirm: y then
-// Enter for the architecture, a click then a second click for the plan.
+// The plan's reply button sends the owner's exact words into the docked chat
+// through the Board's say path, only after the arm and the confirm (a click
+// then a second click); the architecture gate never sends anything.
 func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
@@ -124,19 +114,16 @@ func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
 	w.gateContractSource = func(context.Context) (*gateContract, error) { return walkContract(), nil }
 	w.refreshGates(ctx)
 
+	// The architecture gate opens the browser: y and Enter never type into
+	// the chat.
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'y'})
-	if out, _ := tmux.CapturePane(ctx, pane); strings.Contains(out, "accept architecture") {
-		t.Fatalf("y alone sent the reply:\n%s", out)
-	}
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyEnter})
-	waitForTmuxOutput(t, pane, "got:accept architecture")
-	if text := frameText(w, 120, 40); !strings.Contains(text, "sent “accept architecture” to the Marshal") || strings.Contains(strings.SplitN(text, "\n", 3)[1], "NEEDS YOU") {
-		t.Fatalf("the sent gate does not wait for the Marshal:\n%s", text)
+	time.Sleep(4 * saySettle)
+	if out, _ := tmux.CapturePane(ctx, pane); strings.Contains(out, "accept architecture") {
+		t.Fatalf("the architecture gate typed into the chat:\n%s", out)
 	}
-	// A sent gate is not armed again by y.
-	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'y'})
-	if w.gateArmed() != "" || w.composing() || !strings.Contains(w.state.LastOutput, "Already sent") {
-		t.Fatalf("a sent gate armed again or y leaked: armed %q composer %q", w.gateArmed(), w.composer.Text())
+	if w.gateArmed() != "" || len(w.sayEchoList()) != 0 {
+		t.Fatalf("the architecture gate armed or sent: armed %q echoes %+v", w.gateArmed(), w.sayEchoList())
 	}
 
 	w.gateContractSource = func(context.Context) (*gateContract, error) { return nil, nil }
@@ -156,7 +143,7 @@ func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
 	}
 	clickText(t, w, 170, 40, "[Enter] send")
 	waitForTmuxOutput(t, pane, "got:approve the plan")
-	if n := len(w.sayEchoList()); n != 2 {
+	if n := len(w.sayEchoList()); n != 1 {
 		t.Fatalf("echoes %+v", w.sayEchoList())
 	}
 }

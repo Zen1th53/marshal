@@ -30,8 +30,8 @@ func writeGateANS(t *testing.T, w *Workspace, name string, cols, rows int) {
 
 // End to end on a real store: the live Marshal submits a project contract
 // through MCP, the Board reads it as the owner's gate (contract id,
-// revision, purpose, NEEDS YOU); the owner's "accept architecture" in the
-// chat closes it. A drafted plan saved in the store is the plan's gate.
+// revision, purpose, NEEDS YOU); the owner's Accept architecture in the
+// browser closes it. A drafted plan saved in the store is the plan's gate.
 func TestOwnerGatesFromTheSeededStore(t *testing.T) {
 	w, _, cfg := liveMCPFixture(t)
 	w.screen = NewScreen(nil)
@@ -53,7 +53,7 @@ func TestOwnerGatesFromTheSeededStore(t *testing.T) {
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "hello-uz-contract-01", "proposal": draft}, true)
 	w.refreshGates(ctx)
 	text := frameText(w, 120, 34)
-	for _, want := range []string{"NEEDS YOU", "contract hello-uz rev 1 waits for your acceptance", "Build hello-uz", "[y] accept architecture", "[b] open details"} {
+	for _, want := range []string{"NEEDS YOU", "architecture waits for you in the browser", "Build hello-uz", "[y] open in browser"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Board misses %q:\n%s", want, text)
 		}
