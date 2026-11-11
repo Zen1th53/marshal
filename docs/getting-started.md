@@ -70,17 +70,18 @@ Example goal:
 
 ---
 
-## 5. Accept the Architecture with `y`
+## 5. Accept the Architecture in the Browser
 
 After receiving your goal, the Marshal reviews your repository structure, asks clarifying questions if needed, and drafts an **architecture proposal** and project contract.
 
 When the draft is ready:
 1. The Board header alerts with an orange **`NEEDS YOU`** banner:
    ```text
-   contract my-project rev 1 waits for your acceptance · [y] accept architecture · [b] open details
+   ⚑ architecture · architecture waits for you in the browser
+       [y] open in browser
    ```
-2. Press `y` on the Board. This arms the acceptance reply.
-3. Press `Enter` to confirm.
+2. Press `y` on the Board. The architecture opens in your browser.
+3. Review it and click **Accept architecture**. The page shows "Accepted — the run continues in your terminal.", and the Marshal moves on by itself; no key is needed.
 
 The accepted architecture becomes the binding contract for all subsequent tasks.
 

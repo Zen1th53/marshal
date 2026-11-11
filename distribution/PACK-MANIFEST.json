@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "2ffccf5d15e3e3d3bd01b9049caa10256ddd4605714533363f266fffd755cff2",
-      "bytes": 12729
+      "sha256": "24899ba10b54967040b03b97ac01d35b640f29a36de11519d293045dbdc19641",
+      "bytes": 12775
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -516,8 +516,8 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "66226701126f3c0c487b2d7accd6d147f0d3ae023869ce0d99a3d0f37f756f8a",
-      "bytes": 7130
+      "sha256": "32f80288bea2df3cabc0f912dc870a0c8608f25312942b638197126c0da4b3e4",
+      "bytes": 7332
     },
     {
       "path": "docs/configuration.md",
@@ -526,18 +526,18 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "326ae4fa8bd686f4630ed93fac30b21877f5aa46c5c9ffab660a59d03a00aada",
-      "bytes": 4865
+      "sha256": "6d4e733c5d0b5666f62473837102a60bff2bb90e16ad625f77a31a2b1c4345f1",
+      "bytes": 5009
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "6c1f09c5022d780b1483163385960afcb9901365f9385edd75d988698136f1e3",
-      "bytes": 4273
+      "sha256": "26e91cebafd9c70f3ea7a6d0c9ee25010306b74c9bca0f4d59c9c16f55ef80b7",
+      "bytes": 4278
     },
     {
       "path": "docs/index.md",
-      "sha256": "f37c070e53b796787c22bb9540780fb85bd5cce2fe91b6a732cfb24b403ee804",
-      "bytes": 4038
+      "sha256": "81842cfe72f6257d26c88efcd3e2690948477c3db19493d769e9a735cabcdfe3",
+      "bytes": 4058
     },
     {
       "path": "docs/installation.md",
@@ -611,8 +611,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "c2b59ee129fbb001f3b25ec5c6352ba20ad5ae69b5e0a0ae67f3ad94e9156b09",
-      "bytes": 4012
+      "sha256": "c686465c83875f233f445f6d1f913eee081a47338e9df760556e0809523caf97",
+      "bytes": 4127
     },
     {
       "path": "docs/upgrading.md",
