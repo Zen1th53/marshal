@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -73,46 +74,122 @@ func parseHoldIDs(s string) ([]string, error) {
 // isHeldFor reports whether runID's plan task is held. The held set is keyed by
 // run so a hold never touches another run's tasks.
 func (m *marshalSession) isHeldFor(runID, planTaskID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	return m.isHeldLocked(runID, planTaskID)
+}
+
+func (m *marshalSession) isHeldLocked(runID, planTaskID string) bool {
 	return runID != "" && runID == m.heldRunID && m.held[planTaskID]
 }
 
-// holdTasks adds ids to the held set for runID, replacing any set left over
-// from another run.
-func (m *marshalSession) holdTasks(runID string, ids []string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// claimDispatch is dispatch's last hold check, under the lock a hold takes:
+// a held task is refused; otherwise the launch is counted until end is
+// called, so a hold that lands meanwhile counts the task as running rather
+// than paused. The hold and the dispatch decision are atomic.
+func (m *marshalSession) claimDispatch(runID, planTaskID string) (func(), bool) {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	if m.isHeldLocked(runID, planTaskID) {
+		return nil, false
+	}
+	key := runID + "\x00" + planTaskID
+	if m.launching == nil {
+		m.launching = map[string]int{}
+	}
+	m.launching[key]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.holdMu.Lock()
+			defer m.holdMu.Unlock()
+			if m.launching[key]--; m.launching[key] <= 0 {
+				delete(m.launching, key)
+			}
+		})
+	}, true
+}
+
+// holdChanged returns a channel closed the next time the held set changes.
+func (m *marshalSession) holdChanged() <-chan struct{} {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	if m.holdCh == nil {
+		m.holdCh = make(chan struct{})
+	}
+	return m.holdCh
+}
+
+// notifyHoldLocked wakes whoever waits on the held set. holdMu is held.
+func (m *marshalSession) notifyHoldLocked() {
+	if m.holdCh != nil {
+		close(m.holdCh)
+		m.holdCh = nil
+	}
+}
+
+// holdTasks validates ids against the run as stored and adds them to the
+// held set for runID, replacing any set left over from another run, all under
+// holdMu so no dispatch claim can slip between the count and the hold. It
+// returns how many held tasks had not started (and are now paused) and how
+// many were running or past it, or the first ID that is not in the run.
+func (m *marshalSession) holdTasks(runID string, ids []string, load func() (marshal.Run, bool)) (notStarted, running int, unknown string, ok bool) {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	run, found := load()
+	if !found {
+		return 0, 0, "", false
+	}
+	state := map[string]marshal.TaskState{}
+	for _, t := range run.Tasks {
+		state[t.PlanTaskID] = t.State
+	}
+	held := map[string]bool{}
+	for _, id := range ids {
+		if _, exists := state[id]; !exists {
+			return 0, 0, id, false
+		}
+		held[id] = true
+	}
 	if m.heldRunID != runID || m.held == nil {
 		m.heldRunID = runID
 		m.held = map[string]bool{}
 	}
-	for _, id := range ids {
+	for id := range held {
+		if taskNotStarted(state[id]) && m.launching[runID+"\x00"+id] == 0 {
+			notStarted++
+		} else {
+			running++
+		}
 		m.held[id] = true
 	}
+	m.notifyHoldLocked()
+	return notStarted, running, "", true
 }
 
 // releaseTasks drops ids from the held set.
 func (m *marshalSession) releaseTasks(ids []string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
 	for _, id := range ids {
 		delete(m.held, id)
 	}
+	m.notifyHoldLocked()
 }
 
 // releaseAllHeld clears the whole held set.
 func (m *marshalSession) releaseAllHeld() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
 	m.held = nil
 	m.heldRunID = ""
+	m.notifyHoldLocked()
 }
 
 // heldCount is how many tasks the session currently holds.
 func (m *marshalSession) heldCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
 	return len(m.held)
 }
 
@@ -147,34 +224,25 @@ func (w *Workspace) applyHold(p marshalProposal) {
 		w.rejectChange(p, "malformed hold ids")
 		return
 	}
-	m, runID, run, ok := w.currentMarshalRun()
+	m := w.marshalSession()
+	m.mu.Lock()
+	runID := m.runID
+	m.mu.Unlock()
+	// The run is read under the hold's lock, so the count matches what
+	// dispatch will do: a task whose launch is already claimed counts as
+	// running, and every task counted as paused is refused by dispatch.
+	notStarted, running, unknown, ok := m.holdTasks(runID, ids, func() (marshal.Run, bool) {
+		_, id, run, ok := w.currentMarshalRun()
+		return run, ok && id == runID
+	})
+	if unknown != "" {
+		w.rejectChange(p, "task "+unknown+" is not in the active run")
+		return
+	}
 	if !ok {
 		w.rejectChange(p, "no active run to change")
 		return
 	}
-	state := map[string]marshal.TaskState{}
-	for _, t := range run.Tasks {
-		state[t.PlanTaskID] = t.State
-	}
-	held := map[string]bool{}
-	for _, id := range ids {
-		if _, exists := state[id]; !exists {
-			w.rejectChange(p, "task "+id+" is not in the active run")
-			return
-		}
-		held[id] = true
-	}
-	heldIDs := make([]string, 0, len(held))
-	notStarted, running := 0, 0
-	for id := range held {
-		heldIDs = append(heldIDs, id)
-		if taskNotStarted(state[id]) {
-			notStarted++
-		} else {
-			running++
-		}
-	}
-	m.holdTasks(runID, heldIDs)
 	w.change.mu.Lock()
 	w.change.card = &changeCard{runID: runID, notStarted: notStarted, running: running, at: time.Now()}
 	w.change.mu.Unlock()
@@ -265,7 +333,12 @@ func (w *Workspace) handleChangeKey(event KeyEvent) bool {
 }
 
 // clickChange is the same two actions by mouse.
+// While the change is being applied a click does nothing, as for the keys:
+// it must not send "apply this change" again or release the hold.
 func (w *Workspace) clickChange(id string) {
+	if w.changeApplying() {
+		return
+	}
 	switch id {
 	case "apply":
 		w.changeApply()
@@ -279,6 +352,9 @@ func (w *Workspace) clickChange(id string) {
 // TUI pauses it to apply the amendment (beginChangeApply). With no chat open
 // nothing is sent and the card stays.
 func (w *Workspace) changeApply() {
+	if w.changeApplying() {
+		return
+	}
 	if w.sayPane() == "" && !w.nativeChatShown() {
 		w.setOutput("No Marshal chat is open; the change was not applied.", true)
 		return
@@ -291,6 +367,29 @@ func (w *Workspace) changeApply() {
 	w.change.mu.Unlock()
 	w.sayToMarshal(w.workers.context(), "apply this change")
 	w.requestRepaint()
+}
+
+// changeApplying reports whether the open card is applying the change and
+// has not timed out: the card then takes no action until it settles.
+func (w *Workspace) changeApplying() bool {
+	w.change.mu.Lock()
+	defer w.change.mu.Unlock()
+	c := w.change.card
+	return c != nil && c.applying && !c.timedOut
+}
+
+// finishAppliedChange releases the hold and closes the card after an
+// amendment the owner asked for ran through the ordinary amend path (the run
+// was not busy). The busy-apply sequence does this itself, so it is skipped
+// while that sequence runs.
+func (w *Workspace) finishAppliedChange() {
+	w.change.mu.Lock()
+	c := w.change.card
+	applying := c != nil && c.applying && !w.change.inFlight
+	w.change.mu.Unlock()
+	if applying {
+		w.releaseChange()
+	}
 }
 
 // changeKeep tells the Marshal to keep the current goal, releases the held set
@@ -310,6 +409,16 @@ func (w *Workspace) changeKeep() {
 // busy. The proposal is resolved as applied here; the sequence runs in the
 // background so it can wait for the run to pause.
 func (w *Workspace) beginChangeApply(p marshalProposal) {
+	w.change.mu.Lock()
+	if w.change.inFlight {
+		w.change.mu.Unlock()
+		// One change, one amendment: a repeated or separate amend proposal
+		// while the sequence runs is refused, not applied a second time.
+		w.rejectChange(p, "the change is already being applied")
+		return
+	}
+	w.change.inFlight = true
+	w.change.mu.Unlock()
 	w.resolveChangeProposal(p, "applied")
 	w.change.mu.Lock()
 	if w.change.card != nil {
@@ -330,6 +439,11 @@ func (w *Workspace) beginChangeApply(p marshalProposal) {
 // try again. The stop/busy/amend/resume steps go through seams so tests can
 // drive them.
 func (w *Workspace) applyChangeSequence(ctx context.Context, reason string) {
+	defer func() {
+		w.change.mu.Lock()
+		w.change.inFlight = false
+		w.change.mu.Unlock()
+	}()
 	stopFn, busyFn, amendFn, resumeFn, poll, timeout := w.changeSeams()
 	w.RecordActivity("Applying your change: pausing the run briefly.")
 	stopFn()

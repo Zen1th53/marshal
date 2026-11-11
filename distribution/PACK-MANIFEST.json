@@ -2326,13 +2326,13 @@
     },
     {
       "path": "internal/app/marshal_execute.go",
-      "sha256": "e16ffec1437af688fe9e3d87a5cc2d26989a5532504146b0a6927f4daaea0875",
-      "bytes": 15755
+      "sha256": "4345fc0cb8c5c983f78f0e59e5b39bfa3559da3b1aee13b0cda91fd5b5a4146c",
+      "bytes": 17437
     },
     {
       "path": "internal/app/marshal_execute_test.go",
-      "sha256": "e96034016b8fd68554c3b40dd16facb3f76add7000a3bc54c9cf0b8a3511c9d8",
-      "bytes": 25936
+      "sha256": "8b2af9373c85575978616e5a79e067f1085abcf1766bbd2d45fcf506b672e418",
+      "bytes": 29156
     },
     {
       "path": "internal/app/marshal_expired_approval_rework_extreme_test.go",
@@ -2721,8 +2721,8 @@
     },
     {
       "path": "internal/app/marshal_service.go",
-      "sha256": "fec9183fe396f9c04a26cf04a1623c43b470db2a25d86b1fb47fcd8e2f32fe27",
-      "bytes": 22970
+      "sha256": "f885473fc5d657363c6c9ddec38e52b9d3d1231ec36d1a1c5aeef1c3279e3866",
+      "bytes": 23813
     },
     {
       "path": "internal/app/marshal_service_test.go",
@@ -12331,8 +12331,8 @@
     },
     {
       "path": "internal/tui/board_change.go",
-      "sha256": "d3e4c941ee3af3c45a3920cebe74edd4ba5e1409c65e81d5f08f985feeff4798",
-      "bytes": 15800
+      "sha256": "6e7b861e1e3669dc90b4c995e5225451dd03796e4acf55a7c82e7198d450bfb1",
+      "bytes": 19457
     },
     {
       "path": "internal/tui/board_change_default_test.go",
@@ -12346,8 +12346,8 @@
     },
     {
       "path": "internal/tui/board_change_test.go",
-      "sha256": "a5b9b06ec58b80d0480ee7e5d220b6328eac945a4cc72be7970610b1e8244564",
-      "bytes": 12503
+      "sha256": "5738ad993746601459ba7ead4e59f6066af1efb941542dcb33028e8e7f25740c",
+      "bytes": 17384
     },
     {
       "path": "internal/tui/board_demo_test.go",
@@ -12861,8 +12861,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "cb83fe19b0c34510ee8dd393f58536f8f5349e3618e4cacd0944d26376cba3a1",
-      "bytes": 72196
+      "sha256": "d754e28413fcd45b9c757db6315a41df185b12d11aec798e2e817fb2a6eb75e9",
+      "bytes": 72960
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -15066,8 +15066,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "cd49c11219ee8226b39deaef64eda5e361da0191d791c42272fbd2d762d7039a",
-      "bytes": 84154
+      "sha256": "ce23c1fe0f922595af5087edb8d983e1d810ac1743f7a974131007f804fec8c3",
+      "bytes": 84285
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

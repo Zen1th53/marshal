@@ -241,6 +241,9 @@ type Workspace struct {
 		resumeFn func(ctx context.Context) (string, error)
 		poll     time.Duration
 		timeout  time.Duration
+		// inFlight is set while the busy-apply sequence runs, so a second
+		// amend proposal cannot start another one.
+		inFlight bool
 	}
 	// next is the "what next?" card shown when a run closes (board_next.go);
 	// shownFor is the run id it was shown for, so a later Closed publish does

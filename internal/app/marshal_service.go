@@ -84,7 +84,20 @@ type MarshalService struct {
 	// the TUI session only (never persisted), so after a restart it is gone
 	// and the Marshal holds again if the change is still open. Nil means no
 	// hold is in force.
-	HeldTask                      func(planTaskID string) bool
+	HeldTask func(planTaskID string) bool
+	// HoldChanged returns a channel that is closed the next time the held
+	// set changes. When nothing else can move and a task that has not started
+	// is held, Execute waits on it instead of reporting that the run cannot
+	// progress, so a released task runs. Nil means Execute does not wait.
+	HoldChanged func() <-chan struct{}
+	// ClaimDispatch is the last hold check before a task launches, taken
+	// under the same lock the TUI uses to apply a hold: ok false means the
+	// task is now held and is not launched. end is called once the dispatch
+	// attempt has returned. It makes the hold and the dispatch decision
+	// atomic: a hold either lands before the claim (the task is skipped) or
+	// sees the claim (the task is counted as already running). Nil means no
+	// claim is needed.
+	ClaimDispatch                 func(planTaskID string) (end func(), ok bool)
 	workerRecall                  func(context.Context, authz.Principal, RecallRequest) (RecallResponse, error)
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error

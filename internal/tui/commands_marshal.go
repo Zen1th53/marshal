@@ -78,9 +78,16 @@ type marshalSession struct {
 	// held is the set of plan task IDs the owner's open change holds, keyed
 	// by heldRunID so a hold never touches another run's tasks. It lives in
 	// memory only (never persisted); dispatchReady skips a held task that has
-	// not started (board_change.go).
+	// not started (board_change.go). holdMu guards held, heldRunID, launching
+	// and holdCh, and is the one lock a hold and a dispatch claim share, so
+	// the two cannot cross. launching counts dispatches claimed but not yet
+	// returned, keyed by run and task; holdCh is closed when the held set
+	// changes, waking a run that waits on its held tasks.
+	holdMu    sync.Mutex
 	heldRunID string
 	held      map[string]bool
+	launching map[string]int
+	holdCh    chan struct{}
 }
 
 type marshalAmendment struct {
@@ -789,6 +796,8 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	service.RecordActivity = w.RecordActivity
 	service.QuotaLeft = w.providerLeft
 	service.HeldTask = func(planTaskID string) bool { return m.isHeldFor(runID, planTaskID) }
+	service.ClaimDispatch = func(planTaskID string) (func(), bool) { return m.claimDispatch(runID, planTaskID) }
+	service.HoldChanged = m.holdChanged
 	return service, provider, note, nil
 }
 
@@ -1592,6 +1601,10 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		_, _ = w.runAmend(runCtx, m, service, runID, provider, reason)
+		// The owner's "apply this change" may reach this ordinary path when
+		// the run was no longer busy; the amendment is done either way, so
+		// release the hold and close the card (board_change.go).
+		w.finishAppliedChange()
 	})
 	return "Amendment started; the panel will show the result.", nil
 }
