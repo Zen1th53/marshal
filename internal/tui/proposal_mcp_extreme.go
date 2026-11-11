@@ -414,7 +414,7 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 			parsed.occurrence = id
 			parsed.who = "Marshal"
 			parsed.sourceSession = l.session
-			if parsed.action == "intake" || parsed.action == "ask" {
+			if parsed.action == "intake" || parsed.action == "ask" || parsed.action == "requirements" {
 				if err = w.store.SetMCPProposalState(ctx, w.projectID, id, "applying", parsed.action+" application admitted"); err != nil {
 					return nil, err
 				}

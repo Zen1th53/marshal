@@ -48,6 +48,10 @@ const (
 	// choice's label to the Marshal chat and closes the card, as its key
 	// does. There is no arm step.
 	hitAsk boardHitKind = "ask"
+	// hitRequirements is a region of the requirements card
+	// (board_requirements.go): the Enter or e button, or a line row; a click
+	// confirms, starts an edit, or edits that line, as the keys do.
+	hitRequirements boardHitKind = "requirements"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -188,6 +192,8 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		if i, err := strconv.Atoi(h.id); err == nil {
 			w.answerAsk(i)
 		}
+	case hitRequirements:
+		w.clickRequirements(h.id)
 	case hitInspect:
 		// The same paths the inspector's keys take: a decision button
 		// opens the inbox's confirmation, never decides; o shows the pane.

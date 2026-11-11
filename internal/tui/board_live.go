@@ -392,6 +392,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
+	v.req = w.currentReq()
 	v.guard, v.guardPrefix, v.guardArmed, v.guardUndo = w.guardPaint()
 	if empty {
 		v.project = filepath.Base(w.providerRoot())
@@ -586,6 +587,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	// An open ask card takes its keys first: Enter picks the recommended
 	// choice, each letter picks its own; the card closes when one sends.
 	if w.handleAskKey(event) {
+		return true
+	}
+	// The requirements card's keys come next, after any ask card: Enter
+	// confirms once every line is filled, e edits a line.
+	if w.handleRequirementsKey(event) {
 		return true
 	}
 	// An owner gate's armed reply takes the next key: Enter sends it,

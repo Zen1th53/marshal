@@ -30,7 +30,7 @@ type marshalProposal struct {
 	sourceSession, revision, digest, instructionRef, criteria             string
 	action, key, value, provider, path, id, reason, language, earlierWork string
 	taskID, targetWorker, model                                           string
-	question, choices                                                     string
+	question, choices, card                                               string
 	freshSession                                                          bool
 }
 
@@ -86,7 +86,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	}
 	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
 	p.revision, p.digest, p.instructionRef, p.criteria = fields["revision"], fields["digest"], fields["instruction_ref"], fields["criteria"]
-	p.question, p.choices = fields["question"], fields["choices"]
+	p.question, p.choices, p.card = fields["question"], fields["choices"], fields["card"]
 	var keys []string
 	switch p.action {
 	case "intake":
@@ -100,6 +100,11 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 			return p, invalid
 		}
 		if _, err := parseAskChoices(p.choices); err != nil {
+			return p, invalid
+		}
+	case "requirements":
+		keys = []string{"action", "card"}
+		if _, err := parseRequirementsCard(p.card); err != nil {
 			return p, invalid
 		}
 	case "setting":
@@ -914,6 +919,8 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 		w.applyMarshalArchitectureAcceptance(p)
 	case "ask":
 		w.openAsk(p)
+	case "requirements":
+		w.openRequirements(p)
 	case "intake":
 		if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
 			w.permissions.mu.Lock()
