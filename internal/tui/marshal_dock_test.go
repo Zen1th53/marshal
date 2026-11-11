@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 // dockFake is a fake tmux that keeps just enough pane state for the dock:
@@ -272,26 +273,132 @@ func TestMarshalDockNarrowWindowKeepsChatDocked(t *testing.T) {
 	}
 }
 
-func TestMarshalDockTitleTracksRunAndProvider(t *testing.T) {
+// codexWindow is a Codex quota window 42% used (58% left), resetting in ~4d.
+func codexWindow(now time.Time) usage.Window {
+	return usage.Window{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(98 * time.Hour)}
+}
+
+func TestMarshalDockTitleShowsLimit(t *testing.T) {
 	f := newDockFake(t, 120)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 120)
 	chat.provider = "codex"
-	chat.runID = "R-7f3a"
-	w.setMarshalPanel(&MarshalPanel{RunID: "R-7f3a", Provider: "codex", State: "dispatching"})
+	now := time.Now()
+	w.storeUsage([]usage.Quota{{
+		Provider: "codex", Known: true, AsOf: now,
+		Windows: []usage.Window{codexWindow(now)},
+	}})
+	if err := w.reconcileDock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mustContain(t, f.take(),
+		"set-option -p -t %7 @marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 42% ·4d    F11 Board ")
+
+	// The reading turns unknown: the title says so within the same reconcile.
+	w.storeUsage([]usage.Quota{{Provider: "codex", Reason: usage.ReasonStale}})
 	if err := w.reconcileDock(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	log := f.take()
-	mustContain(t, log, "Marshal", "codex", "R-7f3a", "step dispatching", "Enter send", "F11 / Alt+→ Board")
+	mustContain(t, log, "⬡ codex unavailable")
+	// A title-only change joins, binds or restyles nothing.
+	mustNotContain(t, log, "join-pane", "bind-key", "pane-border-status")
 
-	w.setMarshalPanel(&MarshalPanel{RunID: "R-next", Provider: "codex", State: "reviewing"})
+	// An identical reconcile writes no title: reconcileDock is idempotent.
 	if err := w.reconcileDock(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	log = f.take()
-	mustContain(t, log, "R-next", "step reviewing")
-	mustNotContain(t, log, "join-pane", "bind-key", "pane-border-status")
+	mustNotContain(t, f.take(), "@marshal_dock_title")
+}
+
+func TestDockTitleFits(t *testing.T) {
+	w := &Workspace{}
+	chat := &activeTmuxAgent{provider: "codex"}
+	now := time.Now()
+	w.storeUsage([]usage.Quota{{
+		Provider: "codex", Known: true, AsOf: now,
+		Windows: []usage.Window{codexWindow(now)},
+	}})
+	for _, tc := range []struct {
+		width int
+		want  string
+	}{
+		{120, " MARSHAL · ⬡ codex ▓▓░ 42% ·4d    F11 Board "},
+		{40, " MARSHAL · ⬡ codex 42%    F11 Board "},
+		{20, " MARSHAL · ⬡ codex    F11 Board "},
+	} {
+		if got := w.dockTitle(chat, tc.width); got != tc.want {
+			t.Fatalf("width %d:\n got %q\nwant %q", tc.width, got, tc.want)
+		}
+	}
+}
+
+func TestDockTitleCases(t *testing.T) {
+	now := time.Now()
+	codexKnown := func(stale bool) usage.Quota {
+		return usage.Quota{Provider: "codex", Known: true, Stale: stale, AsOf: now,
+			Windows: []usage.Window{codexWindow(now)}}
+	}
+	for _, tc := range []struct {
+		name     string
+		provider string
+		ascii    bool
+		qs       []usage.Quota
+		read     bool
+		want     string
+	}{
+		{"known", "codex", false, []usage.Quota{codexKnown(false)}, true, " MARSHAL · ⬡ codex ▓▓░ 42% ·4d    F11 Board "},
+		{"known stale", "codex", false, []usage.Quota{codexKnown(true)}, true, " MARSHAL · ⬡ codex ▓▓░ ~42% ·4d    F11 Board "},
+		{"unknown", "agy", false, []usage.Quota{{Provider: "agy", Reason: usage.NotExposed}}, true, " MARSHAL · ◆ agy unavailable    F11 Board "},
+		{"not read yet", "claude", false, nil, false, " MARSHAL · ✳ claude    F11 Board "},
+		{"no glyph", "", false, nil, false, " MARSHAL · chat    F11 Board "},
+		{"ascii", "codex", true, []usage.Quota{codexKnown(false)}, true, " MARSHAL . cx codex ==- 42% .4d    F11 Board "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := &Workspace{}
+			if tc.ascii {
+				w.theme = NewTheme(ThemeNoColor, false, false)
+			}
+			if tc.read {
+				w.storeUsage(tc.qs)
+			}
+			chat := &activeTmuxAgent{provider: tc.provider}
+			if got := w.dockTitle(chat, 0); got != tc.want {
+				t.Fatalf("got %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUsageReadKicksDock(t *testing.T) {
+	f := newDockFake(t, 120)
+	w, chat := dockWorkspace(t)
+	f.pane(chat.paneID, "@1", 120)
+	chat.provider = "codex"
+	now := time.Now()
+	reads := 0
+	w.usage.every = 5 * time.Millisecond
+	w.usage.readFn = func(time.Time) []usage.Quota {
+		reads++
+		left := 58.0 // 42% used
+		if reads%2 == 0 {
+			left = 18.0 // 82% used
+		}
+		return []usage.Quota{{Provider: "codex", Known: true, AsOf: now,
+			Windows: []usage.Window{{Label: "wk", LeftPercent: left, ResetsAt: now.Add(98 * time.Hour)}}}}
+	}
+	// The Board must be visible for startUsage to read.
+	w.screen = NewScreen(nil)
+	w.homeBoard = true
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.startDock(ctx)
+	waitDockLog(t, f, "join-pane")
+	w.startUsage(ctx)
+	// Two different readings reach the title without any key press.
+	waitDockLog(t, f,
+		"@marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 42%",
+		"@marshal_dock_title  MARSHAL · ⬡ codex ▓▓▓ 82%")
 }
 
 func TestMarshalDockRejoinsRecreatedChat(t *testing.T) {

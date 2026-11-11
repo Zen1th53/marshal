@@ -113,7 +113,7 @@ func TestRealTmuxDockFocusSwitch(t *testing.T) {
 	if got := title(board); !strings.Contains(got, "▶") || !strings.Contains(got, "BOARD") || !strings.Contains(got, "F11 / Alt+← chat") {
 		t.Fatalf("board title while selected: %q", got)
 	}
-	if got := title(chatPane); strings.Contains(got, "▶") || !strings.Contains(got, "F11 / Alt+→ Board") {
+	if got := title(chatPane); strings.Contains(got, "▶") || !strings.Contains(got, "F11 Board") {
 		t.Fatalf("chat title while the Board is selected: %q", got)
 	}
 

@@ -20,7 +20,7 @@ func TestDockTitleStartupLayout(t *testing.T) {
 	}
 	log := f.take()
 	mustContain(t, log,
-		"set-option -p -t %7 @marshal_dock_title "+w.dockTitle(chat),
+		"set-option -p -t %7 @marshal_dock_title "+w.dockTitle(chat, 59),
 		"set-option -w -t %0 pane-border-format "+dockBorderFormat,
 		"set-option -p -t %0 @marshal_board_title "+boardDockTitle,
 		"set-option -w -t %0 pane-border-status top",

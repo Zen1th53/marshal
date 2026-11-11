@@ -143,7 +143,7 @@ func (w *Workspace) reconcileStartupDock(ctx context.Context) error {
 	if chatGeo.WindowID != boardGeo.WindowID {
 		return nil
 	}
-	return w.adoptDockLocked(ctx, chat, board, w.providerRoot())
+	return w.adoptDockLocked(ctx, chat, board, w.providerRoot(), chatGeo.PaneWidth)
 }
 
 // reconcileDock makes tmux match the dock's intent. It is idempotent: a call
@@ -202,12 +202,13 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 			return err
 		}
 	}
-	return w.adoptDockLocked(ctx, chat, board, root)
+	return w.adoptDockLocked(ctx, chat, board, root, width)
 }
 
 // adoptDockLocked installs the same keys and title for every path that puts
-// the chat beside the Board. Caller holds dock.mu.
-func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, board, root string) error {
+// the chat beside the Board. width is the chat pane's width, for fitting the
+// title. Caller holds dock.mu.
+func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, board, root string, width int) error {
 	if w.dock.pane != chat.paneID || w.dock.board != board {
 		if err := w.bindDockKeys(ctx, chat.paneID, board, root); err != nil {
 			return err
@@ -219,7 +220,7 @@ func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, 
 	}
 	// tmux owns the border row, outside the provider's PTY. The CLI still
 	// receives every ordinary key and may repaint its entire own screen.
-	title := w.dockTitle(chat)
+	title := w.dockTitle(chat, width)
 	if title != w.dock.title {
 		if err := tmux.SetPaneOption(ctx, chat.paneID, "@marshal_dock_title", title); err != nil {
 			return err
@@ -352,33 +353,77 @@ func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 	return err
 }
 
-// dockTitle uses only the snapshots already in memory. In particular it
-// cannot open a history file or consult the store on the rendering path.
-func (w *Workspace) dockTitle(chat *activeTmuxAgent) string {
-	provider, run, state := chat.provider, chat.runID, ""
-	if p := w.marshalPanel(); p != nil {
-		if p.RunID != "" {
-			run = p.RunID
+// dockTitle is the chat pane's border title: the Marshal brand, the chat
+// provider's glyph and name, and how close that provider's model is to its
+// limit. It uses only the snapshots already in memory (the last usage reading
+// and the theme); it never opens a file or consults the store on the
+// rendering path. width is the chat pane's width in columns, used to drop the
+// limit's less important parts when the pane is narrow; width <= 0 skips the
+// fit.
+func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
+	w.mu.RLock()
+	unicode := w.theme == nil || w.theme.Unicode
+	w.mu.RUnlock()
+	sep := " · "
+	if !unicode {
+		sep = " . "
+	}
+	name := dockTitleText(chat.provider)
+	if name == "" {
+		name = "chat"
+	}
+	head := " MARSHAL" + sep + name
+	if g := providerGlyph(name, unicode); g != "" {
+		head = " MARSHAL" + sep + g + " " + name
+	}
+	// The chat provider's limit, when a reading has it: a used bar and the
+	// percent with its reset. A read entry that is not known shows
+	// "unavailable"; before the first reading, or for a provider with no
+	// entry, there is no limit part.
+	bar, fig := "", ""
+	if qs, ok := w.usageQuotas(); ok {
+		for _, q := range qs {
+			if q.Provider != name {
+				continue
+			}
+			if figure, pct, known := limitFigure(q, time.Now()); known {
+				if !unicode {
+					figure = strings.ReplaceAll(figure, "·", ".")
+				}
+				bar, fig = " "+limitBar(pct, unicode), " "+figure
+			} else {
+				fig = " unavailable"
+			}
+			break
 		}
-		state = string(p.State)
 	}
-	if provider == "" {
-		provider = "chat"
+	tail := "    F11 Board "
+	title := head + bar + fig + tail
+	if width <= 0 {
+		return title
 	}
-	// The switch hint comes right after the name: a narrow chat pane cuts
-	// the title at its right edge, and the run's details matter less.
-	parts := []string{" MARSHAL", dockTitleText(provider), "F11 / Alt+→ Board", "Enter send"}
-	if run = dockTitleText(run); run != "" {
-		if n := len(run); n > 12 {
-			// As the Board's header shortens it: the last six characters.
-			run = "R-" + run[n-6:]
+	// Drop the limit's less important parts, in order, until the title fits
+	// the pane (less the ` ▶ ` marker). head and tail are never dropped; if it
+	// is still too wide, tmux cuts it.
+	avail := width - 3
+	for _, drop := range []func(){
+		func() { bar = "" },
+		func() { // the reset: keep the percent, drop " ·4d" / " .4d"
+			if i := strings.Index(fig, " ·"); i >= 0 {
+				fig = fig[:i]
+			} else if i := strings.Index(fig, " ."); i >= 0 {
+				fig = fig[:i]
+			}
+		},
+		func() { fig = "" },
+	} {
+		if VisibleLen(title) <= avail {
+			break
 		}
-		parts = append(parts, "run "+run)
+		drop()
+		title = head + bar + fig + tail
 	}
-	if state != "" {
-		parts = append(parts, "step "+dockTitleText(state))
-	}
-	return strings.Join(parts, "  ·  ") + " "
+	return title
 }
 
 func dockTitleText(s string) string {
