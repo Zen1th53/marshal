@@ -1186,8 +1186,8 @@
     },
     {
       "path": "internal/app/architecture_builders_extreme.go",
-      "sha256": "73aec57c68871cfbfdf7f131ecbf4b6adfb3ef514195b74fecb793c3cc8ad6a9",
-      "bytes": 2580
+      "sha256": "e2f3d8af865edd72710efd63c960d8b73ee0ae3470c1e5414bfbaa751d275405",
+      "bytes": 2643
     },
     {
       "path": "internal/app/architecture_builders_extreme_test.go",

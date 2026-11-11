@@ -24,7 +24,7 @@ func (r *Runtime) architectureBuilders() func(context.Context) []architecturerev
 		if err != nil {
 			codexDir = ""
 		}
-		quotas := usage.Read(time.Now(), codexDir)
+		quotas := usage.Read(time.Now(), usage.Sources{CodexDir: codexDir, ClaudeFile: usage.ClaudeConfigFile()})
 		options := make([]architecturereview.BuilderOption, 0, len(architecturecodec.BuilderProviders))
 		for _, provider := range architecturecodec.BuilderProviders {
 			option := architecturereview.BuilderOption{ID: provider, Glyph: glyphs[provider]}
