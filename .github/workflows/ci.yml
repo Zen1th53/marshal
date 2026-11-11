@@ -82,6 +82,26 @@ jobs:
           python3 -m unittest discover -s tools/tests_v6 -v
           python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
 
+      # internal/tui/wired.json is generated from the recorded Ctrl+N walk. It
+      # must match its matrix, and no spec may fall from live to under
+      # construction unless a task file names it.
+      - name: Advanced menu wired status
+        run: |
+          if [ ! -d tasks ]; then
+            echo "task specs are not part of this source release; wired status check skipped"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base=origin/${{ github.base_ref }}
+          else
+            base=HEAD~1
+          fi
+          if git show "$base:internal/tui/wired.json" > "$RUNNER_TEMP/wired-base.json" 2>/dev/null; then
+            python3 tools/e2e/tui_walk.py wired --check --base "$RUNNER_TEMP/wired-base.json"
+          else
+            python3 tools/e2e/tui_walk.py wired --check
+          fi
+
       - name: Validate diff whitespace
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
