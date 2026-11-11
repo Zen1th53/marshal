@@ -12511,13 +12511,13 @@
     },
     {
       "path": "internal/tui/board_picker.go",
-      "sha256": "4f46b5e556d2ad036806f751cb0a1e87e0fdd28e146dd019721ebe49bc271146",
-      "bytes": 11927
+      "sha256": "ee6a2e915066a6af5c04e1f9756e3fda2eaf597f8bfee93dcdf288c0e5fe9217",
+      "bytes": 12235
     },
     {
       "path": "internal/tui/board_picker_test.go",
-      "sha256": "f72c4acd2abf61bb9d9819871d946d78802deb7e782e4b9e9d3330faa529cf37",
-      "bytes": 7178
+      "sha256": "61efe6ad228bf8a51c2baa86351c87bf6a9acf65948408ed063a9309942fe078",
+      "bytes": 8168
     },
     {
       "path": "internal/tui/board_quota.go",
@@ -15021,8 +15021,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "16065f9281f576e0f6bf8e9bbfb26066d133c785c6dbd9bf0729acd53b3aa084",
-      "bytes": 82561
+      "sha256": "9df8181ae50883848d20d051cb1bffdb02ffb7687b526d283a24fa1c395da8b2",
+      "bytes": 82633
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

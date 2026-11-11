@@ -212,3 +212,31 @@ func TestPickerHoldsChatStartUntilConfirm(t *testing.T) {
 		t.Fatal("chat start did not run after the picker was confirmed")
 	}
 }
+
+// q quits while the picker waits: it is consumed and asks the workspace to exit.
+func TestPickerQQuits(t *testing.T) {
+	w := pickerWorkspace(t)
+	w.openPicker([]pickerCand{{provider: "codex", known: true, left: 40}, {provider: "claude"}}, 0, "")
+	if !w.handlePickerKey(KeyEvent{Type: KeyRune, Rune: 'q'}) {
+		t.Fatal("q was not consumed by the picker")
+	}
+	if !w.commandExitRequested() {
+		t.Fatal("q did not ask the workspace to exit")
+	}
+}
+
+// The preselected candidate is never one that is out of limit while a usable one exists.
+func TestPickerPreselectSkipsOutOfLimit(t *testing.T) {
+	installPickerStubs(t, "codex", "claude")
+	reset := time.Now().Add(3 * time.Hour)
+	w := pickerWorkspace(t, quotaLeft("codex", 0, reset))
+	if !w.decideMarshalPicker(t.Context()) {
+		t.Fatal("picker did not open")
+	}
+	w.picker.mu.Lock()
+	sel, cands := w.picker.sel, w.picker.cands
+	w.picker.mu.Unlock()
+	if cands[sel].out {
+		t.Fatalf("preselected %s, which is out of limit", cands[sel].provider)
+	}
+}

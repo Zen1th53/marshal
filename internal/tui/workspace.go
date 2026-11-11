@@ -1165,6 +1165,10 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		return false
 	}
 	if w.handleBoardKey(event) {
+		if w.commandExitRequested() {
+			w.clearTerminal()
+			return true
+		}
 		w.renderFullView()
 		return false
 	}

@@ -177,8 +177,8 @@ func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
 }
 
 // preselectPicker is the entry drawn selected: the saved provider when it is a
-// usable candidate, otherwise the candidate with the most known percent left,
-// otherwise the first candidate.
+// usable candidate, otherwise the usable candidate with the most known percent
+// left, otherwise the first usable candidate, otherwise the first.
 func preselectPicker(cands []pickerCand, saved string) int {
 	for i, c := range cands {
 		if c.provider == saved && !c.out {
@@ -187,12 +187,17 @@ func preselectPicker(cands []pickerCand, saved string) int {
 	}
 	best := -1
 	for i, c := range cands {
-		if c.known && (best < 0 || c.left > cands[best].left) {
+		if c.known && !c.out && (best < 0 || c.left > cands[best].left) {
 			best = i
 		}
 	}
 	if best >= 0 {
 		return best
+	}
+	for i, c := range cands {
+		if !c.out {
+			return i
+		}
 	}
 	return 0
 }
@@ -234,7 +239,11 @@ func (w *Workspace) handlePickerKey(ev KeyEvent) bool {
 	}
 	switch {
 	case ev.Type == KeyRune && ev.Rune == 'q':
-		return false
+		// q quits even while the picker waits, as on the Blocked screen.
+		w.mu.Lock()
+		w.exitRequested = true
+		w.mu.Unlock()
+		return true
 	case ev.Type == KeyRune && ev.Rune == 'r' && n == 0:
 		w.closePicker()
 		w.retryLaunchCheck()
@@ -276,7 +285,8 @@ func (w *Workspace) confirmPicker(i int) {
 	w.picker.mu.Unlock()
 
 	if err := saveDefaultProvider(w.providerRoot(), p); err != nil {
-		w.RecordActivity("The Marshal model was not saved: " + err.Error())
+		w.logTUIError("save the Marshal model", err)
+		w.RecordActivity("The Marshal model was not saved. The details are in .marshal/logs/tui-errors.log.")
 	}
 	w.RecordActivity("Marshal: " + p + ".")
 	w.requestRepaint()
