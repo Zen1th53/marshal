@@ -69,7 +69,11 @@ func appendMarshalIntake(root, brief string) string {
 }
 
 func (w *Workspace) marshalContinuityBriefing(root, brief string) string {
-	return w.appendProjectKnowledge(root, appendMarshalIntake(root, brief))
+	scan := w.launchScanBlock(root)
+	if strings.Contains(brief, "PROJECT SCAN (data, read only, taken at launch):") {
+		scan = ""
+	}
+	return w.appendProjectKnowledge(root, appendMarshalIntake(root, brief)+scan)
 }
 
 func (w *Workspace) marshalEarlierWorkWanted() bool {

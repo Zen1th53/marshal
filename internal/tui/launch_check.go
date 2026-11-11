@@ -40,6 +40,7 @@ type launchState struct {
 	blockers []string
 	warnings []string
 	started  time.Time
+	scan     projectScan
 	// pending holds afterLaunchCheck callbacks waiting for the check to
 	// finish ready; they run once then, and a later retry that turns ready
 	// runs any registered since.
@@ -62,10 +63,22 @@ func (w *Workspace) runLaunchCheck(ctx context.Context) {
 	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
+	var scanWG sync.WaitGroup
+	var scan projectScan
+	scanWG.Add(1)
+	go func() {
+		defer scanWG.Done()
+		scan = w.runLaunchScan(checkCtx, root)
+	}()
+
 	layout, err := project.Discover(root)
 	if err != nil {
 		// Discovery failing is the repository check failing: the project is
 		// not a usable Git repository, so there is nothing else to report.
+		scanWG.Wait()
+		w.launch.mu.Lock()
+		w.launch.scan = scan
+		w.launch.mu.Unlock()
 		w.finishLaunchCheck([]string{blockLine("repository", "", project.Layout{})}, nil)
 		return
 	}
@@ -77,6 +90,10 @@ func (w *Workspace) runLaunchCheck(ctx context.Context) {
 	}
 
 	if checkCtx.Err() == context.DeadlineExceeded {
+		scanWG.Wait()
+		w.launch.mu.Lock()
+		w.launch.scan = scan
+		w.launch.mu.Unlock()
 		w.finishLaunchCheck([]string{"I can't fix this safely: the project check did not finish in 20 seconds. Run marshal doctor, then press r."}, nil)
 		return
 	}
@@ -85,6 +102,10 @@ func (w *Workspace) runLaunchCheck(ctx context.Context) {
 	for _, warning := range warnings {
 		w.RecordActivity(warning)
 	}
+	scanWG.Wait()
+	w.launch.mu.Lock()
+	w.launch.scan = scan
+	w.launch.mu.Unlock()
 	w.finishLaunchCheck(blockers, warnings)
 }
 
