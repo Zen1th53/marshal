@@ -263,10 +263,18 @@ func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
 		t.Skip("Marshal applies reads automatically and waits for the Marshal on memory; TestExtremeReadsApplyAutomatically covers it")
 	}
 	w, rt := realControlWorkspace(t, "SESSION-proposal-continuation", false)
-	// Explicit intake consent precedes requests; popup/grant assertions below remain unchanged.
-	emitMarshalIntakeFile(t, w, "English", "yes")
+	// The launch scan found this project's Codex history folder; only that
+	// folder may be proposed. Popup/grant assertions below remain unchanged.
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	root := rt.ProjectRoot()
-	folder := t.TempDir()
+	folder := rt.EarlierWorkFolder("codex")
+	if err := os.MkdirAll(folder, 0700); err != nil {
+		t.Fatal(err)
+	}
+	w.launch.mu.Lock()
+	w.launch.scan = projectScan{Sessions: []scanSessions{{Provider: "codex", NeedsGrant: true}, {Provider: "claude", NeedsGrant: true}}}
+	w.launch.mu.Unlock()
 	data := fmt.Sprintf("{\"type\":\"session_meta\",\"timestamp\":\"2026-10-01T10:00:00Z\",\"payload\":{\"id\":\"earlier\",\"cwd\":%q}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"phase\":\"final_answer\",\"content\":[{\"type\":\"output_text\",\"text\":\"Pending work\"}]}}\n", root)
 	if err := os.WriteFile(filepath.Join(folder, "earlier.jsonl"), []byte(data), 0600); err != nil {
 		t.Fatal(err)
@@ -324,7 +332,15 @@ func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
 	if err != nil || len(records) != 1 {
 		t.Fatalf("memory=%v %v", records, err)
 	}
-	other := t.TempDir()
+	// A read outside this project's history folders is deferred, never queued.
+	propose(map[string]string{"action": "read", "path": t.TempDir()})
+	if !w.permissions.queue.Empty() {
+		t.Fatal("read outside this project's history folders was queued")
+	}
+	other := rt.EarlierWorkFolder("claude")
+	if err := os.MkdirAll(other, 0700); err != nil {
+		t.Fatal(err)
+	}
 	propose(map[string]string{"action": "read", "path": other})
 	batch = w.permissions.queue.Take(false)
 	if len(batch) != 1 {
@@ -703,9 +719,6 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 		t.Fatal("intake leaked into another project")
 	}
 	emit("03", `{"action":"intake","language":"Uzbek","earlier_work":"yes"}`)
-	if !w.marshalEarlierWorkWanted() {
-		t.Fatal("earlier-work answer not persisted")
-	}
 }
 
 func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork string) {

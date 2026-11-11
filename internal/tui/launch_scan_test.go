@@ -194,7 +194,7 @@ func TestProjectScanBlockFormat(t *testing.T) {
 - unmerged branches: feature/login, fix/typo
 - active run: none
 - earlier runs: 2 (requirements under .marshal/marshal/runs/*/plan/)
-- earlier sessions: claude 14 loaded, codex 0
+- earlier sessions: claude 14 loaded
 - limits: codex 42% · claude 94% · agy unavailable · opencode unavailable`
 
 	got := scan.briefingBlock(nil)

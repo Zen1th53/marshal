@@ -746,6 +746,11 @@ func nativeInventoryFolder(provider, root string) string {
 	return filepath.Join(home, dir)
 }
 
+// EarlierWorkFolder returns the provider history folder used for this project.
+func (r *Runtime) EarlierWorkFolder(provider string) string {
+	return nativeInventoryFolder(provider, r.ProjectRoot())
+}
+
 func (r *Runtime) proposeMemory(ctx context.Context, rec model.MemoryRecordV2) error {
 	rec, _, err := security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec)
 	if err != nil {

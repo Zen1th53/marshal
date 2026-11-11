@@ -321,7 +321,7 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 				continue
 			}
 			p, err := parseMarshalProposal(line)
-			if err == nil && (p.action == "read" || p.action == "continue") && !w.marshalEarlierWorkWanted() {
+			if err == nil && (p.action == "read" || p.action == "continue") && !w.earlierWorkFolderFound(p.path) {
 				w.RecordActivity("History proposal deferred until the operator chooses to continue earlier work.")
 				continue
 			}

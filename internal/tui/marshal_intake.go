@@ -75,12 +75,3 @@ func (w *Workspace) marshalContinuityBriefing(root, brief string) string {
 	}
 	return w.appendProjectKnowledge(root, appendMarshalIntake(root, brief)+scan)
 }
-
-func (w *Workspace) marshalEarlierWorkWanted() bool {
-	if w.runtime == nil {
-		return false
-	}
-	data, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
-	var intake marshalIntake
-	return err == nil && json.Unmarshal(data, &intake) == nil && intake.EarlierWork == "yes"
-}

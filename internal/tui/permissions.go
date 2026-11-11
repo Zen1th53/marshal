@@ -32,6 +32,7 @@ type permissionState struct {
 	running                bool
 	outstanding            map[string]bool
 	continuations          map[string]string
+	continuationDone       map[string]chan error
 	proposalsSeen          map[string]bool
 	planApprovalPending    bool
 	planApprovalRunID      string
@@ -416,6 +417,7 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		folder := filepath.Clean(req.Object)
 		w.permissions.mu.Lock()
 		provider := w.permissions.continuations[folder]
+		done := w.permissions.continuationDone[folder]
 		if req.ContinuationProvider != "" {
 			provider = req.ContinuationProvider
 		}
@@ -423,7 +425,11 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		w.permissions.mu.Unlock()
 		if allow && provider != "" {
 			_, err := w.continueEarlierWork(ctx, provider, folder)
+			w.finishEarlierContinuation(folder, err)
 			return err
+		}
+		if done != nil {
+			w.finishEarlierContinuation(folder, errors.New("read was not allowed"))
 		}
 	}
 	return nil
@@ -555,7 +561,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
 	}
-	b.WriteString(strings.ReplaceAll("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate by atomically writing {\"action\":\"memory\",\"id\":\"candidate-id\"} to a fresh .marshal/proposals/<unique-request-id>.json file; do not print the payload in chat. MARSHAL will show a popup; press A to apply.\n", ".marshal/", statepath.DirName+"/"))
+	b.WriteString(strings.ReplaceAll(continuationMemoryHint, ".marshal/", statepath.DirName+"/"))
 	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
 	if err != nil {
 		return "", err
@@ -663,7 +669,7 @@ func (w *Workspace) permissionPopupTarget(ctx context.Context, batch []permissio
 				chat := w.tmuxActiveWins["marshal-chat"]
 				inChat := chat != nil && chat.paneID == parts[1]
 				w.tmuxMu.Unlock()
-				if !inChat || !w.marshalEarlierWorkWanted() {
+				if !inChat || !w.earlierWorkFolderFound(req.Object) {
 					eligible = false
 					break
 				}
