@@ -483,6 +483,10 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
 	switch {
+	case w.launchBlocked():
+		// A problem the Marshal can't fix safely replaces the Board body with
+		// the Blocked screen until a retry clears it.
+		lines = w.paintBlocked(l, th, v)
 	case v.archView:
 		lines = w.paintArch(l, th, v)
 	case v.planView:

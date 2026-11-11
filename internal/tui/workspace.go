@@ -279,6 +279,9 @@ type Workspace struct {
 	// outputSeq counts command answers and status outputs, so the Board
 	// can tell an answer that arrived with a run note from an older one.
 	outputSeq atomic.Uint64
+	// launch is the per-start project check: the doctor runs at every start,
+	// safe fixes apply, and the Marshal chat waits until it is ready.
+	launch launchState
 }
 
 // AttachULTRASession applies authorization and the build's startup preference.
@@ -887,6 +890,9 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	defer func() { loopCancel(); w.Close() }()
 	w.startAnimator()
 	defer w.stopAnimator()
+	// The doctor runs at every start, in the background, so the first paint
+	// and the opening animation are not blocked while it checks the project.
+	w.startBackground(ctx, w.runLaunchCheck)
 	w.startFollowers(ctx)
 	// The host watcher runs for as long as this screen does.
 	w.startHostWatch(ctx)
@@ -1107,6 +1113,14 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		return false
 	}
 	if w.handleBoardAnswerKey(event) {
+		w.renderFullView()
+		return false
+	}
+	if handled, exit := w.handleBlockedBoardKey(event); handled {
+		if exit {
+			w.clearTerminal()
+			return true
+		}
 		w.renderFullView()
 		return false
 	}
@@ -2236,6 +2250,10 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 	defer func() {
 		w.reportActiveTmuxSessions()
 	}()
+
+	// The headless path starts the launch check too, so the Marshal chat is
+	// never started without the project having passed the doctor.
+	w.startBackground(ctx, w.runLaunchCheck)
 
 	// Non-interactive fallback: stdin is a pipe or file, so there is no screen
 	// to address. Output is sequential by necessity, but it renders the same

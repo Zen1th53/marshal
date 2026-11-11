@@ -896,6 +896,7 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	// 1. Initialize tmux: Marshal Chat MUST start automatically (F3)
 	cleanupTmuxWorkspace(t, ws)
 	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
+	readyLaunch(ws)
 	ws.InitTmux(workDir)
 
 	ws.tmuxMu.Lock()
@@ -1059,6 +1060,7 @@ func TestTmuxStartupReattachAndAutomaticChatPreserveControlCentre(t *testing.T) 
 		}
 	}
 	fixtureTmuxNamespace(t, ws.workDir)
+	readyLaunch(ws)
 	ws.InitTmux(ws.workDir)
 	assertSelected(fixtureTmuxNamespace(t, ws.providerRoot()) + ":@0")
 	ws.tmuxMu.Lock()
@@ -1137,6 +1139,7 @@ func TestRuntimeTmuxStartupKeepsControlCentreSelected(t *testing.T) {
 	_, ws, _ := acceptanceWorkspace(t)
 	cleanupTmuxWorkspace(t, ws)
 	fixtureTmuxNamespace(t, ws.runtime.ProjectRoot())
+	readyLaunch(ws)
 	ws.InitTmux(ws.runtime.ProjectRoot())
 	ws.tmuxMu.Lock()
 	chat := copyAgentLocked(ws.tmuxActiveWins["marshal-chat"])

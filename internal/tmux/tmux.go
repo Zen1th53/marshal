@@ -184,10 +184,15 @@ func CurrentWindowID(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// DetectInstallCommand returns a one-line install command for the detected OS distribution.
-func DetectInstallCommand() string {
+// DetectInstallCommand returns a one-line install command for tmux on the
+// detected OS distribution.
+func DetectInstallCommand() string { return InstallCommandFor("tmux") }
+
+// InstallCommandFor returns a one-line install command for pkg on the detected
+// OS distribution, using the same distro logic DetectInstallCommand does.
+func InstallCommandFor(pkg string) string {
 	if runtime.GOOS == "darwin" {
-		return "brew install tmux"
+		return "brew install " + pkg
 	}
 
 	distroID := ""
@@ -201,37 +206,47 @@ func DetectInstallCommand() string {
 		}
 	}
 
+	return installCommandFor(pkg, distroID, func(name string) error {
+		_, err := exec.LookPath(name)
+		return err
+	})
+}
+
+// installCommandFor is the pure core of InstallCommandFor: it maps an
+// os-release ID (and, failing that, which package manager look finds) to an
+// install command for pkg. look reports whether a binary is on PATH.
+func installCommandFor(pkg, distroID string, look func(string) error) string {
 	switch {
 	case strings.Contains(distroID, "arch") || strings.Contains(distroID, "manjaro") || strings.Contains(distroID, "endeavouros"):
-		return "sudo pacman -S tmux"
+		return "sudo pacman -S " + pkg
 	case strings.Contains(distroID, "ubuntu") || strings.Contains(distroID, "debian") || strings.Contains(distroID, "pop") || strings.Contains(distroID, "mint"):
-		return "sudo apt install tmux"
+		return "sudo apt install " + pkg
 	case strings.Contains(distroID, "fedora") || strings.Contains(distroID, "rhel") || strings.Contains(distroID, "centos") || strings.Contains(distroID, "rocky") || strings.Contains(distroID, "alma"):
-		return "sudo dnf install tmux"
+		return "sudo dnf install " + pkg
 	case strings.Contains(distroID, "suse") || strings.Contains(distroID, "opensuse") || strings.Contains(distroID, "sles"):
-		return "sudo zypper install tmux"
+		return "sudo zypper install " + pkg
 	}
 
-	if _, err := exec.LookPath("pacman"); err == nil {
-		return "sudo pacman -S tmux"
+	if look("pacman") == nil {
+		return "sudo pacman -S " + pkg
 	}
-	if _, err := exec.LookPath("apt"); err == nil {
-		return "sudo apt install tmux"
+	if look("apt") == nil {
+		return "sudo apt install " + pkg
 	}
-	if _, err := exec.LookPath("apt-get"); err == nil {
-		return "sudo apt-get install tmux"
+	if look("apt-get") == nil {
+		return "sudo apt-get install " + pkg
 	}
-	if _, err := exec.LookPath("dnf"); err == nil {
-		return "sudo dnf install tmux"
+	if look("dnf") == nil {
+		return "sudo dnf install " + pkg
 	}
-	if _, err := exec.LookPath("zypper"); err == nil {
-		return "sudo zypper install tmux"
+	if look("zypper") == nil {
+		return "sudo zypper install " + pkg
 	}
-	if _, err := exec.LookPath("brew"); err == nil {
-		return "brew install tmux"
+	if look("brew") == nil {
+		return "brew install " + pkg
 	}
 
-	return "sudo apt install tmux"
+	return "sudo apt install " + pkg
 }
 
 func parseOsReleaseID(content string) string {

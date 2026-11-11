@@ -427,3 +427,25 @@ func (w *Workspace) openBoardHelp() {
 	w.boardUI.helpScroll = 0
 	w.boardHelp.Store(true)
 }
+
+// handleBlockedBoardKey is the Board's key path while the launch check left the
+// project blocked: r (and a click on [r] Retry) re-runs the check, q quits, and
+// every other key except help is inert, so no view opens behind the Blocked
+// screen. It reports whether it consumed the key and whether the key asked the
+// workspace to exit.
+func (w *Workspace) handleBlockedBoardKey(event KeyEvent) (handled, exit bool) {
+	if !w.launchBlocked() || !w.boardVisible() || w.palette.IsOpen() || w.diffViewer.IsOpen() || w.completionOpen {
+		return false, false
+	}
+	switch {
+	case event.Type == KeyRune && event.Rune == 'r':
+		w.retryLaunchCheck()
+		return true, false
+	case event.Type == KeyRune && event.Rune == 'q':
+		return true, true
+	case event.Type == KeyRune && event.Rune == '?', event.Type == KeyF1:
+		// Help keeps its normal meaning while blocked.
+		return false, false
+	}
+	return true, false
+}
