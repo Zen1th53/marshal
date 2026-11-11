@@ -136,6 +136,17 @@ func TestBoardHintsFollowState(t *testing.T) {
 		}
 	})
 
+	t.Run("5 gate before 4 no run", func(t *testing.T) {
+		w := emptyBoardWorkspace(t)
+		defer w.Close()
+		w.endOpening()
+		w.gates.contract = &gateContract{ID: "c", Revision: 1, Digest: "sha256:1", Purpose: "p", Submitted: time.Now()}
+		ids, row := footerIDs(t, w, 170, 45)
+		if len(ids) == 0 || ids[0] != "gate.reply" || !strings.HasPrefix(row, " y reply") {
+			t.Fatalf("hints %v, want gate.reply first; footer %q", ids, row)
+		}
+	})
+
 	t.Run("10 a view", func(t *testing.T) {
 		w, _, _ := viewsWorkspace(t)
 		defer w.Close()
@@ -383,6 +394,8 @@ func goldenHints(v boardVisual) []string {
 	lead := v.viewHints()
 	switch {
 	case lead != nil:
+	case waitingGates(v.gates) > 0:
+		lead = []string{"gate.reply"}
 	case v.empty:
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
 	default:

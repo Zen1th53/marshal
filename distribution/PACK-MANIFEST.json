@@ -12411,8 +12411,8 @@
     },
     {
       "path": "internal/tui/board_gates_test.go",
-      "sha256": "54b49cbeff3ba8d10a56b6795089d74d18b7b2716db4baa786d833b8498bb856",
-      "bytes": 8857
+      "sha256": "57f1ee23173c615d8200e7ff825eb1b8bc7c74505131041016406bd2cad63cfc",
+      "bytes": 8706
     },
     {
       "path": "internal/tui/board_guard.go",
@@ -12431,13 +12431,13 @@
     },
     {
       "path": "internal/tui/board_hints.go",
-      "sha256": "f09dee6285ca55d3a47faaa6decfb068604fb9ac85e82553f87d71bdf08642b7",
-      "bytes": 13564
+      "sha256": "8867ede820e6b00ddeac7262abafd4380654cddd00b99133bf786d850e6982e5",
+      "bytes": 13589
     },
     {
       "path": "internal/tui/board_hints_test.go",
-      "sha256": "e43f049f29d6afc4b4fb49e3b5e14b373ca0e15e08a66965de72f5ef83b4b8bb",
-      "bytes": 13146
+      "sha256": "d511b2eb00d7dfe0713384b6869211886e9a5afbbd8cbb8e07475fa9db1c263a",
+      "bytes": 13646
     },
     {
       "path": "internal/tui/board_inbox.go",

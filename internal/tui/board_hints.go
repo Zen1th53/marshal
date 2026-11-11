@@ -31,10 +31,10 @@ func (w *Workspace) boardHints(v boardVisual) []string {
 		lead, tail = []string{"picker.use", "picker.choose", "picker.keep"}, false
 	case w.composing(): // 3: typing
 		lead, tail = []string{"typing.send", "typing.cancel"}, false
+	case waitingGates(v.gates) > 0: // 5: a gate waits; more urgent than rule 4
+		lead = []string{"gate.reply"}
 	case v.empty: // 4: no run on screen
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
-	case waitingGates(v.gates) > 0: // 5: a gate waits
-		lead = []string{"gate.reply"}
 	case v.guard != nil: // 6: the guard's alert
 		lead = []string{"guard.undo", "guard.keep"}
 	case w.stuckUnderKeyboard(): // 7: a stuck task

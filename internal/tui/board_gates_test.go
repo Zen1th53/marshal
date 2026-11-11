@@ -45,10 +45,8 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 			t.Errorf("first-use Board still shows %q:\n%s", gone, text)
 		}
 	}
-	// With no run the hint bar's rule 4 leads (P5-03); the gate's own [y]
-	// button above is where its reply starts.
-	if foot := strings.Split(text, "\n")[39]; !strings.HasPrefix(foot, " s say what to build") {
-		t.Errorf("first-use footer does not lead with s say what to build: %q", foot)
+	if !strings.Contains(strings.Split(text, "\n")[39], "y reply") {
+		t.Errorf("footer does not offer y: %q", strings.Split(text, "\n")[39])
 	}
 
 	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
