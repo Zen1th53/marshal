@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
@@ -58,7 +60,7 @@ func TestTaskModelKeyByState(t *testing.T) {
 			t.Errorf("%s: picker open %v, want %v", c.id, got, c.wantPicker)
 		}
 		if !c.wantPicker {
-			if got := lastOutput(w); got != c.wantAnswer {
+			if got := pickerLastOutput(w); got != c.wantAnswer {
 				t.Errorf("%s answer %q, want %q", c.id, got, c.wantAnswer)
 			}
 		}
@@ -77,7 +79,7 @@ func TestTaskModelKeyByState(t *testing.T) {
 		if w.marshalPickerOpen() {
 			t.Errorf("T-033 (governed) opened the picker")
 		}
-		if got, want := lastOutput(w), "T-033 has not started yet; in this edition its model can change only after it gets stuck."; got != want {
+		if got, want := pickerLastOutput(w), "T-033 has not started yet; in this edition its model can change only after it gets stuck."; got != want {
 			t.Errorf("T-033 governed answer %q, want %q", got, want)
 		}
 	}
@@ -91,7 +93,7 @@ func TestTaskModelKeyByState(t *testing.T) {
 	if w.marshalPickerOpen() {
 		t.Error("w opened the picker with no task under the keyboard")
 	}
-	if got := lastOutput(w); got != taskModelWhy {
+	if got := pickerLastOutput(w); got != taskModelWhy {
 		t.Errorf("no-task answer %q, want %q", got, taskModelWhy)
 	}
 }
@@ -155,7 +157,7 @@ func TestTaskModelQueuedWhileBusy(t *testing.T) {
 	if queued != "claude" {
 		t.Fatalf("queued move %q, want claude", queued)
 	}
-	if got, want := lastOutput(w), "The Marshal is mid-step. T-023 moves to Claude Code when that step ends — unless it has started by then."; got != want {
+	if got, want := pickerLastOutput(w), "The Marshal is mid-step. T-023 moves to Claude Code when that step ends — unless it has started by then."; got != want {
 		t.Fatalf("queue answer %q, want %q", got, want)
 	}
 
@@ -168,8 +170,17 @@ func TestTaskModelQueuedWhileBusy(t *testing.T) {
 		}
 	}
 	w.mu.Unlock()
+	// While the step is still running the drain takes nothing off the queue.
 	w.drainTaskMoves(ctx)
-	if got, want := lastOutput(w), "T-023 already started on Codex; its model was not changed."; got != want {
+	m.mu.Lock()
+	still := m.nextTaskMoves["T-023"]
+	m.busy = false // the step ends; onIdle drains now
+	m.mu.Unlock()
+	if still != "claude" {
+		t.Fatalf("a drain during the step removed the queued move")
+	}
+	w.drainTaskMoves(ctx)
+	if got, want := pickerLastOutput(w), "T-023 already started on Codex; its model was not changed."; got != want {
 		t.Fatalf("drain answer %q, want %q", got, want)
 	}
 	m.mu.Lock()
@@ -177,6 +188,48 @@ func TestTaskModelQueuedWhileBusy(t *testing.T) {
 	m.mu.Unlock()
 	if left != 0 {
 		t.Fatalf("drain left %d queued moves", left)
+	}
+}
+
+// TestTaskModelQueuedMovesAllApply: two moves queued during one step both run
+// after it, one at a time on the command lane; none is lost to the busy lane.
+func TestTaskModelQueuedMovesAllApply(t *testing.T) {
+	orig := boardMove
+	defer func() { boardMove = orig }()
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	ctx := t.Context()
+	var mu sync.Mutex
+	var calls []string
+	boardMove = func(_ *Workspace, _ context.Context, id, worker string) (string, error) {
+		mu.Lock()
+		calls = append(calls, id+" "+worker)
+		mu.Unlock()
+		return id + " will run on " + worker + ".", nil
+	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.nextTaskMoves = map[string]string{"T-033": "claude", "T-023": "opencode"}
+	m.mu.Unlock()
+
+	want := []string{"T-023 opencode", "T-033 claude"}
+	w.drainTaskMoves(ctx)
+	// Each finished command drains the next move; wait until both have run.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		w.commandWG.Wait()
+		mu.Lock()
+		n := len(calls)
+		mu.Unlock()
+		if n >= len(want) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slicesEqualStr(calls, want) {
+		t.Fatalf("queued moves ran %q, want %q", calls, want)
 	}
 }
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -211,20 +212,30 @@ func (w *Workspace) plainMoveError(id, worker string, err error) string {
 // drainTaskMoves applies the model moves queued while a step ran. It runs after
 // the step finishes (onIdle), before the Marshal switch queue. A task that has
 // started since it was chosen is dropped with a plain note; the rest move now
-// that nothing is running.
+// that nothing is running. The command lane runs one command at a time, so it
+// starts one move (in task-id order) and leaves the rest queued; the end of that
+// command (runCommandFunc) drains the next. While a step or a command is still
+// running nothing is taken off the queue.
 func (w *Workspace) drainTaskMoves(ctx context.Context) {
 	m := w.marshalSession()
-	m.mu.Lock()
-	moves := m.nextTaskMoves
-	m.nextTaskMoves = nil
-	m.mu.Unlock()
-	if len(moves) == 0 {
-		return
-	}
-	p := w.marshalPanel()
-	for id, worker := range moves {
+	for {
+		m.mu.Lock()
+		if m.busy || w.commandBusy.Load() || len(m.nextTaskMoves) == 0 {
+			m.mu.Unlock()
+			return
+		}
+		ids := make([]string, 0, len(m.nextTaskMoves))
+		for id := range m.nextTaskMoves {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		id := ids[0]
+		worker := m.nextTaskMoves[id]
+		delete(m.nextTaskMoves, id)
+		m.mu.Unlock()
+
 		row, ok := boardmodel.TaskRow{}, false
-		if p != nil {
+		if p := w.marshalPanel(); p != nil {
 			row, ok = taskRow(p.Board, id)
 		}
 		if !ok || !taskModelMovable(row.State) {
@@ -232,6 +243,7 @@ func (w *Workspace) drainTaskMoves(ctx context.Context) {
 			continue
 		}
 		w.moveTask(ctx, id, worker)
+		return
 	}
 }
 
