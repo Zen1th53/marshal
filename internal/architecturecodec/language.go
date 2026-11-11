@@ -16,7 +16,7 @@ func EnglishUIStrings() map[string]string {
 	return map[string]string{
 		"architecture": "Architecture", "traffic": "Traffic", "marshal": "Marshal", "diagram": "Diagram",
 		"select_area": "Select area", "approve": "Accept architecture", "approved": "✓ Accepted", "working": "Marshal is working…", "fit": "Fit",
-		"view_hint": "View only · Use a pencil to comment", "area_hint": "Drag to select an area", "request_type": "Request type",
+		"view_hint": "Click a part to open it · Use a pencil to comment", "area_hint": "Drag to select an area", "request_type": "Request type",
 		"comment": "Comment", "change": "Change request", "request_label": "Write to Marshal", "placeholder": "Comment or request a precise change here…",
 		"submit": "Submit to Marshal", "withdraw": "Withdraw request", "close": "Close", "pencil_prefix": "Comment:", "version": "Revision",
 		"selected_area": "Selected area", "empty_area": "This area contains no architecture elements.", "connection": "Connection",
@@ -24,7 +24,7 @@ func EnglishUIStrings() map[string]string {
 		"request_empty": "Write a comment or request first.", "stale_selection": "The diagram changed. Select the target again.",
 		"submitted": "Submitted to Marshal.", "pending_text": "There is an unsent request.", "approved_notice": "Accepted — the run continues in your terminal.",
 		"updated_notice": "Marshal prepared a new proposal. Select again for a new request.", "withdrawn": "Request withdrawn; history retained.",
-		"what_it_does": "What it does", "files": "Files", "no_files": "No files listed yet.", "builder": "Builder",
+		"what_it_does": "What it does", "files": "Files", "no_files": "No files listed yet.", "files_more": "+{n} more", "builder": "Builder",
 		"builder_auto": "Auto (Marshal picks)", "builder_unavailable": "unavailable", "builder_saved": "Builder saved.",
 		"builder_locked": "Accepted — builders are fixed for this run.", "comment_on_part": "Comment on this part",
 		"accept_summary": "{parts} parts · {builders} builders chosen · {open} open comments", "accept_summary_plain": "{parts} parts · {open} open comments",
