@@ -47,11 +47,6 @@ CREATE TRIGGER IF NOT EXISTS architecture_acceptances_no_delete BEFORE DELETE ON
 // ArchitectureAcceptanceFor is a read-only joined lookup. Missing policy,
 // receipt or audit is denial; there is no migration from JSON approval data.
 func (s *Store) ArchitectureAcceptanceFor(ctx context.Context, projectID string) (ArchitectureAcceptance, error) {
-	if architecturecodec.ModelArchitectureApprovalAllowed() {
-		if a, err := s.MarshalArchitectureAcceptanceFor(ctx, projectID); err == nil {
-			return a, nil
-		}
-	}
 	a, err := s.currentArchitectureAcceptance(ctx, projectID)
 	if err != nil {
 		return ArchitectureAcceptance{}, err
@@ -389,9 +384,6 @@ func (s *Store) ArchitectureFactAvailable(ctx context.Context, projectID string,
 	digest, err := architecturecodec.CanonicalDigest(body)
 	if err != nil {
 		return false
-	}
-	if architecturecodec.ModelArchitectureApprovalAllowed() && s.marshalArchitectureFactAvailable(ctx, projectID, digest) {
-		return true
 	}
 	a, err := s.currentArchitectureAcceptance(ctx, projectID)
 	if err != nil {

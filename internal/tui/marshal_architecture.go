@@ -78,7 +78,7 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 				_, provider, _, err = w.marshalService(workerCtx, "")
 			}
 			if err == nil {
-				session, err = rt.StartArchitectureReviewForSession(workerCtx, provider, goal, w.sessionID)
+				session, err = rt.StartArchitectureReviewForSession(workerCtx, provider, goal, w.sessionID, w.architectureReviewHooks())
 			}
 		} else {
 			m.mu.Lock()

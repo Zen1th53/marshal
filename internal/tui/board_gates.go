@@ -10,21 +10,19 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
-// Owner gates: what the Marshal waits for the owner to say in its chat.
-// The Marshal asks for them in prose ("Reply accept architecture",
-// "Approve this one-task plan?"); the Board reads the same wait from
-// canonical state and shows it in the inbox, so the operator never has to
-// watch the chat to find out the run needs them.
+// Owner gates: what the Marshal waits for the owner to decide. The Board
+// reads each wait from canonical state and shows it in the inbox, so the
+// operator never has to watch the chat to find out the run needs them.
 //
 // A gate is read from the store, never from the chat's words: a submitted
-// project contract that waits for the owner's acceptance
-// (store.ReadPendingProjectContract, Extreme), and a run whose drafted plan
-// waits for approval (run state drafting with planned tasks). Its reply
-// button sends the owner's exact words to the docked chat through the
-// Board's say path (board_say.go), as if the owner typed them there, so
-// the existing owner-instruction binding records it. Sending is never one
-// key: y or a click arms the reply, Enter or a second click sends it, any
-// other key cancels. Nothing here accepts or approves on its own.
+// project contract whose architecture waits for the owner's Accept in the
+// browser (store.ReadPendingProjectContract, Extreme), and a run whose
+// drafted plan waits for approval (run state drafting with planned tasks).
+// The architecture gate's only button opens the browser; it never types
+// into the chat. The plan gate's reply button sends the owner's exact words
+// to the docked chat through the Board's say path (board_say.go); sending is
+// never one key: y or a click arms the reply, Enter or a second click sends
+// it, any other key cancels. Nothing here accepts or approves on its own.
 
 // gateContract is a submitted project contract waiting for the owner.
 type gateContract struct {
@@ -47,8 +45,8 @@ type ownerGate struct {
 	// reply is the owner's exact words the reply button says to the
 	// Marshal.
 	reply string
-	// details is the key that opens what the gate is about: b for the
-	// architecture, 7 for the plan.
+	// details is the key that opens what the gate is about: y (open in
+	// browser) for the architecture, 7 for the plan.
 	details rune
 	// sent is set once the reply went to the chat: the gate then waits
 	// for the Marshal and offers no button until it changes.
@@ -69,12 +67,9 @@ type gateState struct {
 // Marshal, and it can be sent again.
 const gateResend = 5 * time.Minute
 
-// Replies the gates send: the exact words the Marshal asks for and the
-// owner-instruction binding accepts (store.ArchitectureAcceptanceInstruction).
-const (
-	gateReplyArchitecture = "accept architecture"
-	gateReplyPlan         = "approve the plan"
-)
+// gateReplyPlan is the exact words the plan gate's reply button says to the
+// Marshal; its owner-instruction binding records the approval.
+const gateReplyPlan = "approve the plan"
 
 // gateSource is a test's seam for the pending contract; nil reads the
 // store (board_gates_extreme.go).
@@ -119,10 +114,10 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 		g := ownerGate{
 			key:     fmt.Sprintf("architecture:%s:%d:%s", c.ID, c.Revision, c.Digest),
 			kind:    "architecture",
-			title:   fmt.Sprintf("contract %s rev %d waits for your acceptance", c.ID, c.Revision),
+			title:   "architecture waits for you in the browser",
 			summary: firstLine(c.Purpose),
-			reply:   gateReplyArchitecture,
-			details: 'b',
+			reply:   "",
+			details: 'y',
 		}
 		out = append(out, g)
 	}
@@ -233,10 +228,16 @@ func (w *Workspace) handleGateKey(event KeyEvent, p *MarshalPanel) bool {
 		return false
 	}
 	for _, g := range gates {
-		if !g.sent {
-			w.armGate(g)
+		if g.sent {
+			continue
+		}
+		if g.kind == "architecture" {
+			// Opening the browser is not a decision: no arm, no confirm.
+			w.openArchitectureReview()
 			return true
 		}
+		w.armGate(g)
+		return true
 	}
 	if len(gates) > 0 {
 		// Every reply is sent: y says so instead of typing a "y".
@@ -259,7 +260,9 @@ func (w *Workspace) clickGate(key string, action rune) {
 		}
 		switch action {
 		case 'y':
-			if w.gateArmed() == key {
+			if g.kind == "architecture" {
+				w.openArchitectureReview()
+			} else if w.gateArmed() == key {
 				w.sendGate(w.workers.context(), g)
 			} else {
 				w.armGate(g)
@@ -308,6 +311,8 @@ func (v boardVisual) gateEntry(g ownerGate, x, row, w int) []string {
 		details = "open details"
 	}
 	switch {
+	case g.kind == "architecture":
+		button(v.bg("rule", "[y]")+" open in browser", 'y')
 	case g.sent:
 		gap(v.fg("dim", "sent “"+g.reply+"” to the Marshal · waiting for it to act  "))
 		button(v.bg("rule", "["+string(g.details)+"]")+" "+details, g.details)

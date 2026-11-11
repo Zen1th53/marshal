@@ -27,6 +27,10 @@ type Config struct {
 	Feedback                          func(context.Context, json.RawMessage) (json.RawMessage, error)
 	OnApprove                         func(json.RawMessage) error
 	Builders                          func(context.Context) []BuilderOption
+	// AcceptBlocked, when it returns a non-empty reason, is shown on the page
+	// and refuses Accept. OnAccepted runs after an acceptance was saved.
+	AcceptBlocked func() string
+	OnAccepted    func(json.RawMessage)
 }
 
 // BuilderOption is one provider the owner may pick for a part, as the
@@ -221,6 +225,10 @@ func New(config Config) (*Review, error) {
 		r.state["approved"] = false
 		delete(r.state, "approval")
 	}
+	if approval, _ := r.state["approval"].(map[string]any); r.state["approved"] == true && (approval == nil || approval["source"] != "browser_operator") {
+		r.state["approved"] = false
+		delete(r.state, "approval")
+	}
 	if r.state["approved"] == true {
 		raw, _ := canonicalJSON(r.state)
 		if _, err = ValidateStoredState(raw, config.Project); err != nil {
@@ -244,6 +252,11 @@ func (r *Review) publicState() (json.RawMessage, error) {
 		return nil, err
 	}
 	state["layouts"] = r.layouts
+	if r.config.AcceptBlocked != nil {
+		if reason := r.config.AcceptBlocked(); reason != "" {
+			state["accept_blocked"] = reason
+		}
+	}
 	return canonicalJSON(state)
 }
 func (r *Review) commit(next map[string]any) error {
@@ -371,6 +384,11 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 		if q["builders_digest"] != next["builders_digest"] {
 			return nil, errors.New("Builders changed. Check them and press Accept again.")
 		}
+		if r.config.AcceptBlocked != nil {
+			if reason := r.config.AcceptBlocked(); reason != "" {
+				return nil, errors.New(reason)
+			}
+		}
 		for _, value := range next["comments"].([]any) {
 			if value.(map[string]any)["resolved"] != true {
 				return nil, errors.New("unresolved feedback prevents approval")
@@ -386,6 +404,11 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 		}
 		if err = r.commit(next); err != nil {
 			return nil, err
+		}
+		if r.config.OnAccepted != nil {
+			accepted, _ := r.publicState()
+			r.work.Add(1)
+			go func() { defer r.work.Done(); r.config.OnAccepted(accepted) }()
 		}
 		return r.publicState()
 	}

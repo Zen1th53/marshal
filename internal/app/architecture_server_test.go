@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,7 +101,7 @@ func TestArchitectureServerReusesPrivateViewAndSubmitsExactModelFeedback(t *test
 	cli, marker := architectureServerFakeCLI(t, runtime, response)
 	ctx, cancel := context.WithCancel(architectureServerContext(t, runtime, cli))
 	defer cancel()
-	session, err := runtime.startArchitectureReview(ctx, cli, "")
+	session, err := runtime.startArchitectureReview(ctx, cli, "", ArchitectureReviewHooks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +200,7 @@ func TestArchitectureServerFreshDraftBuildsActualTopologyAndDisplayBeforeOpening
 	if err := os.WriteFile(cli.Binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	session, err := runtime.startArchitectureReview(architectureServerContext(t, runtime, cli), cli, "Account for local host traffic")
+	session, err := runtime.startArchitectureReview(architectureServerContext(t, runtime, cli), cli, "Account for local host traffic", ArchitectureReviewHooks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +222,7 @@ func TestArchitectureServerNeverSilentlyReplacesExistingOwnerGraph(t *testing.T)
 	runtime := architectureServerRuntime(t)
 	proposal := architectureServerState(t, runtime)
 	cli, marker := architectureServerFakeCLI(t, runtime, proposal)
-	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Make another unrelated architecture"); err == nil {
+	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Make another unrelated architecture", ArchitectureReviewHooks{}); err == nil {
 		t.Fatal("explicit goal silently replaced existing owner graph")
 	}
 	architectureAssertNoModelTurn(t, marker)
@@ -243,7 +244,7 @@ func TestArchitectureServerLeasePreventsDuplicateWritersBeforeModelGeneration(t 
 	}
 	proposal := architectureTestJSON(t, architectureTestProposal())
 	cli, marker := architectureServerFakeCLI(t, runtime, proposal)
-	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Build a new architecture"); err == nil || !strings.Contains(err.Error(), "http://127.0.0.1:34567/") {
+	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Build a new architecture", ArchitectureReviewHooks{}); err == nil || !strings.Contains(err.Error(), "http://127.0.0.1:34567/") {
 		t.Fatalf("duplicate writer not pointed to current view: %v", err)
 	}
 	architectureAssertNoModelTurn(t, marker)
@@ -295,14 +296,14 @@ func TestArchitectureServerRejectsCorruptViewAndReleasesFailedGenerationLease(t 
 	if err := os.WriteFile(statePath, []byte(`{"protocol_version":"architecture-review.v1","project":"foreign"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.startArchitectureReview(t.Context(), cli, ""); err == nil {
+	if _, err := runtime.startArchitectureReview(t.Context(), cli, "", ArchitectureReviewHooks{}); err == nil {
 		t.Fatal("corrupt foreign view accepted")
 	}
 	architectureAssertNoModelTurn(t, marker)
 	if err := os.Remove(statePath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Fresh architecture"); err == nil {
+	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Fresh architecture", ArchitectureReviewHooks{}); err == nil {
 		t.Fatal("architecture incorrectly accepted as a UI translation")
 	}
 	if lease, err := runtime.AcquireArchitectureReviewLease(); err != nil {
@@ -315,7 +316,7 @@ func TestArchitectureServerRejectsCorruptViewAndReleasesFailedGenerationLease(t 
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := runtime.startArchitectureReview(ctx, cli, ""); !errors.Is(err, context.Canceled) {
+	if _, err := runtime.startArchitectureReview(ctx, cli, "", ArchitectureReviewHooks{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled generation proceeded: %v", err)
 	}
 }
@@ -363,12 +364,12 @@ func TestArchitectureServerPrivateFilesCannotRedirectTokensOrPreferences(t *test
 
 func TestArchitectureServerInvalidRuntimeOrModelCannotCreateReviewState(t *testing.T) {
 	runtime := architectureServerRuntime(t)
-	if _, err := runtime.startArchitectureReview(t.Context(), nil, ""); err == nil {
+	if _, err := runtime.startArchitectureReview(t.Context(), nil, "", ArchitectureReviewHooks{}); err == nil {
 		t.Fatal("missing model created review")
 	}
 	foreign := &Runtime{store: runtime.store, layout: runtime.layout}
 	foreign.layout.RuntimeDir = filepath.Join(runtime.layout.Root, "foreign-state")
-	if _, err := foreign.startArchitectureReview(t.Context(), &MarshalCLI{Provider: "codex"}, ""); err == nil {
+	if _, err := foreign.startArchitectureReview(t.Context(), &MarshalCLI{Provider: "codex"}, "", ArchitectureReviewHooks{}); err == nil {
 		t.Fatal("foreign runtime state accepted")
 	}
 	if _, err := foreign.AcquireArchitectureReviewLease(); err == nil {
@@ -393,7 +394,7 @@ func TestArchitectureServerCloseCancelsAndJoinsRunningModel(t *testing.T) {
 	if err := os.WriteFile(cli.Binary, []byte("#!/bin/sh\nprintf called > \"$0.started\"\nexec sleep 30\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	session, err := runtime.startArchitectureReview(architectureServerContext(t, runtime, cli), cli, "")
+	session, err := runtime.startArchitectureReview(architectureServerContext(t, runtime, cli), cli, "", ArchitectureReviewHooks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,5 +483,68 @@ func TestApprovedMarshalLanguageUsesOnlySavedOwnerChoice(t *testing.T) {
 	}
 	if _, err := runtime.ApprovedMarshalLanguage(); err == nil {
 		t.Fatal("symlink preference followed or silently defaulted")
+	}
+}
+
+func TestArchitectureReviewHooksAreWired(t *testing.T) {
+	runtime := architectureServerRuntime(t)
+	proposal := architectureServerState(t, runtime)
+	response := architectureTestJSON(t, map[string]any{"status": "answered", "reply": "Fixture answer", "questions": []string{}, "architecture": proposal})
+	cli, _ := architectureServerFakeCLI(t, runtime, response)
+	ctx := architectureServerContext(t, runtime, cli)
+	approve := func(session *ArchitectureReviewSession) int {
+		t.Helper()
+		state := architectureServerGET(t, session)
+		location, _ := url.Parse(session.URL)
+		raw := architectureTestJSON(t, map[string]any{"protocol_version": architecturereview.Version, "action": "approve", "revision": state["revision"], "digest": state["digest"], "ui_digest": state["ui_digest"], "language": state["language"], "builders_digest": state["builders_digest"]})
+		request, _ := http.NewRequest(http.MethodPost, "http://"+location.Host+"/api/review", strings.NewReader(string(raw)))
+		request.Header.Set("Authorization", "Bearer "+location.Query().Get("token"))
+		request.Header.Set("Origin", "http://"+location.Host)
+		posted, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		posted.Body.Close()
+		return posted.StatusCode
+	}
+
+	refused := ArchitectureReviewHooks{BeforeAccept: func(context.Context, json.RawMessage) error {
+		return errors.New("The Marshal's project summary is not ready yet. Try again in a moment.")
+	}, Accepted: func(json.RawMessage) { t.Error("Accepted ran for a refused Accept") }}
+	session, err := runtime.startArchitectureReview(ctx, cli, "", refused)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status := approve(session); status != http.StatusConflict {
+		t.Fatalf("refused Accept status=%d, want 409", status)
+	}
+	if architectureServerGET(t, session)["approved"] != false {
+		t.Fatal("a refused BeforeAccept approved")
+	}
+	if err := session.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	accepted := 0
+	wired := ArchitectureReviewHooks{BeforeAccept: func(context.Context, json.RawMessage) error { return nil }, AcceptBlocked: func() string { return "" }, Accepted: func(json.RawMessage) {
+		mu.Lock()
+		accepted++
+		mu.Unlock()
+	}}
+	session, err = runtime.startArchitectureReview(ctx, cli, "", wired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status := approve(session); status != http.StatusOK {
+		t.Fatalf("Accept status=%d", status)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if accepted != 1 {
+		t.Fatalf("Accepted ran %d times, want 1", accepted)
 	}
 }

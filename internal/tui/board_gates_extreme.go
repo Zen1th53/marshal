@@ -10,9 +10,8 @@ import "context"
 const ownerPlanGate = false
 
 // readPendingContract is the project contract the live Marshal submitted
-// that waits for the owner's "accept architecture", nil when none does.
-// Without a live Marshal launch nothing can bind the owner's reply, so
-// nothing waits.
+// that waits for the owner's browser Accept, nil when none does. Without a
+// live Marshal launch nothing can bind the owner's Accept, so nothing waits.
 func (w *Workspace) readPendingContract(ctx context.Context) (*gateContract, error) {
 	w.mu.RLock()
 	rt := w.runtime

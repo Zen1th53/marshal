@@ -26,10 +26,18 @@ import (
 // ArchitectureReviewSession owns a local view and its read-only model turns.
 // It never starts a worker or grants plan or execution authority.
 type ArchitectureReviewSession struct {
-	URL    string
-	Done   <-chan struct{}
-	close  func() error
-	accept func(context.Context, string, string, string, string, int64, string) error
+	URL   string
+	Done  <-chan struct{}
+	close func() error
+}
+
+// ArchitectureReviewHooks connect the browser's Accept to the workspace.
+// BeforeAccept runs inside the acceptance and can refuse it; Accepted
+// runs after it was saved; AcceptBlocked is shown on the page.
+type ArchitectureReviewHooks struct {
+	BeforeAccept  func(context.Context, json.RawMessage) error
+	AcceptBlocked func() string
+	Accepted      func(json.RawMessage)
 }
 
 type ArchitectureReviewOwnedError struct{ URL string }
@@ -47,12 +55,12 @@ func (s *ArchitectureReviewSession) Close() error {
 }
 
 func (r *Runtime) StartArchitectureReview(ctx context.Context, provider, goal string) (*ArchitectureReviewSession, error) {
-	return r.StartArchitectureReviewForSession(ctx, provider, goal, "")
+	return r.StartArchitectureReviewForSession(ctx, provider, goal, "", ArchitectureReviewHooks{})
 }
 
 // StartArchitectureReviewForSession binds browser model turns to the current
 // canonical Goal even before a plan exists. It conveys no acceptance authority.
-func (r *Runtime) StartArchitectureReviewForSession(ctx context.Context, provider, goal, sessionID string) (*ArchitectureReviewSession, error) {
+func (r *Runtime) StartArchitectureReviewForSession(ctx context.Context, provider, goal, sessionID string, hooks ArchitectureReviewHooks) (*ArchitectureReviewSession, error) {
 	if r == nil || r.store == nil {
 		return nil, model.ErrUnavailable
 	}
@@ -65,10 +73,10 @@ func (r *Runtime) StartArchitectureReviewForSession(ctx context.Context, provide
 	// The review model gets bounded source observation, never recalled facts.
 	reviewModel := *service.Model.(*MarshalCLI)
 	reviewModel.ProjectContext = r.MarshalArchitectureDiscoveryContext
-	return r.startArchitectureReview(ctx, &reviewModel, goal)
+	return r.startArchitectureReview(ctx, &reviewModel, goal, hooks)
 }
 
-func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, goal string) (*ArchitectureReviewSession, error) {
+func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, goal string, hooks ArchitectureReviewHooks) (*ArchitectureReviewSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -165,6 +173,11 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	}
 	serverCtx, cancel := context.WithCancel(ctx)
 	config.Context = serverCtx
+	if hooks.BeforeAccept != nil {
+		config.OnApprove = func(raw json.RawMessage) error { return hooks.BeforeAccept(serverCtx, raw) }
+	}
+	config.AcceptBlocked = hooks.AcceptBlocked
+	config.OnAccepted = hooks.Accepted
 	var turns sync.WaitGroup
 	var mu sync.Mutex
 	closed := false
@@ -259,17 +272,6 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		BaseContext: func(net.Listener) context.Context { return serverCtx }}
 	done := make(chan struct{})
 	session := &ArchitectureReviewSession{URL: url, Done: done}
-	session.accept = func(ctx context.Context, chat, ref, occurrence, id string, revision int64, digest string) error {
-		mu.Lock()
-		if closed {
-			mu.Unlock()
-			return context.Canceled
-		}
-		turns.Add(1)
-		mu.Unlock()
-		defer turns.Done()
-		return r.acceptArchitectureByMarshal(ctx, review, chat, ref, occurrence, id, revision, digest)
-	}
 	var once sync.Once
 	var closeErr error
 	session.close = func() error {

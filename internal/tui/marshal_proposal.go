@@ -300,9 +300,6 @@ func (w *Workspace) observeAuthenticatedMarshalProposals(tr importer.SessionTran
 
 func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, occurrence, who string) {
 	for messageIndex, message := range tr.Messages {
-		if who == "Marshal" && occurrence == "" && message.Role == "user" && message.Kind == importer.MessageKindText {
-			w.observeArchitectureOperatorInstruction(tr.SessionID, messageIndex, message.Timestamp, message.Content)
-		}
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
 		}
@@ -980,8 +977,6 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 			w.resolveArchitectureProposal(p.occurrence, openErr)
 			w.RecordActivity("Ignored Marshal architecture proposal: " + openErr.Error())
 		}
-	case "accept-architecture":
-		w.applyMarshalArchitectureAcceptance(p)
 	case "ask":
 		w.openAsk(p)
 	case "requirements":

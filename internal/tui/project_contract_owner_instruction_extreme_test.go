@@ -5,6 +5,7 @@ package tui
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -28,10 +29,29 @@ func ownerTypes(t *testing.T, w *Workspace, text string, at time.Time) importer.
 	return tr
 }
 
-// ownerAcceptsArchitecture is the owner's single TUI step in Extreme.
+// browserAcceptState is the accepted review state the browser hands the hooks.
+func browserAcceptState(revision int) json.RawMessage {
+	return json.RawMessage(fmt.Sprintf(`{"architecture_id":"architecture-browser","revision":%d,"digest":"%s","builders":{}}`, revision, strings.Repeat("a", 64)))
+}
+
+// ownerPressesAccept is the owner's Accept architecture click: the hook that
+// runs inside the acceptance, then, when it allowed it, the after-save hook.
+func ownerPressesAccept(t *testing.T, w *Workspace) error {
+	t.Helper()
+	state := browserAcceptState(1)
+	if err := w.beforeBrowserAccept()(t.Context(), state); err != nil {
+		return err
+	}
+	w.browserAccepted(state)
+	return nil
+}
+
+// ownerAcceptsArchitecture is the owner's single step in Extreme.
 func ownerAcceptsArchitecture(t *testing.T, w *Workspace) {
 	t.Helper()
-	ownerTypes(t, w, "accept architecture", time.Now().UTC().Add(time.Millisecond))
+	if err := ownerPressesAccept(t, w); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func activityCount(w *Workspace, needle string) int {
@@ -40,35 +60,27 @@ func activityCount(w *Workspace, needle string) int {
 	return strings.Count(w.state.LastOutput, needle)
 }
 
-func TestExtremeOwnerAcceptArchitectureWithoutReviewLetsMarshalAcceptContract(t *testing.T) {
+func TestExtremeBrowserAcceptLetsMarshalAcceptContract(t *testing.T) {
 	w, _, cfg := liveMCPFixture(t)
 	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
 	if _, err := os.Lstat(w.runtime.StateDirectory() + "/architecture/review/state.json"); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("fixture unexpectedly has an architecture review: %v", err)
 	}
-	// An instruction typed before any draft is refused once, never re-bound.
-	early := ownerTypes(t, w, "accept architecture", time.Now().UTC())
-	for range 5 {
-		w.observeAuthenticatedMarshalProposals(early)
-	}
-	if n := activityCount(w, "Architecture instruction refused"); n != 1 {
-		t.Fatalf("refusal spam: %d refusals for one message", n)
-	}
-	// The long Uzbek message is not an explicit whole instruction.
-	ownerTypes(t, w, "Boshla. Arxitekturani qabul qil va Goal'ni rasmiylashtir — Marshal'da bunga ruxsat beraman", time.Now().UTC())
-	if n := activityCount(w, "Architecture instruction"); n != 1 {
-		t.Fatalf("non-instruction text was observed: %d", n)
+	// An Accept before any draft is refused and records nothing.
+	if err := ownerPressesAccept(t, w); err == nil || err.Error() != "The Marshal's project summary is not ready yet. Try again in a moment." {
+		t.Fatalf("Accept without a contract draft: %v", err)
 	}
 	var inventory store.ProjectContractInventoryPage
 	if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_inventory", map[string]any{"limit": 1}, true)), &inventory); err != nil {
 		t.Fatal(err)
 	}
-	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: w.runtime.ProjectContractBinding(), ID: "ARCH-owner", Revision: 1, Purpose: "Accept on the owner's explicit chat instruction", Components: []projectcontext.Component{{ID: "core", Responsibility: "Core", Paths: []string{"src"}}}, Invariants: []string{"Owner instruction precedes acceptance"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
+	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: w.runtime.ProjectContractBinding(), ID: "ARCH-owner", Revision: 1, Purpose: "Accept on the owner's browser Accept", Components: []projectcontext.Component{{ID: "core", Responsibility: "Core", Paths: []string{"src"}}}, Invariants: []string{"Owner instruction precedes acceptance"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "owner-contract", "proposal": draft}, true)
-	// The early message is never re-observed against the new draft.
-	w.observeAuthenticatedMarshalProposals(early)
+	// The refused Accept is never bound to the new draft, and the old chat
+	// phrase records nothing any more.
+	ownerTypes(t, w, "accept architecture", time.Now().UTC().Add(time.Millisecond))
 	if raw, _ := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal")); strings.Contains(string(raw), "contract_id=") {
-		t.Fatal("pre-draft message was bound to the draft")
+		t.Fatal("pre-draft Accept or chat phrase was bound to the draft")
 	}
 	ownerAcceptsArchitecture(t, w)
 	raw, err := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal"))
@@ -76,7 +88,7 @@ func TestExtremeOwnerAcceptArchitectureWithoutReviewLetsMarshalAcceptContract(t 
 		t.Fatal(err)
 	}
 	digest, _ := draft.Contract.CanonicalDigest()
-	if !regexp.MustCompile(`instruction_ref=operator:[0-9a-f]+; contract_id=ARCH-owner; revision=1; digest=` + digest).Match(raw) {
+	if !regexp.MustCompile(`instruction_ref=browser:[0-9a-f]+; contract_id=ARCH-owner; revision=1; digest=` + digest).Match(raw) {
 		t.Fatalf("instruction binding not delivered to the Marshal: %s", raw)
 	}
 	authorizeTestMemory(t, w, cfg, true) // The Marshal's own allow Decision; no popup.
@@ -92,17 +104,16 @@ func TestExtremeOwnerAcceptArchitectureWithoutReviewLetsMarshalAcceptContract(t 
 	if err != nil || instruction.Instruction != "accept architecture" || instruction.Session != "native-session" {
 		t.Fatalf("acceptance lacks owner instruction receipt: %+v %v", instruction, err)
 	}
-	// Live state: contract accepted, no architecture review file. Further
-	// owner messages and repeated transcript scans are quiet, not refusals.
-	later := ownerTypes(t, w, "accept architecture", time.Now().UTC().Add(time.Second))
-	for range 5 {
-		w.observeAuthenticatedMarshalProposals(later)
-		w.observeAuthenticatedMarshalProposals(early)
+	// Live state: contract accepted, none pending. A further Accept is a valid
+	// acceptance that records no new instruction.
+	if err := ownerPressesAccept(t, w); err != nil {
+		t.Fatalf("Accept after the contract was accepted: %v", err)
 	}
-	if n := activityCount(w, "Architecture instruction refused"); n != 1 {
-		t.Fatalf("refusals after acceptance: %d", n)
+	raw, err = os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if n := activityCount(w, "Recorded owner instruction"); n != 1 {
+	if n := strings.Count(string(raw), "Recorded owner instruction"); n != 1 {
 		t.Fatalf("instruction re-recorded after acceptance: %d", n)
 	}
 }

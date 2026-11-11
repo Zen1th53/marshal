@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/architecturecodec"
 	"github.com/Zen1th53/marshal/internal/architecturereview"
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -112,9 +111,6 @@ func (r *Runtime) acceptedArchitectureContext(ctx context.Context, roleRoot stri
 	if err != nil {
 		return nil, err
 	}
-	if err := r.validateMarshalArchitectureApproval(ctx, data); err != nil {
-		return nil, err
-	}
 	return packet, nil
 }
 
@@ -135,9 +131,6 @@ func (r *Runtime) RequireArchitectureAcceptance(ctx context.Context) error {
 		return err
 	}
 	if packet.Status != "accepted" {
-		if architecturecodec.ModelArchitectureApprovalAllowed() {
-			return errors.New("accept the exact current architecture in the browser or on a recorded operator instruction before plan approval or worker dispatch")
-		}
 		return errors.New("accept the exact current architecture in the browser before plan approval or worker dispatch")
 	}
 	return nil

@@ -17,7 +17,4 @@ func TestCommunityOwnerChatInstructionCannotAuthorizeModelAcceptance(t *testing.
 	if _, _, err := rt.RecordProjectContractOperatorInstruction(t.Context(), "chat", "launch", "operator:1", "accept architecture", time.Now()); !errors.Is(err, model.ErrPolicyDenied) {
 		t.Fatalf("Community recorded a contract instruction: %v", err)
 	}
-	if _, err := rt.RecordArchitectureOperatorInstruction(t.Context(), "chat", "operator:1", "accept architecture"); err == nil {
-		t.Fatal("Community recorded an architecture instruction")
-	}
 }

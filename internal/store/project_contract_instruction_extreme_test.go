@@ -34,7 +34,7 @@ func TestProjectContractOwnerInstructionLetsMarshalAcceptExactDraft(t *testing.T
 		t.Fatalf("refused allow left acceptance: %v", err)
 	}
 	uzbek := "Boshla. Arxitekturani qabul qil va Goal'ni rasmiylashtir — Marshal'da bunga ruxsat beraman"
-	for _, text := range []string{uzbek, "please accept architecture", "don't accept architecture"} {
+	for _, text := range []string{uzbek, "please accept architecture", "don't accept architecture", "Accept Architecture", " accept architecture ", "approve architecture", "accept the architecture", "approve the architecture", "/marshal accept-architecture"} {
 		if _, _, err := s.RecordProjectContractInstruction(t.Context(), c.Project, "chat", "launch", "operator:other", text, time.Now().UTC()); !errors.Is(err, model.ErrPolicyDenied) {
 			t.Fatalf("%q recorded: %v", text, err)
 		}
@@ -43,7 +43,7 @@ func TestProjectContractOwnerInstructionLetsMarshalAcceptExactDraft(t *testing.T
 		t.Fatalf("instruction crossed launches: %v", err)
 	}
 	at := time.Now().UTC().Add(time.Second)
-	i, fresh, err := s.RecordProjectContractInstruction(t.Context(), c.Project, "chat", "launch", "operator:owner", "Accept Architecture", at)
+	i, fresh, err := s.RecordProjectContractInstruction(t.Context(), c.Project, "chat", "launch", "operator:owner", BrowserAcceptanceInstruction, at)
 	if err != nil || !fresh {
 		t.Fatalf("record: %v %v", fresh, err)
 	}
@@ -51,7 +51,7 @@ func TestProjectContractOwnerInstructionLetsMarshalAcceptExactDraft(t *testing.T
 	if i.ContractID != c.ID || i.Revision != c.Revision || i.ContractDigest != digest || i.ProposalOccurrence != req.ProposalID || i.Session != "chat" {
 		t.Fatalf("binding: %+v", i)
 	}
-	if _, fresh, err = s.RecordProjectContractInstruction(t.Context(), c.Project, "chat", "launch", "operator:owner", "Accept Architecture", at); err != nil || fresh {
+	if _, fresh, err = s.RecordProjectContractInstruction(t.Context(), c.Project, "chat", "launch", "operator:owner", BrowserAcceptanceInstruction, at); err != nil || fresh {
 		t.Fatalf("replay must be idempotent and not fresh: %v %v", fresh, err)
 	}
 	if _, err = s.db.ExecContext(t.Context(), `UPDATE extreme_project_contract_instructions SET contract_digest='forged'`); err == nil {

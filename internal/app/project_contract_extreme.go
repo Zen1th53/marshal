@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/architecturecodec"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/security"
@@ -17,6 +16,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/proposalmcp"
 	"github.com/Zen1th53/marshal/internal/store"
 )
+
+// OperatorInstructionBinding names the exact artifact a recorded owner
+// instruction authorizes: the pending project contract draft the owner's
+// browser Accept stands for.
+type OperatorInstructionBinding struct {
+	Kind, Ref, ID string
+	Revision      int64
+	Digest        string
+}
 
 func (r *Runtime) ProjectContractBinding() projectcontext.ProjectBinding {
 	return projectcontext.ProjectBinding{CanonicalID: r.ProjectIdentity(), StorageID: r.ProjectID()}
@@ -90,11 +98,11 @@ func (r *Runtime) commitBrokerProjectContractPermission(ctx context.Context, req
 	return true, err
 }
 
-// RecordProjectContractOperatorInstruction binds a whole owner message from
-// the authenticated live Marshal transcript to the newest unaccepted contract
-// draft of the live MCP launch. It is used when no architecture review exists.
+// RecordProjectContractOperatorInstruction binds the owner's browser Accept to
+// the newest unaccepted contract draft of the live MCP launch, as the owner's
+// recorded instruction for exactly that contract.
 func (r *Runtime) RecordProjectContractOperatorInstruction(ctx context.Context, session, launch, ref, text string, at time.Time) (OperatorInstructionBinding, bool, error) {
-	if !architecturecodec.ModelArchitectureApprovalAllowed() || r == nil || r.store == nil || !store.ArchitectureAcceptanceInstruction(text) {
+	if r == nil || r.store == nil || !store.ArchitectureAcceptanceInstruction(text) {
 		return OperatorInstructionBinding{}, false, model.ErrPolicyDenied
 	}
 	i, fresh, err := r.store.RecordProjectContractInstruction(ctx, r.ProjectContractBinding(), session, launch, ref, text, at)
