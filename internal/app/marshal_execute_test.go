@@ -19,6 +19,52 @@ import (
 
 func marshalBrief(t marshal.Task, _ BriefContext) string { return "complete task " + t.PlanTaskID }
 
+// A held queued task is not launched by dispatchReady; once the hold no longer
+// covers it, the next pass launches it.
+func TestDispatchReadySkipsHeldTask(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Tasks[0].State != marshal.Queued {
+		t.Fatalf("task is not queued to begin with: %s", run.Tasks[0].State)
+	}
+	// Held: the one ready task is skipped, nothing launches, and it stays
+	// queued so a later pass can still take it.
+	s.HeldTask = func(id string) bool { return id == "a" }
+	launched, err := s.dispatchReady(ctx, "run", run, marshalBrief)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(launched) != 0 {
+		t.Fatalf("a held task was launched: %d dispatches", len(launched))
+	}
+	again, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Tasks[0].State != marshal.Queued {
+		t.Fatalf("held task left queued, got %s", again.Tasks[0].State)
+	}
+	// Unheld (the hold covers a different id): the same ready task launches.
+	s.HeldTask = func(id string) bool { return id == "zzz" }
+	launched, err = s.dispatchReady(ctx, "run", again, marshalBrief)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(launched) != 1 || launched[0].TaskID != "a" {
+		t.Fatalf("unheld task did not launch: %+v", launched)
+	}
+}
+
 // Execute drives an approved plan through dispatch, review, merge and
 // verification, and stops where the default acceptance mode needs the user
 // to close.

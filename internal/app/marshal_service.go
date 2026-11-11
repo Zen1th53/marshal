@@ -70,12 +70,21 @@ type MarshalService struct {
 	InstalledVersion func(ctx context.Context, worker string) string
 	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
 	// AfterLifecycleEffect injects a failure after the effect but before completion.
-	AfterLifecycleEffect          func(kind, operationID string) error
-	RecordActivity                func(string)
+	AfterLifecycleEffect func(kind, operationID string) error
+	RecordActivity       func(string)
 	// QuotaLeft reports a provider's percent quota left and whether it is
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.
 	QuotaLeft func(provider string) (left int, known bool)
+	// HeldTask reports whether the owner's change is holding this plan task:
+	// a task the owner asked to pause while they decide a mid-run change.
+	// dispatchReady skips a held task that has not started yet, so it does
+	// not launch until the hold is released. Running tasks are never held;
+	// they finish and are reviewed and verified as normal. The hold lives in
+	// the TUI session only (never persisted), so after a restart it is gone
+	// and the Marshal holds again if the change is still open. Nil means no
+	// hold is in force.
+	HeldTask                      func(planTaskID string) bool
 	workerRecall                  func(context.Context, authz.Principal, RecallRequest) (RecallResponse, error)
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error

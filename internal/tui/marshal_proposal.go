@@ -31,6 +31,7 @@ type marshalProposal struct {
 	action, key, value, provider, path, id, reason, language, earlierWork string
 	taskID, targetWorker, model                                           string
 	question, choices, card                                               string
+	ids                                                                   string
 	freshSession                                                          bool
 }
 
@@ -87,6 +88,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
 	p.revision, p.digest, p.instructionRef, p.criteria = fields["revision"], fields["digest"], fields["instruction_ref"], fields["criteria"]
 	p.question, p.choices, p.card = fields["question"], fields["choices"], fields["card"]
+	p.ids = fields["ids"]
 	var keys []string
 	switch p.action {
 	case "intake":
@@ -108,6 +110,19 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	case "requirements":
 		keys = []string{"action", "card"}
 		if _, err := parseRequirementsCard(p.card); err != nil {
+			return p, invalid
+		}
+	case "hold":
+		keys = []string{"action", "ids", "reason"}
+		if _, err := parseHoldIDs(p.ids); err != nil {
+			return p, invalid
+		}
+		if strings.TrimSpace(p.reason) == "" || len(p.reason) > 500 {
+			return p, invalid
+		}
+	case "release":
+		keys = []string{"action", "ids"}
+		if _, err := parseHoldIDs(p.ids); err != nil {
 			return p, invalid
 		}
 	case "setting":
@@ -399,8 +414,18 @@ func (w *Workspace) queueMarshalPlanApproval() {
 func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	m := w.marshalSession()
 	m.mu.Lock()
-	service, runID, pending := m.service, m.runID, m.pending
+	service, runID, pending, busy := m.service, m.runID, m.pending, m.busy
 	m.mu.Unlock()
+	// A change card is open and the owner pressed "apply this change": the
+	// Marshal answers with an amend proposal. If the run operation is busy,
+	// reserveContext would refuse the amend. Instead of failing, the TUI
+	// pauses the run briefly, applies the amendment and resumes (board_change.go).
+	// Only in the shipped build, where amend applies without a popup anyway;
+	// the governed edition keeps its operator approval path unchanged.
+	if editionExtreme && p.action == "amend" && busy && w.currentChange() != nil {
+		w.beginChangeApply(p)
+		return nil
+	}
 	if service == nil || runID == "" || (pending != nil && p.action != "amend-approve" && p.action != "amend-deny") || (pending == nil && (p.action == "amend-approve" || p.action == "amend-deny")) {
 		return errors.New("no matching active plan")
 	}
@@ -961,6 +986,10 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 		w.openAsk(p)
 	case "requirements":
 		w.openRequirements(p)
+	case "hold":
+		w.applyHold(p)
+	case "release":
+		w.applyRelease(p)
 	case "intake":
 		if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
 			w.permissions.mu.Lock()
