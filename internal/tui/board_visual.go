@@ -639,7 +639,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		items = [][2]string{{"esc", "board"}, {"s", "tell the Marshal"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
 	}
 	if v.archView {
-		items = [][2]string{{"j/k", "scroll"}, {"o", "open in browser"}, {"d", "diff since accepted"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+		items = [][2]string{{"o", "open in browser"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
 	}
 	// The run's note leads the footer, which is full width, so an id it
 	// carries for the operator to type is shown whole; keys follow while

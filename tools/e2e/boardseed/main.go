@@ -1,9 +1,8 @@
 // Command boardseed writes a demo Marshal run into a throwaway project's
 // store, so an end-to-end walk of the real TUI has a Board to look at
-// without spending provider quota: tasks in every state, decisions for the
-// activity pane and the header, and the owner's accepted architecture
-// revision for the header chip. It mirrors the run the Board demo goldens
-// paint (internal/tui/board_demo_test.go). Lanes and the inbox come from
+// without spending provider quota: tasks in every state, and decisions for
+// the activity pane and the header. It mirrors the run the Board demo
+// goldens paint (internal/tui/board_demo_test.go). Lanes and the inbox come from
 // live workers and permission requests, which a store seed cannot fake.
 //
 // Usage: boardseed [-awaiting] PROJECT_ROOT
@@ -16,8 +15,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -128,37 +125,6 @@ func seed(ctx context.Context, root string) error {
 	} {
 		if err := decide(d.kind, d.task, time.Now().UTC().Add(-d.ago), d.data); err != nil {
 			return err
-		}
-	}
-	return acceptArchitecture(ctx, layout.Database, p.ID, start)
-}
-
-// acceptArchitecture records the owner's signed acceptance of architecture
-// revision 7, as the Board e2e test does, so the header shows its chip.
-func acceptArchitecture(ctx context.Context, path, projectID string, at time.Time) error {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	var receipt store.SignedArchitectureReceipt
-	receipt.Challenge.Binding.ArchitectureID, receipt.Challenge.Binding.Revision, receipt.Challenge.Binding.Digest = "ARCH-1", 7, "a3f1c9e2"
-	receipt.Challenge.Message = "accept architecture"
-	raw, err := json.Marshal(receipt)
-	if err != nil {
-		return err
-	}
-	for _, q := range []struct {
-		sql  string
-		args []any
-	}{
-		{`INSERT OR IGNORE INTO architecture_target_generations(project_id,generation,enrollment_id,enrollment) VALUES(?,1,'enrol-seed',x'7b7d')`, []any{projectID}},
-		{`INSERT OR IGNORE INTO architecture_owner_nonces(nonce,project_id,generation,payload_digest,expires_unix) VALUES('nonce-seed',?,1,'pd',0)`, []any{projectID}},
-		{`INSERT OR IGNORE INTO architecture_accepted_revisions(receipt_id,receipt_digest,project_id,generation,nonce,receipt) VALUES('rcpt-seed','d-rcpt-seed',?,1,'nonce-seed',?)`, []any{projectID, raw}},
-		{`INSERT OR IGNORE INTO architecture_owner_audit(receipt_id,project_id,generation,message_id,session_id,origin,accepted_at) VALUES('rcpt-seed',?,1,'m','s','owner_command',?)`, []any{projectID, at.Format(time.RFC3339Nano)}},
-	} {
-		if _, err := db.ExecContext(ctx, q.sql, q.args...); err != nil {
-			return fmt.Errorf("%s: %w", q.sql, err)
 		}
 	}
 	return nil

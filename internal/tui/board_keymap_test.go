@@ -164,7 +164,7 @@ func TestBoardKeymapBound(t *testing.T) {
 	for _, c := range []struct {
 		view string
 		keys string
-	}{{"Memory", "a r i PgUp PgDn j k"}, {"Providers", "v j k"}, {"Verify", "x j k"}, {"Security", "a d j k"}, {"Architecture", "o d"}, {"Host", "j k"}} {
+	}{{"Memory", "a r i PgUp PgDn j k"}, {"Providers", "v j k"}, {"Verify", "x j k"}, {"Security", "a d j k"}, {"Architecture", "o"}, {"Host", "j k"}} {
 		events, _ := boardKeyEvents(c.keys)
 		for _, e := range events {
 			w.closeBodyViews()

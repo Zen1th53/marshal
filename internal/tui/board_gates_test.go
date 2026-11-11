@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tmux"
@@ -71,13 +72,13 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	}
 }
 
-// fakeArch is an Architecture source with nothing accepted.
+// fakeArch is an Architecture source with no review drafted.
 type fakeArch struct{}
 
-func (fakeArch) ArchitectureOverview(context.Context, string) (store.ArchitectureOverview, error) {
-	return store.ArchitectureOverview{}, nil
+func (fakeArch) ArchitectureStatus(context.Context) (app.ArchitectureStatus, error) {
+	return app.ArchitectureStatus{}, nil
 }
-func (fakeArch) OpenPage(context.Context, string, []byte) (string, error) { return "", nil }
+func (fakeArch) Open() {}
 
 // drafting is the walkthrough's run after the Marshal drafted its plan:
 // one task, waiting for the owner's approval.
