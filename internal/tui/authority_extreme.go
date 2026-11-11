@@ -199,7 +199,7 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 	}
 	registered := time.Now().UTC()
 	deadline, boundReview := w.privateProcess05ReviewDeadline(ctx, req, registered)
-	audit := map[string]any{"request_id": id, "kind": req.Kind, "object": req.Object, "scope": req.Scope, "request_reason": RedactContent(req.Reason, nil), "provider": provider, "run_id": req.RunID, "approval_binding": req.ApprovalBinding}
+	audit := map[string]any{"request_id": id, "kind": req.Kind, "object": req.Object, "scope": req.Scope, "scope_detail": req.Detail, "request_reason": RedactContent(req.Reason, nil), "provider": provider, "run_id": req.RunID, "approval_binding": req.ApprovalBinding}
 	if boundReview {
 		audit["deadline_utc"] = deadline.UTC().Format(time.RFC3339Nano)
 		audit["review_seconds"] = deadline.Sub(registered).Seconds()
@@ -218,7 +218,7 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		deadline = registered.Add(extremeAwaitForever)
 	}
 	p := &buildPendingDecision{request: req, provider: provider, paneID: pane, deadline: deadline, launchID: w.proposalLaunchID()}
-	description := map[string]string{"id": id, "kind": req.Kind, "object": req.Object, "scope": req.Scope, "reason": req.Reason}
+	description := map[string]string{"id": id, "kind": req.Kind, "object": req.Object, "scope": req.Scope, "scope_detail": req.Detail, "reason": req.Reason}
 	if boundReview {
 		description["deadline_utc"] = deadline.UTC().Format(time.RFC3339Nano)
 		description["review_seconds"] = strconv.FormatFloat(deadline.Sub(registered).Seconds(), 'f', 9, 64)

@@ -11,7 +11,13 @@ This guide addresses common questions, error messages, and operational situation
 When running `marshal` or `marshal tui`, you may encounter an error message similar to:
 
 ```text
-MARSHAL project "/path/to/project" is not initialized or is invalid: missing CAPABILITIES.yaml; missing state.db; run `marshal init` here (or cd into your project); run `marshal doctor` for details
+Marshal isn't set up in this project yet. Run `marshal init` here.
+```
+
+or, when some of Marshal's files exist but are broken:
+
+```text
+Some of Marshal's files in this project are damaged. Run `marshal doctor` to see which.
 ```
 
 ### Why it Happens

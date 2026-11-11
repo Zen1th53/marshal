@@ -22,13 +22,16 @@ type Request struct {
 	ApprovalBinding                                 string `json:",omitempty"`
 	ProposalID                                      string `json:",omitempty"`
 	Kind, Object, Scope, Who, Reason, RunID, TaskID string
+	// Detail carries the technical scope (IDs, revisions, digests) kept for the
+	// audit record and deduplication. It is never rendered to the operator.
+	Detail string `json:",omitempty"`
 	// ContinuationProvider binds a read decision to its proposed importer.
 	// It is independent of task identity and included in evidence and deduplication.
 	ContinuationProvider string
 }
 
 func (r Request) Key() string {
-	key := r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider + "\x00" + r.ApprovalBinding
+	key := r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider + "\x00" + r.ApprovalBinding + "\x00" + r.Detail
 	if r.SourceLaunch != "" {
 		key += "\x00" + r.SourceLaunch + "\x00" + r.SourceOccurrence
 	}
@@ -51,7 +54,7 @@ func Render(requests []Request) (string, error) {
 			return "", fmt.Errorf("unknown continuation provider")
 		}
 
-		for _, s := range []string{r.Object, r.Scope, r.Who, r.RunID, r.TaskID} {
+		for _, s := range []string{r.Object, r.Scope, r.Who, r.RunID, r.TaskID, r.Detail} {
 			if strings.ContainsFunc(s, func(c rune) bool { return unicode.IsControl(c) || unicode.Is(unicode.Cf, c) }) {
 				return "", fmt.Errorf("unsafe permission metadata")
 			}

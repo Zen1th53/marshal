@@ -280,6 +280,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	if err != nil {
 		if c.json {
 			_ = c.print(map[string]any{"error": err.Error(), "exit_code": exitCode(err)}, "")
+		} else if errors.Is(err, api.ErrRuntimeNotRunning) {
+			fmt.Fprintln(stderr, "Marshal's background service isn't running in this project. Start it with `marshal daemon` in another terminal, then try again.")
 		} else {
 			fmt.Fprintln(stderr, err)
 		}

@@ -173,11 +173,11 @@ func TestNativePlanningLaunchPacketCannotReplaceFreshMCPRead(t *testing.T) {
 			reviewed = request
 		}
 	}
-	if reviewed.ApprovalBinding == "" || !strings.Contains(reviewed.Scope, storedPlan.ID) || !strings.Contains(reviewed.Scope, goal.ID) || !strings.Contains(reviewed.Scope, "gpt-test") || !strings.Contains(reviewed.Scope, "true") {
+	if reviewed.ApprovalBinding == "" || !strings.Contains(reviewed.Detail, storedPlan.ID) || !strings.Contains(reviewed.Detail, goal.ID) || !strings.Contains(reviewed.Detail, "gpt-test") || !strings.Contains(reviewed.Detail, "true") {
 		t.Fatalf("canonical approval popup omitted reviewed route, check, or binding: %+v", reviewed)
 	}
 	var snapshot app.PlanApprovalSnapshot
-	if err := json.Unmarshal([]byte(reviewed.ApprovalBinding), &snapshot); err != nil || snapshot.CanonicalScopeDigest == "" || snapshot.AssignmentSummary == "" || snapshot.PlanningMode != "standard" || snapshot.MarshalBudgetSummary == "" || !strings.Contains(reviewed.Scope, snapshot.CanonicalScopeDigest) || !strings.Contains(reviewed.Scope, snapshot.AssignmentSummary) || !strings.Contains(reviewed.Scope, snapshot.MarshalBudgetSummary) {
+	if err := json.Unmarshal([]byte(reviewed.ApprovalBinding), &snapshot); err != nil || snapshot.CanonicalScopeDigest == "" || snapshot.AssignmentSummary == "" || snapshot.PlanningMode != "standard" || snapshot.MarshalBudgetSummary == "" || !strings.Contains(reviewed.Detail, snapshot.CanonicalScopeDigest) || !strings.Contains(reviewed.Detail, snapshot.AssignmentSummary) || !strings.Contains(reviewed.Detail, snapshot.MarshalBudgetSummary) {
 		t.Fatalf("canonical approval popup omitted immutable scope or exact harness assignment: %+v %v", snapshot, err)
 	}
 	if _, err := permission.Render([]permission.Request{reviewed}); err != nil {
@@ -250,11 +250,11 @@ func TestNativePlanningChatPopupApprovesExactCanonicalPlan(t *testing.T) {
 			request = candidate
 		}
 	}
-	if request.ApprovalBinding == "" || !strings.Contains(request.Scope, goal.ID) || !strings.Contains(request.Scope, "gpt-test") || !strings.Contains(request.Scope, "true") {
+	if request.ApprovalBinding == "" || !strings.Contains(request.Detail, goal.ID) || !strings.Contains(request.Detail, "gpt-test") || !strings.Contains(request.Detail, "true") {
 		t.Fatalf("canonical popup omitted exact review material: %+v", request)
 	}
 	var snapshot app.PlanApprovalSnapshot
-	if err := json.Unmarshal([]byte(request.ApprovalBinding), &snapshot); err != nil || snapshot.CanonicalScopeDigest == "" || snapshot.AssignmentSummary == "" || snapshot.PlanningMode != "standard" || snapshot.MarshalBudgetSummary == "" || !strings.Contains(request.Scope, snapshot.CanonicalScopeDigest) || !strings.Contains(request.Scope, snapshot.AssignmentSummary) || !strings.Contains(request.Scope, snapshot.MarshalBudgetSummary) {
+	if err := json.Unmarshal([]byte(request.ApprovalBinding), &snapshot); err != nil || snapshot.CanonicalScopeDigest == "" || snapshot.AssignmentSummary == "" || snapshot.PlanningMode != "standard" || snapshot.MarshalBudgetSummary == "" || !strings.Contains(request.Detail, snapshot.CanonicalScopeDigest) || !strings.Contains(request.Detail, snapshot.AssignmentSummary) || !strings.Contains(request.Detail, snapshot.MarshalBudgetSummary) {
 		t.Fatalf("canonical popup omitted immutable scope or exact harness assignment: %+v %v", snapshot, err)
 	}
 	if _, err := permission.Render([]permission.Request{request}); err != nil {

@@ -129,7 +129,7 @@ func (v boardVisual) memTop(m memoryPaint, w int) []string {
 	if !s.Loaded {
 		summary := "reading the store…"
 		if s.Err != "" {
-			summary = v.fg("failed", "not readable: "+cleanBoard(s.Err))
+			summary = viewLoadFailed
 		}
 		return []string{v.title("MEMORY", summary, false, w), v.kv("store", firstNonEmpty(s.StorePath, memoryStorePath()), w)}
 	}
@@ -156,7 +156,7 @@ func (v boardVisual) memTop(m memoryPaint, w int) []string {
 	out = append(out, v.kv("snapshots", snaps, w))
 	read := "read " + hostAgo(v.now.Sub(s.At)) + " · every 10 s while open"
 	if s.Err != "" {
-		read = v.fg("failed", "last read failed: "+cleanBoard(s.Err)) + v.fg("dim", " · showing "+hostAgo(v.now.Sub(s.At)))
+		read = "Couldn't refresh; showing what was read " + hostAgo(v.now.Sub(s.At)) + "."
 	}
 	out = append(out, v.kv("updated", read, w))
 	return out

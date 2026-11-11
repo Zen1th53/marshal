@@ -170,6 +170,7 @@ func (w *Workspace) refreshPlan(ctx context.Context) {
 	w.plan.mu.Lock()
 	w.plan.snap.At = time.Now()
 	w.plan.snap.NoRun = false
+	logErr := err != nil && err.Error() != w.plan.snap.Err
 	if err != nil {
 		w.plan.snap.Err = err.Error()
 	} else {
@@ -177,6 +178,9 @@ func (w *Workspace) refreshPlan(ctx context.Context) {
 	}
 	w.plan.clampLocked()
 	w.plan.mu.Unlock()
+	if logErr {
+		w.logTUIError("Plan view", err)
+	}
 	if w.planView.Load() && w.boardVisible() {
 		w.requestRepaint()
 	}

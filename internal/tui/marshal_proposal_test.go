@@ -362,7 +362,7 @@ func TestMarshalProposalApprovalWaitsForDraftAndExpires(t *testing.T) {
 	w.queueMarshalPlanApproval()
 	w.observeMarshalProposals(tr)
 	batch := w.permissions.queue.Take(false)
-	if len(batch) != 1 || batch[0].Object != "/marshal approve" || !strings.Contains(batch[0].Scope, record.Value.PlanID+" version 1") {
+	if len(batch) != 1 || batch[0].Object != "/marshal approve" || !strings.Contains(batch[0].Detail, record.Value.PlanID+" version 1") {
 		t.Fatalf("approval requests=%v", batch)
 	}
 	// Updating even the result state invalidates the old proposal binding.
@@ -829,7 +829,7 @@ func TestMarshalPlanPopupFreezesPackAndAsksDeliverySeparately(t *testing.T) {
 	if len(batch) != 1 {
 		t.Fatalf("approval popup=%v", batch)
 	}
-	if !strings.Contains(batch[0].Scope, pack.Digest) || !strings.Contains(batch[0].Scope, "refs/heads/main") {
+	if !strings.Contains(batch[0].Detail, pack.Digest) || !strings.Contains(batch[0].Detail, "refs/heads/main") {
 		t.Fatalf("popup omits binding: %+v", batch)
 	}
 	// Recover the persisted popup, preserving the reviewed bytes rather than
@@ -883,6 +883,35 @@ func TestMarshalPlanPopupFreezesPackAndAsksDeliverySeparately(t *testing.T) {
 	run, err = service.Snapshot(t.Context(), "RUN-plan-proposal")
 	if err != nil || !run.ValidCloseAuthorization() {
 		t.Fatalf("delivery consent missing: %+v %v", run, err)
+	}
+}
+
+// TestPopupScopeHasNoIDs: the approval popup's Scope is a plain sentence; the
+// run and plan identities live in Detail, which is never rendered.
+func TestPopupScopeHasNoIDs(t *testing.T) {
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, run := fixture.w, fixture.run
+	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}})
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal approve" {
+		t.Fatalf("approval popup=%v", batch)
+	}
+	req := batch[0]
+	text, err := permission.Render([]permission.Request{req})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantScope := fmt.Sprintf("The plan the Marshal drafted (version %d).", run.PlanVersion)
+	if !strings.Contains(text, wantScope) {
+		t.Fatalf("rendered popup lacks plain scope %q:\n%s", wantScope, text)
+	}
+	for _, bad := range []string{"RUN-", "PLAN-"} {
+		if strings.Contains(text, bad) {
+			t.Fatalf("rendered popup leaks %q:\n%s", bad, text)
+		}
+	}
+	if !strings.Contains(req.Detail, run.PlanID) || !strings.Contains(req.Detail, "RUN-plan-proposal") {
+		t.Fatalf("Detail missing run/plan ids: %q", req.Detail)
 	}
 }
 
@@ -1156,7 +1185,7 @@ func TestMarshalProposalAmendDenyRouting(t *testing.T) {
 	if len(batchDeny) != 1 || batchDeny[0].Object != "/marshal amend deny" {
 		t.Fatalf("unexpected queued permission: %+v", batchDeny)
 	}
-	if !strings.Contains(batchDeny[0].Reason, "Deny proposed amendment: add new task") {
+	if !strings.Contains(batchDeny[0].Reason, "Don't make this change to the plan: add new task") {
 		t.Fatalf("unexpected reason: %s", batchDeny[0].Reason)
 	}
 	if err := w.decidePermission(t.Context(), batchDeny[0], false, "operator popup"); err != nil {

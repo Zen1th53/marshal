@@ -80,7 +80,7 @@ func TestTUIRejectsUninitializedProjectWithoutWrites(t *testing.T) {
 				if code == 0 || stdout != "" {
 					t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 				}
-				for _, want := range []string{dir, "missing PACK-VERSION.yaml", "CAPABILITIES.yaml", "state.db", "run `marshal init` here", "cd into your project", "marshal doctor"} {
+				for _, want := range []string{"Marshal isn't set up in this project yet.", "Run `marshal init` here."} {
 					if !strings.Contains(stderr, want) {
 						t.Fatalf("missing %q in %q", want, stderr)
 					}
@@ -103,7 +103,7 @@ func TestTUIOutsideRepositoryReportsFailure(t *testing.T) {
 		if code == 0 || stdout != "" {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
-		for _, want := range []string{dir, "Git repository", "cd into your project", "marshal doctor"} {
+		for _, want := range []string{"This folder isn't a Git project with a first commit yet.", "Run `git init`", "cd into your project"} {
 			if !strings.Contains(stderr, want) {
 				t.Fatalf("missing %q in %q", want, stderr)
 			}

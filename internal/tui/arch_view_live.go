@@ -187,12 +187,16 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 	w.arch.mu.Lock()
 	w.arch.snap.At = time.Now()
 	w.arch.snap.Telemetry = telemetry
+	logErr := err != nil && err.Error() != w.arch.snap.Err
 	if err != nil {
 		w.arch.snap.Err = err.Error()
 	} else {
 		w.arch.snap.Overview, w.arch.snap.Loaded, w.arch.snap.Err = o, true, ""
 	}
 	w.arch.mu.Unlock()
+	if logErr {
+		w.logTUIError("Architecture view", err)
+	}
 	// The open view repaints for every read; the Board only when its chip
 	// changed.
 	nowLoaded, nowRev := w.archState()

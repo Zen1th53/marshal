@@ -24,7 +24,7 @@ func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 		if errors.Is(err, project.ErrStatePreparation) {
 			return project.Layout{}, fmt.Errorf("cannot open Marshal project in %q: %w", root, err)
 		}
-		return project.Layout{}, fmt.Errorf("cannot open MARSHAL project in %q: no usable Git repository or commit baseline; cd into your project; run `marshal doctor` for details", root)
+		return project.Layout{}, errors.New("This folder isn't a Git project with a first commit yet. Run `git init`, make a first commit, then run `marshal init`. Or cd into your project.")
 	}
 	var problems []string
 	for _, name := range append(append([]string{}, defaultProjectFiles...), filepath.Join(filepath.Base(layout.RuntimeDir), "state.db")) {
@@ -58,14 +58,29 @@ func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 		}
 	}
 	if len(problems) != 0 {
-		return project.Layout{}, projectNotReadyError{msg: fmt.Sprintf("MARSHAL project %q is not initialized or is invalid: %s; run `marshal init` here (or cd into your project); run `marshal doctor` for details", layout.Root, strings.Join(problems, "; "))}
+		msg := "Some of Marshal's files in this project are damaged. Run `marshal doctor` to see which."
+		allMissing := true
+		for _, p := range problems {
+			if !strings.HasPrefix(p, "missing ") {
+				allMissing = false
+				break
+			}
+		}
+		if allMissing {
+			msg = "Marshal isn't set up in this project yet. Run `marshal init` here."
+		}
+		return project.Layout{}, projectNotReadyError{msg: msg, detail: strings.Join(problems, "; ")}
 	}
 	return layout, nil
 }
 
-// projectNotReadyError keeps the operator-facing message unchanged while
-// remaining an invalid-input error for callers that match model.ErrInvalid.
-type projectNotReadyError struct{ msg string }
+// projectNotReadyError keeps the operator-facing message plain while remaining
+// an invalid-input error for callers that match model.ErrInvalid. detail keeps
+// the technical problem list for the log; it is never printed.
+type projectNotReadyError struct {
+	msg    string
+	detail string
+}
 
 func (e projectNotReadyError) Error() string { return e.msg }
 func (e projectNotReadyError) Unwrap() error { return model.ErrInvalid }

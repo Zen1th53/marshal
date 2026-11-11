@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +13,10 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 )
+
+// ErrRuntimeNotRunning marks the case where no background service is listening
+// on the project's runtime socket, so a plain message can be shown for it.
+var ErrRuntimeNotRunning = errors.New("marshal runtime is not running")
 
 type Client struct {
 	http *http.Client
@@ -128,7 +133,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("%w: connect to local runtime: %v", model.ErrUnavailable, err)
+		return "", fmt.Errorf("%w: %w: connect to local runtime: %v", model.ErrUnavailable, ErrRuntimeNotRunning, err)
 	}
 	defer response.Body.Close()
 	var envelope Envelope

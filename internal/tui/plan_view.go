@@ -19,6 +19,10 @@ const planPane layout.PaneID = "plan"
 // before the first Marshal run: no error, just what to do next.
 const viewNoRunLine = "  No run yet. Press s and tell the Marshal what to build."
 
+// viewLoadFailed is the one line a body view shows when its first read of
+// the store failed: plain, no error text, in the normal colour.
+const viewLoadFailed = "Couldn't load this view. It tries again every 10 seconds."
+
 // planSnapshot is the Plan view's data: the last overview read and when
 // it was read.
 type planSnapshot struct {
@@ -158,13 +162,13 @@ func (v boardVisual) planLines(m planPaint, w, h int) []string {
 	if !s.Loaded {
 		read := "reading the store…"
 		if s.Err != "" {
-			read = v.fg("failed", "not readable: "+cleanBoard(s.Err))
+			read = viewLoadFailed
 		}
 		return append(out, v.kv("updated", read, w))
 	}
 	read := "read " + hostAgo(v.now.Sub(s.At)) + " · every 10 s while open"
 	if s.Err != "" {
-		read = v.fg("failed", "last read failed: "+cleanBoard(s.Err)) + v.fg("dim", " · showing "+hostAgo(v.now.Sub(s.At)))
+		read = "Couldn't refresh; showing what was read " + hostAgo(v.now.Sub(s.At)) + "."
 	}
 	out = append(out, v.kv("updated", read, w))
 	if len(o.Tasks) == 0 {

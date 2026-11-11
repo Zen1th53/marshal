@@ -277,13 +277,13 @@ func (v boardVisual) archLines(m archPaint, w, h int) []string {
 	if !s.Loaded {
 		read := "reading the store…"
 		if s.Err != "" {
-			read = v.fg("failed", "not readable: "+cleanBoard(s.Err))
+			read = viewLoadFailed
 		}
 		top = append(top, v.kv("updated", read, w))
 	} else {
 		read := "read " + hostAgo(v.now.Sub(s.At)) + " · every 10 s while open"
 		if s.Err != "" {
-			read = v.fg("failed", "last read failed: "+cleanBoard(s.Err)) + v.fg("dim", " · showing "+hostAgo(v.now.Sub(s.At)))
+			read = "Couldn't refresh; showing what was read " + hostAgo(v.now.Sub(s.At)) + "."
 		}
 		top = append(top, v.kv("updated", read, w))
 		force := v.fg("parked", "nothing accepted yet · the owner accepts a draft with \"accept architecture\"")

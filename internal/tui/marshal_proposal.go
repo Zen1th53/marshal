@@ -471,13 +471,27 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	if w.permissions.runProposals == nil {
 		w.permissions.runProposals = map[string]marshalProposal{}
 	}
-	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: p.requester(), Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
+	// Scope and Reason are plain sentences for the operator; every technical
+	// value (IDs, revisions, digests) goes to Detail, which is never rendered.
+	scope, reason := marshalRunProposalPopupText(p, run)
+	if p.reviewed != nil {
+		scope += " Tasks and checks are on the Plan view (press 7)."
+	}
+	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: scope, Who: p.requester(), Reason: reason, RunID: runID, TaskID: binding, Detail: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision)}
 	if p.action == "approve-task" {
-		w.describePrivateTransportApproval(&req, p.id)
+		var transport permission.Request
+		w.describePrivateTransportApproval(&transport, p.id)
+		req.Detail += transport.Scope
+		if transport.Reason != "" {
+			req.Reason = transport.Reason
+		}
+		if transport.ApprovalBinding != "" {
+			req.ApprovalBinding = transport.ApprovalBinding
+		}
 	}
 	if resumeDescription.ApprovalBinding != "" {
 		req.ApprovalBinding = resumeDescription.ApprovalBinding
-		req.Scope += resumeDescription.Scope
+		req.Detail += resumeDescription.Scope
 		req.Reason = resumeDescription.Reason
 	}
 	if p.action == "accept" {
@@ -486,30 +500,29 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 			w.permissions.mu.Unlock()
 			return e
 		}
-		req.Scope += "; result " + purpose
+		req.Detail += "; result " + purpose
 	}
 	if p.reviewed != nil {
 		data, _ := json.Marshal(p.reviewed)
 		req.ApprovalBinding = string(data)
-		req.Scope += fmt.Sprintf("; pack %s; repository %s; base %s; target %s", p.reviewed.PackDigest, p.reviewed.Repository, p.reviewed.BaseCommit, p.reviewed.TargetRef)
+		req.Detail += fmt.Sprintf("; pack %s; repository %s; base %s; target %s", p.reviewed.PackDigest, p.reviewed.Repository, p.reviewed.BaseCommit, p.reviewed.TargetRef)
 		if p.reviewed.CanonicalScopeDigest != "" {
 			// Permission metadata is one line: Render rejects control characters.
 			// Keep every reviewed task route and check visible, separated clearly.
-			req.Scope += fmt.Sprintf("; Process 04 %s version %d; Goal %s revision %d; project contract %s; approval scope %s; mode %s; Marshal budget %s; task routes: %s; harness assignments: %s; team: %s; verification: %s; executable checks: %s", p.reviewed.PlanID, p.reviewed.PlanVersion, p.reviewed.GoalID, p.reviewed.GoalRevision, p.reviewed.ContractDigest, p.reviewed.CanonicalScopeDigest, p.reviewed.PlanningMode, popupReviewText(p.reviewed.MarshalBudgetSummary), popupReviewText(p.reviewed.RouteSummary), popupReviewText(p.reviewed.AssignmentSummary), popupReviewText(p.reviewed.TeamSummary), popupReviewText(p.reviewed.VerificationSummary), popupReviewText(p.reviewed.TaskCheckSummary))
+			req.Detail += fmt.Sprintf("; Process 04 %s version %d; Goal %s revision %d; project contract %s; approval scope %s; mode %s; Marshal budget %s; task routes: %s; harness assignments: %s; team: %s; verification: %s; executable checks: %s", p.reviewed.PlanID, p.reviewed.PlanVersion, p.reviewed.GoalID, p.reviewed.GoalRevision, p.reviewed.ContractDigest, p.reviewed.CanonicalScopeDigest, p.reviewed.PlanningMode, popupReviewText(p.reviewed.MarshalBudgetSummary), popupReviewText(p.reviewed.RouteSummary), popupReviewText(p.reviewed.AssignmentSummary), popupReviewText(p.reviewed.TeamSummary), popupReviewText(p.reviewed.VerificationSummary), popupReviewText(p.reviewed.TaskCheckSummary))
 		}
 	}
 	if p.action == "deliver" {
 		p.value = run.ApprovalScopeDigest
 		req.ApprovalBinding = run.ApprovalScopeDigest
-		req.Scope += "; target " + run.TargetRef + "; approval " + run.ApprovalScopeDigest
-		req.Reason = "Separate confirmation: deliver automatically to this target after verification"
+		req.Detail += "; target " + run.TargetRef + "; approval " + run.ApprovalScopeDigest
 	}
 	if pending != nil {
-		req.Scope += "; proposed amendment " + binding[strings.LastIndex(binding, ":")+1:]
+		req.Detail += "; proposed amendment " + binding[strings.LastIndex(binding, ":")+1:]
 		if p.action == "amend-deny" {
-			req.Reason = "Deny proposed amendment: " + pending.reason
+			req.Reason = "Don't make this change to the plan: " + pending.reason
 		} else {
-			req.Reason = "Approve proposed amendment: " + pending.reason
+			req.Reason = "Make this change to the plan: " + pending.reason
 		}
 	}
 	bound, bindErr := w.bindProposalMCPRequest(req)
@@ -531,6 +544,30 @@ func marshalRunHasGovernedTask(run marshal.Run) bool {
 		}
 	}
 	return false
+}
+
+// marshalRunProposalPopupText is the plain Scope and Reason the operator sees
+// for a run proposal. The amendment Reason is finished by the caller, which has
+// the amendment text.
+func marshalRunProposalPopupText(p marshalProposal, run marshal.Run) (scope, reason string) {
+	switch p.action {
+	case "approve":
+		return fmt.Sprintf("The plan the Marshal drafted (version %d).", run.PlanVersion), "Please check this plan before it runs."
+	case "approve-task":
+		return "One task of the current plan.", "Please check this task before it runs."
+	case "accept":
+		return "One task's finished work.", "Please check this work before it joins the run."
+	case "close":
+		return "Finishing the current run.", "Please check the result before the run is closed."
+	case "resume":
+		return "Continuing the current run.", "Please confirm the run should continue."
+	case "deliver":
+		return "Delivering the finished work to " + run.TargetRef + ".", "After the checks pass, deliver the work automatically."
+	case "amend-approve", "amend-deny":
+		return "A change to the approved plan.", "Please check this change before it runs."
+	default:
+		return "The current run.", "Please check this before it runs."
+	}
 }
 
 func popupReviewText(s string) string {
@@ -882,7 +919,7 @@ func (p marshalProposal) requester() string {
 }
 
 func (w *Workspace) queueReservedMergeApproval(_ context.Context, runID, taskID string, revision int64, result string, files []string) {
-	w.queuePermission(permission.Request{Kind: "marshal-command", Object: "Merge reserved governance files: " + strings.Join(files, ", "), RunID: runID, TaskID: app.ReservedMergePurpose(taskID, result, revision), Who: "MARSHAL runtime", Scope: fmt.Sprintf("run %s task %s revision %d result %s", runID, taskID, revision, result), Reason: "Separate operator consent for these changes; A merges and resumes, D keeps the result unmerged"})
+	w.queuePermission(permission.Request{Kind: "marshal-command", Object: "Merge changes to Marshal's own rule files: " + strings.Join(files, ", "), RunID: runID, TaskID: app.ReservedMergePurpose(taskID, result, revision), Who: "MARSHAL runtime", Scope: "One task's finished work.", Reason: "These files control how Marshal works. A merges them and continues; D keeps them out.", Detail: fmt.Sprintf("run %s task %s revision %d result %s", runID, taskID, revision, result)})
 }
 
 func (w *Workspace) monitorGoverningIntegrity() {
@@ -961,9 +998,9 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 			w.RecordActivity("Ignored Marshal memory proposal: candidate does not exist.")
 		}
 	case "harness-verify":
-		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, worker qualification", Who: p.requester(), Reason: "Verify provider harness configuration"})
+		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "This project.", Who: p.requester(), Reason: "Check this provider's setup."})
 	case "setting":
-		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: p.requester(), Reason: "Apply the exact proposed setting"})
+		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "This project, from the next run.", Who: p.requester(), Reason: "Change this setting as proposed."})
 	case "approve":
 		m := w.marshalSession()
 		m.mu.Lock()
