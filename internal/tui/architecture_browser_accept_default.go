@@ -19,3 +19,7 @@ func (w *Workspace) browserAcceptBlocked() func() string { return nil }
 func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.Runtime, provider, goal string) (*app.ArchitectureReviewSession, error) {
 	return rt.StartArchitectureReviewForSession(ctx, provider, goal, w.sessionID, w.architectureReviewHooks())
 }
+
+// wakeMarshalAfterAccept does nothing here: Community's Marshal is told in its
+// inbox only.
+func (w *Workspace) wakeMarshalAfterAccept() {}

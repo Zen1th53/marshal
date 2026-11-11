@@ -29,6 +29,21 @@ func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.
 	return rt.StartArchitectureReviewForSession(ctx, provider, goal, w.sessionID, w.architectureReviewHooks())
 }
 
+// browserAcceptNudge wakes an idle Marshal after a recorded browser Accept.
+// It is not an acceptance and carries no binding: the instruction itself is
+// only in the inbox, and no chat text accepts anything.
+const browserAcceptNudge = "The owner accepted the architecture in the browser. Check your inbox."
+
+// wakeMarshalAfterAccept sends the nudge through the same path the ask card
+// uses for its answer, only when a Marshal chat is open; otherwise the inbox
+// note waits for the Marshal's next turn.
+func (w *Workspace) wakeMarshalAfterAccept() {
+	if w.sayPane() == "" && !w.nativeChatShown() {
+		return
+	}
+	w.sayToMarshal(w.workers.context(), browserAcceptNudge)
+}
+
 // browserContractChanged refuses an Accept of a page built from a contract
 // the Marshal has since replaced.
 var browserContractChanged = errors.New("The Marshal sent a newer project summary. Open the architecture again from your terminal, then press Accept.")

@@ -61,6 +61,9 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 	}
 	if err != nil {
 		w.RecordActivity("Could not tell the Marshal that the architecture was accepted; tell it in the chat.")
+	} else {
+		// The inbox is read on the Marshal's next turn; wake an idle one.
+		w.wakeMarshalAfterAccept()
 	}
 	w.RecordActivity(fmt.Sprintf("Architecture accepted in the browser (rev %d).", n))
 	if w.archView.Load() {

@@ -188,3 +188,116 @@ func TestBrowserAcceptRefusesSupersededContractPage(t *testing.T) {
 		t.Fatalf("the refused Accept recorded an instruction for the newer draft: %v %v", c, err)
 	}
 }
+
+// submitBrowserContract submits a pending project contract for the fixture's
+// live launch, as the Marshal does before the owner accepts.
+func submitBrowserContract(t *testing.T, w *Workspace, child *memoryTestChild, id, submission string) store.ProjectContractSubmission {
+	t.Helper()
+	var inventory store.ProjectContractInventoryPage
+	if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_inventory", map[string]any{"limit": 1}, true)), &inventory); err != nil {
+		t.Fatal(err)
+	}
+	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: w.runtime.ProjectContractBinding(), ID: id, Revision: 1, Purpose: "Wake test", Components: []projectcontext.Component{{ID: "core", Responsibility: "Core", Paths: []string{"main.go"}}}, Invariants: []string{"none"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
+	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": submission, "proposal": draft}, true)
+	return draft
+}
+
+func nudgesSent(w *Workspace) (n int, other []string) {
+	for _, e := range w.sayEchoList() {
+		if e.Text == browserAcceptNudge {
+			n++
+		} else {
+			other = append(other, e.Text)
+		}
+	}
+	return n, other
+}
+
+// A recorded browser Accept wakes an open Marshal chat exactly once, with
+// the fixed nudge and nothing that binds or accepts.
+func TestBrowserAcceptWakesMarshalChatOnce(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	submitBrowserContract(t, w, child, "wake", "wake-contract")
+	w.tmuxMu.Lock()
+	w.tmuxActiveWins["marshal-chat"].paneID = "%4242"
+	w.tmuxMu.Unlock()
+	state := browserAcceptState(1)
+	if err := w.beforeBrowserAccept()(t.Context(), state); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := nudgesSent(w); n != 0 {
+		t.Fatal("the nudge was sent before the Accept was saved")
+	}
+	w.browserAccepted(state)
+	n, other := nudgesSent(w)
+	if n != 1 || len(other) != 0 {
+		t.Fatalf("nudges %d, other messages %q", n, other)
+	}
+	if strings.Contains(browserAcceptNudge, "instruction_ref") || strings.Contains(browserAcceptNudge, "accept architecture") {
+		t.Fatalf("the nudge carries a binding or the instruction text: %q", browserAcceptNudge)
+	}
+}
+
+// Without an open Marshal chat nothing is sent; the inbox note waits.
+func TestBrowserAcceptWithoutChatSendsNoNudge(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	submitBrowserContract(t, w, child, "quiet", "quiet-contract")
+	state := browserAcceptState(1)
+	if err := w.beforeBrowserAccept()(t.Context(), state); err != nil {
+		t.Fatal(err)
+	}
+	// The chat is closed by the time the Accept is saved.
+	w.mu.Lock()
+	w.boardClassic = true
+	w.mu.Unlock()
+	w.tmuxMu.Lock()
+	delete(w.tmuxActiveWins, "marshal-chat")
+	w.tmuxMu.Unlock()
+	if w.sayPane() != "" || w.nativeChatShown() {
+		t.Fatal("a Marshal chat is still open")
+	}
+	w.browserAccepted(state)
+	if len(w.sayEchoList()) != 0 {
+		t.Fatalf("sent with no chat open: %+v", w.sayEchoList())
+	}
+	if raw, _ := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal")); !strings.Contains(string(raw), "instruction_ref=browser:") {
+		t.Fatalf("the inbox note is missing: %s", raw)
+	}
+}
+
+// The nudge sentence is a wake-up, never an acceptance: typing it in the
+// chat, sending it through the say path, or offering it as an instruction
+// records nothing, and the Marshal's allow is still refused.
+func TestBrowserAcceptNudgeAcceptsNothing(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	submitBrowserContract(t, w, child, "nudge-only", "nudge-contract")
+	if store.ArchitectureAcceptanceInstruction(browserAcceptNudge) {
+		t.Fatal("the nudge is an acceptance instruction")
+	}
+	tr := ownerTypes(t, w, browserAcceptNudge, time.Now().UTC().Add(time.Millisecond))
+	w.observeAuthenticatedMarshalProposals(tr)
+	w.sayToMarshal(t.Context(), browserAcceptNudge)
+	w.tmuxMu.Lock()
+	session := w.tmuxActiveWins["marshal-chat"].sessionID
+	w.tmuxMu.Unlock()
+	if _, _, err := w.runtime.RecordProjectContractOperatorInstruction(t.Context(), session, w.proposalLaunchID(), "browser:nudge", browserAcceptNudge, time.Now().UTC()); err == nil {
+		t.Fatal("the nudge was recorded as the owner's instruction")
+	}
+	if c, err := w.readPendingContract(t.Context()); err != nil || c == nil {
+		t.Fatalf("the nudge consumed the pending contract: %v %v", c, err)
+	}
+	if raw, _ := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal")); strings.Contains(string(raw), "instruction_ref=") {
+		t.Fatalf("the nudge produced an instruction: %s", raw)
+	}
+	authorizeTestMemory(t, w, cfg, true) // the Marshal tries to allow
+	var receipt projectContractMCPReceipt
+	if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_receipt", map[string]string{"submission_id": "nudge-contract"}, true)), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if receipt.Accepted || receipt.Current {
+		t.Fatalf("the nudge let the Marshal accept the contract: %+v", receipt)
+	}
+}

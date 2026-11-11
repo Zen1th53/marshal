@@ -12036,23 +12036,23 @@
     },
     {
       "path": "internal/tui/architecture_browser_accept.go",
-      "sha256": "5a8d8376553702031c39cc90c113702f69e8509dd64c07bdb858e42665c5653c",
-      "bytes": 3115
+      "sha256": "20eae36b768fc91bd29f6885b423ea0fcdb98c18bb948f0095f9f21cc4c48b8a",
+      "bytes": 3223
     },
     {
       "path": "internal/tui/architecture_browser_accept_default.go",
-      "sha256": "a129ac6fee44ed9f8baeab2b09e9afc04eb59ffdf41ef47f060d0edaad9ee1e1",
-      "bytes": 773
+      "sha256": "5ba2505b9269e07c82d9e448e29541f2be5fca42efe1475e055a14821cefe7eb",
+      "bytes": 917
     },
     {
       "path": "internal/tui/architecture_browser_accept_extreme.go",
-      "sha256": "9bd8b9b8bee012b1578138567e0381fc6bead56ece183987b6fde16be42c8b6e",
-      "bytes": 4288
+      "sha256": "11281b306a994d4b743b330af9f352dc82a0015e35015bd8dd4451f82f5094ec",
+      "bytes": 4964
     },
     {
       "path": "internal/tui/architecture_browser_accept_extreme_test.go",
-      "sha256": "edcb8a7230ac6950875b86704bb31d9bc802d9f3b4226052fc12e8f7dd38ab9f",
-      "bytes": 10491
+      "sha256": "405cf17f0193d67ad0d2e4f35cd45ee991f6a3830afc1e34339b3f0295d50826",
+      "bytes": 15611
     },
     {
       "path": "internal/tui/auth_nontmux_preflight_test.go",
