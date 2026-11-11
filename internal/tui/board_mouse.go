@@ -66,6 +66,10 @@ const (
 	// (board_keymap.go): its id is the action's ID, and a click runs that
 	// action the way its key would.
 	hitAction boardHitKind = "action"
+	// hitPaletteRow is a visible row of the command palette (palette.go):
+	// its id is the row's index in cp.filtered. A first click selects it, a
+	// click on the selected row runs it exactly as Enter does.
+	hitPaletteRow boardHitKind = "palette"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -121,17 +125,24 @@ func (v boardVisual) unhit(row int) {
 }
 
 // boardMouseWanted reports whether the Board reads the mouse: while it is
-// on screen with nothing over it that takes the mouse itself.
+// on screen with nothing over it that takes the mouse itself. The palette is
+// drawn over the Board and its rows are clickable, so it does not turn the
+// mouse off; the diff viewer owns the whole screen and does.
 func (w *Workspace) boardMouseWanted() bool {
-	return w.boardVisible() && !w.diffViewer.IsOpen() && !w.palette.IsOpen()
+	return w.boardVisible() && !w.diffViewer.IsOpen()
 }
 
 // handleBoardMouse is a click on the Board. It returns false for anything
 // that is not the Board's: a mouse report with the Board hidden, or with
-// the diff viewer or the palette over it.
+// the diff viewer over it.
 func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
-	if event.Type != KeyMouse || !w.boardVisible() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
+	if event.Type != KeyMouse || !w.boardVisible() || w.diffViewer.IsOpen() || w.completionOpen {
 		return false
+	}
+	// The palette is drawn over the Board: it takes the wheel and the click
+	// itself, so it is handled before the Board's own "left press only" rule.
+	if w.palette.IsOpen() {
+		return w.handlePaletteMouse(ctx, event)
 	}
 	// Only a left press acts; releases, other buttons and the wheel are
 	// the Board's to ignore, so they never reach the composer.
@@ -144,8 +155,13 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		return true
 	}
 	if w.boardHelp.Load() {
-		// As any key does, a click closes the help.
+		// A click closes help; one that lands on a help line naming a runnable
+		// key also runs that action, as pressing the key would. A KeyConfirm
+		// key only opens its confirmation, so the mouse still never decides.
 		w.boardHelp.Store(false)
+		if h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1); ok && h.kind == hitAction {
+			w.runBoardAction(ctx, h.id)
+		}
 		return true
 	}
 	h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1)
@@ -268,6 +284,47 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 			w.inboxView.Begin(h.action)
 		}
 	}
+	return true
+}
+
+// handlePaletteMouse is a mouse report while the command palette is open over
+// the Board. The wheel moves the selection as ↑/↓ do; a first left click on a
+// row selects it, a click on the already-selected row runs it exactly as
+// Enter, and a left click outside the box closes the palette.
+func (w *Workspace) handlePaletteMouse(ctx context.Context, event KeyEvent) bool {
+	// The wheel moves the selection by one, like ↑/↓.
+	switch event.MouseButton {
+	case 64:
+		w.palette.HandleKey(KeyEvent{Type: KeyUp})
+		return true
+	case 65:
+		w.palette.HandleKey(KeyEvent{Type: KeyDown})
+		return true
+	}
+	// Beyond the wheel only a left press acts; releases and other buttons
+	// are ignored so they never reach the composer.
+	if event.MouseRelease || event.MouseButton != 0 {
+		return true
+	}
+	h, ok := w.boardHits.at(event.MouseRow-1, event.MouseColumn-1)
+	if !ok || h.kind != hitPaletteRow {
+		// A click outside the box closes the palette, as Esc does.
+		w.palette.Close()
+		return true
+	}
+	i, err := strconv.Atoi(h.id)
+	if err != nil {
+		return true
+	}
+	if w.palette.Selected() == i {
+		// A click on the selected row runs it the one way Enter does.
+		if action, run := w.palette.HandleKey(KeyEvent{Type: KeyEnter}); run && action != nil {
+			w.runPaletteAction(ctx, *action)
+		}
+		return true
+	}
+	// A first click only selects the row; a second click on it runs it.
+	w.palette.Select(i)
 	return true
 }
 

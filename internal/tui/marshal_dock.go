@@ -173,7 +173,13 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 		// Undock, or forget a docked pane that has been replaced: the
 		// replacement is joined below.
 		err := w.undockLocked(ctx, root, chat)
-		if !want || err != nil {
+		if !want {
+			// The dock does not own the session's mouse option now: the
+			// reconciler does, so a click still works on an undocked Board.
+			w.reconcileBoardMouse(ctx, board)
+			return err
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -203,6 +209,24 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 		}
 	}
 	return w.adoptDockLocked(ctx, chat, board, root, width)
+}
+
+// reconcileBoardMouse owns the tmux session's mouse option while the dock is
+// not active. The dock turns it on for the pair when a chat is docked
+// (styleDockLocked) and off when it undocks (forgetDockLocked); here, with no
+// dock, it stays on whenever the Board is the screen inside this MARSHAL
+// session so a click still selects and opens, and is unset otherwise — a
+// non-Board screen, or the exit that clears w.dock.enabled before this runs.
+// Caller holds dock.mu.
+func (w *Workspace) reconcileBoardMouse(ctx context.Context, board string) {
+	if !isPaneID(board) {
+		return
+	}
+	if w.dock.enabled && w.boardMouseWanted() {
+		_, _ = tmux.RunCommand(ctx, "set-option", "-t", board, "mouse", "on")
+		return
+	}
+	_, _ = tmux.RunCommand(ctx, "set-option", "-u", "-t", board, "mouse")
 }
 
 // adoptDockLocked installs the same keys and title for every path that puts

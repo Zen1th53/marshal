@@ -8,6 +8,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/permission"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -559,10 +560,28 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		ui.insp, ui.inspFor = nil, ""
 		lines = paintBoard(l, th, v.render)
 	}
+	var overlayHits []boardHit
 	if len(popup) == 0 && w.boardHelp.Load() {
 		r := l.Overlay(0)
-		popup, ui.helpMax = v.helpOverlay(r.W, r.H, ui.helpScroll)
+		var helpHits []boardHit
+		popup, ui.helpMax, helpHits = v.helpOverlay(r.W, r.H, ui.helpScroll)
 		ui.helpScroll = min(ui.helpScroll, ui.helpMax)
+		// helpOverlay places its regions box-relative; the overlay draws the
+		// box at r, so offset them onto the frame.
+		for _, h := range helpHits {
+			h.row, h.x0, h.x1 = h.row+r.Y, h.x0+r.X, h.x1+r.X
+			overlayHits = append(overlayHits, h)
+		}
+	}
+	// The palette (space / Ctrl+K) is rendered by the caller and arrives as
+	// popup; its visible rows are clickable. Layout gives the same box width
+	// and row range Render drew, so each row's region lands under its line.
+	if w.palette.IsOpen() {
+		r := l.Overlay(0)
+		boxWidth, start, end := w.palette.Layout(cols, rows)
+		for i := start; i < end; i++ {
+			overlayHits = append(overlayHits, boardHit{row: r.Y + 3 + (i - start), x0: r.X, x1: r.X + boxWidth, kind: hitPaletteRow, id: strconv.Itoa(i)})
+		}
 	}
 	// The mid-run Marshal picker (m) is an overlay like help; its rows record
 	// click regions kept past the popup hit sweep below.
@@ -596,6 +615,9 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 			return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0)
 		})
 	}
+	// The palette rows and help's clickable key lines are the overlay's own
+	// regions: they survive the body sweep above so a click reaches them.
+	hits = append(hits, overlayHits...)
 	w.boardHits.set(hits)
 	return lines, cursorRow, cursorCol
 }

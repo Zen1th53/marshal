@@ -187,7 +187,7 @@ func TestPanelWithNewNoteIsNotStopped(t *testing.T) {
 // Help lists every kind of click target the Board's mouse acts on.
 func TestBoardHelpListsMouse(t *testing.T) {
 	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true)}
-	help, _ := v.helpOverlay(160, 80, 0)
+	help, _, _ := v.helpOverlay(160, 80, 0)
 	got := StripANSI(strings.Join(help, "\n"))
 	for _, want := range []string{"MOUSE", "task  lane", "header chip", "open its confirmation", "[Enter]", "do what it suggests", "footer key", "closes help"} {
 		if !strings.Contains(got, want) {

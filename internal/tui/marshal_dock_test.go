@@ -246,6 +246,27 @@ func TestMarshalDockJoinsFollowsResizeAndUndocks(t *testing.T) {
 	}
 }
 
+// With no chat docked, the reconciler keeps the session's mouse on while the
+// Board is the screen, so a click still works; exit unsets it.
+func TestMarshalDockMouseWhenUndocked(t *testing.T) {
+	f := newDockFake(t, 120)
+	w, _ := dockWorkspace(t)
+	// No chat is docked: the Board stands alone in its MARSHAL session.
+	w.tmuxMu.Lock()
+	delete(w.tmuxActiveWins, "marshal-chat")
+	w.tmuxMu.Unlock()
+	w.screen = NewScreen(nil)
+	w.homeBoard = true
+	if err := w.reconcileDock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mustContain(t, f.take(), "set-option -t %0 mouse on")
+
+	// On exit the dock is disabled before the reconcile, so the mouse is unset.
+	w.endDock()
+	mustContain(t, f.take(), "set-option -u -t %0 mouse")
+}
+
 func TestMarshalDockNarrowWindowKeepsChatDocked(t *testing.T) {
 	for _, tc := range []struct{ cols, chat int }{{113, 56}, {112, 55}, {106, 49}, {97, 40}, {96, 47}, {80, 39}, {40, 19}, {2, 1}} {
 		if got := dockWidth(tc.cols); got != tc.chat {
