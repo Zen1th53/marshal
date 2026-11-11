@@ -6426,8 +6426,8 @@
     },
     {
       "path": "internal/hostwatch/hostwatch_test.go",
-      "sha256": "67b19caed9c44de99ed3e82d9acea9b76a1c15d84b6295e47fb02d396fc29f90",
-      "bytes": 13175
+      "sha256": "8012ced1b952bdfcf96389c6d7c0587a2ec155d74dc362766ea3d0f105fe28de",
+      "bytes": 14759
     },
     {
       "path": "internal/hostwatch/live_test.go",
@@ -6436,8 +6436,8 @@
     },
     {
       "path": "internal/hostwatch/policy.go",
-      "sha256": "8b2979146cc2b8491522745a598db836617f42512ff90fa8f332cc18fd7faf99",
-      "bytes": 8715
+      "sha256": "fbe53b85f84b7747687aeb3e17dccabe179990936b7e788a33f1f9d43ace4ec4",
+      "bytes": 9688
     },
     {
       "path": "internal/hostwatch/ring.go",
@@ -13221,18 +13221,18 @@
     },
     {
       "path": "internal/tui/host_view.go",
-      "sha256": "1bef6933b3cdc78e356bb82829376dad978e09fb926b0b75f56d58a972329f63",
-      "bytes": 20994
+      "sha256": "55a3919142d27c36ee0aa6601217c15df77467bf2df394fe4aae1e17d5d462a8",
+      "bytes": 20932
     },
     {
       "path": "internal/tui/host_watch.go",
-      "sha256": "5d3d6904b08cbc8e5950f53a0181101d10a13f1ac5055d9ca307e80828d3a041",
+      "sha256": "23b8231575ac9608c56ccd0f868482c1db3d84b84ec5da12c4b7ecf21fd65f99",
       "bytes": 13516
     },
     {
       "path": "internal/tui/host_watch_test.go",
-      "sha256": "54a6a7a5ef230e3e98b60f73af5c69c0789239d00d8076d5b077ba3291b65f2c",
-      "bytes": 20649
+      "sha256": "0db72ae3da6646a026420eb047f85614d4f13003058a48b9e967279a92bea6ac",
+      "bytes": 20569
     },
     {
       "path": "internal/tui/ia.go",
@@ -14736,13 +14736,13 @@
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-home-200x60.golden",
-      "sha256": "02ec8d2b69d1d1ae0065b66669f2acd933eb4c0f2e0a38c950508aa6fd6d8faa",
-      "bytes": 20544
+      "sha256": "dfd8f8d77da0da1e0c49d34f32669c80cdbba834867e78e36f17fabe9ff7bb31",
+      "bytes": 20545
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-split-120x40.golden",
-      "sha256": "e4f40aec80d5fb09fa077e585f0ec6da4cf08b257233fba3c8a56bf876d0aaeb",
-      "bytes": 10924
+      "sha256": "68044fcf30be3f9c88000bc16ccaf7ad00737dc5386ef49121c83a5f80e7024a",
+      "bytes": 10925
     },
     {
       "path": "internal/tui/testdata/board/demo-chips-split-80x24.golden",
@@ -14916,8 +14916,8 @@
     },
     {
       "path": "internal/tui/testdata/board/host-split-120x40.golden",
-      "sha256": "268e3a52e018b099ae55a3efb6a8d18cf66b8c0436a97de8df7a701b62aad7be",
-      "bytes": 12586
+      "sha256": "d583d6c8bd95fc5ad1954d225c9fd09c08633549725d031f0adc81e9d192a492",
+      "bytes": 12571
     },
     {
       "path": "internal/tui/testdata/board/host-split-80x24.golden",

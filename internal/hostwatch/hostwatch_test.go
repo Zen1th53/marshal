@@ -352,6 +352,59 @@ func TestPolicyDiskAndMemoryRules(t *testing.T) {
 	}
 }
 
+func TestDiskThresholdIsSmallerOfGBAndPercent(t *testing.T) {
+	p := DefaultPolicy()
+	if got := p.DiskFreeThresholdBytes(500e9); got != 10e9 {
+		t.Fatalf("500 GB total: got %d, want %d", got, uint64(10e9))
+	}
+	if got := p.DiskFreeThresholdBytes(100e9); got != 5e9 {
+		t.Fatalf("100 GB total: got %d, want %d", got, uint64(5e9))
+	}
+	if got := p.DiskFreeThresholdBytes(0); got != 10e9 {
+		t.Fatalf("0 total: got %d, want %d", got, uint64(10e9))
+	}
+}
+
+func TestDiskRuleUsesPerMountThreshold(t *testing.T) {
+	p := DefaultPolicy()
+	now := time.Now()
+	var state State
+
+	// 100 GB total, 6 GB free -> threshold is 5 GB -> no action
+	s1 := Sample{
+		At: now,
+		DiskMounts: []DiskMountUsage{
+			{MountPoint: "/", TotalBytes: 100e9, FreeBytes: 6e9, Known: true},
+		},
+	}
+	state, actions := p.Evaluate([]Sample{s1}, state)
+	if state.ActiveRules["disk_free_low"] {
+		t.Errorf("expected disk_free_low to be inactive")
+	}
+	if len(actions) != 0 {
+		t.Errorf("expected 0 actions, got %+v", actions)
+	}
+
+	// 100 GB total, 4 GB free -> threshold is 5 GB -> triggers
+	s2 := Sample{
+		At: now.Add(time.Second),
+		DiskMounts: []DiskMountUsage{
+			{MountPoint: "/", TotalBytes: 100e9, FreeBytes: 4e9, Known: true},
+		},
+	}
+	state, actions = p.Evaluate([]Sample{s2}, state)
+	if !state.ActiveRules["disk_free_low"] {
+		t.Errorf("expected disk_free_low to be active")
+	}
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %+v", actions)
+	}
+	a := actions[0]
+	if a.Rule != "disk_free_low" || a.Kind != ActionTrigger || a.FreeBytes != 4e9 || a.Mount != "/" {
+		t.Errorf("unexpected action: %+v", a)
+	}
+}
+
 func TestRingBuffer(t *testing.T) {
 	ring := NewRing(3)
 	if ring.Cap() != 3 || ring.Len() != 0 {

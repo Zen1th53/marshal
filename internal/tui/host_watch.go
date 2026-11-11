@@ -197,9 +197,9 @@ func (h *hostWatcher) act(a hostwatch.Action, window []hostwatch.Sample) {
 			h.setNotice(a.Rule, "")
 		}
 	case ruleDisk:
-		h.addLog("disk", degrees(a.Reason)+noticeSuffix(trigger))
+		h.addLog("disk", a.Reason)
 		if trigger {
-			h.setNotice(a.Rule, "host: "+degrees(a.Reason)+". No automatic action.")
+			h.setNotice(a.Rule, "Disk almost full: "+hostwatch.GBText(a.FreeBytes)+" left. Marshal keeps running.")
 		} else {
 			h.setNotice(a.Rule, "")
 		}

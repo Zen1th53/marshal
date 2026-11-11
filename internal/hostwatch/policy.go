@@ -12,9 +12,12 @@ const (
 
 // Action represents an edge-triggered state transition event.
 type Action struct {
-	Rule   string
-	Kind   ActionKind
-	Reason string
+	Rule           string
+	Kind           ActionKind
+	Reason         string
+	Mount          string
+	FreeBytes      uint64
+	ThresholdBytes uint64
 }
 
 // State tracks the active status of each rule in the policy.
@@ -30,6 +33,7 @@ type Policy struct {
 
 	// Thresholds
 	DiskFreeThresholdGB      float64 // triggers if free disk < threshold GB (1 GB = 1e9 bytes)
+	DiskFreeThresholdPercent float64 // and below this % of the mount's size; the smaller wins (0 = GB only)
 	MemAvailableThresholdGiB float64 // triggers if MemAvailable < threshold GiB (1 GiB = 1024^3 bytes)
 	ThrottleRatePerMin       float64 // triggers if throttle rate/min > threshold
 	GPUTempThresholdC        float64 // triggers if GPU temp > threshold
@@ -41,12 +45,32 @@ func DefaultPolicy() Policy {
 	return Policy{
 		PackageTempTriggerC:      90.0,
 		PackageTempReleaseC:      85.0,
-		DiskFreeThresholdGB:      50.0,
+		DiskFreeThresholdGB:      10.0,
+		DiskFreeThresholdPercent: 5.0,
 		MemAvailableThresholdGiB: 8.0,
 		ThrottleRatePerMin:       100.0,
 		GPUTempThresholdC:        85.0,
 		NVMeTempThresholdC:       75.0,
 	}
+}
+
+// DiskFreeThresholdBytes is the free space below which a mount of total
+// bytes is low: the GB threshold or the percentage, whichever is smaller.
+func (p Policy) DiskFreeThresholdBytes(total uint64) uint64 {
+	gb := uint64(p.DiskFreeThresholdGB * 1e9)
+	if p.DiskFreeThresholdPercent <= 0 || total == 0 {
+		return gb
+	}
+	pct := uint64(float64(total) * p.DiskFreeThresholdPercent / 100)
+	return min(gb, pct)
+}
+
+// GBText formats a byte count as whole gigabytes (rounded down) or "0.X GB" if below 1 GB.
+func GBText(b uint64) string {
+	if b >= 1e9 {
+		return fmt.Sprintf("%d GB", b/1e9)
+	}
+	return fmt.Sprintf("%.1f GB", float64(b)/1e9)
 }
 
 // Evaluate evaluates the policy rules over the provided window of samples.
@@ -119,16 +143,21 @@ func (p Policy) Evaluate(window []Sample, prev State) (State, []Action) {
 	if p.DiskFreeThresholdGB > 0 {
 		ruleDisk := "disk_free_low"
 		wasActive := prev.ActiveRules != nil && prev.ActiveRules[ruleDisk]
-		thresholdBytes := uint64(p.DiskFreeThresholdGB * 1e9)
 		hasLowDisk := false
 		var lowMount string
 		var lowFree uint64
+		var lowThreshold uint64
 
 		for _, m := range latest.DiskMounts {
-			if m.Known && m.FreeBytes < thresholdBytes {
+			if !m.Known {
+				continue
+			}
+			thr := p.DiskFreeThresholdBytes(m.TotalBytes)
+			if m.FreeBytes < thr {
 				hasLowDisk = true
 				lowMount = m.MountPoint
 				lowFree = m.FreeBytes
+				lowThreshold = thr
 				break
 			}
 		}
@@ -136,16 +165,19 @@ func (p Policy) Evaluate(window []Sample, prev State) (State, []Action) {
 		if !wasActive && hasLowDisk {
 			next.ActiveRules[ruleDisk] = true
 			actions = append(actions, Action{
-				Rule:   ruleDisk,
-				Kind:   ActionTrigger,
-				Reason: fmt.Sprintf("Disk free on %s (%.2f GB) < threshold %.2f GB", lowMount, float64(lowFree)/1e9, p.DiskFreeThresholdGB),
+				Rule:           ruleDisk,
+				Kind:           ActionTrigger,
+				Reason:         fmt.Sprintf("Disk almost full on %s: %s left (alert below %s)", lowMount, GBText(lowFree), GBText(lowThreshold)),
+				Mount:          lowMount,
+				FreeBytes:      lowFree,
+				ThresholdBytes: lowThreshold,
 			})
 		} else if wasActive && !hasLowDisk {
 			next.ActiveRules[ruleDisk] = false
 			actions = append(actions, Action{
 				Rule:   ruleDisk,
 				Kind:   ActionRelease,
-				Reason: fmt.Sprintf("Disk free on all monitored mounts >= threshold %.2f GB", p.DiskFreeThresholdGB),
+				Reason: "Disk space is fine again",
 			})
 		}
 	}
