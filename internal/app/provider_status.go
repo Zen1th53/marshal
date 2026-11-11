@@ -270,8 +270,8 @@ func (r *Runtime) ProviderStatusDetails(ctx context.Context) ([]ProviderStatusDe
 			Found:           d.Found,
 			Path:            d.Path,
 			ObservedAt:      now,
-			QuotaReason:     "no provider exposes a machine-readable quota or capacity through a supported interface",
-			ResetReason:     "no provider exposes a machine-readable quota reset time through a supported interface",
+			QuotaReason:     "quota and usage limits are read from the provider CLI's own local report where it writes one",
+			ResetReason:     "limit reset times are read from the provider CLI's own local report where it writes one",
 			AllowanceReason: "no provider exposes a machine-readable temporary or promotional allowance through a supported interface",
 		}
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 // providerPane is the Providers view's one pane: the Board's body, between
@@ -28,6 +29,8 @@ type providerSnapshot struct {
 // providerPaint is what one frame of the Providers view needs.
 type providerPaint struct {
 	Snap providerSnapshot
+	// Quotas are the latest locally reported usage limits, keyed by provider.
+	Quotas map[string]usage.Quota
 	// Selected is the provider the verify key acts on.
 	Selected string
 	// Busy is the provider whose harness is being verified; Routing the
@@ -140,11 +143,33 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 				verified = v.fg("dim", ago)
 			}
 		}
-		limit, resets := v.fg("dim", "—"), v.fg("dim", "—")
+		q, hasQuota := m.Quotas[providerOf(p.Provider)]
+		if !hasQuota && (providerOf(p.Provider) == "agy" || providerOf(p.Provider) == "opencode") {
+			q = usage.Quota{Provider: providerOf(p.Provider), Reason: usage.NotExposed}
+			hasQuota = true
+		}
+		limit, resets := v.fg("dim", "unavailable"), v.fg("dim", "—")
 		switch {
 		case st == "limit":
 			limit = v.fg("failed", cleanBoard(p.LastLimitReason))
 			resets = providerUntil(p.LimitUntil, v.now)
+		case q.Known:
+			if win, ok := q.Binding(); ok {
+				pct := win.UsedShown()
+				text := limitBar(pct, v.unicode()) + " " + fmt.Sprintf("%d%% used · %s", pct, win.Label)
+				colour := ""
+				if pct >= 90 {
+					colour = "failed"
+				} else if pct >= 70 {
+					colour = "waiting"
+				}
+				if q.Stale {
+					text += " · " + resetIn(v.now.Sub(q.AsOf)) + " old"
+					colour = "dim"
+				}
+				limit = v.fg(colour, text)
+				resets = providerUntil(win.ResetsAt, v.now)
+			}
 		case !p.LastLimitAt.IsZero():
 			limit = v.fg("dim", cleanBoard(p.LastLimitReason))
 			resets = v.fg("dim", "was "+hostAgo(v.now.Sub(p.LastLimitAt)))
@@ -170,6 +195,11 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 		return out, sel
 	}
 	p := *selected
+	q, hasQuota := m.Quotas[providerOf(p.Provider)]
+	if !hasQuota && (providerOf(p.Provider) == "agy" || providerOf(p.Provider) == "opencode") {
+		q = usage.Quota{Provider: providerOf(p.Provider), Reason: usage.NotExposed}
+		hasQuota = true
+	}
 	keys := v.bg("rule", "[v]") + " verify harness  " + v.bg("rule", "[r]") + " route around"
 	note := ""
 	switch providerState(p, v.now) {
@@ -188,6 +218,13 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 			note = cleanBoard(p.Provider) + " is ready."
 		}
 	}
+	if !q.Known {
+		if hasQuota {
+			note += " " + limitReason(q) + "."
+		} else {
+			note += " usage limits have not been read in this session."
+		}
+	}
 	switch {
 	case m.Busy != "":
 		keys = v.fg("waiting", "verifying "+cleanBoard(m.Busy)+"…")
@@ -198,6 +235,9 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 	case m.Route.From == p.Provider:
 		keys = v.fg("waiting", fmt.Sprintf("Enter to route %s to %s · Esc cancels", cleanBoard(strings.Join(m.Route.Tasks, ", ")), cleanBoard(m.Route.To)))
 	}
-	out = append(out, "", PadCell("  "+keys, w), v.fg("dim", PadCell("  "+note, w)))
+	out = append(out, "", PadCell("  "+keys, w))
+	for _, line := range wrapWords(note, w-2) {
+		out = append(out, v.fg("dim", PadCell("  "+line, w)))
+	}
 	return out, sel
 }
