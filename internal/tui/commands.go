@@ -9,6 +9,12 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+// msgNoProjectData is shown when a read needs project data that isn't loaded.
+const msgNoProjectData = "Your project data isn't loaded. Restart Marshal from your project folder."
+
+// msgNothingChanged is shown when a mutation can't run because no project is open.
+const msgNothingChanged = "Nothing was changed: this needs an open project. Restart Marshal from your project folder."
+
 // CommandHandler dispatches interactive slash commands in the TUI workspace.
 type CommandHandler struct {
 	ws          *Workspace

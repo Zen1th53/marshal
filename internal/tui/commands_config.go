@@ -71,4 +71,4 @@ func oneOf(value string, options ...string) bool {
 	return false
 }
 
-const configStoreUnavailable = "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init)."
+const configStoreUnavailable = msgNoProjectData

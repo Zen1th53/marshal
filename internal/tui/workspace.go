@@ -1515,7 +1515,7 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 	w.mu.Lock()
 	w.outputSeq.Add(1)
 	if err != nil {
-		w.state.LastOutput = fmt.Sprintf("Error: %v", err)
+		w.state.LastOutput = plainCommandError(cmd, err)
 		if strings.TrimSpace(resp) != "" {
 			w.state.LastOutput = resp + "\n" + w.state.LastOutput
 		}
@@ -1545,6 +1545,9 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 		w.scrollOffset = max(0, len(frame.Body)-bodyHeight)
 	}
 	w.mu.Unlock()
+	if err != nil {
+		w.logTUIError(cmd, err)
+	}
 }
 
 // SuspendTerminal temporarily leaves raw terminal mode and alternate screen,
@@ -2554,7 +2557,8 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 			fmt.Fprintln(out, response)
 		}
 		if err != nil {
-			fmt.Fprintf(out, "Error: %v\n", err)
+			fmt.Fprintln(out, plainCommandError(line, err))
+			w.logTUIError(line, err)
 		}
 
 		if w.commandExitRequested() {

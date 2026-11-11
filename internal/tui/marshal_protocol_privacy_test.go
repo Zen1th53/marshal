@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -105,7 +106,8 @@ func TestMarshalLaunchRefusesMissingOrFailedHiddenDelivery(t *testing.T) {
 				t.Setenv("OPENCODE_CONFIG_CONTENT", "invalid")
 			}
 			args, env, dir, err := prepareMarshalLaunch(tc.provider, root, nil, "MARSHAL PROTOCOL\nprivate")
-			if err == nil || !strings.Contains(err.Error(), "Marshal not started:") || containsMarshalProtocol(err.Error()) {
+			var start *marshalStartError
+			if err == nil || !errors.As(err, &start) || containsMarshalProtocol(err.Error()) || containsMarshalProtocol(errors.Unwrap(err).Error()) {
 				t.Fatalf("unsafe refusal: %v", err)
 			}
 			if len(args) != 0 || len(env) != 0 || dir != nil {
@@ -226,7 +228,8 @@ func TestMarshalRestartRefusesFailedHiddenDelivery(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	w.tmuxSession = "test-session"
 	a := &activeTmuxAgent{provider: "opencode", binary: "opencode", paneID: "%chat", window: "chat"}
-	w.restartMarshalChat(context.Background(), a, t.TempDir())
+	root := t.TempDir()
+	w.restartMarshalChat(context.Background(), a, root)
 	data, err := os.ReadFile(log)
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
@@ -234,8 +237,11 @@ func TestMarshalRestartRefusesFailedHiddenDelivery(t *testing.T) {
 	if strings.Contains(string(data), "respawn-window") || strings.Contains(string(data), "respawn-pane") || strings.Contains(string(data), "new-window") {
 		t.Fatal("restart launched after failed hidden delivery")
 	}
-	if !strings.Contains(w.state.LastOutput, "Marshal not started:") {
+	if !strings.Contains(w.state.LastOutput, "couldn't start") {
 		t.Fatal("no operator refusal")
+	}
+	if logData, _ := os.ReadFile(statepath.Path(root, "logs", "tui-errors.log")); containsMarshalProtocol(string(logData)) {
+		t.Fatal("error log leaked protocol text")
 	}
 }
 
@@ -262,7 +268,7 @@ func TestMarshalHiddenInstructionsSurviveLastProviderOverride(t *testing.T) {
 func TestMarshalHiddenDeliveryRejectsNullOpenCodeConfig(t *testing.T) {
 	t.Setenv("OPENCODE_CONFIG_CONTENT", "null")
 	args, env, dir, err := prepareMarshalLaunch("opencode", t.TempDir(), nil, "MARSHAL PROTOCOL")
-	if err == nil || len(args) != 0 || len(env) != 0 || dir != nil || !strings.Contains(err.Error(), "Marshal not started:") {
+	if err == nil || len(args) != 0 || len(env) != 0 || dir != nil || !strings.Contains(err.Error(), "couldn't start") {
 		t.Fatal("null config did not refuse hidden delivery")
 	}
 }

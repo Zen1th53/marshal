@@ -262,7 +262,7 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 		{"/doctor", "SYSTEM DIAGNOSTICS", "/doctor codex", "authority unavailable"},
 		{"/provider", "PROVIDER / HARNESS STATUS", "/provider config codex", "UNAVAILABLE"},
 		{"/harness", "HARNESS CAPABILITY PROBE", "/harness select qa codex", "NOT applied"},
-		{"/model", "", "/model select codex test-model", "NOT applied"},
+		{"/model", "", "/model select codex test-model", msgNothingChanged},
 		{"/models", "authority unavailable", "/models", "authority unavailable"},
 		{"/effort", "", "/effort high", ""},
 		{"/backup", "Usage:", "/backup create", ""},
@@ -272,7 +272,7 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 		{"/export", "", "/export", ""},
 		{"/blind", "NOT VERIFIED", "/blind resolve reason text", "NOT recorded"},
 		{"/reinjection", "NOT VERIFIED", "/reinjection", "NOT VERIFIED"},
-		{"/alignment", "NOT VERIFIED", "/alignment resolve run:R/T#0 acknowledged reason text", "NOT resolved"},
+		{"/alignment", "NOT VERIFIED", "/alignment resolve run:R/T#0 acknowledged reason text", msgNothingChanged},
 		{"/optimization", "Usage:", "/optimization missing", ""},
 		{"/features", "authority unavailable", "/features list", "authority unavailable"},
 		{"/search", "authority unavailable", "/search on", "authority unavailable"},
@@ -320,8 +320,10 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 							t.Fatalf("silent command: %s", valid)
 						}
 						malformed := valid + " extra unknown"
-						if cmd == "/blind" || cmd == "/alignment" && sub == "resolve" { // reason syntax is a product decision, and still fails closed
+						if cmd == "/blind" { // reason syntax is a product decision, and still fails closed
 							sweepWorkRun(t, v.ws, malformed, "NOT")
+						} else if cmd == "/alignment" && sub == "resolve" {
+							sweepWorkRun(t, v.ws, malformed, msgNothingChanged)
 						} else if cmd == "/provider" && sub == "config" {
 							sweepWorkRun(t, v.ws, malformed, "Refusing")
 						} else {
@@ -492,15 +494,17 @@ func TestCommandSweepConfigSavedPreferences(t *testing.T) {
 	}
 	sweepWorkRun(t, ws, "/model show", "test-model")
 	sweepWorkRun(t, ws, "/effort", "Probed reasoning knobs: high")
-	for _, line := range []string{"/model select codex replacement", "/harness select qa codex", "/effort low"} {
-		sweepWorkRun(t, ws, line, "NOT applied")
+	for _, c := range []struct{ line, want string }{
+		{"/model select codex replacement", msgNothingChanged}, {"/harness select qa codex", "NOT applied"}, {"/effort low", msgNothingChanged},
+	} {
+		sweepWorkRun(t, ws, c.line, c.want)
 	}
 	profile, err := st.GetHarnessProfile(ctx, "codex")
 	if err != nil || profile.DefaultModel != "test-model" || profile.ReasoningKnobs[0] != "high" {
 		t.Fatalf("refused mutation changed profile: %+v %v", profile, err)
 	}
 	ws.router = nil
-	sweepWorkRun(t, ws, "/effort high", "NOT applied")
+	sweepWorkRun(t, ws, "/effort high", msgNothingChanged)
 	out, err = ws.ExecuteCommand(ctx, "/effort")
 	if err == nil || !strings.Contains(err.Error(), "advisory router") {
 		t.Errorf("missing router hint: %q %v", out, err)
@@ -542,7 +546,7 @@ func TestCommandSweepConfigDegradedHints(t *testing.T) {
 	for _, line := range []string{"/models", "/model test-model", "/features", "/search", "/sandbox read-only", "/login", "/logout"} {
 		t.Run(line, func(t *testing.T) { sweepWorkRun(t, ws, line, "Open the TUI") })
 	}
-	t.Run("optimization", func(t *testing.T) { sweepWorkRun(t, ws, "/optimization missing", "marshal init") })
+	t.Run("optimization", func(t *testing.T) { sweepWorkRun(t, ws, "/optimization missing", msgNoProjectData) })
 	t.Run("doctor", func(t *testing.T) { sweepWorkRun(t, ws, "/doctor", "marshal init") })
 	if !ws.knownCommand("/providers") {
 		t.Error("accepted /providers alias missing from completion")

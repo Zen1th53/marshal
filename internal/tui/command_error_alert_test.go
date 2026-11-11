@@ -19,13 +19,13 @@ func TestCommandErrorStaysVisibleAfterAlert(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := w.GetUIState()
-	if !strings.Contains(state.LastOutput, "probe refused: example cause") || !strings.Contains(state.LastOutput, "task-1") || !state.LastOutputIsError {
+	if !strings.Contains(state.LastOutput, "/harness didn't work. The details are in .marshal/logs/tui-errors.log.") || !strings.Contains(state.LastOutput, "task-1") || !state.LastOutputIsError {
 		t.Fatalf("command error hidden by alert: %q", state.LastOutput)
 	}
 	if err := w.deliverEgressAlert(alert); err != nil {
 		t.Fatal(err)
 	}
-	if state := w.GetUIState(); strings.Count(state.LastOutput, "probe refused") != 1 {
+	if state := w.GetUIState(); strings.Count(state.LastOutput, "/harness didn't work.") != 1 {
 		t.Fatalf("a second alert lost or repeated the error: %q", state.LastOutput)
 	}
 	// Any other output ends the error: a later alert replaces that output.
@@ -33,7 +33,7 @@ func TestCommandErrorStaysVisibleAfterAlert(t *testing.T) {
 	if err := w.deliverEgressAlert(alert); err != nil {
 		t.Fatal(err)
 	}
-	if state := w.GetUIState(); strings.Contains(state.LastOutput, "probe refused") {
+	if state := w.GetUIState(); strings.Contains(state.LastOutput, "/harness didn't work.") {
 		t.Fatalf("an ended command error came back: %q", state.LastOutput)
 	}
 	w.recordCommandResult("/harness verify codex gpt-test", "", errors.New("probe refused: example cause"))
@@ -41,7 +41,7 @@ func TestCommandErrorStaysVisibleAfterAlert(t *testing.T) {
 	if err := w.deliverEgressAlert(alert); err != nil {
 		t.Fatal(err)
 	}
-	if state := w.GetUIState(); strings.Contains(state.LastOutput, "probe refused") {
+	if state := w.GetUIState(); strings.Contains(state.LastOutput, "/harness didn't work.") {
 		t.Fatalf("a later command's result did not end the error: %q", state.LastOutput)
 	}
 }

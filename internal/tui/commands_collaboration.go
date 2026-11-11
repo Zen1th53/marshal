@@ -17,7 +17,7 @@ import (
 func (h *CommandHandler) handleCollaboration(ctx context.Context, operation string, args []string) (string, error) {
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Collaboration is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	session, err := a.runtime.Store().GetTeamSession(ctx, a.sessionID)
 	if err != nil {

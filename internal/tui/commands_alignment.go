@@ -82,7 +82,7 @@ func (h *CommandHandler) resolveAlignment(ctx context.Context, target, decision,
 		return "", fmt.Errorf("read runs: %w", err)
 	}
 	if a == nil || a.localControl == nil {
-		return "Alignment escalation was NOT resolved: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	runID, _, _, err := app.ParseAlignmentTarget(target)
 	if err != nil {

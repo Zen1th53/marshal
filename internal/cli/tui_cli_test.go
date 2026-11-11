@@ -167,7 +167,7 @@ func TestRunWorkspaceRefusesBindingChangedAfterRuntimeAdmission(t *testing.T) {
 	if err := cmd.runWorkspace(t.Context(), runtime, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "no runtime is attached to this workspace") {
+	if !strings.Contains(stdout.String(), "/permission didn't work: your project data isn't loaded.") {
 		t.Fatalf("workspace accepted a binding changed after admission:\n%s", stdout.String())
 	}
 }

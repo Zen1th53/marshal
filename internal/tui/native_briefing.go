@@ -80,30 +80,45 @@ func marshalKickoffArgs(provider string, roots ...string) []string {
 	}
 }
 
+// marshalStartError is a Marshal launch that did not happen. Its text is for
+// people; the cause is logged.
+type marshalStartError struct {
+	provider string
+	cause    error
+}
+
+func (e *marshalStartError) Error() string {
+	return "The Marshal couldn't start with " + providerDisplayName(e.provider) + ". Press m to try again, or check it on the Providers view (press 4)."
+}
+func (e *marshalStartError) Unwrap() error { return e.cause }
+func marshalNotStarted(provider string, cause error) error {
+	return &marshalStartError{provider, cause}
+}
+
 // prepareMarshalLaunch delivers mandatory instructions separately from the
 // opening turn. Every fresh launch and resume must rebuild this delivery;
 // saved argv may belong to an older version that exposed the protocol.
 func prepareMarshalLaunch(provider, root string, args []string, protocol string) ([]string, []string, *briefingDir, error) {
 	channel := hiddenChannel(provider)
 	if channel == injectOff || strings.TrimSpace(protocol) == "" {
-		return nil, nil, nil, fmt.Errorf("Marshal not started: %s has no usable hidden instruction channel", providerDisplayName(provider))
+		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("%s has no usable hidden instruction channel", providerDisplayName(provider)))
 	}
 	protocol = appendMarshalIntake(root, protocol)
 	if err := scrubMarshalInboxes(root); err != nil {
-		return nil, nil, nil, fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
+		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("retained briefing cleanup failed: %w", err))
 	}
 	args = append(append([]string(nil), args...), marshalKickoffArgs(provider, root)...)
 	if channel != injectMarshalDir {
 		updated, _, err := applyBriefing(provider, root, args, protocol, channel)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
+			return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %w", err))
 		}
 		args, env, dir, err := configureMarshalMCP(provider, root, updated, nil, nil, "marshal", "")
 		if err != nil {
 			if dir != nil {
 				dir.remove()
 			}
-			return nil, nil, nil, fmt.Errorf("Marshal not started: MCP delivery failed: %w", err)
+			return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %w", err))
 		}
 		return args, env, dir, nil
 	}
@@ -117,14 +132,14 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 	}
 	if err != nil {
 		dir.remove()
-		return nil, nil, nil, fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
+		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %w", err))
 	}
 	args, env, dir, err = configureMarshalMCP(provider, root, args, env, dir, "marshal", "")
 	if err != nil {
 		if dir != nil {
 			dir.remove()
 		}
-		return nil, nil, nil, fmt.Errorf("Marshal not started: MCP delivery failed: %w", err)
+		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %w", err))
 	}
 	return args, env, dir, nil
 }
@@ -409,7 +424,7 @@ func (l briefingLine) String() string {
 func applyBriefing(provider, root string, args []string, briefing string, channel injectChannel) ([]string, string, error) {
 	briefing = strings.TrimSpace(briefing)
 	if containsMarshalProtocol(briefing) && (channel == injectOff || channel != hiddenChannel(provider)) {
-		return args, "", fmt.Errorf("Marshal not started: protocol requires a hidden instruction channel")
+		return args, "", marshalNotStarted(provider, errors.New("protocol requires a hidden instruction channel"))
 	}
 	if briefing == "" || channel == injectOff {
 		return args, "", nil

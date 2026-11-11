@@ -20,7 +20,7 @@ func (h *CommandHandler) handleApprovals(ctx context.Context, args []string) (st
 		return h.handleCanonicalApprovals(ctx, authority, args)
 	}
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return msgNoProjectData, nil
 	}
 
 	h.ws.mu.RLock()
@@ -73,7 +73,7 @@ func (h *CommandHandler) handleApprovals(ctx context.Context, args []string) (st
 // context the request carries.
 func (h *CommandHandler) handleApproval(ctx context.Context, args []string) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return msgNoProjectData, nil
 	}
 	if len(args) < 2 {
 		return "Usage: /approval [inspect|diff] <approval_id>", nil
@@ -122,7 +122,7 @@ func (h *CommandHandler) handleApproval(ctx context.Context, args []string) (str
 // handleTermination reports the canonical termination state of the active goal.
 func (h *CommandHandler) handleTermination(ctx context.Context) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return msgNoProjectData, nil
 	}
 
 	h.ws.mu.RLock()

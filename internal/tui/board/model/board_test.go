@@ -413,3 +413,19 @@ func TestRunLevelActivityNamesSubjectAndWord(t *testing.T) {
 		}
 	}
 }
+
+// An accepted task shows that checks passed, never the raw gate code the
+// audit record carries.
+func TestAcceptedActivityHasNoGateCode(t *testing.T) {
+	e := events.Event{Type: events.EventTypeMarshalTaskAccepted, TaskID: "T-1", Data: map[string]any{"reason": "CONST_ALLOWED"}}
+	l, ok := NewActivityLine(e)
+	if !ok {
+		t.Fatalf("accepted event produced no activity line")
+	}
+	if l.Detail != "checks passed" {
+		t.Fatalf("Detail = %q, want %q", l.Detail, "checks passed")
+	}
+	if strings.Contains(l.Detail, "CONST_") {
+		t.Fatalf("Detail %q leaks the gate code", l.Detail)
+	}
+}

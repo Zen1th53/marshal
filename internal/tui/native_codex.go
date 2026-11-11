@@ -449,14 +449,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if len(marshalBrief) > 0 {
 		// The protocol is mandatory and must never become a conversation turn.
 		if hiddenChannel(provider) == injectOff || strings.TrimSpace(marshalBrief[0]) == "" {
-			return "", fmt.Errorf("Marshal not started: %s has no hidden instruction channel", label)
+			return "", marshalNotStarted(provider, fmt.Errorf("%s has no hidden instruction channel", label))
 		}
 		if err := scrubMarshalInboxes(root); err != nil {
-			return "", fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
+			return "", marshalNotStarted(provider, fmt.Errorf("retained briefing cleanup failed: %w", err))
 		}
 		note, err := deliver(w.marshalContinuityBriefing(root, marshalBrief[0]), hiddenChannel(provider))
 		if err != nil {
-			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
+			return "", marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %w", err))
 		}
 		briefingNotes = append(briefingNotes, note)
 		args = append(args, marshalKickoffArgs(provider, root)...)
@@ -464,7 +464,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {
 		if len(marshalBrief) > 0 {
-			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %s", RedactContent(err.Error(), nil))
+			return "", marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %s", RedactContent(err.Error(), nil)))
 		}
 		return "", fmt.Errorf("Session not started: hidden instruction delivery failed: %s", RedactContent(err.Error(), nil))
 	}
@@ -477,7 +477,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if dir != nil {
 				dir.remove()
 			}
-			return "", fmt.Errorf("Marshal not started: MCP delivery failed: %s", RedactContent(err.Error(), nil))
+			return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %s", RedactContent(err.Error(), nil)))
 		}
 	}
 	if len(marshalBrief) == 0 {
@@ -494,7 +494,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if !w.isTmuxActive() {
 			args, briefingEnv, dir, err = w.prepareProposalMCP(provider, root, args, briefingEnv, dir)
 			if err != nil {
-				return "", fmt.Errorf("Marshal not started: MCP delivery failed: %s", RedactContent(err.Error(), nil))
+				return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %s", RedactContent(err.Error(), nil)))
 			}
 		}
 		out, err := w.launchNativeChat(ctx, provider, root, binary, args, briefingEnv, dir, watch)

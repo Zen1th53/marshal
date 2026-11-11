@@ -121,7 +121,7 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 	}
 	if len(args) == 0 || strings.EqualFold(args[0], "list") {
 		if h.ws.store == nil {
-			return "Store unavailable to list tasks. Open the TUI in an initialized MARSHAL project (marshal init).", nil
+			return msgNoProjectData, nil
 		}
 		tasks, label, err := h.scopedTasks(ctx, scope)
 		if errors.Is(err, errNoActiveScope) {
@@ -180,7 +180,7 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 
 func (h *CommandHandler) handleTaskOwnership(ctx context.Context, scope string) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
+		return msgNoProjectData, nil
 	}
 	tasks, label, err := h.scopedTasks(ctx, scope)
 	if errors.Is(err, errNoActiveScope) {
@@ -306,7 +306,7 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [agent authors…]]", nil
 	}
 	if h.ws.store == nil {
-		return "Store unavailable; reopen the TUI with a project store to read durable memory.", nil
+		return msgNoProjectData, nil
 	}
 
 	h.ws.mu.RLock()
@@ -759,7 +759,7 @@ func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string
 	}
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Model selection was NOT applied: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	adapter := strings.ToLower(args[1])
 	if adapter != "codex" && adapter != "claude" {
@@ -1273,7 +1273,7 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 	h.ws.mu.RUnlock()
 
 	if goal.ID == "" {
-		return "No active goal: open a session with a canonical goal before exporting. Goal creation in TUI is unavailable; authenticated runtime authorization is required.", nil
+		return "No active goal: open a session with a canonical goal before exporting.", nil
 	}
 
 	var evidence []model.EvidenceRef
@@ -1408,7 +1408,7 @@ func (h *CommandHandler) handleDiffScope(ctx context.Context, scope string) (str
 func (h *CommandHandler) setCodexEffort(ctx context.Context, level string) (string, error) {
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Reasoning effort was NOT applied: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	level = strings.ToLower(level)
 	if level == "default" {
@@ -1453,7 +1453,7 @@ func (h *CommandHandler) providerModelLine(ctx context.Context, harnessName stri
 func (h *CommandHandler) restoreBackup(ctx context.Context, path, digest, confirmed string) (string, error) {
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
-		return "Restore was NOT performed: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	if len(confirmed) < 12 || !strings.HasPrefix(strings.TrimPrefix(digest, "sha256:"), confirmed) {
 		return fmt.Sprintf("Restore was NOT performed: %q does not match the backup's digest; run /backup restore %s to see it again.", confirmed, path), nil

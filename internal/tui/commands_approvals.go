@@ -12,7 +12,7 @@ import (
 func (h *CommandHandler) handleApprovalDecision(ctx context.Context, args []string, approve bool) (string, error) {
 	authority, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || authority == nil || authority.runtime == nil || authority.localControl == nil {
-		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return msgNothingChanged, nil
 	}
 	if len(args) == 0 || (approve && len(args) != 1) {
 		return "Usage: /approve <typed-id|id> | /reject <typed-id|id> [reason]", nil

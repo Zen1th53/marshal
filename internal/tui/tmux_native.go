@@ -275,6 +275,10 @@ func (w *Workspace) ensureMarshalChatAuto(projectRoot string) {
 		}
 	}
 	if err := w.startMarshalChat(ctx, projectRoot); err != nil && !isProviderAuthError(err) {
+		var start *marshalStartError
+		if errors.As(err, &start) {
+			w.logTUIError("marshal start", errors.Unwrap(err))
+		}
 		w.RecordActivity(err.Error())
 	}
 }
@@ -293,7 +297,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	winName := tmux.ChatWindowName(projectRoot)
 	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
-		return errors.New("Marshal not started: protocol unavailable")
+		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}
 	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief))
 	if err == nil {
@@ -345,7 +349,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	cmd := marshalChatCommand(binary, args)
 
 	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
-		return fmt.Errorf("Marshal not started: %s", RedactContent(err.Error(), nil))
+		return marshalNotStarted(provider, fmt.Errorf("%s", RedactContent(err.Error(), nil)))
 	}
 	launched = true
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
@@ -427,6 +431,10 @@ func marshalChatCommand(binary string, args []string) []string {
 
 func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAgent, root string) {
 	if err := w.respawnMarshalChat(ctx, agent, root, true); err != nil {
+		var start *marshalStartError
+		if errors.As(err, &start) {
+			w.logTUIError("marshal start", errors.Unwrap(err))
+		}
 		w.RecordActivity(err.Error())
 	}
 }
@@ -472,7 +480,7 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 
 	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
-		return errors.New("Marshal not started: protocol unavailable")
+		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}
 	var base []string
 	if sessionID != "" {
@@ -516,7 +524,7 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	}
 	if err != nil {
 		dir.remove()
-		return fmt.Errorf("Marshal not started: %s", RedactContent(err.Error(), nil))
+		return marshalNotStarted(provider, fmt.Errorf("%s", RedactContent(err.Error(), nil)))
 	}
 	agent.briefingDir.remove()
 	agent.briefingDir = dir
@@ -1842,8 +1850,8 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 			}
 		}
 	}
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("canonical Process 04 plan ready: %d tasks · review %s and the approval scope", len(run.Tasks), packDir)))
-	w.RecordActivity(fmt.Sprintf("Canonical Process 04 plan drafted (%d tasks). Review the plan in %s and its exact approval scope.", len(run.Tasks), packDir))
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan ready: %d tasks", len(run.Tasks))))
+	w.RecordActivity(fmt.Sprintf("A plan with %d tasks is ready. Review it and approve it in the popup.", len(run.Tasks)))
 	w.queueMarshalPlanApproval()
 	return true
 }

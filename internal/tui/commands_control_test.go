@@ -93,7 +93,7 @@ func TestStatusCommandReportsCanonicalState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/cancel: %v", err)
 	}
-	if !strings.Contains(cancelOut, "NOT performed") {
+	if !strings.Contains(cancelOut, msgNothingChanged) {
 		t.Fatalf("expected explicit fail-closed cancellation response: %s", cancelOut)
 	}
 	out, err = ws.ExecuteCommand(ctx, "/status")
@@ -140,7 +140,7 @@ func TestRollbackRefusalDoesNotRecordSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "NOT performed") {
+	if out != msgNothingChanged {
 		t.Fatalf("rollback refusal is ambiguous: %s", out)
 	}
 	rows, err := st.GetCheckpointRollbacks(ctx, cp.ID)
@@ -227,7 +227,7 @@ func TestApproveFailsClosedWithoutRuntimeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/approve: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if out != msgNothingChanged {
 		t.Fatalf("expected fail-closed response:\n%s", out)
 	}
 
@@ -250,7 +250,7 @@ func TestRejectFailsClosedWithoutRuntimeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/reject: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if out != msgNothingChanged {
 		t.Fatalf("expected fail-closed response:\n%s", out)
 	}
 
@@ -273,7 +273,7 @@ func TestApproveWithoutIDDisambiguates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/approve empty: %v", err)
 	}
-	if !strings.Contains(out, "unavailable") {
+	if out != msgNothingChanged {
 		t.Fatalf("expected authenticated runtime requirement:\n%s", out)
 	}
 }

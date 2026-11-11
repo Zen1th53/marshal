@@ -35,7 +35,7 @@ func TestMarshalGoalsStillStartPlanning(t *testing.T) {
 			_, ws, _ := acceptanceWorkspace(t)
 			t.Setenv("PATH", t.TempDir())
 			got, err := (&CommandHandler{ws: ws}).handleMarshal(context.Background(), strings.Fields(goal))
-			if err != nil || got != "Marshal is preparing and drafting a plan for: "+goal {
+			if err != nil || got != "The Marshal is drafting a plan for: "+goal {
 				t.Fatalf("goal = %q, %v", got, err)
 			}
 			if ws.marshal == nil || ws.marshalPanel() == nil || ws.marshalPanel().RunID == "" {
