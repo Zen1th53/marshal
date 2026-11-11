@@ -364,11 +364,11 @@ func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
 	}
 	out, err = ws.ExecuteCommand(ctx, "/marshal reassign "+taskID+" claude")
 	if governed && Edition() != "Marshal" {
-		if err == nil || strings.Contains(out, "reassigned to claude") || !strings.Contains(out+err.Error(), "plan amendment") {
+		if err == nil || strings.Contains(out, "will run on claude") || !strings.Contains(out+err.Error(), "plan amendment") {
 			t.Fatalf("governed reassign output: %q %v", out, err)
 		}
 	} else {
-		if err != nil || !strings.Contains(out, "reassigned to claude") {
+		if err != nil || !strings.Contains(out, "will run on claude") {
 			t.Fatalf("reassign output: %q %v", out, err)
 		}
 		if err := service.Escalate(ctx, runID, taskID, marshal.CodeEscalated, "no worker"); err != nil {

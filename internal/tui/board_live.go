@@ -821,8 +821,21 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 			w.inspectorDecision(ui.inspect, event.Rune)
 		case event.Type == KeyRune && event.Rune == 'o':
 			w.inspectorWorkerPane(p.Board, ui.inspect)
+		case event.Type == KeyRune && event.Rune == 'w':
+			// w chooses the model that runs the inspected task (P5-05).
+			w.openTaskModelPicker(context.Background(), ui.inspect)
 		default:
 			return false
+		}
+		return true
+	}
+	// w chooses the model that runs the task under the keyboard (P5-05); with
+	// no task it answers why instead of typing a w into the composer.
+	if event.Type == KeyRune && event.Rune == 'w' {
+		if id, ok := taskUnderKeyboard(w); ok {
+			w.openTaskModelPicker(context.Background(), id)
+		} else {
+			w.setOutput(taskModelWhy, false)
 		}
 		return true
 	}

@@ -100,9 +100,18 @@ func (w *Workspace) readUsageNow(now time.Time) []usage.Quota {
 // once, so callers must never call it on the paint path. P2-04's launch picker
 // and P5-02's Marshal picker share it: there is one limit/busy reader.
 func (w *Workspace) marshalCandidates(ctx context.Context) []pickerCand {
+	return w.candidatesForDrivers(ctx, app.MarshalProviders())
+}
+
+// candidatesForDrivers is marshalCandidates over an explicit driver list. The
+// Marshal picker (m) passes app.MarshalProviders(); the task-model picker (w,
+// board_task_model.go) passes the four worker drivers, so neither copies the
+// one limit/busy reader. providers is the row order; a provider not installed
+// is left out (P2-04's candidate rule).
+func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string) []pickerCand {
 	installed := installedNeutralProviders(ctx)
 	var cands []pickerCand
-	for _, p := range app.MarshalProviders() {
+	for _, p := range providers {
 		if slices.Contains(installed, p) {
 			cands = append(cands, pickerCand{provider: p})
 		}

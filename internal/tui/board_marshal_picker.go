@@ -19,13 +19,28 @@ import (
 // inside a step: it switches now when nothing is running, else it is queued and
 // takes over when the step finishes (commands_marshal.go).
 
-// marshalPickerState is the mid-run Marshal picker's state: the candidates read
-// once when it opened (never on the paint path) and the cursor over them.
+// pickerFor is the one overlay's configuration: the title it draws, the
+// candidate rows (read once when it opened, never on the paint path), the
+// provider marked "now" and the one marked "next", and what applies a choice.
+// The Marshal picker (m) and the task-model picker (w, board_task_model.go)
+// both fill it, so there is one overlay, one key handler and one mouse path.
+// apply is called with the chosen provider, or "" when the picker is kept or
+// cancelled (Esc, m); an out-of-limit row never reaches it.
+type pickerFor struct {
+	title   string
+	cands   []pickerCand
+	current string
+	next    string
+	apply   func(ctx context.Context, choice string)
+}
+
+// marshalPickerState is the mid-run picker's state: the configuration read once
+// when it opened and the cursor over its rows.
 type marshalPickerState struct {
 	mu     sync.Mutex
 	open   bool
 	cursor int
-	cands  []pickerCand
+	cfg    pickerFor
 }
 
 // marshalPickerView is a frame's copy of the picker, read under the lock once
@@ -33,6 +48,7 @@ type marshalPickerState struct {
 type marshalPickerView struct {
 	open    bool
 	cursor  int
+	title   string
 	cands   []pickerCand
 	current string
 	next    string
@@ -107,12 +123,35 @@ func (w *Workspace) marshalPickerOpen() bool {
 
 func (w *Workspace) marshalPickerPaint() marshalPickerView {
 	w.marshalPicker.mu.Lock()
-	cands := append([]pickerCand(nil), w.marshalPicker.cands...)
-	view := marshalPickerView{open: w.marshalPicker.open, cursor: w.marshalPicker.cursor, cands: cands}
+	defer w.marshalPicker.mu.Unlock()
+	cfg := w.marshalPicker.cfg
+	return marshalPickerView{
+		open:    w.marshalPicker.open,
+		cursor:  w.marshalPicker.cursor,
+		title:   cfg.title,
+		cands:   append([]pickerCand(nil), cfg.cands...),
+		current: cfg.current,
+		next:    cfg.next,
+	}
+}
+
+// openPickerFor opens the overlay with cfg over the Board, the cursor on the
+// row marked "now" when it is a candidate. The Marshal picker and the
+// task-model picker both call it.
+func (w *Workspace) openPickerFor(cfg pickerFor) {
+	cursor := 0
+	if cfg.current != "" {
+		for i, c := range cfg.cands {
+			if c.provider == cfg.current {
+				cursor = i
+				break
+			}
+		}
+	}
+	w.marshalPicker.mu.Lock()
+	w.marshalPicker.open, w.marshalPicker.cfg, w.marshalPicker.cursor = true, cfg, cursor
 	w.marshalPicker.mu.Unlock()
-	view.current = w.currentMarshalProvider()
-	view.next = w.queuedMarshalProvider()
-	return view
+	w.requestRepaint()
 }
 
 // openMarshalPicker reads the installed providers and opens the picker over the
@@ -128,24 +167,18 @@ func (w *Workspace) openMarshalPicker(ctx context.Context) {
 		w.setOutput(marshalDisplayName(cands[0].provider)+" is the only coding agent installed, so it stays the Marshal.", false)
 		return
 	}
-	cursor := 0
-	if cur := w.currentMarshalProvider(); cur != "" {
-		for i, c := range cands {
-			if c.provider == cur {
-				cursor = i
-				break
-			}
-		}
-	}
-	w.marshalPicker.mu.Lock()
-	w.marshalPicker.open, w.marshalPicker.cands, w.marshalPicker.cursor = true, cands, cursor
-	w.marshalPicker.mu.Unlock()
-	w.requestRepaint()
+	w.openPickerFor(pickerFor{
+		title:   " WHO PLANS? ",
+		cands:   cands,
+		current: w.currentMarshalProvider(),
+		next:    w.queuedMarshalProvider(),
+		apply:   w.applyMarshalChoice,
+	})
 }
 
 func (w *Workspace) closeMarshalPicker() {
 	w.marshalPicker.mu.Lock()
-	w.marshalPicker.open, w.marshalPicker.cands, w.marshalPicker.cursor = false, nil, 0
+	w.marshalPicker.open, w.marshalPicker.cfg, w.marshalPicker.cursor = false, pickerFor{}, 0
 	w.marshalPicker.mu.Unlock()
 	w.requestRepaint()
 }
@@ -153,7 +186,7 @@ func (w *Workspace) closeMarshalPicker() {
 // moveMarshalPicker moves the cursor and wraps at the ends.
 func (w *Workspace) moveMarshalPicker(delta int) {
 	w.marshalPicker.mu.Lock()
-	if n := len(w.marshalPicker.cands); n > 0 {
+	if n := len(w.marshalPicker.cfg.cands); n > 0 {
 		w.marshalPicker.cursor = ((w.marshalPicker.cursor+delta)%n + n) % n
 	}
 	w.marshalPicker.mu.Unlock()
@@ -167,7 +200,7 @@ func (w *Workspace) moveMarshalPicker(delta int) {
 // keys and Ctrl chords pass on.
 func (w *Workspace) handleMarshalPickerKey(ctx context.Context, ev KeyEvent) bool {
 	w.marshalPicker.mu.Lock()
-	open, n, cur := w.marshalPicker.open, len(w.marshalPicker.cands), w.marshalPicker.cursor
+	open, n, cur := w.marshalPicker.open, len(w.marshalPicker.cfg.cands), w.marshalPicker.cursor
 	w.marshalPicker.mu.Unlock()
 	if !open {
 		return false
@@ -180,7 +213,7 @@ func (w *Workspace) handleMarshalPickerKey(ctx context.Context, ev KeyEvent) boo
 		w.moveMarshalPicker(1)
 		return true
 	case ev.Type == KeyEsc, ev.Type == KeyRune && ev.Rune == 'm':
-		w.keepMarshal()
+		w.keepPicker(ctx)
 		return true
 	case ev.Type == KeyEnter:
 		w.applyPickerChoice(ctx, cur)
@@ -194,52 +227,66 @@ func (w *Workspace) handleMarshalPickerKey(ctx context.Context, ev KeyEvent) boo
 	return ev.Type == KeyRune
 }
 
-// keepMarshal closes the picker without changing the Marshal and cancels any
-// queued switch.
-func (w *Workspace) keepMarshal() {
-	cur := w.currentMarshalProvider()
-	name := marshalDisplayName(cur)
-	if name == "" {
-		name = "the current one"
-	}
+// keepPicker closes the picker without choosing a row (Esc, m) and lets its
+// apply settle: the Marshal picker says it stays and cancels a queued switch,
+// the task-model picker does nothing.
+func (w *Workspace) keepPicker(ctx context.Context) {
+	w.marshalPicker.mu.Lock()
+	apply := w.marshalPicker.cfg.apply
+	w.marshalPicker.mu.Unlock()
 	w.closeMarshalPicker()
-	w.clearQueuedMarshal()
-	w.setOutput("The Marshal stays "+name+".", false)
+	if apply != nil {
+		apply(ctx, "")
+	}
 }
 
-// applyPickerChoice answers the ith row: an out-of-limit row cannot be chosen,
-// the current Marshal keeps (and cancels a queued switch), and any other row
-// applies through pickMarshal.
+// applyMarshalChoice is the Marshal picker's apply: keeping (or choosing the
+// current Marshal) cancels a queued switch and says it stays, any other
+// provider switches through pickMarshal.
+func (w *Workspace) applyMarshalChoice(ctx context.Context, choice string) {
+	if choice == "" || choice == w.currentMarshalProvider() {
+		name := marshalDisplayName(w.currentMarshalProvider())
+		if name == "" {
+			name = "the current one"
+		}
+		w.clearQueuedMarshal()
+		w.setOutput("The Marshal stays "+name+".", false)
+		return
+	}
+	w.pickMarshal(ctx, choice)
+}
+
+// applyPickerChoice answers the ith row: an out-of-limit row cannot be chosen
+// (the picker stays open), any other row closes the picker and settles through
+// the configured apply.
 func (w *Workspace) applyPickerChoice(ctx context.Context, i int) {
 	w.marshalPicker.mu.Lock()
-	if !w.marshalPicker.open || i < 0 || i >= len(w.marshalPicker.cands) {
+	if !w.marshalPicker.open || i < 0 || i >= len(w.marshalPicker.cfg.cands) {
 		w.marshalPicker.mu.Unlock()
 		return
 	}
-	cand := w.marshalPicker.cands[i]
+	cand := w.marshalPicker.cfg.cands[i]
+	apply := w.marshalPicker.cfg.apply
 	w.marshalPicker.mu.Unlock()
-	name := marshalDisplayName(cand.provider)
 	if cand.out {
 		fig := "out of limit"
 		if !cand.until.IsZero() {
 			fig += " until " + cand.until.In(time.Now().Location()).Format("15:04")
 		}
-		w.setOutput(name+" is "+fig+".", false)
-		return
-	}
-	if cand.provider == w.currentMarshalProvider() {
-		w.keepMarshal()
+		w.setOutput(marshalDisplayName(cand.provider)+" is "+fig+".", false)
 		return
 	}
 	w.closeMarshalPicker()
-	w.pickMarshal(ctx, cand.provider)
+	if apply != nil {
+		apply(ctx, cand.provider)
+	}
 }
 
 // clickMarshalPicker applies the row a click reached, named by its provider.
 func (w *Workspace) clickMarshalPicker(ctx context.Context, provider string) {
 	w.marshalPicker.mu.Lock()
 	idx := -1
-	for i, c := range w.marshalPicker.cands {
+	for i, c := range w.marshalPicker.cfg.cands {
 		if c.provider == provider {
 			idx = i
 			break
@@ -360,7 +407,10 @@ func (v boardVisual) marshalPickerOverlay(r layout.Rect, view marshalPickerView)
 		body = append(body, coloured)
 	}
 
-	title := " WHO PLANS? "
+	title := view.title
+	if title == "" {
+		title = " WHO PLANS? "
+	}
 	hint := "Enter keep · " + arrows + " or click change · 1-" + strconv.Itoa(len(view.cands)) + " pick · Esc keep"
 	out := []string{th.BoxTopLeft + th.BoxHoriz + v.bold(v.fg("white", title)) + strings.Repeat(th.BoxHoriz, max(0, w-3-VisibleLen(title))) + th.BoxTopRight}
 	for _, l := range body {
