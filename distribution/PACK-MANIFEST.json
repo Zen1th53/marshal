@@ -505,6 +505,11 @@
       "bytes": 4029
     },
     {
+      "path": "docs/SETUP-PROMPT.md",
+      "sha256": "df5f8fbe3d929dc274513daf2c336dd93813bd814212129b46b91af29094af57",
+      "bytes": 5370
+    },
+    {
       "path": "docs/assets/marshal-tui.png",
       "sha256": "3222ae5c645506008c00d0f55edebb91b3099f2c9e2cdece69ba6db324469f94",
       "bytes": 506159
