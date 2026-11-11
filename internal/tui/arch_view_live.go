@@ -144,7 +144,9 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 	w.arch.snap.At = time.Now()
 	logErr := err != nil && err.Error() != w.arch.snap.Err
 	if err != nil {
-		w.arch.snap.Err = err.Error()
+		// A failed refresh must not leave the last good status on screen as
+		// if it were current: the line says it could not be read.
+		w.arch.snap.Status, w.arch.snap.Loaded, w.arch.snap.Err = app.ArchitectureStatus{}, false, err.Error()
 	} else {
 		w.arch.snap.Status, w.arch.snap.Loaded, w.arch.snap.Err = status, true, ""
 	}

@@ -12001,13 +12001,13 @@
     },
     {
       "path": "internal/tui/arch_view_live.go",
-      "sha256": "d29dcc2a956d4fc5b28826fd930ada2d072f0216bea833bb400d02c3331b9d7f",
-      "bytes": 6141
+      "sha256": "ffdaf82660ef7c197d70f92140c21267466d383af9237e1ce022a1119070efb0",
+      "bytes": 6346
     },
     {
       "path": "internal/tui/arch_view_test.go",
-      "sha256": "7ad6906b0ac6788eec54d8d228aa5513f8bad103d0faef40903e2816a3df28a7",
-      "bytes": 10394
+      "sha256": "27697e0c380dd0788e700c73357f75fc84c25f400d11684873de9cedf54275d8",
+      "bytes": 11242
     },
     {
       "path": "internal/tui/architecture_browser_accept.go",

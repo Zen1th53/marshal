@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -204,6 +205,28 @@ func TestArchAcceptedClosesView(t *testing.T) {
 	}
 	if ans := lastOutput(w); ans != "Architecture accepted — back to the Board." {
 		t.Fatalf("close answer: %q", ans)
+	}
+}
+
+// TestArchFailedRefreshDropsTheOldStatus: a read that fails after a good one
+// must not keep showing the old status as current.
+func TestArchFailedRefreshDropsTheOldStatus(t *testing.T) {
+	w, _, f := viewsWorkspace(t)
+	defer w.Close()
+	f.setStatus(app.ArchitectureStatus{Exists: true, Revision: 3})
+	w.refreshArch(t.Context())
+	f.mu.Lock()
+	f.err = errors.New("state.json is not valid")
+	f.mu.Unlock()
+	w.refreshArch(t.Context())
+	w.arch.mu.Lock()
+	snap := w.arch.snap
+	w.arch.mu.Unlock()
+	if snap.Loaded || snap.Status.Exists || snap.Err == "" {
+		t.Fatalf("after a failed refresh the snapshot still reads as current: %+v", snap)
+	}
+	if line, open := (boardVisual{}).archStatusLine(snap); !strings.Contains(line, "could not be read right now") || open != -1 {
+		t.Fatalf("line after a failed refresh = %q (open %d)", line, open)
 	}
 }
 
