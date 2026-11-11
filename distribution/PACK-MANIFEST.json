@@ -2461,8 +2461,8 @@
     },
     {
       "path": "internal/app/marshal_model.go",
-      "sha256": "55967e9cabcdc563fef69ec0312e55c27bb0b863351a1148296c73b142f23eb7",
-      "bytes": 33957
+      "sha256": "412baf1739d2535d63968ff207b9ff96af252f5912e9886b2753f8a1c5effc3e",
+      "bytes": 34430
     },
     {
       "path": "internal/app/marshal_model_session_linux.go",
@@ -2486,8 +2486,8 @@
     },
     {
       "path": "internal/app/marshal_model_test.go",
-      "sha256": "03ceb72b29936b50871cebb4b29de84465576e0093fe723eb971be7f69864281",
-      "bytes": 22332
+      "sha256": "5f8eea62cd31763634fc64660a4a4010f9f93f0f4b7ca853edc6f8017350adaf",
+      "bytes": 23956
     },
     {
       "path": "internal/app/marshal_model_transport_default_test.go",
@@ -2506,13 +2506,13 @@
     },
     {
       "path": "internal/app/marshal_native_plan_bridge_extreme_test.go",
-      "sha256": "09fbedd5b509df9c6e214e0802510c90e99252c1ad73726902ecdb29c094da4c",
-      "bytes": 17302
+      "sha256": "f8e2971b9bfb497def20da170b729e52e20f99af91047659821c4ba01bb6e9e7",
+      "bytes": 19577
     },
     {
       "path": "internal/app/marshal_native_plan_extreme.go",
-      "sha256": "906352a49fc8e1bf26f9386b5632ece8aa51e6213d55b78c53a9df050fb14810",
-      "bytes": 8656
+      "sha256": "62820684a1779508e7ac08ca1f56a2cbb4e9ee82c9df79cac3e8c96521979390",
+      "bytes": 8951
     },
     {
       "path": "internal/app/marshal_operations.go",
@@ -2523,6 +2523,16 @@
       "path": "internal/app/marshal_operator_test.go",
       "sha256": "964ced6d9970dd9499c27bbda27253e28278394f1b1191c06c96dfd1e338322a",
       "bytes": 8355
+    },
+    {
+      "path": "internal/app/marshal_owner_builders_extreme.go",
+      "sha256": "8534a96eac475979d18428e3976d28daa4898ecacc73f26a703387d00cf8fd99",
+      "bytes": 2760
+    },
+    {
+      "path": "internal/app/marshal_owner_builders_extreme_test.go",
+      "sha256": "588e30461ac9a1f6f13f0498b81009f4b88be0ab3b6b1060eb1f29cf1241b791",
+      "bytes": 3297
     },
     {
       "path": "internal/app/marshal_pack.go",
@@ -6981,8 +6991,8 @@
     },
     {
       "path": "internal/marshal/domain.go",
-      "sha256": "8a0dbdc789346e8947b27985cd2caf3e9a288575b073a13e50c9519df1e0f2d2",
-      "bytes": 23841
+      "sha256": "9c74d7b0faf6759bc278191d2621d5b357f66f5b38e2e83174af903653672334",
+      "bytes": 24034
     },
     {
       "path": "internal/marshal/domain_test.go",

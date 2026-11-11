@@ -41,6 +41,14 @@ func (r *Runtime) PrepareNativeMarshalDraft(ctx context.Context, sessionID strin
 		}
 		mode = modes[0]
 	}
+	packet, err := r.acceptedArchitectureContext(ctx, r.layout.Root)
+	if err != nil {
+		return MarshalDraft{}, err
+	}
+	ownerLines, err := applyOwnerBuilders(&draft, packet)
+	if err != nil {
+		return MarshalDraft{}, err
+	}
 	request := CreatePlanRequest{SessionID: sessionID, ProjectID: projectid.ID(r.ProjectIdentity()),
 		Assessment: assessment, Tasks: draft.Plan.Tasks, Mode: mode,
 		Scope: append([]string(nil), goal.Scope...), Checks: draft.Plan.Checks,
@@ -87,6 +95,9 @@ func (r *Runtime) PrepareNativeMarshalDraft(ctx context.Context, sessionID strin
 	}
 	// RevisionReason is part of the plan persisted atomically with the run.
 	// Preparing a draft must never publish a committed reassignment event.
+	for _, line := range ownerLines {
+		built.RevisionReason += line + "\n"
+	}
 	for _, decision := range reassignments {
 		decision.SelectedModel = built.Routes[decision.Task].Model
 		built.RevisionReason += decision.String() + "\n"

@@ -243,7 +243,10 @@ type Task struct {
 	Files               []string
 	Criteria            []string
 	DependsOn           []string
-	EvidenceAttemptBase int `json:",omitempty"`
+	// Components are the accepted-architecture part IDs the task builds;
+	// the owner's builder choice for those parts selects its worker.
+	Components          []string `json:",omitempty"`
+	EvidenceAttemptBase int      `json:",omitempty"`
 	// Instructions and ExpectedOutput are copied from the approved plan task;
 	// the worker's brief carries them.
 	Instructions        string `json:",omitempty"`

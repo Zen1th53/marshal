@@ -55,7 +55,7 @@ func (m *MarshalCLI) SetMarshalConversationID(id string) {
 	}
 }
 
-const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"mode":{"type":"string","enum":["native","governed"]},"type":{"type":"string","enum":["change","inspection","verification"]},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","mode","type","checks","instructions","expected_output"]}}},"required":["tasks"]}`
+const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"components":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"mode":{"type":"string","enum":["native","governed"]},"type":{"type":"string","enum":["change","inspection","verification"]},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","components","worker","mode","type","checks","instructions","expected_output"]}}},"required":["tasks"]}`
 const marshalReviewSchema = `{"type":"object","additionalProperties":false,"properties":{"Verdict":{"type":"string","enum":["accept","return","reassign","escalate"]},"Reviewer":{"type":"string"},"Reasons":{"type":"array","items":{"type":"string"}},"EvidenceRefs":{"type":"array","items":{"type":"string"}}},"required":["Verdict","Reviewer","Reasons","EvidenceRefs"]}`
 const marshalVerifySchema = `{"type":"object","additionalProperties":false,"properties":{"head":{"type":"string"},"verdict":{"type":"string","enum":["pass","fail"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["head","verdict","findings"]}`
 
@@ -486,15 +486,16 @@ type marshalTaskProposal struct {
 }
 
 type marshalProposedTask struct {
-	ID        string                 `json:"id"`
-	Title     string                 `json:"title"`
-	Criteria  []string               `json:"criteria"`
-	Paths     []string               `json:"paths"`
-	DependsOn []string               `json:"depends_on"`
-	Worker    string                 `json:"worker"`
-	Mode      marshal.WorkerMode     `json:"mode"`
-	Type      marshal.TaskType       `json:"type"`
-	Checks    []marshalProposedCheck `json:"checks"`
+	ID         string                 `json:"id"`
+	Title      string                 `json:"title"`
+	Criteria   []string               `json:"criteria"`
+	Paths      []string               `json:"paths"`
+	DependsOn  []string               `json:"depends_on"`
+	Components []string               `json:"components"`
+	Worker     string                 `json:"worker"`
+	Mode       marshal.WorkerMode     `json:"mode"`
+	Type       marshal.TaskType       `json:"type"`
+	Checks     []marshalProposedCheck `json:"checks"`
 	// Instructions and ExpectedOutput become part of the approved plan
 	// task. Strict control requires instructions for every task.
 	Instructions   string `json:"instructions,omitempty"`
@@ -606,6 +607,13 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		if !allowed || item.ID == "" || item.Title == "" || len(item.Criteria) == 0 || len(item.Paths) == 0 || len(item.Checks) == 0 {
 			return MarshalDraft{}, fmt.Errorf("invalid proposed task %q", item.ID)
 		}
+		componentSeen := make(map[string]bool, len(item.Components))
+		for _, id := range item.Components {
+			if !marshalIdentifier(id) || componentSeen[id] {
+				return MarshalDraft{}, fmt.Errorf("invalid architecture part %q in task %q", id, item.ID)
+			}
+			componentSeen[id] = true
+		}
 		mode := item.Mode
 		if mode == "" {
 			mode = marshal.Native
@@ -630,7 +638,7 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 			return MarshalDraft{}, errors.New("invalid task type")
 		}
 		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Type: string(kind), Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
-		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
+		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Components: append([]string(nil), item.Components...), Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
 		for _, check := range item.Checks {
 			task.Checks = append(task.Checks, marshal.Check{Command: check.Command, Criteria: check.Criteria})
 			draft.Plan.Checks[item.ID] = append(draft.Plan.Checks[item.ID], check.Command)
