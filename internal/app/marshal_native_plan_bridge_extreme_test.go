@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/architecturereview"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -99,6 +101,56 @@ func TestNativeMarshalBridgeReassignsUnverifiedWorker(t *testing.T) {
 		t.Fatalf("import lost provenance: %+v %v", saved, err)
 	}
 
+}
+
+func TestNativeMarshalBridgeUsesOwnerBuilder(t *testing.T) {
+	r, draft, profile := canonicalNativeBridgeFixture(t)
+	ctx := t.Context()
+	if err := r.Store().SaveHarnessProfile(ctx, profile); err != nil {
+		t.Fatal(err)
+	}
+	layouts, err := architecturereview.GenericLayouts(browserArchitectureFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := architecturereview.New(architecturereview.Config{
+		Context: ctx, Project: r.ProjectIdentity(), ArchitectureID: "architecture-context",
+		StateDir: filepath.Join(r.layout.RuntimeDir, "architecture", "review"),
+		Proposal: browserArchitectureFixture, Layouts: layouts,
+		Builders: func(context.Context) []architecturereview.BuilderOption {
+			return []architecturereview.BuilderOption{{ID: "codex", Glyph: "⬡", Available: true}}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := review.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value map[string]any
+	if err := json.Unmarshal(state, &value); err != nil {
+		t.Fatal(err)
+	}
+	request, _ := json.Marshal(map[string]any{"protocol_version": architecturereview.Version, "action": "builder", "revision": value["revision"], "digest": value["digest"], "ui_digest": value["ui_digest"], "language": value["language"], "builders_digest": value["builders_digest"], "component_id": "runtime", "builder": "codex"})
+	if _, err := review.Apply(ctx, request); err != nil {
+		t.Fatal(err)
+	}
+	// Re-open and accept through the same browser-context fixture path used by
+	// architecture context tests; the prior builder choice remains in state.
+	browserContextState(t, r, true)
+	draft.Tasks[0].Worker = "claude"
+	draft.Tasks[0].Components = []string{"runtime"}
+	canonical, err := r.PrepareNativeMarshalDraft(ctx, "SESSION-required", draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if canonical.Tasks[0].Worker != "codex" || canonical.Plan.Routes["fix"].Provider != "codex" {
+		t.Fatalf("owner builder did not select task route: worker=%q route=%+v", canonical.Tasks[0].Worker, canonical.Plan.Routes["fix"])
+	}
+	if !strings.Contains(canonical.Plan.RevisionReason, `owner builder: task "fix" uses codex (part runtime)`) {
+		t.Fatalf("owner builder provenance missing: %s", canonical.Plan.RevisionReason)
+	}
 }
 
 func TestNativeMarshalBridgeRequiresVerifiedProfileThenApprovesExactCanonicalRun(t *testing.T) {

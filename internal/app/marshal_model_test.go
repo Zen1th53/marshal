@@ -252,6 +252,48 @@ func TestMarshalDraftSchemaRequiresEveryProperty(t *testing.T) {
 	check(schema)
 }
 
+func TestDraftSchemaRequiresComponents(t *testing.T) {
+	var schema struct {
+		Properties struct {
+			Tasks struct {
+				Items struct {
+					Properties map[string]json.RawMessage `json:"properties"`
+					Required   []string                   `json:"required"`
+				} `json:"items"`
+			} `json:"tasks"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(marshalDraftSchema), &schema); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := schema.Properties.Tasks.Items.Properties["components"]; !ok {
+		t.Fatal("task schema lacks components property")
+	}
+	for _, name := range schema.Properties.Tasks.Items.Required {
+		if name == "components" {
+			return
+		}
+	}
+	t.Fatal("task schema does not require components")
+}
+
+func TestDraftFromProposalAcceptsComponents(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	service := &MarshalService{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+	data := []byte(`{"tasks":[{"id":"a","title":"task","criteria":["done"],"paths":["a.txt"],"depends_on":[],"components":["capture"],"worker":"codex","mode":"governed","type":"change","checks":[{"command":"true","criteria":["done"]}],"instructions":"do it","expected_output":"a.txt"}]}`)
+	draft, err := service.DraftFromProposal(data, "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(draft.Tasks) != 1 || len(draft.Tasks[0].Components) != 1 || draft.Tasks[0].Components[0] != "capture" {
+		t.Fatalf("components not materialized: %+v", draft.Tasks)
+	}
+}
+
 func TestMarshalWiredDraftUsesCanonicalProjectBinding(t *testing.T) {
 	repo := runtimeRepo(t)
 	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
