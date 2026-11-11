@@ -1774,7 +1774,7 @@ func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, er
 	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" retried"))
 	}
-	return fmt.Sprintf("Task %s retried; /marshal resume to continue.", task), nil
+	return fmt.Sprintf("Task %s starts again; the run continues when you resume it.", task), nil
 }
 
 func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string, error) {

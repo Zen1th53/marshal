@@ -340,7 +340,7 @@ func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
 
 	// /marshal retry
 	out, err := ws.ExecuteCommand(ctx, "/marshal retry "+taskID)
-	if err != nil || !strings.Contains(out, "retried") {
+	if err != nil || !strings.Contains(out, "starts again") {
 		t.Fatalf("retry output: %q %v", out, err)
 	}
 

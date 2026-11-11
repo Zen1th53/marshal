@@ -87,6 +87,7 @@ var boardKeymap = []boardKey{
 	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen, ID: "inspector.walk", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
 	{Group: "BOARD", Keys: "o", What: "inspector: show the worker's pane", Class: KeyOpen, ID: "inspector.pane"},
 	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
+	{Group: "BOARD", Keys: "r", What: "stuck task: retry it, Enter", Hint: "retry", Press: pressRune('r'), Class: KeyConfirm, ID: "task.retry", When: func(w *Workspace) bool { _, ok := stuckTaskUnderKeyboard(w); return ok }, Why: reason("Highlight a stuck task first.")},
 
 	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}, ID: "inbox.reply", Hint: "reply", When: func(w *Workspace) bool { return w.boardReplyWaiting() }, Why: reason("Nothing is waiting for your reply.")},
 	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm, ID: "inbox.decide", When: func(w *Workspace) bool { return len(w.boardInbox()) > 0 }, Why: reason("The inbox has nothing to decide.")},

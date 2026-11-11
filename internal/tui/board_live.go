@@ -298,6 +298,9 @@ type boardUI struct {
 	// navigation survives them; inspFor is the task it opened on.
 	insp    *inspector.View
 	inspFor string
+	// retryArmed is the stuck task whose retry r has armed: the footer asks
+	// for Enter and the next key runs it or cancels (board_retry.go).
+	retryArmed string
 }
 
 // inspector is the one inspector for taskID, fed the Board just
@@ -485,6 +488,8 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		runes := []rune(cleanBoard(text))
 		v.status = prefix + string(runes)
 		cursorCol = min(cols, 2+VisibleLen(prefix)+VisibleLen(string(runes[:min(len(runes), w.composer.CursorPos())])))
+	case ui.retryArmed != "":
+		v.status = retryArmStatus(p.Board, ui.retryArmed)
 	case w.interruptArmed:
 		v.status = "Press Ctrl+C again to exit, or /quit. Durable session data is preserved."
 	case answer != "" && seq != ui.ackSeq:
@@ -672,6 +677,10 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	if w.handleGateKey(event, w.state.Marshal) {
 		return true
 	}
+	// r armed a stuck task's retry: Enter runs it, any other key cancels.
+	if w.handleRetryKey(event) {
+		return true
+	}
 	// The all-providers-at-limit card's keys: r arms auto-resume, s stops
 	// here (board_quota.go).
 	if w.handleQuotaKey(event, p.Board.Run) {
@@ -782,6 +791,14 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		case move != 0:
 			ui.task = step(p.Board.Tasks, taskID, ui.task, move)
 			ui.inspect = ui.task
+		case event.Type == KeyRune && event.Rune == 'r':
+			// A parked task with no waiting decision: r arms its retry; any
+			// other parked or working task keeps r's today meaning below.
+			if id, ok := stuckTaskUnderKeyboard(w); ok {
+				w.armRetry(id)
+			} else {
+				w.inspectorDecision(ui.inspect, event.Rune)
+			}
 		case event.Type == KeyRune && strings.ContainsRune("aAdrxi", event.Rune):
 			// The decision keys act on the task's waiting decision: they
 			// take it to the inbox and open the same confirmation the
@@ -834,6 +851,13 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		case event.Type == KeyEnter && ui.task != "":
 			ui.inspect = ui.task
 			return true
+		case event.Type == KeyRune && event.Rune == 'r':
+			// A parked task with no waiting decision: r arms its retry.
+			// Otherwise r falls through to the inbox, as it did before.
+			if id, ok := stuckTaskUnderKeyboard(w); ok {
+				w.armRetry(id)
+				return true
+			}
 		}
 	case layout.Lanes:
 		if move != 0 {

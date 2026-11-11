@@ -1541,29 +1541,38 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 		return
 	}
 	if w.uiEvents != nil && !w.directTerminalCommand(cmd) {
-		if !w.commandBusy.CompareAndSwap(false, true) {
-			w.RecordActivity("A command is still running; Ctrl+C cancels it.")
-			return
-		}
-		commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		w.commandCancelMu.Lock()
-		w.commandCancel = cancel
-		w.commandCancelMu.Unlock()
-		w.workers.start(commandCtx, &w.commandWG, func(ctx context.Context) {
-			commandCtx = ctx
-			defer cancel()
-			resp, err := w.cmd.Handle(commandCtx, cmd)
-			_ = w.RefreshState(commandCtx)
-			if !w.postUI(ctx, func() { w.recordCommandResult(cmd, resp, err); w.commandBusy.Store(false) }) {
-				w.commandBusy.Store(false)
-			}
-		})
+		w.runCommandFunc(ctx, cmd, func(ctx context.Context) (string, error) { return w.cmd.Handle(ctx, cmd) })
 		return
 	}
 	resp, err := w.cmd.Handle(ctx, cmd)
 	_ = w.RefreshState(ctx)
 	w.recordCommandResult(cmd, resp, err)
 	w.renderFullView()
+}
+
+// runCommandFunc runs do on the ordinary command lane: it keeps a single
+// command in flight at a time, binds its cancellation so Ctrl+C stops it,
+// refreshes the state after it and records its result under label. runCommand
+// uses it for a typed command; a Board key that runs a command calls it
+// directly.
+func (w *Workspace) runCommandFunc(ctx context.Context, label string, do func(context.Context) (string, error)) {
+	if !w.commandBusy.CompareAndSwap(false, true) {
+		w.RecordActivity("A command is still running; Ctrl+C cancels it.")
+		return
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	w.commandCancelMu.Lock()
+	w.commandCancel = cancel
+	w.commandCancelMu.Unlock()
+	w.workers.start(commandCtx, &w.commandWG, func(ctx context.Context) {
+		commandCtx = ctx
+		defer cancel()
+		resp, err := do(commandCtx)
+		_ = w.RefreshState(commandCtx)
+		if !w.postUI(ctx, func() { w.recordCommandResult(label, resp, err); w.commandBusy.Store(false) }) {
+			w.commandBusy.Store(false)
+		}
+	})
 }
 
 func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
