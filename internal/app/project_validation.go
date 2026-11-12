@@ -11,6 +11,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
 	"go.yaml.in/yaml/v3"
 )
@@ -21,6 +22,15 @@ import (
 func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 	layout, err := project.Discover(root)
 	if err != nil {
+		// A folder whose repository is the home folder or / is told why in
+		// plain words; the refused root itself gets the refusal.
+		var refused *statepath.RefusedRootError
+		if errors.As(err, &refused) {
+			if statepath.ValidateRoot(root) != nil {
+				return project.Layout{}, refused
+			}
+			return project.Layout{}, errors.New(refused.InsideReason())
+		}
 		if errors.Is(err, project.ErrStatePreparation) {
 			return project.Layout{}, fmt.Errorf("cannot open Marshal project in %q: %w", root, err)
 		}

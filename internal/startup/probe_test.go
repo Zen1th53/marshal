@@ -489,3 +489,36 @@ func TestHarnessProbeReportsMissingProviderWithoutBlocking(t *testing.T) {
 		}
 	}
 }
+
+// A folder inside the home folder's repository is never reported as a ready
+// project: the repository found is one Marshal refuses to use.
+func TestHomeRepositorySubfolderIsNotReady(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	work := filepath.Join(home, "Desktop", "project")
+	prober := healthyProject(home)
+	prober.dirs[work] = true
+	prober.writable[work] = true
+
+	assessment := startup.Assess(context.Background(), prober, healthyEnv(work))
+
+	repo, ok := assessment.Check("project.repository")
+	if !ok || repo.Reason != startup.ReasonProjectRootRefused || repo.Status.Healthy() {
+		t.Fatalf("the home repository was accepted: %+v", repo)
+	}
+	if !strings.Contains(repo.Summary, "inside the Git repository of your home folder") || !strings.Contains(repo.Summary, "Run `marshal` here") {
+		t.Fatalf("the reason is not plain: %q", repo.Summary)
+	}
+	if initialized, ok := assessment.Check("project.initialized"); !ok || initialized.Status.Healthy() {
+		t.Fatalf("the home folder's project was reported as set up: %+v", initialized)
+	}
+	if assessment.Phase == startup.PhaseReady || assessment.ExecutionPermitted() {
+		t.Fatalf("work was permitted in the home repository: %s", assessment.Phase)
+	}
+	if assessment.ProjectPath != "" {
+		t.Fatalf("the home folder became the project: %q", assessment.ProjectPath)
+	}
+	if !assessment.ControlCenterOpens() {
+		t.Fatal("the control center did not open")
+	}
+}

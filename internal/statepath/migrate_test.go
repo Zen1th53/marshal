@@ -140,7 +140,7 @@ func TestRefuseHostAndHomeProjectRoots(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	for _, root := range []string{"/", home, filepath.Join(home, ".")} {
-		if err := ValidateRoot(root); err == nil || !strings.Contains(err.Error(), "without a sandbox") {
+		if err := ValidateRoot(root); err == nil || err.Error() != RefusedRootMessage {
 			t.Fatal(root, err)
 		}
 	}

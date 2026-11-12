@@ -324,6 +324,9 @@ func (c command) policy(ctx context.Context, args []string) error {
 }
 
 func (c command) init(ctx context.Context) error {
+	if _, err := c.prepareProjectRepository(ctx); err != nil {
+		return err
+	}
 	if err := c.ensureGitBaseline(ctx); err != nil {
 		return err
 	}

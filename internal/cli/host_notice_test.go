@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 func TestHostWorkerFirstRunNotice(t *testing.T) {
@@ -30,7 +32,7 @@ func TestCLIRefusesHomeAndRootBeforeStateWrites(t *testing.T) {
 	t.Setenv("HOME", home)
 	for _, root := range []string{"/", home} {
 		var out, errs bytes.Buffer
-		if code := Execute(context.Background(), root, []string{"init"}, nil, &out, &errs); code == 0 || !strings.Contains(errs.String(), "refuses") {
+		if code := Execute(context.Background(), root, []string{"init"}, nil, &out, &errs); code == 0 || strings.TrimSpace(errs.String()) != statepath.RefusedRootMessage {
 			t.Fatal(code, errs.String())
 		}
 	}

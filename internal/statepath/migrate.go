@@ -33,9 +33,33 @@ func ValidateRoot(root string) error {
 		home = resolved
 	}
 	if root == string(filepath.Separator) || root == filepath.Clean(home) {
-		return fmt.Errorf("Marshal refuses %s as a project root: workers run on the host without a sandbox; choose a dedicated project directory outside $HOME itself and /", root)
+		return &RefusedRootError{Root: root, Home: root != string(filepath.Separator)}
 	}
 	return nil
+}
+
+// RefusedRootError is the refusal of the home folder or / as a project.
+// Workers run on the host without a sandbox, so neither is ever a project.
+type RefusedRootError struct {
+	// Root is the refused directory, with aliases resolved.
+	Root string
+	// Home reports whether Root is the home folder rather than /.
+	Home bool
+}
+
+// RefusedRootMessage is what a person running Marshal directly in the home
+// folder or / is told.
+const RefusedRootMessage = "Marshal does not use your home folder (or /) as a project. Make a folder for your project, cd into it and run marshal there."
+
+func (e *RefusedRootError) Error() string { return RefusedRootMessage }
+
+// InsideReason says, in plain words, what is wrong with a folder below the
+// refused root whose Git repository is that root, and what to do.
+func (e *RefusedRootError) InsideReason() string {
+	if e.Home {
+		return "This folder is inside the Git repository of your home folder. Run `marshal` here and it will start a separate repository for this project."
+	}
+	return "This folder is inside a Git repository that covers your whole computer (/). Run `marshal` here and it will start a separate repository for this project."
 }
 
 const migrationMarker = ".namespace-migration-pending"

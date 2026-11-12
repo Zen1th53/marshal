@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.9
+
+### Fixed
+- `marshal` and `marshal init` in a folder inside a home-folder Git repository, or in no repository at all, start a separate Git repository in that folder with a first commit (using your own Git identity) and carry on; the home repository is never touched. Without a Git identity Marshal stops and shows the two `git config --global` commands.
+- `marshal setup` no longer reports READY for a folder inside the home folder's repository; it says why and what to do.
+- `marshal doctor` without a project prints one reason and one line for the checks that need a project instead of seventeen FAIL lines; the JSON report is unchanged.
+- Running Marshal in the home folder or `/` gives a plain message saying to make a project folder and run marshal there.
+
 ## 0.2.8
 
 ### Fixed

@@ -17,8 +17,11 @@ func TestInitOffersBaseline(t *testing.T) {
 	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.invalid")
 	t.Setenv("GIT_COMMITTER_NAME", "MARSHAL Test")
 	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.invalid")
+	// A folder with no repository at all is prepared without asking (see
+	// project_repository_test.go); an existing repository with no commit
+	// still asks before its first commit is made.
 	for _, action := range []string{"init"} {
-		for _, repository := range []bool{false, true} {
+		for _, repository := range []bool{true} {
 			t.Run(action+map[bool]string{false: "/directory", true: "/unborn"}[repository], func(t *testing.T) {
 				dir := t.TempDir()
 				answers := "y\ny\n"
@@ -63,7 +66,7 @@ func TestInitOffersBaseline(t *testing.T) {
 
 func TestInitAndTUIDeclinedBaseline(t *testing.T) {
 	for _, action := range []string{"init", "tui"} {
-		for _, repository := range []bool{false, true} {
+		for _, repository := range []bool{true} {
 			t.Run(action+map[bool]string{false: "/directory", true: "/unborn"}[repository], func(t *testing.T) {
 				dir := t.TempDir()
 				if repository {

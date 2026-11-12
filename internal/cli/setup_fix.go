@@ -49,6 +49,7 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 	// repository has to exist before it can hold a commit, and a project needs
 	// that commit as its baseline.
 	order := []startup.ReasonCode{
+		startup.ReasonProjectRootRefused,
 		startup.ReasonNotAGitRepository,
 		startup.ReasonRepositoryEmpty,
 		startup.ReasonProjectNotInit,
@@ -65,6 +66,15 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 			continue
 		}
 		switch check.Reason {
+		case startup.ReasonProjectRootRefused:
+			fixes = append(fixes, setupFix{
+				checkID: check.ID, reason: check.Reason,
+				question: "Start a separate Git repository for this project here",
+				apply: func(ctx context.Context, root string) error {
+					_, err := prepareProjectRepository(ctx, root)
+					return err
+				},
+			})
 		case startup.ReasonNotAGitRepository:
 			fixes = append(fixes, setupFix{
 				checkID: check.ID, reason: check.Reason,

@@ -13,7 +13,8 @@ import (
 )
 
 func TestInitWithoutBaselineExplainsCommands(t *testing.T) {
-	for _, repository := range []bool{false, true} {
+	// A folder with no repository at all is prepared by init itself.
+	for _, repository := range []bool{true} {
 		t.Run(map[bool]string{false: "directory", true: "unborn"}[repository], func(t *testing.T) {
 			dir := t.TempDir()
 			if repository {
