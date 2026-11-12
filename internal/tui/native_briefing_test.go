@@ -536,7 +536,7 @@ func TestRuntimeNotesCarryTheMarshalLabel(t *testing.T) {
 			t.Fatalf("note %q", text)
 		}
 	}
-	if got := runClosedNotice(1, 1, "refs/heads/master"); !strings.HasPrefix(got, "[Marshal] The run closed: 1 of 1 tasks verified and merged to master.") {
+	if got := runClosedNotice(1, 1, "refs/heads/master"); !strings.HasPrefix(got, "[Marshal] The run closed: 1 of 1 task verified and merged to master.") {
 		t.Fatalf("run-closed note %q", got)
 	}
 }

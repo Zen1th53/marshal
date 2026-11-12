@@ -5,8 +5,10 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -114,11 +116,42 @@ func TestExtremeAuthenticatedProposalAutoApplied(t *testing.T) {
 	if err != nil || string(settings.Value.AcceptanceMode) != "marshal" {
 		t.Fatalf("%+v %v", settings, err)
 	}
-	w.mu.RLock()
-	activity := w.state.LastOutput
-	w.mu.RUnlock()
-	if !strings.Contains(activity, "Marshal allowed: /marshal settings acceptance-mode marshal —") {
-		t.Fatalf("activity: %s", activity)
+	// The applied step is recorded as the Marshal's decision, but it is
+	// machinery: Activity gets no "Marshal allowed: …" line for it.
+	w.permissions.mu.Lock()
+	decisions := slices.Clone(w.permissions.build.decisions)
+	w.permissions.mu.Unlock()
+	if len(decisions) != 1 || !decisions[0].allow || !strings.Contains(decisions[0].request, "/marshal settings acceptance-mode marshal") {
+		t.Fatalf("decisions: %+v", decisions)
+	}
+	for _, n := range w.noteList() {
+		if strings.Contains(n.Text, "Marshal allowed") || strings.Contains(n.Text, "acceptance-mode") {
+			t.Fatalf("an internal decision line reached Activity: %q", n.Text)
+		}
+	}
+}
+
+// TestMarshalDecisionActivityIsPlain: a decision's Activity line is plain or
+// absent, never the raw object and the model's reason.
+func TestMarshalDecisionActivityIsPlain(t *testing.T) {
+	for _, c := range []struct {
+		object string
+		allow  bool
+		err    error
+		want   string
+	}{
+		{"/harness verify codex", true, nil, "Codex verified."},
+		{"/harness verify claude sonnet", true, nil, "Claude Code verified."},
+		{"/harness verify codex", true, errors.New("no runtime"), "Verifying Codex failed: no runtime"},
+		{"/harness verify agy", false, nil, "The Marshal did not verify Antigravity."},
+		{"square-mathx", true, nil, ""},
+		{"/marshal deliver", true, nil, ""},
+		{"/marshal deliver", false, nil, "The Marshal turned down /marshal deliver."},
+		{"/marshal deliver", true, errors.New("busy"), "The Marshal's decision on /marshal deliver could not be applied: busy"},
+	} {
+		if got := marshalDecisionActivity(c.object, c.allow, c.err); got != c.want {
+			t.Errorf("%q allow=%v err=%v: %q, want %q", c.object, c.allow, c.err, got, c.want)
+		}
 	}
 }
 

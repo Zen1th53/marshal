@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -87,7 +86,7 @@ func (v boardVisual) answerOverlay(text string, isError bool, w, h, scroll int) 
 	body = body[scroll:min(len(body), scroll+rows)]
 	hint := "Esc closes"
 	if maxScroll > 0 {
-		hint = fmt.Sprintf("j/k scroll · %d more lines · Esc closes", maxScroll-scroll)
+		hint = "j/k scroll · " + count(maxScroll-scroll, "more line", "more lines") + " · Esc closes"
 	}
 	title := " ANSWER "
 	color := "white"

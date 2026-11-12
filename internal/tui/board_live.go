@@ -452,6 +452,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
+	v.planning = w.planningNow(empty)
 	v.goalGiven = state.Goal.ID != "" && state.Goal.Confirmation != model.ConfirmationCancelled
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
@@ -484,6 +485,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.plan = w.planSrc() != nil
 	v.planView = v.plan && w.planView.Load()
 	v.viewNoRun = w.currentRunID() == ""
+	v.mcpFailed = w.mcpFailed()
 	v.arch = w.archSrc() != nil
 	v.archView = v.arch && w.archView.Load()
 	if w.inboxView.Confirming() || w.inboxView.Inspecting() {
@@ -662,7 +664,7 @@ func (w *Workspace) providerDots(now time.Time) map[string]string {
 			switch providerState(provider, now) {
 			case "limit":
 				dot = "×"
-			case "re-verify":
+			case "re-verify", "unverified":
 				dot = "◐"
 			}
 			dots[providerWorker(provider.Provider)] = dot

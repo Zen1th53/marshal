@@ -1935,8 +1935,8 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 			}
 		}
 	}
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan ready: %d tasks", len(run.Tasks))))
-	w.RecordActivity(fmt.Sprintf("A plan with %d tasks is ready. Review it and approve it in the popup.", len(run.Tasks)))
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
+	w.RecordActivity(fmt.Sprintf("A plan with %s is ready. Review it and approve it in the popup.", count(len(run.Tasks), "task", "tasks")))
 	w.queueMarshalPlanApproval()
 	return true
 }

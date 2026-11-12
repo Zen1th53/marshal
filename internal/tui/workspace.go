@@ -278,6 +278,12 @@ type Workspace struct {
 	// hostWatch samples the host for as long as the screen runs; nil
 	// before then. Set once, before its goroutine starts.
 	hostWatch atomic.Pointer[hostWatcher]
+	// mcpFault is why MCP last failed (mcp_fault.go); nil while it works.
+	mcpFault atomic.Pointer[string]
+	// planning is set from the owner's architecture Accept until the run
+	// it plans exists: the Board says the Marshal is planning instead of
+	// NO RUN YET (board_planning.go).
+	planning atomic.Bool
 	// hostView is set while the Host view is painted in the Board's body.
 	hostView atomic.Bool
 	// memView is set while the Memory view is painted in the Board's body;
@@ -1308,7 +1314,7 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.runCommand(ctx, "/models")
 		return false
 	case KeyF6:
-		w.runCommand(ctx, "/mcp")
+		w.showMCPFailure(ctx)
 		return false
 	}
 

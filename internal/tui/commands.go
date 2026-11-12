@@ -791,7 +791,7 @@ func (h *CommandHandler) helpText() string {
 
 Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
-  F4: Status     F5: Models     F6: MCP servers
+  F4: Status     F5: Models     F6: MCP failure
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
   F10: Update    F11: Return to control centre    Ctrl+X: Stop all workers
 

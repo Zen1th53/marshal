@@ -323,15 +323,9 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 	if err == nil && allow && req.Kind == "marshal-command" && strings.HasPrefix(req.Object, "/marshal approve-task ") {
 		w.queuePrivateProcess05Resume()
 	}
-	decision := "denied"
-	if allow {
-		decision = "allowed"
+	if text := marshalDecisionActivity(req.Object, allow, err); text != "" {
+		w.RecordActivity(text)
 	}
-	text := "Marshal " + decision + ": " + req.Object + " — " + reason
-	if err != nil {
-		text += " (application failed: " + err.Error() + ")"
-	}
-	w.RecordActivity(text)
 
 	reqDesc := req.Kind
 	if req.Object != "" {
@@ -352,6 +346,34 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 		binding:   req.ApprovalBinding,
 	})
 	w.permissions.mu.Unlock()
+}
+
+// marshalDecisionActivity is the Activity line for a decision the Marshal
+// made on the owner's behalf, in plain words, or "" for none. A step that was
+// allowed and applied is the Marshal's own machinery, so it adds no line (the
+// permission audit and the decision record keep it); a verified harness says
+// so as an outcome. A denial or a failed application is shown, since the run
+// may now wait on it. The model's reason is never shown: it is protocol text.
+func marshalDecisionActivity(object string, allow bool, err error) string {
+	object = strings.TrimSpace(object)
+	verify, isVerify := strings.CutPrefix(object, "/harness verify ")
+	if isVerify {
+		verify, _, _ = strings.Cut(strings.TrimSpace(verify), " ")
+		verify = marshalDisplayName(verify)
+	}
+	switch {
+	case err != nil && isVerify:
+		return "Verifying " + verify + " failed: " + RedactContent(err.Error(), nil)
+	case err != nil:
+		return "The Marshal's decision on " + object + " could not be applied: " + RedactContent(err.Error(), nil)
+	case !allow && isVerify:
+		return "The Marshal did not verify " + verify + "."
+	case !allow:
+		return "The Marshal turned down " + object + "."
+	case isVerify:
+		return verify + " verified."
+	}
+	return ""
 }
 
 func (w *Workspace) collectRecentMarshalDecisions(ctx context.Context) []marshalDecisionRecord {

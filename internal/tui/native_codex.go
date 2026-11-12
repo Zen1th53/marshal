@@ -467,6 +467,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if dir != nil {
 				dir.remove()
 			}
+			w.noteMCPFailure("The Marshal could not start: its MCP connection failed (" + RedactContent(err.Error(), nil) + ").")
 			return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %s", RedactContent(err.Error(), nil)))
 		}
 	}
@@ -484,6 +485,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if !w.isTmuxActive() {
 			args, briefingEnv, dir, err = w.prepareProposalMCP(provider, root, args, briefingEnv, dir)
 			if err != nil {
+				w.noteMCPFailure("The Marshal could not start: its MCP connection failed (" + RedactContent(err.Error(), nil) + ").")
 				return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %s", RedactContent(err.Error(), nil)))
 			}
 		}

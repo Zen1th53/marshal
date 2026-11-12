@@ -44,7 +44,7 @@ func newNextCard(h boardmodel.RunHead) nextCard {
 
 // line is the one sentence of runtime counts the card states.
 func (c nextCard) line() string {
-	s := fmt.Sprintf("Done: %d of %d tasks verified and merged.", c.Done, c.Total)
+	s := fmt.Sprintf("Done: %d of %s verified and merged.", c.Done, count(c.Total, "task", "tasks"))
 	if c.Done < c.Total {
 		s += fmt.Sprintf(" Not done: %d.", c.Total-c.Done)
 	}
@@ -91,7 +91,7 @@ func runClosedNotice(done, total int, targetRef string) string {
 	if branch := strings.TrimPrefix(strings.TrimSpace(targetRef), "refs/heads/"); branch != "" {
 		merged += " to " + branch
 	}
-	return fmt.Sprintf(marshalNotePrefix+"The run closed: %d of %d tasks %s. Tell the person briefly what was delivered and ask what is next; start nothing until they answer.", done, total, merged)
+	return fmt.Sprintf(marshalNotePrefix+"The run closed: %d of %s %s. Tell the person briefly what was delivered and ask what is next; start nothing until they answer.", done, count(total, "task", "tasks"), merged)
 }
 
 // tellMarshalRunClosed sends the run-closed notice once per run, only when

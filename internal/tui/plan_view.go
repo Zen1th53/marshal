@@ -153,7 +153,7 @@ func (v boardVisual) planLines(m planPaint, w, h int) []string {
 	o := s.Overview
 	head := planVersionHead(o, v.now)
 	if s.Loaded {
-		head = joinNonEmpty(" · ", head, fmt.Sprintf("%d tasks", len(o.Tasks)))
+		head = joinNonEmpty(" · ", head, count(len(o.Tasks), "task", "tasks"))
 	}
 	out := []string{v.title("PLAN", head, false, w)}
 	if s.NoRun {

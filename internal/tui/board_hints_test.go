@@ -99,7 +99,7 @@ func TestBoardHintsFollowState(t *testing.T) {
 			w.boardUI.focus = layout.Inbox
 			return w
 		}, []string{"inbox.allow", "inbox.deny", "inbox.show"}, true},
-		{"11 otherwise", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-017") }, []string{"board.move", "task.inspect", "marshal.say"}, true},
+		{"11 otherwise", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-017") }, []string{"board.move", "task.inspect", "marshal.say", "task.model"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := tc.setup(t)
@@ -136,6 +136,17 @@ func TestBoardHintsFollowState(t *testing.T) {
 		}
 	})
 
+	t.Run("4 planning", func(t *testing.T) {
+		w := emptyBoardWorkspace(t)
+		defer w.Close()
+		w.endOpening()
+		w.planning.Store(true)
+		ids, row := footerIDs(t, w, 170, 45)
+		if !slices.Equal(ids, []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}) {
+			t.Fatalf("planning hints %v; footer %q", ids, row)
+		}
+	})
+
 	t.Run("5 gate before 4 no run", func(t *testing.T) {
 		w := emptyBoardWorkspace(t)
 		defer w.Close()
@@ -166,7 +177,7 @@ func TestBoardHintsFollowState(t *testing.T) {
 		defer w.Close()
 		w.dock.docked.Store(true)
 		ids, row := footerIDs(t, w, 170, 45)
-		if !slices.Equal(ids[3:], []string{"palette", "marshal.pick", "marshal.chat", "help"}) {
+		if !slices.Equal(ids[4:], []string{"palette", "marshal.pick", "marshal.chat", "help"}) {
 			t.Fatalf("hints %v; footer %q", ids, row)
 		}
 	})
@@ -336,15 +347,26 @@ func TestBoardHintsAreButtons(t *testing.T) {
 	})
 }
 
-// TestBoardHintsDropTailFirst: at 80 columns the items that do not fit go
-// from the end, and the lead's first item stays.
+// TestBoardHintsDropTailFirst: a narrow hint bar keeps the lead actions,
+// "space actions" and "? help": the tail's optional items go first, the
+// labels shorten next, and only then the lead's later items.
 func TestBoardHintsDropTailFirst(t *testing.T) {
 	for _, task := range []string{"T-017", "T-023", "T-033"} {
 		w := runHintWorkspace(t, task)
 		wide, _ := footerIDs(t, w, 170, 45)
 		narrow, row := footerIDs(t, w, 80, 24)
-		if len(narrow) == 0 || narrow[0] != wide[0] || !slices.Equal(narrow, wide[:len(narrow)]) {
+		if len(narrow) == 0 || narrow[0] != wide[0] || !slices.Contains(narrow, "palette") || !slices.Contains(narrow, "help") {
 			t.Errorf("%s: 80 columns %v (%q), 170 columns %v", task, narrow, row, wide)
+		}
+		// What is kept stays in the wide bar's order.
+		at := 0
+		for _, id := range narrow {
+			i := slices.Index(wide[at:], id)
+			if i < 0 {
+				t.Errorf("%s: %q out of order: 80 columns %v, 170 columns %v", task, id, narrow, wide)
+				break
+			}
+			at += i + 1
 		}
 		w.Close()
 	}
@@ -357,6 +379,48 @@ func TestBoardHintsDropTailFirst(t *testing.T) {
 	_, row := footerIDs(t, w, 80, 24)
 	if !strings.Contains(row, "app-d71a119c") {
 		t.Fatalf("the note lost its place: %q", row)
+	}
+}
+
+// TestFitHintsRule: fitHints drops the tail's optional items first, then
+// shortens labels, then the lead's later items; "space actions" and "? help"
+// go only once nothing less important is left.
+func TestFitHintsRule(t *testing.T) {
+	items := []hintItem{
+		{"say.build", "s", "say what to build"}, {"firstuse.chat", "⏎", "chat"}, {"marshal.say", "x", "say it"},
+		{"palette", "space", "actions"}, {"marshal.pick", "m", "Marshal"}, {"marshal.chat", "F11", "chat"}, {"help", "?", "help"},
+	}
+	ids := func(list []hintItem) string {
+		var out []string
+		for _, it := range list {
+			out = append(out, it.id+"="+it.hint)
+		}
+		return strings.Join(out, " ")
+	}
+	width := func(list []hintItem) int {
+		n := 0
+		for _, it := range list {
+			n += VisibleLen(it.key) + 1 + VisibleLen(it.hint) + 2
+		}
+		return n
+	}
+	full := width(items)
+	for _, c := range []struct {
+		w    int
+		want string
+	}{
+		{full, "say.build=say what to build firstuse.chat=chat marshal.say=say it palette=actions marshal.pick=Marshal marshal.chat=chat help=help"},
+		{full - 1, "say.build=say what to build firstuse.chat=chat marshal.say=say it palette=actions marshal.pick=Marshal help=help"},
+		{62, "say.build=say what to build firstuse.chat=chat marshal.say=say it palette=actions help=help"},
+		{61, "say.build=say firstuse.chat=chat marshal.say=say palette=actions help=help"},
+		{44, "say.build=say firstuse.chat=chat palette=actions help=help"},
+		{37, "say.build=say palette=actions help=help"},
+		{29, "say.build=say help=help"},
+		{14, "help=help"},
+	} {
+		if got := ids(fitHints(items, 0, c.w)); got != c.want {
+			t.Errorf("width %d (full %d):\n got %s\nwant %s", c.w, full, got, c.want)
+		}
 	}
 }
 
@@ -396,8 +460,12 @@ func goldenHints(v boardVisual) []string {
 	case lead != nil:
 	case waitingGates(v.gates) > 0:
 		lead = []string{"gate.reply"}
+	case v.empty && v.planning:
+		lead = []string{"marshal.say", "firstuse.chat", "marshal.pick"}
 	case v.empty:
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
+	case v.selectedTask != "":
+		lead = []string{"board.move", "task.inspect", "marshal.say", "task.model"}
 	default:
 		lead = []string{"board.move", "task.inspect", "marshal.say"}
 	}

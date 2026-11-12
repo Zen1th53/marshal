@@ -387,9 +387,11 @@ func (v boardVisual) marshalPickerOverlay(r layout.Rect, view marshalPickerView)
 			}
 			colour = "failed"
 		case !c.known:
-			figure = "unavailable"
+			// The launch picker's and vitals' word: the provider may still
+			// be usable, so it is never "unavailable".
+			figure = limitUnknown
 		default:
-			figure = fmt.Sprintf("%d%%", c.left)
+			figure = fmt.Sprintf("%d%% left", c.left)
 			if c.age != "" {
 				// An old reading is dimmed and dated, as vitals shows it.
 				figure += " · " + c.age
@@ -397,8 +399,11 @@ func (v boardVisual) marshalPickerOverlay(r layout.Rect, view marshalPickerView)
 			}
 		}
 		row := marker + glyph + PadRight(marshalDisplayName(c.provider), 13) + " " + PadRight(mark, 4) + " " + figure
+		// Every row says whether a lane is running on it.
 		if c.busy {
 			row += "   busy"
+		} else {
+			row += "   free"
 		}
 		coloured := row
 		if colour != "" {

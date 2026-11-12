@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -25,7 +24,8 @@ type memorySnapshot struct {
 	Loaded bool
 	At     time.Time
 	Err    string
-	// MCP is the MCP server's state; empty when nothing reports it.
+	// MCP is why the MCP connection last failed, in one plain sentence;
+	// empty while it works, and then the view says nothing about MCP.
 	MCP string
 	// StorePath is where the memory lives, as the owner would type it.
 	StorePath string
@@ -66,7 +66,7 @@ func (v boardVisual) memoryRender(m memoryPaint, w, h, scroll int, follow bool) 
 	scroll = min(max(0, scroll), maxScroll)
 	out := slices.Clone(all[scroll:min(len(all), scroll+h)])
 	if scroll < maxScroll && len(out) == h && h > 0 {
-		out[h-1] = v.fg("dim", fmt.Sprintf("… %d more lines · PgDn scroll", maxScroll-scroll))
+		out[h-1] = v.fg("dim", "… "+count(maxScroll-scroll, "more line", "more lines")+" · PgDn scroll")
 	}
 	for i := range out {
 		out[i] = PadCell(out[i], w)
@@ -77,9 +77,9 @@ func (v boardVisual) memoryRender(m memoryPaint, w, h, scroll int, follow bool) 
 	return out, scroll, maxScroll
 }
 
-// memoryLines lays the sections out: MEMORY across the top, then REVIEW QUEUE beside RECENT RECALLS
-// when there is room for two columns, then MCP TOOLS. It also returns the line the selected candidate
-// starts on, or -1.
+// memoryLines lays the sections out: MEMORY across the top, then REVIEW QUEUE. It also returns the
+// line the selected candidate starts on, or -1. The MCP machinery behind memory (tool calls,
+// callers, query digests) is not shown; an MCP line appears in MEMORY only when MCP failed.
 func (v boardVisual) memoryLines(m memoryPaint, w int) ([]string, int) {
 	var out []string
 	selAt := -1
@@ -93,34 +93,9 @@ func (v boardVisual) memoryLines(m memoryPaint, w int) ([]string, int) {
 		out = append(out, lines...)
 	}
 	add(v.memTop(m, w), -1)
-	if w >= layout.TwoColumns {
-		lw := (w - 2) / 2
-		rw := w - 2 - lw
-		queue, sel := v.memQueue(m, lw)
-		add(sideBySide(queue, v.memRecalls(m, rw), lw, rw), sel)
-		add(v.memTools(m, w), -1)
-	} else {
-		queue, sel := v.memQueue(m, w)
-		add(queue, sel)
-		add(v.memRecalls(m, w), -1)
-		add(v.memTools(m, w), -1)
-	}
+	queue, sel := v.memQueue(m, w)
+	add(queue, sel)
 	return out, selAt
-}
-
-func sideBySide(left, right []string, lw, rw int) []string {
-	rows := make([]string, max(len(left), len(right)))
-	for i := range rows {
-		var l, r string
-		if i < len(left) {
-			l = left[i]
-		}
-		if i < len(right) {
-			r = right[i]
-		}
-		rows[i] = PadCell(l, lw) + "  " + PadCell(r, rw)
-	}
-	return rows
 }
 
 func (v boardVisual) memTop(m memoryPaint, w int) []string {
@@ -134,10 +109,7 @@ func (v boardVisual) memTop(m memoryPaint, w int) []string {
 		return []string{v.title("MEMORY", summary, false, w), v.kv("store", firstNonEmpty(s.StorePath, memoryStorePath()), w)}
 	}
 	waiting := lifeCount(o.Counts, "candidate")
-	summary := fmt.Sprintf("%s records · %s durable · %s waiting review · %s rejected", commas(int64(o.Counts.Total)), commas(int64(lifeCount(o.Counts, "durable"))), commas(int64(waiting)), commas(int64(lifeCount(o.Counts, "rejected"))))
-	if s.MCP != "" {
-		summary += " · MCP server " + s.MCP
-	}
+	summary := fmt.Sprintf("%s %s · %s durable · %s waiting review · %s rejected", commas(int64(o.Counts.Total)), plural(o.Counts.Total, "record", "records"), commas(int64(lifeCount(o.Counts, "durable"))), commas(int64(waiting)), commas(int64(lifeCount(o.Counts, "rejected"))))
 	out := []string{v.title("MEMORY", summary, false, w)}
 	out = append(out, v.kv("store", firstNonEmpty(s.StorePath, memoryStorePath())+" · project memory shared by every window", w))
 	recalls := commas(int64(o.RecentRecalls.TotalReceipts)) + " served"
@@ -145,10 +117,12 @@ func (v boardVisual) memTop(m memoryPaint, w int) []string {
 		recalls += " · last " + hostAgo(v.now.Sub(o.RecentRecalls.Recent[0].CreatedAt))
 	}
 	out = append(out, v.kv("recalls", recalls, w))
-	out = append(out, v.kv("MCP", fmt.Sprintf("%s candidates from workers · %s proposals audited", commas(int64(o.MCPTools.CandidatesCount)), commas(int64(o.MCPTools.ProposalsCount))), w))
+	if s.MCP != "" {
+		out = append(out, v.kv("MCP", v.fg("waiting", cleanBoard(s.MCP)), w))
+	}
 	snaps := "none yet"
 	if n := o.Snapshots.TotalSnapshots; n > 0 {
-		snaps = fmt.Sprintf("%d restore points", n)
+		snaps = count(n, "restore point", "restore points")
 		if o.Snapshots.NewestSnapshot != nil {
 			snaps += " · last " + hostAgo(v.now.Sub(*o.Snapshots.NewestSnapshot))
 		}
@@ -220,59 +194,4 @@ func (v boardVisual) memQueue(m memoryPaint, w int) ([]string, int) {
 		out = append(out, lines...)
 	}
 	return out, sel
-}
-
-func (v boardVisual) memRecalls(m memoryPaint, w int) []string {
-	r := m.Snap.Overview.RecentRecalls
-	out := []string{v.title("RECENT RECALLS", "who asked memory for what", false, w)}
-	for _, rc := range r.Recent[:min(8, len(r.Recent))] {
-		who := firstNonEmpty(cleanBoard(rc.CallerID), cleanBoard(rc.Provider), "—")
-		task := firstNonEmpty(cleanBoard(rc.TaskID), cleanBoard(rc.RunID), "—")
-		query := cleanBoard(rc.QueryDigest)
-		if len(query) > 8 {
-			query = query[:8]
-		}
-		outcome := firstNonEmpty(cleanBoard(rc.OutcomeStatus), "served")
-		col := "dim"
-		if rc.DeniedCount > 0 {
-			outcome += fmt.Sprintf(" · %d denied", rc.DeniedCount)
-			col = "waiting"
-		}
-		ago := ""
-		if !rc.CreatedAt.IsZero() {
-			ago = hostAgo(v.now.Sub(rc.CreatedAt))
-		}
-		line := v.fg("accent", PadCell(who, 10)) + " " + v.fg("dim", PadCell(task, 8)) + " " + PadCell(query, 8) + " " + v.fg(col, "→ "+outcome)
-		out = append(out, PadCell(PadCell(line, max(0, w-10))+v.fg("dim", fmt.Sprintf("%10s", ago)), w))
-	}
-	if len(r.Recent) == 0 {
-		out = append(out, v.fg("dim", PadCell("  no recalls yet", w)))
-	}
-	return out
-}
-
-func (v boardVisual) memTools(m memoryPaint, w int) []string {
-	calls := m.Snap.Overview.MCPTools.ToolCalls
-	out := []string{v.title("MCP TOOLS", "calls since the store was created", false, w)}
-	type tool struct {
-		name string
-		n    int
-	}
-	var tools []tool
-	for name, n := range calls {
-		tools = append(tools, tool{name, n})
-	}
-	slices.SortFunc(tools, func(a, b tool) int { return cmp.Or(b.n-a.n, strings.Compare(a.name, b.name)) })
-	nw := max(8, min(28, w-12))
-	out = append(out, v.fg("dim", PadCell("  "+PadCell("tool", nw)+fmt.Sprintf("%8s", "calls"), w)))
-	for _, t := range tools[:min(10, len(tools))] {
-		out = append(out, PadCell("  "+PadCell(cleanBoard(t.name), nw)+fmt.Sprintf("%8s", commas(int64(t.n))), w))
-	}
-	if len(tools) > 10 {
-		out = append(out, v.fg("dim", PadCell(fmt.Sprintf("  … %d more tools", len(tools)-10), w)))
-	}
-	if len(tools) == 0 {
-		out = append(out, v.fg("dim", PadCell("  no gateway calls recorded", w)))
-	}
-	return out
 }

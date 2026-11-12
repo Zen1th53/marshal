@@ -443,7 +443,7 @@ func memoryEvidenceLines(id string, rec model.MemoryRecordV2, err error, secrets
 	}
 	kv("commit", clean(joinNonEmpty(" · ", rec.HeadCommit, rec.BranchName)))
 	if len(rec.EvidenceIDs) > 0 {
-		kv("evidence", fmt.Sprintf("%d refs", len(rec.EvidenceIDs)))
+		kv("evidence", count(len(rec.EvidenceIDs), "ref", "refs"))
 		for _, e := range rec.EvidenceIDs[:min(8, len(rec.EvidenceIDs))] {
 			out = append(out, "    "+clean(e))
 		}
@@ -470,6 +470,7 @@ func memoryEvidenceLines(id string, rec model.MemoryRecordV2, err error, secrets
 // keeps the scroll the paint settled on.
 func (w *Workspace) paintMemory(l layout.Layout, th *Theme, v boardVisual) []string {
 	paint := w.mem.paint()
+	paint.Snap.MCP = w.mcpFailure()
 	w.mem.mu.Lock()
 	scroll, follow := w.mem.scroll, w.mem.follow
 	evidence := slices.Clone(w.mem.evidence)

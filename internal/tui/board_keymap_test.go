@@ -88,8 +88,42 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 	}
 	plain := StripANSI(strings.Join(help, "\n"))
 	for _, k := range boardKeymap {
+		if v.helpHides(k) {
+			continue
+		}
 		if !strings.Contains(plain, k.Keys) || !strings.Contains(plain, k.What) {
 			t.Errorf("help lacks %q %q", k.Keys, k.What)
+		}
+	}
+}
+
+// TestBoardHelpHidesWhatCannotRun: with no run help leaves out the Verify,
+// Security and Plan views and their keys; while MCP works it leaves out F6.
+// Once there is a run, or MCP failed, they are listed again.
+func TestBoardHelpHidesWhatCannotRun(t *testing.T) {
+	th := NewTheme(ThemeNoColor, true, true)
+	v := boardViewVisual(memEpoch, th)
+	r := layout.Compute(120, 41, layout.Split).Overlay(0)
+	paint := func(v boardVisual) string {
+		help, _, _ := v.helpOverlay(r.W, 1000, 0)
+		return StripANSI(strings.Join(help, "\n"))
+	}
+	hidden := []string{"verify: claims and their evidence", "plan: task graph and plan versions", securityKeyWhat, "verify: return claims", "MCP: what failed"}
+	v.viewNoRun, v.mcpFailed = true, false
+	got := paint(v)
+	for _, s := range hidden {
+		if strings.Contains(got, s) {
+			t.Errorf("help with no run and MCP working lists %q", s)
+		}
+	}
+	if !strings.Contains(got, "memory: review queue") || strings.Contains(got, "memory (MCP)") {
+		t.Errorf("help's memory row is not plain:\n%s", got)
+	}
+	v.viewNoRun, v.mcpFailed = false, true
+	got = paint(v)
+	for _, s := range hidden {
+		if !strings.Contains(got, s) {
+			t.Errorf("help with a run and an MCP failure lacks %q", s)
 		}
 	}
 }

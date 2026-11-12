@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -66,6 +65,17 @@ type boardKey struct {
 	Run func(*Workspace, context.Context)
 }
 
+// runViewOff is the Why of a view that needs a run: runViewWhy while there is
+// none, else the fixed sentence for a session that cannot read the view.
+func runViewOff(name, noSource string) func(*Workspace) string {
+	return func(w *Workspace) string {
+		if !w.hasRun() {
+			return runViewWhy(name)
+		}
+		return noSource
+	}
+}
+
 func pressRune(r rune) *KeyEvent { return &KeyEvent{Type: KeyRune, Rune: r} }
 
 // reason wraps a fixed sentence as a Why, the common case where the one
@@ -76,11 +86,11 @@ func reason(s string) func(*Workspace) string { return func(*Workspace) string {
 var boardKeymap = []boardKey{
 	{Group: "VIEWS", Keys: "1  Esc", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
 	{Group: "VIEWS", Keys: "2  h", What: "host: temperature, disk, guards", View: "Host", Press: pressRune('2'), Class: KeyOpen, ID: "view.host", Hint: "host", When: func(w *Workspace) bool { return w.hostWatch.Load() != nil }, Why: reason("Host vitals are not available in this session.")},
-	{Group: "VIEWS", Keys: "3", What: "memory (MCP): review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
+	{Group: "VIEWS", Keys: "3", What: "memory: review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
 	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen, ID: "view.providers", Hint: "providers", When: func(w *Workspace) bool { return w.providerSrc() != nil }, Why: reason("Provider health has nothing to show in this session.")},
-	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen, ID: "view.verify", Hint: "verify", When: func(w *Workspace) bool { return w.verifySrc() != nil }, Why: reason("There are no claims to verify in this session.")},
-	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen, ID: "view.security", Hint: "security", When: func(w *Workspace) bool { return w.securitySrc() != nil }, Why: reason("There is no security activity to show in this session.")},
-	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil }, Why: reason("There is no plan to show in this session.")},
+	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen, ID: "view.verify", Hint: "verify", When: func(w *Workspace) bool { return w.verifySrc() != nil && w.hasRun() }, Why: runViewOff("Verify", "There are no claims to verify in this session.")},
+	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen, ID: "view.security", Hint: "security", When: func(w *Workspace) bool { return w.securitySrc() != nil && w.hasRun() }, Why: runViewOff("Security", "There is no security activity to show in this session.")},
+	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil && w.hasRun() }, Why: runViewOff("Plan", "There is no plan to show in this session.")},
 	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen, ID: "view.architecture", Hint: "architecture", When: func(w *Workspace) bool { return w.archSrc() != nil }, Why: reason("There is no architecture to show in this session.")},
 
 	{Group: "BOARD", Keys: "j k  ↑ ↓", What: "move in the focused pane, scroll", Class: KeyMove, ID: "board.move", Hint: "move"},
@@ -125,7 +135,7 @@ var boardKeymap = []boardKey{
 	{Group: "FUNCTION KEYS", Keys: "F3", What: "diff", Command: "/diff", Class: KeyOpen, ID: "fkey.diff"},
 	{Group: "FUNCTION KEYS", Keys: "F4", What: "status", Command: "/status", Class: KeyOpen, ID: "fkey.status"},
 	{Group: "FUNCTION KEYS", Keys: "F5", What: "models", Command: "/models", Class: KeyOpen, ID: "fkey.models"},
-	{Group: "FUNCTION KEYS", Keys: "F6", What: "MCP", Command: "/mcp", Class: KeyOpen, ID: "fkey.mcp"},
+	{Group: "FUNCTION KEYS", Keys: "F6", What: "MCP: what failed", Class: KeyOpen, ID: "fkey.mcp", When: (*Workspace).mcpFailed, Why: reason(mcpNoFailure)},
 	{Group: "FUNCTION KEYS", Keys: "F7", What: "native Codex", Command: "/codex", Class: KeyOpen, ID: "fkey.codex"},
 	{Group: "FUNCTION KEYS", Keys: "F8", What: "native Claude", Command: "/claude", Class: KeyOpen, ID: "fkey.claude"},
 	{Group: "FUNCTION KEYS", Keys: "F9", What: "native OpenCode", Command: "/opencode", Class: KeyOpen, ID: "fkey.opencode"},
@@ -445,12 +455,30 @@ type helpLine struct {
 	id   string
 }
 
+// helpHides reports whether help leaves k out on this paint: the Verify,
+// Security and Plan views' keys while there is no run, and F6 while MCP
+// works. Their keys still answer one plain line when pressed.
+func (v boardVisual) helpHides(k boardKey) bool {
+	switch k.ID {
+	case "view.verify", "view.security", "view.plan", "verify.return", "security.decide", "plan.inspect":
+		return v.viewNoRun
+	case "fkey.mcp":
+		return !v.mcpFailed
+	}
+	return false
+}
+
 // boardHelpRows is the keymap as help lines, group by group, in columns
 // of w cells, and the mouse's click targets after it.
 func (v boardVisual) boardHelpRows(w int) [][]helpLine {
 	var groups [][]helpLine
-	for i, k := range boardKeymap {
-		if i == 0 || boardKeymap[i-1].Group != k.Group {
+	group := ""
+	for _, k := range boardKeymap {
+		if v.helpHides(k) {
+			continue
+		}
+		if k.Group != group {
+			group = k.Group
 			groups = append(groups, []helpLine{{text: v.bold(v.fg("accent", k.Group))}})
 		}
 		g := &groups[len(groups)-1]
@@ -554,7 +582,7 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int, []boardHit) {
 	}
 	hint := "Esc or ? closes"
 	if maxScroll > 0 {
-		hint += fmt.Sprintf(" · j/k scroll · %d more lines", maxScroll-scroll)
+		hint += " · j/k scroll · " + count(maxScroll-scroll, "more line", "more lines")
 	}
 	title := " KEYS "
 	out := []string{th.BoxTopLeft + th.BoxHoriz + v.bold(v.fg("white", title)) + strings.Repeat(th.BoxHoriz, max(0, w-3-VisibleLen(title))) + th.BoxTopRight}

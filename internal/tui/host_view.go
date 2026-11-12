@@ -84,7 +84,7 @@ func (v boardVisual) hostRender(s hostSnapshot, w, h, scroll int) ([]string, int
 	scroll = min(max(0, scroll), maxScroll)
 	out := all[scroll:min(len(all), scroll+h)]
 	if scroll < maxScroll && len(out) == h && h > 0 {
-		out[h-1] = v.fg("dim", fmt.Sprintf("… %d more lines · j/k scroll", maxScroll-scroll))
+		out[h-1] = v.fg("dim", "… "+count(maxScroll-scroll, "more line", "more lines")+" · j/k scroll")
 	}
 	for i := range out {
 		out[i] = PadCell(out[i], w)

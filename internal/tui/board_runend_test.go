@@ -34,7 +34,7 @@ func TestNextCardShowsBesideTheChat(t *testing.T) {
 		t.Fatalf("layout mode %q, want split", w.boardLayoutMode())
 	}
 	text := frameText(w, 80, 30)
-	for _, want := range []string{"done · Done: 1 of 1 tasks verified and merged.", "[n] new goal", "[d] details", "[q] quit"} {
+	for _, want := range []string{"done · Done: 1 of 1 task verified and merged.", "[n] new goal", "[d] details", "[q] quit"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the card beside the chat misses %q:\n%s", want, text)
 		}

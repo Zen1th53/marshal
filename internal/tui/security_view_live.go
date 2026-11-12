@@ -138,6 +138,9 @@ func (w *Workspace) wakeSecurity() {
 // openSecurityView paints the Security view in the Board's body, in place
 // of any other view, and asks the follower for a fresh read.
 func (w *Workspace) openSecurityView() {
+	if w.refuseRunView("Security") {
+		return
+	}
 	w.hostView.Store(false)
 	if w.planView.Load() {
 		w.closePlanView()

@@ -124,7 +124,7 @@ func TestLimitsStaleReadingSameAgeEverywhere(t *testing.T) {
 			if !strings.Contains(launch, "codex 32% left · read 2h ago") {
 				t.Errorf("launch picker = %q, want the reading's age", launch)
 			}
-			if !strings.Contains(m, "32% · read 2h ago") {
+			if !strings.Contains(m, "32% left · read 2h ago") {
 				t.Errorf("m picker = %q, want the reading's age", m)
 			}
 			if !strings.Contains(vitals, "(read 2h ago)") {

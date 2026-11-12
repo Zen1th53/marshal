@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestViewsWithoutRunSayNoRunYet: before the first run, the Verify,
@@ -93,6 +95,51 @@ func TestViewFooterWithoutRunOffersOnlyWorkingKeys(t *testing.T) {
 		}
 		if strings.Contains(got, c.absent) {
 			t.Errorf("%s: footer still offers %q: %q", c.name, c.absent, got)
+		}
+	}
+}
+
+// TestRunViewsNotOfferedWithoutRun: with no run, 5, 6 and 7 answer one plain
+// line and open nothing; their registry rows are off with that line as the
+// Why, so the palette and the hint bar do not offer them.
+func TestRunViewsNotOfferedWithoutRun(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	w.endOpening()
+	w.verSource = &fakeVerifyView{overview: demoVerifyOverview(time.Now())}
+	w.secSource = &fakeSecurityView{overview: demoSecurityOverview(time.Now())}
+	w.planSource = &fakePlanView{overview: demoPlanOverview(time.Now())}
+	for _, c := range []struct {
+		key  rune
+		id   string
+		name string
+		open func() bool
+	}{
+		{'5', "view.verify", "Verify", w.verView.Load},
+		{'6', "view.security", "Security", w.secView.Load},
+		{'7', "view.plan", "Plan", w.planView.Load},
+	} {
+		k, _ := boardAction(c.id)
+		run, why := k.available(w)
+		if run || why != runViewWhy(c.name) {
+			t.Errorf("%s: available=%v why=%q with no run", c.id, run, why)
+		}
+		w.handleTerminalKey(t.Context(), KeyEvent{Type: KeyRune, Rune: c.key})
+		if c.open() {
+			t.Errorf("%c opened the %s view with no run", c.key, c.name)
+		}
+		w.mu.RLock()
+		answer := w.answer
+		w.mu.RUnlock()
+		if answer != runViewWhy(c.name) {
+			t.Errorf("%c answered %q, want %q", c.key, answer, runViewWhy(c.name))
+		}
+		if strings.Count(answer, "\n") != 0 {
+			t.Errorf("%c answered more than one line: %q", c.key, answer)
+		}
+		ids, row := footerIDs(t, w, 170, 45)
+		if slices.Contains(ids, c.id) {
+			t.Errorf("the hint bar offers %s with no run: %q", c.id, row)
 		}
 	}
 }

@@ -20,7 +20,7 @@ import (
 // installed, or out of limit — so a returning owner whose provider still has
 // quota is never stopped by it. Each candidate shows its live limit (the P3-01
 // reader) and whether it is busy; a limit that cannot be read reads
-// "unavailable", never a guess.
+// "limit unknown" (limitUnknown), never a guess.
 
 // pickerState is the launch picker's shared state.
 type pickerState struct {
