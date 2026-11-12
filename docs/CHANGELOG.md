@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.11
+
+### Fixed
+- Architecture prep no longer shows a failed project-memory call: any page size is accepted (a larger one reads as the largest page).
+- The Marshal can look a task up by the short name the Board shows (for example `greet`) in the current or last run; a shared name lists the choices.
+- The "Started a new Git repository" line is also the first Activity line in the TUI, so it is not lost when the TUI opens.
+
 ## 0.2.10
 
 ### Fixed

@@ -612,6 +612,13 @@ func canonicalPlanTaskID(planID string, planVersion int64, taskID string) string
 	return "TASK-P05-" + hex.EncodeToString(sum[:12])
 }
 
+// PlanTaskStoreID is canonicalPlanTaskID for readers outside this package that
+// resolve a task's short plan name to its store record. It derives, never
+// guesses.
+func PlanTaskStoreID(planID string, planVersion int64, taskID string) string {
+	return canonicalPlanTaskID(planID, planVersion, taskID)
+}
+
 // Materialize each owned provider callback once so the constructor guard and
 // registry share its exact identity rather than a caller-controlled name.
 func runtimeProcess05Harnesses(r *Runtime) []execution.WorkerHarness {

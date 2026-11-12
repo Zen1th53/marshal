@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "811892cfb54638edeeb92f59029ecd45140862898cc7a188ab2b74954b688afa",
-      "bytes": 10873
+      "sha256": "eea96e5d2f75e5f2d08632ca9da0b104d4367fe2acc631a43e56f77d764731b7",
+      "bytes": 11303
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -1776,8 +1776,8 @@
     },
     {
       "path": "internal/app/execution_runtime.go",
-      "sha256": "34f6cecd63767d98933ef3d900a7ddac8c2fff1e591ff344ed9eb4edac64bbcf",
-      "bytes": 26281
+      "sha256": "fad955724173385d07d08e0553b4c906a826f7d0c71eee95624accd26b7f7b88",
+      "bytes": 26587
     },
     {
       "path": "internal/app/execution_runtime_test.go",
@@ -4686,8 +4686,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "3503012abfb348f3e186c33e8778d95b565ea4ae309112405bfb8fba9e14439a",
-      "bytes": 44396
+      "sha256": "b8b23ea52c7b2e5217b059580a22babd6eda5eb9abf6966da6a1f9aa3393d5d9",
+      "bytes": 44627
     },
     {
       "path": "internal/cli/cli_mcp_default.go",
@@ -4756,8 +4756,8 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "894fabf5c4700341effa20763d94b03a160992950793b35e7f7a641c374452c7",
-      "bytes": 7317
+      "sha256": "c9366d16aeee6347f8c1a18549c31cb622827da488f0fd7550683a8ec4af431a",
+      "bytes": 7809
     },
     {
       "path": "internal/cli/control_center_test.go",
@@ -4971,8 +4971,8 @@
     },
     {
       "path": "internal/cli/project_repository.go",
-      "sha256": "641bb6cc3b6037555302a71eba49b11fb264a6ab9865aeb862a463bf49b3e24a",
-      "bytes": 13958
+      "sha256": "ad84a4e8e462b2b9310589ef807d970f558cfede8e03e9f8ff8704c1b9ff257d",
+      "bytes": 14002
     },
     {
       "path": "internal/cli/project_repository_test.go",
@@ -5023,6 +5023,11 @@
       "path": "internal/cli/setup_git_boundary_test.go",
       "sha256": "e275b2a02ae05da81adb1422146d3fe0860dff995e99dd7cea17e586b713798b",
       "bytes": 1402
+    },
+    {
+      "path": "internal/cli/started_repository_activity_test.go",
+      "sha256": "d1b6a3ba88bbc42e8527eea709cb1bf537a5cd582228923d48dbd747d9270ef8",
+      "bytes": 2606
     },
     {
       "path": "internal/cli/startup_isolation_extreme_test.go",
@@ -5096,8 +5101,8 @@
     },
     {
       "path": "internal/cli/tui_cli.go",
-      "sha256": "405cc985b668f9ae27949ab51fafb7e841c4e216ff1d576117b54bbf23e66ac4",
-      "bytes": 7405
+      "sha256": "7f92e4efe3136dfa16b4defc5d4fc813b8e9db65efb33ae83026448a2cd657f9",
+      "bytes": 8179
     },
     {
       "path": "internal/cli/tui_cli_test.go",
@@ -7536,8 +7541,8 @@
     },
     {
       "path": "internal/mcp/proposal_extreme.go",
-      "sha256": "f2a40bf0c549e5f1aa7a96833cc011653ee5d5905f8a014b2f0427e02f6604e6",
-      "bytes": 7636
+      "sha256": "c063e6f469ed4e59784d92858d2b7faf6be79d612912eab16817638e0c4cc199",
+      "bytes": 7964
     },
     {
       "path": "internal/mcp/proposal_extreme_test.go",
@@ -7566,8 +7571,8 @@
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "ceac128ffdf8e318cb1141e50ab9b3e36d1be693c5e2e29acb3f5ebb88e49d73",
-      "bytes": 42185
+      "sha256": "b050bf3c7767a93068b0fc798a2545ebae9053b802d7360c0fee818246b5e411",
+      "bytes": 42287
     },
     {
       "path": "internal/mcp/server_default_test.go",
@@ -7593,6 +7598,16 @@
       "path": "internal/mcp/session_memory_test.go",
       "sha256": "cd608f44d3b968e9744e4c074c8dd1ae379303cd03d9ef09f72853ccf2a93b54",
       "bytes": 5802
+    },
+    {
+      "path": "internal/mcp/task_reference.go",
+      "sha256": "4a5d0af9be6e125d1fa693ad4744b69dce92b2f27d7418f9c0faa5b889b18971",
+      "bytes": 2697
+    },
+    {
+      "path": "internal/mcp/task_reference_test.go",
+      "sha256": "da4200f729d9fbb21345fd595c3290122b7ecca9d3e0828e5c28868e98ecbc7f",
+      "bytes": 3155
     },
     {
       "path": "internal/mcp/token.go",
@@ -14325,9 +14340,14 @@
       "bytes": 1264
     },
     {
+      "path": "internal/tui/project_contract_inventory_limit_extreme_test.go",
+      "sha256": "658b29bed797e97882c86bcad9168fb63fcc7a752162e52f258c99afe6c9eb40",
+      "bytes": 2431
+    },
+    {
       "path": "internal/tui/project_contract_mcp_extreme.go",
-      "sha256": "4990d8fca36acd36187a2bce2da9a567d406bf5e81fa5e25816b24b5c7c20363",
-      "bytes": 10167
+      "sha256": "b23e9214f4ba6753fdc06d1f60405d17c7e78f02eb2488ba654a6984eb6a0b8a",
+      "bytes": 10420
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme_test.go",
@@ -15815,6 +15835,11 @@
       "bytes": 1523
     },
     {
+      "path": "release/RELEASE_NOTES_0.2.11.md",
+      "sha256": "72eef98e9aa15a34ea09f1eee34b28d74ac893a03142e2a9b8850fa064a4c0df",
+      "bytes": 964
+    },
+    {
       "path": "release/RELEASE_NOTES_0.2.2.md",
       "sha256": "e0295d7830ed71f2cd929961413bb9ad3250b4c1b0b1ce49c171f715b98d55d6",
       "bytes": 1479
@@ -16286,8 +16311,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d9383895c8d5f198ce081835c18191538b6d5ba17f30c4abdef678961a10d855",
-      "bytes": 428923
+      "sha256": "2680f464481dc5edd36148b164e342a698ead3744d2474e185a9fa1b5903a63e",
+      "bytes": 429415
     },
     {
       "path": "tools/extreme/prq/main_default.go",

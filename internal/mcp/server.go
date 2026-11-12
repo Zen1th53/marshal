@@ -291,7 +291,7 @@ func (s *Server) listTools() []Tool {
 		},
 		{
 			Name:        "task_get",
-			Description: "Get specific MARSHAL task by ID",
+			Description: "Get a MARSHAL task by its ID, or by the short task name the Board and run_digest show (it resolves within the current or last run)",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -705,7 +705,7 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		if taskID == "" {
 			return "", fmt.Errorf("%w: task_id parameter is required", model.ErrInvalid)
 		}
-		task, err := s.runtime.Task(ctx, taskID)
+		task, err := s.taskByReference(ctx, taskID)
 		if err != nil {
 			return "", err
 		}
