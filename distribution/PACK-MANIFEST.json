@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "1c36825bf91d799fd9b085d4cc70b84be98ee75d3527de2af094d050cf1de58c",
-      "bytes": 7728
+      "sha256": "d77062af963b7b2cd78461569acdd3b30c0dc19a1cba6c30218fc2e8f5297992",
+      "bytes": 7898
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -15740,9 +15740,9 @@
       "bytes": 1458
     },
     {
-      "path": "release/RELEASE_NOTES_0.2.6.md",
-      "sha256": "3de562813d7c017b352c957a8364fc2b7556e4510a3907668458307a11faae5b",
-      "bytes": 8392
+      "path": "release/RELEASE_NOTES_0.2.7.md",
+      "sha256": "1c06e19fdd53a7af044f603a3512751ae327ec3c894fdb91d8b7e5678bc17d46",
+      "bytes": 8562
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",

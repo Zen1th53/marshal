@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.2.6
+## 0.2.7
+
+v0.2.6 was tagged but never released: a release check stopped it on a Go standard-library vulnerability. Everything planned for 0.2.6 ships here, built with Go 1.26.11.
 
 ### Fixed
 - Marshal starts on macOS and on Linux without bubblewrap; `marshal setup status` says how work runs instead of reporting a missing sandbox.
