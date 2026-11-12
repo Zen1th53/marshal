@@ -28,6 +28,29 @@
   does not use your home folder (or /) as a project. Make a folder for your
   project, cd into it and run marshal there."
 
+- **The Marshal tells you when a run is done.** When a run closes, the
+  Marshal now says in the chat what was delivered and asks what you want next,
+  instead of still saying the work is underway.
+- **No internal IDs in your Git history.** Commits Marshal makes in your
+  repository no longer carry run or operation IDs, `marshal init` tells you
+  which files it added and committed, and when a run finishes Marshal also
+  removes branches left by task attempts that were sent back and redone (any it
+  cannot remove are named in Activity).
+- **A second Marshal window opens reliably.** Opening a second window on the
+  same project no longer sometimes stops with "Some of Marshal's files in this
+  project are damaged" while the first window is starting or closing.
+- **Clearer Board.** Each requirement on the requirements card is readable in
+  full; a task's files read "calc.py, test_calc.py"; during the last step the
+  header says "final check: re-running the checks on the merged result"; a
+  usage reading shows its age only when it is over 30 minutes old ("read 2h
+  ago"), the same in the vitals row and the provider pickers.
+- A brand-new project no longer says the Marshal "did not review a memory
+  imported from an earlier chat": the Marshal's own conversation is no longer
+  imported as memory.
+- Worker windows no longer open with "error retrieving current directory"
+  lines: Marshal now starts its terminal server from a folder that is never
+  deleted.
+
 ## Install
 
 ```bash
