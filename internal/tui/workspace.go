@@ -660,21 +660,6 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	return ws
 }
 
-// paletteRegistryActions is the registry's actions for the palette, without
-// the per-provider Marshal-model rows: the Marshal picker (m) owns choosing
-// the model, so the palette does not list one row per provider as well.
-func paletteRegistryActions() []PaletteAction {
-	all := GlobalRegistry.ToPaletteActions()
-	out := make([]PaletteAction, 0, len(all))
-	for _, a := range all {
-		if strings.HasPrefix(a.ID, "marshal.model.") {
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
 // registryPaletteActions is paletteRegistryActions for a live workspace's
 // refresh closure.
 func (w *Workspace) registryPaletteActions() []PaletteAction {

@@ -34,7 +34,7 @@ func TestBoardKeymapClasses(t *testing.T) {
 		group, key string
 		want       KeyClass
 	}{
-		{"VIEWS", "1", KeyOpen}, {"VIEWS", "Esc", KeyOpen}, {"VIEWS", "h", KeyOpen}, {"VIEWS", "8", KeyOpen}, {"VIEWS", "b", KeyOpen},
+		{"VIEWS", "1", KeyOpen}, {"VIEWS", "h", KeyOpen}, {"VIEWS", "8", KeyOpen}, {"VIEWS", "b", KeyOpen},
 		{"BOARD", "j", KeyMove}, {"BOARD", "k", KeyMove}, {"BOARD", "↑", KeyMove}, {"BOARD", "↓", KeyMove},
 		{"BOARD", "t", KeyMove}, {"BOARD", "i", KeyMove}, {"BOARD", "l", KeyMove},
 		{"BOARD", "Enter", KeyOpen}, {"BOARD", "Esc", KeyOpen}, {"BOARD", "d", KeyOpen},

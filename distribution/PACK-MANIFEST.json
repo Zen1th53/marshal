@@ -12591,8 +12591,8 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "634a555f14199022721e2b68d0255cc72c1e138cdfd357391a48743168744408",
-      "bytes": 30788
+      "sha256": "459b70bf8a095d09afa8c8771d6e1c84e88e610df806bbc2ba4fdf2340869cf9",
+      "bytes": 32582
     },
     {
       "path": "internal/tui/board_keymap_test.go",
@@ -13471,8 +13471,8 @@
     },
     {
       "path": "internal/tui/keymap_test.go",
-      "sha256": "8d92d95e30b5db9f6ef8d9e4eac629b6e4ec41e2359ab6c537ec0b918e05ac74",
-      "bytes": 18343
+      "sha256": "ac7d34d7abc1620265546ae1c0ee5aa4d083e0c320ea7e5c58f6aea371d19921",
+      "bytes": 18316
     },
     {
       "path": "internal/tui/keysfix_test.go",
@@ -14205,6 +14205,21 @@
       "bytes": 11921
     },
     {
+      "path": "internal/tui/palette_allowlist_default_test.go",
+      "sha256": "cefe0ccdceff3e6c32a042e577a4eb06852619814a9c4a01aad9a8645200f0c3",
+      "bytes": 902
+    },
+    {
+      "path": "internal/tui/palette_allowlist_extreme_test.go",
+      "sha256": "207bc454c42fe63f0670157092b26d59f99489900d74cdf079055ae5f7764f76",
+      "bytes": 1864
+    },
+    {
+      "path": "internal/tui/palette_keys_test.go",
+      "sha256": "00b0acdafb4c135dac749353cac43d257c700d2fd0fc34d7b01f42d72f5ec0d0",
+      "bytes": 2479
+    },
+    {
       "path": "internal/tui/palette_test.go",
       "sha256": "42aea07dde8d04c19519e1b5d9ac42c9873f8856a3dccc2966711a967b07a4c3",
       "bytes": 7871
@@ -14601,8 +14616,8 @@
     },
     {
       "path": "internal/tui/registry.go",
-      "sha256": "de03661be72bac0596d1706ef1670be1afab7a383a0924b8a2d00728ed6aa5c2",
-      "bytes": 46000
+      "sha256": "a5058d04b4a468b70bf311f8ff2b0cd0b9b3f3424419dea004de7ae0949bf31c",
+      "bytes": 43857
     },
     {
       "path": "internal/tui/registry_parity_test.go",
@@ -14996,22 +15011,22 @@
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-120x40.golden",
-      "sha256": "951a13f47a9a0bef368b05dbe23ee7e45d7a02cd99b69a3cb908076a64c54b24",
+      "sha256": "cb76cdaa124a9865909309099c768d047f9c4d34c4fdccdb02b091935dae8e24",
       "bytes": 7904
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-80x24.golden",
-      "sha256": "8a3a7a9a53aee617bb8c528d9b5fa8d1817deeb9f9e6217396b88f4c2a527851",
+      "sha256": "aa29ec4863e51a56d786fbfe14c4c5537e854bedcfb7cf97a6f12ab1b97b6859",
       "bytes": 3831
     },
     {
       "path": "internal/tui/testdata/board/help-split-120x40.golden",
-      "sha256": "725032062f35b6c9e947e29b5de2be2aaea9ccb4b332765869e8fab1409e5995",
+      "sha256": "7e913f99df6cb70103edc39026e08fe883637bd8650fcedd9b8dacd7e6075385",
       "bytes": 7904
     },
     {
       "path": "internal/tui/testdata/board/help-split-80x24.golden",
-      "sha256": "82a898a608a45775e2d40196e502da8678c40ef0fa820e672c434a54069344eb",
+      "sha256": "570854b1087ec69ed9faac47bfde73c832b8a50fdfd11faa100e327e693e3993",
       "bytes": 3831
     },
     {
@@ -15391,8 +15406,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "d236c230a616263b9b049e7e90d16ec730b13bf53097a0d552deb02b929f1489",
-      "bytes": 88895
+      "sha256": "c3bc42f2a11a2deb4117d02f4f5f4582176723e2bb70e2c9fd949fa54aa30bc2",
+      "bytes": 88404
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

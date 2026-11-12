@@ -84,7 +84,7 @@ func reason(s string) func(*Workspace) string { return func(*Workspace) string {
 
 // boardKeymap is every key the Board binds, in the order help lists them.
 var boardKeymap = []boardKey{
-	{Group: "VIEWS", Keys: "1  Esc", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
+	{Group: "VIEWS", Keys: "1", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
 	{Group: "VIEWS", Keys: "2  h", What: "host: temperature, disk, guards", View: "Host", Press: pressRune('2'), Class: KeyOpen, ID: "view.host", Hint: "host", When: func(w *Workspace) bool { return w.hostWatch.Load() != nil }, Why: reason("Host vitals are not available in this session.")},
 	{Group: "VIEWS", Keys: "3", What: "memory: review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
 	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen, ID: "view.providers", Hint: "providers", When: func(w *Workspace) bool { return w.providerSrc() != nil }, Why: reason("Provider health has nothing to show in this session.")},
@@ -250,6 +250,52 @@ func boardPaletteActions(w *Workspace) []PaletteAction {
 		keys = append(keys, a)
 	}
 	return append(views, keys...)
+}
+
+// shippedPaletteCommands is what the shipped palette lists after the
+// Board's keys: the user's commands no Board key runs. The capability
+// registry's menus (claims, evidence, budget, goal, team, policy…) are
+// machinery the Marshal runs, so the shipped palette does not list them;
+// their commands still type and complete.
+var shippedPaletteCommands = []PaletteAction{
+	{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"},
+	{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"},
+}
+
+// paletteRegistryActions is what the palette lists after the Board's keys.
+// The shipped edition lists shippedPaletteCommands only. The governed
+// edition lists the registry, without the per-provider Marshal-model rows
+// (the Marshal picker, m, owns choosing the model) and without a row whose
+// key or ID a Board row has (that Board row is the action, listed once), then
+// quit, which the registry has no row for.
+func paletteRegistryActions() []PaletteAction {
+	if editionExtreme {
+		return slices.Clone(shippedPaletteCommands)
+	}
+	all := GlobalRegistry.ToPaletteActions()
+	out := make([]PaletteAction, 0, len(all)+1)
+	for _, a := range all {
+		if _, board := boardAction(a.ID); board || strings.HasPrefix(a.ID, "marshal.model.") || a.Shortcut != "" && boardBindsKey(a.Shortcut) {
+			continue
+		}
+		out = append(out, a)
+	}
+	for _, a := range shippedPaletteCommands {
+		if a.ID == "app.quit" {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// boardBindsKey reports whether a boardKeymap entry lists key.
+func boardBindsKey(key string) bool {
+	for _, k := range boardKeymap {
+		if slices.Contains(k.keys(), key) {
+			return true
+		}
+	}
+	return false
 }
 
 // runBoardAction runs one registry action the way its key would: the one
