@@ -11811,13 +11811,13 @@
     },
     {
       "path": "internal/store/validate.go",
-      "sha256": "29b5ef0f36c429f6a564c9c9b538dbc196c7528bf7b743e59058013b13c91b5a",
-      "bytes": 853
+      "sha256": "4fa557d4dbf681060944be4245fe8f61139101d4fe95edcda12c39ac51afd865",
+      "bytes": 1159
     },
     {
       "path": "internal/store/validate_test.go",
-      "sha256": "e093b7aec47f867bbbd3a4a263ed398d01784429e6c1b7cd8892ab39dac124dc",
-      "bytes": 408
+      "sha256": "cf3067ade52d87d07e3409a6bc48927133b9673c9425b08d92997d9fe38b932e",
+      "bytes": 2704
     },
     {
       "path": "internal/store/verification.go",
