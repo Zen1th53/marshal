@@ -15,6 +15,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
@@ -139,7 +140,33 @@ func (w *Workspace) projectBoard(p *MarshalPanel, evs []events.Event) boardmodel
 	w.permissions.mu.Unlock()
 	workers := w.boardWorkers(p.RunID)
 	w.boardFeed.noteWorkers(p.RunID, workersFingerprint(workers))
-	return boardmodel.Project(boardmodel.Snapshot{RunID: p.RunID, Run: run, Requests: requests, Workers: workers}, evs)
+	return boardmodel.Project(boardmodel.Snapshot{RunID: p.RunID, Run: run, Requests: requests, Workers: workers, Driving: boardDriving(p, run.State) && w.marshalDriving(p.RunID)}, evs)
+}
+
+// boardDriving reports whether the panel's run can be moving under this
+// process: not stopped, not waiting for the person, not closed or drafting.
+func boardDriving(p *MarshalPanel, state marshal.RunState) bool {
+	if p.Stopped {
+		return false
+	}
+	switch state {
+	case marshal.AwaitingUser, marshal.Closed, marshal.Drafting, "":
+		return false
+	}
+	return true
+}
+
+// marshalDriving reports whether this process holds the Marshal session's
+// operation for runID now: Execute dispatches, collects, reviews and merges
+// under it, so a task in review is being reviewed rather than stalled.
+func (w *Workspace) marshalDriving(runID string) bool {
+	m := w.marshalSession()
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.busy && m.runID == runID
 }
 
 // wakeBoard tells the follower the panel or the view changed.
@@ -425,6 +452,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
+	v.goalGiven = state.Goal.ID != "" && state.Goal.Confirmation != model.ConfirmationCancelled
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
 	v.req = w.currentReq()

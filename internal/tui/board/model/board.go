@@ -27,6 +27,10 @@ type Snapshot struct {
 	Run      marshal.Run
 	Requests []permission.Request
 	Workers  []Worker
+	// Driving is set while this process is driving the run (dispatching,
+	// collecting, reviewing, merging): a task in review is then being
+	// reviewed, not stalled.
+	Driving bool
 }
 
 // Worker is one live worker invocation as the tmux monitor knows it.
@@ -86,6 +90,8 @@ type RunHead struct {
 	// to free up, zero when unknown.
 	PauseKind  string
 	PauseUntil time.Time
+	// Driving is the snapshot's: this process is driving the run now.
+	Driving bool
 }
 
 // TaskState is the operator's word for where a task is. It folds the
@@ -155,6 +161,9 @@ type TaskRow struct {
 	// task into State. Zero when no event does, as for a task an amendment
 	// queued again.
 	Since time.Time
+	// Began is when the task was first dispatched in the events seen, zero
+	// when it never was. A finished task's time runs from Began to Since.
+	Began time.Time
 	// Returns and ReworkLimit come from the snapshot only. Counting returned
 	// events would disagree with the run: operator retries record a return
 	// without charging rework, and reassignment charges the previous worker.
@@ -259,10 +268,41 @@ func (b Board) Live(taskID string) bool {
 }
 
 // Stalled reports whether the task claims to be moving with nothing behind
-// it: working or in review while no live lane is on it, as a run recovered
-// after its workers ended shows. Such a row is drawn still, never spinning.
+// it: working with no live lane on it, or in review while nothing drives the
+// run, as a run recovered after its workers ended shows. A review has no
+// worker lane: while the run is driven the Marshal is reviewing it. Such a
+// row is drawn still, never spinning.
 func (b Board) Stalled(t TaskRow) bool {
-	return (t.State == TaskWorking || t.State == TaskReview) && !b.Live(t.ID)
+	switch t.State {
+	case TaskWorking:
+		return !b.Live(t.ID)
+	case TaskReview:
+		return !b.Run.Driving && !b.Live(t.ID)
+	}
+	return false
+}
+
+// Finished reports whether the task's work is over: merged or cancelled.
+func (t TaskRow) Finished() bool {
+	return t.State == TaskMerged || t.State == TaskCancelled
+}
+
+// Elapsed is the task row's time and whether it has one. A live task's
+// time runs from when it entered its state to now; a finished task's time
+// is frozen at how long it took, from its first dispatch to its end, and it
+// has none when it never ran.
+func (t TaskRow) Elapsed(now time.Time) (time.Duration, bool) {
+	if t.Since.IsZero() {
+		return 0, false
+	}
+	end, start := now, t.Since
+	if t.Finished() {
+		if t.Began.IsZero() {
+			return 0, false
+		}
+		end, start = t.Since, t.Began
+	}
+	return max(0, end.Sub(start)), true
 }
 
 // Spark scales Recent to eight levels, 0 to 7, against its own maximum, so
@@ -451,7 +491,7 @@ func runClosedDetail(data map[string]any) string {
 // Project builds the Board from a snapshot and the run's events in sequence
 // order. Project(s, a+b) equals Project(s, a).Tail(b) for any split.
 func Project(s Snapshot, evs []events.Event) Board {
-	b := Board{Run: RunHead{ID: s.RunID, State: s.Run.State, Total: len(s.Run.Tasks), TokenLimit: s.Run.Budget.Tokens.Plan, LaneCap: laneCap(s.Run.Settings)}, PlanID: s.Run.PlanID, Budget: s.Run.Budget}
+	b := Board{Run: RunHead{ID: s.RunID, State: s.Run.State, Total: len(s.Run.Tasks), TokenLimit: s.Run.Budget.Tokens.Plan, LaneCap: laneCap(s.Run.Settings), Driving: s.Driving}, PlanID: s.Run.PlanID, Budget: s.Run.Budget}
 	if s.Run.State == marshal.AwaitingUser && s.Run.Pause != nil {
 		b.Run.Paused, b.Run.Next = s.Run.Pause.Reason, slices.Clone(s.Run.Pause.Resolutions)
 		b.Run.PauseAction, b.Run.PauseTask, b.Run.PauseCode = s.Run.Pause.Action, s.Run.Pause.TaskID, s.Run.Pause.Code
@@ -534,6 +574,11 @@ func (b *Board) apply(e events.Event) {
 		for i := range b.Lanes {
 			if b.Lanes[i].TaskID == e.TaskID {
 				b.Lanes[i].Started, b.Lanes[i].Tokens, b.Lanes[i].Recent = e.At, 0, [8]int64{}
+			}
+		}
+		for i := range b.Tasks {
+			if b.Tasks[i].ID == e.TaskID && b.Tasks[i].Began.IsZero() {
+				b.Tasks[i].Began = e.At
 			}
 		}
 	}

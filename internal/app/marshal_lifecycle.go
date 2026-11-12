@@ -444,6 +444,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	op.Attempt = attempt
 	op.Next = &run
 	op.Event.Data["result_commit"] = handin.ResultCommit
+	// The hand-in happened now, when the worker delivered it, not when the
+	// wait for it began at dispatch.
+	op.Event.At = s.clock()
 	// Persist the observed hand-in as the receipt before recording completion.
 	pending := initial
 	pending.Operation = op

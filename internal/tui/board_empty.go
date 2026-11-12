@@ -393,7 +393,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		pad = " "
 	}
 	// A decision already waiting comes before anything else.
-	if n := len(v.board.Inbox) + len(v.gates) + v.guardCount() + v.askCount() + v.reqCount() + v.changeCount() + v.nextCount(); n > 0 {
+	if n := len(v.board.Inbox) + len(v.gates) + v.cardCount(); n > 0 {
 		// The requirements card is tall: count it as 11 rows, not the
 		// 2+3*n estimate the shorter cards use.
 		est := 2 + 3*n
@@ -413,22 +413,30 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		add("")
 	}
 
-	// The call to action: a button that focuses the chat.
-	arrow, enter := "▸", "⏎"
-	if !v.unicode() {
-		arrow, enter = ">", "Enter"
+	// The call to action: a button that focuses the chat. Once a goal is
+	// given, or the Marshal already filled its requirements, there is
+	// nothing left to ask for: the button goes and the chat keys stay.
+	given := v.goalGiven || v.req != nil
+	if !given {
+		arrow, enter := "▸", "⏎"
+		if !v.unicode() {
+			arrow, enter = ">", "Enter"
+		}
+		label := " " + arrow + " " + firstUseCTA + "   " + enter + " "
+		if VisibleLen(pad+label) > w {
+			label = " " + arrow + " " + firstUseCTA + " "
+		}
+		button := v.bold(v.bg("accent", v.fg("bg", label)))
+		if v.code("accent", true) == "" {
+			button = "[" + strings.TrimSpace(label) + "]"
+		}
+		hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(label), kind: hitAction, id: "marshal.chat"})
+		add(pad + button)
 	}
-	label := " " + arrow + " " + firstUseCTA + "   " + enter + " "
-	if VisibleLen(pad+label) > w {
-		label = " " + arrow + " " + firstUseCTA + " "
-	}
-	button := v.bold(v.bg("accent", v.fg("bg", label)))
-	if v.code("accent", true) == "" {
-		button = "[" + strings.TrimSpace(label) + "]"
-	}
-	hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(label), kind: hitAction, id: "marshal.chat"})
-	add(pad + button)
 	how := "Enter or F11: type it in the Marshal chat  ·  s: say it from here"
+	if given {
+		how = "The Marshal has your goal  ·  F11: the Marshal chat  ·  s: say something from here"
+	}
 	for _, line := range wrapWords(how, w-len(pad)-1) {
 		add(pad + " " + v.fg("dim", line))
 	}

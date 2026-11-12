@@ -44,6 +44,7 @@ func (w *Workspace) plainStatus() string {
 	v := boardVisual{board: b, now: time.Now(), note: p.Note}
 	v.gates = w.ownerGates(p)
 	v.guard, _, _, _ = w.guardPaint()
+	v.ask, v.req, v.change, v.next = w.currentAsk(), w.currentReq(), w.currentChange(), w.currentNext()
 	title := firstLine(b.Run.Title)
 	if title == "" {
 		title = "current run"

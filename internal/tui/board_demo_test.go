@@ -49,6 +49,10 @@ func demoBoard(now time.Time) model.Board {
 		}
 		if d.seconds > 0 {
 			t.Since = now.Add(-time.Duration(d.seconds) * time.Second)
+			if t.Finished() {
+				// A finished task shows how long it took, frozen.
+				t.Began = t.Since.Add(-time.Duration(d.seconds) * time.Second)
+			}
 		}
 		b.Tasks = append(b.Tasks, t)
 	}

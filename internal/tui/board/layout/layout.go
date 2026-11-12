@@ -227,6 +227,10 @@ func columns(cols int, c Counts, dock bool) []column {
 	if cols >= FullDensity {
 		d, inbox, activity = Full, 7, 5
 	}
+	// The inbox asks for a heading and two rows an item, up to three
+	// items, as the single column does, so no entry the header counts is
+	// cut off below its fixed share.
+	inbox = max(inbox, 1+2*min(c.Inbox, 3))
 	left := []slot{{Tasks, d, 12, true, true, tasksMost}, {Inbox, d, inbox, false, false, 0}}
 	right := []slot{{Lanes, d, 12, true, true, lanesMost}, {Activity, d, activity, true, false, 0}}
 	if cols < DockedColumn || !dock {
