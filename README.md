@@ -34,9 +34,9 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 <br>
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="From an empty folder: marshal init, verify Claude Code, Codex, OpenCode and Antigravity, state a goal, accept the architecture with y, and four agents build four modules in parallel while a different model reviews each one." width="100%">
+  <img src=".github/assets/demo.gif" alt="The Marshal Board from launch to a finished run: the opening, the Who plans? picker with each provider's limit (Codex is chosen), a goal said from the Board, the requirements card confirmed with Enter, the architecture accepted in the browser, then Codex, Claude, Antigravity and OpenCode building four tasks in parallel, each hand-in reviewed by a different provider, verified and merged, ending on the What next? card." width="100%">
   <br>
-  <sub>Real recording, sped up: empty folder → <code>marshal init</code> → verify four providers → goal → accept the architecture with <code>y</code> → Codex, Claude, OpenCode and Antigravity build four modules in parallel → each hand-in reviewed by a different model.</sub>
+  <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → Codex → say the goal → requirements card, <code>Enter</code> confirms → accept the architecture in the browser → Codex, Claude, Antigravity and OpenCode build in parallel → each hand-in reviewed by a different provider → verify → merge → <b>What next?</b></sub>
 </p>
 
 ---

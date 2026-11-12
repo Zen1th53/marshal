@@ -71,8 +71,8 @@
     },
     {
       "path": ".github/assets/demo.gif",
-      "sha256": "86382e2db9d36f87632c375f4da72a3a25a2430360f606c5f609cbcc677c1846",
-      "bytes": 475064
+      "sha256": "db8d37fe5c344ff3c00b9028805c479693de351419d583d87bf3e525f260fa5c",
+      "bytes": 797588
     },
     {
       "path": ".github/dependabot.yml",
@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "3800035ca538d1d392dd13a1b9f0f66b32ead6ae73ba8f2caea650568008b9ad",
-      "bytes": 12798
+      "sha256": "ac504fd9afc0c19f9f57f6ac730fff461607dbc3da33b25dbe88c491d1a9f981",
+      "bytes": 13067
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -13141,8 +13141,8 @@
     },
     {
       "path": "internal/tui/demo_sequence_test.go",
-      "sha256": "01780ccf078884edfae3623c8350683ea4e60ec68b393f54e61c94b88d1385c0",
-      "bytes": 2909
+      "sha256": "3f06e69a080a5335ce198698c1745f6d5ef58c62909bda13d761abf8f60643f7",
+      "bytes": 19114
     },
     {
       "path": "internal/tui/diff_scopes_test.go",
@@ -16098,6 +16098,11 @@
       "path": "tools/ci/test-shard.sh",
       "sha256": "d45c6d402d4478e85e22a89ae7603e0550d145b71ae5de82d3742128d135faeb",
       "bytes": 3893
+    },
+    {
+      "path": "tools/demo/render.sh",
+      "sha256": "a748898fb812282b988b607544cf14c1fb5e0ad5de0df8daf9ce8681126f806d",
+      "bytes": 1814
     },
     {
       "path": "tools/detached_sign.py",
