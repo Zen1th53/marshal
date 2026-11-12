@@ -133,7 +133,11 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 		cancel()
 	}
 	quotas := map[string]usage.Quota{}
-	for _, q := range w.readUsageNow(now) {
+	reading := w.readUsageNow(now)
+	// The vitals row shows this same reading at once, so it never says
+	// "limit unknown" beside a picker that just showed the figure.
+	w.storeUsage(reading)
+	for _, q := range reading {
 		quotas[q.Provider] = q
 	}
 	for i := range cands {

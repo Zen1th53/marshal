@@ -61,6 +61,9 @@ type guardAlert struct {
 	wasDirty map[string]bool
 	// gen is the baseline the alert was found against.
 	gen int
+	// answered is the owner's answer to the Marshal's question about these
+	// files when it chose an undo that has not happened yet; "" otherwise.
+	answered string
 }
 
 // guardState is the guard's baseline and its pending alert.
@@ -403,14 +406,20 @@ func guardMarshalText(paths []string, prefix string) string {
 // tellMarshalGuard delivers the notice to the Marshal chat through the
 // say path, which waits for the chat's idle prompt.
 func (w *Workspace) tellMarshalGuard(ctx context.Context, paths []string, prefix string) {
+	w.tellMarshalGuardText(ctx, guardMarshalText(paths, prefix))
+}
+
+// tellMarshalGuardText is one guard notice to the Marshal chat, through the test seam
+// when one is set.
+func (w *Workspace) tellMarshalGuardText(ctx context.Context, text string) {
 	if w.guardTell != nil {
-		w.guardTell(guardMarshalText(paths, prefix))
+		w.guardTell(text)
 		return
 	}
 	if w.sayPane() == "" && !w.nativeChatActive() {
 		return
 	}
-	w.noticeToMarshal(ctx, guardMarshalText(paths, prefix))
+	w.noticeToMarshal(ctx, text)
 }
 
 // guardPaint is the alert for a paint, nil for none, and whether its undo
@@ -492,19 +501,54 @@ func (w *Workspace) guardDisarm() {
 }
 
 // guardKeep keeps the files: the alert goes and the next look takes them
-// into the baseline.
+// into the baseline. An open question the Marshal asked about them is
+// answered with its keep choice, so neither card outlives the decision.
 func (w *Workspace) guardKeep() {
 	g := &w.guard
 	g.mu.Lock()
 	a := g.alert
+	g.mu.Unlock()
+	if !w.guardKeepAlert(a) {
+		return
+	}
+	if card, i := w.askForGuard(a); card != nil && i >= 0 && (w.sayPane() != "" || w.nativeChatShown()) {
+		w.answerAsk(i)
+	}
+}
+
+// guardKeepAlert keeps alert a's files when it is still the open alert, and
+// reports whether it was.
+func (w *Workspace) guardKeepAlert(a *guardAlert) bool {
+	g := &w.guard
+	g.mu.Lock()
+	if a == nil || g.alert != a {
+		g.mu.Unlock()
+		return false
+	}
 	g.alert, g.armed, g.baseOK = nil, false, false
 	prefix := g.last.prefix
 	g.mu.Unlock()
-	if a == nil {
-		return
-	}
 	w.memoryAnswer("Kept: "+guardShown(a.paths, prefix, 6)+". The Board no longer lists them.", false)
 	w.addNote("Kept project files changed outside a run: "+guardShown(a.paths, prefix, 4), false)
+	return true
+}
+
+// guardAlertNow is the open alert, nil for none; its identity names it.
+func (w *Workspace) guardAlertNow() *guardAlert {
+	w.guard.mu.Lock()
+	defer w.guard.mu.Unlock()
+	return w.guard.alert
+}
+
+// guardAnswered records on alert a, while it is open, that the owner
+// answered the Marshal's question about its files with an undo.
+func (w *Workspace) guardAnswered(a *guardAlert, label string) {
+	w.guard.mu.Lock()
+	if w.guard.alert == a {
+		a.answered = label
+	}
+	w.guard.mu.Unlock()
+	w.requestRepaint()
 }
 
 // guardUndoNow runs the armed undo off the key path, against a fresh look
@@ -553,6 +597,12 @@ func (w *Workspace) guardUndoNow() {
 		}
 		w.memoryAnswer(msg, false)
 		w.addNote(msg, false)
+		// The Marshal's open question about these files is answered by
+		// the undo: its card closes and the Marshal is told what was done.
+		if card, _ := w.askForGuard(a); card != nil {
+			w.clearAsk()
+			w.tellMarshalGuardText(ctx, "Runtime notice: the person answered your question about the changed files from the Board. "+msg+" Do not undo them again; continue the protocol.")
+		}
 	})
 	if !ok {
 		g.mu.Lock()
@@ -705,7 +755,11 @@ func (v boardVisual) guardEntry(x, row, w int) []string {
 		button(v.bg("rule", "[u]")+" undo", 'u')
 		gap("  ")
 		button(v.bg("rule", "[K]")+" keep", 'K')
-		gap(v.fg("dim", "  · the Marshal was told not to implement"))
+		if a.answered != "" {
+			gap(v.fg("dim", "  · you answered “"+cleanBoard(a.answered)+"”; nothing is undone yet"))
+		} else {
+			gap(v.fg("dim", "  · the Marshal was told not to implement"))
+		}
 	}
 	return []string{PadCell(first, w), PadCell(second, w)}
 }

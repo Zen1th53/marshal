@@ -3,10 +3,12 @@ package tui
 import (
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	"github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // runStop is why the run on the Board no longer moves on its own and what
@@ -27,6 +29,16 @@ type runStop struct {
 	code     string
 	verb     string
 	action   marshal.PauseAction
+}
+
+// cardEnterKey is the key an open card's Enter button names: Enter, or
+// "click" while a stopped run leads the inbox and takes Enter itself
+// (boardStopWaiting), so no card below it claims the key.
+func (v boardVisual) cardEnterKey() string {
+	if _, ok := v.stopNotice(); ok && len(v.board.Inbox) == 0 {
+		return "click"
+	}
+	return "Enter"
 }
 
 // stopNotice is the run's stop, if it stopped.
@@ -207,13 +219,21 @@ func (v boardVisual) runWord() (string, string) {
 		}
 		return "paused", "failed"
 	}
-	if v.ownerWaits() && !(v.board.Run.State == marshal.Closed && v.onlyNextWaits()) {
+	if v.ownerWaitsForRun() && !(v.board.Run.State == marshal.Closed && v.onlyNextWaits()) {
 		// The Marshal waits for the owner's reply (board_gates.go), or
 		// changed files wait for keep or undo (board_guard.go). The "what
 		// next?" card of a closed run is no wait: the run is done.
 		return "waiting for you", "needs"
 	}
 	switch v.board.Run.State {
+	case marshal.Reviewing:
+		return "reviewing", "accent"
+	case marshal.Approved, marshal.Dispatching:
+		if v.onlyReviewing() {
+			// Every task still moving is in the Marshal's review: no
+			// worker runs, and nothing waits for the owner.
+			return "reviewing", "accent"
+		}
 	case marshal.Closed:
 		return "done", "merged"
 	case marshal.Merging:
@@ -229,6 +249,33 @@ func (v boardVisual) runWord() (string, string) {
 		return "starting", "dim"
 	}
 	return "running", "accent"
+}
+
+// ownerWaitsForRun is ownerWaits as the run's state reads it: a requirements
+// card is settled before planning, so one still open while the run executes
+// does not hold the run up, and the header says what the run is doing.
+func (v boardVisual) ownerWaitsForRun() bool {
+	if v.req != nil && slices.Contains(guardRunActive, v.board.Run.State) {
+		u := v
+		u.req = nil
+		return u.ownerWaits()
+	}
+	return v.ownerWaits()
+}
+
+// onlyReviewing reports whether at least one task is in review and none is
+// working: the run is reviewing.
+func (v boardVisual) onlyReviewing() bool {
+	review := 0
+	for _, t := range v.board.Tasks {
+		switch t.State {
+		case model.TaskReview:
+			review++
+		case model.TaskWorking, "verifying":
+			return false
+		}
+	}
+	return review > 0 && v.liveLanes() == 0
 }
 
 // onlyNextWaits reports whether the "what next?" card is the only thing open

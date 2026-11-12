@@ -106,14 +106,38 @@ func (w *Workspace) openRequirements(p marshalProposal) {
 	}
 	card := &reqCard{Lines: lines, At: time.Now()}
 	w.req.mu.Lock()
-	w.req.card = card
+	again := w.req.confirmed != nil && *w.req.confirmed == reqTexts(lines)
+	if !again {
+		w.req.card = card
+	}
 	w.req.mu.Unlock()
+	if again {
+		// The Marshal sent back the card the owner already confirmed,
+		// with its sources updated: it is recorded, and no card opens to
+		// take a later Enter.
+		w.RecordActivity("Marshal recorded the requirements you confirmed.")
+		if w.store != nil {
+			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
+		}
+		w.requestRepaint()
+		return
+	}
 	w.clearAsk()
 	w.RecordActivity(fmt.Sprintf("Marshal: requirements card updated (%d of 8 filled).", card.filled()))
 	if w.store != nil {
 		_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 	}
 	w.requestRepaint()
+}
+
+// reqTexts is each line's text, spaces collapsed, the way two cards are
+// compared: the same requirements with other sources are the same card.
+func reqTexts(lines [8]reqLine) [8]string {
+	var out [8]string
+	for i, l := range lines {
+		out[i] = strings.Join(strings.Fields(l.Text), " ")
+	}
+	return out
 }
 
 // currentReq is the open card, nil for none.
@@ -163,6 +187,10 @@ func (w *Workspace) handleRequirementsKey(event KeyEvent) bool {
 	}
 	switch event.Type {
 	case KeyEnter:
+		if w.boardStopWaiting() {
+			// A stopped run leads the inbox: Enter is its key.
+			return false
+		}
 		w.confirmRequirements()
 		return true
 	case KeyRune:
@@ -186,6 +214,10 @@ func (w *Workspace) confirmRequirements() {
 		w.setOutput("Answer the blank lines first; the Marshal asks them one at a time.", false)
 		return
 	}
+	texts := reqTexts(card.Lines)
+	w.req.mu.Lock()
+	w.req.confirmed = &texts
+	w.req.mu.Unlock()
 	w.clearReq()
 	w.sayToMarshal(w.workers.context(), "confirm all")
 	w.RecordActivity("You confirmed the requirements.")
@@ -305,7 +337,7 @@ func (v boardVisual) requirementsEntry(c reqCard, x, row, w int) []string {
 		out = append(out, PadCell(line, w))
 		return out
 	}
-	confirm := v.bg("rule", "[Enter]") + " confirm all"
+	confirm := v.bg("rule", "["+v.cardEnterKey()+"]") + " confirm all"
 	edit := v.bg("rule", "[e]") + " edit a line"
 	line := "  " + confirm + "  " + edit
 	v.hit(boardHit{row: arow, x0: x + 2, x1: x + 2 + VisibleLen(confirm), kind: hitRequirements, id: "enter"})

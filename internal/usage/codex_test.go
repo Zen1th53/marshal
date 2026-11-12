@@ -215,3 +215,22 @@ func TestCodexWindowLabels(t *testing.T) {
 		t.Fatalf("other window = %+v", q)
 	}
 }
+
+// A Codex chat that just started has written no report yet: its rollout is
+// the newest but holds no rate_limits line. The last report Codex wrote, in
+// the session before, is the reading, so a limit just shown does not turn to
+// "unknown" when the chat opens.
+func TestCodexNewSessionKeepsTheLastReport(t *testing.T) {
+	dir := t.TempDir()
+	place(t, dir, "2026/11/08", "rollout-earlier.jsonl", fixture(t, "fresh.jsonl"), now.Add(-10*time.Minute))
+	place(t, dir, "2026/11/08", "rollout-new.jsonl", []byte("{\"type\":\"session_meta\"}\n"), now.Add(-time.Second))
+	q := readCodex(now, dir)
+	if !q.Known || q.Windows[0].LeftPercent != 82 || !q.AsOf.Equal(now.Add(-10*time.Minute)) {
+		t.Fatalf("new session = %+v", q)
+	}
+	// A newer report that is unknown still wins: it is the last word.
+	place(t, dir, "2026/11/08", "rollout-newer.jsonl", fixture(t, "reset-passed.jsonl"), now)
+	if q := readCodex(now, dir); q.Known || q.Reason != ReasonReset {
+		t.Fatalf("newer unknown report = %+v", q)
+	}
+}
