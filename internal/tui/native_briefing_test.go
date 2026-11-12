@@ -4,6 +4,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -500,5 +501,69 @@ func TestMarshalLaunchWithSavedIntakeRefusesMissingProtocol(t *testing.T) {
 		if err == nil || args != nil || env != nil || dir != nil {
 			t.Fatalf("protocol %q: launch material %v %v %v, err %v", protocol, args, env, dir, err)
 		}
+	}
+}
+
+// The opening cue is the person's first visible message in the provider's
+// own CLI, so it reads as a greeting, holds no quote character a launch
+// script must escape, and a saved argv from an older version, which ended
+// in "Start." or "Continue.", still has its cue recognised and stripped.
+func TestOpeningCueIsPlainAndLegacyCuesAreRecognised(t *testing.T) {
+	for _, cue := range []string{marshalKickoff, marshalKickoffContinue} {
+		if strings.ContainsAny(cue, `'"\`) || strings.Contains(cue, "Start") || len(cue) > 20 {
+			t.Fatalf("opening cue %q", cue)
+		}
+	}
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		for _, legacy := range legacyMarshalCues {
+			args := append([]string{"-c", "x", "--"}, marshalCueArgs(provider, legacy)...)
+			if got := dropMarshalCue(provider, args); !slices.Equal(got, []string{"-c", "x"}) {
+				t.Fatalf("%s: legacy cue %q not stripped: %q", provider, legacy, got)
+			}
+		}
+	}
+}
+
+// Every message MARSHAL itself types into the Marshal chat opens with the
+// same plain "[Marshal]" label, so it never reads as the person's words.
+func TestRuntimeNotesCarryTheMarshalLabel(t *testing.T) {
+	for _, text := range []string{
+		runClosedNotice(1, 1, "refs/heads/master"),
+		guardMarshalText([]string{"a.go"}, "", true),
+		guardMarshalText([]string{"a.go"}, "", false),
+	} {
+		if !strings.HasPrefix(text, "[Marshal] ") || strings.Contains(text, "Runtime notice") {
+			t.Fatalf("note %q", text)
+		}
+	}
+	if got := runClosedNotice(1, 1, "refs/heads/master"); !strings.HasPrefix(got, "[Marshal] The run closed: 1 of 1 tasks verified and merged to master.") {
+		t.Fatalf("run-closed note %q", got)
+	}
+}
+
+// A Codex Marshal chat launches with Codex's usage tips off, as a per-launch
+// -c override placed before the opening cue, added once; other providers'
+// launches are unchanged.
+func TestMarshalChatViewArgsTurnOffCodexTips(t *testing.T) {
+	root := t.TempDir()
+	args := append([]string{"-c", "model=x"}, marshalKickoffArgs("codex", root)...)
+	got := marshalChatViewArgs("codex", root, args)
+	want := append([]string{"-c", "model=x", "-c", codexMarshalChatTips}, marshalKickoffArgs("codex", root)...)
+	if !slices.Equal(got, want) {
+		t.Fatalf("codex view args %q, want %q", got, want)
+	}
+	if again := marshalChatViewArgs("codex", root, got); !slices.Equal(again, got) {
+		t.Fatalf("view args added twice: %q", again)
+	}
+	claude := append([]string{"--model", "x"}, marshalKickoffArgs("claude", root)...)
+	if got := marshalChatViewArgs("claude", root, claude); !slices.Equal(got, claude) {
+		t.Fatalf("claude args changed: %q", got)
+	}
+	launched, _, dir, err := prepareMarshalLaunch("codex", root, nil, "MARSHAL PROTOCOL\nrules", false, "")
+	if dir != nil {
+		defer dir.remove()
+	}
+	if err != nil || !codexConfigOverrides(launched, "tui.show_tooltips") || launched[len(launched)-1] != marshalKickoff {
+		t.Fatalf("codex Marshal launch %q err=%v", launched, err)
 	}
 }

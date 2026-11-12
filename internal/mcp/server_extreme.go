@@ -60,7 +60,7 @@ func (s *Server) callStdioProposal(ctx context.Context, req jsonRPCRequest) (jso
 			resp.Error = toolError(rawParams.Name, err)
 			return resp, true
 		}
-		resp.Result = map[string]any{"content": []map[string]any{{"type": "text", "text": string(result)}}}
+		resp.Result = map[string]any{"content": s.marshalResultContent(rawParams.Name, string(result))}
 		if projectContractTool(rawParams.Name) {
 			frame, err := json.Marshal(resp)
 			wireLimit := 4096

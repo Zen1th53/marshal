@@ -74,6 +74,15 @@ func (w *Workspace) noteRunClosed(prev, cur *MarshalPanel) {
 	w.tellMarshalRunClosed(cur)
 }
 
+// marshalNotePrefix opens every message MARSHAL itself types into the
+// Marshal chat. Neither Codex nor Claude Code accepts a system or developer
+// message into a running interactive session (Codex's `queue` and the typed
+// prompt are both user turns; Claude Code hooks add context only to a turn
+// the person starts), so a notice is a user turn the CLI prints as typed.
+// The prefix tells a person glancing at the chat, and the model (the
+// protocol says so), that the note is MARSHAL's, not theirs.
+const marshalNotePrefix = "[Marshal] "
+
 // runClosedNotice is the one runtime notice the Marshal chat gets when a run
 // closes: plain counts and the branch the work went to, then what to do. It
 // is information, not an instruction to start work.
@@ -82,7 +91,7 @@ func runClosedNotice(done, total int, targetRef string) string {
 	if branch := strings.TrimPrefix(strings.TrimSpace(targetRef), "refs/heads/"); branch != "" {
 		merged += " to " + branch
 	}
-	return fmt.Sprintf("Runtime notice: the run closed — %d of %d tasks %s. Tell the person in one or two sentences what was delivered and ask what they want next. Do not start new work until they answer.", done, total, merged)
+	return fmt.Sprintf(marshalNotePrefix+"The run closed: %d of %d tasks %s. Tell the person briefly what was delivered and ask what is next; start nothing until they answer.", done, total, merged)
 }
 
 // tellMarshalRunClosed sends the run-closed notice once per run, only when

@@ -65,7 +65,7 @@ func TestExtremeMarshalMCPLaunchConfig(t *testing.T) {
 				if cfgFile == "" {
 					t.Fatalf("claude args missing --mcp-config: %v", args)
 				}
-				if len(args) < 4 || args[len(args)-3] != cfgFile || args[len(args)-2] != "--" || args[len(args)-1] != "Start." {
+				if len(args) < 4 || args[len(args)-3] != cfgFile || args[len(args)-2] != "--" || args[len(args)-1] != "Hello." {
 					t.Fatalf("claude opening was consumed by variadic --mcp-config: %v", args)
 				}
 				data, err := os.ReadFile(cfgFile)
@@ -157,7 +157,7 @@ func TestExtremeClaudeMCPConfigPreservesSavedIntakeOpening(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(args) < 4 || args[len(args)-4] != "--mcp-config" || args[len(args)-2] != "--" || args[len(args)-1] != "Continue." {
+	if len(args) < 4 || args[len(args)-4] != "--mcp-config" || args[len(args)-2] != "--" || args[len(args)-1] != "Hello again." {
 		t.Fatalf("saved intake opening was consumed by variadic --mcp-config: %v", args)
 	}
 }

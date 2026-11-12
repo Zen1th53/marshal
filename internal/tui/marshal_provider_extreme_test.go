@@ -63,9 +63,9 @@ func TestExtremeOpenCodeMarshalSelectionProtocolKickoffAndResume(t *testing.T) {
 			if err != nil || provider != "opencode" || service.ModelProvider != "opencode" {
 				t.Fatalf("service: %s %v", provider, err)
 			}
-			opening := "Start."
+			opening := "Hello."
 			if saved {
-				opening = "Continue."
+				opening = "Hello again."
 				if err := w.saveMarshalIntake(marshalIntake{Language: "Uzbek"}); err != nil {
 					t.Fatal(err)
 				}

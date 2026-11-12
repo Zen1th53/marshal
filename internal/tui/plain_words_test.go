@@ -33,7 +33,7 @@ func TestPickerActivityNamesTheMarshalInPlainWords(t *testing.T) {
 func TestRuntimeNoticeIsNotLabelledAsTheOwner(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
-	w.noticeToMarshal(t.Context(), "Runtime notice: project files changed outside a run")
+	w.noticeToMarshal(t.Context(), "[Marshal] Project files changed outside a run")
 	echoes := w.sayEchoList()
 	if len(echoes) != 1 || !echoes[0].Runtime {
 		t.Fatalf("echo: %+v", echoes)

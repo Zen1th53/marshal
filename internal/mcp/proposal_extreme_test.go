@@ -95,7 +95,7 @@ func TestProposalMCPRolesAndRawWireAuthorization(t *testing.T) {
 			t.Fatalf("live action %s: error=%+v raw=%s", proposal, resp.Error, got)
 		}
 		content := resp.Result.(map[string]any)["content"].([]map[string]any)
-		if content[0]["text"] != `{"state":"admitted"}` {
+		if len(content) != 2 || content[0]["text"] != "Proposal received; it waits for the person's decision." || content[1]["text"] != `{"state":"admitted"}` {
 			t.Fatalf("transport changed admission into application: %+v", resp)
 		}
 	}

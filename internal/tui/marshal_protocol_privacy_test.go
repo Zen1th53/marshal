@@ -389,8 +389,8 @@ func TestPeerInboxOpeningScrubsOldProtocol(t *testing.T) {
 // TestMarshalProtocolNeverVisibleInProviderChatTurn enforces that the Marshal's
 // protocol instructions and saved project intake are never exposed as a visible
 // turn in the provider chat (e.g. U5-reopened finding). Fresh launches must use
-// a neutral opening turn ("Start."), and launches with saved intake must use
-// "Continue." with the intake delivered exclusively through the hidden instruction channel.
+// a neutral opening turn ("Hello."), and launches with saved intake must use
+// "Hello again." with the intake delivered exclusively through the hidden instruction channel.
 func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 	protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
@@ -421,9 +421,9 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 					t.Fatal(err)
 				}
 				visibleOpening := args[len(args)-1]
-				wantOpening := "Start."
+				wantOpening := "Hello."
 				if mode != "fresh" {
-					wantOpening = "Continue."
+					wantOpening = "Hello again."
 				}
 				if visibleOpening != wantOpening {
 					t.Fatalf("visible opening = %q, want %q", visibleOpening, wantOpening)
@@ -453,7 +453,7 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 					}
 					hidden = string(content)
 				}
-				if !strings.Contains(hidden, `"Start."`) || !strings.Contains(hidden, `"Continue."`) {
+				if !strings.Contains(hidden, `"Hello."`) || !strings.Contains(hidden, `"Hello again."`) {
 					t.Fatal("hidden protocol does not define neutral start cues")
 				}
 				if !strings.Contains(hidden, "MARSHAL PROTOCOL") {

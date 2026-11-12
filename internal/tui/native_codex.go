@@ -449,6 +449,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if args, err = w.confineWorkspaceMarshalChat(ctx, provider, root, args); err != nil {
 			return "", marshalNotStarted(provider, fmt.Errorf("read-only launch settings failed: %w", err))
 		}
+		args = marshalChatViewArgs(provider, root, args)
 	}
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {

@@ -134,10 +134,11 @@ func (c *memoryTestChild) call(t *testing.T, name string, args any, ok bool) str
 	if resp.Error != nil {
 		t.Fatal(resp.Error.Message)
 	}
-	if len(resp.Result.Content) != 1 {
+	// A Marshal result is one plain summary line, then the data.
+	if n := len(resp.Result.Content); n != 1 && (n != 2 || strings.Contains(resp.Result.Content[0].Text, "{")) {
 		t.Fatalf("response=%s", c.scanner.Bytes())
 	}
-	return resp.Result.Content[0].Text
+	return resp.Result.Content[len(resp.Result.Content)-1].Text
 }
 func authorizeTestMemory(t *testing.T, w *Workspace, cfg proposalmcp.Config, allow bool) {
 	t.Helper()

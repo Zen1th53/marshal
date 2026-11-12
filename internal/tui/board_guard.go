@@ -414,9 +414,9 @@ func guardNoteText(paths []string, prefix string, byMarshal bool) string {
 // guardMarshalText is the one message the Marshal gets per detection.
 func guardMarshalText(paths []string, prefix string, byMarshal bool) string {
 	if byMarshal {
-		return "Runtime notice: you changed project files while planning (" + guardShown(paths, prefix, 6) + "). You never change project files; workers do. Tell the person you made these changes and recommend undoing them with [u] on the Board; never recommend keeping them; do not implement — record the goal and continue the protocol. Workers implement in worktrees after the architecture is accepted; write only under .marshal/."
+		return marshalNotePrefix + "You changed project files while planning: " + guardShown(paths, prefix, 6) + ". Only workers change project files, in worktrees after the architecture is accepted. Tell the person you changed project files and recommend undoing them with [u] on the Board; never recommend keeping them; do not implement — record the goal and continue the protocol, writing only under .marshal/."
 	}
-	return "Runtime notice: project files changed outside a run while you are planning (" + guardShown(paths, prefix, 6) + "). The person decides whether to keep or undo them; if you changed any of them yourself, say so and recommend undo, never keep; do not implement — record the goal and continue the protocol. Workers implement in worktrees after the architecture is accepted; write only under .marshal/."
+	return marshalNotePrefix + "Project files changed outside a run while you plan: " + guardShown(paths, prefix, 6) + ". The person decides whether to keep or undo them; if you changed any of them yourself, say so and recommend undo, never keep; do not implement — record the goal and continue the protocol, writing only under .marshal/. Workers implement in worktrees after the architecture is accepted."
 }
 
 // tellMarshalGuard delivers the notice to the Marshal chat through the
@@ -617,7 +617,7 @@ func (w *Workspace) guardUndoNow() {
 		// the undo: its card closes and the Marshal is told what was done.
 		if card, _ := w.askForGuard(a); card != nil {
 			w.clearAsk()
-			w.tellMarshalGuardText(ctx, "Runtime notice: the person answered your question about the changed files from the Board. "+msg+" Do not undo them again; continue the protocol.")
+			w.tellMarshalGuardText(ctx, marshalNotePrefix+"The person answered your question about the changed files from the Board. "+msg+" Do not undo them again; continue the protocol.")
 		}
 	})
 	if !ok {
