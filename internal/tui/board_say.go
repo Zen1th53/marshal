@@ -144,10 +144,15 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 		w.chat.view.SetThinking(true)
 	}
 	w.chat.mu.Unlock()
+	// Once taken, a message belongs to the workspace, not to the caller:
+	// a caller that hands over a short-lived context (a background task
+	// that ends as soon as the message is queued) must not stop it from
+	// being sent.
+	bg := w.workers.context()
 	if tr != nil {
 		echo.State = saySent
 		w.sayNote(echo)
-		w.startBackground(ctx, func(ctx context.Context) {
+		w.startBackground(bg, func(ctx context.Context) {
 			if err := tr.Send(ctx, chattransport.Turn{Text: text}); err != nil {
 				w.sayNote(sayEcho{id: id, At: now, Text: text, State: sayFailed, Why: err.Error(), Runtime: runtime})
 				w.memoryAnswer(sayWhose(runtime, "The Marshal chat did not take your message: ", "The Marshal chat did not take Marshal's notice: ")+err.Error(), true)
@@ -174,7 +179,7 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 	start := !w.say.running
 	w.say.running = true
 	w.say.mu.Unlock()
-	if start && !w.startBackground(ctx, w.deliverSaid) {
+	if start && !w.startBackground(bg, w.deliverSaid) {
 		w.say.mu.Lock()
 		w.say.running = false
 		w.say.mu.Unlock()
@@ -222,6 +227,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: saySent, Runtime: item.runtime})
 			continue
 		case ctx.Err() != nil:
+			w.dropSaid()
 			return
 		case !errors.Is(err, errChatBusy):
 			pop()
@@ -244,9 +250,24 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			t.Stop()
+			w.dropSaid()
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// dropSaid ends a deliverer that was stopped: the queue is released, so a
+// later message starts a new deliverer, and each waiting message shows as
+// not sent in plain words instead of "sending" forever.
+func (w *Workspace) dropSaid() {
+	w.say.mu.Lock()
+	left := w.say.pending
+	w.say.pending = nil
+	w.say.running = false
+	w.say.mu.Unlock()
+	for _, item := range left {
+		w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: "MARSHAL stopped before it was sent", Runtime: item.runtime})
 	}
 }
 

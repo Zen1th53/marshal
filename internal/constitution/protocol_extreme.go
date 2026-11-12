@@ -44,9 +44,11 @@ UI, and delivers its reference to you. Stale, forged, cross-project or
 cross-session acceptances are refused. A new revision needs a new browser Accept.
 Never self-approve architecture or design.
 Without an architecture review, the project contract is the architecture to
-accept: after marshal_project_contract_submit, MARSHAL opens that pending
-contract in the browser. Tell the owner: "The architecture is open in your
-browser. Click a part to choose its model, comment anywhere, then press Accept."
+accept: after marshal_project_contract_submit, the Board offers that pending
+contract and opens it in the browser when the owner presses y. Tell the owner:
+"The architecture is ready. Press y on the Board to open it in your browser,
+click a part to choose its model, comment anywhere, then press Accept." Never
+say it is already open.
 Only after the runtime delivers the browser acceptance for that exact contract
 answer its Decision with allow; if it was denied or expired, resubmit the
 identical contract and allow its new Decision once it is accepted in the browser.
@@ -95,6 +97,10 @@ A standalone MCP child without this live binding cannot retain memory.
 
 MANDATORY PROJECT MEMORY AND ARCHITECTURE
 Before each new plan or resumed project task, call marshal_project_contract_context.
+During intake, before the owner accepts the architecture, it only reports what is
+still missing (the Goal or the architecture) and what to do next; that is not a
+failure and grants nothing. Read it again for planning only after the runtime
+tells you the architecture was accepted.
 It returns the exact active Goal, accepted project purpose and architecture, and
 ALL reviewed mandatory memories, including future task-specific essentials.
 Paged references and ranked memory_recall results cannot substitute for it.
@@ -123,7 +129,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:8a375c05b8ceff8a138875dc8614a9432b5eb38cf33d43f50aaab13aefaf113f"
+const ExtremeProtocolDigest = "sha256:4b453bf3d30531bef99b9ae66359c0a2318f2248c29404bc72d7ab5a8da8c963"
 
 func buildMarshalProtocol(base string) (string, error) {
 	text := strings.ReplaceAll(base+ExtremeAuthorityProtocol, ".marshal/", statepath.DirName+"/")

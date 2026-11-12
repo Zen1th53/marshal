@@ -89,7 +89,8 @@ func runClosedNotice(done, total int, targetRef string) string {
 // a Marshal chat is open (the what-next card covers the rest) and never for
 // a run whose execution stopped with an error. It goes through the runtime
 // notice path, off the caller's locks; marshalPublish calls this under the
-// session lock.
+// session lock. The delivery waits for the chat's idle prompt and, when the
+// chat stays busy past sayGiveUp, Activity says it was not sent.
 func (w *Workspace) tellMarshalRunClosed(cur *MarshalPanel) {
 	if cur.Stopped {
 		return
@@ -106,7 +107,11 @@ func (w *Workspace) tellMarshalRunClosed(cur *MarshalPanel) {
 		return
 	}
 	text := runClosedNotice(head.Done, head.Total, cur.run.TargetRef)
-	w.startBackground(w.workers.context(), func(ctx context.Context) {
+	// The notice is handed the workspace's own context, not this short
+	// task's: the task ends as soon as the notice is queued, and its
+	// context ending then stopped the delivery before the chat got it.
+	ctx := w.workers.context()
+	w.startBackground(ctx, func(context.Context) {
 		w.noticeToMarshal(ctx, text)
 	})
 }

@@ -264,8 +264,9 @@ How to propose:
      only with the architecture, in the browser, before planning tasks;
      silence is never approval.
    - Open it with an architecture proposal, then say: "The architecture is
-     open in your browser. Click a part to choose its model, comment
-     anywhere, then press Accept."
+     ready. Press y on the Board to open it in your browser, click a part to
+     choose its model, comment anywhere, then press Accept." Never say it is
+     already open: the page opens when the person presses y.
    ARCHITECTURE REVIEW v1, for new and imported projects:
    - MARSHAL's local browser view is view-only by default: component blocks
      and directed connections; no editable fields on the canvas. A hover
@@ -421,7 +422,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:2c2b2afd56cf3b9688111deb2c5e3605871dc81d6a71354f87a7ed11e25e11a6"
+const MarshalProtocolDigest = "sha256:eb2d9bd12c4c80d057f7cc4590526285ebc4c9b4cc3acd704efd280b48d325b2"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")
