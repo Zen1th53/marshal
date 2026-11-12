@@ -284,7 +284,7 @@ func TestM09HappyPathTwoTasksVerifyClose(t *testing.T) {
 		t.Fatalf("close: %+v %v", got, err)
 	}
 	target := marshalGit(t, repo, "rev-parse", "refs/heads/main")
-	integrated := marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration")
+	integrated := deliveredCommit(t, s, "run")
 	if target != integrated {
 		t.Fatal("target was not fast-forwarded")
 	}
@@ -921,7 +921,7 @@ func TestM09CloseUsesProjectBranchOnDetachedHEAD(t *testing.T) {
 	if err = s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration") {
+	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != deliveredCommit(t, s, "run") {
 		t.Fatal("default branch did not advance")
 	}
 }

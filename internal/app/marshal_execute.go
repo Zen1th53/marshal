@@ -445,6 +445,19 @@ func (s *MarshalService) waitHeldTasks(ctx context.Context, run marshal.Run) (bo
 // finish verifies the integrated result and, when the user granted a
 // standing close authorization, closes the run.
 func (s *MarshalService) finish(ctx context.Context, runID string, current func() (marshal.Run, error)) (marshal.Run, error) {
+	// A run that will close on its own first checks that the delivery can
+	// land: a retry while the checkout is still in the way does not verify
+	// the same result again.
+	if run, err := current(); err == nil && run.State == marshal.Verifying && run.Settings.AcceptanceMode == marshal.AcceptMarshal && run.ValidCloseAuthorization() {
+		if project, err := s.Store.Project(ctx); err == nil && project.DefaultBranch != "" {
+			if err := s.deliveryPrecheck(ctx, project.DefaultBranch); err != nil {
+				var stop *DeliveryStopError
+				if errors.As(err, &stop) {
+					return run, err
+				}
+			}
+		}
+	}
 	if _, err := s.VerifyMerged(ctx, runID, unknownMarshalCharge()); err != nil {
 		run, _ := current()
 		return run, err

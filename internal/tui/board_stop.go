@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 
@@ -55,9 +56,74 @@ func (v boardVisual) stopNotice() (runStop, bool) {
 				s.reason = firstLine(cause[at[0]:])
 			}
 		}
+		if reason, next, command, ok := parseKnownStopNote(v.note); ok {
+			s.reason = reason
+			if next != "" {
+				s.next = next
+			}
+			s.commands = []string{command}
+		}
 		return s, true
 	}
 	return runStop{}, false
+}
+
+// knownStopPrefix marks a panel note that carries a stop's own plain reason
+// and, after two spaces, what to do (the note stays one line wherever it is
+// shown), so the stop shows them instead of the generic sentence. Only errors
+// written for people carry one; a raw error stays behind "The run stopped
+// unexpectedly." and goes to the log.
+const knownStopPrefix = "stopped because: "
+
+// knownCloseStopPrefix is knownStopPrefix for a stop of the person's own
+// close (/marshal close): Enter closes again rather than resuming the run.
+const knownCloseStopPrefix = "delivery stopped because: "
+
+// knownStopGap separates a known stop's reason from what to do.
+const knownStopGap = "  "
+
+// knownStopNote is the panel note for an error that says why in plain words
+// (app.DeliveryStopError), or "" for any other error.
+func knownStopNote(err error) string { return knownStopNoteWith(knownStopPrefix, err) }
+
+// knownCloseStopNote is knownStopNote for a failed /marshal close.
+func knownCloseStopNote(err error) string { return knownStopNoteWith(knownCloseStopPrefix, err) }
+
+func knownStopNoteWith(prefix string, err error) string {
+	var known interface{ StopReason() (string, string) }
+	if !errors.As(err, &known) {
+		return ""
+	}
+	reason, next := known.StopReason()
+	reason, next = strings.TrimSpace(reason), strings.TrimSpace(next)
+	if reason == "" || strings.ContainsAny(reason+next, "\r\n") {
+		return ""
+	}
+	reason = strings.ReplaceAll(reason, knownStopGap, " ")
+	if next != "" {
+		return prefix + reason + knownStopGap + next
+	}
+	return prefix + reason
+}
+
+// parseKnownStopNote reads a known stop's note back: its reason, what to do
+// and the command Enter runs.
+func parseKnownStopNote(note string) (string, string, string, bool) {
+	note = strings.TrimSpace(note)
+	command := "/marshal resume"
+	rest, ok := strings.CutPrefix(note, knownStopPrefix)
+	if !ok {
+		if rest, ok = strings.CutPrefix(note, knownCloseStopPrefix); !ok {
+			return "", "", "", false
+		}
+		command = "/marshal close"
+	}
+	reason, next, _ := strings.Cut(rest, knownStopGap)
+	reason = cleanBoard(strings.TrimSpace(reason))
+	if reason == "" {
+		return "", "", "", false
+	}
+	return reason, cleanBoard(strings.TrimSpace(next)), command, true
 }
 
 // approvalRequiredRE matches the governed build's Process 05 approval

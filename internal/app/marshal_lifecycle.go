@@ -1414,6 +1414,11 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 	if err = s.validateDelivery(ctx, run); err != nil {
 		return err
 	}
+	// A checkout that would refuse the delivery says so before verification
+	// runs again, so each retry costs nothing until it can succeed.
+	if err = s.deliveryPrecheck(ctx, project.DefaultBranch); err != nil {
+		return err
+	}
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	head, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
@@ -1456,7 +1461,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 		return err
 	}
 	if old != run.BaseCommit {
-		return errors.New("approved delivery base changed; review and approve again")
+		return &DeliveryStopError{Reason: fmt.Sprintf("%s has new commits since this run was approved, so its work cannot be delivered as approved.", project.DefaultBranch), Next: "Ask the Marshal to redo the work on top of them.", Cause: errors.New("approved delivery base changed; review and approve again")}
 	}
 	if err = s.validateDelivery(ctx, run); err != nil {
 		return err
@@ -1475,7 +1480,14 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 	effectCompleted := false
 	defer func() {
 		if !effectCompleted {
-			if abandonErr := s.abandonOperation(ctx, runID, op); abandonErr != nil {
+			// A known stop is the escalation's reason, so the Board's activity
+			// says what is in the way instead of a generic refusal.
+			reason := ""
+			var stop *DeliveryStopError
+			if errors.As(retErr, &stop) {
+				reason = stop.Reason
+			}
+			if abandonErr := s.abandonOperationBecause(ctx, runID, op, reason); abandonErr != nil {
 				retErr = errors.Join(retErr, abandonErr)
 			}
 		}
@@ -1522,30 +1534,19 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 		if _, err = gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", old, head); err != nil {
 			return errors.New("target cannot fast-forward")
 		}
-		checkedOut, err := marshalTargetWorktree(ctx, s.Repository, target)
+		// A checkout of the target moves with it only when Git can do so
+		// without touching uncommitted work; otherwise the stop says what is
+		// in the way and nothing changes.
+		checkedOut, err := s.deliveryCheckout(ctx, project.DefaultBranch, target, old)
 		if err != nil {
 			return err
 		}
 		if checkedOut != "" {
-			refusal := fmt.Errorf("target branch %s is checked out at %s; run `git switch --detach` from that worktree to switch it away before the run can close", project.DefaultBranch, checkedOut)
-			// Only the main worktree has the same Git and common directories.
-			// A linked worktree must still be switched away by its operator.
-			dirs, dirErr := gitMarshal(ctx, checkedOut, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
-			paths := strings.Split(dirs, "\n")
-			status, statusErr := gitMarshal(ctx, checkedOut, "status", "--porcelain", "--untracked-files=all")
-			if dirErr != nil || len(paths) != 2 || paths[0] != paths[1] || statusErr != nil || status != "" {
-				return refusal
-			}
-			// Recheck the checkpoint and checkout identity before Git updates the
-			// branch, index and files together. Git's fast-forward merge refuses
-			// divergence and worktree conflicts; hooks stay disabled by gitMarshal.
-			branch, branchErr := gitMarshal(ctx, checkedOut, "symbolic-ref", "HEAD")
-			current, currentErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
-			if branchErr != nil || branch != target || currentErr != nil || current != old {
-				return refusal
-			}
+			// Git's fast-forward merge updates the branch, index and files
+			// together and refuses divergence and worktree conflicts; hooks
+			// stay disabled by gitMarshal.
 			if _, err = gitMarshal(ctx, checkedOut, "merge", "--ff-only", "--no-edit", "--no-overwrite-ignore", head); err != nil {
-				return fmt.Errorf("target fast-forward failed: %w", err)
+				return &DeliveryStopError{Reason: fmt.Sprintf("Git could not move your checkout of %s forward.", project.DefaultBranch), Next: "Press Enter to try again.", Cause: fmt.Errorf("target fast-forward failed: %w", err)}
 			}
 			if after, err := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD"); err != nil || after != head {
 				return errors.New("the target branch moved during close")
@@ -1571,7 +1572,13 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
-	return s.completeOperation(ctx, runID, rev, op)
+	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
+		return err
+	}
+	// The run's own merged worktrees and branches are done with; a failure
+	// keeps them and never undoes the close.
+	_ = s.cleanupDeliveredRun(ctx, runID, next, target)
+	return nil
 }
 
 // errAmendClosedRun refuses a change to a run that already closed. Its work

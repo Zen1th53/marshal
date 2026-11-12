@@ -142,7 +142,8 @@ func TestMarshalHelpCloseRecoveryInstruction(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("operator edit"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Close(t.Context(), "run"); err == nil || !strings.Contains(err.Error(), "git switch --detach") || strings.Contains(err.Error(), "fast-forward it") {
+	// The recovery instruction is plain and never asks to detach the checkout.
+	if err := s.Close(t.Context(), "run"); err == nil || !strings.Contains(err.Error(), "Stash them (git stash -u) or undo them, then press Enter to finish delivering.") || strings.Contains(err.Error(), "detach") || strings.Contains(err.Error(), "fast-forward it") {
 		t.Fatalf("close recovery: %v (repo %s)", err, repo)
 	}
 }

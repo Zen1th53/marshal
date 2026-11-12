@@ -161,6 +161,9 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			return run, rev, err
 		}
 		record, err := s.Store.GetMarshalRun(ctx, s.ProjectID, runID)
+		if err == nil && op.Kind == "close" {
+			_ = s.cleanupDeliveredRun(ctx, runID, record.Value, op.Target)
+		}
 		return record.Value, record.Revision, err
 	}
 	// No proven completion. Preserve the branch and all evidence, with a
@@ -183,6 +186,12 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 // abandonOperation clears only an intent whose effect was refused or failed
 // before completion. The caller must retain intents for effects that succeeded.
 func (s *MarshalService) abandonOperation(ctx context.Context, runID string, op *marshal.LifecycleOperation) error {
+	return s.abandonOperationBecause(ctx, runID, op, "")
+}
+
+// abandonOperationBecause is abandonOperation whose escalation names reason,
+// a refusal the person can act on; empty keeps the generic reason.
+func (s *MarshalService) abandonOperationBecause(ctx context.Context, runID string, op *marshal.LifecycleOperation, reason string) error {
 	ctx = context.WithoutCancel(ctx)
 	stored, err := s.Store.GetMarshalRun(ctx, s.ProjectID, runID)
 	if err != nil {
@@ -200,6 +209,9 @@ func (s *MarshalService) abandonOperation(ctx context.Context, runID string, op 
 	event.Data = copyMarshalEventData(event.Data)
 	event.Type = events.EventTypeMarshalEscalated
 	event.Data["reason"] = "lifecycle effect refused or failed before completion"
+	if reason != "" {
+		event.Data["reason"] = reason
+	}
 	if err := s.boundMarshalEvent(&event); err != nil {
 		return fmt.Errorf("bound escalated lifecycle event for abandonment: %w", err)
 	}
@@ -237,7 +249,26 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 			}
 		}
 	}
+	s.cleanupClosedRuns(ctx)
 	return errors.Join(failures...)
+}
+
+// cleanupClosedRuns removes what runs closed by an earlier session, or by a
+// build that did not clean up, left behind once delivered. It is best effort.
+func (s *MarshalService) cleanupClosedRuns(ctx context.Context) {
+	project, err := s.Store.Project(ctx)
+	if err != nil || project.DefaultBranch == "" {
+		return
+	}
+	runs, err := s.Store.MarshalRuns(ctx, s.ProjectID)
+	if err != nil {
+		return
+	}
+	for id, record := range runs {
+		if record.Value.State == marshal.Closed {
+			_ = s.cleanupDeliveredRun(ctx, id, record.Value, "refs/heads/"+project.DefaultBranch)
+		}
+	}
 }
 
 func unfinishedMarshalOperation(run marshal.Run) error {

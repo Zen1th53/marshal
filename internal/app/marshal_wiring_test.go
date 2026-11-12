@@ -156,7 +156,7 @@ func TestM09WiredRunClosesOnObservedState(t *testing.T) {
 	if err := s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration") {
+	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != deliveredCommit(t, s, "run") {
 		t.Fatal("target was not fast-forwarded")
 	}
 }
