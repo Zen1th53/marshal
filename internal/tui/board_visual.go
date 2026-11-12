@@ -678,10 +678,8 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		return v.tasksBrief(p)
 	}
 	w, h := p.Rect.W, p.Rect.H
-	run, park, merged := v.counts()
-	if v.board.Run.Running > 0 {
-		run = v.board.Run.Running
-	}
+	_, park, merged := v.counts()
+	run := v.running()
 	if v.board.Run.Done > 0 {
 		merged = v.board.Run.Done
 	}
@@ -910,7 +908,7 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 			parts = append(parts, fmt.Sprintf("%s%s %d/%d", v.mark(n, ""), n, c[0], c[1]))
 		}
 	}
-	busy := v.liveLanes()
+	busy := v.running()
 	summary := "idle"
 	if busy > 0 {
 		summary = fmt.Sprintf("%d running", busy)

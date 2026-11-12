@@ -55,7 +55,13 @@ case "$1" in
         exit 0;;
       *"#{session_id}"*) printf '$0\n'; exit 0;;
       *"#{session_name}:#{window_id}"*) printf 'test-session:@0\n'; exit 0;;
+      *"#{pane_id}"*)
+        k=$(key "$target")
+        if [ "$target" = "%%0" ] || [ -f "$d/win_$k" ]; then printf '%%s\n' "$target"; fi
+        exit 0;;
     esac;;
+  show-options) [ -f "$d/owned" ] && cat "$d/owned"; exit 0;;
+  list-panes) [ -f "$d/panes" ] && cat "$d/panes"; exit 0;;
   join-pane) k=$(key "$src"); echo @0 > "$d/win_$k"; echo "$width" > "$d/w_$k";;
   break-pane) k=$(key "$src"); echo @9 > "$d/win_$k";;
   resize-pane) k=$(key "$target"); echo "$width" > "$d/w_$k";;

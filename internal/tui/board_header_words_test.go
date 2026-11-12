@@ -99,3 +99,24 @@ func TestLanesTitleIdleAndRunning(t *testing.T) {
 		t.Fatalf("busy lanes title %q", got)
 	}
 }
+
+// A task in review is running: its row spins "review", and the TASKS header,
+// the LANES title and the vitals row all count it, though no worker lane is
+// live while the Marshal reviews. Before, TASKS said "1 running" while LANES
+// said "idle" and the vitals "0 running".
+func TestReviewCountsAsRunningEverywhere(t *testing.T) {
+	th := NewTheme(ThemeNoColor, true, true)
+	b := model.Board{Run: model.RunHead{State: marshal.Dispatching, Total: 1, Running: 1}, Tasks: []model.TaskRow{{
+		ID: "multiply", Worker: "codex", Scope: []string{"calc.py"}, State: model.TaskReview,
+	}}}
+	v := boardVisual{theme: th, now: time.Now(), edition: "Marshal", board: b}
+	tasks := StripANSI(v.tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: 120, H: 6}})[0])
+	lanes := StripANSI(v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 120, H: 4}})[0])
+	vitals, _ := v.vitalsLine(160)
+	vitals = StripANSI(vitals)
+	for name, got := range map[string]string{"TASKS": tasks, "LANES": lanes, "vitals": vitals} {
+		if !strings.Contains(got, "1 running") {
+			t.Errorf("%s does not count the review as running: %q", name, got)
+		}
+	}
+}

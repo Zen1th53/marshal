@@ -9,6 +9,19 @@ import (
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 
+// running is the one "N running" figure the TASKS header, the LANES title
+// and the vitals row all show: the tasks being moved now (working, in
+// review or verifying, as their rows spin), or the live lanes when those
+// count more. A review has no worker lane, the Marshal reviews it, and it is
+// running all the same.
+func (v boardVisual) running() int {
+	run, _, _ := v.counts()
+	if v.board.Run.Running > 0 {
+		run = v.board.Run.Running
+	}
+	return max(run, v.liveLanes())
+}
+
 // vitalsData is what the vitals row paints, gathered off the paint path.
 type vitalsData struct {
 	quotas    []usage.Quota // last reading; nil before the first
@@ -144,7 +157,7 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 			diskTxt = v.fg(col, fmt.Sprintf("disk %d%%", c.DiskPct))
 		}
 	}
-	n := v.liveLanes()
+	n := v.running()
 	runColor := ""
 	if n > 0 {
 		runColor = "working"

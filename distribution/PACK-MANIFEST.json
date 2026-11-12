@@ -11915,14 +11915,19 @@
       "bytes": 2518
     },
     {
+      "path": "internal/tmux/owned_test.go",
+      "sha256": "75a3d18040ae60b23720adc9ca22d09865e018669554857660f6230fedc29f0e",
+      "bytes": 1522
+    },
+    {
       "path": "internal/tmux/target_test.go",
       "sha256": "c64428c807f3cdd89b33eeca5443ac6c0ff33bfe343c2e3931203fb11fc49854",
       "bytes": 4321
     },
     {
       "path": "internal/tmux/tmux.go",
-      "sha256": "5bbfcf0c7fe4493b93c06b0fabad189a94b125b912639e61fcb0a402236b9ba0",
-      "bytes": 39127
+      "sha256": "2d84d3abfed8e6c12f1a3dab6fc07c31492290c3aa417cb61521f954a9d1cc1a",
+      "bytes": 40071
     },
     {
       "path": "internal/tmux/tmux_test.go",
@@ -12471,8 +12476,8 @@
     },
     {
       "path": "internal/tui/board_header_words_test.go",
-      "sha256": "ea64f8c825b6369b9c767888ab7097ab01613a27139298e486f3e9fff285cae0",
-      "bytes": 4310
+      "sha256": "cbd64f12a7f668208e269927b63646f1ca6c5ead2fb4321d39e0ca445cf6cec7",
+      "bytes": 5436
     },
     {
       "path": "internal/tui/board_hints.go",
@@ -12701,8 +12706,8 @@
     },
     {
       "path": "internal/tui/board_visual.go",
-      "sha256": "45f22932f89137cae02732b62d7903aadce564b6a2baa0ba089dd125b0585d5f",
-      "bytes": 44159
+      "sha256": "598262fbc9d0302d4229f8a12c3dc0b307acba1fc38fe084e9958478f38e017f",
+      "bytes": 44114
     },
     {
       "path": "internal/tui/board_visual_test.go",
@@ -12711,8 +12716,8 @@
     },
     {
       "path": "internal/tui/board_vitals.go",
-      "sha256": "94f3a4121f8715547fef629af93e76752a742aef46a47e41d687d571abe78a22",
-      "bytes": 8195
+      "sha256": "6961e1d3ab308812ad4c5923a431869e6c00c6ed4c079218fdce693aa0cde3f2",
+      "bytes": 8674
     },
     {
       "path": "internal/tui/board_vitals_test.go",
@@ -13481,8 +13486,8 @@
     },
     {
       "path": "internal/tui/marshal_dock_test.go",
-      "sha256": "7cb28a25cdcaaa9487b1c6014805c78a162cef86e15b7727f91cc60022b4e7e9",
-      "bytes": 17129
+      "sha256": "1fdd69a5d58f05a9e14b2114cb1324bf1bced99cca29bb3acd496ffca74a5199",
+      "bytes": 17407
     },
     {
       "path": "internal/tui/marshal_dock_tmux_test.go",
@@ -14425,6 +14430,11 @@
       "bytes": 8072
     },
     {
+      "path": "internal/tui/quit_session_test.go",
+      "sha256": "9de72fe6360bb897d5a1fe6da3a29625f242339a1a60f67b7c7cb23b1ab958af",
+      "bytes": 2653
+    },
+    {
       "path": "internal/tui/redact.go",
       "sha256": "bb4781b58273a5d304c2d1d3433d62acedfe44c81ff8f671786101f76421e239",
       "bytes": 1231
@@ -14635,6 +14645,11 @@
       "bytes": 5867
     },
     {
+      "path": "internal/tui/task_relay_window_test.go",
+      "sha256": "d3702e111e68ff4e3101cab3995f945565208888a3ab9443b16d8713dda506f5",
+      "bytes": 2093
+    },
+    {
       "path": "internal/tui/task_scope_pty_test.go",
       "sha256": "999b33224932508bad629c01812c56b59340e5fe7f75e6665d5d7b8db149bd59",
       "bytes": 968
@@ -14771,8 +14786,8 @@
     },
     {
       "path": "internal/tui/testdata/board/demo-split-56x29-empty.golden",
-      "sha256": "6acbae0aca3b6cc1aacb57f6bd8e1d51d3276a1f3250a165bf5e1379497df493",
-      "bytes": 3862
+      "sha256": "a056baaa1ba6f7a7bec811136eccc11c7879b774c9d85ab3af99609a7d388cee",
+      "bytes": 3868
     },
     {
       "path": "internal/tui/testdata/board/demo-split-56x29.golden",
@@ -15021,8 +15036,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "293371dabf4f230cbb255b4bf51a68f67e170a0e2de4edf8b1a9b555b5b058e3",
-      "bytes": 81122
+      "sha256": "b1b1163c7ccbdae136a70f15d9dfd37a994697616a5b604c067eb6fa1246d96e",
+      "bytes": 83767
     },
     {
       "path": "internal/tui/tmux_native_osc_test.go",
@@ -15181,8 +15196,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "acb4e23294004aa7cbc072d0cbec8286a4cfed7e477682aab20f4ed5008cc424",
-      "bytes": 87034
+      "sha256": "f37b834dfb632c51bd00cdf0774449f677213e54a27469f9f0a47382bfbd1074",
+      "bytes": 87207
     },
     {
       "path": "internal/tui/workspace_keys_test.go",
@@ -16166,8 +16181,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "5a7af299390e0824927b66967807afd056360bbf4500f6549530dcdb668ca147",
-      "bytes": 409865
+      "sha256": "52659cd2cb069b66870aed37148b73c5238f5fabdb8bf310c3cf0045172075b4",
+      "bytes": 412312
     },
     {
       "path": "tools/extreme/prq/main_default.go",
