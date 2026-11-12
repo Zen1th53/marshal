@@ -963,6 +963,9 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		w.reportActiveTmuxSessions()
 		fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 	}()
+	// Quitting ends the tmux session MARSHAL made for this workspace, after
+	// Close below has stopped the workers and the dock returned the chat.
+	defer w.endOwnedSession()
 
 	loopCtx, loopCancel := context.WithCancel(ctx)
 	ctx = loopCtx

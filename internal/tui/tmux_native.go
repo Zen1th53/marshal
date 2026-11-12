@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -688,26 +689,36 @@ func providerFKey(provider string) string {
 	}
 }
 
-// hostNativeTmuxWindow applies input policy before publishing the terminal.
-func (w *Workspace) hostNativeTmuxWindow(ctx context.Context, name, root, socket string, origin nativeLaunchOrigin, paneID ...*string) error {
+// hostRelayCommand is the command a hosting pane runs to show the terminal
+// behind socket.
+func hostRelayCommand(ctx context.Context, socket string) ([]string, error) {
 	relay, err := exec.LookPath("socat")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var target string
 	argv := []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}
 	if view, ok := ctx.Value(taskRelayViewKey{}).(taskRelayView); ok {
 		// A governed task can host more than one process; retain all relay output.
 		path := filepath.Join(view.root, statepath.DirName, "evidence", view.id+"-relay-latest.txt")
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			if err := saveAgentEvidence(view.root, view.id+"-relay", ""); err != nil {
-				return err
+				return nil, err
 			}
 		} else if err != nil {
-			return err
+			return nil, err
 		}
 		argv = taskRelayCommand(relay, socket, view.root, view.id)
 	}
+	return argv, nil
+}
+
+// hostNativeTmuxWindow applies input policy before publishing the terminal.
+func (w *Workspace) hostNativeTmuxWindow(ctx context.Context, name, root, socket string, origin nativeLaunchOrigin, paneID ...*string) error {
+	argv, err := hostRelayCommand(ctx, socket)
+	if err != nil {
+		return err
+	}
+	var target string
 	err = tmux.NewWindow(ctx, w.tmuxSession, name, root, nil, argv, &target)
 	if err != nil {
 		return err
@@ -1377,6 +1388,49 @@ func (w *Workspace) reportActiveTmuxSessions() {
 	fmt.Fprintln(w.out, "Ending an agent session remains an explicit action.")
 }
 
+// endOwnedSession ends the tmux session MARSHAL created for this project
+// when the workspace quits. The Marshal chat and every worker view are closed,
+// and the Board's own pane is set to close with this process, so the session
+// ends with it and the operator's terminal returns to the shell instead of
+// showing the next window of a session nobody drives any more. A session
+// MARSHAL did not create is never touched. Detaching never reaches here: the
+// workspace goes on running. The caller has stopped every worker and monitor,
+// so no pane closed here is mistaken for a worker that died.
+func (w *Workspace) endOwnedSession() {
+	if !w.isTmuxActive() {
+		return
+	}
+	w.tmuxMu.Lock()
+	session, board := w.tmuxSession, w.tmuxMarshalPaneID
+	w.tmuxMu.Unlock()
+	if session == "" || !isPaneID(board) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), dockWait)
+	defer cancel()
+	if !tmux.SessionOwned(ctx, session) {
+		return
+	}
+	panes, err := tmux.ListPanes(ctx, "="+session+":")
+	if err != nil || !slices.ContainsFunc(panes, func(p tmux.PaneInfo) bool { return p.PaneID == board }) {
+		return
+	}
+	// A pane option outranks a remain-on-exit the operator's tmux
+	// configuration sets for the window or globally.
+	if err := tmux.SetPaneOption(ctx, board, "remain-on-exit", "off"); err != nil {
+		w.RecordActivity("MARSHAL session left open: " + err.Error())
+		return
+	}
+	for _, p := range panes {
+		if p.PaneID != board {
+			_ = tmux.KillPane(ctx, p.PaneID)
+		}
+	}
+	w.tmuxMu.Lock()
+	clear(w.tmuxActiveWins)
+	w.tmuxMu.Unlock()
+}
+
 // StopAllWorkers terminates all worker agent windows and process groups while keeping MARSHAL intact.
 // Decision 9: One key stops all workers but never the Marshal (and never the Marshal planning chat).
 func (w *Workspace) StopAllWorkers(ctx context.Context) string {
@@ -1928,9 +1982,33 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		if t.inner.Mode() == marshal.Governed {
 			ctx = withTaskRelayView(ctx, root, agentID)
 		}
-		if err := t.w.hostNativeTmuxWindow(ctx, name, req.Worktree, socket, nativeLaunchAutomated, &agent.paneID); err != nil {
+		// A governed task runs its processes one after another, each on a
+		// terminal of its own; they all show in the task's one window. Only
+		// the first opens it: a later one replaces the view in that pane, so
+		// a task never leaves a window per process behind.
+		t.w.tmuxMu.Lock()
+		pane := agent.paneID
+		t.w.tmuxMu.Unlock()
+		if pane != "" {
+			argv, err := hostRelayCommand(ctx, socket)
+			if err != nil {
+				return err
+			}
+			if err := tmux.RespawnPaneIn(ctx, pane, req.Worktree, argv); err == nil {
+				if err := tmux.SetPaneReadOnly(ctx, pane, true); err != nil {
+					return err
+				}
+				return t.w.bindWorkspaceKeys(ctx, pane, root)
+			}
+			// The window was closed by hand: open it again below.
+		}
+		var hosted string
+		if err := t.w.hostNativeTmuxWindow(ctx, name, req.Worktree, socket, nativeLaunchAutomated, &hosted); err != nil {
 			return err
 		}
+		t.w.tmuxMu.Lock()
+		agent.paneID = hosted
+		t.w.tmuxMu.Unlock()
 		agent.window = name
 		panes, err := tmux.ListPanes(ctx, t.w.tmuxSession)
 		if err != nil {

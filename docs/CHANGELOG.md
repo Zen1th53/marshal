@@ -11,6 +11,7 @@
 - The Board shows a task as working while its worker runs, a review is no longer shown as stalled, finished tasks stop their clock, and the inbox count matches what is listed.
 - A finished run no longer takes an amendment that would re-queue delivered work; the "what next?" card shows beside the chat.
 - Usage limits read "% left" everywhere; a limit Marshal cannot read says "limit unknown".
+- Quitting ends Marshal's own tmux session (chat included) and returns you to the shell; each worker uses one window.
 - `marshal status` and `marshal tasks` work while the TUI is open; `marshal doctor` marks absent optional plugins as optional.
 - Marshal's tool errors to the Marshal are plain sentences; Activity lines and worker commits carry no internal IDs.
 

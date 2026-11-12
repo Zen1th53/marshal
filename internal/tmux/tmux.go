@@ -460,7 +460,28 @@ func NewSession(ctx context.Context, session, workDir, windowName string, comman
 	off.Env = cmd.Env
 	off.WaitDelay = cmd.WaitDelay
 	_ = off.Run()
+	// The session is MARSHAL's own: the workspace that quits in it may end
+	// it (SessionOwned). A session the operator made never carries this;
+	// unmarked, a session is only ever left running.
+	mark := exec.CommandContext(ctx, bin, "set-option", "-t", "="+session+":", ownedOption, "1")
+	mark.Env = cmd.Env
+	mark.WaitDelay = cmd.WaitDelay
+	_ = mark.Run()
 	return nil
+}
+
+// ownedOption marks a session NewSession created.
+const ownedOption = "@" + statepath.Name + "_owned"
+
+// SessionOwned reports whether NewSession created session: only such a
+// session may be ended when the workspace in it quits. Any error answers
+// false, so a session MARSHAL cannot prove is its own is left alone.
+func SessionOwned(ctx context.Context, session string) bool {
+	if requireTarget(session) != nil {
+		return false
+	}
+	out, err := RunCommand(ctx, "show-options", "-qv", "-t", "="+session+":", ownedOption)
+	return err == nil && strings.TrimSpace(string(out)) == "1"
 }
 
 // AttachSession attaches to an existing tmux session using the provided standard streams.
