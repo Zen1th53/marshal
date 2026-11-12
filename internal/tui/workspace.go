@@ -1585,7 +1585,10 @@ func (w *Workspace) runCommandFunc(ctx context.Context, label string, do func(co
 		if !w.postUI(ctx, func() {
 			w.recordCommandResult(label, resp, err)
 			w.commandBusy.Store(false)
-			// A Marshal switch queued while this command ran applies now.
+			// Work queued while this command ran applies now: the next task
+			// move first (it takes the lane), then the Marshal switch, which
+			// waits again if a move just started.
+			w.drainTaskMoves(ctx)
 			w.applyQueuedMarshal(ctx)
 		}) {
 			w.commandBusy.Store(false)

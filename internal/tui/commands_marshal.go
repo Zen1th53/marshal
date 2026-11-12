@@ -68,7 +68,12 @@ type marshalSession struct {
 	// nextProvider is a Marshal switch chosen while a step was running; it is
 	// applied when the step finishes (onIdle → applyQueuedMarshal).
 	nextProvider string
-	// onIdle runs after a reserved step finishes when a switch is queued.
+	// nextTaskMoves are per-task model moves (P5-05) chosen while a step was
+	// running, keyed by task id; they drain when the step finishes (onIdle →
+	// drainTaskMoves), before the Marshal switch above.
+	nextTaskMoves map[string]string
+	// onIdle runs after a reserved step finishes when a switch or a task move
+	// is queued.
 	onIdle              func()
 	integrityAlertRunID string
 	approving               bool
@@ -139,10 +144,14 @@ func (w *Workspace) marshalSession() *marshalSession {
 	defer w.mu.Unlock()
 	if w.marshal == nil {
 		w.marshal = &marshalSession{}
-		// A Marshal switch chosen mid-step drains once the step releases its
-		// reservation, on the UI goroutine so the switch runs like a key.
+		// A task move or Marshal switch chosen mid-step drains once the step
+		// releases its reservation, on the UI goroutine so each runs like a
+		// key. Task moves drain first, then the Marshal switch.
 		w.marshal.onIdle = func() {
-			w.postUI(context.Background(), func() { w.applyQueuedMarshal(context.Background()) })
+			w.postUI(context.Background(), func() {
+				w.drainTaskMoves(context.Background())
+				w.applyQueuedMarshal(context.Background())
+			})
 		}
 	}
 	return w.marshal
@@ -907,7 +916,7 @@ func (m *marshalSession) finishWithNativeTurn(cancel context.CancelFunc, nativeT
 		m.nativeCancels = append(m.nativeCancels, cancel)
 	}
 	drain := m.onIdle
-	queued := m.nextProvider != ""
+	queued := m.nextProvider != "" || len(m.nextTaskMoves) > 0
 	m.mu.Unlock()
 	if !nativeTurnWaiting && cancel != nil {
 		cancel()
@@ -1852,7 +1861,7 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" reassigned to "+worker))
 	}
-	return fmt.Sprintf("Task %s reassigned to %s; /marshal resume to continue.", task, worker), nil
+	return fmt.Sprintf("Task %s will run on %s; the run continues when you resume it.", task, worker), nil
 }
 
 func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, error) {
