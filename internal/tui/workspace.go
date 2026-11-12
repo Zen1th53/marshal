@@ -2538,7 +2538,7 @@ func (w *Workspace) directTerminalCommand(line string) bool {
 	case "/doctor":
 		return len(parts) > 1 && oneOf(strings.ToLower(parts[1]), "codex", "provider")
 	case "/resume":
-		return len(parts) > 1 && !strings.HasPrefix(parts[1], "run:")
+		return len(parts) > 1 && !strings.HasPrefix(parts[1], "run:") && !strings.EqualFold(parts[1], "all")
 	case "/review":
 		return len(parts) != 2 || !strings.HasPrefix(parts[1], "ver-")
 	case "/sandbox":

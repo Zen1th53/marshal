@@ -18,6 +18,10 @@ func workCommandUsage(parts []string) string {
 	case "/pause", "/cancel":
 		usage = cmd + " [run:<id>]"
 		valid = len(args) == 0 || len(args) == 1 && strings.HasPrefix(args[0], "run:")
+		if cmd == "/pause" {
+			usage = "/pause [run:<id>|all]"
+			valid = valid || len(args) == 1 && strings.EqualFold(args[0], "all")
+		}
 	case "/mode":
 		usage, valid = "/mode [manual|auto|ultra]", len(args) <= 1
 	case "/approve":

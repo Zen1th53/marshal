@@ -6281,8 +6281,13 @@
     },
     {
       "path": "internal/execution/run_control.go",
-      "sha256": "cd29c60ffe50762187334139ef1aac1ded289ac79948b37c42999a25b1c66bbb",
-      "bytes": 2984
+      "sha256": "1c3e8d34e84c1e82cd9f176b5f7682866e9e48f2ad4e22c5a9bc3f72f610f944",
+      "bytes": 3164
+    },
+    {
+      "path": "internal/execution/run_control_lane_error_extreme_test.go",
+      "sha256": "1dd68398b144e6dc76ada363b97815a7693bd96e95c301db762c319f85f0e803",
+      "bytes": 1156
     },
     {
       "path": "internal/execution/scheduler.go",
@@ -12471,8 +12476,8 @@
     },
     {
       "path": "internal/tui/board_change.go",
-      "sha256": "535e7b376ef6914813009e44bc748b1f54709945659970e2b2296924066edaa2",
-      "bytes": 19625
+      "sha256": "b7c3cb14b3e9675bc1816befbcc2eeac96e2a7defdf32234473c4ff363b4088c",
+      "bytes": 20261
     },
     {
       "path": "internal/tui/board_change_default_test.go",
@@ -12591,8 +12596,8 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "812ca83563f82c61324ed58fbeec34f4242c04a5719b7d5b2790529893dda251",
-      "bytes": 34512
+      "sha256": "f750a8d822a2a5eca3a7afb18783e4b4a9c14052b44ac9d224bc330f74e0c9c8",
+      "bytes": 34290
     },
     {
       "path": "internal/tui/board_keymap_test.go",
@@ -12961,8 +12966,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "21b6f9807d7e13ba291b44ba1b48965b89c950c36f288365c6b519533b4119ac",
-      "bytes": 32102
+      "sha256": "df189be4623c9a0a3ecb6b617f1aded0aa06fad1bcd2b37d1918f1004aebad24",
+      "bytes": 32345
     },
     {
       "path": "internal/tui/commands_alignment.go",
@@ -13076,8 +13081,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "521a7d30dc29eb27bdef90a94617bf9be67cd15cbf779ea8ec99d32f5e62169d",
-      "bytes": 75848
+      "sha256": "a2db94748008989faea7b06efbbaa537d6a11a84f728cec93181c42991eff5e8",
+      "bytes": 76078
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -13106,8 +13111,8 @@
     },
     {
       "path": "internal/tui/commands_runcontrol.go",
-      "sha256": "62fa1f5f8c631db4bb3dd1b3b49bf791f28546e36e199f4e26c767015af7d356",
-      "bytes": 3762
+      "sha256": "25b71f58302a737276b8af8f7a507ca01e1a9a9f7a1018284d26ba418de597ca",
+      "bytes": 8393
     },
     {
       "path": "internal/tui/commands_status_test.go",
@@ -13136,8 +13141,8 @@
     },
     {
       "path": "internal/tui/commands_work.go",
-      "sha256": "7d0ab4534a12cd53002d45e463ffbe94e9e61f9bdc97c48e8d063b5af5d27dab",
-      "bytes": 3538
+      "sha256": "e888c4531a31893294c707e026e5983cd4138c1814a62799316469c7f39ca8fe",
+      "bytes": 3672
     },
     {
       "path": "internal/tui/completion_popup.go",
@@ -14211,8 +14216,8 @@
     },
     {
       "path": "internal/tui/palette_allowlist_extreme_test.go",
-      "sha256": "97eb574c4040084c6a9a4a917bc354a22ebbe2af4be686029810ff4fc40193b3",
-      "bytes": 3566
+      "sha256": "e31dd888672733835d1eb35aca94476d410ba48bfe9e71eed88eaf17588141a0",
+      "bytes": 3452
     },
     {
       "path": "internal/tui/palette_keys_test.go",
@@ -14678,6 +14683,16 @@
       "path": "internal/tui/route_why_test.go",
       "sha256": "f99840f9ce173ae7b1f185a0bb621e35f988e7fd71c08293096c75c00890a77a",
       "bytes": 2048
+    },
+    {
+      "path": "internal/tui/run_control_all_extreme_test.go",
+      "sha256": "ca32ef91b85f618f74b95846242b88376056a4160381a050975a1854d7da0577",
+      "bytes": 2384
+    },
+    {
+      "path": "internal/tui/run_control_all_test.go",
+      "sha256": "a8e33163b55b22b7ff2d3f78d5c4e8ee8216a24da1ad8076ecf663dc4f067e32",
+      "bytes": 6566
     },
     {
       "path": "internal/tui/run_control_pty_test.go",
@@ -15406,8 +15421,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "1af344f2fb7382d925ea10f72e8edb2cc9fc8eca9c32c15457d9f0ee17cc9c87",
-      "bytes": 88725
+      "sha256": "2980bb0fd30ef0ba65136453745b781c927d1e56b09159a53a7ee6e66fc5325f",
+      "bytes": 88764
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

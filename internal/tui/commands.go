@@ -311,16 +311,22 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return out + h.budgetLimitsAndRuns(ctx), nil
 
 	case "/pause":
+		if len(parts) == 2 && strings.EqualFold(parts[1], "all") {
+			return h.handleRunControlAll(ctx, "pause")
+		}
 		return h.handleRunControl(ctx, "pause", parts[1:])
 
 	case "/resume":
+		if len(parts) == 2 && strings.EqualFold(parts[1], "all") {
+			return h.handleRunControlAll(ctx, "resume")
+		}
 		// "run:<id>" or no argument controls a MARSHAL run; anything else is
 		// native resume syntax such as --last for the default provider.
 		if len(parts) > 1 && !strings.HasPrefix(parts[1], "run:") {
 			return h.handleNeutral(ctx, "resume", parts[1:], line)
 		}
 		if len(parts) > 2 {
-			return "Usage: /resume [run:<id>]  (native session: /resume --last)", nil
+			return "Usage: /resume [run:<id>|all]  (native session: /resume --last)", nil
 		}
 		return h.handleRunControl(ctx, "resume", parts[1:])
 
@@ -736,8 +742,8 @@ func (h *CommandHandler) helpText() string {
   /checkpoint list | inspect <id> | diff <from> <to>  Read the project's snapshots; files re-checked
   /checkpoint create <reason>  Snapshot the project's files
   /rollback <id> [confirm <digest>]  Preview, then restore a snapshot (recovery point kept)
-  /pause [run:<id>]        Pause a run of this session (stops new dispatch)
-  /resume [run:<id>]       Resume a paused run; /resume --last: native resume (default provider)
+  /pause [run:<id>|all]    Pause a run of this session, or all (stops new dispatch)
+  /resume [run:<id>|all]   Resume a paused run, or all; /resume --last: native resume (default provider)
   /cancel [run:<id>]       Cancel a run of this session and its provider turns
   /review [instructions]   Native review (Codex only); governed commit review takes no instructions
   /approvals               List pending approvals

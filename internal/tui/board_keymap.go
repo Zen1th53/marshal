@@ -268,18 +268,8 @@ type paletteCommand struct {
 // their commands still type and complete. Stopping every worker is the
 // Board's Ctrl+X row (workers.stop).
 var shippedPaletteCommands = []paletteCommand{
-	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Dispatch no new task; a task in a provider turn finishes it", Command: "/pause"}, When: func(w *Workspace) bool { return w.runPausable.Load() == 1 }, Why: func(w *Workspace) string {
-		if w.runPausable.Load() > 1 {
-			return "More than one run is running; type /pause run:<id>."
-		}
-		return "No run is running to pause."
-	}},
-	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Start the paused run again", Command: "/resume"}, When: func(w *Workspace) bool { return w.runResumable.Load() == 1 }, Why: func(w *Workspace) string {
-		if w.runResumable.Load() > 1 {
-			return "More than one run is paused; type /resume run:<id>."
-		}
-		return "No run is paused."
-	}},
+	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; the Marshal starts no new one until you resume", Command: "/pause all"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
+	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Resume every paused task and let the Marshal go on", Command: "/resume all"}, When: func(w *Workspace) bool { return w.runResumable.Load() > 0 }, Why: reason("No run is paused.")},
 	{PaletteAction: PaletteAction{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"}},
 	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"}},
 }

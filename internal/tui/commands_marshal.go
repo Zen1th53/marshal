@@ -98,6 +98,10 @@ type marshalSession struct {
 	held      map[string]bool
 	launching map[string]int
 	holdCh    chan struct{}
+	// pausedRunID is the Marshal run the person paused from the palette
+	// (/pause all): every task of it that has not started is held, so the
+	// Marshal opens no new lane until they resume. Guarded by holdMu.
+	pausedRunID string
 }
 
 type marshalAmendment struct {

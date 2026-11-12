@@ -80,7 +80,28 @@ func (m *marshalSession) isHeldFor(runID, planTaskID string) bool {
 }
 
 func (m *marshalSession) isHeldLocked(runID, planTaskID string) bool {
-	return runID != "" && runID == m.heldRunID && m.held[planTaskID]
+	return runID != "" && (runID == m.pausedRunID || runID == m.heldRunID && m.held[planTaskID])
+}
+
+// holdDispatch holds every not-yet-started task of runID: the person paused
+// the run, so the Marshal launches nothing new until releaseDispatch. Tasks
+// already running are paused by run control, not by this hold.
+func (m *marshalSession) holdDispatch(runID string) {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	m.pausedRunID = runID
+	m.notifyHoldLocked()
+}
+
+// releaseDispatch ends holdDispatch's hold, waking a run that waits on it.
+func (m *marshalSession) releaseDispatch() {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	if m.pausedRunID == "" {
+		return
+	}
+	m.pausedRunID = ""
+	m.notifyHoldLocked()
 }
 
 // claimDispatch is dispatch's last hold check, under the lock a hold takes:

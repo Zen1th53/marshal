@@ -41,8 +41,8 @@ func TestShippedPaletteAllowList(t *testing.T) {
 
 // Pause and resume are the user's run controls in the palette, and Ctrl+X's
 // stop-all is a row too. Each row is on only when its command can act: pause
-// while exactly one run of the session is running, resume while exactly one
-// is paused; otherwise the row says why.
+// while a run of the session is running, resume while one is paused;
+// otherwise the row says why.
 func TestShippedPaletteRunControls(t *testing.T) {
 	w, _ := boardWorkspace(t)
 	defer w.Close()
@@ -69,12 +69,12 @@ func TestShippedPaletteRunControls(t *testing.T) {
 		{0, 0, false, "No run is running to pause.", false, "No run is paused."},
 		{1, 0, true, "", false, "No run is paused."},
 		{0, 1, false, "No run is running to pause.", true, ""},
-		{2, 2, false, "More than one run is running; type /pause run:<id>.", false, "More than one run is paused; type /resume run:<id>."},
+		{3, 2, true, "", true, ""},
 	} {
 		w.runPausable.Store(c.pause)
 		w.runResumable.Store(c.resume)
 		p, r := row("run.pause"), row("run.resume")
-		if p.Command != "/pause" || r.Command != "/resume" {
+		if p.Command != "/pause all" || r.Command != "/resume all" {
 			t.Fatalf("run rows run %q and %q", p.Command, r.Command)
 		}
 		if p.Disabled == c.pauseOn || p.Reason != c.pauseWhy || r.Disabled == c.resumeOn || r.Reason != c.resumeWhy {
