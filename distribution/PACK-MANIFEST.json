@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "1e44379bc0df86ccc172a158c551a752b917be3fcf2520b65570899dfb87a1c1",
-      "bytes": 7631
+      "sha256": "1c36825bf91d799fd9b085d4cc70b84be98ee75d3527de2af094d050cf1de58c",
+      "bytes": 7728
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -541,7 +541,7 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "d217beb077bf27de2a83e80231e63bb185636d0a6b451a16d6a32d132bb3d1fc",
+      "sha256": "2426f46b5e47f09108d890dea860db471cb3cac4fec4086d63506f754908aa3b",
       "bytes": 3158
     },
     {
@@ -646,7 +646,7 @@
     },
     {
       "path": "go.mod",
-      "sha256": "cb8bfcbe2c60e78d7681ad8c62cd4cc563390146c4c4432612c216fd80992901",
+      "sha256": "582a87b60681695a16b8f9d799abe730a4cad088f62126f80f13d1e507c4a166",
       "bytes": 730
     },
     {
@@ -15741,8 +15741,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.2.6.md",
-      "sha256": "b81f1874f2cfa64e8af9b20de7562a2d8693de1939604d0a4e451adff9ee3d83",
-      "bytes": 8293
+      "sha256": "3de562813d7c017b352c957a8364fc2b7556e4510a3907668458307a11faae5b",
+      "bytes": 8392
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
@@ -15936,7 +15936,7 @@
     },
     {
       "path": "third_party/code-evidence/go.mod",
-      "sha256": "609bf96b018736cbc8890870a8e737de78812d33952259c6b777aeb92a9937a5",
+      "sha256": "ce0ca7e0222c4717afbac85165600c56e5f033c8c0d23205e0a5943bd5a312d6",
       "bytes": 552
     },
     {
@@ -16151,7 +16151,7 @@
     },
     {
       "path": "tools/e2e/extreme-e2e.sh",
-      "sha256": "8619b0bf200e29375d2b45ce3aae35ff445bf62d82b1701bf7b1f59e263813dd",
+      "sha256": "919f74bc0a556ddcfb95534e8f58a8826498bde8ac03b7a5be023129619183c0",
       "bytes": 32902
     },
     {
