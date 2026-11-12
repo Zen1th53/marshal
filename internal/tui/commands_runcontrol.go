@@ -62,9 +62,13 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 		return fmt.Sprintf("%s was NOT performed: %v", verb, err), nil
 	}
 	state := string(result.Run.State)
-	if operation == "resume" {
-		// The palette's pause holds the Marshal's dispatch; once no run of
-		// the session is paused, resuming one by one releases it too.
+	switch operation {
+	case "pause":
+		// Any paused run of the session holds the Marshal's dispatch, so it
+		// does not start the paused work again behind the person's back.
+		h.holdMarshalDispatch()
+	case "resume":
+		// Once no run of the session is paused, the hold is released.
 		h.ws.noteRunControl(ctx)
 		if h.ws.runResumable.Load() == 0 {
 			h.ws.marshalSession().releaseDispatch()
@@ -77,6 +81,18 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 		return fmt.Sprintf("Run %s %s, still settling: no new task is dispatched, and a task already in a provider turn finishes or is cancelled first.", target.RunID, state), nil
 	default:
 		return fmt.Sprintf("Run %s %s; no task is executing.", target.RunID, state), nil
+	}
+}
+
+// holdMarshalDispatch holds the current Marshal run's dispatch (none when no
+// Marshal run is open in this session).
+func (h *CommandHandler) holdMarshalDispatch() {
+	m := h.ws.marshalSession()
+	m.mu.Lock()
+	runID := m.runID
+	m.mu.Unlock()
+	if runID != "" {
+		m.holdDispatch(runID)
 	}
 }
 
@@ -103,22 +119,38 @@ func (w *Workspace) noteRunControl(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	pause, resume := runControlCounts(runs)
+	m := w.marshalSession()
+	m.mu.Lock()
+	open := m.runID != ""
+	m.mu.Unlock()
+	pause, resume := runControlCounts(runs, waitingForMarshal(open, m.dispatchHeld()))
 	w.runPausable.Store(pause)
 	w.runResumable.Store(resume)
 }
 
-// runControlCounts is how many of runs /pause and /resume can each take.
-func runControlCounts(runs []execution.ExecutionRun) (pause, resume int32) {
+// runControlCounts is how many of runs /pause and /resume can each take; a
+// run waiting reports is already resumed and only waits for the Marshal to
+// continue it.
+func runControlCounts(runs []execution.ExecutionRun, waiting func(execution.ExecutionRun) bool) (pause, resume int32) {
 	for _, run := range runs {
 		if runControllable("pause", run.State) {
 			pause++
 		}
-		if runControllable("resume", run.State) {
+		if runControllable("resume", run.State) && !waiting(run) {
 			resume++
 		}
 	}
 	return pause, resume
+}
+
+// waitingForMarshal reports, for a paused run, whether it is already resumed
+// as far as the person is concerned: a Marshal run is open, its dispatch is
+// no longer held, and the run is a lane the Marshal continues itself
+// (marshalContinues) on its next dispatch.
+func waitingForMarshal(marshalOpen, held bool) func(execution.ExecutionRun) bool {
+	return func(run execution.ExecutionRun) bool {
+		return marshalOpen && !held && marshalContinues(run)
+	}
 }
 
 // handleRunControlAll pauses every run of this session that can be paused, or
@@ -139,13 +171,17 @@ func (h *CommandHandler) handleRunControlAll(ctx context.Context, operation stri
 	if err != nil {
 		return msgNothingChanged, nil
 	}
+	m := h.ws.marshalSession()
+	m.mu.Lock()
+	marshalRun := m.runID
+	m.mu.Unlock()
+	waiting := waitingForMarshal(marshalRun != "", m.dispatchHeld())
 	var targets []execution.ExecutionRun
 	for _, run := range runs {
-		if runControllable(operation, run.State) {
+		if runControllable(operation, run.State) && !(operation == "resume" && waiting(run)) {
 			targets = append(targets, run)
 		}
 	}
-	m := h.ws.marshalSession()
 	if len(targets) == 0 {
 		if operation == "pause" {
 			return "Nothing is running to pause.", nil
@@ -158,7 +194,14 @@ func (h *CommandHandler) handleRunControlAll(ctx context.Context, operation stri
 		return min(1, len(y.TaskLanes)) - min(1, len(x.TaskLanes))
 	})
 	failed := map[string]error{}
+	continued := map[string]bool{}
 	for _, t := range targets {
+		if operation == "resume" && marshalRun != "" && marshalContinues(t) {
+			// The Marshal continues this lane itself once its hold is
+			// released, under its own dispatch, so it collects the result.
+			continued[t.RunID] = true
+			continue
+		}
 		current, err := service.Engine().GetRun(ctx, t.RunID)
 		if err != nil {
 			failed[t.RunID] = err
@@ -173,9 +216,6 @@ func (h *CommandHandler) handleRunControlAll(ctx context.Context, operation stri
 			failed[t.RunID] = err
 		}
 	}
-	m.mu.Lock()
-	marshalRun := m.runID
-	m.mu.Unlock()
 	_, after, _ := h.sessionRuns(ctx)
 	state := map[string]execution.RunState{}
 	for _, run := range after {
@@ -187,12 +227,12 @@ func (h *CommandHandler) handleRunControlAll(ctx context.Context, operation stri
 		if len(t.TaskLanes) > 0 && t.ParentRunID == "" {
 			// A lane parent is the run's summary, not a task.
 			if err := failed[t.RunID]; err != nil && runControllable(operation, state[t.RunID]) {
-				notDone = append(notDone, "the run itself "+runControlFailure(operation, err))
+				notDone = append(notDone, "one part of the run "+runControlFailure(operation, err))
 			}
 			continue
 		}
 		total++
-		if runControllable(operation, state[t.RunID]) {
+		if !continued[t.RunID] && runControllable(operation, state[t.RunID]) {
 			notDone = append(notDone, runControlName(t)+" "+runControlFailure(operation, failed[t.RunID]))
 			continue
 		}
@@ -229,12 +269,24 @@ var runControlEach = func(ctx context.Context, r *app.Runtime, e app.CommandEnve
 }
 
 // runControlName names a run as the person knows it: its task for a task
-// lane, the run otherwise.
+// lane, "one part of the run" otherwise. It never shows a run id.
 func runControlName(run execution.ExecutionRun) string {
 	if run.LaneTaskID != "" {
-		return run.LaneTaskID
+		return "task " + run.LaneTaskID
 	}
-	return "run " + run.RunID
+	return "one part of the run"
+}
+
+// marshalContinues reports whether the Marshal continues a paused run itself
+// on resume: a task lane whose task has not finished. Its dispatch reopens
+// the same lane and runs it under the Marshal's own collection; resuming it
+// here would restart it outside that.
+func marshalContinues(run execution.ExecutionRun) bool {
+	if run.ParentRunID == "" || run.LaneTaskID == "" {
+		return false
+	}
+	state := run.Tasks[run.LaneTaskID].State
+	return state != execution.TaskCompletedPendingVerify && !state.IsTerminal()
 }
 
 // runControlFailure says in plain words why a run was not paused or resumed.

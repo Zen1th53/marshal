@@ -16,8 +16,10 @@ import (
 // The shipped Marshal runs each task in its own lane under one parent run.
 // "pause the run" pauses every running lane (the parent first, which pauses
 // its lanes with it) and holds dispatch; "resume the run" resumes the parent
-// and every lane. The lanes are opened by the production OpenTaskLane; no
-// provider turn starts.
+// and releases the hold, leaving each unfinished lane for the Marshal to
+// continue under its own dispatch and collection (it reopens the same lane),
+// so no lane restarts outside the Marshal. The lanes are opened by the
+// production OpenTaskLane; no provider turn starts.
 func TestPauseAllPausesEveryLane(t *testing.T) {
 	w := startupCodexDecisionWorkspace(t)
 	rt, ctx := w.runtime, t.Context()
@@ -34,16 +36,18 @@ func TestPauseAllPausesEveryLane(t *testing.T) {
 	if err := e.RunStore().CreateRun(ctx, parent); err != nil {
 		t.Fatal(err)
 	}
+	lanes := map[string]bool{}
 	for i := range 3 {
 		lane, err := e.OpenTaskLane(ctx, parent.RunID, fmt.Sprintf("task-%d", i), parent.BaseCommit)
 		if err != nil {
 			t.Fatal(err)
 		}
+		lanes[lane.RunID] = true
 		lane.State = execution.RunRunning
 		if err := e.RunStore().UpdateRun(ctx, *lane); err != nil {
 			t.Fatal(err)
 		}
 	}
 	installRunControlSeam(t, w)
-	checkPauseResumeAll(t, w, ctx, 3)
+	checkPauseResumeAll(t, w, ctx, 3, lanes)
 }

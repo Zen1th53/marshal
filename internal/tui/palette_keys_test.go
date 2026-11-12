@@ -83,10 +83,11 @@ func TestPaletteRowsUnique(t *testing.T) {
 // The palette's run-control rows count the runs /pause and /resume take.
 func TestRunControlCounts(t *testing.T) {
 	runs := []execution.ExecutionRun{{State: execution.RunRunning}, {State: execution.RunNeedsApproval}, {State: execution.RunPaused}, {State: execution.RunCancelled}, {State: execution.RunReady}}
-	if pause, resume := runControlCounts(runs); pause != 2 || resume != 1 {
+	none := func(execution.ExecutionRun) bool { return false }
+	if pause, resume := runControlCounts(runs, none); pause != 2 || resume != 1 {
 		t.Fatalf("pause %d resume %d, want 2 and 1", pause, resume)
 	}
-	if pause, resume := runControlCounts(nil); pause != 0 || resume != 0 {
+	if pause, resume := runControlCounts(nil, none); pause != 0 || resume != 0 {
 		t.Fatalf("no runs: pause %d resume %d", pause, resume)
 	}
 }

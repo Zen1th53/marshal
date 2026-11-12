@@ -93,6 +93,13 @@ func (m *marshalSession) holdDispatch(runID string) {
 	m.notifyHoldLocked()
 }
 
+// dispatchHeld reports whether the person's pause holds a Marshal run.
+func (m *marshalSession) dispatchHeld() bool {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	return m.pausedRunID != ""
+}
+
 // releaseDispatch ends holdDispatch's hold, waking a run that waits on it.
 func (m *marshalSession) releaseDispatch() {
 	m.holdMu.Lock()

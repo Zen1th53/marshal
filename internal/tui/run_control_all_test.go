@@ -81,13 +81,14 @@ func TestPauseAllPausesEveryRun(t *testing.T) {
 		{RunID: "RUN-b", State: execution.RunNeedsApproval},
 		{RunID: "RUN-c", State: execution.RunRunning},
 	})
-	checkPauseResumeAll(t, w, ctx, 3)
+	checkPauseResumeAll(t, w, ctx, 3, nil)
 }
 
 // checkPauseResumeAll pauses every run of the session from the palette's
 // command, checks the Marshal's dispatch is held, resumes them all and
-// checks it is released. n is the number of tasks the line counts.
-func checkPauseResumeAll(t *testing.T, w *Workspace, ctx context.Context, n int) {
+// checks it is released. n is the number of tasks the line counts; the runs
+// in marshal stay paused on resume, left for the Marshal to continue.
+func checkPauseResumeAll(t *testing.T, w *Workspace, ctx context.Context, n int, marshal map[string]bool) {
 	t.Helper()
 	w.noteRunControl(ctx)
 	if w.runPausable.Load() == 0 {
@@ -118,9 +119,12 @@ func checkPauseResumeAll(t *testing.T, w *Workspace, ctx context.Context, n int)
 		t.Fatalf("/resume all: %q %v", out, err)
 	}
 	for id, state := range runStates(t, w, ctx) {
-		if state != execution.RunRunning {
-			t.Errorf("%s is %s after resume all", id, state)
+		if want := map[bool]execution.RunState{false: execution.RunRunning, true: execution.RunPaused}[marshal[id]]; state != want {
+			t.Errorf("%s is %s after resume all, want %s", id, state, want)
 		}
+	}
+	if w.runResumable.Load() != 0 {
+		t.Fatalf("after resume the palette still offers resume for %d runs", w.runResumable.Load())
 	}
 	select {
 	case <-woken:
@@ -144,7 +148,7 @@ func TestPauseAllNamesWhatFailed(t *testing.T) {
 		{RunID: "RUN-z", State: execution.RunRunning},
 	}, "RUN-y")
 	out, err := w.ExecuteCommand(ctx, "/pause all")
-	want := "Paused 2 running tasks; run RUN-y could not be paused (it changed meanwhile; try again)."
+	want := "Paused 2 running tasks; one part of the run could not be paused (it changed meanwhile; try again)."
 	if err != nil || out != want {
 		t.Fatalf("/pause all: %q %v, want %q", out, err, want)
 	}
@@ -175,5 +179,17 @@ func TestPauseAllWithNothingRunning(t *testing.T) {
 	}
 	if w.marshalSession().isHeldFor("RUN-marshal", "T-01") {
 		t.Fatal("pausing nothing held the Marshal")
+	}
+}
+
+// Pausing one run by its id holds the Marshal's dispatch too, so the Marshal
+// does not start the paused work again behind the person's back.
+func TestPauseOneRunHoldsDispatch(t *testing.T) {
+	w, ctx := runControlAllWorkspace(t, []execution.ExecutionRun{{RunID: "RUN-s", State: execution.RunRunning}, {RunID: "RUN-t", State: execution.RunRunning}})
+	if out, err := w.ExecuteCommand(ctx, "/pause run:RUN-s"); err != nil || !strings.Contains(out, "PAUSED") {
+		t.Fatalf("/pause run:RUN-s: %q %v", out, err)
+	}
+	if !w.marshalSession().isHeldFor("RUN-marshal", "T-01") {
+		t.Fatal("a single pause left the Marshal free to dispatch")
 	}
 }

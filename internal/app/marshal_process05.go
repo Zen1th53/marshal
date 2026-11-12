@@ -19,6 +19,12 @@ import (
 // provider execution. Orchestration can report it without spending infra retries.
 var ErrProcess05Admission = errors.New("process 05: dispatch admission refused")
 
+// ErrProcess05Paused is a dispatch that stopped because the person paused
+// the execution run its task runs in before the task finished. It is not a
+// failure: the task goes back to waiting, with no rework counted, and the
+// next dispatch after resume continues the same lane (parkPausedTask).
+var ErrProcess05Paused = errors.New("process 05: the run is paused")
+
 // marshalProcess05Run executes one Marshal task only when it is exactly the
 // active Process 04 plan. Process 05 owns worker execution and its worktree;
 // Marshal imports only the completed commit into its task branch.
@@ -168,6 +174,11 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 					return nil, ctx.Err()
 				case <-ticker.C:
 				}
+			}
+		}
+		if err == nil && completed != nil && completed.State == execution.RunPaused {
+			if state := completed.Tasks[req.Task.PlanTaskID].State; state != execution.TaskCompletedPendingVerify && !state.IsTerminal() {
+				return nil, ErrProcess05Paused
 			}
 		}
 		if err = r.process05ProviderFailure(ctx, req, completed, err); err != nil {
