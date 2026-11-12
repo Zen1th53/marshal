@@ -263,7 +263,7 @@ func TestLiveMCPNativeProviderExplicitChildEnvironmentBinding(t *testing.T) {
 	for _, provider := range []string{"codex", "claude", "opencode"} {
 		t.Run(provider, func(t *testing.T) {
 			w, _ := realControlWorkspace(t, "SESSION-launch-environment", false)
-			args, env, dir, err := prepareMarshalLaunch(provider, w.runtime.ProjectRoot(), nil, "MARSHAL PROTOCOL\nTest launch", false)
+			args, env, dir, err := prepareMarshalLaunch(provider, w.runtime.ProjectRoot(), nil, "MARSHAL PROTOCOL\nTest launch", false, "")
 			if err != nil {
 				t.Fatal(err)
 			}

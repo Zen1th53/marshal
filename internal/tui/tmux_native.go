@@ -315,7 +315,11 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 		saved.HistoryBaseline = nil
 	}
 	resume := saved.SessionID != ""
-	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief), resume)
+	rights := w.marshalExecutionRights(ctx)
+	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief), resume, rights)
+	if err == nil {
+		w.noteMarshalWrites(provider, rights)
+	}
 	if err == nil {
 		args, env, dir, err = w.prepareProposalMCP(provider, projectRoot, args, env, dir)
 	}
@@ -496,7 +500,11 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	if sessionID != "" {
 		base = marshalResumeArgs(provider, sessionID)
 	}
-	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief), sessionID != "")
+	rights := w.marshalExecutionRights(ctx)
+	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief), sessionID != "", rights)
+	if err == nil {
+		w.noteMarshalWrites(provider, rights)
+	}
 	if err == nil {
 		resumeArgs, env, dir, err = w.prepareProposalMCP(provider, root, resumeArgs, env, dir)
 	}

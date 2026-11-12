@@ -1095,6 +1095,9 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 	}
 	if v.guard != nil && waitingGates(v.gates) == 0 && !stopped {
 		summary = "project files changed outside a run"
+		if v.guard.byMarshal {
+			summary = "the Marshal changed project files"
+		}
 		if m := len(v.board.Inbox); m > 0 {
 			summary += fmt.Sprintf(" · %d more waiting", m)
 		}

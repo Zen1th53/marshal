@@ -18,12 +18,14 @@ import (
 
 // The plan-only guard. The Marshal plans; workers implement in worktrees
 // under .marshal/worktrees once the person accepts the architecture. Its
-// only legitimate writes are under the project's .marshal/ directory, yet a
-// provider CLI in workspace-write mode can still edit the main tree when a
-// goal reads "Build X". Nothing else writes the main tree while no run
-// executes and no other agent window is open, so a project file that
-// changes then is shown on the Board as a decision: keep it (the default,
-// it may be the person's own edit) or undo exactly the listed files. The
+// only legitimate writes are under the project's .marshal/ directory. Where
+// the Marshal's CLI can be started read-only it is (marshal_confine.go), and
+// a change is then the person's own; where it cannot, a provider CLI can
+// still edit the main tree when a goal reads "Build X". Nothing else writes
+// the main tree while no run executes and no other agent window is open, so
+// a project file that changes then is shown on the Board as a decision: keep
+// it or undo exactly the listed files. When only the protocol stopped the
+// Marshal, the Board says the Marshal changed them and recommends undo. The
 // Marshal is told once per detection not to implement.
 //
 // Detection is one git status per guardEvery, only while the Marshal chat
@@ -64,6 +66,9 @@ type guardAlert struct {
 	// answered is the owner's answer to the Marshal's question about these
 	// files when it chose an undo that has not happened yet; "" otherwise.
 	answered string
+	// byMarshal: nothing but the protocol stopped the Marshal chat writing
+	// these files, so it made them; undo is the recommendation.
+	byMarshal bool
 }
 
 // guardState is the guard's baseline and its pending alert.
@@ -76,6 +81,9 @@ type guardState struct {
 	alert  *guardAlert
 	armed  bool
 	busy   bool
+	// marshalWrites is what stops the open Marshal chat writing project
+	// files, set when it is launched.
+	marshalWrites marshalWriteMode
 }
 
 // guardSource is a test's seam for the working tree's status; nil runs
@@ -329,7 +337,7 @@ func (w *Workspace) guardTick(ctx context.Context, watching bool) {
 				was[p] = true
 			}
 		}
-		g.alert = &guardAlert{at: time.Now(), paths: changed, wasDirty: was, gen: g.gen}
+		g.alert = &guardAlert{at: time.Now(), paths: changed, wasDirty: was, gen: g.gen, byMarshal: g.marshalWrites == marshalWritesUnblocked}
 		raised = true
 	case a != nil && a.gen == g.gen:
 		// Against the same baseline the alert is exactly what differs
@@ -359,16 +367,18 @@ func (w *Workspace) guardTick(ctx context.Context, watching bool) {
 		slices.Sort(a.paths)
 	}
 	var paths []string
+	byMarshal := false
 	if g.alert != nil {
 		paths = slices.Clone(g.alert.paths)
+		byMarshal = g.alert.byMarshal
 	}
 	prefix := snap.prefix
 	g.mu.Unlock()
 	if raised || grew {
-		w.addNote(guardNoteText(paths, prefix), true)
+		w.addNote(guardNoteText(paths, prefix, byMarshal), true)
 	}
 	if raised {
-		w.tellMarshalGuard(ctx, paths, prefix)
+		w.tellMarshalGuard(ctx, paths, prefix, byMarshal)
 	}
 	w.requestRepaint()
 }
@@ -394,19 +404,25 @@ func guardShown(paths []string, prefix string, limit int) string {
 }
 
 // guardNoteText is the red Activity line for a detection.
-func guardNoteText(paths []string, prefix string) string {
+func guardNoteText(paths []string, prefix string, byMarshal bool) string {
+	if byMarshal {
+		return "The Marshal changed project files while planning: " + guardShown(paths, prefix, 4) + " — only workers may change them. [u] undo (recommended)  [K] keep"
+	}
 	return "Project files changed outside a run (Marshal chat open): " + guardShown(paths, prefix, 4) + " — workers should implement. [u] undo  [K] keep"
 }
 
 // guardMarshalText is the one message the Marshal gets per detection.
-func guardMarshalText(paths []string, prefix string) string {
-	return "Runtime notice: project files changed outside a run while you are planning (" + guardShown(paths, prefix, 6) + "). The person decides whether to keep or undo them; do not implement — record the goal and continue the protocol. Workers implement in worktrees after the architecture is accepted; write only under .marshal/."
+func guardMarshalText(paths []string, prefix string, byMarshal bool) string {
+	if byMarshal {
+		return "Runtime notice: you changed project files while planning (" + guardShown(paths, prefix, 6) + "). You never change project files; workers do. Tell the person you made these changes and recommend undoing them with [u] on the Board; never recommend keeping them; do not implement — record the goal and continue the protocol. Workers implement in worktrees after the architecture is accepted; write only under .marshal/."
+	}
+	return "Runtime notice: project files changed outside a run while you are planning (" + guardShown(paths, prefix, 6) + "). The person decides whether to keep or undo them; if you changed any of them yourself, say so and recommend undo, never keep; do not implement — record the goal and continue the protocol. Workers implement in worktrees after the architecture is accepted; write only under .marshal/."
 }
 
 // tellMarshalGuard delivers the notice to the Marshal chat through the
 // say path, which waits for the chat's idle prompt.
-func (w *Workspace) tellMarshalGuard(ctx context.Context, paths []string, prefix string) {
-	w.tellMarshalGuardText(ctx, guardMarshalText(paths, prefix))
+func (w *Workspace) tellMarshalGuard(ctx context.Context, paths []string, prefix string, byMarshal bool) {
+	w.tellMarshalGuardText(ctx, guardMarshalText(paths, prefix, byMarshal))
 }
 
 // tellMarshalGuardText is one guard notice to the Marshal chat, through the test seam
@@ -725,9 +741,13 @@ func (v boardVisual) guardEntry(x, row, w int) []string {
 	if !v.unicode() {
 		flag = "! "
 	}
-	first := v.fg("failed", flag+"files changed") + v.fg("dim", " · ") + v.bold(v.fg("white", "project files changed outside a run: "))
-	first += v.fg("white", v.trunc(guardShown(a.paths, v.guardPrefix, 4), max(8, w-VisibleLen(first)-28)))
-	first += v.fg("dim", " · workers should implement")
+	what, why := "project files changed outside a run: ", " · workers should implement"
+	if a.byMarshal {
+		what, why = "the Marshal changed project files: ", " · only workers may change them"
+	}
+	first := v.fg("failed", flag+"files changed") + v.fg("dim", " · ") + v.bold(v.fg("white", what))
+	first += v.fg("white", v.trunc(guardShown(a.paths, v.guardPrefix, 4), max(8, w-VisibleLen(first)-VisibleLen(why))))
+	first += v.fg("dim", why)
 	second, at := "    ", 4
 	button := func(label string, action rune) {
 		v.hit(boardHit{row: row + 1, x0: x + at, x1: x + min(w, at+VisibleLen(label)), kind: hitGuard, id: "guard", action: action})
@@ -752,7 +772,11 @@ func (v boardVisual) guardEntry(x, row, w int) []string {
 		gap("  ")
 		button(v.bg("rule", "[Esc]")+" cancel", 'n')
 	} else {
-		button(v.bg("rule", "[u]")+" undo", 'u')
+		if a.byMarshal {
+			button(v.bg("rule", "[u]")+" undo (recommended)", 'u')
+		} else {
+			button(v.bg("rule", "[u]")+" undo", 'u')
+		}
 		gap("  ")
 		button(v.bg("rule", "[K]")+" keep", 'K')
 		if a.answered != "" {

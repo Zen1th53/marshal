@@ -31,7 +31,7 @@ func TestMarshalLaunchHiddenProtocolMatrix(t *testing.T) {
 				if resumed {
 					base = resumeArgsForProvider(provider, "bound-session")
 				}
-				args, env, dir, err := prepareMarshalLaunch(provider, root, base, protocol, false)
+				args, env, dir, err := prepareMarshalLaunch(provider, root, base, protocol, false, "")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -105,7 +105,7 @@ func TestMarshalLaunchRefusesMissingOrFailedHiddenDelivery(t *testing.T) {
 			if tc.badConfig {
 				t.Setenv("OPENCODE_CONFIG_CONTENT", "invalid")
 			}
-			args, env, dir, err := prepareMarshalLaunch(tc.provider, root, nil, "MARSHAL PROTOCOL\nprivate", false)
+			args, env, dir, err := prepareMarshalLaunch(tc.provider, root, nil, "MARSHAL PROTOCOL\nprivate", false, "")
 			var start *marshalStartError
 			if err == nil || !errors.As(err, &start) || containsMarshalProtocol(err.Error()) || containsMarshalProtocol(errors.Unwrap(err).Error()) {
 				t.Fatalf("unsafe refusal: %v", err)
@@ -274,7 +274,7 @@ func TestMarshalHiddenInstructionsSurviveLastProviderOverride(t *testing.T) {
 				flag, key = "-c", "developer_instructions="
 			}
 			base := []string{flag, key + "first", flag, key + "last"}
-			args, _, dir, err := prepareMarshalLaunch(provider, t.TempDir(), base, "MARSHAL PROTOCOL\nmandatory", false)
+			args, _, dir, err := prepareMarshalLaunch(provider, t.TempDir(), base, "MARSHAL PROTOCOL\nmandatory", false, "")
 			defer dir.remove()
 			if err != nil {
 				t.Fatal(err)
@@ -288,7 +288,7 @@ func TestMarshalHiddenInstructionsSurviveLastProviderOverride(t *testing.T) {
 
 func TestMarshalHiddenDeliveryRejectsNullOpenCodeConfig(t *testing.T) {
 	t.Setenv("OPENCODE_CONFIG_CONTENT", "null")
-	args, env, dir, err := prepareMarshalLaunch("opencode", t.TempDir(), nil, "MARSHAL PROTOCOL", false)
+	args, env, dir, err := prepareMarshalLaunch("opencode", t.TempDir(), nil, "MARSHAL PROTOCOL", false, "")
 	if err == nil || len(args) != 0 || len(env) != 0 || dir != nil || !strings.Contains(err.Error(), "couldn't start") {
 		t.Fatal("null config did not refuse hidden delivery")
 	}
@@ -352,7 +352,7 @@ func TestMarshalLaunchScrubsRetainedProtocolInboxes(t *testing.T) {
 	if err := os.WriteFile(ordinary, []byte("ordinary history"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, _, dir, err := prepareMarshalLaunch("codex", root, nil, "MARSHAL PROTOCOL\nmandatory", false)
+	_, _, dir, err := prepareMarshalLaunch("codex", root, nil, "MARSHAL PROTOCOL\nmandatory", false, "")
 	defer dir.remove()
 	if err != nil {
 		t.Fatal(err)
@@ -413,7 +413,7 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				args, _, dir, err := prepareMarshalLaunch(provider, root, base, protocol, false)
+				args, _, dir, err := prepareMarshalLaunch(provider, root, base, protocol, false, "")
 				if dir != nil {
 					defer dir.remove()
 				}

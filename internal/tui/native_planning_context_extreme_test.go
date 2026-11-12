@@ -79,7 +79,7 @@ func TestNativePlanningLaunchAndResumeCarryFullMandatoryPacket(t *testing.T) {
 				if len(brief) < 19000 {
 					t.Fatal("fixture did not exercise actual compiled private protocol")
 				}
-				args, env, dir, err := prepareMarshalLaunch(provider, root, base, brief, false)
+				args, env, dir, err := prepareMarshalLaunch(provider, root, base, brief, false, "")
 				if err == nil {
 					args, _, dir, err = w.prepareProposalMCP(provider, root, args, env, dir)
 				}
@@ -381,7 +381,7 @@ func TestNativePlanningActualHostProcessReceivesCompiledHiddenPacket(t *testing.
 		t.Fatal(err)
 	}
 	for _, base := range [][]string{nil, marshalResumeArgs("codex", "owned-fixture-session")} {
-		args, env, dir, err := prepareMarshalLaunch("codex", w.runtime.ProjectRoot(), base, brief, false)
+		args, env, dir, err := prepareMarshalLaunch("codex", w.runtime.ProjectRoot(), base, brief, false, "")
 		if err == nil {
 			args, env, dir, err = w.prepareProposalMCP("codex", w.runtime.ProjectRoot(), args, env, dir)
 		}

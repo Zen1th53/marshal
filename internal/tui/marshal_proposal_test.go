@@ -704,7 +704,7 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 		if opening != marshalKickoffContinue || strings.Contains(opening, `"language":"English"`) || strings.Contains(opening, "Do not repeat") {
 			t.Fatalf("%s reopened/switched opening leaked file intake into chat: %s", provider, opening)
 		}
-		pArgs, _, dir, err := prepareMarshalLaunch(provider, rt.ProjectRoot(), nil, "protocol", false)
+		pArgs, _, dir, err := prepareMarshalLaunch(provider, rt.ProjectRoot(), nil, "protocol", false, "")
 		if dir != nil {
 			defer dir.remove()
 		}
