@@ -94,6 +94,11 @@ func workCommandUsage(parts []string) string {
 		}
 	}
 	if !valid {
+		if !strings.Contains(usage, " ") {
+			// A command that takes nothing says so, rather than repeat
+			// its own name.
+			return "Usage: " + usage + " — type it on its own, with nothing after it."
+		}
 		return "Usage: " + usage
 	}
 	return ""

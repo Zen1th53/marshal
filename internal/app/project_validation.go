@@ -76,10 +76,19 @@ func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 				break
 			}
 		}
-		if allMissing {
+		// Without canonical state the project was never set up in this
+		// clone: opening Marshal sets it up, as `marshal init` would. A
+		// project that has its state but lost a file is set up again only
+		// on request, since init would replace the lost file with a default.
+		_, stateErr := os.Stat(layout.Database)
+		notSetUp := allMissing && os.IsNotExist(stateErr)
+		switch {
+		case notSetUp:
+			msg = "Marshal isn't set up in this project yet. Run `marshal` here and it sets the project up."
+		case allMissing:
 			msg = "Marshal isn't set up in this project yet. Run `marshal init` here."
 		}
-		return project.Layout{}, projectNotReadyError{msg: msg, detail: strings.Join(problems, "; ")}
+		return project.Layout{}, projectNotReadyError{msg: msg, detail: strings.Join(problems, "; "), notSetUp: notSetUp}
 	}
 	return layout, nil
 }
@@ -90,6 +99,18 @@ func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 type projectNotReadyError struct {
 	msg    string
 	detail string
+	// notSetUp: nothing is damaged and the project has no canonical state:
+	// Marshal was never set up in this clone.
+	notSetUp bool
+}
+
+// ProjectNotSetUp reports whether err is ValidateProject finding a Git
+// project Marshal was never set up in: nothing is damaged and there is no
+// state database. Setting such a project up only adds what is missing, so
+// opening Marshal does it without asking.
+func ProjectNotSetUp(err error) bool {
+	var notReady projectNotReadyError
+	return errors.As(err, &notReady) && notReady.notSetUp
 }
 
 func (e projectNotReadyError) Error() string { return e.msg }

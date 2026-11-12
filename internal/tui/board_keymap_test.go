@@ -368,6 +368,7 @@ func TestBoardHelpGoldens(t *testing.T) {
 			l := layout.Compute(tc.w, tc.h, layout.Split)
 			r := l.Overlay(0)
 			v.hints = goldenHints(v)
+			v.telemetry = "anonymous telemetry: off"
 			help, _, _ := v.helpOverlay(r.W, r.H, 0)
 			frame := overlayBoard(paintBoard(l, th, v.render), l, th, 0, help)
 			checkViewGolden(t, helpGoldenName, tc.name, frame, tc.w)

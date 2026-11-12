@@ -13,6 +13,9 @@ import (
 )
 
 func TestStatusIsPlainAndMatchesBoard(t *testing.T) {
+	old := telemetryLineFor
+	telemetryLineFor = func(string) string { return "anonymous telemetry: off" }
+	t.Cleanup(func() { telemetryLineFor = old })
 	ws := NewWorkspace(nil, "project", "session")
 	t.Cleanup(ws.Close)
 	ws.setUltraExecution(true)
@@ -22,7 +25,7 @@ func TestStatusIsPlainAndMatchesBoard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/status without a run: %v", err)
 	}
-	want := fmt.Sprintf("Marshal %s · %s\nRun: none yet. Press s and tell the Marshal what to build.", BuildVersion, filepath.Base(ws.providerRoot()))
+	want := fmt.Sprintf("Marshal %s · %s\nRun: none yet. Press s and tell the Marshal what to build.\nanonymous telemetry: off", BuildVersion, filepath.Base(ws.providerRoot()))
 	if out != want {
 		t.Fatalf("no-run status = %q, want %q", out, want)
 	}

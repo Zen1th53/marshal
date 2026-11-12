@@ -53,8 +53,10 @@ func gitDirectory(t *testing.T) string {
 	return dir
 }
 
-// Startup failures must reach the terminal before tmux is launched.
-func TestTUIRejectsUninitializedProjectWithoutWrites(t *testing.T) {
+// Opening Marshal in an existing Git project it was never set up in sets
+// the project up, as `marshal init` would, and says in one line what it
+// committed; `marshal doctor` stays read-only (TestDoctorBeforeInitIsPlain).
+func TestTUISetsUpProjectNotSetUpYet(t *testing.T) {
 	for _, partial := range []bool{false, true} {
 		for _, args := range [][]string{nil, {"tui"}} {
 			t.Run(fmt.Sprintf("partial=%t/args=%v", partial, args), func(t *testing.T) {
@@ -68,29 +70,62 @@ func TestTUIRejectsUninitializedProjectWithoutWrites(t *testing.T) {
 				}
 				t.Setenv("TMUX", "")
 				t.Setenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH", "1")
-				// Any tmux operation would fail and leave a marker.
-				marker := filepath.Join(t.TempDir(), "called")
+				// tmux fails, so the launch stops right after setup.
 				fake := filepath.Join(t.TempDir(), "tmux")
-				if err := os.WriteFile(fake, []byte(fmt.Sprintf("#!/bin/sh\ntouch %q\nexit 1\n", marker)), 0700); err != nil {
+				if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 					t.Fatal(err)
 				}
 				tmux.SetBinaryPath(fake)
 				defer tmux.ResetBinaryPath()
-				stdout, stderr, code := runCLI(t, dir, args...)
-				if code == 0 || stdout != "" {
-					t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+				_, stderr, _ := runCLI(t, dir, args...)
+				want := `Set up Marshal in this project. Committed CAPABILITIES.yaml, PACK-VERSION.yaml and RUNTIME-VERSION.yaml to your repository (commit "Initialize MARSHAL project").`
+				if !strings.Contains(stderr, want) || strings.Contains(stderr, "isn't set up") {
+					t.Fatalf("no setup line in %q", stderr)
 				}
-				for _, want := range []string{"Marshal isn't set up in this project yet.", "Run `marshal init` here."} {
-					if !strings.Contains(stderr, want) {
-						t.Fatalf("missing %q in %q", want, stderr)
-					}
+				if _, err := os.Stat(statepath.Path(dir, "state.db")); err != nil {
+					t.Fatalf("project was not set up: %v", err)
 				}
-				for _, path := range []string{marker, statepath.Path(dir, "state.db"), statepath.Path(dir, "runtime-owner.lock"), statepath.Path(dir, "logs")} {
-					if _, err := os.Stat(path); !os.IsNotExist(err) {
-						t.Fatalf("startup wrote %s: %v", path, err)
-					}
+				out, err := exec.Command("git", "-C", dir, "log", "-1", "--format=%s", "--name-only").Output()
+				if err != nil || !strings.Contains(string(out), "Initialize MARSHAL project") || !strings.Contains(string(out), "CAPABILITIES.yaml") {
+					t.Fatalf("init commit missing: %s %v", out, err)
+				}
+				// Opening again sets nothing up a second time.
+				_, stderr, _ = runCLI(t, dir, args...)
+				if strings.Contains(stderr, "Set up Marshal") {
+					t.Fatalf("second open set up again: %q", stderr)
 				}
 			})
+		}
+	}
+}
+
+// A project whose canonical state exists but lost one of Marshal's files is
+// not set up again on opening (init would put a default in its place): the
+// launch stops before tmux and writes nothing.
+func TestTUIRejectsDamagedProjectWithoutWrites(t *testing.T) {
+	dir := gitDirectory(t)
+	if _, stderr, code := runCLI(t, dir, "init"); code != 0 {
+		t.Fatal(stderr)
+	}
+	if err := os.Remove(filepath.Join(dir, "CAPABILITIES.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX", "")
+	t.Setenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH", "1")
+	marker := filepath.Join(t.TempDir(), "called")
+	fake := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(fake, []byte(fmt.Sprintf("#!/bin/sh\ntouch %q\nexit 1\n", marker)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	stdout, stderr, code := runCLI(t, dir)
+	if code == 0 || stdout != "" || !strings.Contains(stderr, "Run `marshal init` here.") || strings.Contains(stderr, "Set up Marshal") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	for _, path := range []string{marker, filepath.Join(dir, "CAPABILITIES.yaml")} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("startup wrote %s: %v", path, err)
 		}
 	}
 }

@@ -41,7 +41,7 @@ func (h *CommandHandler) handleEgress(ctx context.Context, args []string) (strin
 		return "Egress status unavailable: " + err.Error(), nil
 	}
 	if len(rows) == 0 {
-		b.WriteString("No active governed egress runs.\n")
+		b.WriteString(egressNoRunsText)
 	}
 	for _, row := range rows {
 		fmt.Fprintf(&b, "%s: %s (%s), task %s, parent %s\n  Allowed: %s\n", row.RunID, row.Worker, row.Provider, row.TaskID, row.ParentRunID, strings.Join(row.Allowed, ", "))
@@ -63,8 +63,13 @@ func (h *CommandHandler) handleEgress(ctx context.Context, args []string) (strin
 	for _, alert := range alerts {
 		fmt.Fprintf(&b, "  %s: %s\n", alert.RunID, alert.Message)
 	}
-	b.WriteString(egressUsage)
-	return b.String(), nil
+	if egressReportsEnforcement || len(rows) > 0 || len(alerts) > 0 {
+		// The grants only mean something where network access is
+		// enforced or a worker is asking; otherwise the answer stops at
+		// what was found.
+		b.WriteString(egressUsage)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
 
 // deliverEgressAlert renders a refused request in the TUI and in the Marshal's

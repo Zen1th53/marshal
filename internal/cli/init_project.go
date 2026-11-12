@@ -15,9 +15,12 @@ import (
 // initCommitSubject names the one commit init makes in the user's repository.
 const initCommitSubject = "Initialize MARSHAL project"
 
-// initializeProject is used only by explicit init and accepted setup offers.
-// Automatic runtime bootstrap must not commit project files. It returns the
-// files it committed, so the caller can say so; none on a repeated init.
+// initializeProject is used by explicit init, accepted setup offers and
+// opening Marshal in a Git project it was never set up in (controlCenter):
+// opening is the user asking to work here, and setup only adds what is
+// missing. Runtime bootstrap elsewhere must not commit project files. It
+// returns the files it committed, so the caller can say so; none on a
+// repeated init.
 //
 // The files stay at the repository root and are committed: CAPABILITIES.yaml
 // is the project's capability policy, shared and reviewed with the code, and
@@ -71,6 +74,16 @@ func initCommitNotice(files []string) string {
 	}
 	list := strings.Join(files[:len(files)-1], ", ") + " and " + files[len(files)-1]
 	return fmt.Sprintf("Committed %s to your repository (commit %q).", list, initCommitSubject)
+}
+
+// setUpProjectLine is the one line opening Marshal prints after it set up a
+// project that was not set up yet, naming what it committed.
+func setUpProjectLine(files []string) string {
+	line := "Set up Marshal in this project."
+	if notice := initCommitNotice(files); notice != "" {
+		line += " " + notice
+	}
+	return line
 }
 
 // Use Git's resolved path so this also works when .git is a worktree pointer.

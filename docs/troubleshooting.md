@@ -8,10 +8,10 @@ This guide addresses common questions, error messages, and operational situation
 
 ### The Error
 
-When running `marshal` or `marshal tui`, you may encounter an error message similar to:
+Opening `marshal` in a Git project sets Marshal up there by itself, as `marshal init` would, and says which files it committed. Other commands, such as `marshal status`, may instead print:
 
 ```text
-Marshal isn't set up in this project yet. Run `marshal init` here.
+Marshal isn't set up in this project yet. Run `marshal` here and it sets the project up.
 ```
 
 or, when some of Marshal's files exist but are broken:

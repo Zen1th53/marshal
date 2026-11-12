@@ -17,8 +17,9 @@ import (
 )
 
 // A dispatch refused while opening its task lane (no worker ran) is not a
-// return: the task escalates once with the refusal, spends no rework and is
-// not relaunched until the operator retries it. Bug #28: an orphan lane left
+// return: a retry-safe refusal is retried once by itself, then the task
+// escalates with the refusal, spends no rework and is not relaunched again
+// until the operator retries it. Bug #28: an orphan lane left
 // RUNNING by a restart made every attempt refuse in seconds and burned the
 // whole rework limit.
 func TestExtremeLaneAdmissionRefusalEscalatesWithoutSpendingRework(t *testing.T) {
@@ -58,9 +59,9 @@ func TestExtremeLaneAdmissionRefusalEscalatesWithoutSpendingRework(t *testing.T)
 		t.Fatalf("run was not paused for the refusal: %s %+v", run.State, run.Pause)
 	}
 	mu.Lock()
-	if launches["b"] != 1 {
+	if launches["b"] != 2 {
 		mu.Unlock()
-		t.Fatalf("refused task was relaunched %d times without a retry", launches["b"]-1)
+		t.Fatalf("refused task was launched %d times, want 2 (one retry by itself)", launches["b"])
 	}
 	refuse = false
 	mu.Unlock()

@@ -98,11 +98,9 @@ func playMarshalSplash(out io.Writer, th *Theme, animate bool) {
 	}
 	lines := pickMarshalBanner(th.Unicode).lines
 	// The subtitle never names the underlying provider: the person is working
-	// with MARSHAL, not with whatever model happens to sit behind it.
+	// with MARSHAL, not with whatever model happens to sit behind it. Nor
+	// does it name the build's machinery: every edition says the same.
 	subtitle := "Summoning the Marshal"
-	if buildMarker != "" {
-		subtitle = buildMarker
-	}
 
 	if !animate {
 		fmt.Fprintln(out)

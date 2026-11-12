@@ -33,8 +33,8 @@
 [2m      [0m│  [38;5;15mx          [0m cancel the decision being typed          [38;5;15mF8         [0m native Claude                          │[2m      [0m
 [2m      [0m│  [38;5;15mhard gate  [0m type the canonical id, then Enter        [38;5;15mF9         [0m native OpenCode                        │[2m      [0m
 [2mINBOX [0m│                                                       [38;5;15mF10        [0m update: check or install               │[2m      [0m
-[2m⚑ T-02[0m│ [1m[38;5;111mMOUSE[0m[0m[38;5;243m left click; never decides[0m                       [38;5;15mF12        [0m native Antigravity                     │[2m      [0m
-[2m⚑ T-03[0m│                                                                                                          │[2m      [0m
-[2m    co[0m╰─[38;5;243m Esc or ? closes · j/k scroll · 5 more lines [0m────────────────────────────────────────────────────────────╯[2m      [0m
+[2m⚑ T-02[0m│                                                                                                          │[2m      [0m
+[2m⚑ T-03[0m│ [38;5;243manonymous telemetry: off[0m                                                                                 │[2m      [0m
+[2m    co[0m╰─[38;5;243m Esc or ? closes · j/k scroll · 6 more lines [0m────────────────────────────────────────────────────────────╯[2m      [0m
 [2m                                                                  │                                                     [0m
  [48;5;239m[38;5;15mj/k[0m[48;5;239m[0m [38;5;243mmove[0m  [48;5;239m[38;5;15m⏎[0m[48;5;239m[0m [38;5;243minspect[0m  [48;5;239m[38;5;15ms[0m[48;5;239m[0m [38;5;243msay[0m  [48;5;239m[38;5;15mspace[0m[48;5;239m[0m [38;5;243mactions[0m  [48;5;239m[38;5;15mm[0m[48;5;239m[0m [38;5;243mMarshal[0m  [48;5;239m[38;5;15m?[0m[48;5;239m[0m [38;5;243mhelp[0m                                                           

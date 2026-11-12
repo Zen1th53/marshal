@@ -592,6 +592,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	if len(popup) == 0 && w.boardHelp.Load() {
 		r := l.Overlay(0)
 		var helpHits []boardHit
+		v.telemetry = w.telemetryLine()
 		popup, ui.helpMax, helpHits = v.helpOverlay(r.W, r.H, ui.helpScroll)
 		ui.helpScroll = min(ui.helpScroll, ui.helpMax)
 		// helpOverlay places its regions box-relative; the overlay draws the
@@ -664,7 +665,7 @@ func (w *Workspace) providerDots(now time.Time) map[string]string {
 			case "re-verify":
 				dot = "◐"
 			}
-			dots[provider.Provider] = dot
+			dots[providerWorker(provider.Provider)] = dot
 		}
 	}
 	return dots

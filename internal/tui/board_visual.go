@@ -31,6 +31,9 @@ type boardVisual struct {
 	health                      map[string]string
 	// vitals is the data the top-of-every-view vitals row paints.
 	vitals vitalsData
+	// telemetry is the help's footer line saying whether anonymous
+	// telemetry is on; "" leaves the footer out.
+	telemetry string
 	// edition is the build named in the header; empty names none.
 	edition string
 	// note is the run's latest note to the operator, shown in the footer.

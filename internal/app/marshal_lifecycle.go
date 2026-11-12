@@ -1147,6 +1147,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
+	s.forgetLaneAdmissionRetry(runID, taskID)
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalTaskReturned, map[string]any{"retry": true, "fresh_session": freshSession})
 }
 

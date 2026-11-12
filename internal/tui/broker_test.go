@@ -12,7 +12,7 @@ import (
 func TestBrokerCommandQueuesPromptWithoutGranting(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	out, err := w.cmd.Handle(context.Background(), "/permission credential request codex")
-	if err != nil || !strings.Contains(out, "permission queued") {
+	if err != nil || out != credentialRequestQueuedText("codex") || strings.Contains(out, "governed task") != (buildMarker == "") {
 		t.Fatalf("request: %s %v", out, err)
 	}
 	requests := w.permissions.queue.Take(false)
@@ -37,18 +37,18 @@ func TestCredentialRevocationReportsPendingUntilOwnerAcknowledges(t *testing.T) 
 		t.Fatal(err)
 	}
 	out, err := ws.cmd.Handle(t.Context(), "/permission credential revoke codex")
-	if err != nil || !strings.Contains(out, "pending owner acknowledgement") || strings.Contains(out, "connections closed") {
+	if err != nil || out != credentialRevocationMessage("codex", "pending") {
 		t.Fatalf("revoke: %s %v", out, err)
 	}
 	out, err = ws.cmd.Handle(t.Context(), "/permission credential status codex")
-	if err != nil || !strings.Contains(out, "pending owner acknowledgement") {
+	if err != nil || out != credentialRevocationMessage("codex", "pending") {
 		t.Fatalf("pending: %s %v", out, err)
 	}
 	if err := runtime.Store().AppendEvent(t.Context(), nil, model.Event{ID: "owner-closed", Type: "BROKER_SCOPE_CLOSED", ProjectID: runtime.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"scope_socket": "daemon-incarnation", "provider": "codex", "decision_id": ""}}); err != nil {
 		t.Fatal(err)
 	}
 	out, err = ws.cmd.Handle(t.Context(), "/permission credential status codex")
-	if err != nil || !strings.Contains(out, "connections closed (owners acknowledged)") {
+	if err != nil || out != credentialRevocationMessage("codex", "closed") {
 		t.Fatalf("closed: %s %v", out, err)
 	}
 }

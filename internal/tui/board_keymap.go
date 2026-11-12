@@ -530,6 +530,10 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int, []boardHit) {
 		bodyIDs = append(bodyIDs, ids)
 	}
 	rows := max(1, h-3)
+	if v.telemetry != "" {
+		// The footer line holds still while the keys scroll.
+		rows = max(1, rows-1)
+	}
 	maxScroll := max(0, len(body)-rows)
 	scroll = min(max(0, scroll), maxScroll)
 	lo, hi := scroll, min(len(body), scroll+rows)
@@ -557,8 +561,15 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int, []boardHit) {
 	for _, l := range body {
 		out = append(out, th.BoxVert+" "+PadCell(l, inner)+" "+th.BoxVert)
 	}
-	for len(out) < h-1 {
+	footer := 0
+	if v.telemetry != "" {
+		footer = 1
+	}
+	for len(out) < h-1-footer {
 		out = append(out, th.BoxVert+strings.Repeat(" ", w-2)+th.BoxVert)
+	}
+	if footer > 0 {
+		out = append(out, th.BoxVert+" "+PadCell(v.fg("dim", v.telemetry), inner)+" "+th.BoxVert)
 	}
 	out = append(out, th.BoxBottomLeft+th.BoxHoriz+v.fg("dim", " "+hint+" ")+strings.Repeat(th.BoxHoriz, max(0, w-5-VisibleLen(hint)))+th.BoxBottomRight)
 	for i := range out {
