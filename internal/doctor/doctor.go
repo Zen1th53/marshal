@@ -31,6 +31,9 @@ const (
 	// Optional is an optional add-on that is absent or unusable. It never
 	// changes the report's verdict: Marshal works without it.
 	Optional Verdict = "OPTIONAL"
+	// Warn is advisory: something worth knowing, such as resource pressure,
+	// that never changes the report's verdict.
+	Warn Verdict = "WARN"
 )
 
 type Result struct {
@@ -89,6 +92,71 @@ func (r Report) FormattedText() string {
 	return strings.TrimSpace(sb.String())
 }
 
+// reportAdder returns the function that records a result in report: a FAIL
+// fails the report and a DEGRADED degrades it; every other verdict is shown
+// without changing it.
+func reportAdder(report *Report) func(Result) {
+	return func(result Result) {
+		report.Results = append(report.Results, result)
+		if result.Verdict == Fail {
+			report.Verdict = Fail
+		} else if result.Verdict == Degraded && report.Verdict != Fail {
+			report.Verdict = Degraded
+		}
+	}
+}
+
+// resourcesResult is the resources row. Pressure is advisory: it is shown as
+// WARN with its reason, so the row never reads PASS while saying the computer
+// is under pressure, yet it does not fail or degrade an otherwise healthy
+// installation or change scheduler behaviour.
+func resourcesResult(snapshot resources.Snapshot) Result {
+	detail := fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", snapshot.CPU.Effective, formatBytes(snapshot.Memory.AvailableBytes), formatBytes(snapshot.Storage.FreeBytes), snapshot.Recommendation.Concurrency)
+	if len(snapshot.Accelerators) == 0 {
+		detail += "; accelerators: none detected"
+	} else {
+		var accelerators []string
+		for _, accelerator := range snapshot.Accelerators {
+			accelerators = append(accelerators, acceleratorName(accelerator))
+		}
+		detail += "; accelerators: " + strings.Join(accelerators, ", ")
+	}
+	verdict := Pass
+	pressure := ""
+	switch snapshot.Health.Overall {
+	case resources.StatusCritical:
+		verdict, pressure = Warn, "critical pressure"
+	case resources.StatusWarn:
+		verdict, pressure = Warn, "pressure warning"
+	}
+	if pressure != "" {
+		if len(snapshot.Health.Warnings) > 0 {
+			pressure += ": " + strings.Join(snapshot.Health.Warnings, ", ")
+		}
+		detail += " (" + pressure + ")"
+	}
+	return Result{Name: "resources", Verdict: verdict, Method: "bounded local inventory", Capability: "Community advisory only", Detail: detail}
+}
+
+// acceleratorName is how one accelerator is shown: its vendor and model, with
+// the vendor named once when the model already starts with it.
+func acceleratorName(accelerator resources.Accelerator) string {
+	model := accelerator.Model
+	if model == "" {
+		model = "UNKNOWN"
+	}
+	name := model
+	vendor := strings.TrimSpace(accelerator.Vendor)
+	if vendor != "" && !strings.HasPrefix(strings.ToLower(model), strings.ToLower(vendor)) {
+		name = vendor + " " + model
+	}
+	telemetry := accelerator.TelemetrySource
+	if telemetry == "" {
+		telemetry = "UNKNOWN"
+	}
+	return fmt.Sprintf("%s (telemetry: %s)", name, telemetry)
+}
+
 type Options struct {
 	Lookup         func(string) (string, error)
 	Run            func(context.Context, string, ...string) (string, error)
@@ -109,14 +177,7 @@ func Check(ctx context.Context, root string, options Options) Report {
 	for _, status := range egm.All() {
 		report.Results = append(report.Results, egmResult(status))
 	}
-	add := func(result Result) {
-		report.Results = append(report.Results, result)
-		if result.Verdict == Fail {
-			report.Verdict = Fail
-		} else if result.Verdict == Degraded && report.Verdict != Fail {
-			report.Verdict = Degraded
-		}
-	}
+	add := reportAdder(&report)
 
 	git, err := lookup("git")
 	if err != nil {
@@ -184,32 +245,7 @@ func Check(ctx context.Context, root string, options Options) Report {
 		add(success("worktree", "git worktree list --porcelain", "Git worktrees are supported"))
 	}
 	resourceSnapshot := resources.NewCollector().Collect(ctx, layout.RuntimeDir)
-	resourceDetail := fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", resourceSnapshot.CPU.Effective, formatBytes(resourceSnapshot.Memory.AvailableBytes), formatBytes(resourceSnapshot.Storage.FreeBytes), resourceSnapshot.Recommendation.Concurrency)
-	if len(resourceSnapshot.Accelerators) == 0 {
-		resourceDetail += "; accelerators: none detected"
-	} else {
-		var accelerators []string
-		for _, accelerator := range resourceSnapshot.Accelerators {
-			model := accelerator.Model
-			if model == "" {
-				model = "UNKNOWN"
-			}
-			telemetry := accelerator.TelemetrySource
-			if telemetry == "" {
-				telemetry = "UNKNOWN"
-			}
-			accelerators = append(accelerators, fmt.Sprintf("%s %s (telemetry: %s)", accelerator.Vendor, model, telemetry))
-		}
-		resourceDetail += "; accelerators: " + strings.Join(accelerators, ", ")
-	}
-	if resourceSnapshot.Health.Overall == resources.StatusCritical {
-		resourceDetail += " (critical pressure)"
-	} else if resourceSnapshot.Health.Overall == resources.StatusWarn {
-		resourceDetail += " (pressure warning)"
-	}
-	// Pressure is advisory: it must be visible without making an otherwise
-	// healthy installation fail diagnostics or changing scheduler behavior.
-	add(Result{Name: "resources", Verdict: Pass, Method: "bounded local inventory", Capability: "Community advisory only", Detail: resourceDetail})
+	add(resourcesResult(resourceSnapshot))
 	ollamaDetail := "Ollama: NOT_AVAILABLE"
 	if resourceSnapshot.Ollama.Status == "DETECTED" {
 		ollamaDetail = fmt.Sprintf("Ollama: detected; models: %d", len(resourceSnapshot.Ollama.Models))

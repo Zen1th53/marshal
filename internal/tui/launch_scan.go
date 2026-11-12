@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
@@ -175,7 +176,9 @@ func defaultScanFiles(ctx context.Context, root string) (scanFiles, error) {
 	counts := make(map[string]int)
 	total := 0
 	for _, line := range strings.Split(string(out), "\x00") {
-		if line == "" {
+		// Marshal's own files are not the person's project: a folder Marshal
+		// just set up is an empty project, not a mixed one.
+		if line == "" || project.MarshalOwnedFile(root, line) {
 			continue
 		}
 		total++
@@ -656,6 +659,8 @@ func (s projectScan) briefingBlock(doctorWarnings []string) string {
 	// project:
 	if s.Language == "unknown" || s.Files < 0 {
 		lines = append(lines, "- project: unknown")
+	} else if s.Language != "" && s.Files == 0 {
+		lines = append(lines, "- project: empty, no files yet")
 	} else if s.Language != "" || s.Files > 0 {
 		lines = append(lines, fmt.Sprintf("- project: %s, %d files", s.Language, s.Files))
 	}

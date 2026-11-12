@@ -324,18 +324,23 @@ func (c command) policy(ctx context.Context, args []string) error {
 }
 
 func (c command) init(ctx context.Context) error {
-	if _, err := c.prepareProjectRepository(ctx); err != nil {
+	started, err := c.prepareProjectRepository(ctx)
+	if err != nil {
 		return err
 	}
 	if err := c.ensureGitBaseline(ctx); err != nil {
+		c.reportStartedRepository(started, nil)
 		return err
 	}
 	layout, committed, err := initializeProject(ctx, c.root)
+	// A repository Marshal just started is described in one line, both
+	// commits included, so the separate notice would repeat it.
+	c.reportStartedRepository(started, committed)
 	if err != nil {
 		return err
 	}
 	human := "initialized " + layout.RuntimeDir
-	if notice := initCommitNotice(committed); notice != "" {
+	if notice := initCommitNotice(committed); notice != "" && !started.Started {
 		human += "\n" + notice
 	}
 	if committed == nil {

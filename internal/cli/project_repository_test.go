@@ -82,7 +82,7 @@ func TestInitStartsRepositoryInHomeRepositorySubfolder(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("init code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "Started a new Git repository for this project in ~/Desktop/testM and committed 2 files.") {
+	if !strings.Contains(stderr, "Started a new Git repository for this project in ~/Desktop/testM (first commit: .gitignore and notes.txt). Marshal added CAPABILITIES.yaml, PACK-VERSION.yaml and RUNTIME-VERSION.yaml in a second commit.\n") {
 		t.Fatalf("missing started line: %q", stderr)
 	}
 	assertStartedRepository(t, dir, stderr)
@@ -120,8 +120,19 @@ func TestInitStartsRepositoryOutsideAnyRepository(t *testing.T) {
 	if files := testGit(t, dir, "ls-tree", "--name-only", "HEAD^"); files != ".gitignore" {
 		t.Fatalf("an empty folder's first commit holds more than the default .gitignore: %s", files)
 	}
-	if !strings.Contains(stderr, " and committed 1 file.") {
-		t.Fatalf("the started line does not count one file: %q", stderr)
+	// Two commits are made, and the line says so: the first holds only the
+	// default .gitignore, the second Marshal's own files.
+	if !strings.Contains(stderr, " (first commit: .gitignore). Marshal added CAPABILITIES.yaml, PACK-VERSION.yaml and RUNTIME-VERSION.yaml in a second commit.\n") {
+		t.Fatalf("the started line does not describe both commits: %q", stderr)
+	}
+	if files := testGit(t, dir, "show", "--name-only", "--format=", "HEAD"); files != "CAPABILITIES.yaml\nPACK-VERSION.yaml\nRUNTIME-VERSION.yaml" {
+		t.Fatalf("the second commit holds %q", files)
+	}
+	if count := testGit(t, dir, "rev-list", "--count", "HEAD"); count != "2" {
+		t.Fatalf("init made %s commits, want 2", count)
+	}
+	if strings.Contains(stdout, "to your repository") {
+		t.Fatalf("the second commit is told twice: %q", stdout)
 	}
 	assertInitializedProject(t, dir)
 }
@@ -150,13 +161,21 @@ func TestFirstCommitWritesDefaultGitignoreAndLeavesSecretsOut(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("init code=%d stderr=%q", code, stderr)
 	}
-	want := "Started a new Git repository for this project in ~/Desktop/app and committed 2 files (left out: cert.p12, credentials-prod.json)."
+	want := "Started a new Git repository for this project in ~/Desktop/app (first commit: .gitignore and main.go). Left out credentials-prod.json, which looks like a secret, and listed it in .gitignore. Marshal added CAPABILITIES.yaml, PACK-VERSION.yaml and RUNTIME-VERSION.yaml in a second commit.\n"
 	if !strings.Contains(stderr, want) {
 		t.Fatalf("missing %q in %q", want, stderr)
 	}
+	// The default .gitignore keeps .p12 certificates out, and lists the file
+	// left out by name, so a later `git add .` cannot commit it either.
 	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if err != nil || string(data) != defaultGitignore {
+	if err != nil || string(data) != defaultGitignore+"# Left out by Marshal: secret-looking files\n/credentials-prod.json\n" {
 		t.Fatalf("default .gitignore not written: %v %q", err, data)
+	}
+	if got := testGit(t, dir, "show", "HEAD^:.gitignore"); got+"\n" != string(data) {
+		t.Fatalf("the committed .gitignore differs: %q", got)
+	}
+	if got := testGit(t, dir, "status", "--porcelain"); got != "" {
+		t.Fatalf("files are left for a later `git add .`: %q", got)
 	}
 	if got := testGit(t, dir, "ls-tree", "-r", "--name-only", "HEAD^"); got != ".gitignore\nmain.go" {
 		t.Fatalf("first commit holds %q", got)
@@ -185,11 +204,20 @@ func TestFirstCommitKeepsExistingGitignoreAndLeavesSecretsOut(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("init code=%d stderr=%q", code, stderr)
 	}
-	if !strings.Contains(stderr, " and committed 3 files (left out: .env, id_rsa, keys/deploy.KEY).") {
+	if !strings.Contains(stderr, " (first commit: .gitignore, main.go and node_modules/x.js). Left out .env, id_rsa and keys/deploy.KEY, which look like secrets, and listed them in your .gitignore.") {
 		t.Fatalf("started line: %q", stderr)
 	}
-	if data, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(data) != "/logs/\n" {
-		t.Fatalf("the existing .gitignore changed: %q", data)
+	// The person's .gitignore is kept and the left-out files are added to it,
+	// in the same first commit.
+	wantIgnore := "/logs/\n# Left out by Marshal: secret-looking files\n/.env\n/id_rsa\n/keys/deploy.KEY\n"
+	if data, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(data) != wantIgnore {
+		t.Fatalf("the existing .gitignore = %q, want %q", data, wantIgnore)
+	}
+	if got := testGit(t, dir, "show", "HEAD^:.gitignore"); got+"\n" != wantIgnore {
+		t.Fatalf("the committed .gitignore = %q", got)
+	}
+	if got := testGit(t, dir, "status", "--porcelain"); got != "" {
+		t.Fatalf("files are left for a later `git add .`: %q", got)
 	}
 	if got := testGit(t, dir, "ls-tree", "-r", "--name-only", "HEAD^"); got != ".gitignore\nmain.go\nnode_modules/x.js" {
 		t.Fatalf("first commit holds %q", got)
@@ -198,8 +226,9 @@ func TestFirstCommitKeepsExistingGitignoreAndLeavesSecretsOut(t *testing.T) {
 
 func TestStartedRepositoryLineShortensLongLeftOutList(t *testing.T) {
 	t.Setenv("HOME", "/nonexistent-home")
-	got := startedRepositoryLine("/work/x", firstCommit{Started: true, Files: 12, LeftOut: []string{".env", "a.pem", "b.key", "id_rsa", "c.p12"}})
-	if want := "Started a new Git repository for this project in /work/x and committed 12 files (left out: .env, a.pem, b.key and 2 more)."; got != want {
+	committed := []string{"a", "b", "c", "d"}
+	got := startedRepositoryLine("/work/x", firstCommit{Started: true, Files: 4, Committed: committed, Listed: true, LeftOut: []string{".env", "a.pem", "b.key", "id_rsa", "c.p12"}}, nil)
+	if want := "Started a new Git repository for this project in /work/x (first commit: 4 files). Left out .env, a.pem, b.key and 2 more, which look like secrets, and listed them in your .gitignore."; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
@@ -358,10 +387,56 @@ func TestControlCenterStartsRepositoryInHomeRepositorySubfolder(t *testing.T) {
 	_, stderr, _ := runCLI(t, dir)
 	assertStartedRepository(t, dir, stderr)
 	assertInitializedProject(t, dir)
+	// The control centre makes both commits too, and the line tells both.
+	if !strings.Contains(stderr, " (first commit: .gitignore). Marshal added CAPABILITIES.yaml, PACK-VERSION.yaml and RUNTIME-VERSION.yaml in a second commit.\n") {
+		t.Fatalf("the started line does not describe both commits: %q", stderr)
+	}
 	if after := homeState(t, home); after != before {
 		t.Fatal("the home repository changed")
 	}
 	if strings.Contains(stderr, "isn't set up") || strings.Contains(stderr, "home folder") {
 		t.Fatalf("the control centre did not continue as for a normal project: %q", stderr)
+	}
+}
+
+// Each left-out file is listed as an exact path: Git ignores that one file and
+// reads nothing in its name as a pattern.
+func TestLeftOutFilesAreListedAsExactPaths(t *testing.T) {
+	fakeHome(t, true)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/logs/"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"[ab].key", "#x.pem", "!y.pem", "id_rsa ", "sub/star*.key", "a.pfx"}
+	writeTree(t, dir, append([]string{"main.go", "a.key.txt", "b.key.txt"}, names...)...)
+	_, stderr, code := runCLI(t, dir, "init")
+	if code != 0 {
+		t.Fatalf("init code=%d stderr=%q", code, stderr)
+	}
+	if got := testGit(t, dir, "status", "--porcelain", "--untracked-files=all"); got != "" {
+		t.Fatalf("left-out files are not ignored: %q", got)
+	}
+	for _, name := range names {
+		if got := testGit(t, dir, "ls-files", "--", ":(literal)"+name); got != "" {
+			t.Fatalf("%q is tracked", name)
+		}
+	}
+	// Nothing else is ignored by the added lines: the look-alike files that
+	// are not secrets were committed.
+	for _, name := range []string{"main.go", "a.key.txt", "b.key.txt"} {
+		testGit(t, dir, "cat-file", "-e", "HEAD^:"+name)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if !strings.HasPrefix(string(data), "/logs/\n# Left out by Marshal: secret-looking files\n") {
+		t.Fatalf(".gitignore = %q", data)
+	}
+	if got := gitignoreExactPath("sub/star*.key"); got != "/sub/star\\*.key" {
+		t.Fatalf("pattern = %q", got)
+	}
+	if got := gitignoreExactPath("z.key "); got != "/z.key\\ " {
+		t.Fatalf("trailing space pattern = %q", got)
 	}
 }
