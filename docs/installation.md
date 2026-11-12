@@ -5,7 +5,7 @@ Marshal is published as a standalone binary for Linux on x86_64 (`amd64`) and AR
 Prefer to let your coding agent do it? Paste the [setup prompt](SETUP-PROMPT.md) into Claude Code or Codex.
 
 > [!WARNING]
-> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not process execution or network activity. Always review goals, plans, and generated code before approving work.
+> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not process execution or network activity. The Marshal plans and approves the work itself; accepting the architecture is your one gate, so review it before you accept, and stop the run at any time with `Ctrl+X`.
 
 ---
 

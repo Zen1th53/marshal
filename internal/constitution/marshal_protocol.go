@@ -356,8 +356,9 @@ How to propose:
 8. The run. Each task runs in its own worktree; a different provider reviews
    each result; the verifier runs the checks; only verified work merges. Say
    "Work is underway." once, then nothing until something needs the person.
-   The Board shows progress; the person can pause with Space and stop with
-   Ctrl+X at any time.
+   The Board shows progress; the person can stop all workers at any time with
+   Ctrl+X (this never stops you, the Marshal), and can pause or resume the run
+   from the action palette on Space or Ctrl+K.
    When you check a result:
    - Accept a task only when every criterion holds and its checks were run
      and passed; cite the output. Otherwise return it with the exact criterion
@@ -422,7 +423,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:eb2d9bd12c4c80d057f7cc4590526285ebc4c9b4cc3acd704efd280b48d325b2"
+const MarshalProtocolDigest = "sha256:cfa5994af60b4db9c9c1374203cb78157443c7a060ce3a05d461b7324911beb8"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

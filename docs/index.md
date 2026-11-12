@@ -5,7 +5,7 @@ Marshal is a free, open-source (AGPL-3.0 plus a commercial licence) local multi-
 Instead of typing a request into one AI assistant and hoping it makes no mistakes, Marshal introduces a structured multi-agent workflow: one model acts as the **Marshal** to clarify your goals, draft architecture, and plan discrete tasks; other AI agents execute those tasks across isolated branches; a cross-provider reviewer evaluates the code; and an independent verifier tests the integrated result before it is merged into `main`.
 
 > [!WARNING]
-> **Important Notice on Worker Execution**: Worker agents run directly on your host machine with your user permissions and without a sandbox. Worktrees isolate Git changes, not system calls. Always review plans, commands, and code changes before approving them.
+> **Important Notice on Worker Execution**: Worker agents run directly on your host machine with your user permissions and without a sandbox. Worktrees isolate Git changes, not system calls. The Marshal plans and approves the work itself, and workers run without pausing for per-command approval; your one gate is accepting the architecture, so review it before you accept, watch the run on the Board, and stop it at any time with `Ctrl+X`.
 
 ---
 

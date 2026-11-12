@@ -3,7 +3,7 @@
 This guide walks you through your first complete multi-agent engineering run with Marshal: from a fresh Git repository to merged code in `main`.
 
 > [!WARNING]
-> **Host Execution Notice**: Workers execute on your local machine with your user privileges and without a sandbox. Worktrees isolate Git changes, not operating system calls. Always inspect goals, plans, and generated code before giving approval.
+> **Host Execution Notice**: Workers execute on your local machine with your user privileges and without a sandbox. Worktrees isolate Git changes, not operating system calls. The Marshal plans and approves the work itself; accepting the architecture is your one gate, so review it before you accept, and stop the run at any time with `Ctrl+X`.
 
 ---
 

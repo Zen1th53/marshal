@@ -516,13 +516,13 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "37125cc2c3756c96198f22062674e384a05a74376b8fe22ad805eb756d58e0cf",
-      "bytes": 7334
+      "sha256": "76d12e8b924c4804fdd3f265fc73eb5c3b059d35fcdf233072c0fc9ca0749b18",
+      "bytes": 7352
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "a4badd8f8860f538d112997446e981fe72aad6534e55b5faf41ce6baf8e076be",
-      "bytes": 3651
+      "sha256": "538030592f3270faa05e2054db75ab32d355262e7555cdbdf805f7e919d77c97",
+      "bytes": 3750
     },
     {
       "path": "docs/faq.md",
@@ -531,23 +531,23 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "3a8e5b3c7631cf4c46bac48c17fb0877a634f12be3532a407ca99f125336b2fc",
-      "bytes": 5532
+      "sha256": "0412897108782b7bce3fef10329df1da8612a8ae0f034bc45fbb6a8963f3055a",
+      "bytes": 5629
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "26e91cebafd9c70f3ea7a6d0c9ee25010306b74c9bca0f4d59c9c16f55ef80b7",
-      "bytes": 4278
+      "sha256": "c0a52d7823d0f3d278b84570c53842adf936c49540d4477ab3568e576738c98f",
+      "bytes": 4373
     },
     {
       "path": "docs/index.md",
-      "sha256": "a8210ec63457c6fa38b7cde0bd508d2ae8e6c96abbe8561ef0eff84fb6531223",
-      "bytes": 4044
+      "sha256": "60e597b4ed5eb0d2d490abf60217ddb1dc7741d2a10a7873ce326512234fbc9b",
+      "bytes": 4223
     },
     {
       "path": "docs/installation.md",
-      "sha256": "0cc903fac838e575aef1f16a5a7fd147a83436f9f6441be615c4df434c8a5410",
-      "bytes": 3282
+      "sha256": "377b32fbb8811f923f0d24e3d26bfe12f985d3e52c24adb9dbaca8adeeeb3b5e",
+      "bytes": 3381
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -5356,8 +5356,8 @@
     },
     {
       "path": "internal/constitution/architecture_binding_extreme_test.go",
-      "sha256": "e113e51c2c8d7b548211eb4cd52ad682e3b69a26559b507ebd8c30aaf798f50f",
-      "bytes": 4731
+      "sha256": "37935a99ab5cff0e92ac1da74a755d38974e20df8301ab911fe5b6e57722679e",
+      "bytes": 4942
     },
     {
       "path": "internal/constitution/architecture_protocol_test.go",
@@ -5431,8 +5431,8 @@
     },
     {
       "path": "internal/constitution/marshal_protocol.go",
-      "sha256": "825d79f13dc04f1aedaa76acbed8c21d9d8314f68e09f517b2c0fc56fc196b4f",
-      "bytes": 27343
+      "sha256": "c996b1eee66612cfe8fa1463e3680965dbc63fd50562e4b2bf808b2fc7fb6bd7",
+      "bytes": 27449
     },
     {
       "path": "internal/constitution/marshal_protocol_test.go",
@@ -5456,13 +5456,13 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "3f3ec4821a9adfc8cf3a466d03a075be7f92c9ae11dd873d3b7d130c38863897",
-      "bytes": 9372
+      "sha256": "0ba572a561e78e050d6e2bb84c5cdaf514be68c99e093b1bd0fe69f778f4474a",
+      "bytes": 11565
     },
     {
       "path": "internal/constitution/protocol_extreme_test.go",
-      "sha256": "d4978471466d1144040406a31b76d3b155aa4b59f23537a56f692edc81e2cc49",
-      "bytes": 847
+      "sha256": "c3e517c7d2ba8854d477757fd7f51d228d5edd56da51820656d34048d695a302",
+      "bytes": 2022
     },
     {
       "path": "internal/constitution/protocol_namespace_extreme_test.go",

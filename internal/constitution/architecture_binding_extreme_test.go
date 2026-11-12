@@ -91,7 +91,9 @@ func TestExtremeArchitectureRuleDigests(t *testing.T) {
 	if marshalProtocolDigest(marshalProtocol) != MarshalProtocolDigest {
 		t.Fatal("base protocol changed")
 	}
-	composite := strings.ReplaceAll(marshalProtocol+ExtremeAuthorityProtocol, ".marshal/", statepath.DirName+"/")
+	// The shipped composite strips the base protocol's operator-popup wording
+	// (buildMarshalProtocol) before the authority variant is appended.
+	composite := strings.ReplaceAll(shippedProtocolStripper.Replace(marshalProtocol)+ExtremeAuthorityProtocol, ".marshal/", statepath.DirName+"/")
 	if marshalProtocolDigest(composite) != ExtremeProtocolDigest {
 		t.Fatal("Marshal digest does not pin the composite protocol")
 	}
@@ -102,7 +104,7 @@ func TestExtremeArchitectureRuleDigests(t *testing.T) {
 	if _, err := buildMarshalProtocol(marshalProtocol); err != nil {
 		t.Fatal(err)
 	}
-	if marshalProtocolDigest(marshalProtocol+altered) == ExtremeProtocolDigest {
+	if marshalProtocolDigest(shippedProtocolStripper.Replace(marshalProtocol)+altered) == ExtremeProtocolDigest {
 		t.Fatal("altered architecture rule matched the digest")
 	}
 	if _, err := buildMarshalProtocol(strings.Replace(marshalProtocol, "Hello and the goal", "Hello", 1)); err == nil {
