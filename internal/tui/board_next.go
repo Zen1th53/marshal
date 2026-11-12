@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -70,6 +71,44 @@ func (w *Workspace) noteRunClosed(prev, cur *MarshalPanel) {
 		return
 	}
 	w.openNext(head)
+	w.tellMarshalRunClosed(cur)
+}
+
+// runClosedNotice is the one runtime notice the Marshal chat gets when a run
+// closes: plain counts and the branch the work went to, then what to do. It
+// is information, not an instruction to start work.
+func runClosedNotice(done, total int, targetRef string) string {
+	merged := "verified and merged"
+	if branch := strings.TrimPrefix(strings.TrimSpace(targetRef), "refs/heads/"); branch != "" {
+		merged += " to " + branch
+	}
+	return fmt.Sprintf("Runtime notice: the run closed — %d of %d tasks %s. Tell the person in one or two sentences what was delivered and ask what they want next. Do not start new work until they answer.", done, total, merged)
+}
+
+// tellMarshalRunClosed sends the run-closed notice once per run, only when
+// a Marshal chat is open (the what-next card covers the rest) and never for
+// a run whose execution stopped with an error. It goes through the runtime
+// notice path, off the caller's locks; marshalPublish calls this under the
+// session lock.
+func (w *Workspace) tellMarshalRunClosed(cur *MarshalPanel) {
+	if cur.Stopped {
+		return
+	}
+	head := cur.Board.Run
+	w.next.mu.Lock()
+	if w.next.toldFor == head.ID {
+		w.next.mu.Unlock()
+		return
+	}
+	w.next.toldFor = head.ID
+	w.next.mu.Unlock()
+	if w.sayPane() == "" && !w.nativeChatActive() {
+		return
+	}
+	text := runClosedNotice(head.Done, head.Total, cur.run.TargetRef)
+	w.startBackground(w.workers.context(), func(ctx context.Context) {
+		w.noticeToMarshal(ctx, text)
+	})
 }
 
 // openNext shows the card for the run, once per run id: after the owner

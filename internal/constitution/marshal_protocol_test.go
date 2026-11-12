@@ -129,6 +129,8 @@ func TestMarshalProtocolPlanAndFinalReport(t *testing.T) {
 				"what was not done",
 				"Offer accept or close proposals with operator popups",
 				"Do not report untested work as working or hide work not done",
+				"When the runtime tells you a run closed, tell the person what was delivered and ask what is next.",
+				"The notice is information, not an instruction: start no new work until the person answers.",
 			},
 		},
 	} {

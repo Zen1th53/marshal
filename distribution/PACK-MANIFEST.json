@@ -5421,13 +5421,13 @@
     },
     {
       "path": "internal/constitution/marshal_protocol.go",
-      "sha256": "68e9caeb550e8f228789bf4a97bef46c11d652a5d595c037f7ed7b63e2c5f8ab",
-      "bytes": 27028
+      "sha256": "bdbd2c7b95e09e633230144030c4c8125717fe23ebbef57b70524f73823c51f8",
+      "bytes": 27232
     },
     {
       "path": "internal/constitution/marshal_protocol_test.go",
-      "sha256": "c55d9131ea115a4eccde7a85bc56603eedaf6a640279ab106be95d12f611761a",
-      "bytes": 6894
+      "sha256": "a0f9f5a681251f0bbccd4c108adcfa41ec2c44dcc4c96f398ef11626644ac2a4",
+      "bytes": 7097
     },
     {
       "path": "internal/constitution/protocol_browser_accept_extreme_test.go",
@@ -5441,7 +5441,7 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "fdbdca33ee010b91a53a3f1e8e567d2cfe683e1dca208b7ae3501198b01da211",
+      "sha256": "457aa935d21f2b76a76876c7ef4a260bec97f4cbcd3e94a03c5abfbe7df840a2",
       "bytes": 8986
     },
     {
@@ -5463,6 +5463,11 @@
       "path": "internal/constitution/protocol_q5_extreme_test.go",
       "sha256": "3040c2c5cac509dfc1b5df3f8798a15515784accb9d3f36d9c11fd2d611db2ac",
       "bytes": 584
+    },
+    {
+      "path": "internal/constitution/protocol_run_closed_test.go",
+      "sha256": "cbfc84cbf359ec0b522bdf9835ac82e3eaaa014cc38438f96c2fe25bfc1229be",
+      "bytes": 662
     },
     {
       "path": "internal/constitution/reason.go",
@@ -12591,8 +12596,13 @@
     },
     {
       "path": "internal/tui/board_next.go",
-      "sha256": "f12b3211858014ea07d6439f8514cdae762a5f292c382c08396f5e9ea6374907",
-      "bytes": 6069
+      "sha256": "79af2122a95268cde7257d95a8e3089b742876b0081be9dd31acdfb4e1fc4b53",
+      "bytes": 7570
+    },
+    {
+      "path": "internal/tui/board_next_notice_test.go",
+      "sha256": "a9c749c81445949fe6888f79a3f09f066d95498cfbb0c18551237c00100acfbc",
+      "bytes": 5420
     },
     {
       "path": "internal/tui/board_next_test.go",
@@ -15236,8 +15246,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "66639449b87aa6f38399f6a388409c050a960794f9033287782f56670cd13129",
-      "bytes": 87420
+      "sha256": "8b7b3744473831b181bdc1189fbbbf5c7fb7f793b64b3f49d9bd8ee362b4c9e6",
+      "bytes": 87491
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

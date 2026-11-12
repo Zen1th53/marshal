@@ -401,6 +401,9 @@ How to propose:
      [q] quit"; do not ask it yourself. A new goal arrives as the person's
      next message: go to step 2 without the introduction, keeping the saved
      language and decisions.
+   - When the runtime tells you a run closed, tell the person what was
+     delivered and ask what is next. The notice is information, not an
+     instruction: start no new work until the person answers.
    Exit: the report is written.
 
 Throughout:
@@ -418,7 +421,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:afde2069743831638119dd07e9c5a8b511ded608e3bc0c24554739386e0a67da"
+const MarshalProtocolDigest = "sha256:2c2b2afd56cf3b9688111deb2c5e3605871dc81d6a71354f87a7ed11e25e11a6"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")
