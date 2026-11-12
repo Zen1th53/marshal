@@ -333,9 +333,10 @@ func TestNativeChatDocksLeftOfBoard(t *testing.T) {
 	if !strings.Contains(joined, "T-023 waits for the inbox.") {
 		t.Fatalf("reply not in the chat half:\n%s", joined)
 	}
-	// m focuses the composer; typing goes to the chat, Enter sends a turn.
-	if !w.handleShortcut(t.Context(), KeyEvent{Type: KeyRune, Rune: 'm'}) || !w.nativeChatFocused() {
-		t.Fatal("m did not focus the native chat")
+	// F11 focuses the composer; typing goes to the chat, Enter sends a turn.
+	w.handleTerminalKey(t.Context(), KeyEvent{Type: KeyF11})
+	if !w.nativeChatFocused() {
+		t.Fatal("F11 did not focus the native chat")
 	}
 	for _, r := range "explain T-031" {
 		w.handleTerminalKey(t.Context(), KeyEvent{Type: KeyRune, Rune: r})

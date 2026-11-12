@@ -146,8 +146,9 @@ func TestPaletteListsRegistryWithAvailability(t *testing.T) {
 func TestPaletteCtrlKFromNativeChat(t *testing.T) {
 	w, _, _ := boardWithNativeChat(t)
 	ctx := t.Context()
-	if !w.handleShortcut(ctx, KeyEvent{Type: KeyRune, Rune: 'm'}) || !w.nativeChatFocused() {
-		t.Fatal("m did not focus the native chat")
+	w.handleTerminalKey(ctx, KeyEvent{Type: KeyF11})
+	if !w.nativeChatFocused() {
+		t.Fatal("F11 did not focus the native chat")
 	}
 
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: ' '})

@@ -105,7 +105,8 @@ var boardKeymap = []boardKey{
 	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen, ID: "plan.inspect", When: func(w *Workspace) bool { return w.planView.Load() }, Why: reason("Open the Plan view first.")},
 	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen, ID: "arch.open", When: func(w *Workspace) bool { return w.archView.Load() }, Why: reason("Open the Architecture view first.")},
 
-	{Group: "MARSHAL", Keys: "m  F11", What: "chat; F11 or Alt+arrow switch", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() }, Why: reason("The Marshal chat opens on the Board.")},
+	{Group: "MARSHAL", Keys: "m", What: "change the Marshal", Hint: "Marshal", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.pick"},
+	{Group: "MARSHAL", Keys: "F11", What: "chat ⇄ Board (Alt+← / Alt+→ in tmux)", Hint: "chat", Press: &KeyEvent{Type: KeyF11}, Class: KeyOpen, ID: "marshal.chat"},
 	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", When: func(w *Workspace) bool { return w.boardVisible() && w.boardUI.inspect == "" }, Why: reason("Leave the inspector to speak to the Marshal.")},
 	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen, ID: "command.line", Hint: "command"},
 	{ID: "palette", Group: "MARSHAL", Keys: "space  Ctrl+K", What: "all actions; type to filter", Hint: "actions", Class: KeyOpen},

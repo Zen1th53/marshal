@@ -61,9 +61,23 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			if err := os.WriteFile(logFile, nil, 0600); err != nil {
 				t.Fatal(err)
 			}
+			if attached {
+				// An open run keeps the service wired with the old Marshal
+				// until it is rebuilt; the switch must re-wire it.
+				w.marshalSession().runID = "R-runtime"
+			}
 			msg, err := w.ExecuteCommand(context.Background(), "/marshal model claude")
-			if err != nil || msg != "The Marshal now uses claude." {
+			if err != nil || msg != "The Marshal is now Claude Code." {
 				t.Fatalf("switch: %q %v", msg, err)
+			}
+			if attached {
+				m := w.marshalSession()
+				m.mu.Lock()
+				svc := m.service
+				m.mu.Unlock()
+				if svc == nil || svc.ModelProvider != "claude" {
+					t.Fatalf("open run not re-wired to claude: %+v", svc)
+				}
 			}
 			chat := w.tmuxActiveWins["marshal-chat"]
 			if chat == nil || chat == old || chat.provider != "claude" || chat.paneID == oldPane || chat.window != old.window {
@@ -97,7 +111,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 				t.Fatal(err)
 			}
 			msg, err = w.ExecuteCommand(context.Background(), "/marshal model claude")
-			if err != nil || msg != "The Marshal now uses claude." || w.tmuxActiveWins["marshal-chat"] != chat {
+			if err != nil || msg != "The Marshal is now Claude Code." || w.tmuxActiveWins["marshal-chat"] != chat {
 				t.Fatalf("same provider: %q %v", msg, err)
 			}
 			data, _ = os.ReadFile(logFile)
@@ -202,7 +216,7 @@ func TestMarshalModelMissingCLILeavesChatRunning(t *testing.T) {
 	}
 	for _, provider := range []string{"claude", "agy"} {
 		_, err := w.ExecuteCommand(context.Background(), "/marshal model "+provider)
-		if err == nil || !strings.Contains(err.Error(), provider+" CLI is missing") {
+		if err == nil || !strings.Contains(err.Error(), marshalDisplayName(provider)+" is not installed") {
 			t.Fatalf("missing CLI: %v", err)
 		}
 		if w.tmuxActiveWins["marshal-chat"] != old || loadDefaultProvider(w.workDir) != "codex" {

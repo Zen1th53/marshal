@@ -93,16 +93,14 @@ func (w *Workspace) readUsageNow(now time.Time) []usage.Quota {
 	return read(now)
 }
 
-// decideMarshalPicker decides whether the launch picker opens. It returns true
-// when it does; the caller then holds the chat-start callbacks until
-// confirmPicker releases them. When it returns false it has already settled the
-// provider (a returning owner's saved one, or the single candidate it saved),
-// and the chat may start.
-func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
-	root := w.providerRoot()
-	saved := loadDefaultProvider(root)
+// marshalCandidates builds one pickerCand per installed Marshal provider, in
+// app.MarshalProviders() order, each filled with its P3-01 limit (percent left
+// or unavailable, never a guess), whether a lane is busy on it, and whether it
+// is out of limit. It reads PATH, the usage store and the provider overview
+// once, so callers must never call it on the paint path. P2-04's launch picker
+// and P5-02's Marshal picker share it: there is one limit/busy reader.
+func (w *Workspace) marshalCandidates(ctx context.Context) []pickerCand {
 	installed := installedNeutralProviders(ctx)
-
 	var cands []pickerCand
 	for _, p := range app.MarshalProviders() {
 		if slices.Contains(installed, p) {
@@ -110,10 +108,8 @@ func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
 		}
 	}
 	if len(cands) == 0 {
-		w.openPicker(nil, 0, pickerInstallLine)
-		return true
+		return nil
 	}
-
 	now := time.Now()
 	// The overview carries busy (active lanes) and a running cooldown; a read
 	// that fails or is slow leaves every candidate not busy and not limited.
@@ -150,7 +146,24 @@ func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
 			}
 		}
 	}
+	return cands
+}
 
+// decideMarshalPicker decides whether the launch picker opens. It returns true
+// when it does; the caller then holds the chat-start callbacks until
+// confirmPicker releases them. When it returns false it has already settled the
+// provider (a returning owner's saved one, or the single candidate it saved),
+// and the chat may start.
+func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
+	root := w.providerRoot()
+	saved := loadDefaultProvider(root)
+	cands := w.marshalCandidates(ctx)
+	if len(cands) == 0 {
+		w.openPicker(nil, 0, pickerInstallLine)
+		return true
+	}
+
+	now := time.Now()
 	savedIdx := slices.IndexFunc(cands, func(c pickerCand) bool { return c.provider == saved })
 	// A saved provider that is installed and not out of limit needs no picker.
 	if savedIdx >= 0 && !cands[savedIdx].out {

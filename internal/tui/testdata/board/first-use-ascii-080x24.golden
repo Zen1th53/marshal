@@ -3,7 +3,7 @@
                                                                                 |
                                                                                 |
   [> Tell the Marshal what to build   Enter]                                    |
-   Enter or m: type it in the Marshal chat . s: say it from here                |
+   Enter or F11: type it in the Marshal chat . s: say it from here              |
                                                                                 |
   PROVIDERS v verifies the next unverified . click one to verify it             |
   * cx codex verified   ~ cl claude unverified   x ag agy limited until 14:42   |
@@ -21,4 +21,4 @@
                                                                                 |
                                                                                 |
                                                                                 |
- Enter tell the marshal  m chat  s say  v verify  / command  ? help             |
+ Enter tell the marshal  F11 chat  s say  v verify  / command  ? help           |

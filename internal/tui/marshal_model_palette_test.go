@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -9,50 +8,45 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 )
 
-// The Marshal model had no menu entry: only typing /marshal model <provider>
-// changed it. The command palette now lists one "Choose Marshal model" row per
-// provider this edition's Marshal accepts, and the chosen row runs that same
-// command, so the choice is persisted exactly as the typed command does.
+// Changing the Marshal is now one key and one picker (m, action marshal.pick),
+// not one palette row per provider. The per-provider "Choose Marshal model"
+// rows stay registered for completion and the parity audit, but the palette
+// hides them so the picker is the single way to change the model.
 func TestPaletteChoosesMarshalModel(t *testing.T) {
-	var listed []string
+	// The capability rows are still registered, one per provider this edition
+	// accepts.
+	var registered []string
 	for _, action := range GlobalRegistry.ToPaletteActions() {
-		if !strings.HasPrefix(action.Title, "Choose Marshal model: ") {
-			continue
+		if strings.HasPrefix(action.ID, "marshal.model.") {
+			registered = append(registered, strings.TrimPrefix(action.ID, "marshal.model."))
 		}
-		provider := strings.TrimPrefix(action.Title, "Choose Marshal model: ")
-		if action.Command != "/marshal model "+provider {
-			t.Fatalf("%s runs %q, not /marshal model %s", action.Title, action.Command, provider)
-		}
-		listed = append(listed, provider)
 	}
-	if !slices.Equal(listed, app.MarshalProviders()) {
-		t.Fatalf("palette lists Marshal models %v, want %v", listed, app.MarshalProviders())
+	if !slices.Equal(registered, app.MarshalProviders()) {
+		t.Fatalf("registry defines Marshal-model rows %v, want %v", registered, app.MarshalProviders())
 	}
 	if describeCompletion("/marshal") != "Marshal" {
 		t.Fatalf("/marshal completion is described as %q", describeCompletion("/marshal"))
 	}
 
-	pal := NewCommandPalette(nil, GlobalRegistry.ToPaletteActions())
-	pal.Open()
-	for _, r := range "choose marshal model" {
-		pal.HandleKey(KeyEvent{Type: KeyRune, Rune: r})
+	// The palette the Board shows lists the Marshal picker and none of the
+	// capability rows.
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	actions := append(boardPaletteActions(w), w.registryPaletteActions()...)
+	var pick *PaletteAction
+	for i := range actions {
+		a := &actions[i]
+		if strings.HasPrefix(a.ID, "marshal.model.") {
+			t.Fatalf("the palette lists a Marshal-model capability row %q", a.ID)
+		}
+		if a.ID == "marshal.pick" {
+			pick = a
+		}
 	}
-	if got := len(pal.filtered); got != len(app.MarshalProviders()) {
-		t.Fatalf("searching the palette shows %d rows, want one per provider", got)
+	if pick == nil {
+		t.Fatal("the palette does not list the Marshal picker (marshal.pick)")
 	}
-	pal.HandleKey(KeyEvent{Type: KeyDown})
-	selected, ok := pal.HandleKey(KeyEvent{Type: KeyEnter})
-	if !ok || selected == nil || selected.Command != "/marshal model claude" {
-		t.Fatalf("palette selection: %v %+v", ok, selected)
-	}
-
-	marshalSwitchEnvironment(t)
-	w := NewWorkspace(nil, "project", "test-session")
-	w.workDir = t.TempDir()
-	if _, err := w.ExecuteCommand(context.Background(), selected.Command); err != nil {
-		t.Fatalf("%s: %v", selected.Command, err)
-	}
-	if got := loadDefaultProvider(w.providerRoot()); got != "claude" {
-		t.Fatalf("palette choice persisted %q, want claude", got)
+	if pick.Title != "change the Marshal" {
+		t.Fatalf("marshal.pick title %q, want %q", pick.Title, "change the Marshal")
 	}
 }
