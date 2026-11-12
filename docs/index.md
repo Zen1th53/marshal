@@ -55,4 +55,4 @@ Once inside the Board:
 - [Configuration](configuration.md) — TUI settings, project files, environment variables, and CLI options.
 - [Telemetry](telemetry.md) — Anonymous telemetry details and how to opt out.
 - [Troubleshooting](troubleshooting.md) — Solutions for uninitialized projects, provider limits, and resuming runs.
-- [Changelog](CHANGELOG.md) — Version 0.2.0 release notes and history.
+- [Changelog](CHANGELOG.md) — Release notes and history.

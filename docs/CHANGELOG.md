@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.6
+
+### Fixed
+- Marshal starts on macOS and on Linux without bubblewrap; `marshal setup status` says how work runs instead of reporting a missing sandbox.
+- `install.sh` works on macOS (no GNU-only `install -D`).
+- The Architecture view, key help and `/egress`, `/sandbox`, `/provider` no longer claim a network broker, credential leases or owner plan approval; the rules line shows the real telemetry state.
+- Telemetry registration succeeds on slower connections (900 ms per request).
+- A worker still changing files is no longer taken for stalled when its worktree check is slow.
+- The Board shows a task as working while its worker runs, a review is no longer shown as stalled, finished tasks stop their clock, and the inbox count matches what is listed.
+- A finished run no longer takes an amendment that would re-queue delivered work; the "what next?" card shows beside the chat.
+- Usage limits read "% left" everywhere; a limit Marshal cannot read says "limit unknown".
+- `marshal status` and `marshal tasks` work while the TUI is open; `marshal doctor` marks absent optional plugins as optional.
+- Marshal's tool errors to the Marshal are plain sentences; Activity lines and worker commits carry no internal IDs.
+
+### Added
+- A project check at every start, with safe fixes and a Blocked screen (`r` checks again).
+- A short opening animation instead of the "how a run starts" text.
+- A "Who plans?" picker at launch with live usage limits, remembered per project; `m` changes the Marshal later, at a safe point during a run.
+- Earlier Claude and Codex sessions for the project load at launch; a launch scan of the project is handed to the Marshal.
+- One-key question cards, a requirements card, a mid-run change card (hold affected tasks, apply or keep), a "what next?" card when a run closes, and a "Welcome back" line on resume.
+- A usage-limit and machine vitals row on every view; limits on the chat pane and in the Providers view.
+- Tasks reroute to the provider with the most limit left; a card when every provider is at its limit.
+- Architecture page: click a part to see its files and choose its builder; the plan follows the choice. A revision bar highlights changed parts, and a Design panel shows the design review.
+- `Space` / `Ctrl+K` opens one actions palette; `r` retries a stuck task; `w` chooses the model for a task.
+- Disk warning at 10 GB or 5% free, whichever is smaller.
+- The footer hint bar shows only the actions available now, and each can be clicked; palette rows and help lines can be clicked too. A click never decides: it opens the confirmation.
+
+### Changed
+- The architecture is accepted only with the Accept button in the browser (`y` on the gate opens it); typing `accept architecture` in the chat no longer accepts.
+- The Marshal approves its own plan (no plan gate); its default execution rights are `read-only`; the plan can mark single tasks strict.
+- The Architecture view (`8`) is one status line with `[o]` open; `m` opens the Marshal picker, `F11` moves between chat and Board; `Ctrl+P` is replaced by `Space` / `Ctrl+K`.
+- Plain words across the Board, Activity, inbox and errors, with no run or plan IDs; `/status` matches the Board.
+
+### Removed
+- The `Ctrl+N` navigation menu, the empty `ev` column, the Memory view's "BY EDITION" panel and the `/ultra` switch.
+
+### Documentation
+- README and docs describe the shipped flow and settings defaults; Windows via WSL2; a new lifecycle demo; a setup prompt for coding agents.
+
 ## 0.2.5
 
 ### Added
