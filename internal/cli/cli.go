@@ -280,6 +280,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	if err != nil {
 		if c.json {
 			_ = c.print(map[string]any{"error": err.Error(), "exit_code": exitCode(err)}, "")
+		} else if errors.Is(err, api.ErrRuntimeNotRunning) && heldByWindow(root) {
+			fmt.Fprintln(stderr, heldElsewhereLine)
 		} else if errors.Is(err, api.ErrRuntimeNotRunning) {
 			fmt.Fprintln(stderr, "Marshal's background service isn't running in this project. Start it with `marshal daemon` in another terminal, then try again.")
 		} else {
@@ -404,10 +406,13 @@ func (c command) status(ctx context.Context) error {
 		return err
 	}
 	value, _, err := client.Status(ctx)
+	if notRunning(err) {
+		return c.statusLocal(ctx)
+	}
 	if err != nil {
 		return err
 	}
-	return c.print(value, fmt.Sprintf("schema=%d tasks=%d agents=%d honeypot=%s", value.SchemaVersion, value.TaskCount, value.AgentCount, value.Honeypot))
+	return c.print(value, statusLine(value))
 }
 
 func (c command) agent(ctx context.Context, args []string) error {
@@ -452,6 +457,9 @@ func (c command) tasks(ctx context.Context) error {
 		return err
 	}
 	value, _, err := client.Tasks(ctx)
+	if notRunning(err) {
+		return c.tasksLocal(ctx)
+	}
 	if err != nil {
 		return err
 	}

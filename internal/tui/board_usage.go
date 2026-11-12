@@ -118,9 +118,9 @@ func usageKey(qs []usage.Quota, now time.Time) string {
 	return b.String()
 }
 
-// usageLeft is the percent a window has left. It is what the shown used
-// figure leaves, so the two always add to 100 wherever both appear (picker,
-// quota card, launch scan, vitals row).
+// usageLeft is the percent a window has left: the one quantity every limit
+// figure shows (picker, quota card, launch scan, vitals row, chat title,
+// Providers view), labelled "left".
 func usageLeft(win usage.Window) int {
 	return 100 - win.UsedShown()
 }

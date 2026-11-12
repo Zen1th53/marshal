@@ -313,7 +313,7 @@ func TestMarshalDockTitleShowsLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustContain(t, f.take(),
-		"set-option -p -t %7 @marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 42% ·4d    F11 Board ")
+		"set-option -p -t %7 @marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    F11 Board ")
 
 	// The reading turns unknown: the title says so within the same reconcile.
 	w.storeUsage([]usage.Quota{{Provider: "codex", Reason: usage.ReasonStale}})
@@ -321,7 +321,7 @@ func TestMarshalDockTitleShowsLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := f.take()
-	mustContain(t, log, "⬡ codex unavailable")
+	mustContain(t, log, "⬡ codex limit unknown")
 	// A title-only change joins, binds or restyles nothing.
 	mustNotContain(t, log, "join-pane", "bind-key", "pane-border-status")
 
@@ -344,8 +344,8 @@ func TestDockTitleFits(t *testing.T) {
 		width int
 		want  string
 	}{
-		{120, " MARSHAL · ⬡ codex ▓▓░ 42% ·4d    F11 Board "},
-		{40, " MARSHAL · ⬡ codex 42%    F11 Board "},
+		{120, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    F11 Board "},
+		{45, " MARSHAL · ⬡ codex 58% left    F11 Board "},
 		{20, " MARSHAL · ⬡ codex    F11 Board "},
 	} {
 		if got := w.dockTitle(chat, tc.width); got != tc.want {
@@ -368,12 +368,12 @@ func TestDockTitleCases(t *testing.T) {
 		read     bool
 		want     string
 	}{
-		{"known", "codex", false, []usage.Quota{codexKnown(false)}, true, " MARSHAL · ⬡ codex ▓▓░ 42% ·4d    F11 Board "},
-		{"known stale", "codex", false, []usage.Quota{codexKnown(true)}, true, " MARSHAL · ⬡ codex ▓▓░ ~42% ·4d    F11 Board "},
-		{"unknown", "agy", false, []usage.Quota{{Provider: "agy", Reason: usage.NotExposed}}, true, " MARSHAL · ◆ agy unavailable    F11 Board "},
+		{"known", "codex", false, []usage.Quota{codexKnown(false)}, true, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    F11 Board "},
+		{"known stale", "codex", false, []usage.Quota{codexKnown(true)}, true, " MARSHAL · ⬡ codex ▓▓░ ~58% left ·4d    F11 Board "},
+		{"unknown", "agy", false, []usage.Quota{{Provider: "agy", Reason: usage.NotExposed}}, true, " MARSHAL · ◆ agy limit unknown    F11 Board "},
 		{"not read yet", "claude", false, nil, false, " MARSHAL · ✳ claude    F11 Board "},
 		{"no glyph", "", false, nil, false, " MARSHAL · chat    F11 Board "},
-		{"ascii", "codex", true, []usage.Quota{codexKnown(false)}, true, " MARSHAL . cx codex ==- 42% .4d    F11 Board "},
+		{"ascii", "codex", true, []usage.Quota{codexKnown(false)}, true, " MARSHAL . cx codex ==- 58% left .4d    F11 Board "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := &Workspace{}
@@ -401,9 +401,9 @@ func TestUsageReadKicksDock(t *testing.T) {
 	w.usage.every = 5 * time.Millisecond
 	w.usage.readFn = func(time.Time) []usage.Quota {
 		reads++
-		left := 58.0 // 42% used
+		left := 58.0
 		if reads%2 == 0 {
-			left = 18.0 // 82% used
+			left = 18.0
 		}
 		return []usage.Quota{{Provider: "codex", Known: true, AsOf: now,
 			Windows: []usage.Window{{Label: "wk", LeftPercent: left, ResetsAt: now.Add(98 * time.Hour)}}}}
@@ -418,8 +418,8 @@ func TestUsageReadKicksDock(t *testing.T) {
 	w.startUsage(ctx)
 	// Two different readings reach the title without any key press.
 	waitDockLog(t, f,
-		"@marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 42%",
-		"@marshal_dock_title  MARSHAL · ⬡ codex ▓▓▓ 82%")
+		"@marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 58% left",
+		"@marshal_dock_title  MARSHAL · ⬡ codex ▓░░ 18% left")
 }
 
 func TestMarshalDockRejoinsRecreatedChat(t *testing.T) {

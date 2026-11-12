@@ -64,10 +64,10 @@ func TestVitalsLineWidths(t *testing.T) {
 		w    int
 		want string
 	}{
-		{160, " ✳ claude ▓▓░ 42% ·4d · ⬡ codex ▓░░ 12% ·3h · ◆ agy unavailable · ● opencode unavailable" + strings.Repeat(" ", 24) + right},
-		{120, " ✳ claude ▓▓░ 42% ·4d · ⬡ codex ▓░░ 12% ·3h · ◆ agy unavailable · ● —" + strings.Repeat(" ", 3) + right},
-		{80, " ✳ 42% ·4d · ⬡ 12% ·3h · ◆ —" + strings.Repeat(" ", 4) + right},
-		{56, " ✳ 42% ·4d · ⬡ 12% ·3h" + strings.Repeat(" ", 11) + "cpu 23% · 61°C · 3 run "},
+		{160, " ✳ claude ▓▓░ 58% left ·4d · ⬡ codex ▓▓▓ 88% left ·3h · ◆ agy limit unknown · ● opencode limit unknown" + strings.Repeat(" ", 10) + right},
+		{120, " ✳ claude ▓▓░ 58% left ·4d · ⬡ codex ▓▓▓ 88% left ·3h · ◆ — · ● —" + strings.Repeat(" ", 7) + right},
+		{80, " ✳ 58% left · ⬡ 88% left · ◆ —" + strings.Repeat(" ", 2) + right},
+		{56, " ✳ 58% left · ⬡ 88% left" + strings.Repeat(" ", 9) + "cpu 23% · 61°C · 3 run "},
 	} {
 		line, _ := v.vitalsLine(tc.w)
 		if got := StripANSI(line); got != tc.want {
@@ -102,16 +102,16 @@ func TestVitalsHonesty(t *testing.T) {
 	if line, _ := notRead.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude …") {
 		t.Fatalf("not read: %q", StripANSI(line))
 	}
-	// A quota whose last report is too old is unavailable.
+	// A quota whose last report is too old reads limit unknown.
 	staleClaude := vitalsFixture(th)
 	staleClaude.vitals.quotas[0] = usage.Quota{Provider: "claude", Reason: usage.ReasonStale}
-	if line, _ := staleClaude.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude unavailable") {
+	if line, _ := staleClaude.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude limit unknown") {
 		t.Fatalf("reason stale: %q", StripANSI(line))
 	}
 	// A stale-but-shown Known quota is marked old.
 	staleShown := vitalsFixture(th)
 	staleShown.vitals.quotas[0] = usage.Quota{Provider: "claude", Known: true, Stale: true, AsOf: vitalsNow.Add(-3 * time.Hour), Windows: []usage.Window{{Label: "wk", LeftPercent: 58, ResetsAt: vitalsNow.Add(98 * time.Hour)}}}
-	if line, _ := staleShown.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude ▓▓░ ~42% ·4d (3h old)") {
+	if line, _ := staleShown.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude ▓▓░ ~58% left ·4d (3h old)") {
 		t.Fatalf("stale shown: %q", StripANSI(line))
 	}
 	// A low disk survives the drop step even at the narrow width.
@@ -125,7 +125,7 @@ func TestVitalsHonesty(t *testing.T) {
 func TestVitalsASCII(t *testing.T) {
 	v := vitalsFixture(NewTheme(ThemeNoColor, false, false))
 	line := v.render(layout.Pane{ID: layout.Vitals, Rect: layout.Rect{W: 80, H: 1}})[0]
-	want := " cl 42% .4d . cx 12% .3h . ag -" + strings.Repeat(" ", 2) + "cpu 23% . 61C . ram 48% . disk 71% . 3 running "
+	want := " cl 58% left . cx 88% left" + strings.Repeat(" ", 7) + "cpu 23% . 61C . ram 48% . disk 71% . 3 running "
 	if got := StripANSI(line); got != want {
 		t.Errorf("ascii:\n got %q\nwant %q", got, want)
 	}

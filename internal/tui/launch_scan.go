@@ -734,9 +734,9 @@ func (s projectScan) briefingBlock(doctorWarnings []string) string {
 		var limParts []string
 		for _, lim := range s.Limits {
 			if lim.Known {
-				limParts = append(limParts, fmt.Sprintf("%s %d%%", lim.Provider, lim.LeftPercent))
+				limParts = append(limParts, fmt.Sprintf("%s %d%% left", lim.Provider, lim.LeftPercent))
 			} else {
-				limParts = append(limParts, fmt.Sprintf("%s unavailable", lim.Provider))
+				limParts = append(limParts, fmt.Sprintf("%s %s", lim.Provider, limitUnknown))
 			}
 		}
 		lines = append(lines, "- limits: "+strings.Join(limParts, " · "))

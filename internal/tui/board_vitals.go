@@ -80,24 +80,22 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 		case !v.vitals.read:
 			left = append(left, vitalsLeft{"limit:" + p, mk + v.fg("dim", p+" "+ellip), mk + v.fg("dim", ellip), true, 0})
 		case !known:
-			left = append(left, vitalsLeft{"limit:" + p, mk + v.fg("dim", p+" unavailable"), mk + v.fg("dim", dash), true, 0})
+			left = append(left, vitalsLeft{"limit:" + p, mk + v.fg("dim", p+" "+limitUnknown), mk + v.fg("dim", dash), true, 0})
 		default:
 			fig, pct, _ := limitFigure(q, v.now)
 			bar := limitBar(pct, v.unicode())
-			figColor, barColor := "", ""
-			switch {
-			case pct >= 90:
-				figColor, barColor = "failed", "failed"
-			case pct >= 70:
-				figColor, barColor = "waiting", "waiting"
-			}
+			figColor := limitColour(pct)
+			barColor := figColor
 			suffix := ""
 			if q.Stale {
 				figColor, barColor = "dim", "dim"
 				suffix = v.fg("dim", " ("+resetIn(v.now.Sub(q.AsOf))+" old)")
 			}
 			full := mk + v.fg("dim", p) + " " + v.fg(barColor, bar) + " " + v.fg(figColor, fig) + suffix
-			short := mk + v.fg(figColor, fig) + suffix
+			// The short form keeps the "left" label and drops the reset, so
+			// a narrow row still says which quantity it shows.
+			shortFig, _, _ := strings.Cut(fig, " ·")
+			short := mk + v.fg(figColor, shortFig) + suffix
 			left = append(left, vitalsLeft{"limit:" + p, full, short, false, 0})
 		}
 	}

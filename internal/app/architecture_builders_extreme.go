@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"math"
 	"os/exec"
 	"strings"
 	"time"
@@ -47,14 +48,15 @@ func (r *Runtime) architectureBuilders() func(context.Context) []architecturerev
 }
 
 // builderLimitText renders a provider's last reported quota in plain English.
-// An unreadable or unexposed limit is "limit unavailable"; never estimated.
+// An unreadable or unexposed limit is "limit unknown"; never estimated. The
+// percent left is rounded down, as the launch picker and vitals row show it.
 func builderLimitText(quotas []usage.Quota, provider string) string {
 	for _, quota := range quotas {
 		if quota.Provider != provider {
 			continue
 		}
 		if !quota.Known {
-			return "limit unavailable"
+			return "limit unknown"
 		}
 		var windows []string
 		reset := ""
@@ -62,13 +64,13 @@ func builderLimitText(quotas []usage.Quota, provider string) string {
 			if !window.Known() {
 				continue
 			}
-			windows = append(windows, fmt.Sprintf("%s %.0f%% left", window.Label, window.LeftPercent))
+			windows = append(windows, fmt.Sprintf("%s %d%% left", window.Label, int(math.Floor(window.LeftPercent))))
 			if reset == "" {
 				reset = window.ResetsAt.Local().Format("15:04")
 			}
 		}
 		if len(windows) == 0 {
-			return "limit unavailable"
+			return "limit unknown"
 		}
 		text := strings.Join(windows, ", ")
 		if reset != "" {
@@ -76,5 +78,5 @@ func builderLimitText(quotas []usage.Quota, provider string) string {
 		}
 		return text
 	}
-	return "limit unavailable"
+	return "limit unknown"
 }

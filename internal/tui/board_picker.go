@@ -319,22 +319,13 @@ func (w *Workspace) confirmPicker(i int) {
 	w.releaseLaunchPending()
 }
 
-// pickerGlyph is a provider's picker glyph, or "" without unicode.
+// pickerGlyph is a provider's one glyph (the same as everywhere else), or ""
+// without unicode.
 func (v boardVisual) pickerGlyph(provider string) string {
 	if !v.unicode() {
 		return ""
 	}
-	switch provider {
-	case "codex":
-		return "⬡"
-	case "claude":
-		return "✳"
-	case "agy":
-		return "◆"
-	case "opencode":
-		return "◇"
-	}
-	return ""
+	return providerGlyph(provider, true)
 }
 
 // paintPicker paints the launch picker in the Board's body, with the Board's
@@ -401,9 +392,9 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 			}
 			colour = "failed"
 		case !c.known:
-			figure = "unavailable"
+			figure = limitUnknown
 		default:
-			figure = fmt.Sprintf("%d%%", c.left)
+			figure = fmt.Sprintf("%d%% left", c.left)
 		}
 		entry := ""
 		if g := v.pickerGlyph(c.provider); g != "" {

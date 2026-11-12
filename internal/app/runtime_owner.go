@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/Zen1th53/marshal/internal/project"
 )
 
 var ErrRuntimeOwned = errors.New("another MARSHAL window owns this project’s lifecycle; use that window for lifecycle commands, or close it and reopen this window to recover and take ownership")
@@ -33,6 +35,27 @@ func acquireRuntimeOwner(stateDir string) (*os.File, error) {
 		return nil, fmt.Errorf("lock runtime owner: %w", err)
 	}
 	return file, nil
+}
+
+// ProjectHeldElsewhere reports whether another process (a Marshal window)
+// holds root's lifecycle lock right now. It only asks the kernel: a shared,
+// non-blocking probe that conflicts with the holder's exclusive lock and is
+// let go at once. It never creates the lock file.
+func ProjectHeldElsewhere(root string) bool {
+	layout, err := project.Discover(root)
+	if err != nil {
+		return false
+	}
+	file, err := os.OpenFile(filepath.Join(layout.RuntimeDir, "runtime-owner.lock"), os.O_RDONLY, 0)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		return errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN)
+	}
+	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	return false
 }
 
 // Ownership is required for lifecycle mutations, not shared memory or operator

@@ -215,9 +215,9 @@ func TestProvidersViewLimitColumn(t *testing.T) {
 	text := strings.Join(strings.Fields(StripANSI(strings.Join(lines, "\n"))), " ")
 	for _, want := range []string{
 		"codex", "usage limit reached", providerUntil(now.Add(5*time.Hour), now),
-		"claude", "▓▓░ 42% used · wk", providerUntil(now.Add(4*24*time.Hour+2*time.Hour), now),
-		"opencode", "▓▓░ 65% used · wk · 3h old", providerUntil(now.Add(2*24*time.Hour), now),
-		"agy", "unavailable", "agy does not write its usage limits where Marshal can read them.",
+		"claude", "▓▓░ 58% left · wk", providerUntil(now.Add(4*24*time.Hour+2*time.Hour), now),
+		"opencode", "▓░░ 35% left · wk · 3h old", providerUntil(now.Add(2*24*time.Hour), now),
+		"agy", "unknown", "agy does not write its usage limits where Marshal can read them.",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Providers view lacks %q:\n%s", want, text)
