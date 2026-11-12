@@ -102,7 +102,9 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 			suffix := ""
 			if q.Stale {
 				figColor, barColor = "dim", "dim"
-				suffix = v.fg("dim", " ("+resetIn(v.now.Sub(q.AsOf))+" old)")
+				if age := readAgo(q, v.now); age != "" {
+					suffix = v.fg("dim", " ("+age+")")
+				}
 			}
 			full := mk + v.fg("dim", p) + " " + v.fg(barColor, bar) + " " + v.fg(figColor, fig) + suffix
 			// The short form keeps the "left" label and drops the reset, so

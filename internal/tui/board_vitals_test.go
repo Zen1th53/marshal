@@ -111,8 +111,14 @@ func TestVitalsHonesty(t *testing.T) {
 	// A stale-but-shown Known quota is marked old.
 	staleShown := vitalsFixture(th)
 	staleShown.vitals.quotas[0] = usage.Quota{Provider: "claude", Known: true, Stale: true, AsOf: vitalsNow.Add(-3 * time.Hour), Windows: []usage.Window{{Label: "wk", LeftPercent: 58, ResetsAt: vitalsNow.Add(98 * time.Hour)}}}
-	if line, _ := staleShown.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude ▓▓░ ~58% left ·4d (3h old)") {
+	if line, _ := staleShown.vitalsLine(160); !strings.Contains(StripANSI(line), "✳ claude ▓▓░ ~58% left ·4d (read 3h ago)") {
 		t.Fatalf("stale shown: %q", StripANSI(line))
+	}
+	// A reading only just 30 minutes old carries no age beside it.
+	justFresh := vitalsFixture(th)
+	justFresh.vitals.quotas[0] = usage.Quota{Provider: "claude", Known: true, Stale: true, AsOf: vitalsNow.Add(-30 * time.Minute), Windows: []usage.Window{{Label: "wk", LeftPercent: 58, ResetsAt: vitalsNow.Add(98 * time.Hour)}}}
+	if line, _ := justFresh.vitalsLine(160); strings.Contains(StripANSI(line), "ago") || strings.Contains(StripANSI(line), " old") {
+		t.Fatalf("a 30-minute reading shows an age: %q", StripANSI(line))
 	}
 	// A low disk survives the drop step even at the narrow width.
 	low := vitalsFixture(th)

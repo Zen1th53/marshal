@@ -446,6 +446,13 @@ func NewSession(ctx context.Context, session, workDir, windowName string, comman
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.WaitDelay = 100 * time.Millisecond
+	// A tmux server started here keeps this process's directory as its own
+	// for its whole life, and tmux starts every later pane there before the
+	// pane changes to its own directory (InDir). A project directory can be
+	// deleted while the shared server lives on; every later worker pane then
+	// opened with the shell's "error retrieving current directory" lines.
+	// The root directory is never removed.
+	cmd.Dir = "/"
 	if os.Getenv("TMUX_TMPDIR") == "" {
 		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf(statepath.Name+"-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
