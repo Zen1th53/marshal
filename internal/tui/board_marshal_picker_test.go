@@ -52,7 +52,7 @@ func TestMarshalPickerRowsAndKeys(t *testing.T) {
 		t.Fatal("the Marshal picker is not open")
 	}
 	frame := plainFrame(w, 120, 40)
-	for _, want := range []string{"WHO PLANS?", "Codex", "now", "Claude Code", "unavailable", "OpenCode", "out of limit until 15:40"} {
+	for _, want := range []string{"WHO PLANS?", "Codex", "now", "Claude Code", "limit unknown", "OpenCode", "out of limit until 15:40"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("picker frame lacks %q:\n%s", want, frame)
 		}

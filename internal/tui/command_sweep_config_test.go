@@ -84,7 +84,7 @@ func TestCommandSweepConfigDiscovery(t *testing.T) {
 	}
 	InvalidateProbeCache()
 	sweepWorkRun(t, ws, "/provider typo", "config <name>")
-	sweepWorkRun(t, ws, "/providers", "PROVIDER / HARNESS STATUS")
+	sweepWorkRun(t, ws, "/providers", providerStatusHeading)
 	sweepWorkRun(t, ws, "/providers config codex", "UNAVAILABLE")
 	sweepWorkRun(t, ws, "/providers status extra", "Usage:")
 	sweepWorkRun(t, ws, "/providers typo", "Usage:")
@@ -260,7 +260,7 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 		{"/policy", "NOT VERIFIED", "/policy network", "NOT VERIFIED"},
 		{"/sandbox", sandboxStatusText, "/sandbox read-only", "authority unavailable"},
 		{"/doctor", "SYSTEM DIAGNOSTICS", "/doctor codex", "authority unavailable"},
-		{"/provider", "PROVIDER / HARNESS STATUS", "/provider config codex", "UNAVAILABLE"},
+		{"/provider", providerStatusHeading, "/provider config codex", "UNAVAILABLE"},
 		{"/harness", "HARNESS CAPABILITY PROBE", "/harness select qa codex", "NOT applied"},
 		{"/model", "", "/model select codex test-model", msgNothingChanged},
 		{"/models", "authority unavailable", "/models", "authority unavailable"},
@@ -402,7 +402,7 @@ printf 'test_feature stable true\n'
 		t.Errorf("missing CLI recovery hint: %s", outMissing)
 	}
 	out, err := ws.ExecuteCommand(ctx, "/optimization missing")
-	if err != nil || !strings.Contains(out, "cycle_id") {
+	if err != nil || !strings.Contains(out, `There is no optimization cycle "missing"`) {
 		t.Fatalf("unknown optimization missing hint: %q %v", out, err)
 	}
 }
@@ -414,14 +414,14 @@ func TestCommandSweepConfigPTY(t *testing.T) {
 	useCodexByDefault(t, project)
 	cases := []struct{ line, want string }{
 		{"/policy network", "Policy enforcement status: NOT VERIFIED"}, {"/sandbox read-only", "Install Codex"},
-		{"/doctor codex", "Install Codex"}, {"/provider status", "PROVIDER / HARNESS STATUS"},
+		{"/doctor codex", "Install Codex"}, {"/provider status", providerStatusHeading},
 		{"/harness probe", "HARNESS CAPABILITY PROBE"}, {"/model show", "SAVED MODEL PREFERENCES"},
 		{"/models", "Check Codex installation"}, {"/effort high", "NOT applied"},
 		{"/backup create", "Backup written and verified"}, {"/fingerprint", "FAILURE FINGERPRINTS (from"},
 		{"/runtime", "RUNTIME STATUS (canonical store read-back"}, {"/store", "STORE STATUS"},
 		{"/export", "No active goal"}, {"/blind resolve reason", "NOT recorded"},
 		{"/reinjection", "CONSTRAINT RE-INJECTION"}, {"/alignment scope", "ALIGNMENT GUARD (advisory"},
-		{"/optimization missing", "not found"}, {"/features list", "Install Codex"},
+		{"/optimization missing", "no optimization cycle"}, {"/features list", "Install Codex"},
 		{"/search on", "Install Codex"}, {"/login", "Install Codex"}, {"/logout", "Install Codex"},
 	}
 	for _, c := range cases {
@@ -674,9 +674,15 @@ exit 1
 		t.Fatal(err)
 	}
 	InvalidateProbeCache()
-	out := sweepWorkRun(t, ws, "/provider status", "Auth:    UNKNOWN")
-	if !strings.Contains(out, strings.TrimRight(providerEgressLine, "\n")) {
-		t.Fatalf("changed egress observation: %s", out)
+	if showQualificationLabel {
+		out := sweepWorkRun(t, ws, "/provider status", "Auth:    UNKNOWN")
+		if !strings.Contains(out, strings.TrimRight(providerEgressLine, "\n")) {
+			t.Fatalf("changed egress observation: %s", out)
+		}
+	} else {
+		// The Marshal build says it plainly; it still runs nothing.
+		sweepWorkRun(t, ws, "/provider status", "Codex: installed (")
+		sweepWorkRun(t, ws, "/provider status", "Workers use your normal network connection.")
 	}
 	sweepWorkRun(t, ws, "/provider config codex", "Auth state: UNKNOWN")
 	sweepWorkRun(t, ws, "/harness probe", "AVAILABLE")

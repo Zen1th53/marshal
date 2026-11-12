@@ -319,7 +319,7 @@ func TestMarshalDockTitleShowsLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustContain(t, f.take(),
-		"set-option -p -t %7 @marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    F11 Board ")
+		"set-option -p -t %7 @marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    [m] switch ")
 
 	// The reading turns unknown: the title says so within the same reconcile.
 	w.storeUsage([]usage.Quota{{Provider: "codex", Reason: usage.ReasonStale}})
@@ -350,12 +350,72 @@ func TestDockTitleFits(t *testing.T) {
 		width int
 		want  string
 	}{
-		{120, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    F11 Board "},
-		{45, " MARSHAL · ⬡ codex 58% left    F11 Board "},
-		{20, " MARSHAL · ⬡ codex    F11 Board "},
+		{120, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    [m] switch  F11 Board "},
+		{45, " MARSHAL · ⬡ codex 58% left    [m] switch "},
+		{20, " ⬡ 58% left    [m] "},
 	} {
 		if got := w.dockTitle(chat, tc.width); got != tc.want {
 			t.Fatalf("width %d:\n got %q\nwant %q", tc.width, got, tc.want)
+		}
+	}
+}
+
+// TestDockTitleModelAndLimit is the chat's title row at the two window widths
+// the plan names: the Marshal model (from the chat's --model, else the
+// provider's own last reading), its live limit and [m] flush right. At 100
+// columns the model name is shortened before any part of the limit goes, and
+// the percent left and [m] always stay.
+func TestDockTitleModelAndLimit(t *testing.T) {
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	codex := []usage.Quota{{Provider: "codex", Known: true, AsOf: now, Model: "gpt-6.1-sol",
+		Windows: []usage.Window{{Label: "wk", LeftPercent: 29, ResetsAt: now.Add(50 * time.Hour)}}}}
+	claude := []usage.Quota{{Provider: "claude", Known: true, AsOf: now,
+		Windows: []usage.Window{{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(98 * time.Hour)}}}}
+	for _, tc := range []struct {
+		name, provider string
+		args           []string
+		qs             []usage.Quota
+		windowCols     int
+		want           string
+	}{
+		{"codex 160", "codex", nil, codex, 160, " MARSHAL · ⬡ GPT-6.1-Sol ▓░░ 29% left ·2d             [m] switch  F11 Board "},
+		{"codex 100", "codex", nil, codex, 100, " MARSHAL · ⬡ 6.1-Sol 29% left       [m] "},
+		{"claude arg 160", "claude", []string{"--model", "claude-opus-5-5"}, claude, 160, " MARSHAL · ✳ Claude Opus 5.5 ▓▓░ 58% left ·4d         [m] switch  F11 Board "},
+		{"claude arg 100", "claude", []string{"--model=claude-opus-5-5"}, claude, 100, " MARSHAL · ✳ Opus 5.5 58% left      [m] "},
+		{"unknown model 100", "claude", nil, claude, 100, " MARSHAL · ✳ claude 58% left        [m] "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			chatW := dockWidth(tc.windowCols)
+			got, at := dockTitleFor(tc.provider, tc.args, tc.qs, true, true, chatW, true, now)
+			if got != tc.want {
+				t.Errorf("got  %q\nwant %q", got, tc.want)
+			}
+			if n := VisibleLen(got); n != chatW-3 {
+				t.Errorf("width %d, want %d", n, chatW-3)
+			}
+			if at < 0 || !strings.HasPrefix(string([]rune(got)[at:]), "[m]") {
+				t.Errorf("[m] at %d in %q", at, got)
+			}
+			if !strings.Contains(got, "% left") {
+				t.Errorf("limit dropped: %q", got)
+			}
+		})
+	}
+}
+
+func TestModelDisplayName(t *testing.T) {
+	for id, want := range map[string][2]string{
+		"gpt-6.1-sol":                {"GPT-6.1-Sol", "6.1-Sol"},
+		"gpt-5.1-codex-max":          {"GPT-5.1-Codex-Max", "5.1-Codex-Max"},
+		"claude-opus-5-5":            {"Claude Opus 5.5", "Opus 5.5"},
+		"claude-sonnet-4-5-20250929": {"Claude Sonnet 4.5", "Sonnet 4.5"},
+		"o3":                         {"o3", "o3"},
+		"":                           {"", ""},
+		"gpt-6; rm -rf":              {"GPT-6rm-Rf", "6rm-Rf"},
+	} {
+		long, short := modelDisplayName(id)
+		if long != want[0] || short != want[1] {
+			t.Errorf("%q: got %q/%q, want %q/%q", id, long, short, want[0], want[1])
 		}
 	}
 }
@@ -374,12 +434,12 @@ func TestDockTitleCases(t *testing.T) {
 		read     bool
 		want     string
 	}{
-		{"known", "codex", false, []usage.Quota{codexKnown(false)}, true, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    F11 Board "},
-		{"known stale", "codex", false, []usage.Quota{codexKnown(true)}, true, " MARSHAL · ⬡ codex ▓▓░ ~58% left ·4d    F11 Board "},
-		{"unknown", "agy", false, []usage.Quota{{Provider: "agy", Reason: usage.NotExposed}}, true, " MARSHAL · ◆ agy limit unknown    F11 Board "},
-		{"not read yet", "claude", false, nil, false, " MARSHAL · ✳ claude    F11 Board "},
-		{"no glyph", "", false, nil, false, " MARSHAL · chat    F11 Board "},
-		{"ascii", "codex", true, []usage.Quota{codexKnown(false)}, true, " MARSHAL . cx codex ==- 58% left .4d    F11 Board "},
+		{"known", "codex", false, []usage.Quota{codexKnown(false)}, true, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    [m] switch  F11 Board "},
+		{"known stale", "codex", false, []usage.Quota{codexKnown(true)}, true, " MARSHAL · ⬡ codex ▓▓░ ~58% left ·4d    [m] switch  F11 Board "},
+		{"unknown", "agy", false, []usage.Quota{{Provider: "agy", Reason: usage.NotExposed}}, true, " MARSHAL · ◆ agy limit unknown    [m] switch  F11 Board "},
+		{"not read yet", "claude", false, nil, false, " MARSHAL · ✳ claude    [m] switch  F11 Board "},
+		{"no glyph", "", false, nil, false, " MARSHAL · chat    [m] switch  F11 Board "},
+		{"ascii", "codex", true, []usage.Quota{codexKnown(false)}, true, " MARSHAL . cx codex ==- 58% left .4d    [m] switch  F11 Board "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := &Workspace{}

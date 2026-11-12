@@ -126,7 +126,8 @@ class CleanInstallSmokeTests(unittest.TestCase):
             daemon = self.start_daemon(repo_path)
             try:
                 status = self.run_marshal(repo_path, "status")
-                self.assertIn("tasks=0", status.stdout)
+                self.assertIn("Run: none yet", status.stdout)
+                self.assertNotIn("tasks=", status.stdout)
 
                 agent = self.run_marshal(
                     repo_path,

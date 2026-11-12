@@ -228,6 +228,7 @@ func (w *Workspace) followBoard(ctx context.Context) {
 		case <-t.C:
 		}
 		w.refreshBoard(ctx)
+		w.noteRunControl(ctx)
 	}
 }
 
@@ -420,8 +421,16 @@ func (w *Workspace) fillVitals(v *boardVisual, state UIState) {
 }
 
 // boardFrame paints the run on the Board with the composer, the inbox's
-// confirmation and any popup, and returns the frame with its cursor.
+// confirmation and any popup, and returns the frame with its cursor. The
+// vitals row is left out while Marshal's tmux status line carries it.
 func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, rows int) ([]string, int, int) {
+	return w.boardFrameVitals(state, th, popup, cols, rows, w.vitalsInStatus())
+}
+
+// boardFrameVitals is boardFrame; outside says the vitals row is painted
+// elsewhere (the tmux status line, or full width above a native chat), so
+// the Board lays out without it.
+func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, cols, rows int, outside bool) ([]string, int, int) {
 	p := state.Marshal
 	empty := p == nil
 	if empty {
@@ -452,6 +461,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
+	v.planning = w.planningNow(empty, state.Goal)
 	v.goalGiven = state.Goal.ID != "" && state.Goal.Confirmation != model.ConfirmationCancelled
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
@@ -484,6 +494,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.plan = w.planSrc() != nil
 	v.planView = v.plan && w.planView.Load()
 	v.viewNoRun = w.currentRunID() == ""
+	v.mcpFailed = w.mcpFailed()
 	v.arch = w.archSrc() != nil
 	v.archView = v.arch && w.archView.Load()
 	if w.inboxView.Confirming() || w.inboxView.Inspecting() {
@@ -539,6 +550,9 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		v.pick = w.pickerPaint()
 	}
 	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
+	if outside {
+		l = layout.ComputeFor(cols, rows+1, w.boardLayoutMode(), v.layoutCounts()).WithoutVitals()
+	}
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
 	// The opening animation (P2-03) owns the body on the first paints of a
@@ -592,6 +606,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	if len(popup) == 0 && w.boardHelp.Load() {
 		r := l.Overlay(0)
 		var helpHits []boardHit
+		v.telemetry = w.telemetryLine()
 		popup, ui.helpMax, helpHits = v.helpOverlay(r.W, r.H, ui.helpScroll)
 		ui.helpScroll = min(ui.helpScroll, ui.helpMax)
 		// helpOverlay places its regions box-relative; the overlay draws the
@@ -661,10 +676,10 @@ func (w *Workspace) providerDots(now time.Time) map[string]string {
 			switch providerState(provider, now) {
 			case "limit":
 				dot = "×"
-			case "re-verify":
+			case "re-verify", "unverified":
 				dot = "◐"
 			}
-			dots[provider.Provider] = dot
+			dots[providerWorker(provider.Provider)] = dot
 		}
 	}
 	return dots

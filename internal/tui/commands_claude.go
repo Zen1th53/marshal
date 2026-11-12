@@ -34,7 +34,7 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (result string, re
 	}
 	args = cleanArgv
 	dialect := app.ObserveProviderDialect(ctx, "claude")
-	if dialect.Operation(app.ProviderArgOperation("claude", args)).Status == app.ProviderUnknown {
+	if showQualificationLabel && dialect.Operation(app.ProviderArgOperation("claude", args)).Status == app.ProviderUnknown {
 		defer func() {
 			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation("claude", args)
 			if resultErr != nil {
@@ -100,7 +100,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			return h.handleNativeSelection(ctx, "claude", args)
 		}
 	}
-	if len(args) > 0 && app.ObserveProviderDialect(ctx, "claude").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
+	if showQualificationLabel && len(args) > 0 && app.ObserveProviderDialect(ctx, "claude").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
 		defer func() {
 			result = "UNKNOWN — unqualified pass-through: claude " + strings.ToLower(args[0]) + "\n" + result
 		}()

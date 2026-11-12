@@ -10,19 +10,15 @@ import (
 func TestMarshalSplashShowsAWordmark(t *testing.T) {
 	th := NewTheme(ThemeDefault, true, false)
 	seen := map[string]bool{}
+	// Every edition shows the same subtitle; none names its machinery
+	// ("approval authority").
 	wantSubtitle := "Summoning the Marshal"
-	if buildMarker != "" {
-		wantSubtitle = buildMarker
-	}
 	splitAnchor := "Summoning"
-	if buildMarker != "" {
-		splitAnchor = buildMarker
-	}
 	for i := 0; i < 200; i++ {
 		var b strings.Builder
 		playMarshalSplash(&b, th, false)
 		out := b.String()
-		if !strings.Contains(out, wantSubtitle) {
+		if !strings.Contains(out, wantSubtitle) || strings.Contains(out, "authority") {
 			t.Fatalf("splash lacks its subtitle:\n%s", out)
 		}
 		for _, provider := range []string{"Codex", "Claude", "OpenCode", "Antigravity", "codex", "claude"} {

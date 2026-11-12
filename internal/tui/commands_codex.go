@@ -31,7 +31,7 @@ func runGovernedCodexCmd(ctx context.Context, args []string) (result string, res
 	}
 	args = cleanArgv
 	dialect := app.ObserveProviderDialect(ctx, "codex")
-	if dialect.Operation(app.ProviderArgOperation("codex", args)).Status == app.ProviderUnknown {
+	if showQualificationLabel && dialect.Operation(app.ProviderArgOperation("codex", args)).Status == app.ProviderUnknown {
 		defer func() {
 			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation("codex", args)
 			if resultErr != nil {
@@ -110,7 +110,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			return h.handleNativeSelection(ctx, "codex", args)
 		}
 	}
-	if len(args) > 0 && app.ObserveProviderDialect(ctx, "codex").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
+	if showQualificationLabel && len(args) > 0 && app.ObserveProviderDialect(ctx, "codex").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
 		defer func() {
 			result = "UNKNOWN — unqualified pass-through: codex " + strings.ToLower(args[0]) + "\n" + result
 		}()

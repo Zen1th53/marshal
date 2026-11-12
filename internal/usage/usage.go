@@ -40,6 +40,10 @@ type Quota struct {
 	// Stale is set on a Known quota whose figures are FreshFor old or more:
 	// still shown, marked as old.
 	Stale bool
+	// Model is the model the provider last named in the same file the
+	// figures came from (Codex: the rollout's newest turn_context), as the
+	// provider's own bottom line shows it; "" when it named none.
+	Model string
 }
 
 // Binding is the known window closest to its limit: the highest used

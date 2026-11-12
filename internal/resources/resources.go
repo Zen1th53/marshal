@@ -18,6 +18,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/hostwatch"
 )
 
 type Status string
@@ -533,13 +535,11 @@ func assess(m Memory, d Storage, thermal Status, thermalWarning string) Health {
 		}
 	}
 	if d.TotalBytes > 0 {
-		ratio := float64(d.FreeBytes) / float64(d.TotalBytes)
-		if ratio < .05 {
-			h.Disk = StatusCritical
-			h.Warnings = append(h.Warnings, "very low disk space")
-		} else if ratio < .10 {
+		// One rule for low disk everywhere, the Host view's: free space
+		// below 10 GB or 5% of the disk, whichever is smaller.
+		if d.FreeBytes < hostwatch.DefaultPolicy().DiskFreeThresholdBytes(d.TotalBytes) {
 			h.Disk = StatusWarn
-			h.Warnings = append(h.Warnings, "low disk space")
+			h.Warnings = append(h.Warnings, "low disk space: "+hostwatch.GBText(d.FreeBytes)+" free")
 		} else {
 			h.Disk = StatusOK
 		}

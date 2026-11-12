@@ -354,6 +354,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if handled, waitErr := s.pausePrivateProcess05Approval(ctx, runID, dispatch, err); handled {
 		return handin, waitErr
 	}
+	if handled, parkErr := s.parkPausedTask(ctx, runID, dispatch, err); handled {
+		return handin, parkErr
+	}
 	if isGovernedHarnessMismatch(err) {
 		return marshal.HandIn{}, errors.Join(s.escalateGovernedHarnessMismatch(context.WithoutCancel(ctx), runID, dispatch.TaskID))
 	}
@@ -1147,6 +1150,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
+	s.forgetLaneAdmissionRetry(runID, taskID)
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalTaskReturned, map[string]any{"retry": true, "fresh_session": freshSession})
 }
 
@@ -2026,4 +2030,24 @@ func (s *MarshalService) requireIndependentVerifier(ctx context.Context, run mar
 		return errors.New("independent verifier is unavailable")
 	}
 	return nil
+}
+
+// parkPausedTask puts a task whose execution run the person paused back to
+// waiting: the pause is neither a failure nor rework, and the next dispatch
+// after resume continues the same lane. It reports whether cause was such a
+// pause.
+func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispatch MarshalDispatch, cause error) (bool, error) {
+	if !errors.Is(cause, ErrProcess05Paused) {
+		return false, nil
+	}
+	run, rev, err := s.load(context.WithoutCancel(ctx), runID)
+	if err != nil {
+		return true, err
+	}
+	i := taskIndex(run, dispatch.TaskID)
+	if i < 0 || run.Tasks[i].State != marshal.Dispatched {
+		return true, errors.Join(cause, model.ErrConflict)
+	}
+	run.Tasks[i].State = marshal.Queued
+	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 }

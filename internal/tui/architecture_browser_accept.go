@@ -71,6 +71,7 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 	w.clearAnswer(architectureOpening)
 	w.clearAnswer(architectureOpened)
 	w.RecordActivity(fmt.Sprintf("Architecture accepted in the browser (rev %d).", n))
+	w.planning.Store(true)
 	if w.archView.Load() {
 		w.closeArchView()
 	}

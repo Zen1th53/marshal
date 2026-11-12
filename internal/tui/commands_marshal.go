@@ -98,6 +98,10 @@ type marshalSession struct {
 	held      map[string]bool
 	launching map[string]int
 	holdCh    chan struct{}
+	// pausedRunID is the Marshal run the person paused from the palette
+	// (/pause all): every task of it that has not started is held, so the
+	// Marshal opens no new lane until they resume. Guarded by holdMu.
+	pausedRunID string
 }
 
 type marshalAmendment struct {
@@ -644,9 +648,9 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan ready: %d tasks", len(run.Tasks))))
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
 	w.queueMarshalPlanApproval()
-	return result + "\n" + fmt.Sprintf("A plan with %d tasks is ready. Review it and approve it in the popup.", len(run.Tasks)), nil
+	return result + "\n" + fmt.Sprintf("A plan with %s is ready. Review it and approve it in the popup.", count(len(run.Tasks), "task", "tasks")), nil
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {
@@ -1050,7 +1054,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "planning failed: " + err.Error()})
 			return
 		}
-		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks", len(run.Tasks))))
+		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, "plan drafted: "+count(len(run.Tasks), "task", "tasks")))
 	})
 	return "The Marshal is drafting a plan for: " + goal, nil
 }

@@ -60,7 +60,10 @@ func (e *Engine) controlRunLocked(ctx context.Context, runID, operation string, 
 		return RunControlResult{}, err
 	}
 	if err := e.controlTaskLanes(ctx, run, operation); err != nil {
-		return RunControlResult{Run: run, Executing: e.IsExecuting(runID)}, err
+		// operationMu is held here: read the executors directly, as below,
+		// not through IsExecuting, which takes it again.
+		_, executing := e.activeRuns[runID]
+		return RunControlResult{Run: run, Executing: executing || e.taskLanesExecuting(runID)}, err
 	}
 	if operation == "cancel" {
 		if cancel := e.turnCancels[runID]; cancel != nil {

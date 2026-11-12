@@ -33,6 +33,8 @@ func (w *Workspace) boardHints(v boardVisual) []string {
 		lead, tail = []string{"typing.send", "typing.cancel"}, false
 	case waitingGates(v.gates) > 0: // 5: a gate waits; more urgent than rule 4
 		lead = []string{"gate.reply"}
+	case v.empty && v.planning: // 4: no run yet, the Marshal is planning it
+		lead = []string{"marshal.say", "firstuse.chat", "marshal.pick"}
 	case v.empty: // 4: no run on screen
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
 	case v.guard != nil: // 6: the guard's alert
@@ -45,8 +47,8 @@ func (w *Workspace) boardHints(v boardVisual) []string {
 		lead = []string{"inbox.allow", "inbox.deny", "inbox.show"}
 	case inView: // 10: a body view's own keys
 		lead = v.viewHints()
-	default: // 11
-		lead = []string{"board.move", "task.inspect", "marshal.say"}
+	default: // 11; w chooses the highlighted task's model
+		lead = []string{"board.move", "task.inspect", "marshal.say", "task.model"}
 	}
 	out := lead
 	if tail {
@@ -277,13 +279,69 @@ func init() {
 		row("launch.retry", "r", "retry", (*Workspace).launchBlocked, reason("Nothing is blocked."), pressing(KeyEvent{Type: KeyRune, Rune: 'r'})),
 	}
 	// Two key rows whose click must take the key's own path, which the
-	// palette's does not: F11's chat switch and the palette's Ctrl+K.
+	// palette's does not: F11's chat switch and the palette's Ctrl+K; and
+	// F6, which opens the MCP failure's detail (mcp_fault.go).
 	for i := range boardKeymap {
 		switch boardKeymap[i].ID {
+		case "fkey.mcp":
+			boardKeymap[i].Run = (*Workspace).showMCPFailure
 		case "marshal.chat":
 			boardKeymap[i].Run = pressing(KeyEvent{Type: KeyF11})
 		case "palette":
 			boardKeymap[i].Run = pressing(KeyEvent{Type: KeyCtrlK})
 		}
 	}
+}
+
+// hintItem is one hint of the bar as the footer writes it: the action's
+// registry id, its key and its label.
+type hintItem struct{ id, key, hint string }
+
+// fitHints shortens the hint bar to fit w cells after used cells of note, by
+// one rule: the state's lead actions, "space actions" and "? help" stay
+// longest. It drops the tail's optional items (Marshal, chat) from the end
+// first, then shortens every label to its first word ("say what to build"
+// is "say"), then drops the lead's items from the end but its first and a
+// view's "esc board", and only then "space actions", the first lead item
+// and, last, "? help". Each hint takes its key, a space, its label and two
+// cells after it.
+func fitHints(items []hintItem, used, w int) []hintItem {
+	fits := func(list []hintItem) bool {
+		n := used
+		for _, it := range list {
+			n += VisibleLen(it.key) + 1 + VisibleLen(it.hint) + 2
+		}
+		return n <= w
+	}
+	out := slices.Clone(items)
+	lead := slices.IndexFunc(out, func(it hintItem) bool { return it.id == "palette" })
+	if lead < 0 {
+		lead = len(out)
+	}
+	// drop removes, from the end, the items keep does not keep until the
+	// bar fits.
+	drop := func(keep func(i int, id string) bool) {
+		for i := len(out) - 1; i >= 0 && !fits(out); i-- {
+			if !keep(i, out[i].id) {
+				out = slices.Delete(out, i, i+1)
+				if i < lead {
+					lead--
+				}
+			}
+		}
+	}
+	// 1: the tail's optional items, from the end.
+	drop(func(i int, id string) bool { return i < lead || id == "palette" || id == "help" })
+	// 2: every label to its first word.
+	if !fits(out) {
+		for i := range out {
+			out[i].hint, _, _ = strings.Cut(out[i].hint, " ")
+		}
+	}
+	// 3: the lead's items from the end, its first and the way out kept.
+	drop(func(i int, id string) bool { return i == 0 || i >= lead || id == "view.leave" })
+	// 4: "space actions", then the first lead item; "? help" goes last.
+	drop(func(_ int, id string) bool { return id != "palette" })
+	drop(func(_ int, id string) bool { return id == "help" })
+	return out
 }

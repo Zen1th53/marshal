@@ -54,12 +54,21 @@ const (
 )
 
 // marshalKickoff is the one conversation turn that starts a Marshal whose
-// protocol was delivered outside the conversation.
-const marshalKickoff = "Start."
+// protocol was delivered outside the conversation. No supported CLI starts a
+// model turn without a user message (Codex and Claude Code both wait at an
+// empty prompt), so the cue cannot be avoided; it is worded as the person
+// would greet, because the CLI prints it as their first message. Neither cue
+// holds a quote character, so every launch script quotes it the same way.
+const marshalKickoff = "Hello."
 
 // marshalKickoffContinue is the conversation turn used when a saved intake
 // exists, delivered through the hidden instruction channel.
-const marshalKickoffContinue = "Continue."
+const marshalKickoffContinue = "Hello again."
+
+// legacyMarshalCues are the opening cues earlier versions appended. A saved
+// argv from such a version is still recognised, so a resume strips the old
+// cue instead of sending it as a fresh turn.
+var legacyMarshalCues = []string{"Start.", "Continue."}
 
 // marshalOpening is the single opening cue for one launch. It is Continue when
 // the project already carries saved intake or the launch scan found an active
@@ -107,7 +116,7 @@ func marshalCueArgs(provider, opening string) []string {
 // read it back from argv instead of recomputing it, so an intake saved or a
 // scan finished mid-launch can never make them disagree with what was sent.
 func trailingMarshalCue(provider string, args []string) []string {
-	for _, opening := range []string{marshalKickoff, marshalKickoffContinue} {
+	for _, opening := range append([]string{marshalKickoff, marshalKickoffContinue}, legacyMarshalCues...) {
 		k := marshalCueArgs(provider, opening)
 		if len(args) >= len(k) && slices.Equal(args[len(args)-len(k):], k) {
 			return k
@@ -171,6 +180,7 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string,
 	if err != nil {
 		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("read-only launch settings failed: %w", err))
 	}
+	args = marshalChatViewArgs(provider, root, args)
 	if channel != injectMarshalDir {
 		updated, _, err := applyBriefing(provider, root, args, protocol, channel)
 		if err != nil {

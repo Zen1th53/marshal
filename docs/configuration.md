@@ -3,7 +3,7 @@
 Marshal provides project-level configuration files, in-session TUI settings, CLI flags, and environment variables.
 
 > [!WARNING]
-> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not system calls or process execution. Always review goals, plans, and generated code before approving work.
+> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not system calls or process execution. The Marshal plans and approves the work itself; accepting the architecture is your one gate, so review it before you accept, and stop the run at any time with `Ctrl+X`.
 
 ---
 

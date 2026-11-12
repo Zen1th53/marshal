@@ -21,6 +21,10 @@ func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService
 	if !run.Process05Bound || req.Task.Mode != marshal.Governed || !marshalDepsMerged(run, req.Task) {
 		return nil, fmt.Errorf("%w: task lane requires reviewed dependencies", execution.ErrRunBlocked)
 	}
+	if parent.State == execution.RunPaused {
+		// The person paused the run: no new lane opens until they resume.
+		return nil, ErrProcess05Paused
+	}
 	if err := r.Execution().Engine().SetTaskLaneParent(ctx, parent.RunID, run.BaseCommit); err != nil {
 		return nil, err
 	}

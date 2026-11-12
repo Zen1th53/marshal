@@ -42,12 +42,16 @@ func TestLiveMCPRunProposalRecordedOnce(t *testing.T) {
 		w.routeBuildPermission(t.Context(), req)
 	}
 	count := 0
-	for _, n := range w.noteList() {
-		if strings.HasPrefix(n.Text, "Marshal allowed: /marshal amend") {
+	w.permissions.mu.Lock()
+	for _, d := range w.permissions.build.decisions {
+		if strings.Contains(d.request, "/marshal amend") {
 			count++
-			if strings.Contains(n.Text, "application failed") {
-				t.Errorf("a second application was attempted: %s", n.Text)
-			}
+		}
+	}
+	w.permissions.mu.Unlock()
+	for _, n := range w.noteList() {
+		if strings.Contains(n.Text, "could not be applied") {
+			t.Errorf("a second application was attempted: %s", n.Text)
 		}
 	}
 	if count != 1 {

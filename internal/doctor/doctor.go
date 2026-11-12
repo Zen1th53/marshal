@@ -45,6 +45,10 @@ type Result struct {
 	// text, when set, is what the human report shows in place of Detail. The
 	// machine-readable report keeps Detail unchanged.
 	text string
+	// folded rows are left out of the human report because another row
+	// already says, once, why they fail; the machine-readable report keeps
+	// them.
+	folded bool
 }
 
 // notCheckedDetail marks a check that could not run because there is no
@@ -73,6 +77,9 @@ func (r Report) FormattedText() string {
 	for _, res := range r.Results {
 		if res.Verdict == Fail && res.Detail == notCheckedDetail {
 			notChecked++
+			continue
+		}
+		if res.folded {
 			continue
 		}
 		status := fmt.Sprintf("[%s]", res.Verdict)
@@ -196,6 +203,13 @@ func Check(ctx context.Context, root string, options Options) Report {
 		return finalizeMissing(report)
 	}
 	add(success("repository", "git rev-parse", "repository identity resolved"))
+	// Before Marshal is set up here the files and state its checks read do
+	// not exist yet, so one row says so and what to do; the rows that fail
+	// only for that reason are folded into it.
+	_, runtimeErr := os.Lstat(layout.RuntimeDir)
+	_, stateErr := os.Lstat(layout.Database)
+	notSetUp := os.IsNotExist(runtimeErr) || os.IsNotExist(stateErr)
+	add = foldNotSetUp(add, notSetUp)
 
 	if value, err := versionValue(filepath.Join(layout.Root, "PACK-VERSION.yaml"), "pack_version"); err != nil || value == "" {
 		add(failure("pack", "parse PACK-VERSION.yaml", "pack version is invalid"))
@@ -447,6 +461,30 @@ func finalizeMissing(report Report) Report {
 	}
 	report.Verdict = Fail
 	return report
+}
+
+// notSetUpText is the doctor's one line for a Git project Marshal has not
+// been set up in yet.
+const notSetUpText = "Marshal isn't set up in this project yet. Run marshal here and it sets the project up."
+
+// foldNotSetUp wraps add for a project Marshal is not set up in: the state
+// row says so in plain words, and the rows that read the files setup writes
+// fail without being shown one by one. The verdict is unchanged.
+func foldNotSetUp(add func(Result), notSetUp bool) func(Result) {
+	if !notSetUp {
+		return add
+	}
+	return func(result Result) {
+		if result.Verdict == Fail {
+			switch result.Name {
+			case "sqlite":
+				result.text = notSetUpText
+			case "pack", "runtime_version", "permissions", "artifacts", "policy":
+				result.folded = true
+			}
+		}
+		add(result)
+	}
 }
 
 // repositoryProblem says why no project could be found in root and what to

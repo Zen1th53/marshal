@@ -1,6 +1,6 @@
 # The Board and Keyboard Shortcuts
 
-The Board is Marshal's terminal command center. Built on top of tmux, it coordinates tasks, worker processes, live activity streams, and operator approvals without requiring you to switch windows or manage multiple terminal tabs.
+The Board is Marshal's terminal command center. Built on top of tmux, it coordinates tasks, worker processes, live activity streams, and the one architecture acceptance gate without requiring you to switch windows or manage multiple terminal tabs.
 
 ---
 

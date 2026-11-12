@@ -15,4 +15,31 @@ const (
 	// egressReportsEnforcement: /egress probes and reports bubblewrap
 	// network isolation only where the build uses it.
 	egressReportsEnforcement = false
+	// egressNoRunsText is /egress with nothing recorded.
+	egressNoRunsText = "No network calls recorded yet.\n"
+	// showQualificationLabel: the Marshal build passes a provider's own
+	// commands through without the governed build's qualification label.
+	showQualificationLabel = false
+	// providerStatusHeading heads /provider status.
+	providerStatusHeading = "Providers:"
 )
+
+// credentialRequestQueuedText answers /permission credential request. This
+// build has no credential broker: the Marshal decides whether tasks may use
+// the provider's own sign-in.
+func credentialRequestQueuedText(provider string) string {
+	return "Asked to let tasks use " + provider + "'s sign-in in this project. The Marshal decides."
+}
+
+// credentialRevocationMessage answers /permission credential revoke and
+// status from the revocation's state, in this build's words.
+func credentialRevocationMessage(provider, state string) string {
+	switch state {
+	case "pending":
+		return "Tasks may no longer use " + provider + "'s sign-in; running ones stop once they confirm. Check /permission credential status " + provider + "."
+	case "closed":
+		return "Tasks may no longer use " + provider + "'s sign-in; every running task has stopped using it."
+	default:
+		return "Nothing about " + provider + "'s sign-in was revoked."
+	}
+}

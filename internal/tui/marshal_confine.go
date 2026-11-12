@@ -108,6 +108,24 @@ func confineMarshalChat(provider, root string, args []string, rights marshal.Exe
 	return args, nil
 }
 
+// codexMarshalChatTips turns off Codex's own usage tips in the Marshal chat
+// ("Tip: Press ^g to edit your current draft…" printed under an answer). It
+// is a -c override for this launch only; the owner's config.toml is never
+// edited. Codex 0.167 knows the key (`codex exec --strict-config -c
+// tui.show_tooltips=false` loads, an unknown tui key is refused). Codex has
+// no key that hides or collapses MCP tool-call cells; MARSHAL shapes its
+// tool results instead (internal/mcp marshalResultContent).
+const codexMarshalChatTips = "tui.show_tooltips=false"
+
+// marshalChatViewArgs adds the Codex display overrides of a Marshal chat
+// launch, once: a rebuilt argv that carries them is left as it is.
+func marshalChatViewArgs(provider, root string, args []string) []string {
+	if canonicalNeutralProvider(provider) != "codex" || codexConfigOverrides(args, "tui.show_tooltips") {
+		return args
+	}
+	return insertBeforeKickoff("codex", root, args, []string{"-c", codexMarshalChatTips})
+}
+
 // codexMarshalConfineFlags are the -c overrides of MARSHAL's Codex
 // permission profile: the whole disk readable, the project read-only, and
 // only .marshal/marshal and .marshal/proposals writable. They override the

@@ -99,6 +99,9 @@ func (w *Workspace) wakeVerify() {
 // openVerifyView paints the Verify view in the Board's body, in place of
 // any other view, and asks the follower for a fresh read.
 func (w *Workspace) openVerifyView() {
+	if w.refuseRunView("Verify") {
+		return
+	}
 	w.hostView.Store(false)
 	if w.planView.Load() {
 		w.closePlanView()

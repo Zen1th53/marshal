@@ -24,6 +24,9 @@ func (w *Workspace) paintBlocked(l layout.Layout, th *Theme, v boardVisual) []st
 			}
 		}
 	}
+	// The vitals row stays on top of this screen too (when the tmux status
+	// line carries it, the layout has no vitals pane and nothing is placed).
+	place(layout.Vitals)
 	place(layout.Header)
 	place(layout.Footer)
 	body := l.Body

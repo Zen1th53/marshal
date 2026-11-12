@@ -454,3 +454,33 @@ func (v Viewport) Fit(rows, n int) Viewport {
 	v.Top = min(v.Top, v.Sel)
 	return v
 }
+
+// WithoutVitals is l with its vitals row taken out: every pane, rule and the
+// body move up one row and the layout is one row shorter. The caller lays out
+// one row more than it has and calls this when the vitals row is painted
+// elsewhere — Marshal's tmux status line, full width above every pane — so
+// the Board keeps the geometry it has at that size and only loses the row.
+// A layout with no vitals row comes back unchanged.
+func (l Layout) WithoutVitals() Layout {
+	i := slices.IndexFunc(l.Panes, func(p Pane) bool { return p.ID == Vitals })
+	if i < 0 {
+		return l
+	}
+	out := l
+	out.Rows = max(0, l.Rows-1)
+	out.Panes = nil
+	for j, p := range l.Panes {
+		if j == i {
+			continue
+		}
+		p.Rect.Y--
+		out.Panes = append(out.Panes, p)
+	}
+	out.Rules = nil
+	for _, r := range l.Rules {
+		r.Y--
+		out.Rules = append(out.Rules, r)
+	}
+	out.Body.Y--
+	return out
+}

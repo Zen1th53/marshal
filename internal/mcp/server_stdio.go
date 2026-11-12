@@ -130,6 +130,7 @@ func (s *Server) handleStdioRequest(ctx context.Context, req jsonRPCRequest) jso
 			ProtocolVersion string `json:"protocolVersion"`
 		}
 		_ = json.Unmarshal(req.Params, &params)
+		s.noteMCPClient(req.Params)
 		protoVer := params.ProtocolVersion
 		if protoVer == "" {
 			protoVer = ProtocolVersion2026
@@ -183,11 +184,7 @@ func (s *Server) handleStdioRequest(ctx context.Context, req jsonRPCRequest) jso
 			resp.Error = toolError(params.Name, err)
 			return resp
 		}
-		resp.Result = map[string]any{
-			"content": []map[string]any{
-				{"type": "text", "text": res},
-			},
-		}
+		resp.Result = map[string]any{"content": s.marshalResultContent(params.Name, res)}
 
 	case "ping":
 		resp.Result = map[string]any{}

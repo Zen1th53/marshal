@@ -49,7 +49,7 @@ func TestConfineMarshalChatArgsPerProvider(t *testing.T) {
 					t.Fatalf("%s small-tasks was confined: %q", provider, args)
 				}
 			case provider == "codex":
-				want := []string{"-c", wantCodexProfile, "-c", wantCodexFilesystem, "Start."}
+				want := []string{"-c", wantCodexProfile, "-c", wantCodexFilesystem, "Hello."}
 				if !slices.Equal(args, want) {
 					t.Fatalf("codex %q args %q, want %q", rights, args, want)
 				}
@@ -59,9 +59,9 @@ func TestConfineMarshalChatArgsPerProvider(t *testing.T) {
 					}
 				}
 			case provider == "claude":
-				want := []string{"--permission-mode", "manual", "Start."}
+				want := []string{"--permission-mode", "manual", "Hello."}
 				if codexMarshalConfineEnforced { // the shipped edition
-					want = []string{"--permission-mode", "dontAsk", "--settings", wantClaudeSettings, "Start."}
+					want = []string{"--permission-mode", "dontAsk", "--settings", wantClaudeSettings, "Hello."}
 				}
 				if !slices.Equal(args, want) {
 					t.Fatalf("claude %q args %q, want %q", rights, args, want)
@@ -104,7 +104,7 @@ func TestPrepareMarshalLaunchCodexReadOnlyByDefault(t *testing.T) {
 		if !confined && codexMarshalConfineEnforced && !workspaceWrite {
 			t.Fatalf("small-tasks lost its workspace-write sandbox: %q", args)
 		}
-		if args[len(args)-1] != "Start." {
+		if args[len(args)-1] != "Hello." {
 			t.Fatalf("%q: cue not last: %q", rights, args)
 		}
 	}
@@ -129,7 +129,7 @@ func TestPrepareMarshalLaunchClaudeConfined(t *testing.T) {
 	}
 	sep := slices.Index(args, "--")
 	at := slices.Index(args, "--permission-mode")
-	if at < 0 || args[at+1] != mode || sep < 0 || at > sep || args[len(args)-1] != "Start." {
+	if at < 0 || args[at+1] != mode || sep < 0 || at > sep || args[len(args)-1] != "Hello." {
 		t.Fatalf("claude argv %q", args)
 	}
 }
@@ -140,7 +140,7 @@ func TestWorkspaceMarshalChatConfinement(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	root := t.TempDir()
-	args, err := w.confineWorkspaceMarshalChat(context.Background(), "codex", root, []string{"Start."})
+	args, err := w.confineWorkspaceMarshalChat(context.Background(), "codex", root, []string{"Hello."})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestWorkspaceMarshalChatConfinement(t *testing.T) {
 	if got := w.guard.marshalWrites; got != want {
 		t.Fatalf("guard told %v, want %v", got, want)
 	}
-	if _, err := w.confineWorkspaceMarshalChat(context.Background(), "agy", root, []string{"--prompt-interactive", "Start."}); err != nil {
+	if _, err := w.confineWorkspaceMarshalChat(context.Background(), "agy", root, []string{"--prompt-interactive", "Hello."}); err != nil {
 		t.Fatal(err)
 	}
 	if got := w.guard.marshalWrites; got != marshalWritesUnblocked {

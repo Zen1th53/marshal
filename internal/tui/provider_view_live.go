@@ -109,7 +109,7 @@ type providerViewState struct {
 
 // clampLocked keeps the selection on a provider the overview still has.
 func (s *providerViewState) clampLocked() {
-	ps := s.snap.Providers
+	ps := s.snap.rows()
 	if slices.ContainsFunc(ps, func(p store.ProviderStatus) bool { return p.Provider == s.selected }) {
 		return
 	}
@@ -228,6 +228,7 @@ func (w *Workspace) refreshProviders(ctx context.Context) {
 		w.prov.snap.Err = err.Error()
 	} else {
 		w.prov.snap.Providers, w.prov.snap.Loaded, w.prov.snap.Err = ps, true, ""
+		w.prov.snap.Installed = installedRows(ps, w.installedProviders())
 	}
 	w.prov.clampLocked()
 	w.prov.mu.Unlock()
@@ -248,7 +249,7 @@ func (w *Workspace) handleProviderKey(event KeyEvent) bool {
 	p := &w.prov
 	p.mu.Lock()
 	p.clampLocked()
-	ps := p.snap.Providers
+	ps := p.snap.rows()
 	route, armed := p.route, p.verify
 	p.mu.Unlock()
 	move := func(delta int) {
@@ -341,7 +342,7 @@ func (w *Workspace) verifyProvider() {
 	w.prov.clampLocked()
 	var sel store.ProviderStatus
 	found := false
-	for _, p := range w.prov.snap.Providers {
+	for _, p := range w.prov.snap.rows() {
 		if p.Provider == w.prov.selected {
 			sel, found = p, true
 		}
@@ -395,7 +396,7 @@ func (w *Workspace) armProviderRoute() {
 	from, busy := w.prov.selected, w.prov.busy+w.prov.routing
 	to := ""
 	now := time.Now()
-	for _, p := range w.prov.snap.Providers {
+	for _, p := range w.prov.snap.rows() {
 		if to == "" && providerWorker(p.Provider) != providerWorker(from) && providerState(p, now) == "ready" {
 			to = providerWorker(p.Provider)
 		}

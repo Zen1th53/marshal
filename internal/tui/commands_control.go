@@ -36,6 +36,7 @@ func (w *Workspace) plainStatus() string {
 	fmt.Fprintf(&out, "Marshal %s · %s\n", BuildVersion, folder)
 	if p == nil {
 		out.WriteString("Run: none yet. Press s and tell the Marshal what to build.")
+		out.WriteString("\n" + w.telemetryLine())
 		return out.String()
 	}
 
@@ -63,8 +64,15 @@ func (w *Workspace) plainStatus() string {
 		labels = append(labels, app.ProviderDisplayName(provider)+" "+word)
 	}
 	fmt.Fprintf(&out, "\nProviders: %s", strings.Join(labels, " · "))
+	out.WriteString("\n" + w.telemetryLine())
 	return out.String()
 }
+
+// telemetryLineFor says whether anonymous telemetry is on; tests replace it.
+var telemetryLineFor = app.TelemetryLine
+
+// telemetryLine is /status's and the help's line about anonymous telemetry.
+func (w *Workspace) telemetryLine() string { return telemetryLineFor(w.providerRoot()) }
 
 func (h *CommandHandler) handleVerification(ctx context.Context, id string) (string, error) {
 	if h.ws.store == nil {

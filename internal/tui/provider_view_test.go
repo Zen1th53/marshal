@@ -192,7 +192,7 @@ func TestProviderViewContent(t *testing.T) {
 	}
 	empty := providerPaint{Snap: providerSnapshot{Loaded: true, At: now}}
 	lines, _ = v.providerLines(empty, 100)
-	if !strings.Contains(strings.Join(lines, "\n"), "no harness profiles and no lanes yet") {
+	if !strings.Contains(strings.Join(lines, "\n"), "no provider is installed on this machine yet") {
 		t.Error("an empty Providers view says nothing")
 	}
 	ascii := hostASCII(lines, 100)

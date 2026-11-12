@@ -9,7 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/chat"
 )
 
-const runClosedNoticeWant = "Runtime notice: the run closed — 3 of 4 tasks verified and merged to main. Tell the person in one or two sentences what was delivered and ask what they want next. Do not start new work until they answer."
+const runClosedNoticeWant = "[Marshal] The run closed: 3 of 4 tasks verified and merged to main. Tell the person briefly what was delivered and ask what is next; start nothing until they answer."
 
 // noticePanel is a published panel for a run with three of four tasks merged
 // to main, in state.
@@ -30,7 +30,7 @@ func withTmuxChat(w *Workspace) {
 // labelled as from the runtime.
 func runtimeNotices(w *Workspace) (texts []string, runtime []bool) {
 	for _, e := range w.sayEchoList() {
-		if strings.HasPrefix(e.Text, "Runtime notice: the run closed") {
+		if strings.HasPrefix(e.Text, "[Marshal] The run closed") {
 			texts = append(texts, e.Text)
 			runtime = append(runtime, e.Runtime)
 		}
@@ -154,7 +154,7 @@ func TestRunClosedNoticeNativeChatIsRuntimeNote(t *testing.T) {
 // Without a target branch the notice still states plain counts.
 func TestRunClosedNoticeWithoutTarget(t *testing.T) {
 	got := runClosedNotice(2, 2, "")
-	if !strings.HasPrefix(got, "Runtime notice: the run closed — 2 of 2 tasks verified and merged. Tell the person") {
+	if !strings.HasPrefix(got, "[Marshal] The run closed: 2 of 2 tasks verified and merged. Tell the person") {
 		t.Fatalf("notice %q", got)
 	}
 }

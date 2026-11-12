@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,40 @@ func TestTaskRowSentBack(t *testing.T) {
 	}
 	if got := taskRow(rowsVisual(row(2, model.TaskRework), ThemeDefault, false)); !strings.Contains(got, "sent back 2x") {
 		t.Errorf("two returns in ASCII: %q", got)
+	}
+}
+
+// The sent back column is there only once a task was sent back, and the
+// TASKS title counts one task as "1 task".
+func TestTasksSentBackColumnOnlyWhenSentBack(t *testing.T) {
+	board := func(returns ...int) model.Board {
+		var b model.Board
+		for i, r := range returns {
+			b.Tasks = append(b.Tasks, model.TaskRow{ID: fmt.Sprintf("T-%d", i+1), State: model.TaskWorking, Scope: []string{"a.go"}, Returns: r})
+		}
+		b.Run.Total = len(returns)
+		return b
+	}
+	for _, w := range []int{73, 120} {
+		lines := rowsVisual(board(0), ThemeNoColor, true).tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: w, H: 6}})
+		if title := StripANSI(lines[0]); !strings.Contains(title, "TASKS 1 task ·") {
+			t.Errorf("width %d: one task's title: %q", w, title)
+		}
+		if head := StripANSI(lines[1]); strings.Contains(head, "sent back") {
+			t.Errorf("width %d: no task was sent back, yet the column shows: %q", w, head)
+		}
+		lines = rowsVisual(board(0, 1), ThemeNoColor, true).tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: w, H: 6}})
+		if title := StripANSI(lines[0]); !strings.Contains(title, "TASKS 2 tasks ·") {
+			t.Errorf("width %d: two tasks' title: %q", w, title)
+		}
+		if head := StripANSI(lines[1]); !strings.Contains(head, "sent back") {
+			t.Errorf("width %d: a task was sent back, yet the column is gone: %q", w, head)
+		}
+		for _, l := range lines {
+			if got := VisibleLen(l); got != w {
+				t.Errorf("width %d: line is %d cells: %q", w, got, l)
+			}
+		}
 	}
 }
 

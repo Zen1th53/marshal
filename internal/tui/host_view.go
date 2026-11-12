@@ -46,7 +46,9 @@ func (s hostSnapshot) chip() hostFigures {
 	if r, ok := s.root(); ok {
 		c.DiskPct = int(math.Round(float64(r.UsedBytes) / float64(r.TotalBytes) * 100))
 		c.DiskKnown = true
-		c.LowDisk = r.FreeBytes < 2*s.Policy.DiskFreeThresholdBytes(r.TotalBytes)
+		// The agreed rule, the same as the doctor and the Host view: low
+		// when free space is below min(10 GB, 5% of the disk).
+		c.LowDisk = r.FreeBytes < s.Policy.DiskFreeThresholdBytes(r.TotalBytes)
 	}
 	return c
 }
@@ -84,7 +86,7 @@ func (v boardVisual) hostRender(s hostSnapshot, w, h, scroll int) ([]string, int
 	scroll = min(max(0, scroll), maxScroll)
 	out := all[scroll:min(len(all), scroll+h)]
 	if scroll < maxScroll && len(out) == h && h > 0 {
-		out[h-1] = v.fg("dim", fmt.Sprintf("… %d more lines · j/k scroll", maxScroll-scroll))
+		out[h-1] = v.fg("dim", "… "+count(maxScroll-scroll, "more line", "more lines")+" · j/k scroll")
 	}
 	for i := range out {
 		out[i] = PadCell(out[i], w)

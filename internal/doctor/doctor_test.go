@@ -145,3 +145,34 @@ func TestProbeMCPProviders(t *testing.T) {
 		t.Fatalf("mcp_providers detail expected provider names, got %q", check.Detail)
 	}
 }
+
+// Before Marshal is set up in a Git project, the human report says so in one
+// plain row with the next step, instead of a row per missing file; the JSON
+// report keeps every row. Doctor stays read-only: it sets nothing up.
+func TestDoctorBeforeInitIsPlain(t *testing.T) {
+	repo := doctorRepo(t)
+	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	if report.Verdict != Fail {
+		t.Fatalf("verdict = %s", report.Verdict)
+	}
+	text := report.FormattedText()
+	if !strings.Contains(text, notSetUpText) || strings.Count(text, "[FAIL]") != 1 {
+		t.Fatalf("not one plain row:\n%s", text)
+	}
+	for _, gone := range []string{"canonical state cannot be opened", "pack version is invalid", "runtime version is invalid", "runtime directory must have mode 0700", "artifact directory", "policy is unavailable"} {
+		if strings.Contains(text, gone) {
+			t.Fatalf("human report still shows %q:\n%s", gone, text)
+		}
+	}
+	if row := report.Check("sqlite"); row == nil || row.Detail != "canonical state cannot be opened" {
+		t.Fatalf("JSON detail changed: %+v", row)
+	}
+	for _, name := range []string{"permissions", "artifacts"} {
+		if row := report.Check(name); row == nil || row.Verdict != Fail {
+			t.Fatalf("%s row missing from the report: %+v", name, row)
+		}
+	}
+	if _, err := os.Stat(statepath.Path(repo.Path())); !os.IsNotExist(err) {
+		t.Fatalf("doctor created Marshal's state: %v", err)
+	}
+}

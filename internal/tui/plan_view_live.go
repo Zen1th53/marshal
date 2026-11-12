@@ -107,6 +107,9 @@ func (w *Workspace) closeBodyViews() {
 // openPlanView paints the Plan view in the Board's body, in place of any
 // other view, and asks the follower for a fresh read.
 func (w *Workspace) openPlanView() {
+	if w.refuseRunView("Plan") {
+		return
+	}
 	w.closeBodyViews()
 	w.planView.Store(true)
 	w.wakePlan()
@@ -194,6 +197,27 @@ func (w *Workspace) currentRunID() string {
 		return p.RunID
 	}
 	return ""
+}
+
+// hasRun reports whether a run exists to show in the Verify, Security and
+// Plan views. It reads only the workspace's state, so a keymap When may call
+// it on the paint path.
+func (w *Workspace) hasRun() bool { return w.currentRunID() != "" }
+
+// runViewWhy is the one line the Verify, Security and Plan views' keys answer
+// while there is no run: the view is not opened.
+func runViewWhy(name string) string {
+	return "No run yet, so the " + name + " view has nothing to show. Press s and tell the Marshal what to build."
+}
+
+// refuseRunView answers a run view's key with runViewWhy while there is no
+// run, and reports whether it did.
+func (w *Workspace) refuseRunView(name string) bool {
+	if w.hasRun() {
+		return false
+	}
+	w.setOutput(runViewWhy(name), false)
+	return true
 }
 
 // switchBodyView is the keys every body view shares: 2 or h for the Host

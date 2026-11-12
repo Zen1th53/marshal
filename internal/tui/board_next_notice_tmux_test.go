@@ -39,7 +39,7 @@ func TestRunClosedNoticeReachesIdleTmuxChat(t *testing.T) {
 		return fmt.Sprintf("echo %+v pane:\n%s", w.sayEchoList(), out)
 	}
 	waitFor(t, func() bool { return echoState(w, runClosedNoticeWant) == saySent }, why)
-	waitForTmuxOutput(t, pane, "got:Runtime notice: the run closed")
+	waitForTmuxOutput(t, pane, "got:[Marshal] The run closed")
 
 	// The queue is not wedged: the person's next message goes in too.
 	w.sayToMarshal(ctx, "thanks")

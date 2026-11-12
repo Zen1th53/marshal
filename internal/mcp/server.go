@@ -36,6 +36,10 @@ type Server struct {
 	concurrencyLimiter *ratelimit.ConcurrencyLimiter
 	workerCaller       *auth.Principal
 	workerValidate     func(context.Context) error
+	// codexClient is set when the stdio client that opened this session is
+	// Codex (marshalResultContent). Only the stdio loop, which handles one
+	// request at a time, writes it.
+	codexClient bool
 }
 
 func NewServer(runtime *app.Runtime) *Server {

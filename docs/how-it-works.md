@@ -7,7 +7,7 @@ Marshal coordinates multiple AI coding agents to complete software engineering g
 ```
 
 > [!WARNING]
-> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not system calls or process execution. Always review goals, plans, and generated code before approving work.
+> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not system calls or process execution. The Marshal plans and approves the work itself; accepting the architecture is your one gate, so review it before you accept, and stop the run at any time with `Ctrl+X`.
 
 ---
 
@@ -22,7 +22,7 @@ A run begins when you provide a goal—either by pressing `s` on the Board or ty
    - Assigned worker provider.
    - Objective acceptance criteria.
    - Executable verification checks (e.g., unit test commands, linter runs).
-4. **Plan Approval**: The Marshal checks the drafted task graph and approves it itself. You can read it on the Plan view (`7`). If the Marshal asks you instead, press `y` and then `Enter` on the `NEEDS YOU` gate.
+4. **Plan Approval**: The Marshal checks the drafted task graph and approves it itself; there is no plan-approval gate. You can read the plan on the Plan view (`7`) and stop the run at any time with `Ctrl+X`.
 
 ---
 

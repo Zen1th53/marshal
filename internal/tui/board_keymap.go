@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -66,6 +65,17 @@ type boardKey struct {
 	Run func(*Workspace, context.Context)
 }
 
+// runViewOff is the Why of a view that needs a run: runViewWhy while there is
+// none, else the fixed sentence for a session that cannot read the view.
+func runViewOff(name, noSource string) func(*Workspace) string {
+	return func(w *Workspace) string {
+		if !w.hasRun() {
+			return runViewWhy(name)
+		}
+		return noSource
+	}
+}
+
 func pressRune(r rune) *KeyEvent { return &KeyEvent{Type: KeyRune, Rune: r} }
 
 // reason wraps a fixed sentence as a Why, the common case where the one
@@ -74,13 +84,13 @@ func reason(s string) func(*Workspace) string { return func(*Workspace) string {
 
 // boardKeymap is every key the Board binds, in the order help lists them.
 var boardKeymap = []boardKey{
-	{Group: "VIEWS", Keys: "1  Esc", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
+	{Group: "VIEWS", Keys: "1", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
 	{Group: "VIEWS", Keys: "2  h", What: "host: temperature, disk, guards", View: "Host", Press: pressRune('2'), Class: KeyOpen, ID: "view.host", Hint: "host", When: func(w *Workspace) bool { return w.hostWatch.Load() != nil }, Why: reason("Host vitals are not available in this session.")},
-	{Group: "VIEWS", Keys: "3", What: "memory (MCP): review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
+	{Group: "VIEWS", Keys: "3", What: "memory: review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
 	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen, ID: "view.providers", Hint: "providers", When: func(w *Workspace) bool { return w.providerSrc() != nil }, Why: reason("Provider health has nothing to show in this session.")},
-	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen, ID: "view.verify", Hint: "verify", When: func(w *Workspace) bool { return w.verifySrc() != nil }, Why: reason("There are no claims to verify in this session.")},
-	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen, ID: "view.security", Hint: "security", When: func(w *Workspace) bool { return w.securitySrc() != nil }, Why: reason("There is no security activity to show in this session.")},
-	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil }, Why: reason("There is no plan to show in this session.")},
+	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen, ID: "view.verify", Hint: "verify", When: func(w *Workspace) bool { return w.verifySrc() != nil && w.hasRun() }, Why: runViewOff("Verify", "There are no claims to verify in this session.")},
+	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen, ID: "view.security", Hint: "security", When: func(w *Workspace) bool { return w.securitySrc() != nil && w.hasRun() }, Why: runViewOff("Security", "There is no security activity to show in this session.")},
+	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil && w.hasRun() }, Why: runViewOff("Plan", "There is no plan to show in this session.")},
 	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen, ID: "view.architecture", Hint: "architecture", When: func(w *Workspace) bool { return w.archSrc() != nil }, Why: reason("There is no architecture to show in this session.")},
 
 	{Group: "BOARD", Keys: "j k  ↑ ↓", What: "move in the focused pane, scroll", Class: KeyMove, ID: "board.move", Hint: "move"},
@@ -125,7 +135,7 @@ var boardKeymap = []boardKey{
 	{Group: "FUNCTION KEYS", Keys: "F3", What: "diff", Command: "/diff", Class: KeyOpen, ID: "fkey.diff"},
 	{Group: "FUNCTION KEYS", Keys: "F4", What: "status", Command: "/status", Class: KeyOpen, ID: "fkey.status"},
 	{Group: "FUNCTION KEYS", Keys: "F5", What: "models", Command: "/models", Class: KeyOpen, ID: "fkey.models"},
-	{Group: "FUNCTION KEYS", Keys: "F6", What: "MCP", Command: "/mcp", Class: KeyOpen, ID: "fkey.mcp"},
+	{Group: "FUNCTION KEYS", Keys: "F6", What: "MCP: what failed", Class: KeyOpen, ID: "fkey.mcp", When: (*Workspace).mcpFailed, Why: reason(mcpNoFailure)},
 	{Group: "FUNCTION KEYS", Keys: "F7", What: "native Codex", Command: "/codex", Class: KeyOpen, ID: "fkey.codex"},
 	{Group: "FUNCTION KEYS", Keys: "F8", What: "native Claude", Command: "/claude", Class: KeyOpen, ID: "fkey.claude"},
 	{Group: "FUNCTION KEYS", Keys: "F9", What: "native OpenCode", Command: "/opencode", Class: KeyOpen, ID: "fkey.opencode"},
@@ -240,6 +250,82 @@ func boardPaletteActions(w *Workspace) []PaletteAction {
 		keys = append(keys, a)
 	}
 	return append(views, keys...)
+}
+
+// paletteCommand is a palette row that runs a command no Board key runs.
+// When and Why work as a boardKey's do: When reads only in-memory state,
+// and Why says in one sentence why the row is off.
+type paletteCommand struct {
+	PaletteAction
+	When func(*Workspace) bool
+	Why  func(*Workspace) string
+}
+
+// shippedPaletteCommands is what the shipped palette lists after the
+// Board's keys: the user's commands no Board key runs. The capability
+// registry's menus (claims, evidence, budget, goal, team, policy…) are
+// machinery the Marshal runs, so the shipped palette does not list them;
+// their commands still type and complete. Stopping every worker is the
+// Board's Ctrl+X row (workers.stop).
+var shippedPaletteCommands = []paletteCommand{
+	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; the Marshal starts no new one until you resume", Command: "/pause all"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
+	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Resume every paused task and let the Marshal go on", Command: "/resume all"}, When: func(w *Workspace) bool { return w.runResumable.Load() > 0 }, Why: reason("No run is paused.")},
+	{PaletteAction: PaletteAction{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"}},
+	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"}},
+}
+
+// row is the command as a palette row; with a workspace it is marked off,
+// with why, when it cannot run now. A nil workspace (the static
+// constructor) leaves it available, as boardPaletteActions does.
+func (c paletteCommand) row(w *Workspace) PaletteAction {
+	a := c.PaletteAction
+	if w != nil && c.When != nil && !c.When(w) {
+		a.Disabled, a.Reason = true, c.Why(w)
+	}
+	return a
+}
+
+// paletteRegistryActions is paletteRegistryRows for the static palette.
+func paletteRegistryActions() []PaletteAction { return paletteRegistryRows(nil) }
+
+// paletteRegistryRows is what the palette lists after the Board's keys.
+// The shipped edition lists shippedPaletteCommands only. The governed
+// edition lists the registry, without the per-provider Marshal-model rows
+// (the Marshal picker, m, owns choosing the model) and without a row whose
+// key or ID a Board row has (that Board row is the action, listed once), then
+// quit, which the registry has no row for.
+func paletteRegistryRows(w *Workspace) []PaletteAction {
+	if editionExtreme {
+		out := make([]PaletteAction, 0, len(shippedPaletteCommands))
+		for _, c := range shippedPaletteCommands {
+			out = append(out, c.row(w))
+		}
+		return out
+	}
+	all := GlobalRegistry.ToPaletteActions()
+	out := make([]PaletteAction, 0, len(all)+1)
+	for _, a := range all {
+		if _, board := boardAction(a.ID); board || strings.HasPrefix(a.ID, "marshal.model.") || a.Shortcut != "" && boardBindsKey(a.Shortcut) {
+			continue
+		}
+		out = append(out, a)
+	}
+	for _, c := range shippedPaletteCommands {
+		if c.ID == "app.quit" {
+			out = append(out, c.row(w))
+		}
+	}
+	return out
+}
+
+// boardBindsKey reports whether a boardKeymap entry lists key.
+func boardBindsKey(key string) bool {
+	for _, k := range boardKeymap {
+		if slices.Contains(k.keys(), key) {
+			return true
+		}
+	}
+	return false
 }
 
 // runBoardAction runs one registry action the way its key would: the one
@@ -445,12 +531,30 @@ type helpLine struct {
 	id   string
 }
 
+// helpHides reports whether help leaves k out on this paint: the Verify,
+// Security and Plan views' keys while there is no run, and F6 while MCP
+// works. Their keys still answer one plain line when pressed.
+func (v boardVisual) helpHides(k boardKey) bool {
+	switch k.ID {
+	case "view.verify", "view.security", "view.plan", "verify.return", "security.decide", "plan.inspect":
+		return v.viewNoRun
+	case "fkey.mcp":
+		return !v.mcpFailed
+	}
+	return false
+}
+
 // boardHelpRows is the keymap as help lines, group by group, in columns
 // of w cells, and the mouse's click targets after it.
 func (v boardVisual) boardHelpRows(w int) [][]helpLine {
 	var groups [][]helpLine
-	for i, k := range boardKeymap {
-		if i == 0 || boardKeymap[i-1].Group != k.Group {
+	group := ""
+	for _, k := range boardKeymap {
+		if v.helpHides(k) {
+			continue
+		}
+		if k.Group != group {
+			group = k.Group
 			groups = append(groups, []helpLine{{text: v.bold(v.fg("accent", k.Group))}})
 		}
 		g := &groups[len(groups)-1]
@@ -530,6 +634,10 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int, []boardHit) {
 		bodyIDs = append(bodyIDs, ids)
 	}
 	rows := max(1, h-3)
+	if v.telemetry != "" {
+		// The footer line holds still while the keys scroll.
+		rows = max(1, rows-1)
+	}
 	maxScroll := max(0, len(body)-rows)
 	scroll = min(max(0, scroll), maxScroll)
 	lo, hi := scroll, min(len(body), scroll+rows)
@@ -550,15 +658,22 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int, []boardHit) {
 	}
 	hint := "Esc or ? closes"
 	if maxScroll > 0 {
-		hint += fmt.Sprintf(" · j/k scroll · %d more lines", maxScroll-scroll)
+		hint += " · j/k scroll · " + count(maxScroll-scroll, "more line", "more lines")
 	}
 	title := " KEYS "
 	out := []string{th.BoxTopLeft + th.BoxHoriz + v.bold(v.fg("white", title)) + strings.Repeat(th.BoxHoriz, max(0, w-3-VisibleLen(title))) + th.BoxTopRight}
 	for _, l := range body {
 		out = append(out, th.BoxVert+" "+PadCell(l, inner)+" "+th.BoxVert)
 	}
-	for len(out) < h-1 {
+	footer := 0
+	if v.telemetry != "" {
+		footer = 1
+	}
+	for len(out) < h-1-footer {
 		out = append(out, th.BoxVert+strings.Repeat(" ", w-2)+th.BoxVert)
+	}
+	if footer > 0 {
+		out = append(out, th.BoxVert+" "+PadCell(v.fg("dim", v.telemetry), inner)+" "+th.BoxVert)
 	}
 	out = append(out, th.BoxBottomLeft+th.BoxHoriz+v.fg("dim", " "+hint+" ")+strings.Repeat(th.BoxHoriz, max(0, w-5-VisibleLen(hint)))+th.BoxBottomRight)
 	for i := range out {

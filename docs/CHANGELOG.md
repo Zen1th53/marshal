@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.12
+
+### Fixed
+- The palette (Space / Ctrl+K) lists only your actions: the Board's keys plus pause all, resume all, doctor and quit; internal menus and do-nothing chords are gone, and no two actions share a key.
+- Pause and resume work from the palette for every run of the session; while paused the Marshal starts no new task. A deadlock between pausing and the running engine is fixed.
+- Pausing while tasks are working no longer breaks the run: a task that had not started waits, a working task finishes its step, and after resume the Marshal carries on and the run completes. A pause or resume that cannot act names the task or says "one part of the run" instead of an internal id.
+- One vitals row across the whole terminal on every screen (in Marshal's own tmux session also above the chat and workers, with a second row for the docked panes' titles); the launch picker, opening and Blocked screen show it too.
+- The chat's top row shows the Marshal model, its live limit and a clickable `[m] switch`; narrow widths shorten it in a fixed order and keep the percent left and `[m]`.
+- Vitals give way in a fixed order at narrow widths; an unreadable limit always reads "limit unknown" ("?" when narrow); normal vitals text is no longer black; low disk means less than 10 GB or 5% of the disk free, whichever is smaller, everywhere.
+- No "Marshal — approval authority" subtitle in the status line, splash or startup output.
+- The Board shows MCP (F6) only when it failed; counts read "1 task" / "2 tasks"; it says "planning" while the Marshal plans, also after a restart; views 5, 6 and 7 are off until there is a run and say why; sent-back tasks have their own column; `w` is in the hint bar, which always keeps `?`; Activity shows the Marshal's decisions in plain words; the Providers view lists installed providers.
+- The Marshal chat opens with "Hello." / "Hello again."; Marshal's notes start with `[Marshal]` (for example "[Marshal] The run closed: 3 of 4 tasks verified and merged to main."); the Marshal's tool results start with a plain line; Codex tips are off.
+- The Marshal names the real controls: Ctrl+X stops all workers, pause and resume are in the palette, the architecture opens on `y`; the shipped build no longer tells it to ask for A in a popup.
+- Opening Marshal in an existing repository sets the project up; `marshal doctor` and `marshal status` speak plainly; `/egress`, `/provider`, `/mcp` and `/optimization` answer in plain words; sign-in permission messages say what happens; `marshal verify` names the provider; a task that could not start is tried once more; `/status` and the help footer say whether anonymous telemetry is on.
+
+### Changed
+- User docs no longer say you approve the plan or review commands first: the Marshal approves the plan; your acceptance of the architecture is the one gate.
+
 ## 0.2.11
 
 ### Fixed

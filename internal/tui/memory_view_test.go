@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,13 +143,7 @@ func TestMemoryViewGoldens(t *testing.T) {
 				}
 			}
 			plain := StripANSI(got)
-			order := []string{"MEMORY", "REVIEW QUEUE", "RECENT RECALLS", "MCP TOOLS"}
-			if tc.w < layout.TwoColumns {
-				order = order[:2]
-				if !strings.Contains(plain, "PgDn scroll") {
-					t.Error("narrow Memory view does not say it scrolls")
-				}
-			}
+			order := []string{"MEMORY", "REVIEW QUEUE"}
 			at := 0
 			for _, s := range order {
 				i := strings.Index(plain[at:], s+" ")
@@ -165,10 +160,10 @@ func TestMemoryViewGoldens(t *testing.T) {
 			}
 		})
 	}
-	// The narrow view scrolls to the last section.
+	// The short view scrolls to the queue's last candidate.
 	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true), now: now}
-	lines, _, maxScroll := v.memoryRender(demoMemoryPaint(now), 80, 22, 1000, false)
-	if text := strings.Join(lines, "\n"); maxScroll == 0 || !strings.Contains(text, "MCP TOOLS") {
+	lines, _, maxScroll := v.memoryRender(demoMemoryPaint(now), 80, 10, 1000, false)
+	if text := strings.Join(lines, "\n"); maxScroll == 0 || !strings.Contains(text, "MEM-9d02") {
 		t.Fatalf("scrolled to %d:\n%s", maxScroll, text)
 	}
 }
@@ -183,27 +178,28 @@ func TestMemoryViewContent(t *testing.T) {
 		"251 records · 140 durable · 3 waiting review · 108 rejected",
 		".marshal/state.db · project memory shared by every window",
 		"1,943 served · last 14s ago",
-		"140 candidates from workers · 443 proposals audited",
 		"12 restore points · last 41m ago",
 		"MEM-c7a1 finding · confidence high · agent · 2m ago",
 		"[a] keep as durable  [r] reject  [i] evidence",
-		"claude-1   T-018    3fa9c1d2 → served",
-		"→ served · 1 denied",
-		"memory_recall",
-		"1,943",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Memory view lacks %q", want)
 		}
 	}
-	if strings.Contains(text, "MCP server") {
-		t.Error("an unknown MCP server state was shown")
+	// MCP is machinery: while it works the view shows none of it, neither
+	// its counts nor its tools nor the recalls' raw callers and digests.
+	for _, absent := range []string{"MCP", "candidates from workers", "proposals audited", "memory_recall", "RECENT RECALLS", "3fa9c1d2", "claude-1", "no gateway calls recorded"} {
+		if strings.Contains(text, absent) {
+			t.Errorf("Memory view shows %q while MCP works", absent)
+		}
 	}
-	m.Snap.MCP = "up"
+	// An MCP failure is shown, as its own line.
+	m.Snap.MCP = "The Marshal chat lost its MCP connection."
 	lines, _ = v.memoryLines(m, 160)
-	if !strings.Contains(strings.Join(lines, "\n"), "· MCP server up") {
-		t.Error("a known MCP server state is missing")
+	if !strings.Contains(strings.Join(lines, "\n"), "MCP            The Marshal chat lost its MCP connection.") {
+		t.Errorf("an MCP failure is missing:\n%s", strings.Join(lines, "\n"))
 	}
+	m.Snap.MCP = ""
 	m.Pending = 'r'
 	lines, _ = v.memoryLines(m, 160)
 	if !strings.Contains(strings.Join(lines, "\n"), "Enter to reject MEM-c7a1 · Esc cancels") {
@@ -212,9 +208,17 @@ func TestMemoryViewContent(t *testing.T) {
 	empty := memoryPaint{Snap: memorySnapshot{Loaded: true, At: now}}
 	lines, _ = v.memoryLines(empty, 100)
 	text = strings.Join(lines, "\n")
-	for _, want := range []string{"nothing waiting review", "no recalls yet", "no gateway calls recorded"} {
+	for _, want := range []string{"0 records ·", "nothing waiting review"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("empty Memory view lacks %q", want)
+		}
+	}
+	one := memoryPaint{Snap: memorySnapshot{Loaded: true, At: now, Overview: store.MemoryOverview{Counts: store.MemoryOverviewCounts{Total: 1}, Snapshots: store.MemorySnapshots{TotalSnapshots: 1}}}}
+	lines, _ = v.memoryLines(one, 100)
+	text = strings.Join(lines, "\n")
+	for _, want := range []string{"1 record ·", "1 restore point"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("Memory view lacks the singular %q:\n%s", want, text)
 		}
 	}
 	ascii := hostASCII(lines, 100)
@@ -224,6 +228,35 @@ func TestMemoryViewContent(t *testing.T) {
 				t.Fatalf("ASCII line %d has %q: %s", i, r, l)
 			}
 		}
+	}
+}
+
+// TestMemoryViewShowsMCPOnlyOnFailure: the live view's MCP line comes from
+// the workspace's recorded MCP failure, and F6 opens its detail or says MCP
+// works.
+func TestMemoryViewShowsMCPOnlyOnFailure(t *testing.T) {
+	w, _ := memoryWorkspace(t)
+	defer w.Close()
+	w.handleTerminalKey(t.Context(), KeyEvent{Type: KeyF6})
+	w.mu.RLock()
+	answer := w.answer
+	w.mu.RUnlock()
+	if answer != mcpNoFailure {
+		t.Fatalf("F6 with MCP working answered %q", answer)
+	}
+	if k, _ := boardAction("fkey.mcp"); func() bool { run, _ := k.available(w); return run }() {
+		t.Fatal("F6 is offered while MCP works")
+	}
+	w.chatMCPRecoveryFailed(t.TempDir(), errors.New("the unrecovered chat exited"))
+	if !w.mcpFailed() || !strings.Contains(w.mcpFailure(), "lost its MCP connection") {
+		t.Fatalf("the failure was not recorded: %q", w.mcpFailure())
+	}
+	w.handleTerminalKey(t.Context(), KeyEvent{Type: KeyF6})
+	w.mu.RLock()
+	answer = w.answer
+	w.mu.RUnlock()
+	if !strings.Contains(answer, "lost its MCP connection") {
+		t.Fatalf("F6 after a failure answered %q", answer)
 	}
 }
 

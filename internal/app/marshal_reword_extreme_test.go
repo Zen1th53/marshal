@@ -16,12 +16,21 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 )
 
+// A lane refused for capacity is retried once by itself, with a plain
+// Activity line, and only then pauses with the plain line.
 func TestLaneAdmissionPauseIsPlain(t *testing.T) {
 	s, _, _ := parallelWaitFixture(t, 1)
+	launches := 0
 	s.Drivers["worker"] = driver.Governed{Provider: "test", Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) {
+		launches++
 		return nil, fmt.Errorf("%w: task lane capacity exhausted", execution.ErrRunBlocked)
 	}}
+	var activity []string
+	s.RecordActivity = func(line string) { activity = append(activity, line) }
 	run := executeUntil(t, s, "par", func(run marshal.Run) bool { return run.Pause != nil })
+	if launches != 2 || len(activity) != 1 || !strings.HasSuffix(activity[0], " couldn't start yet; Marshal is trying it once more.") {
+		t.Fatalf("launches=%d activity=%q, want one retry by itself", launches, activity)
+	}
 	pause := run.Pause
 	if pause == nil || pause.Reason != "A task couldn't start because too many tasks were running. Nothing ran." || len(pause.Resolutions) == 0 || pause.Resolutions[0] != "Press Enter to try it again." || !strings.HasPrefix(pause.Detail, "task lane admission refused: ") {
 		t.Fatalf("capacity pause: %+v", pause)

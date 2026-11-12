@@ -18,6 +18,10 @@ func workCommandUsage(parts []string) string {
 	case "/pause", "/cancel":
 		usage = cmd + " [run:<id>]"
 		valid = len(args) == 0 || len(args) == 1 && strings.HasPrefix(args[0], "run:")
+		if cmd == "/pause" {
+			usage = "/pause [run:<id>|all]"
+			valid = valid || len(args) == 1 && strings.EqualFold(args[0], "all")
+		}
 	case "/mode":
 		usage, valid = "/mode [manual|auto|ultra]", len(args) <= 1
 	case "/approve":
@@ -94,6 +98,11 @@ func workCommandUsage(parts []string) string {
 		}
 	}
 	if !valid {
+		if !strings.Contains(usage, " ") {
+			// A command that takes nothing says so, rather than repeat
+			// its own name.
+			return "Usage: " + usage + " — type it on its own, with nothing after it."
+		}
 		return "Usage: " + usage
 	}
 	return ""

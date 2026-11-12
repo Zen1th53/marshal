@@ -46,13 +46,27 @@ func (v boardVisual) liveLanes() int {
 }
 
 // vitalsLeft is one provider's piece of the vitals row's left block. state is
-// 0 full, 1 short, 2 dropped; unavail groups the unavailable and not-read
-// parts, which give way before the known ones.
+// 0 full, 1 without the reset, 2 short (glyph and percent), 3 dropped;
+// unavail groups the unavailable and not-read parts, which give way before
+// the known ones and have no reset to drop (mid is full).
 type vitalsLeft struct {
-	id          string // "limit:<provider>"
-	full, short string
-	unavail     bool
-	state       int
+	id               string // "limit:<provider>"
+	full, mid, short string
+	unavail          bool
+	state            int
+}
+
+// text is the part as its state paints it, "" once dropped.
+func (p vitalsLeft) text() string {
+	switch p.state {
+	case 0:
+		return p.full
+	case 1:
+		return p.mid
+	case 2:
+		return p.short
+	}
+	return ""
 }
 
 // vitalsLine paints the vitals row w cells wide and where each part landed:
@@ -91,9 +105,13 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 		mk := v.mark(p, glyphColor)
 		switch {
 		case !v.vitals.read:
-			left = append(left, vitalsLeft{"limit:" + p, mk + v.fg("dim", p+" "+ellip), mk + v.fg("dim", ellip), true, 0})
+			full := mk + v.fg("dim", p+" "+ellip)
+			left = append(left, vitalsLeft{"limit:" + p, full, full, mk + v.fg("dim", ellip), true, 0})
 		case !known:
-			left = append(left, vitalsLeft{"limit:" + p, mk + v.fg("dim", p+" "+limitUnknown), mk + v.fg("dim", dash), true, 0})
+			full := mk + v.fg("dim", p+" "+limitUnknown)
+			// Every provider whose limit cannot be read says so the same
+			// way: "limit unknown" in full, "?" when the row is narrow.
+			left = append(left, vitalsLeft{"limit:" + p, full, full, mk + v.fg("dim", "?"), true, 0})
 		default:
 			fig, pct, _ := limitFigure(q, v.now)
 			bar := limitBar(pct, v.unicode())
@@ -107,17 +125,19 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 				}
 			}
 			full := mk + v.fg("dim", p) + " " + v.fg(barColor, bar) + " " + v.fg(figColor, fig) + suffix
-			// The short form keeps the "left" label and drops the reset, so
-			// a narrow row still says which quantity it shows.
+			// The narrower forms keep the "left" label: the reset goes
+			// first, then the name and the bar, so a narrow row still says
+			// which quantity it shows.
 			shortFig, _, _ := strings.Cut(fig, " ·")
+			mid := mk + v.fg("dim", p) + " " + v.fg(barColor, bar) + " " + v.fg(figColor, shortFig) + suffix
 			short := mk + v.fg(figColor, shortFig) + suffix
-			left = append(left, vitalsLeft{"limit:" + p, full, short, false, 0})
+			left = append(left, vitalsLeft{"limit:" + p, full, mid, short, false, 0})
 		}
 	}
 
 	// Right block: cpu, temperature, ram, disk and the running count.
 	var cpuTxt, tempTxt, ramTxt, diskTxt string
-	tempKnown, diskKnown, diskLow := false, false, false
+	tempKnown, tempGuard, diskKnown, diskLow, ramHigh := false, false, false, false, false
 	if v.host != nil {
 		cpuTxt = v.fg("dim", "cpu ") + dash
 		if pct, ok := v.host.cpuBusy(); ok {
@@ -135,6 +155,7 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 			tempKnown = true
 			tempTxt = v.fg(tempColor(c.Temp), fmt.Sprintf("%.0f%s", c.Temp, degC))
 			if c.Guard {
+				tempGuard = true
 				tempTxt += " " + v.fg("failed", "GUARD")
 			}
 		}
@@ -148,6 +169,7 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 			case pct >= 80:
 				col = "waiting"
 			}
+			ramHigh = pct >= 80
 			ramTxt = v.fg("dim", "ram ") + v.fg(col, fmt.Sprintf("%.0f%%", pct))
 		}
 		if c.DiskKnown {
@@ -172,12 +194,12 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 		group string // "host" or "lanes"
 		text  string
 	}
-	dropRam, dropDisk, shortRun := false, false, false
+	dropRam, dropDisk, dropTemp, shortRun := false, false, false, false
 	rightSegs := func() []rseg {
 		var out []rseg
 		if v.host != nil {
 			out = append(out, rseg{"host", cpuTxt})
-			if tempKnown {
+			if tempKnown && !dropTemp {
 				out = append(out, rseg{"host", tempTxt})
 			}
 			if !dropRam {
@@ -197,11 +219,8 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 	joinLeft := func() string {
 		var parts []string
 		for _, p := range left {
-			switch p.state {
-			case 0:
-				parts = append(parts, p.full)
-			case 1:
-				parts = append(parts, p.short)
+			if t := p.text(); t != "" {
+				parts = append(parts, t)
 			}
 		}
 		return strings.Join(parts, sep)
@@ -223,47 +242,64 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 	}
 	// reduce applies one give-way step, most-expendable first; it returns
 	// false when nothing else can give way (the line is then cut to w).
+	// The order is the rule a narrow terminal follows (100 columns keeps
+	// every limit): unavailable names, then each known limit's reset, the
+	// temperature, each known limit's name and bar, the unavailable parts,
+	// the "running" word, the disk (kept while low), the ram (kept from 80%
+	// used), and last the known limits right to left, the first always kept.
+	shift := func(unavail bool, from, to int) bool {
+		for i := len(left) - 1; i >= 0; i-- {
+			if left[i].unavail == unavail && left[i].state >= from && left[i].state < to {
+				left[i].state = to
+				return true
+			}
+		}
+		return false
+	}
+	// The unavailable parts give way together, so every provider whose
+	// limit cannot be read reads the same at any width.
+	shiftAll := func(from, to int) bool {
+		moved := false
+		for i := range left {
+			if left[i].unavail && left[i].state >= from && left[i].state < to {
+				left[i].state, moved = to, true
+			}
+		}
+		return moved
+	}
 	reduce := func() bool {
-		for i := len(left) - 1; i >= 0; i-- { // 1. shorten unavailable/not-read
-			if left[i].unavail && left[i].state == 0 {
-				left[i].state = 1
-				return true
-			}
+		if shiftAll(0, 2) || shift(false, 0, 1) { // 1-2. unavailable names, resets
+			return true
 		}
-		for i := len(left) - 1; i >= 0; i-- { // 2. shorten known
-			if !left[i].unavail && left[i].state == 0 {
-				left[i].state = 1
-				return true
-			}
+		if tempKnown && !dropTemp && !tempGuard { // 3. temperature, unless GUARD
+			dropTemp = true
+			return true
 		}
-		for i := len(left) - 1; i >= 0; i-- { // 3. drop unavailable/not-read
-			if left[i].unavail && left[i].state != 2 {
-				left[i].state = 2
-				return true
-			}
+		if shift(false, 1, 2) || shiftAll(2, 3) { // 4-5. bars, unavailable parts
+			return true
 		}
-		if !shortRun { // 4. shorten running
+		if !shortRun { // 6. shorten running
 			shortRun = true
 			return true
 		}
-		if diskKnown && !dropDisk && !diskLow { // 5. drop disk unless low
+		if diskKnown && !dropDisk && !diskLow { // 7. disk, unless low
 			dropDisk = true
 			return true
 		}
-		if v.host != nil && !dropRam { // 6. drop ram
+		if v.host != nil && !dropRam && !ramHigh { // 8. ram, unless high
 			dropRam = true
 			return true
 		}
-		kept := 0 // 7. drop known right to left, keeping the first
+		kept := 0 // 9. drop known right to left, keeping the first
 		for _, p := range left {
-			if p.state != 2 {
+			if p.state != 3 {
 				kept++
 			}
 		}
 		if kept > 1 {
 			for i := len(left) - 1; i >= 0; i-- {
-				if !left[i].unavail && left[i].state != 2 {
-					left[i].state = 2
+				if !left[i].unavail && left[i].state != 3 {
+					left[i].state = 3
 					return true
 				}
 			}
@@ -293,17 +329,14 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 	x := 1
 	first := true
 	for _, p := range left {
-		if p.state == 2 {
+		t := p.text()
+		if t == "" {
 			continue
 		}
 		if !first {
 			x += VisibleLen(sep)
 		}
 		first = false
-		t := p.full
-		if p.state == 1 {
-			t = p.short
-		}
 		n := VisibleLen(t)
 		spans = append(spans, headerSpan{p.id, x, x + n})
 		x += n

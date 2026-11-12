@@ -71,6 +71,9 @@ const (
 	// KeyMouse carries an SGR mouse report. Mouse input is navigation-only in
 	// the frozen IA; it never bypasses the same confirmation path as a key.
 	KeyMouse
+	// KeyMarshalPick is the private sequence a click on [m] in the docked
+	// chat's title row sends the Board (marshalPickSeq): open the picker.
+	KeyMarshalPick
 	KeyUnknown
 )
 
@@ -484,6 +487,8 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 						return KeyEvent{Type: KeyF11, Raw: raw}, consumed
 					case "24~":
 						return KeyEvent{Type: KeyF12, Raw: raw}, consumed
+					case "9001~":
+						return KeyEvent{Type: KeyMarshalPick, Raw: raw}, consumed
 					default:
 						return KeyEvent{Type: KeyUnknown, Raw: raw}, consumed
 					}

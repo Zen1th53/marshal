@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/api"
@@ -71,26 +72,26 @@ func (v localView) header() []string {
 	return lines
 }
 
+// runStateWords is a run's state in the Board's words (board_stop.go's
+// runWord), so `marshal status` and the Board say the same thing.
 func runStateWords(state marshal.RunState) string {
 	switch state {
 	case marshal.Drafting:
 		return "planning"
-	case marshal.Approved:
-		return "plan approved"
-	case marshal.Dispatching:
-		return "working"
+	case marshal.Approved, marshal.Dispatching:
+		return "running"
 	case marshal.Reviewing:
 		return "reviewing"
 	case marshal.Merging:
 		return "merging"
 	case marshal.Verifying:
-		return "checking the result"
+		return "final check"
 	case marshal.Closed:
-		return "finished"
+		return "done"
 	case marshal.AwaitingUser:
 		return "waiting for you"
 	}
-	return "working"
+	return "running"
 }
 
 func taskStateWords(state marshal.TaskState) string {
@@ -137,8 +138,7 @@ func (c command) statusLocal(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	lines := append(view.header(), statusLine(view.status))
-	return c.print(view.status, strings.Join(lines, "\n"))
+	return c.print(view.status, view.statusText())
 }
 
 // tasksLocal is `marshal tasks` without a background service: the imported
@@ -166,8 +166,44 @@ func (c command) tasksLocal(ctx context.Context) error {
 	return c.print(view.tasks, strings.Join(lines, "\n"))
 }
 
-func statusLine(value app.Status) string {
-	return fmt.Sprintf("schema=%d tasks=%d agents=%d honeypot=%s", value.SchemaVersion, value.TaskCount, value.AgentCount, value.Honeypot)
+// statusText is `marshal status` in plain words, as the Board says them:
+// the project, the run's state and tasks done, the Marshal provider and
+// whether anonymous telemetry is on.
+func (v localView) statusText() string {
+	var lines []string
+	if v.held {
+		lines = append(lines, "Marshal is open for this project in another window; this is what it has saved so far.")
+	}
+	root := v.status.Project.Repository
+	project := filepath.Base(root)
+	if branch := v.status.Project.DefaultBranch; branch != "" {
+		project += " (branch " + branch + ")"
+	}
+	lines = append(lines, "Project: "+project)
+	if v.hasRun {
+		done := 0
+		for _, t := range v.run.Tasks {
+			if t.State == marshal.Merged {
+				done++
+			}
+		}
+		lines = append(lines, fmt.Sprintf("Run: %s · %d of %d tasks done", runStateWords(v.run.State), done, len(v.run.Tasks)))
+	} else {
+		lines = append(lines, "Run: none yet. Run marshal here and tell the Marshal what to build.")
+	}
+	provider := app.MarshalProviderName(root)
+	if provider == "" {
+		provider = "not chosen yet (Marshal asks when it opens)"
+	}
+	lines = append(lines, "Marshal provider: "+provider)
+	lines = append(lines, app.TelemetryLine(root))
+	return strings.Join(lines, "\n")
+}
+
+// statusOnlyText is the plain status when only the background service's
+// counts could be read.
+func statusOnlyText(value app.Status) string {
+	return localView{status: value}.statusText()
 }
 
 // heldByWindow reports whether another Marshal window holds the project, for

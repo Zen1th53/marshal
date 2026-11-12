@@ -19,6 +19,9 @@ const providerPane layout.PaneID = "providers"
 // and when it was read.
 type providerSnapshot struct {
 	Providers []store.ProviderStatus
+	// Installed is a row for each installed provider Providers does not
+	// list: never verified, so it has no harness profile yet.
+	Installed []store.ProviderStatus
 	// Loaded is set once a read has succeeded; At is when the last read
 	// finished and Err why it failed, if it did.
 	Loaded bool
@@ -43,16 +46,39 @@ type providerPaint struct {
 }
 
 // providerState is a provider's routing state: "limit" while a cooldown
-// runs, "re-verify" when its harness profile is missing or expired, else
-// "ready".
+// runs, "unverified" when it was never verified, "re-verify" when its harness
+// profile expired, else "ready".
 func providerState(p store.ProviderStatus, now time.Time) string {
 	switch {
 	case providerInLimit(p, now):
 		return "limit"
-	case p.Expired || p.VerifiedAt.IsZero():
+	case p.VerifiedAt.IsZero():
+		return "unverified"
+	case p.Expired:
 		return "re-verify"
 	}
 	return "ready"
+}
+
+// rows is what the view lists and selects: the overview, then the
+// installed providers it does not list.
+func (s providerSnapshot) rows() []store.ProviderStatus {
+	return append(slices.Clone(s.Providers), s.Installed...)
+}
+
+// installedRows is a row for each installed provider the overview ps does
+// not list, in the first-use card's order: a provider never verified has no
+// harness profile, but the owner still sees it, its limit and that [v]
+// verifies it. installed is nil before the lookup ran.
+func installedRows(ps []store.ProviderStatus, installed map[string]bool) []store.ProviderStatus {
+	var out []store.ProviderStatus
+	for _, f := range firstUseProviders {
+		if !installed[f.name] || slices.ContainsFunc(ps, func(p store.ProviderStatus) bool { return providerWorker(p.Provider) == f.name }) {
+			continue
+		}
+		out = append(out, store.ProviderStatus{Provider: f.name})
+	}
+	return out
 }
 
 // providerInLimit is whether the provider's newest cooldown still runs.
@@ -64,7 +90,7 @@ func providerUntil(t, now time.Time) string {
 	return t.In(now.Location()).Format("Jan 2 15:04")
 }
 
-var providerStateColour = map[string]string{"ready": "merged", "limit": "failed", "re-verify": "waiting"}
+var providerStateColour = map[string]string{"ready": "merged", "limit": "failed", "re-verify": "waiting", "unverified": "waiting"}
 
 // providerRender paints the Providers view into a w×h body, keeping the
 // selected provider in view.
@@ -91,7 +117,8 @@ type providerCols struct{ prov, model, verified, lanes, limit, resets, state int
 func providerColumns(w int) providerCols {
 	c := providerCols{prov: 10, model: 22, verified: 12, lanes: 5, resets: 14, state: 10}
 	if w < 110 {
-		c = providerCols{prov: 9, model: 14, verified: 10, lanes: 5, resets: 13, state: 9}
+		// "limit unknown" fits whole at 80 columns.
+		c = providerCols{prov: 9, model: 13, verified: 10, lanes: 5, resets: 12, state: 9}
 	}
 	fixed := 2 + c.prov + c.model + c.verified + c.lanes + c.resets + c.state + 7
 	c.limit = min(32, max(8, w-fixed))
@@ -126,12 +153,13 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 		return strings.Join([]string{cell(dot, 1), cell(prov, c.prov), cell(model, c.model), cell(verified, c.verified), fmt.Sprintf("%*s", c.lanes, lanes), cell(limit, c.limit), cell(resets, c.resets), cell(state, c.state)}, " ")
 	}
 	out = append(out, v.fg("dim", PadCell(row("", "provider", "model", "verified", "lanes", "limit", "resets", "state"), w)))
-	if len(s.Providers) == 0 {
-		return append(out, v.fg("dim", PadCell("  no harness profiles and no lanes yet · /harness verify <provider> <model>", w))), -1
+	rows := s.rows()
+	if len(rows) == 0 {
+		return append(out, v.fg("dim", PadCell("  no provider is installed on this machine yet", w))), -1
 	}
 	sel := -1
 	var selected *store.ProviderStatus
-	for i, p := range s.Providers {
+	for i, p := range rows {
 		st := providerState(p, v.now)
 		col := providerStateColour[st]
 		verified := v.fg("dim", "never")
@@ -148,7 +176,7 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 			q = usage.Quota{Provider: providerOf(p.Provider), Reason: usage.NotExposed}
 			hasQuota = true
 		}
-		limit, resets := v.fg("dim", "unknown"), v.fg("dim", "—")
+		limit, resets := v.fg("dim", limitUnknown), v.fg("dim", "—")
 		switch {
 		case st == "limit":
 			limit = v.fg("failed", cleanBoard(p.LastLimitReason))
@@ -183,7 +211,7 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 		line = PadCell(line, w)
 		if p.Provider == m.Selected {
 			sel = len(out)
-			selected = &s.Providers[i]
+			selected = &rows[i]
 			line = v.bg("sel", line)
 		}
 		out = append(out, line)
@@ -203,12 +231,10 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 	case "limit":
 		keys = v.fg("dim", "[v] verify harness · waits for the limit to end") + "  " + v.bg("rule", "[r]") + " route around"
 		note = fmt.Sprintf("running %s lanes finish; new work waits for %s or a ready one.", cleanBoard(p.Provider), providerUntil(p.LimitUntil, v.now))
+	case "unverified":
+		note = fmt.Sprintf("%s is installed but not verified yet; [v] verifies it (one model call) before new lanes go to it.", cleanBoard(p.Provider))
 	case "re-verify":
-		if p.VerifiedAt.IsZero() {
-			note = fmt.Sprintf("%s has no harness profile; Marshal routes no new lanes to it until [v] verifies it.", cleanBoard(p.Provider))
-		} else {
-			note = fmt.Sprintf("%s's profile expired; [v] verifies %s again before new lanes go to it.", cleanBoard(p.Provider), firstNonEmpty(cleanBoard(p.Model), "its default model"))
-		}
+		note = fmt.Sprintf("%s's profile expired; [v] verifies %s again before new lanes go to it.", cleanBoard(p.Provider), firstNonEmpty(cleanBoard(p.Model), "its default model"))
 	default:
 		note = fmt.Sprintf("%s is ready; its profile holds until %s.", cleanBoard(p.Provider), providerUntil(p.ExpiresAt, v.now))
 		if p.ExpiresAt.IsZero() {

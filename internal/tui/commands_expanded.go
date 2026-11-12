@@ -623,11 +623,26 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 		// proof of authentication: an installed harness is AVAILABLE, and
 		// whether its credentials work is UNKNOWN until an execution proves it.
 		var b strings.Builder
-		b.WriteString("PROVIDER / HARNESS STATUS:\n")
+		b.WriteString(providerStatusHeading + "\n")
 		if p, note := h.defaultProvider(ctx); p != "" {
 			b.WriteString(fmt.Sprintf("  Default: %s (change with /provider use <name>)\n", neutralProviderNames[p]))
 		} else {
 			b.WriteString("  Default: none. " + note + "\n")
+		}
+		if !showQualificationLabel {
+			// The Marshal build says what each provider is in one plain
+			// line: whether it is installed and where, and that sign-in
+			// is checked when it first runs.
+			for _, pr := range ProbeHarnesses() {
+				name := app.ProviderDisplayName(pr.HarnessName)
+				if !pr.Installed {
+					fmt.Fprintf(&b, "  %s: not installed. Put %s on PATH to use it.\n", name, harnessBinary(pr.HarnessName))
+					continue
+				}
+				fmt.Fprintf(&b, "  %s: installed (%s). Sign-in is checked when it first runs.\n", name, pr.BinaryPath)
+			}
+			b.WriteString("  Workers use your normal network connection.")
+			return strings.TrimRight(b.String(), "\n"), nil
 		}
 		for _, pr := range ProbeHarnesses() {
 			b.WriteString(fmt.Sprintf("  %s\n", pr.HarnessName))
@@ -691,6 +706,14 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 	return "Usage: /provider [status|use <name>|config <name>]", nil
 }
 
+// harnessBinary is the executable a harness runs as.
+func harnessBinary(harness string) string {
+	if harness == "antigravity" {
+		return "agy"
+	}
+	return harness
+}
+
 // handleHarness handles harness probe and selection.
 func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (string, error) {
 	if len(args) >= 2 && (strings.EqualFold(args[0], "verify") || strings.EqualFold(args[0], "verify-native")) {
@@ -724,6 +747,12 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		if recErr != nil {
 			line += " (not recorded: " + recErr.Error() + ")"
 		}
+		// Whoever ran the verify (the owner's key, the Providers view or
+		// the Marshal's command), every surface that shows the provider's
+		// state reads the new profile now rather than when its view next
+		// opens.
+		h.ws.refreshProviders(ctx)
+		h.ws.requestRepaint()
 		return verified + "\n" + line, nil
 	}
 

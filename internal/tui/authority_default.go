@@ -9,8 +9,6 @@ import (
 
 type buildPermissionState struct{}
 
-const buildMarker = ""
-
 // launchEarlierWorkThroughQueue: the launch scan loads earlier sessions by
 // queueing the ordinary read request (shipped decides it automatically);
 // governed loads directly only under an operator grant already on record.

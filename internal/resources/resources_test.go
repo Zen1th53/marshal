@@ -118,6 +118,31 @@ func TestAssessAllUnavailableIsUnknown(t *testing.T) {
 	}
 }
 
+// Low disk is one rule everywhere, the Host view's: free space below 10 GB
+// or 5% of the disk, whichever is smaller. It warns and never goes critical.
+func TestAssessDiskUsesTheHostViewRule(t *testing.T) {
+	const gb = uint64(1e9)
+	for _, tc := range []struct {
+		name        string
+		total, free uint64
+		want        Status
+	}{
+		{"1 TB disk, 9 GB free (under 10 GB)", 1000 * gb, 9 * gb, StatusWarn},
+		{"big disk, 11 GB free", 1000 * gb, 11 * gb, StatusOK},
+		{"small disk, 4 GB of 100 GB (under 5 GB)", 100 * gb, 4 * gb, StatusWarn},
+		{"small disk, 6 GB of 100 GB (8% free, over 5 GB)", 100 * gb, 6 * gb, StatusOK},
+		{"tiny disk, 1 GB of 10 GB", 10 * gb, 1 * gb, StatusOK},
+	} {
+		h := assess(Memory{}, Storage{TotalBytes: tc.total, FreeBytes: tc.free}, StatusUnknown, "")
+		if h.Disk != tc.want || h.Overall != tc.want {
+			t.Errorf("%s: disk=%s overall=%s, want %s", tc.name, h.Disk, h.Overall, tc.want)
+		}
+		if tc.want == StatusWarn && (len(h.Warnings) != 1 || !strings.HasPrefix(h.Warnings[0], "low disk space: ")) {
+			t.Errorf("%s: warnings %q", tc.name, h.Warnings)
+		}
+	}
+}
+
 func TestCollectCPUOnlyFixtureUsesCgroupAndNeverNeedsVendorTools(t *testing.T) {
 	root := t.TempDir()
 	proc := filepath.Join(root, "proc")

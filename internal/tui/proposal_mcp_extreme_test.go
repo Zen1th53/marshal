@@ -346,7 +346,7 @@ func TestLiveMCPCodexBindingNotAddedWithoutAttachedMarshal(t *testing.T) {
 			}
 			defer owned.remove()
 		}
-		args, env, dir, err := w.prepareProposalMCP(provider, root, []string{"Start."}, nil, owned)
+		args, env, dir, err := w.prepareProposalMCP(provider, root, []string{"Hello."}, nil, owned)
 		if err != nil {
 			t.Fatal(err)
 		}

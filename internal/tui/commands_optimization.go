@@ -18,7 +18,7 @@ func (h *CommandHandler) handleOptimizationCycle(ctx context.Context, id string)
 	}
 	cycle, err := h.ws.store.GetOptimizationCycle(ctx, id)
 	if errors.Is(err, optimization.ErrNotFound) {
-		return fmt.Sprintf("Optimization cycle %q not found. Use /optimization <cycle_id> with an existing canonical cycle ID.", id), nil
+		return fmt.Sprintf("There is no optimization cycle %q in this project.", id), nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("read optimization cycle: %w; reopen the TUI and check /store", err)

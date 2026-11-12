@@ -40,7 +40,9 @@ func (r *Runtime) ExecuteNativeCodexConversation(ctx context.Context, operation,
 		return "", fmt.Errorf("native codex %s failed: %w", operation, err)
 	}
 	result := string(out)
-	if dialect.Operation(ProviderArgOperation("codex", args)).Status == ProviderUnknown {
+	// The Marshal build passes the provider's own commands through without
+	// the governed build's qualification label.
+	if !isExtremeBuild && dialect.Operation(ProviderArgOperation("codex", args)).Status == ProviderUnknown {
 		result = "UNKNOWN — unqualified pass-through: codex " + operation + "\n" + result
 	}
 	return result, nil

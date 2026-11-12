@@ -146,11 +146,12 @@ func TestPTYTabCompletesWithoutExecuting(t *testing.T) {
 	}
 }
 
-// The private build marker has highest status priority, so it survives the
-// narrow terminal after lower-priority mode fields are dropped.
+// The status line's mode field: the shipped build shows Marshal execution
+// active (it carries no "approval authority" subtitle; the header's
+// "[ULTRA ACTIVE]" has no rule before it), governed MANUAL.
 func freshPTYStatusMarker() string {
 	if statepath.PublicEngine {
-		return "Marshal — approval authority"
+		return "│ ULTRA ACTIVE"
 	}
 	return "MANUAL"
 }

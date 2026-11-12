@@ -304,6 +304,9 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 		headerPart{"project", v.fg("dim", "project ") + v.fg("accent", project), v.fg("accent", project)},
 		headerPart{"state", v.bg("sel", v.fg("waiting", " NO RUN YET ")), v.fg("waiting", "NO RUN")},
 	)
+	if v.planning {
+		parts[len(parts)-1] = headerPart{"state", v.bg("sel", v.fg("working", " PLANNING ")), v.fg("working", "PLANNING")}
+	}
 	if v.ownerWaits() {
 		// The Marshal waits for the owner before any run exists: the
 		// project contract to accept, or files changed to keep or undo.
@@ -417,7 +420,10 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 	// The call to action: a button that focuses the chat. Once a goal is
 	// given, or the Marshal already filled its requirements, there is
 	// nothing left to ask for: the button goes and the chat keys stay.
-	given := v.goalGiven || v.req != nil
+	given := v.goalGiven || v.req != nil || v.planning
+	if v.planning {
+		add(pad + v.fg("working", v.frame.Spinner(true)) + " " + v.bold(v.fg("white", planningCard)))
+	}
 	if !given {
 		arrow, enter := "▸", "⏎"
 		if !v.unicode() {
@@ -435,7 +441,10 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		add(pad + button)
 	}
 	how := "Enter or F11: type it in the Marshal chat  ·  s: say it from here"
-	if given {
+	switch {
+	case v.planning:
+		how = "The tasks appear here when the plan is ready  ·  F11: the Marshal chat  ·  s: say something from here"
+	case given:
 		how = "The Marshal has your goal  ·  F11: the Marshal chat  ·  s: say something from here"
 	}
 	for _, line := range wrapWords(how, w-len(pad)-1) {

@@ -202,6 +202,12 @@ func plural(n int, one, many string) string {
 	return many
 }
 
+// count writes n and its noun, one for 1 and many otherwise: "1 task",
+// "3 tasks".
+func count(n int, one, many string) string {
+	return fmt.Sprintf("%d %s", n, plural(n, one, many))
+}
+
 // providerHistoryDir resolves where a provider keeps this project's history.
 //
 // It honours the operator's own home override, because native sessions run in

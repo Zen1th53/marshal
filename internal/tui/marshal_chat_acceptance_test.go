@@ -106,12 +106,12 @@ func TestMarshalNativeLaunchDeliversIntakeCueAllProviders(t *testing.T) {
 				}
 				t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 				t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
-				want := "Start."
+				want := "Hello."
 				if saved {
 					if err := w.saveMarshalIntake(marshalIntake{Language: "Uzbek"}); err != nil {
 						t.Fatal(err)
 					}
-					want = "Continue."
+					want = "Hello again."
 				}
 				protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
 				if err != nil {
@@ -141,7 +141,7 @@ func TestMarshalNativeLaunchDeliversIntakeCueAllProviders(t *testing.T) {
 					}
 					hidden = string(data)
 				}
-				if !strings.Contains(hidden, strings.TrimSpace(protocol)) || !strings.Contains(hidden, `"Start."`) || !strings.Contains(hidden, `"Continue."`) {
+				if !strings.Contains(hidden, strings.TrimSpace(protocol)) || !strings.Contains(hidden, `"Hello."`) || !strings.Contains(hidden, `"Hello again."`) {
 					t.Fatal("hidden protocol lost in native launch")
 				}
 				if saved && !strings.Contains(hidden, `"language":"Uzbek"`) {

@@ -31,6 +31,9 @@ type boardVisual struct {
 	health                      map[string]string
 	// vitals is the data the top-of-every-view vitals row paints.
 	vitals vitalsData
+	// telemetry is the help's footer line saying whether anonymous
+	// telemetry is on; "" leaves the footer out.
+	telemetry string
 	// edition is the build named in the header; empty names none.
 	edition string
 	// note is the run's latest note to the operator, shown in the footer.
@@ -68,8 +71,14 @@ type boardVisual struct {
 	// plan is set when the Plan view can open; planView paints it in the
 	// body.
 	plan, planView bool
-	// viewNoRun is set when views 5-7 have no run to show.
+	// viewNoRun is set when views 5-7 have no run to show: their keys
+	// answer a line instead of opening them, and help leaves them out.
 	viewNoRun bool
+	// planning is set between the architecture's Accept and the run it
+	// plans: the first-use header and card say the Marshal is planning.
+	planning bool
+	// mcpFailed is set once MCP has failed; until then help leaves F6 out.
+	mcpFailed bool
 	// arch is set when the Architecture view can open; archView paints it
 	// in the body.
 	arch, archView bool
@@ -135,7 +144,9 @@ type boardVisual struct {
 }
 
 func (v boardVisual) code(name string, background bool) string {
-	if v.theme == nil || v.theme.Mode == ThemeNoColor {
+	// No name is the terminal's own colour: "" is not in the palette, and
+	// looking it up painted black (colour 0, #000000) text.
+	if v.theme == nil || v.theme.Mode == ThemeNoColor || name == "" {
 		return ""
 	}
 	if v.theme.Mode == ThemeMonochrome {
@@ -575,7 +586,7 @@ type footerSpan struct {
 // of a confirmation, picker or composer right-aligned after it, or help after
 // an answer, while they fit beside it.
 func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
-	type item struct{ id, key, hint string }
+	type item = hintItem
 	var items []item
 	for _, id := range v.hints {
 		if k, ok := boardAction(id); ok && k.Hint != "" {
@@ -649,9 +660,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 			s += part
 		}
 	}
-	// The hints are lead then tail, so stopping at the first that does not
-	// fit drops the tail's end first, then the lead's, and the first lead
-	// item last.
+	items = fitHints(items, VisibleLen(" "+s), w)
 	var spans []footerSpan
 	for _, it := range items {
 		if VisibleLen(" "+s)+width(it)+2 > w {
@@ -686,7 +695,7 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 	if v.board.Run.Done > 0 {
 		merged = v.board.Run.Done
 	}
-	summary := fmt.Sprintf("%d tasks · %d running · %d parked · %d merged", v.board.Run.Total, run, park, merged)
+	summary := fmt.Sprintf("%s · %d running · %d parked · %d merged", count(v.board.Run.Total, "task", "tasks"), run, park, merged)
 	out := []string{v.title("TASKS", summary, v.focus == layout.Tasks, w)}
 	if h == 1 {
 		return out
@@ -703,15 +712,28 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		// id and the scope, so neither is cut to a stub.
 		idW = min(idW, max(taskIDWidth, (w-37)/2+1))
 	}
-	scopeW := max(1, w-56-(idW-taskIDWidth))
+	// The sent back column is there only once a task was sent back; until
+	// then the scope takes its cells.
+	backW := 0
+	for _, t := range v.board.Tasks {
+		if t.Returns > 0 {
+			backW = 12
+			break
+		}
+	}
+	scopeW := max(1, w-44-backW-(idW-taskIDWidth))
 	if compact {
-		scopeW = max(1, w-47-(idW-taskIDWidth))
+		scopeW = max(1, w-35-backW-(idW-taskIDWidth))
+	}
+	backHead := ""
+	if backW > 0 {
+		backHead = PadCell("sent back", backW)
 	}
 	var head string
 	if compact {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("sent back", 12)
+		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + backHead
 	} else {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + PadCell("sent back", 12)
+		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + backHead
 	}
 	out = append(out, v.fg("dim", PadCell(head, w)))
 	visible := max(0, h-2)
@@ -784,9 +806,9 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		var line string
 		id := dim(PadCell(Truncate(t.ID, idW-1), idW))
 		if compact {
-			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(rw, 12))
+			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(rw, backW))
 		} else {
-			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(rw, 12))
+			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(rw, backW))
 		}
 		line = PadCell(line, w)
 		if v.frame.Pulsing(t.ID) {

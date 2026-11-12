@@ -44,6 +44,19 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		}
 	}
 	layout, err := app.ValidateProject(ctx, c.root)
+	if app.ProjectNotSetUp(err) {
+		// An existing Git project Marshal was never set up in is set up on
+		// opening, as `marshal init` would: it only adds what is missing.
+		// The line naming what was committed is printed here and carried
+		// to the TUI's Activity, as a started repository's is.
+		_, committed, setupErr := initializeProject(ctx, c.root)
+		if setupErr != nil {
+			return setupErr
+		}
+		c.startedRepository = setUpProjectLine(committed)
+		fmt.Fprintln(c.stderr, c.startedRepository)
+		layout, err = app.ValidateProject(ctx, c.root)
+	}
 	if err != nil {
 		return err
 	}

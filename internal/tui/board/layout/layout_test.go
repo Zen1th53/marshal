@@ -393,3 +393,33 @@ func TestEmptyLanesDoNotPushActivityDown(t *testing.T) {
 		}
 	}
 }
+
+// TestWithoutVitals takes the vitals row out of a layout one row taller and
+// keeps every other pane where it was, one row up.
+func TestWithoutVitals(t *testing.T) {
+	for _, tc := range []struct {
+		cols, rows int
+		mode       Mode
+	}{{160, 40, Home}, {100, 30, Home}, {99, 40, Split}, {60, 20, Split}} {
+		full := Compute(tc.cols, tc.rows+1, tc.mode)
+		l := full.WithoutVitals()
+		if l.Rows != tc.rows {
+			t.Fatalf("%v: rows %d, want %d", tc, l.Rows, tc.rows)
+		}
+		if _, ok := l.Pane(Vitals); ok {
+			t.Fatalf("%v: vitals still placed", tc)
+		}
+		if len(l.Panes) != len(full.Panes)-1 || l.Body.Y != full.Body.Y-1 {
+			t.Fatalf("%v: panes %d/%d body %d/%d", tc, len(l.Panes), len(full.Panes), l.Body.Y, full.Body.Y)
+		}
+		for _, p := range l.Panes {
+			q, _ := full.Pane(p.ID)
+			if p.Rect.Y != q.Rect.Y-1 || p.Rect.Y < 0 || p.Rect.Y+p.Rect.H > l.Rows {
+				t.Fatalf("%v: %s at %+v (was %+v)", tc, p.ID, p.Rect, q.Rect)
+			}
+		}
+	}
+	if l := (Layout{Cols: 10, Rows: 1, Panes: []Pane{{Notice, Rect{0, 0, 10, 1}, Strip}}}); len(l.WithoutVitals().Panes) != 1 {
+		t.Fatal("a layout without a vitals row changed")
+	}
+}

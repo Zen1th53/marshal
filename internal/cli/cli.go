@@ -431,7 +431,16 @@ func (c command) status(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.print(value, statusLine(value))
+	// The service answers the counts (and --json); the run and the
+	// Marshal provider are read from the store it shares.
+	human := ""
+	if !c.json {
+		human = statusOnlyText(value)
+		if view, err := c.readLocal(ctx); err == nil {
+			human = view.statusText()
+		}
+	}
+	return c.print(value, human)
 }
 
 func (c command) agent(ctx context.Context, args []string) error {

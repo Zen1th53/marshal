@@ -472,10 +472,7 @@ func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (s
 		}
 		if args[1] == "request" {
 			h.ws.queuePermission(req)
-			if buildMarker != "" {
-				return "Credential broker permission queued. The Marshal will decide the requested project scope. Retry the governed task after the decision.", nil
-			}
-			return "Credential broker permission queued. A allows; every other key denies. Retry the governed task after allowing.", nil
+			return credentialRequestQueuedText(req.Object), nil
 		}
 		if err := h.ws.decidePermission(ctx, req, false, "operator revoke"); err != nil {
 			return "", err
@@ -753,15 +750,4 @@ func partitionPermissionTimeout(batch []permission.Request) (popup, deferred []p
 		}
 	}
 	return
-}
-
-func credentialRevocationMessage(provider, state string) string {
-	switch state {
-	case "pending":
-		return "Credential broker revoked for " + provider + "; active broker connections pending owner acknowledgement. Check /permission credential status " + provider + "."
-	case "closed":
-		return "Credential broker revoked for " + provider + "; active broker connections closed (owners acknowledged)."
-	default:
-		return "No credential revocation recorded for " + provider + "."
-	}
 }

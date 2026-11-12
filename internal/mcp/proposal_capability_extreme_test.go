@@ -95,7 +95,9 @@ func TestGovernedActionsStdioPreserveAdmissionFailureAndOwnerPending(t *testing.
 				t.Fatalf("proposal=%s error=%+v raw=%s", proposal, resp.Error, got)
 			}
 			content := resp.Result.(map[string]any)["content"].([]map[string]any)
-			if content[0]["text"] != receipt {
+			// The parent's receipt is the data block, unchanged, after
+			// one plain summary line.
+			if len(content) != 2 || strings.Contains(content[0]["text"].(string), "{") || content[1]["text"] != receipt {
 				t.Fatalf("parent outcome changed: %+v", resp)
 			}
 		}
