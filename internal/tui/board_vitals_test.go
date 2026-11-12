@@ -19,7 +19,7 @@ var vitalsNow = time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 func vitalsHost(lowDisk bool) *hostSnapshot {
 	free, used := uint64(290e9), uint64(710e9)
 	if lowDisk {
-		free, used = uint64(15e9), uint64(985e9)
+		free, used = uint64(9e9), uint64(991e9)
 	}
 	a := hostwatch.Sample{At: vitalsNow.Add(-time.Second), CPUTicksTotal: 10000, CPUTicksIdle: 8500, CPUTicksKnown: true}
 	b := hostwatch.Sample{
@@ -65,9 +65,12 @@ func TestVitalsLineWidths(t *testing.T) {
 		want string
 	}{
 		{160, " ✳ claude ▓▓░ 58% left ·4d · ⬡ codex ▓▓▓ 88% left ·3h · ◆ agy limit unknown · ● opencode limit unknown" + strings.Repeat(" ", 10) + right},
-		{120, " ✳ claude ▓▓░ 58% left ·4d · ⬡ codex ▓▓▓ 88% left ·3h · ◆ — · ● —" + strings.Repeat(" ", 7) + right},
-		{80, " ✳ 58% left · ⬡ 88% left · ◆ —" + strings.Repeat(" ", 2) + right},
-		{56, " ✳ 58% left · ⬡ 88% left" + strings.Repeat(" ", 9) + "cpu 23% · 61°C · 3 run "},
+		{120, " ✳ claude ▓▓░ 58% left ·4d · ⬡ codex ▓▓▓ 88% left ·3h · ◆ ? · ● ?" + strings.Repeat(" ", 7) + right},
+		// 100 columns: the resets go first, then the temperature; every
+		// limit, the bars, ram and disk stay.
+		{100, " ✳ claude ▓▓░ 58% left · ⬡ codex ▓▓▓ 88% left · ◆ ? · ● ?  cpu 23% · ram 48% · disk 71% · 3 running "},
+		{80, " ✳ 58% left · ⬡ 88% left · ◆ ? · ● ?" + strings.Repeat(" ", 3) + "cpu 23% · ram 48% · disk 71% · 3 running "},
+		{56, " ✳ 58% left · ⬡ 88% left" + strings.Repeat(" ", 6) + "cpu 23% · ram 48% · 3 run "},
 	} {
 		line, _ := v.vitalsLine(tc.w)
 		if got := StripANSI(line); got != tc.want {
@@ -75,6 +78,17 @@ func TestVitalsLineWidths(t *testing.T) {
 		}
 		if n := VisibleLen(line); n != tc.w {
 			t.Errorf("w=%d: visible width %d", tc.w, n)
+		}
+	}
+	// Every provider whose limit cannot be read says so the same way at any
+	// width: both "limit unknown", both "?", or both gone.
+	for w := 40; w <= 200; w++ {
+		line, _ := v.vitalsLine(w)
+		plain := StripANSI(line)
+		full := strings.Count(plain, "limit unknown")
+		short := strings.Count(plain, "◆ ?") + strings.Count(plain, "● ?")
+		if !(full == 2 && short == 0 || full == 0 && short == 2 || full == 0 && short == 0) {
+			t.Fatalf("w=%d: unreadable limits read differently: %q", w, plain)
 		}
 	}
 }
@@ -131,7 +145,7 @@ func TestVitalsHonesty(t *testing.T) {
 func TestVitalsASCII(t *testing.T) {
 	v := vitalsFixture(NewTheme(ThemeNoColor, false, false))
 	line := v.render(layout.Pane{ID: layout.Vitals, Rect: layout.Rect{W: 80, H: 1}})[0]
-	want := " cl 58% left . cx 88% left" + strings.Repeat(" ", 7) + "cpu 23% . 61C . ram 48% . disk 71% . 3 running "
+	want := " cl 58% left . cx 88% left" + strings.Repeat(" ", 13) + "cpu 23% . ram 48% . disk 71% . 3 running "
 	if got := StripANSI(line); got != want {
 		t.Errorf("ascii:\n got %q\nwant %q", got, want)
 	}
@@ -218,6 +232,29 @@ func TestVitalsHits(t *testing.T) {
 	for id, seen := range want {
 		if !seen {
 			t.Errorf("no hitChip %q on the vitals row", id)
+		}
+	}
+}
+
+// TestVitalsLowDiskRule: the vitals row's amber disk follows the agreed rule,
+// free space below min(10 GB, 5% of the disk), exactly as the doctor and the
+// Host view do; no margin above it.
+func TestVitalsLowDiskRule(t *testing.T) {
+	for _, tc := range []struct {
+		total, free uint64
+		low         bool
+	}{
+		{1000e9, 9.9e9, true}, // 5% is 50 GB: 10 GB binds
+		{1000e9, 10e9, false}, // at the threshold is not below it
+		{1000e9, 15e9, false}, // under 2x the threshold: not low
+		{100e9, 4.9e9, true},  // 5% is 5 GB: it binds
+		{100e9, 6e9, false},
+	} {
+		snap := vitalsHost(false)
+		last := &snap.Samples[len(snap.Samples)-1]
+		last.DiskMounts = []hostwatch.DiskMountUsage{{MountPoint: "/", TotalBytes: tc.total, UsedBytes: tc.total - tc.free, FreeBytes: tc.free, Known: true}}
+		if got := snap.chip().LowDisk; got != tc.low {
+			t.Errorf("total %v free %v: low %v, want %v", tc.total, tc.free, got, tc.low)
 		}
 	}
 }

@@ -786,10 +786,17 @@ func (w *Workspace) frameLines(cols, rows int) ([]string, int, int) {
 	if chatW < 1 || boardW < 1 {
 		return w.frameLinesFull(cols, rows)
 	}
-	right, cr, cc := w.frameLinesFull(boardW, rows)
 	w.mu.RLock()
 	th := w.theme
 	w.mu.RUnlock()
+	// The vitals row spans the whole terminal, above both the chat and the
+	// Board, unless the tmux status line already carries it.
+	var top []string
+	if !w.vitalsInStatus() && rows >= 2 {
+		top = []string{w.vitalsRow(th, cols)}
+	}
+	rows -= len(top)
+	right, cr, cc := w.frameLinesVitals(boardW, rows, true)
 	left, lr, lc, focused := w.nativeChatFrame(th, chatW, rows)
 	rule := "|"
 	if th != nil {
@@ -806,10 +813,11 @@ func (w *Workspace) frameLines(cols, rows int) ([]string, int, int) {
 		}
 		out[i] = PadCell(l, chatW) + rule + PadCell(r, boardW)
 	}
+	out = append(top, out...)
 	if focused {
-		return out, lr, lc
+		return out, lr + len(top), lc
 	}
-	return out, cr, cc + chatW + 1
+	return out, cr + len(top), cc + chatW + 1
 }
 
 // focusNativeChat moves the keyboard to (or away from) the chat composer.

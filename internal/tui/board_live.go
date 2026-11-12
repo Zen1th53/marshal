@@ -420,8 +420,16 @@ func (w *Workspace) fillVitals(v *boardVisual, state UIState) {
 }
 
 // boardFrame paints the run on the Board with the composer, the inbox's
-// confirmation and any popup, and returns the frame with its cursor.
+// confirmation and any popup, and returns the frame with its cursor. The
+// vitals row is left out while Marshal's tmux status line carries it.
 func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, rows int) ([]string, int, int) {
+	return w.boardFrameVitals(state, th, popup, cols, rows, w.vitalsInStatus())
+}
+
+// boardFrameVitals is boardFrame; outside says the vitals row is painted
+// elsewhere (the tmux status line, or full width above a native chat), so
+// the Board lays out without it.
+func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, cols, rows int, outside bool) ([]string, int, int) {
 	p := state.Marshal
 	empty := p == nil
 	if empty {
@@ -541,6 +549,9 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 		v.pick = w.pickerPaint()
 	}
 	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
+	if outside {
+		l = layout.ComputeFor(cols, rows+1, w.boardLayoutMode(), v.layoutCounts()).WithoutVitals()
+	}
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
 	// The opening animation (P2-03) owns the body on the first paints of a

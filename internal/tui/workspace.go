@@ -275,6 +275,9 @@ type Workspace struct {
 	chatTypeMu sync.Mutex
 	// dock keeps the Marshal chat joined beside the Board.
 	dock marshalDock
+	// status is Marshal's tmux status line: the vitals row on every screen
+	// and, while the chat is docked, both panes' titles (tmux_status.go).
+	status statusBar
 	// hostWatch samples the host for as long as the screen runs; nil
 	// before then. Set once, before its goroutine starts.
 	hostWatch atomic.Pointer[hostWatcher]
@@ -891,9 +894,6 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	w.startLaneTail(ctx)
 	w.startAttention(ctx)
 	w.startUsage(ctx)
-	if buildMarker != "" {
-		fmt.Fprintln(out, buildMarker)
-	}
 	defer w.Close()
 	w.out = out
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {
@@ -995,6 +995,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	w.startHostWatch(ctx)
 	// The Marshal chat is docked beside the Board while this screen runs and
 	// returned to its own window before the workspace closes.
+	// The status line of the tmux session Marshal made carries the vitals
+	// row above every pane; it is handed back after the dock has undocked.
+	w.startStatus(ctx)
+	defer w.endStatus()
 	w.startDock(ctx)
 	defer w.endDock()
 	// The opening animation plays on the first paint when the Board home has
@@ -1166,6 +1170,16 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 	if w.interruptArmed {
 		w.interruptArmed = false
 		w.renderFullView()
+	}
+
+	// A click on [m] in the chat's title row (tmux_status.go) opens the
+	// Marshal picker, as m does on the Board.
+	if event.Type == KeyMarshalPick {
+		if w.boardVisible() && !w.marshalPickerOpen() && !w.pickerOpen() {
+			w.openMarshalPicker(ctx)
+		}
+		w.renderFullView()
+		return false
 	}
 
 	// F-keys run their commands.
@@ -2322,6 +2336,12 @@ func (w *Workspace) paint() {
 // It reads no terminal, so a test sees exactly the frame the screen would
 // get. frameLines wraps it to dock the native chat.
 func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
+	return w.frameLinesVitals(cols, rows, w.vitalsInStatus())
+}
+
+// frameLinesVitals is frameLinesFull; outside says the vitals row is painted
+// elsewhere, so no screen paints its own.
+func (w *Workspace) frameLinesVitals(cols, rows int, outside bool) ([]string, int, int) {
 	w.mu.RLock()
 	state := w.liveStateLocked()
 	th := w.theme
@@ -2334,7 +2354,7 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 	// stays on top of the diff viewer too.
 	if w.diffViewer.IsOpen() {
 		inner, vitals := rows, ""
-		if rows >= 2 {
+		if rows >= 2 && !outside {
 			vitals = w.vitalsRow(th, cols)
 			inner = rows - 1
 		}
@@ -2366,12 +2386,12 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 	// The Board is the screen, a run or not, unless /view classic chose
 	// the classic screen: with no run it shows the first-use card.
 	if (state.Marshal != nil || home) && !classic {
-		return w.boardFrame(state, th, popup, cols, rows)
+		return w.boardFrameVitals(state, th, popup, cols, rows, outside)
 	}
 
 	// The classic screen also carries the vitals row on top.
 	inner, vitals := rows, ""
-	if rows >= 2 {
+	if rows >= 2 && !outside {
 		vitals = w.vitalsRow(th, cols)
 		inner = rows - 1
 	}

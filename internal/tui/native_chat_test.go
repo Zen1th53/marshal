@@ -316,11 +316,15 @@ func TestNativeChatDocksLeftOfBoard(t *testing.T) {
 		t.Fatalf("%d rows", len(lines))
 	}
 	plain := func(s string) string { return StripANSI(s) }
-	if !strings.HasPrefix(plain(lines[0]), "MARSHAL  claude") {
-		t.Fatalf("chat header: %q", plain(lines[0]))
+	// The vitals row spans the whole terminal above both halves.
+	if v := plain(lines[0]); !strings.HasSuffix(v, "running ") || strings.ContainsAny(v, "│|") {
+		t.Fatalf("vitals row: %q", v)
+	}
+	if !strings.HasPrefix(plain(lines[1]), "MARSHAL  claude") {
+		t.Fatalf("chat header: %q", plain(lines[1]))
 	}
 	joined := ""
-	for _, l := range lines {
+	for _, l := range lines[1:] {
 		p := []rune(plain(l))
 		if VisibleLen(l) != cols {
 			t.Fatalf("row width %d: %q", VisibleLen(l), plain(l))

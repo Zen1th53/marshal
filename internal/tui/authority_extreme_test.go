@@ -65,9 +65,16 @@ func TestExtremeFallbackAndTimeout(t *testing.T) {
 		t.Fatal("missing audited automatic application")
 	}
 }
-func TestExtremeMarker(t *testing.T) {
-	if !strings.Contains(RenderStatusline(UIState{}, nil, "/tmp", 160), buildMarker) {
-		t.Fatal("missing marker")
+// TestShippedShowsNoAuthoritySubtitle: the shipped build's status line,
+// splash and startup output carry no "approval authority" subtitle.
+func TestShippedShowsNoAuthoritySubtitle(t *testing.T) {
+	if s := RenderStatusline(UIState{}, nil, "/tmp", 160); strings.Contains(s, "approval authority") {
+		t.Fatalf("status line shows the subtitle: %q", s)
+	}
+	var out strings.Builder
+	playMarshalSplash(&out, NewTheme(ThemeDefault, true, true), false)
+	if strings.Contains(out.String(), "approval authority") {
+		t.Fatalf("splash shows the subtitle:\n%s", out.String())
 	}
 }
 
@@ -219,8 +226,8 @@ func TestExtremeUnverifiedProposalFileNeverAutoApplied(t *testing.T) {
 func TestExtremeStartupAndFinalBriefing(t *testing.T) {
 	var output strings.Builder
 	playMarshalSplash(&output, NewTheme(ThemeDefault, true, true), false)
-	if !strings.Contains(output.String(), buildMarker) {
-		t.Fatal("startup marker missing")
+	if !strings.Contains(output.String(), "Summoning the Marshal") || strings.Contains(output.String(), "approval authority") {
+		t.Fatalf("startup splash:\n%s", output.String())
 	}
 	text, err := marshalRoleBriefing([]string{"codex", "agy"}, marshal.DefaultSettings(), marshal.Standard)
 	if err != nil || !strings.HasSuffix(text, buildRoleAuthority) {

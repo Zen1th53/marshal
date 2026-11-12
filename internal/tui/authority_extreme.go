@@ -20,8 +20,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
-const buildMarker = "Marshal — approval authority"
-
 // launchEarlierWorkThroughQueue: the launch scan loads earlier sessions by
 // queueing the ordinary read request (shipped decides it automatically);
 // governed loads directly only under an operator grant already on record.

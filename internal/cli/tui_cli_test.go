@@ -76,7 +76,10 @@ func TestTUICLIInvocation(t *testing.T) {
 	}
 	expectedStatus := "MANUAL"
 	if cloud.ExecutionOnAtStartup {
-		expectedStatus = "Marshal — approval authority"
+		expectedStatus = "[ULTRA ACTIVE]"
+		if strings.Contains(outStr, "approval authority") {
+			t.Fatalf("the shipped status line shows the approval authority subtitle:\n%s", outStr)
+		}
 		if !strings.Contains(outStr, "[ULTRA ACTIVE]") {
 			t.Fatalf("expected active Marshal execution in tui output:\n%s", outStr)
 		}

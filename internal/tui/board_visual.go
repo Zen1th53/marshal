@@ -144,7 +144,9 @@ type boardVisual struct {
 }
 
 func (v boardVisual) code(name string, background bool) string {
-	if v.theme == nil || v.theme.Mode == ThemeNoColor {
+	// No name is the terminal's own colour: "" is not in the palette, and
+	// looking it up painted black (colour 0, #000000) text.
+	if v.theme == nil || v.theme.Mode == ThemeNoColor || name == "" {
 		return ""
 	}
 	if v.theme.Mode == ThemeMonochrome {

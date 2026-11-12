@@ -1353,9 +1353,6 @@ func (w *Workspace) updateTmuxStatusLine(ctx context.Context) {
 		w.tmuxMu.Unlock()
 
 		statusText := ""
-		if buildMarker != "" {
-			parts = append([]string{buildMarker}, parts...)
-		}
 		if len(parts) > 0 {
 			statusText = fmt.Sprintf(" [%s] ", strings.Join(parts, " | "))
 		}

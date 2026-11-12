@@ -12,7 +12,7 @@ import (
 func TestBrokerCommandQueuesPromptWithoutGranting(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	out, err := w.cmd.Handle(context.Background(), "/permission credential request codex")
-	if err != nil || out != credentialRequestQueuedText("codex") || strings.Contains(out, "governed task") != (buildMarker == "") {
+	if err != nil || out != credentialRequestQueuedText("codex") || strings.Contains(out, "governed task") != !editionExtreme {
 		t.Fatalf("request: %s %v", out, err)
 	}
 	requests := w.permissions.queue.Take(false)

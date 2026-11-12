@@ -234,3 +234,23 @@ func TestCodexNewSessionKeepsTheLastReport(t *testing.T) {
 		t.Fatalf("newer unknown report = %+v", q)
 	}
 }
+
+// TestCodexModel reads the newest turn_context's model from the same rollout
+// the figures came from; a rollout naming none, or a model that is not a plain
+// id, leaves Model empty.
+func TestCodexModel(t *testing.T) {
+	if q := codexFrom(t, "model.jsonl", now.Add(-time.Minute)); !q.Known || q.Model != "gpt-6.1-sol" {
+		t.Fatalf("model = %q (%+v)", q.Model, q)
+	}
+	if q := codexFrom(t, "fresh.jsonl", now.Add(-time.Minute)); q.Model != "" {
+		t.Fatalf("no turn_context: model = %q", q.Model)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "r.jsonl")
+	if err := os.WriteFile(path, []byte(`{"type":"turn_context","payload":{"model":"gpt 6; rm"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if m := lastModel(path); m != "" {
+		t.Fatalf("unsafe model kept: %q", m)
+	}
+}

@@ -49,6 +49,7 @@ func readCodex(now time.Time, dir string) Quota {
 	}
 	var line []byte
 	var mod time.Time
+	var from string
 	readable := false
 	for _, f := range files {
 		if now.Sub(f.mod) >= staleAfter {
@@ -64,7 +65,7 @@ func readCodex(now time.Time, dir string) Quota {
 		}
 		readable = true
 		if l != nil {
-			line, mod = l, f.mod
+			line, mod, from = l, f.mod, f.path
 			break
 		}
 	}
@@ -104,8 +105,38 @@ func readCodex(now time.Time, dir string) Quota {
 	if q.Known {
 		q.AsOf = mod
 		q.Stale = now.Sub(mod) >= FreshFor
+		q.Model = lastModel(from)
 	}
 	return q
+}
+
+// lastModel is the model of the newest turn_context in the tail of the
+// rollout at path, or "" when the tail names none. Only that one field is
+// decoded, and only a plain model id is kept.
+func lastModel(path string) string {
+	line, err := lastLineWith(path, `"turn_context"`)
+	if err != nil || line == nil {
+		return ""
+	}
+	var rec struct {
+		Type    string `json:"type"`
+		Payload struct {
+			Model string `json:"model"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(line, &rec) != nil || rec.Type != "turn_context" {
+		return ""
+	}
+	m := rec.Payload.Model
+	if len(m) == 0 || len(m) > 64 {
+		return ""
+	}
+	for _, c := range m {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.') {
+			return ""
+		}
+	}
+	return m
 }
 
 // codexWindow turns one rate_limits entry into a Window, unknown with a
@@ -240,6 +271,12 @@ func findKey(v any, key string) (any, bool) {
 // that mentions rate_limits, or nil when there is none. A first line cut by
 // the tail window and a last line without its newline are skipped.
 func lastRateLimitLine(path string) ([]byte, error) {
+	return lastLineWith(path, `"rate_limits"`)
+}
+
+// lastLineWith is the last complete line in the tail of path that contains
+// marker, or nil when none does.
+func lastLineWith(path, marker string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -274,7 +311,7 @@ func lastRateLimitLine(path string) ([]byte, error) {
 	for len(buf) > 0 {
 		start := bytes.LastIndexByte(buf, '\n') + 1
 		line := buf[start:]
-		if bytes.Contains(line, []byte(`"rate_limits"`)) {
+		if bytes.Contains(line, []byte(marker)) {
 			return bytes.TrimRight(line, "\r"), nil
 		}
 		if start == 0 {

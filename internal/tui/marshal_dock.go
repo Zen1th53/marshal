@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 // marshalDock keeps the Marshal chat pane joined at the left edge of the
@@ -30,6 +31,10 @@ type marshalDock struct {
 	table   string     // dock key table bound for pane
 	window  string     // chat window name to restore on undock
 	title   string     // last title installed in tmux
+	// pick is the window columns [m] covers in the status title row, and
+	// windowID the Board window the click binding was made for.
+	pick     [2]int
+	windowID string
 
 	docked atomic.Bool // read by paint without taking mu
 	kick   chan struct{}
@@ -69,6 +74,8 @@ func (w *Workspace) startDock(ctx context.Context) {
 // kickDock asks the reconciler to look again: after a resize, a view change
 // or a chat restart. Kicks coalesce.
 func (w *Workspace) kickDock() {
+	// The status line's width and title row follow the window too.
+	w.kickStatus()
 	w.dock.mu.Lock()
 	kick := w.dock.kick
 	w.dock.mu.Unlock()
@@ -143,7 +150,7 @@ func (w *Workspace) reconcileStartupDock(ctx context.Context) error {
 	if chatGeo.WindowID != boardGeo.WindowID {
 		return nil
 	}
-	return w.adoptDockLocked(ctx, chat, board, w.providerRoot(), chatGeo.PaneWidth)
+	return w.adoptDockLocked(ctx, chat, board, w.providerRoot(), chatGeo.PaneWidth, boardGeo.WindowID, boardGeo.WindowWidth)
 }
 
 // reconcileDock makes tmux match the dock's intent. It is idempotent: a call
@@ -208,7 +215,7 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 			return err
 		}
 	}
-	return w.adoptDockLocked(ctx, chat, board, root, width)
+	return w.adoptDockLocked(ctx, chat, board, root, width, boardGeo.WindowID, boardGeo.WindowWidth)
 }
 
 // reconcileBoardMouse owns the tmux session's mouse option while the dock is
@@ -231,9 +238,12 @@ func (w *Workspace) reconcileBoardMouse(ctx context.Context, board string) {
 
 // adoptDockLocked installs the same keys and title for every path that puts
 // the chat beside the Board. width is the chat pane's width, for fitting the
-// title. Caller holds dock.mu.
-func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, board, root string, width int) error {
+// title; window and windowW are the Board window's id and width. Caller holds
+// dock.mu.
+func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, board, root string, width int, window string, windowW int) error {
+	rebound := false
 	if w.dock.pane != chat.paneID || w.dock.board != board {
+		rebound = true
 		if err := w.bindDockKeys(ctx, chat.paneID, board, root); err != nil {
 			return err
 		}
@@ -242,14 +252,31 @@ func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, 
 		}
 		w.dock.pane, w.dock.board, w.dock.table, w.dock.window = chat.paneID, board, dockKeyTable(root), chat.window
 	}
-	// tmux owns the border row, outside the provider's PTY. The CLI still
+	// tmux owns the title row, outside the provider's PTY. The CLI still
 	// receives every ordinary key and may repaint its entire own screen.
-	title := w.dockTitle(chat, width)
-	if title != w.dock.title {
-		if err := tmux.SetPaneOption(ctx, chat.paneID, "@marshal_dock_title", title); err != nil {
-			return err
+	if w.statusOwned() {
+		// The status line's second row carries the titles, so [m] can be
+		// clicked; the click binding follows where [m] lands.
+		title, at := w.dockTitleAt(chat, width, true)
+		pick := [2]int{-1, -1}
+		if at >= 0 {
+			pick = [2]int{3 + at, 3 + at + len("[m]")}
 		}
-		w.dock.title = title
+		if rebound || pick != w.dock.pick || window != w.dock.windowID {
+			if err := w.bindDockClicks(ctx, root, window, chat.paneID, board, width, pick[0], pick[1]); err != nil {
+				return err
+			}
+			w.dock.pick, w.dock.windowID = pick, window
+		}
+		w.publishDockStatus(&dockStatus{window: window, chat: chat.paneID, board: board, chatW: width, boardW: max(0, windowW-1-width), chatTitle: title})
+	} else {
+		title := w.dockTitle(chat, width)
+		if title != w.dock.title {
+			if err := tmux.SetPaneOption(ctx, chat.paneID, "@marshal_dock_title", title); err != nil {
+				return err
+			}
+			w.dock.title = title
+		}
 	}
 	if w.dock.pane == chat.paneID && !w.dock.docked.Load() {
 		if err := w.styleDockLocked(ctx, board); err != nil {
@@ -334,7 +361,9 @@ func (w *Workspace) forgetDockLocked(ctx context.Context) error {
 		errs = append(errs, tmux.UnbindKeyTable(ctx, w.dock.table))
 	}
 	err := errors.Join(errs...)
+	w.publishDockStatus(nil)
 	w.dock.pane, w.dock.board, w.dock.table, w.dock.window, w.dock.title = "", "", "", "", ""
+	w.dock.pick, w.dock.windowID = [2]int{}, ""
 	if w.dock.docked.Swap(false) {
 		w.requestRepaint()
 	}
@@ -356,12 +385,19 @@ const boardDockTitle = "BOARD  ·  F11 / Alt+← chat  ·  s: say it to the Mars
 // the selected pane's border in the accent colour, and mouse focus on so a
 // click selects either pane. Caller holds dock.mu.
 func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
-	for _, o := range [][2]string{
+	opts := [][2]string{
 		{"pane-border-format", dockBorderFormat},
 		{"pane-border-status", "top"},
+	}
+	if w.statusOwned() {
+		// The titles are on the status line's second row instead.
+		opts = nil
+	}
+	opts = append(opts, [][2]string{
 		{"pane-border-style", "fg=" + tmuxColour("faint")},
 		{"pane-active-border-style", "fg=" + tmuxColour("accent") + ",bold"},
-	} {
+	}...)
+	for _, o := range opts {
 		if err := tmux.SetWindowOption(ctx, board, o[0], o[1]); err != nil {
 			return err
 		}
@@ -377,77 +413,192 @@ func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 	return err
 }
 
-// dockTitle is the chat pane's border title: the Marshal brand, the chat
-// provider's glyph and name, and how close that provider's model is to its
-// limit. It uses only the snapshots already in memory (the last usage reading
-// and the theme); it never opens a file or consults the store on the
-// rendering path. width is the chat pane's width in columns, used to drop the
-// limit's less important parts when the pane is narrow; width <= 0 skips the
-// fit.
+// dockTitle is the chat pane's title: the Marshal brand, the Marshal model
+// (or the provider when the model is not known) with the provider's glyph,
+// how close it is to its limit, and [m] to switch. It uses only the snapshots
+// already in memory (the last usage reading, the chat's launch arguments and
+// the theme); it never opens a file or consults the store on the rendering
+// path. width is the chat pane's width in columns; the title then fits it
+// less the 3-cell focus marker; width <= 0 skips the fit.
 func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
+	title, _ := w.dockTitleAt(chat, width, false)
+	return title
+}
+
+// dockTitleAt is dockTitle; pad lays it out exactly width-3 cells wide with
+// "[m] switch" flush right (the status line's title row), and it also
+// returns the cell offset of "[m]" in the title, -1 when it is not shown.
+func (w *Workspace) dockTitleAt(chat *activeTmuxAgent, width int, pad bool) (string, int) {
 	w.mu.RLock()
 	unicode := w.theme == nil || w.theme.Unicode
 	w.mu.RUnlock()
+	qs, read := w.usageQuotas()
+	return dockTitleFor(chat.provider, chat.args, qs, read, unicode, width, pad, time.Now())
+}
+
+// dockTitleFor lays the chat's title out. The parts give way in a fixed
+// order until it fits: "F11 Board", then the model's long name (its vendor
+// prefix goes: "GPT-6.1-Sol" → "6.1-Sol"), the reset, the bar, " switch"
+// after [m], the model name (the glyph stays), and last the brand. The
+// percent left and [m] are never dropped; if it is still too wide, tmux cuts
+// it.
+func dockTitleFor(provider string, args []string, qs []usage.Quota, read, unicode bool, width int, pad bool, now time.Time) (string, int) {
 	sep := " · "
 	if !unicode {
 		sep = " . "
 	}
-	name := dockTitleText(chat.provider)
+	name := dockTitleText(provider)
 	if name == "" {
 		name = "chat"
 	}
-	head := " MARSHAL" + sep + name
-	if g := providerGlyph(name, unicode); g != "" {
-		head = " MARSHAL" + sep + g + " " + name
-	}
+	glyph := providerGlyph(name, unicode)
 	// The chat provider's limit, when a reading has it: a bar of what is left
 	// and the percent left with its reset. A read entry that is not known
-	// shows "limit unknown"; before the first reading, or for a provider with no
-	// entry, there is no limit part.
-	bar, fig := "", ""
-	if qs, ok := w.usageQuotas(); ok {
+	// shows "limit unknown"; before the first reading, or for a provider with
+	// no entry, there is no limit part.
+	bar, pct, reset := "", "", ""
+	modelID := chatModelArg(args)
+	if read {
 		for _, q := range qs {
 			if q.Provider != name {
 				continue
 			}
-			if figure, pct, known := limitFigure(q, time.Now()); known {
+			if modelID == "" {
+				modelID = q.Model
+			}
+			if figure, p, known := limitFigure(q, now); known {
 				if !unicode {
 					figure = strings.ReplaceAll(figure, "·", ".")
 				}
-				bar, fig = " "+limitBar(pct, unicode), " "+figure
+				bar = " " + limitBar(p, unicode)
+				pct = " " + figure
+				for _, cut := range []string{" ·", " ."} {
+					if i := strings.Index(figure, cut); i >= 0 {
+						pct, reset = " "+figure[:i], figure[i:]
+						break
+					}
+				}
 			} else {
-				fig = " " + limitUnknown
+				pct = " " + limitUnknown
 			}
 			break
 		}
 	}
-	tail := "    F11 Board "
-	title := head + bar + fig + tail
-	if width <= 0 {
-		return title
+	long, short := modelDisplayName(modelID)
+	if long == "" {
+		long, short = name, name
 	}
-	// Drop the limit's less important parts, in order, until the title fits
-	// the pane (less the ` ▶ ` marker). head and tail are never dropped; if it
-	// is still too wide, tmux cuts it.
+	model := " " + long
+	brand := " MARSHAL" + sep
+	mkey, mword, tail := "[m]", " switch", "  F11 Board"
+	build := func() (string, int) {
+		head := brand
+		if glyph != "" {
+			head += glyph
+		} else {
+			head = strings.TrimSuffix(head, " ")
+		}
+		head += model + bar + pct + reset
+		right := mkey + mword + tail + " "
+		gap := 4
+		if pad && width > 0 {
+			gap = max(2, width-3-VisibleLen(head)-VisibleLen(right))
+		}
+		return head + strings.Repeat(" ", gap) + right, VisibleLen(head) + gap
+	}
+	title, at := build()
+	if width <= 0 {
+		return title, at
+	}
 	avail := width - 3
 	for _, drop := range []func(){
+		func() { tail = "" },
+		func() { model = " " + short },
+		func() { reset = "" },
 		func() { bar = "" },
-		func() { // the reset: keep the percent, drop " ·4d" / " .4d"
-			if i := strings.Index(fig, " ·"); i >= 0 {
-				fig = fig[:i]
-			} else if i := strings.Index(fig, " ."); i >= 0 {
-				fig = fig[:i]
+		func() { mword = "" },
+		func() {
+			if glyph != "" {
+				model = ""
 			}
 		},
-		func() { fig = "" },
+		func() { brand = " " },
 	} {
 		if VisibleLen(title) <= avail {
 			break
 		}
 		drop()
-		title = head + bar + fig + tail
+		title, at = build()
 	}
-	return title
+	return title, at
+}
+
+// chatModelArg is the model the chat was started with (--model/-m), or "".
+func chatModelArg(args []string) string {
+	for i, a := range args {
+		if a == "--" {
+			break
+		}
+		if v, ok := strings.CutPrefix(a, "--model="); ok {
+			return v
+		}
+		if (a == "--model" || a == "-m") && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+// modelDisplayName is how a model id reads in the title, long and short:
+// "gpt-6.1-sol" is "GPT-6.1-Sol" and "6.1-Sol", "claude-opus-5-5" is
+// "Claude Opus 5.5" and "Opus 5.5" (a trailing date stamp goes). Any other
+// id is shown as it is. An empty id gives "".
+func modelDisplayName(id string) (long, short string) {
+	var clean strings.Builder
+	for _, r := range id {
+		if clean.Len() < 40 && (r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '.') {
+			clean.WriteRune(r)
+		}
+	}
+	id = clean.String()
+	if id == "" {
+		return "", ""
+	}
+	title := func(s string) string {
+		if s == "" {
+			return s
+		}
+		return strings.ToUpper(s[:1]) + s[1:]
+	}
+	lower := strings.ToLower(id)
+	switch {
+	case strings.HasPrefix(lower, "gpt-"):
+		parts := strings.Split(id[4:], "-")
+		for i := range parts {
+			parts[i] = title(parts[i])
+		}
+		rest := strings.Join(parts, "-")
+		return "GPT-" + rest, rest
+	case strings.HasPrefix(lower, "claude-"):
+		parts := strings.Split(id[7:], "-")
+		if n := len(parts); n > 1 && len(parts[n-1]) == 8 && strings.Trim(parts[n-1], "0123456789") == "" {
+			parts = parts[:n-1]
+		}
+		var words, nums []string
+		for _, p := range parts {
+			if p != "" && strings.Trim(p, "0123456789") == "" {
+				nums = append(nums, p)
+			} else {
+				words = append(words, title(p))
+			}
+		}
+		rest := strings.Join(words, " ")
+		if len(nums) > 0 {
+			rest = strings.TrimSpace(rest + " " + strings.Join(nums, "."))
+		}
+		return "Claude " + rest, rest
+	}
+	return id, id
 }
 
 func dockTitleText(s string) string {

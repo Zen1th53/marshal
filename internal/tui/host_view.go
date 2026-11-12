@@ -46,7 +46,9 @@ func (s hostSnapshot) chip() hostFigures {
 	if r, ok := s.root(); ok {
 		c.DiskPct = int(math.Round(float64(r.UsedBytes) / float64(r.TotalBytes) * 100))
 		c.DiskKnown = true
-		c.LowDisk = r.FreeBytes < 2*s.Policy.DiskFreeThresholdBytes(r.TotalBytes)
+		// The agreed rule, the same as the doctor and the Host view: low
+		// when free space is below min(10 GB, 5% of the disk).
+		c.LowDisk = r.FreeBytes < s.Policy.DiskFreeThresholdBytes(r.TotalBytes)
 	}
 	return c
 }
