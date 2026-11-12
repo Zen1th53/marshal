@@ -8,7 +8,12 @@
   your home folder as a project root". Now Marshal starts a separate Git
   repository in that folder, makes a first commit of what the folder holds and
   carries on: "Started a new Git repository for this project in
-  ~/Desktop/testM." The same happens in a folder that is in no Git repository
+  ~/Desktop/testM and committed 12 files (left out: .env)." Secrets and
+  dependencies stay out of that commit: a folder without a `.gitignore` gets a
+  short default one (`.env`, keys, `node_modules/`, `.venv/`, build output and
+  the like), an existing `.gitignore` is kept, and files that look like secrets
+  by name (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `credentials*.json`)
+  are never committed; they stay where they are, untracked. The same happens in a folder that is in no Git repository
   at all. Your home folder's repository is never touched and no file is moved.
   The first commit uses your own Git name and email; if Git does not know them
   yet, Marshal stops and shows the two `git config --global` commands to run.

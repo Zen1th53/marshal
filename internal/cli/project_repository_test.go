@@ -82,7 +82,7 @@ func TestInitStartsRepositoryInHomeRepositorySubfolder(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("init code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "Started a new Git repository for this project in ~/Desktop/testM.") {
+	if !strings.Contains(stderr, "Started a new Git repository for this project in ~/Desktop/testM and committed 2 files.") {
 		t.Fatalf("missing started line: %q", stderr)
 	}
 	assertStartedRepository(t, dir, stderr)
@@ -117,10 +117,91 @@ func TestInitStartsRepositoryOutsideAnyRepository(t *testing.T) {
 		t.Fatalf("init code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	assertStartedRepository(t, dir, stderr)
-	if files := testGit(t, dir, "ls-tree", "--name-only", "HEAD^"); files != "" {
-		t.Fatalf("an empty folder's first commit holds files: %s", files)
+	if files := testGit(t, dir, "ls-tree", "--name-only", "HEAD^"); files != ".gitignore" {
+		t.Fatalf("an empty folder's first commit holds more than the default .gitignore: %s", files)
+	}
+	if !strings.Contains(stderr, " and committed 1 file.") {
+		t.Fatalf("the started line does not count one file: %q", stderr)
 	}
 	assertInitializedProject(t, dir)
+}
+
+// writeTree creates files (and their directories) under dir.
+func writeTree(t *testing.T, dir string, files ...string) {
+	t.Helper()
+	for _, name := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(name+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestFirstCommitWritesDefaultGitignoreAndLeavesSecretsOut(t *testing.T) {
+	home := fakeHome(t, true)
+	dir := filepath.Join(home, "Desktop", "app")
+	writeTree(t, dir, "main.go", ".env", ".env.local", "server.pem", "id_rsa", "config/app.key",
+		"cert.p12", "credentials-prod.json", "node_modules/x/index.js", ".venv/bin/python",
+		"venv/lib.py", "__pycache__/a.pyc", "pkg/b.pyc", "dist/out.js", "build/o", "target/t", ".DS_Store")
+	_, stderr, code := runCLI(t, dir, "init")
+	if code != 0 {
+		t.Fatalf("init code=%d stderr=%q", code, stderr)
+	}
+	want := "Started a new Git repository for this project in ~/Desktop/app and committed 2 files (left out: cert.p12, credentials-prod.json)."
+	if !strings.Contains(stderr, want) {
+		t.Fatalf("missing %q in %q", want, stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil || string(data) != defaultGitignore {
+		t.Fatalf("default .gitignore not written: %v %q", err, data)
+	}
+	if got := testGit(t, dir, "ls-tree", "-r", "--name-only", "HEAD^"); got != ".gitignore\nmain.go" {
+		t.Fatalf("first commit holds %q", got)
+	}
+	for _, name := range []string{"cert.p12", "credentials-prod.json", ".env", "id_rsa"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("%s was moved or removed: %v", name, err)
+		}
+		if got := testGit(t, dir, "ls-files", "--", name); got != "" {
+			t.Fatalf("%s is tracked", name)
+		}
+	}
+}
+
+func TestFirstCommitKeepsExistingGitignoreAndLeavesSecretsOut(t *testing.T) {
+	fakeHome(t, true)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/logs/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeTree(t, dir, "main.go", "logs/a.log", ".env", "id_rsa", "keys/deploy.KEY", "node_modules/x.js")
+	_, stderr, code := runCLI(t, dir, "init")
+	if code != 0 {
+		t.Fatalf("init code=%d stderr=%q", code, stderr)
+	}
+	if !strings.Contains(stderr, " and committed 3 files (left out: .env, id_rsa, keys/deploy.KEY).") {
+		t.Fatalf("started line: %q", stderr)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, ".gitignore")); string(data) != "/logs/\n" {
+		t.Fatalf("the existing .gitignore changed: %q", data)
+	}
+	if got := testGit(t, dir, "ls-tree", "-r", "--name-only", "HEAD^"); got != ".gitignore\nmain.go\nnode_modules/x.js" {
+		t.Fatalf("first commit holds %q", got)
+	}
+}
+
+func TestStartedRepositoryLineShortensLongLeftOutList(t *testing.T) {
+	t.Setenv("HOME", "/nonexistent-home")
+	got := startedRepositoryLine("/work/x", firstCommit{Started: true, Files: 12, LeftOut: []string{".env", "a.pem", "b.key", "id_rsa", "c.p12"}})
+	if want := "Started a new Git repository for this project in /work/x and committed 12 files (left out: .env, a.pem, b.key and 2 more)."; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
 }
 
 func TestInitInsideOrdinaryRepositoryIsUnchanged(t *testing.T) {

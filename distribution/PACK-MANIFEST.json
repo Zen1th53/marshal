@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "fb23474428ee2343fdc68d3d00a693757cf25adc2dc61e45f3c69337a35a25ae",
-      "bytes": 9358
+      "sha256": "84a5ffa54a51d39b0fd20f0746418bfb8da0658db73e29ad7a8c556c6af98b2d",
+      "bytes": 9615
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -531,8 +531,8 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "bb88afe3530fbb70483028a6fbf257a8c559f9e4beae6f976156bb7537e3e482",
-      "bytes": 5346
+      "sha256": "3a8e5b3c7631cf4c46bac48c17fb0877a634f12be3532a407ca99f125336b2fc",
+      "bytes": 5532
     },
     {
       "path": "docs/how-it-works.md",
@@ -4966,13 +4966,13 @@
     },
     {
       "path": "internal/cli/project_repository.go",
-      "sha256": "4fd3e99dfe48866cde257537d9d1a34f8b549f595d2f18c3886451e4655ab3d9",
-      "bytes": 5712
+      "sha256": "ba0caa04fb16e32ba7a8ba04c951d9a40704dae19254214c92ac96272981184b",
+      "bytes": 9599
     },
     {
       "path": "internal/cli/project_repository_test.go",
-      "sha256": "69bc9adf5256e102283239cdf9db2abf50bc1c430c121b886018305db1b1fcdb",
-      "bytes": 10669
+      "sha256": "98db574493d6cdf2ce748d188539fc5bc5e6a7bf3b1788f7a57dc2ef7e15e41d",
+      "bytes": 14075
     },
     {
       "path": "internal/cli/provider_testmain_isolation_test.go",
@@ -15791,8 +15791,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.2.9.md",
-      "sha256": "22e14133c792fa55af6a547af0762cd4dce7f8a9d72592362de1a728dec5d57e",
-      "bytes": 1620
+      "sha256": "f3650f65d69eb907e58eae92314183cf0557d306ed88e40e4c205a8161b949ef",
+      "bytes": 2049
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
@@ -16231,8 +16231,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "449eee1c9baeaf73033a6200cd9b1ef9c36d39b1b508925771c89752c56df0fc",
-      "bytes": 419109
+      "sha256": "5c643df521e45824fcbe5db01ee02d1919ec1f977e182808d3f5feb8b31d6f14",
+      "bytes": 420585
     },
     {
       "path": "tools/extreme/prq/main_default.go",
