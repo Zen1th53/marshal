@@ -71,8 +71,8 @@
     },
     {
       "path": ".github/assets/demo.gif",
-      "sha256": "db8d37fe5c344ff3c00b9028805c479693de351419d583d87bf3e525f260fa5c",
-      "bytes": 797588
+      "sha256": "9bbdfdd09545c668da66d433a1c98b3dbcb81276bfaae26034bd812f3265d0f8",
+      "bytes": 815987
     },
     {
       "path": ".github/dependabot.yml",
