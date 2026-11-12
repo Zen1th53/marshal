@@ -124,6 +124,21 @@ func TestRunViewsNotOfferedWithoutRun(t *testing.T) {
 		if run || why != runViewWhy(c.name) {
 			t.Errorf("%s: available=%v why=%q with no run", c.id, run, why)
 		}
+		// The palette built from the Board's keys shows the row off, with
+		// the same plain line.
+		inPalette := false
+		for _, a := range w.palette.refresh() {
+			if a.ID != c.id {
+				continue
+			}
+			inPalette = true
+			if !a.Disabled || a.Reason != runViewWhy(c.name) {
+				t.Errorf("palette %s: disabled=%v reason=%q with no run", c.id, a.Disabled, a.Reason)
+			}
+		}
+		if !inPalette {
+			t.Errorf("palette has no %s row", c.id)
+		}
 		w.handleTerminalKey(t.Context(), KeyEvent{Type: KeyRune, Rune: c.key})
 		if c.open() {
 			t.Errorf("%c opened the %s view with no run", c.key, c.name)

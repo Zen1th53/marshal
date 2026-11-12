@@ -15426,8 +15426,8 @@
     },
     {
       "path": "internal/tui/views_no_run_test.go",
-      "sha256": "34733d88f4bf48abfd13ee427aa4ad131aa767968562ec8d7c4aa0420cec31da",
-      "bytes": 5113
+      "sha256": "c2989aa6bbc73801576dc6fcd27a40479184eefba2ddee74b9da65726f3ae720",
+      "bytes": 5548
     },
     {
       "path": "internal/tui/workspace.go",
