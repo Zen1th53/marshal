@@ -10,7 +10,7 @@ func TestHandInRepointedMetadataCannotExecuteHostHelpers(t *testing.T) {
 	for _, format := range []string{"openpgp", "x509", "ssh"} {
 		t.Run(format, func(t *testing.T) {
 			tree, marker := testgit.RepointedWorktree(t, format)
-			head, err := recordResult(t.Context(), tree, "TASK-test")
+			head, err := recordResult(t.Context(), tree, "TASK-test", "")
 			if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
 				t.Fatalf("host helper executed: %v", statErr)
 			}

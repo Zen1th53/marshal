@@ -57,7 +57,8 @@ func (w *Workspace) applyMarshalGoalProposal(p marshalProposal) {
 		outcome = "rejected"
 		note = "Marshal goal proposal refused: " + RedactContent(err.Error(), nil)
 	} else {
-		note = fmt.Sprintf("Marshal formalized and confirmed Goal %s [rev %d]: %s", goal.ID, goal.Revision, RedactContent(goal.DesiredOutcome, nil))
+		// Activity names the goal by what it says, never by its ID.
+		note = "The Marshal set the goal: " + RedactContent(goal.DesiredOutcome, nil)
 	}
 	if w.store != nil && p.occurrence != "" {
 		_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, outcome)

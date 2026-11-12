@@ -32,6 +32,9 @@ type sayEcho struct {
 	Text  string
 	State string // sending, queued, sent, not sent
 	Why   string // for not sent: the reason
+	// Runtime marks a message Marshal wrote itself (a notice or a nudge),
+	// never typed by the owner: Activity labels it as from the runtime.
+	Runtime bool
 }
 
 const (
@@ -55,9 +58,10 @@ type sayState struct {
 }
 
 type sayItem struct {
-	id   int
-	text string
-	at   time.Time
+	id      int
+	text    string
+	at      time.Time
+	runtime bool
 }
 
 // sayEchoes is how many messages Activity remembers.
@@ -106,6 +110,17 @@ func (w *Workspace) sayNote(e sayEcho) {
 
 // sayToMarshal sends text to the Marshal chat as the operator's message.
 func (w *Workspace) sayToMarshal(ctx context.Context, text string) {
+	w.sayAs(ctx, text, false)
+}
+
+// noticeToMarshal sends a message the runtime wrote itself (not the
+// owner's words) through the same path; Activity and the docked chat label
+// it as from the runtime, never as "you".
+func (w *Workspace) noticeToMarshal(ctx context.Context, text string) {
+	w.sayAs(ctx, text, true)
+}
+
+func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 	text = strings.TrimSpace(cleanBoard(text))
 	if text == "" {
 		return
@@ -115,13 +130,17 @@ func (w *Workspace) sayToMarshal(ctx context.Context, text string) {
 	id := w.say.next
 	w.say.mu.Unlock()
 	now := time.Now()
-	echo := sayEcho{id: id, At: now, Text: text, State: saySending}
+	echo := sayEcho{id: id, At: now, Text: text, State: saySending, Runtime: runtime}
+	role := chat.You
+	if runtime {
+		role = chat.Note
+	}
 
 	w.chat.mu.Lock()
 	tr := w.chat.tr
 	if tr != nil {
 		w.chat.view.ScrollEnd()
-		w.chat.view.Append(chat.Entry{Role: chat.You, At: now, Text: text})
+		w.chat.view.Append(chat.Entry{Role: role, At: now, Text: text})
 		w.chat.view.SetThinking(true)
 	}
 	w.chat.mu.Unlock()
@@ -130,8 +149,8 @@ func (w *Workspace) sayToMarshal(ctx context.Context, text string) {
 		w.sayNote(echo)
 		w.startBackground(ctx, func(ctx context.Context) {
 			if err := tr.Send(ctx, chattransport.Turn{Text: text}); err != nil {
-				w.sayNote(sayEcho{id: id, At: now, Text: text, State: sayFailed, Why: err.Error()})
-				w.memoryAnswer("The Marshal chat did not take your message: "+err.Error(), true)
+				w.sayNote(sayEcho{id: id, At: now, Text: text, State: sayFailed, Why: err.Error(), Runtime: runtime})
+				w.memoryAnswer(sayWhose(runtime, "The Marshal chat did not take your message: ", "The Marshal chat did not take Marshal's notice: ")+err.Error(), true)
 			}
 		})
 		return
@@ -139,6 +158,10 @@ func (w *Workspace) sayToMarshal(ctx context.Context, text string) {
 	if w.sayPane() == "" {
 		echo.State, echo.Why = sayFailed, "no Marshal chat is open"
 		w.sayNote(echo)
+		if runtime {
+			// Nothing the owner typed is lost: the notice is not theirs.
+			return
+		}
 		// The text goes back in the composer: nothing typed is lost.
 		w.composer.SetText(text)
 		w.say.open.Store(true)
@@ -147,7 +170,7 @@ func (w *Workspace) sayToMarshal(ctx context.Context, text string) {
 	}
 	w.sayNote(echo)
 	w.say.mu.Lock()
-	w.say.pending = append(w.say.pending, sayItem{id: id, text: text, at: now})
+	w.say.pending = append(w.say.pending, sayItem{id: id, text: text, at: now, runtime: runtime})
 	start := !w.say.running
 	w.say.running = true
 	w.say.mu.Unlock()
@@ -196,24 +219,26 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		switch {
 		case err == nil:
 			pop()
-			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: saySent})
+			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: saySent, Runtime: item.runtime})
 			continue
 		case ctx.Err() != nil:
 			return
 		case !errors.Is(err, errChatBusy):
 			pop()
-			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: err.Error()})
-			w.memoryAnswer("Your message did not reach the Marshal chat: "+err.Error(), true)
+			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: err.Error(), Runtime: item.runtime})
+			w.memoryAnswer(sayWhose(item.runtime, "Your message did not reach the Marshal chat: ", "Marshal's notice did not reach the Marshal chat: ")+err.Error(), true)
 			continue
 		case time.Since(item.at) > sayGiveUp:
 			pop()
-			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: "the chat stayed busy"})
-			w.memoryAnswer("The Marshal chat stayed busy, so your message was not sent: press m to type it there.", true)
+			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: "the chat stayed busy", Runtime: item.runtime})
+			w.memoryAnswer(sayWhose(item.runtime, "The Marshal chat stayed busy, so your message was not sent: press m to type it there.", "The Marshal chat stayed busy, so Marshal's notice was not sent."), true)
 			continue
 		case !told[item.id]:
 			told[item.id] = true
-			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued})
-			w.memoryAnswer("Marshal chat busy: your message is queued for its next prompt.", false)
+			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Runtime: item.runtime})
+			if !item.runtime {
+				w.memoryAnswer("Marshal chat busy: your message is queued for its next prompt.", false)
+			}
 		}
 		t := time.NewTimer(sayPoll)
 		select {
@@ -223,6 +248,14 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// sayWhose picks the owner's or the runtime's wording for a message.
+func sayWhose(runtime bool, owner, notice string) string {
+	if runtime {
+		return notice
+	}
+	return owner
 }
 
 // errChatBusy is a chat that is not idle at an empty prompt yet.
@@ -476,9 +509,13 @@ func (v boardVisual) echoLine(e sayEcho, w int) string {
 			state = "not sent · " + e.Why
 		}
 	}
-	to := "you → marshal"
+	from := "you"
+	if e.Runtime {
+		from = "runtime"
+	}
+	to := from + " → marshal"
 	if !v.unicode() {
-		to = "you -> marshal"
+		to = from + " -> marshal"
 	}
 	head := v.fg("dim", e.At.In(v.now.Location()).Format("15:04:05")) + " " + v.fg("accent", to) + " "
 	tail := " " + v.fg(col, "· "+state)

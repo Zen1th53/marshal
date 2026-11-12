@@ -354,7 +354,7 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 		valid := pending != nil && pending.launchID == l.id && pending.answer == nil && time.Now().Before(pending.deadline)
 		w.permissions.mu.Unlock()
 		if !valid {
-			return nil, errors.New("decision is unknown, answered, expired or belongs to another launch")
+			return nil, errors.New("that question is no longer open: it was already answered, it expired, or it belongs to an earlier chat; read the inbox for the current question")
 		}
 	} else {
 		var err error

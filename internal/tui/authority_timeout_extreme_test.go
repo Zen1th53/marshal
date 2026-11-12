@@ -110,3 +110,20 @@ func TestExtremeRedeliveryBackoffIsBounded(t *testing.T) {
 		prev = d
 	}
 }
+
+// An unanswered review of imported history says plainly what happened and
+// shows no record ID or internal cause.
+func TestExtremeUnansweredImportReviewIsPlain(t *testing.T) {
+	w, _ := realControlWorkspace(t, "SESSION-extreme-import-plain", false)
+	req := permission.Request{Kind: "memory", Object: importedHistoryPrefix + "abc123", Who: "Marshal", Reason: "test"}
+	w.permissions.build.pending = map[string]*buildPendingDecision{"expired": {request: req, deadline: time.Now().Add(-time.Second), provider: "codex"}}
+	if !w.routeBuildPermission(t.Context(), req) {
+		t.Fatal("unanswered request was not handled")
+	}
+	w.mu.RLock()
+	activity := w.state.LastOutput
+	w.mu.RUnlock()
+	if !strings.Contains(activity, "The Marshal did not review a memory imported from an earlier Codex chat") || strings.Contains(activity, "MEM-IMPORT") || strings.Contains(activity, "decision timeout") || strings.Contains(activity, "candidate (") {
+		t.Fatalf("import Activity: %q", activity)
+	}
+}

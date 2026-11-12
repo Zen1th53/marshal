@@ -33,6 +33,12 @@ func TestExtremeMarshalFormalizesAndConfirmsGoal(t *testing.T) {
 	if !goal.Confirmation.Settled() || goal.DesiredOutcome == "" || strings.Join(goal.SuccessCriteria, "|") != "python3 -m unittest passes|README.md has the usage line" {
 		t.Fatalf("Marshal goal = %+v", goal)
 	}
+	// Activity says what the goal is, never its ID.
+	if !activityHas(w, "The Marshal set the goal: "+goal.DesiredOutcome) || activityHas(w, goal.ID) || activityHas(w, "GOAL-") {
+		w.mu.RLock()
+		defer w.mu.RUnlock()
+		t.Fatalf("goal Activity: %q", w.state.LastOutput)
+	}
 	// Re-submitting the same Goal changes nothing.
 	p.occurrence = "runtime:goal-2"
 	w.applyMarshalGoalProposal(p)
@@ -46,6 +52,9 @@ func TestExtremeMarshalFormalizesAndConfirmsGoal(t *testing.T) {
 	revised, err := runtime.Store().GetActiveGoalContract(ctx, "SESSION-marshal-goal")
 	if err != nil || revised.Revision <= goal.Revision || !revised.Confirmation.Settled() || len(revised.SuccessCriteria) != 1 {
 		t.Fatalf("revised goal = %+v %v", revised, err)
+	}
+	if activityHas(w, "GOAL-") {
+		t.Fatal("revised goal Activity is not plain")
 	}
 	for _, bad := range []string{
 		`{"action":"goal","value":""}`,

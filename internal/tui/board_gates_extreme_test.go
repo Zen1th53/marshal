@@ -53,7 +53,7 @@ func TestOwnerGatesFromTheSeededStore(t *testing.T) {
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "hello-uz-contract-01", "proposal": draft}, true)
 	w.refreshGates(ctx)
 	text := frameText(w, 120, 34)
-	for _, want := range []string{"NEEDS YOU", "architecture waits for you in the browser", "Build hello-uz", "[y] open in browser"} {
+	for _, want := range []string{"NEEDS YOU", "architecture · waits for you in the browser", "Build hello-uz", "[y] open in browser"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Board misses %q:\n%s", want, text)
 		}

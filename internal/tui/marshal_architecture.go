@@ -44,6 +44,8 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 				w.resolveArchitectureProposal(occurrence, err)
 				if err != nil {
 					w.RecordActivity("Architecture view: " + err.Error() + ". URL: " + url)
+				} else {
+					w.clearAnswer(architectureOpening)
 				}
 			}) {
 				return "", errors.New("workspace is closing")
@@ -124,6 +126,7 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 				url = session.URL
 			}
 			w.RecordActivity("Architecture view: " + url)
+			w.clearAnswer(architectureOpening)
 		}
 		if session == nil {
 			return

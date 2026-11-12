@@ -410,7 +410,7 @@ func (w *Workspace) tellMarshalGuard(ctx context.Context, paths []string, prefix
 	if w.sayPane() == "" && !w.nativeChatActive() {
 		return
 	}
-	w.sayToMarshal(ctx, guardMarshalText(paths, prefix))
+	w.noticeToMarshal(ctx, guardMarshalText(paths, prefix))
 }
 
 // guardPaint is the alert for a paint, nil for none, and whether its undo

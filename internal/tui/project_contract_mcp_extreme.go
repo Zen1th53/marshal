@@ -103,7 +103,7 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 			args.Limit = 4
 		}
 		if args.Limit < 1 || args.Limit > 8 || len(args.After) > 256 || strings.ContainsRune(args.After, 0) {
-			return nil, model.ErrInvalid
+			return nil, fmt.Errorf("%w: limit must be from 1 to 8, and after must be empty or the next cursor from the previous page", model.ErrInvalid)
 		}
 		control := w.controlSource()
 		if control == nil {

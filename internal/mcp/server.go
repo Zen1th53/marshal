@@ -70,8 +70,9 @@ type jsonRPCResponse struct {
 }
 
 type rpcErr struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    *rpcErrData `json:"data,omitempty"`
 }
 
 type Tool struct {
@@ -208,7 +209,8 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 		}
 		res, err := s.callTool(knowledgeRequestContext(ctx, req.ID), callerPrincipal, params.Name, params.Arguments)
 		if err != nil {
-			s.writeError(w, req.ID, -32000, err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: toolError(params.Name, err)})
 			return
 		}
 		s.writeResult(w, req.ID, map[string]any{
