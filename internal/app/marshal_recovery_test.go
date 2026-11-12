@@ -917,3 +917,18 @@ func TestLegacyCancelledScopeCannotMergeVerifyOrClose(t *testing.T) {
 		})
 	}
 }
+
+// The merge commit lands in the owner's history, so it carries no internal
+// operation identifier; recovery proves the merge from its parents instead.
+func TestMergeCommitCarriesNoOperationID(t *testing.T) {
+	s := mergedRecoveryFixture(t)
+	messages := marshalGit(t, s.Repository, "log", "--all", "--format=%B")
+	for _, internal := range []string{"Marshal-Operation", "marshal-op-"} {
+		if strings.Contains(messages, internal) {
+			t.Fatalf("merge commit message exposes %q:\n%s", internal, messages)
+		}
+	}
+	if !strings.Contains(messages, "marshal: merge a") {
+		t.Fatalf("merge commit missing:\n%s", messages)
+	}
+}

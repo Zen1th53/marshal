@@ -94,7 +94,7 @@ func providerColumns(w int) providerCols {
 		c = providerCols{prov: 9, model: 14, verified: 10, lanes: 5, resets: 13, state: 9}
 	}
 	fixed := 2 + c.prov + c.model + c.verified + c.lanes + c.resets + c.state + 7
-	c.limit = min(30, max(8, w-fixed))
+	c.limit = min(32, max(8, w-fixed))
 	return c
 }
 
@@ -159,7 +159,9 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 				text := limitBar(pct, v.unicode()) + " " + fmt.Sprintf("%d%% left · %s", pct, win.Label)
 				colour := limitColour(pct)
 				if q.Stale {
-					text += " · " + resetIn(v.now.Sub(q.AsOf)) + " old"
+					if age := readAgo(q, v.now); age != "" {
+						text += " · " + age
+					}
 					colour = "dim"
 				}
 				limit = v.fg(colour, text)

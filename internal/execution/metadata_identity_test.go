@@ -69,7 +69,7 @@ func TestHandInRejectsReplacedGitMetadata(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(tree, "attack.txt"), []byte("changed"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := commitTaskWorktree(t.Context(), tree, "run", "task", ""); err == nil {
+			if _, err := commitTaskWorktree(t.Context(), tree, "task", ""); err == nil {
 				t.Fatal("hand-in accepted replaced Git metadata")
 			}
 			if got := repo.HEAD(t); got != before {

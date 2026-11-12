@@ -171,3 +171,18 @@ func TestLanesSummaryRunning(t *testing.T) {
 		t.Fatalf("empty lanes summary %q, want idle", title)
 	}
 }
+
+// A task's files read as a list: "calc.py, test_calc.py", a space after
+// each comma.
+func TestTaskScopeListsFilesWithSpaces(t *testing.T) {
+	b := model.Board{Tasks: []model.TaskRow{
+		{ID: "divide", Worker: "codex", State: model.TaskQueued, Scope: []string{"calc.py", "test_calc.py"}},
+	}}
+	for _, w := range []int{73, 120} {
+		v := rowsVisual(b, ThemeNoColor, true)
+		lines := v.tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: w, H: 8}})
+		if row := taskLine(t, lines, "divide"); !strings.Contains(row, "calc.py, test_calc.py") {
+			t.Errorf("width %d: the files are not listed with a space: %q", w, row)
+		}
+	}
+}

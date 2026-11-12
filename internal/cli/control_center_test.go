@@ -95,15 +95,21 @@ func TestTUIRejectsUninitializedProjectWithoutWrites(t *testing.T) {
 	}
 }
 
+// Outside any repository the control centre would start one, but not without
+// the user's Git identity; then it stops, says how to set it and creates
+// nothing.
 func TestTUIOutsideRepositoryReportsFailure(t *testing.T) {
 	for _, args := range [][]string{nil, {"tui"}} {
 		dir := plainDirectory(t)
-		t.Setenv("HOME", t.TempDir())
+		fakeHome(t, false)
 		stdout, stderr, code := runCLI(t, dir, args...)
 		if code == 0 || stdout != "" {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
-		for _, want := range []string{"This folder isn't a Git project with a first commit yet.", "Run `git init`", "cd into your project"} {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); !os.IsNotExist(err) {
+			t.Fatalf("a repository was started without an identity: %v", err)
+		}
+		for _, want := range []string{"Git does not know who you are yet", "git config --global user.name"} {
 			if !strings.Contains(stderr, want) {
 				t.Fatalf("missing %q in %q", want, stderr)
 			}
@@ -142,6 +148,8 @@ func TestSetupNeverMutatesTheDirectory(t *testing.T) {
 
 // Entering the control center must likewise create nothing.
 func TestControlCenterEntryNeverMutates(t *testing.T) {
+	// Without a Git identity the folder cannot be prepared, so nothing is made.
+	fakeHome(t, false)
 	dir := plainDirectory(t)
 	if _, _, code := runCLI(t, dir); code == 0 {
 		t.Fatalf("control center exited %d", code)

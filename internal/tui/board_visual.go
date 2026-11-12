@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/redaction"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
@@ -401,8 +402,10 @@ type headerPart struct {
 // step at a time until it fits: a part is shortened ("-") or left out. The
 // provider limits, host vitals and running count moved to the vitals row;
 // the run's own identity, state and inbox stay longest, after the brand.
-// The "Marshal leads" mode part gives way first.
-var headerSteps = []string{"mode", "-run", "clock", "-budget", "-done", "-brand", "budget", "done", "-arch", "inbox", "run", "state", "arch", "brand"}
+// The "Marshal leads" mode part gives way first; the state's reason (the
+// final check's "re-running the checks on the merged result") goes before
+// any part is left out.
+var headerSteps = []string{"mode", "-run", "clock", "-budget", "-done", "-brand", "-state", "budget", "done", "-arch", "inbox", "run", "state", "arch", "brand"}
 
 // headerSpan is where one header part landed on the line, in cells.
 type headerSpan struct {
@@ -456,7 +459,7 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 	}
 	parts = append(parts, []headerPart{
 		{"run", run, shortRun},
-		{"state", v.stateChip(), ""},
+		{"state", v.stateChip(), v.stateChipShort()},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d done", b.Run.Total)), v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total))},
 	}...)
 	if b.Run.TokenLimit > 0 && b.Run.Tokens.Known {
@@ -484,10 +487,10 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 }
 
 // narrowHeaderSteps is how a header of 100 columns or fewer gives way, as
-// mockups 05 and 06 draw it: the edition and the inbox label go first, then
-// a warm host chip, the budget bar, the lanes and the done count; the run
+// mockups 05 and 06 draw it: the edition, the inbox label and the state's
+// reason go first, then a warm host chip, the budget bar, the lanes and the done count; the run
 // and its state stay longest.
-var narrowHeaderSteps = []string{"-brand", "-inbox", "budget", "done", "inbox", "state", "run", "brand"}
+var narrowHeaderSteps = []string{"-brand", "-inbox", "-state", "budget", "done", "inbox", "state", "run", "brand"}
 
 // narrowHeader is the header at 100 columns or fewer (owner decision
 // 2026-11-06, mockups 05 and 06): the run, its state, the done count and the
@@ -497,7 +500,7 @@ func (v boardVisual) narrowHeader(w int, brand, full, run, shortRun, inboxColor 
 	parts := []headerPart{
 		{"brand", full, brand},
 		{"run", run, shortRun},
-		{"state", v.stateChip(), ""},
+		{"state", v.stateChip(), v.stateChipShort()},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total)), ""},
 	}
 	if b.Run.TokenLimit > 0 && b.Run.Tokens.Known {
@@ -761,7 +764,7 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		}
 		worker = v.mark(providerOf(worker), "") + worker
 		// A long scope keeps its end, where the file name is.
-		scope := truncateLeft(cleanBoard(strings.Join(t.Scope, ",")), scopeW)
+		scope := truncateLeft(cleanBoard(strings.Join(t.Scope, ", ")), scopeW)
 		elapsed := "—"
 		if d, ok := t.Elapsed(v.now); ok {
 			elapsed = fmt.Sprintf("%02d:%02d", int(d.Minutes()), int(d.Seconds())%60)
@@ -871,7 +874,7 @@ func (v boardVisual) tasksBrief(p layout.Pane) []string {
 			}
 			line += PadCell(v.mark(providerOf(worker), "")+worker, 13)
 		}
-		scope := strings.TrimPrefix(cleanBoard(strings.Join(t.Scope, ",")), "internal/")
+		scope := strings.TrimPrefix(cleanBoard(strings.Join(t.Scope, ", ")), "internal/")
 		line += v.fg("dim", truncateLeft(scope, max(1, w-VisibleLen(line))))
 		line = PadCell(line, w)
 		if sel {
@@ -915,6 +918,14 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 	}
 	if len(parts) > 0 {
 		summary += " · " + strings.Join(parts, " · ")
+	}
+	if busy == 0 && v.board.Run.State == marshal.Verifying {
+		// No worker runs while the merged result is checked again: the
+		// lanes say what the run waits for, where a narrow header has no
+		// room for it.
+		if word, _ := v.runWord(); strings.Contains(word, ": ") {
+			summary += " · " + word
+		}
 	}
 	out := []string{v.title("LANES", summary, v.focus == layout.Lanes, w)}
 	if h == 1 && p.Density == layout.Strip && len(v.board.Lanes) > 0 {
@@ -1155,7 +1166,7 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 	// The requirements card comes next: the a–h lines the Marshal filled,
 	// Enter to confirm, e to edit (board_requirements.go).
 	if v.req != nil && len(out) < h {
-		lines := v.requirementsEntry(*v.req, p.Rect.X, p.Rect.Y+len(out), w)
+		lines := v.requirementsEntry(*v.req, p.Rect.X, p.Rect.Y+len(out), w, h-len(out))
 		for len(out)+len(lines) > h && len(lines) > 0 {
 			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
 			lines = lines[:len(lines)-1]

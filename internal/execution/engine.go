@@ -935,7 +935,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				}
 				// Success: reconcile changes to project root
 				if run.Delivery == DeliveryPreserveBranch {
-					commit, err := commitTaskWorktree(ctx, wtPath, run.RunID, t.TaskID, t.Description)
+					commit, err := commitTaskWorktree(ctx, wtPath, t.TaskID, t.Description)
 					if err != nil {
 						t.State = TaskFailed
 						t.LastFailureReason = err.Error()

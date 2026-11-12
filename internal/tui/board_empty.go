@@ -394,11 +394,12 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 	}
 	// A decision already waiting comes before anything else.
 	if n := len(v.board.Inbox) + len(v.gates) + v.cardCount(); n > 0 {
-		// The requirements card is tall: count it as 11 rows, not the
-		// 2+3*n estimate the shorter cards use.
+		// The requirements card is tall: count the rows it draws at this
+		// width (its text wraps), not the 2+3*n estimate the shorter
+		// cards use.
 		est := 2 + 3*n
 		if v.req != nil {
-			est = 11 + 3*(n-1)
+			est = 1 + v.reqRows(*v.req, w, h/2-1) + 3*(n-1)
 		}
 		rows := min(h/2, est)
 		p := layout.Pane{ID: layout.Inbox, Rect: layout.Rect{X: 0, Y: y, W: w, H: rows}, Density: layout.Compact}

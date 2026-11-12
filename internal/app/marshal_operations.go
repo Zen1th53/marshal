@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -124,8 +123,12 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		if err != nil {
 			break
 		} // No proven effect; retain artifacts and allow amendment.
-		message, err := gitMarshal(ctx, s.Repository, "log", "-1", "--format=%B", head)
-		completed = err == nil && strings.Contains(message, "Marshal-Operation: "+op.ID)
+		// The merge commit lands in the owner's history, so it names no
+		// operation. Its proof is the integration ref holding a Marshal merge
+		// of exactly the recorded before and accepted commits; merges made by
+		// earlier versions, which also carried an operation line, match too.
+		subject, err := gitMarshal(ctx, s.Repository, "log", "-1", "--format=%s", head)
+		completed = err == nil && subject == "marshal: merge "+op.TaskID
 		if completed {
 			parents, err := gitMarshal(ctx, s.Repository, "rev-list", "--parents", "-n", "1", head)
 			completed = err == nil && parents == head+" "+op.Before+" "+op.After

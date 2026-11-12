@@ -28,6 +28,19 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return fmt.Errorf("tmux is required to run the MARSHAL TUI; install with: %s", hint)
 	}
 
+	// A dedicated folder without a repository of its own gets one, and then
+	// Marshal is set up in it, as `marshal init` would: the person asked to
+	// work here, and a repository Marshal just started has nothing else in it
+	// to wait for.
+	started, err := c.prepareProjectRepository(ctx)
+	if err != nil {
+		return err
+	}
+	if started {
+		if _, _, err := initializeProject(ctx, c.root); err != nil {
+			return err
+		}
+	}
 	layout, err := app.ValidateProject(ctx, c.root)
 	if err != nil {
 		return err

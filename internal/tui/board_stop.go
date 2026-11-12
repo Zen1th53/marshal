@@ -211,6 +211,14 @@ func (v boardVisual) stateChip() string {
 	return v.bold(v.fg(color, word))
 }
 
+// stateChipShort is the state chip without its reason: the words before
+// ": ", for a header with no room for the reason.
+func (v boardVisual) stateChipShort() string {
+	word, color := v.runWord()
+	short, _, _ := strings.Cut(word, ": ")
+	return v.bold(v.fg(color, short))
+}
+
 // runWord is the run's state as the header says it, and its colour key.
 func (v boardVisual) runWord() (string, string) {
 	if s, ok := v.stopNotice(); ok {
@@ -241,8 +249,9 @@ func (v boardVisual) runWord() (string, string) {
 	case marshal.Verifying:
 		// The runtime's final check of the merged work runs here before the
 		// run closes. An independent verifier re-runs the checks, which can
-		// take minutes, so the header says so instead of "running".
-		return "final check", "accent"
+		// take minutes, so the header says so, and why, instead of
+		// "running"; a narrow header keeps "final check" (stateChipShort).
+		return "final check: re-running the checks on the merged result", "accent"
 	case marshal.Drafting:
 		return "planning", "accent"
 	case "":

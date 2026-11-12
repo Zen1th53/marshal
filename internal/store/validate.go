@@ -9,10 +9,15 @@ import (
 
 // ValidateInitialized uses SQLite's read-only mode, never the normal Open path:
 // Open configures WAL and can create a database before initialization is known.
+//
+// Another window on the same project may be opening, migrating or closing the
+// state at this moment, and SQLite reports that as SQLITE_BUSY. That is not
+// damage: busy_timeout waits for it, bounded by DiagnosticTimeout, the same as
+// every other handle on this database.
 func ValidateInitialized(ctx context.Context, path string) error {
 	ctx, cancel := context.WithTimeout(ctx, DiagnosticTimeout)
 	defer cancel()
-	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
+	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro&_pragma=busy_timeout(5000)"}
 	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
 		return err

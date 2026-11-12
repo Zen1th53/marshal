@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
@@ -72,12 +73,46 @@ func TestHeaderStateWordsAtRunEnd(t *testing.T) {
 		want string
 	}{
 		{"merging", boardVisual{theme: th, board: model.Board{Run: model.RunHead{State: marshal.Merging}}}, "merging"},
-		{"verifying", boardVisual{theme: th, board: model.Board{Run: model.RunHead{State: marshal.Verifying}}}, "final check"},
+		{"verifying", boardVisual{theme: th, board: model.Board{Run: model.RunHead{State: marshal.Verifying}}}, "final check: re-running the checks on the merged result"},
 		{"closed-next", boardVisual{theme: th, next: card, board: model.Board{Run: model.RunHead{State: marshal.Closed}}}, "done"},
 		{"closed-next-guard", boardVisual{theme: th, next: card, guard: &guardAlert{}, board: model.Board{Run: model.RunHead{State: marshal.Closed}}}, "waiting for you"},
 	} {
 		if got := StripANSI(c.v.stateChip()); got != c.want {
 			t.Errorf("%s: stateChip %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// The long final check after a merge says why the run waits, in the header
+// of a wide Board; a narrow one keeps "final check".
+func TestHeaderFinalCheckSaysWhy(t *testing.T) {
+	th := NewTheme(ThemeNoColor, true, true)
+	v := boardVisual{theme: th, now: time.Date(2026, 11, 12, 12, 34, 0, 0, time.UTC), board: model.Board{Run: model.RunHead{State: marshal.Verifying, Title: "divide", Done: 1, Total: 1}}}
+	for _, w := range []int{80, 120, 160} {
+		head := StripANSI(v.header(w))
+		if !strings.Contains(head, "final check") {
+			t.Errorf("width %d: the header lost the final check: %q", w, head)
+		}
+		if w >= 120 && !strings.Contains(head, "final check: re-running the checks on the merged result") {
+			t.Errorf("width %d: the header does not say why: %q", w, head)
+		}
+		if got := VisibleLen(head); got != w {
+			t.Errorf("width %d: the header is %d cells", w, got)
+		}
+	}
+}
+
+// Beside the chat the Board's header has no room for the reason: the idle
+// lanes say it, so a minutes-long final check is understood.
+func TestLanesSayFinalCheckWhenHeaderIsNarrow(t *testing.T) {
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true), now: time.Now(), board: model.Board{Run: model.RunHead{State: marshal.Verifying, Done: 1, Total: 1}}}
+	lines := v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})
+	if len(lines) == 0 || !strings.Contains(StripANSI(lines[0]), "final check: re-running the checks on the merged result") {
+		t.Fatalf("the lanes do not say why the run waits: %q", lines)
+	}
+	v.board.Run.State = marshal.Dispatching
+	lines = v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})
+	if strings.Contains(StripANSI(lines[0]), "final check") {
+		t.Fatalf("the lanes speak of a final check while the run works: %q", lines[0])
 	}
 }

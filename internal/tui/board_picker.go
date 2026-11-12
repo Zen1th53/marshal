@@ -34,6 +34,8 @@ type pickerState struct {
 // pickerCand is one signed-in provider as the picker shows it. left is the
 // P3-01 smallest-window percent left when known; out is set when it is out of
 // limit (0% left, or a running cooldown); busy when a lane is running on it.
+// age is the reading's age as vitals shows it ("read 2h ago", readAgo), empty
+// while the reading is not over 30 minutes old.
 type pickerCand struct {
 	provider string
 	left     int
@@ -41,6 +43,7 @@ type pickerCand struct {
 	out      bool
 	busy     bool
 	until    time.Time
+	age      string
 }
 
 // pickerView is a frame's copy of the picker, read under the lock once and
@@ -145,6 +148,11 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 		if q, ok := quotas[p]; ok {
 			left, known, reset := providerLeft(q)
 			cands[i].left, cands[i].known, cands[i].until = left, known, reset
+			// The same age mark vitals shows for this reading, so the
+			// picker and vitals never look different for it.
+			if known {
+				cands[i].age = readAgo(q, now)
+			}
 			if known && left == 0 {
 				cands[i].out = true
 			}
@@ -399,6 +407,11 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 			figure = limitUnknown
 		default:
 			figure = fmt.Sprintf("%d%% left", c.left)
+			if c.age != "" {
+				// An old reading is dimmed and dated, as vitals shows it.
+				figure += " · " + c.age
+				colour = "dim"
+			}
 		}
 		entry := ""
 		if g := v.pickerGlyph(c.provider); g != "" {

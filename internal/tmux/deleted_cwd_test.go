@@ -74,3 +74,30 @@ func TestLaunchesSurviveDeletedServerDirectory(t *testing.T) {
 		}
 	}
 }
+
+// A session Marshal starts runs its tmux client from the root directory, so a
+// tmux server it starts never lives in a project directory that may later be
+// deleted (every pane would then open with the shell's "error retrieving
+// current directory" lines).
+func TestNewSessionStartsServerFromRoot(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "cwd.log")
+	fake := filepath.Join(dir, "tmux")
+	script := "#!/bin/sh\npwd -P >> '" + logFile + "'\nexit 0\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	SetBinaryPath(fake)
+	defer ResetBinaryPath()
+	if err := NewSession(context.Background(), "s", dir, "main", []string{"sleep", "1"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := strings.SplitN(strings.TrimSpace(string(data)), "\n", 2)[0]
+	if first != "/" {
+		t.Fatalf("the tmux client that may start the server ran in %q, want /", first)
+	}
+}

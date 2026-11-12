@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.9
+
+### Fixed
+- `marshal` and `marshal init` in a folder inside a home-folder Git repository, or in no repository at all, start a separate Git repository in that folder with a first commit (using your own Git identity) and carry on; the first commit gets a default `.gitignore` when the folder has none, never includes secret-looking files (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `credentials*.json`) and the printed line says how many files were committed and which were left out; the home repository is never touched. Without a Git identity Marshal stops and shows the two `git config --global` commands.
+- `marshal setup` no longer reports READY for a folder inside the home folder's repository; it says why and what to do.
+- `marshal doctor` without a project prints one reason and one line for the checks that need a project instead of seventeen FAIL lines; the JSON report is unchanged.
+- Running Marshal in the home folder or `/` gives a plain message saying to make a project folder and run marshal there.
+- The Marshal is told when a run closes and tells you what was delivered.
+- No run or operation IDs in commits Marshal makes; `marshal init` names the files it committed; branches of sent-back attempts are removed when a run finishes.
+- A second window on the same project no longer fails at launch with "files are damaged" (state check now waits for the other window's database lock).
+- Readable requirements card; "a, b" file lists; "final check" says why; usage age shown only when over 30 minutes, the same in vitals and pickers; the Marshal's own chat is not imported as memory; the terminal server starts from `/`.
+
 ## 0.2.8
 
 ### Fixed

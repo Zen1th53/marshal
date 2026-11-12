@@ -251,11 +251,12 @@ type Workspace struct {
 	}
 	// next is the "what next?" card shown when a run closes (board_next.go);
 	// shownFor is the run id it was shown for, so a later Closed publish does
-	// not re-open it.
+	// not re-open it; toldFor is the run the Marshal chat was told closed.
 	next struct {
 		mu       sync.Mutex
 		card     *nextCard
 		shownFor string
+		toldFor  string
 	}
 	// guard is the plan-only guard's baseline and alert (board_guard.go);
 	// guardSource replaces git status and guardTell the delivery to the

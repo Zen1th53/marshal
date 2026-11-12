@@ -20,6 +20,8 @@ git commit --allow-empty -m "Initial commit"
 
 A Git repository must have at least one commit so Marshal can establish a clean baseline for worker branches and merges.
 
+You can also skip the Git steps: in a folder that is in no Git repository, or inside your home folder's repository (common if you keep dotfiles in Git), `marshal` and `marshal init` start a separate repository in that folder and make its first commit with your own Git name and email. A folder without a `.gitignore` gets a short default one first, and files that look like secrets (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `credentials*.json`) are left untracked. Marshal never uses your home folder or `/` itself as a project.
+
 ---
 
 ## 2. Initialize Marshal (`marshal init`)

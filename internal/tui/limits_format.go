@@ -56,6 +56,20 @@ func limitFigure(q usage.Quota, now time.Time) (s string, pct int, ok bool) {
 	return fmt.Sprintf("%s%d%% left ·%s", prefix, pct, resetIn(win.ResetsAt.Sub(now))), pct, true
 }
 
+// readAgo is how old a stale quota's figures are, in plain words ("read 2h
+// ago"), or "" while the reading is not over usage.FreshFor (30 minutes) old
+// or its time is unknown: a fresh figure carries no age beside it.
+func readAgo(q usage.Quota, now time.Time) string {
+	if !q.Stale || q.AsOf.IsZero() {
+		return ""
+	}
+	age := now.Sub(q.AsOf)
+	if age <= usage.FreshFor {
+		return ""
+	}
+	return "read " + resetIn(age) + " ago"
+}
+
 // limitUnknown is the word for a limit Marshal cannot read: the provider
 // may still be usable, so it is never "unavailable".
 const limitUnknown = "limit unknown"

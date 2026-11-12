@@ -39,7 +39,14 @@ type Result struct {
 	Method     string  `json:"method"`
 	Capability string  `json:"capability,omitempty"`
 	Detail     string  `json:"detail"`
+	// text, when set, is what the human report shows in place of Detail. The
+	// machine-readable report keeps Detail unchanged.
+	text string
 }
+
+// notCheckedDetail marks a check that could not run because there is no
+// project to run it in.
+const notCheckedDetail = "not checked because repository discovery failed"
 
 type Report struct {
 	Verdict Verdict  `json:"verdict"`
@@ -59,12 +66,25 @@ func (r Report) FormattedText() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("MARSHAL Doctor Verdict: %s\n", r.Verdict))
 	sb.WriteString("========================================\n")
+	notChecked := 0
 	for _, res := range r.Results {
+		if res.Verdict == Fail && res.Detail == notCheckedDetail {
+			notChecked++
+			continue
+		}
 		status := fmt.Sprintf("[%s]", res.Verdict)
-		sb.WriteString(fmt.Sprintf("%-10s %-16s %s\n", status, res.Name, res.Detail))
+		detail := res.Detail
+		if res.text != "" {
+			detail = res.text
+		}
+		sb.WriteString(fmt.Sprintf("%-10s %-16s %s\n", status, res.Name, detail))
 		if res.Capability != "" {
 			sb.WriteString(fmt.Sprintf("           `- Capability: %s\n", res.Capability))
 		}
+	}
+	// Checks that need a project say so once rather than failing one by one.
+	if notChecked > 0 {
+		sb.WriteString("Other checks need a project; run marshal in your project folder first.\n")
 	}
 	return strings.TrimSpace(sb.String())
 }
@@ -109,7 +129,9 @@ func Check(ctx context.Context, root string, options Options) Report {
 
 	layout, discoverErr := project.Discover(root)
 	if discoverErr != nil {
-		add(failure("repository", "git rev-parse", "not a usable Git repository"))
+		result := failure("repository", "git rev-parse", "not a usable Git repository")
+		result.text = repositoryProblem(root, discoverErr)
+		add(result)
 		return finalizeMissing(report)
 	}
 	add(success("repository", "git rev-parse", "repository identity resolved"))
@@ -385,10 +407,29 @@ func failure(name, method, detail string) Result {
 
 func finalizeMissing(report Report) Report {
 	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "agy", "claude", "bwrap", "artifacts", "policy"} {
-		report.Results = append(report.Results, failure(name, "repository prerequisite", "not checked because repository discovery failed"))
+		report.Results = append(report.Results, failure(name, "repository prerequisite", notCheckedDetail))
 	}
 	report.Verdict = Fail
 	return report
+}
+
+// repositoryProblem says why no project could be found in root and what to
+// do next, in the same words setup uses.
+func repositoryProblem(root string, err error) string {
+	var refused *statepath.RefusedRootError
+	if errors.As(err, &refused) {
+		if statepath.ValidateRoot(root) != nil {
+			return refused.Error()
+		}
+		return refused.InsideReason()
+	}
+	if errors.Is(err, project.ErrStatePreparation) {
+		return "Marshal's files in this project could not be prepared. Run marshal init here to see why."
+	}
+	if strings.HasPrefix(err.Error(), "discover repository root") {
+		return "This folder is not in a Git repository yet. Run marshal here and it will start one for this project."
+	}
+	return "This folder's Git repository needs a checked-out branch with a first commit. Run marshal init here for the next step."
 }
 
 func formatBytes(value uint64) string {

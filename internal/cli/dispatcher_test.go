@@ -188,9 +188,10 @@ func TestDispatcherHelpWholeTreeHasNoEffects(t *testing.T) {
 
 func TestInitNonInteractiveNeverReadsInput(t *testing.T) {
 	root := t.TempDir()
+	testGit(t, root, "init", "-q")
 	var out, stderr bytes.Buffer
 	code := Execute(t.Context(), root, []string{"init"}, unreadableInput{}, &out, &stderr)
-	if code == 0 || !strings.Contains(stderr.String(), "not part of a Git repository") || !strings.Contains(stderr.String(), "git init") {
+	if code == 0 || !strings.Contains(stderr.String(), "no commits yet") || !strings.Contains(stderr.String(), "git commit --allow-empty") {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
 }

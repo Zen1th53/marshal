@@ -23,6 +23,7 @@ const (
 	ReasonGitMissing         ReasonCode = "STARTUP_GIT_MISSING"
 	ReasonGitUnusable        ReasonCode = "STARTUP_GIT_UNUSABLE"
 	ReasonRepositoryEmpty    ReasonCode = "STARTUP_REPOSITORY_EMPTY"
+	ReasonProjectRootRefused ReasonCode = "STARTUP_PROJECT_ROOT_REFUSED"
 	ReasonProjectNotInit     ReasonCode = "STARTUP_PROJECT_NOT_INITIALIZED"
 	ReasonProjectMoved       ReasonCode = "STARTUP_PROJECT_MOVED"
 	ReasonProjectIdentityBad ReasonCode = "STARTUP_PROJECT_IDENTITY_MISMATCH"
@@ -90,6 +91,8 @@ var reasonCatalog = map[ReasonCode]ReasonInfo{
 		Remedy: "Check that Git runs correctly in this directory."},
 	ReasonRepositoryEmpty: {Code: ReasonRepositoryEmpty, BlocksExecution: true,
 		Remedy: "Make a first commit so there is a baseline to work from."},
+	ReasonProjectRootRefused: {Code: ReasonProjectRootRefused, BlocksExecution: true, RepairNeedsConsent: true,
+		Remedy: "Run `marshal` in your project folder. Marshal starts a separate Git repository for the project there."},
 	ReasonProjectNotInit: {Code: ReasonProjectNotInit, BlocksExecution: true,
 		Remedy: "Set up MARSHAL for this project when you are ready."},
 	ReasonProjectMoved: {Code: ReasonProjectMoved, BlocksExecution: true,

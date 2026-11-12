@@ -158,7 +158,7 @@ func TestM04PreserveBranchCommitRootBaseResultAndLease(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(relaunched, task.TaskID+"-rework.txt"), []byte("rework"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		second, err := commitTaskWorktree(ctx, relaunched, completed.RunID, task.TaskID, task.Description)
+		second, err := commitTaskWorktree(ctx, relaunched, task.TaskID, task.Description)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,12 +194,12 @@ func TestM04PreserveBranchCommitUsesConfiguredIdentityAndTaskMessage(t *testing.
 		}
 	}
 	write("first.txt")
-	if _, err := commitTaskWorktree(context.Background(), repo.Path(), "run-1", "task-2", "Add the second file"); err != nil {
+	if _, err := commitTaskWorktree(context.Background(), repo.Path(), "task-2", "Add the second file"); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("git", "-C", repo.Path(), "show", "-s", "--format=%an <%ae>%n%B", "HEAD")
 	out, err := cmd.Output()
-	if err != nil || string(out) != "Task Author <task@example.invalid>\ntask-2: Add the second file\n\nRecorded by Marshal for run run-1.\n\n" {
+	if err != nil || string(out) != "Task Author <task@example.invalid>\ntask-2: Add the second file\n\n" {
 		t.Fatalf("commit identity/message: %q %v", out, err)
 	}
 	for _, key := range []string{"user.name", "user.email"} {
@@ -209,7 +209,7 @@ func TestM04PreserveBranchCommitUsesConfiguredIdentityAndTaskMessage(t *testing.
 		}
 	}
 	write("second.txt")
-	if _, err := commitTaskWorktree(context.Background(), repo.Path(), "run-1", "task-2", "Add the second file"); err == nil || !strings.Contains(err.Error(), "user.name") {
+	if _, err := commitTaskWorktree(context.Background(), repo.Path(), "task-2", "Add the second file"); err == nil || !strings.Contains(err.Error(), "user.name") {
 		t.Fatalf("missing identity error: %v", err)
 	}
 }

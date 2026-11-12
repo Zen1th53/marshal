@@ -246,3 +246,45 @@ func TestRequirementsRendersOnFirstUse(t *testing.T) {
 		}
 	}
 }
+
+// realUserReqCard is the card a real first run filled: plain sentences with
+// long sources, the way the Marshal writes them.
+const realUserReqCard = `[` +
+	`{"line":"a","text":"Add divide(a, b) returning a / b; raise ValueError when b is 0","source":"Owner request; calc.py:1-5"},` +
+	`{"line":"b","text":"Proposed: change only calc.py and test_calc.py","source":"Scope recommendation based on owner request"},` +
+	`{"line":"c","text":"Proposed: work from master, deliver to master","source":"Scan: master; marshal_status: default_branch master"},` +
+	`{"line":"d","text":"Proposed: python3 -m unittest passes","source":"Owner request; verification recommendation"},` +
+	`{"line":"e","text":"No existing tests; the new unittest must pass","source":"Repository file inventory; calc.py:4-5"},` +
+	`{"line":"f","text":"Add divide(a, b); preserve existing add and sub","source":"Owner request; calc.py:4-5"},` +
+	`{"line":"g","text":"Proposed: standard-library only, no network","source":"Implementation recommendation"},` +
+	`{"line":"h","text":"No configured token budget; use the default","source":"Launch current limits; owner request"}` +
+	`]`
+
+// Every requirement's own words are readable on the card at the Board widths
+// a 120- and a 160-column terminal give it (beside the chat, and alone): a
+// long source never squeezes the value down to "Prop…".
+func TestRequirementsValuesReadable(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	p, err := parseMarshalProposal(reqProposalLine(realUserReqCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.openRequirements(p)
+	lines, err := parseRequirementsCard(p.card)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cols := range []int{60, 80, 120, 160} {
+		text := frameText(w, cols, 40)
+		flat := strings.Join(strings.Fields(text), " ")
+		for _, l := range lines {
+			if !strings.Contains(flat, l.Text) {
+				t.Errorf("at %d columns line %s is not readable in full (%q):\n%s", cols, l.Line, l.Text, text)
+			}
+		}
+		if !strings.Contains(text, "[Enter] confirm all") {
+			t.Errorf("at %d columns the confirm key is cut off:\n%s", cols, text)
+		}
+	}
+}

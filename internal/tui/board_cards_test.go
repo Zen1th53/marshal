@@ -94,7 +94,7 @@ func TestStoppedRunTakesEnterBeforeOpenCards(t *testing.T) {
 		t.Fatalf("the stop and the cards' buttons:\n%s", text)
 	}
 	stopped := boardVisual{theme: NewTheme(ThemeNoColor, true, true), stopped: true, note: "stopped: worker exited 2"}
-	if got := StripANSI(strings.Join(stopped.requirementsEntry(*w.currentReq(), 0, 0, 120), "\n")); !strings.Contains(got, "[click] confirm all") || strings.Contains(got, "[Enter]") {
+	if got := StripANSI(strings.Join(stopped.requirementsEntry(*w.currentReq(), 0, 0, 120, 40), "\n")); !strings.Contains(got, "[click] confirm all") || strings.Contains(got, "[Enter]") {
 		t.Fatalf("the requirements card under the stop:\n%s", got)
 	}
 	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {

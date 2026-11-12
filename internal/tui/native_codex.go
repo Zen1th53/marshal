@@ -213,6 +213,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	imported := 0
+	// peerCapture is the memory capture other providers' live sessions use;
+	// the Marshal's own chat is not captured (nativeMemoryConsume).
+	var peerCapture func(importer.SessionTranscript) error
 	if source := w.controlSource(); source != nil {
 		if authority, ok := source.Authority.(*runtimeControlAuthority); ok {
 			if (provider == "codex" && nativeUsesModelPreference(args)) || (provider == "claude" && claudeUsesModelPreference(args)) {
@@ -227,27 +230,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					args = append([]string{"--model", selected}, args...)
 				}
 			}
-			counted := map[string]int{}
-			watch.consume = func(tr importer.SessionTranscript) error {
-				records, dropped, err := authority.runtime.ProposeContinuation(context.WithoutCancel(ctx), tr)
-				if err != nil {
-					return err
-				}
-				imported += countProposedMessages(records, func(id string) (model.MemoryLifecycle, bool) {
-					existing, err := authority.runtime.Store().GetMemoryV2(ctx, authority.runtime.ProjectID(), id)
-					if err != nil {
-						return "", false
-					}
-					return existing.Lifecycle, true
-				}, counted)
-				if dropped {
-					w.mu.Lock()
-					w.state.LastOutput = "Secrets were dropped from captured history."
-					w.mu.Unlock()
-					w.addNote("Secrets were dropped from captured history.", false)
-				}
-				return nil
-			}
+			watch.consume, peerCapture = w.sessionMemoryConsume(ctx, authority.runtime, len(marshalBrief) > 0, &imported)
 		}
 	}
 	if provider == "opencode" && openCodeUsesModelPreference(args) {
@@ -361,6 +344,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			peerName := peer
 			primary := captureTranscript
+			if peerCapture != nil {
+				primary = peerCapture
+			}
 			pw.consume = func(tr importer.SessionTranscript) error {
 				if err := primary(tr); err != nil {
 					return err
@@ -674,6 +660,51 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 }
+
+// sessionMemoryConsume is the memory capture of a native launch: own for the
+// launched session's history, peer for other providers' live sessions. The
+// Marshal's own chat (marshalChat) is not captured (marshalChatMemoryConsume).
+func (w *Workspace) sessionMemoryConsume(ctx context.Context, rt *app.Runtime, marshalChat bool, imported *int) (own, peer func(importer.SessionTranscript) error) {
+	peer = w.nativeMemoryConsume(ctx, rt, imported)
+	if marshalChat {
+		return marshalChatMemoryConsume, peer
+	}
+	return peer, peer
+}
+
+// nativeMemoryConsume is a native session's history capture: each transcript
+// becomes a session-memory candidate for review, counted into imported.
+func (w *Workspace) nativeMemoryConsume(ctx context.Context, rt *app.Runtime, imported *int) func(importer.SessionTranscript) error {
+	counted := map[string]int{}
+	return func(tr importer.SessionTranscript) error {
+		records, dropped, err := rt.ProposeContinuation(context.WithoutCancel(ctx), tr)
+		if err != nil {
+			return err
+		}
+		*imported += countProposedMessages(records, func(id string) (model.MemoryLifecycle, bool) {
+			existing, err := rt.Store().GetMemoryV2(ctx, rt.ProjectID(), id)
+			if err != nil {
+				return "", false
+			}
+			return existing.Lifecycle, true
+		}, counted)
+		if dropped {
+			w.mu.Lock()
+			w.state.LastOutput = "Secrets were dropped from captured history."
+			w.mu.Unlock()
+			w.addNote("Secrets were dropped from captured history.", false)
+		}
+		return nil
+	}
+}
+
+// marshalChatMemoryConsume is the Marshal chat's own memory capture: none. The
+// Marshal's chat is the conversation it is having now, not earlier work, and
+// its review would go to that same Marshal, which leaves it unanswered and puts
+// "did not review a memory imported from an earlier chat" in Activity on a
+// brand-new project. The transcript still reaches the shared channel and the
+// proposal reader, which wrap this consumer.
+func marshalChatMemoryConsume(importer.SessionTranscript) error { return nil }
 
 // countNewProposals advances the imported tally by the records that are still
 // new proposals. A record already stored under a non-candidate lifecycle was

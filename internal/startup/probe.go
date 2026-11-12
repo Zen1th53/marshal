@@ -231,6 +231,26 @@ func probeGitAndProject(ctx context.Context, prober Prober, env Environment) ([]
 		Summary: "Git is available.",
 	}}
 
+	// The repository found is the home folder's or the whole computer's,
+	// which Marshal never uses as a project. Nothing here counts as ready:
+	// the folder needs a repository of its own first.
+	if refusal := statepath.ValidateRoot(root); refusal != nil {
+		summary := statepath.RefusedRootMessage
+		var refused *statepath.RefusedRootError
+		if statepath.ValidateRoot(env.WorkingDir) == nil && errors.As(refusal, &refused) {
+			summary = refused.InsideReason()
+		}
+		checks = append(checks, Check{
+			ID: "project.repository", Dimension: DimensionProject, Status: StatusNeedsAttention,
+			Required: true, Reason: ReasonProjectRootRefused,
+			Summary:      summary,
+			Impact:       "Work cannot run until this project has a Git repository of its own.",
+			Remedy:       Describe(ReasonProjectRootRefused).Remedy,
+			Capabilities: []Capability{CapProjectExecution},
+		})
+		return checks, ""
+	}
+
 	// A repository with no commits is usable for setup but has no baseline to
 	// work from, which is a different situation from having no repository.
 	if _, headErr := prober.Run(ctx, root, "git", "rev-parse", "HEAD"); headErr != nil {

@@ -260,71 +260,30 @@ func (v boardVisual) reqCount() int {
 	return 0
 }
 
-// truncLeft keeps the right end of s and marks the cut with a leading ellipsis.
-func (v boardVisual) truncLeft(s string, w int) string {
-	if VisibleLen(s) <= w {
-		return s
-	}
-	ell := "…"
-	if !v.unicode() {
-		ell = "."
-	}
-	r := []rune(s)
-	for len(r) > 0 && VisibleLen(string(r))+1 > w {
-		r = r[1:]
-	}
-	return ell + string(r)
-}
-
 // requirementsEntry is the open card as the inbox shows it: a header with the
-// filled count, one row per line a–h with its label, text and source, and the
-// action row. x is the inbox's first cell, row its frame row, w its width.
-func (v boardVisual) requirementsEntry(c reqCard, x, row, w int) []string {
+// filled count, one entry per line a–h with its label, text and source, and the
+// action row. x is the inbox's first cell, row its frame row, w its width, and
+// maxRows the rows the inbox has left for the card.
+//
+// The requirement's own words come first: they get the whole width after the
+// label and wrap onto up to three rows. The source follows as a dim suffix
+// when it fits after the text, or on a dim row of its own below it. When the
+// inbox is too short for that, sources that do not fit after the text are
+// left out, and then each text keeps to one row, so the action row stays.
+func (v boardVisual) requirementsEntry(c reqCard, x, row, w, maxRows int) []string {
 	flag := "⚑ "
 	if !v.unicode() {
 		flag = "! "
 	}
 	head := v.fg("waiting", flag+"requirements") + v.fg("dim", fmt.Sprintf(" · %d of 8 filled", c.filled()))
-	out := []string{PadCell(head, w)}
 
-	labelW := 0
-	for _, l := range reqLabels {
-		if n := VisibleLen(l); n > labelW {
-			labelW = n
+	entries := v.reqLayout(c, w, maxRows)
+	out := []string{PadCell(head, w)}
+	for i, rows := range entries {
+		for _, r := range rows {
+			v.hit(boardHit{row: row + len(out), x0: x, x1: x + w, kind: hitRequirements, id: c.Lines[i].Line})
+			out = append(out, PadCell(r, w))
 		}
-	}
-	for i, line := range c.Lines {
-		crow := row + len(out)
-		label := reqLabels[i]
-		label += strings.Repeat(" ", labelW-VisibleLen(label))
-		left := "  " + v.fg("white", line.Line) + "  " + v.fg("dim", label) + "  "
-		leftW := 2 + 1 + 2 + labelW + 2
-		text, source := line.Text, line.Source
-		blank := text == ""
-		if blank {
-			text = "—"
-			source = "(to ask)"
-			if !v.unicode() {
-				text = "-"
-			}
-		}
-		avail := max(1, w-leftW)
-		srcW := VisibleLen(source)
-		if srcW+2 > avail {
-			srcW = max(1, avail-10)
-			source = v.truncLeft(source, srcW)
-			srcW = VisibleLen(source)
-		}
-		textBudget := max(1, avail-srcW-2)
-		text = v.trunc(text, textBudget)
-		pad := max(1, avail-VisibleLen(text)-srcW)
-		textCell := v.fg("white", text)
-		if blank {
-			textCell = v.fg("dim", text)
-		}
-		rowStr := left + textCell + strings.Repeat(" ", pad) + v.fg("dim", source)
-		v.hit(boardHit{row: crow, x0: x, x1: x + w, kind: hitRequirements, id: line.Line})
-		out = append(out, PadCell(rowStr, w))
 	}
 
 	arow := row + len(out)
@@ -344,4 +303,101 @@ func (v boardVisual) requirementsEntry(c reqCard, x, row, w int) []string {
 	v.hit(boardHit{row: arow, x0: x + 2 + VisibleLen(confirm) + 2, x1: x + 2 + VisibleLen(confirm) + 2 + VisibleLen(edit), kind: hitRequirements, id: "edit"})
 	out = append(out, PadCell(line, w))
 	return out
+}
+
+// reqLayout is the rows of each of the card's eight lines at width w: the
+// first layout that fits maxRows with the header and the action row, or the
+// shortest. It draws nothing and registers no click region.
+func (v boardVisual) reqLayout(c reqCard, w, maxRows int) [8][]string {
+	labelW := 0
+	for _, l := range reqLabels {
+		if n := VisibleLen(l); n > labelW {
+			labelW = n
+		}
+	}
+	leftW := 2 + 1 + 2 + labelW + 2
+	avail := max(1, w-leftW)
+	type pass struct {
+		textRows  int
+		sourceRow bool
+	}
+	passes := []pass{{3, true}, {3, false}, {1, false}}
+	var entries [8][]string
+	for pi, ps := range passes {
+		total := 2
+		for i, line := range c.Lines {
+			entries[i] = v.reqEntryRows(line, i, leftW, labelW, avail, ps.textRows, ps.sourceRow)
+			total += len(entries[i])
+		}
+		if total <= maxRows || pi == len(passes)-1 {
+			break
+		}
+	}
+	return entries
+}
+
+// reqRows is how many rows the card draws at width w with maxRows to spare.
+func (v boardVisual) reqRows(c reqCard, w, maxRows int) int {
+	n := 2
+	for _, rows := range v.reqLayout(c, w, maxRows) {
+		n += len(rows)
+	}
+	return n
+}
+
+// reqEntryRows is one line of the card: the letter and label, the text wrapped
+// to at most textRows rows of avail cells, and the source as a dim suffix after
+// the text when it fits there, else on a dim row of its own when sourceRow is
+// set, else left out.
+func (v boardVisual) reqEntryRows(line reqLine, i, leftW, labelW, avail, textRows int, sourceRow bool) []string {
+	label := reqLabels[i]
+	label += strings.Repeat(" ", labelW-VisibleLen(label))
+	left := "  " + v.fg("white", line.Line) + "  " + v.fg("dim", label) + "  "
+	indent := strings.Repeat(" ", leftW)
+	text, source := line.Text, line.Source
+	blank := text == ""
+	if blank {
+		text = "—"
+		source = "(to ask)"
+		if !v.unicode() {
+			text = "-"
+		}
+	}
+	parts := wrapWords(text, avail)
+	if len(parts) == 0 {
+		parts = []string{text}
+	}
+	if len(parts) > textRows {
+		rest := strings.Join(parts[textRows-1:], " ")
+		parts = append(parts[:textRows-1], rest)
+		parts[textRows-1] = v.trunc(parts[textRows-1], avail)
+	}
+	for k := range parts {
+		parts[k] = v.trunc(parts[k], avail)
+	}
+	color := "white"
+	if blank {
+		color = "dim"
+	}
+	var rows []string
+	for k, part := range parts {
+		lead := indent
+		if k == 0 {
+			lead = left
+		}
+		rows = append(rows, lead+v.fg(color, part))
+	}
+	// The source reads as a dim "· source" after its text.
+	dot := "· "
+	if !v.unicode() {
+		dot = "- "
+	}
+	source = dot + source
+	last := parts[len(parts)-1]
+	if room := avail - VisibleLen(last) - 2; VisibleLen(source) <= room {
+		rows[len(rows)-1] += "  " + v.fg("dim", source)
+	} else if sourceRow {
+		rows = append(rows, indent+v.fg("dim", v.trunc(source, avail)))
+	}
+	return rows
 }

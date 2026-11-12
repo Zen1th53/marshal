@@ -216,7 +216,7 @@ func TestProvidersViewLimitColumn(t *testing.T) {
 	for _, want := range []string{
 		"codex", "usage limit reached", providerUntil(now.Add(5*time.Hour), now),
 		"claude", "▓▓░ 58% left · wk", providerUntil(now.Add(4*24*time.Hour+2*time.Hour), now),
-		"opencode", "▓░░ 35% left · wk · 3h old", providerUntil(now.Add(2*24*time.Hour), now),
+		"opencode", "▓░░ 35% left · wk · read 3h ago", providerUntil(now.Add(2*24*time.Hour), now),
 		"agy", "unknown", "agy does not write its usage limits where Marshal can read them.",
 	} {
 		if !strings.Contains(text, want) {

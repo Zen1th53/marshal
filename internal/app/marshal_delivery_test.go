@@ -339,3 +339,136 @@ func deliveredCommit(t *testing.T, s *MarshalService, runID string) string {
 	t.Fatal("no close event")
 	return ""
 }
+
+// sideCommit makes a commit on top of base that no branch holds.
+func sideCommit(t *testing.T, repo, base, name string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), name)
+	marshalGit(t, repo, "worktree", "add", "--detach", dir, base)
+	if err := os.WriteFile(filepath.Join(dir, name+".txt"), []byte(name), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	marshalGit(t, dir, "add", name+".txt")
+	marshalGit(t, dir, "commit", "-q", "-m", name)
+	commit := marshalGit(t, dir, "rev-parse", "HEAD")
+	marshalGit(t, repo, "worktree", "remove", dir)
+	return commit
+}
+
+// A returned attempt's lane branch goes when the run closes: the run keeps
+// the returned commit under its own ref, so nothing is lost. Branches with
+// unrecorded work, another task's or another run's branches, a serial
+// Process05 run's branch, and the person's own branches stay, and so does the
+// close checkpoint the close can be undone from.
+func TestCloseRemovesReturnedAttemptLaneBranch(t *testing.T) {
+	s, repo := verifiedDeliveryFixture(t)
+	ctx := t.Context()
+	run, err := s.Snapshot(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := run.Tasks[0].ResultCommit
+	base := run.BaseCommit
+	returned := sideCommit(t, repo, base, "returned")
+	unrecorded := sideCommit(t, repo, base, "unrecorded")
+	marshalGit(t, repo, "update-ref", "refs/"+statepath.RefName+"/run/returned/a/attempt-1", returned)
+	oldLane := filepath.Join(s.Worktrees, "TASK-lane-0123abcd")
+	marshalGit(t, repo, "worktree", "add", "-q", "-b", statepath.RefName+"/lane-0123abcd/a", oldLane, returned)
+	for branch, commit := range map[string]string{
+		statepath.RefName + "/run-plan-1/a":    result, // a serial Process05 run's branch stays
+		statepath.RefName + "/lane-4567ef01/a": unrecorded,
+		statepath.RefName + "/lane-89ab/z":     returned,
+		statepath.RefName + "/other/a":         returned,
+		statepath.RefName + "/TASK-ffff":       result, // legacy runtime task branch stays
+		"feature":                              returned,
+		"mine":                                 result,
+	} {
+		marshalGit(t, repo, "branch", branch, commit)
+	}
+	if err := s.Close(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	branches := marshalGit(t, repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	for _, gone := range []string{"/lane-0123abcd/"} {
+		if strings.Contains(branches, gone) {
+			t.Fatalf("finished branch %s left:\n%s", gone, branches)
+		}
+	}
+	for _, keep := range []string{"/run-plan-1/a", "/lane-4567ef01/a", "/lane-89ab/z", "/other/a", "/TASK-ffff", "feature", "mine"} {
+		if !strings.Contains(branches, keep) {
+			t.Fatalf("cleanup removed %s:\n%s", keep, branches)
+		}
+	}
+	for _, gone := range []string{oldLane} {
+		if _, err := os.Stat(gone); !os.IsNotExist(err) {
+			t.Fatalf("worktree %s left: %v", gone, err)
+		}
+	}
+	if marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/returned/a/attempt-1") != returned {
+		t.Fatal("the returned attempt's record was removed")
+	}
+	if marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/pre-close") == "" {
+		t.Fatal("undo checkpoint removed")
+	}
+}
+
+// A run that closed before this cleanup existed is cleaned when the project
+// opens; a branch Marshal cannot remove is named in Activity, in plain words,
+// and the rest still goes.
+func TestRecoverCleansReturnedAttemptOfClosedRunAndReportsFailure(t *testing.T) {
+	s, repo := verifiedDeliveryFixture(t)
+	ctx := t.Context()
+	run, err := s.Snapshot(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	returned := sideCommit(t, repo, run.BaseCommit, "returned")
+	marshalGit(t, repo, "update-ref", "refs/"+statepath.RefName+"/run/returned/a/attempt-1", returned)
+	marshalGit(t, repo, "branch", statepath.RefName+"/lane-0123abcd/a", returned)
+	branchesRoot := filepath.Join(repo, statepath.DirName, "branches")
+	stuck := filepath.Join(branchesRoot, "TASK-lane-4567ef01")
+	marshalGit(t, repo, "worktree", "add", "-q", "-b", statepath.RefName+"/lane-4567ef01/a", stuck, run.Tasks[0].ResultCommit)
+	// An ignored file in a folder that cannot be emptied makes the removal
+	// of an otherwise clean worktree fail.
+	exclude := marshalGit(t, repo, "rev-parse", "--git-path", "info/exclude")
+	if !filepath.IsAbs(exclude) {
+		exclude = filepath.Join(repo, exclude)
+	}
+	rules, _ := os.ReadFile(exclude)
+	if err := os.WriteFile(exclude, append(rules, []byte("/locked/\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(stuck, "locked")
+	if err := os.MkdirAll(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "f"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+	var activity []string
+	s.RecordActivity = func(line string) { activity = append(activity, line) }
+	if err := s.RecoverPendingOperations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	branches := strings.Join(marshalBranches(t, repo), " ")
+	if strings.Contains(branches, "lane-0123abcd") {
+		t.Fatalf("returned attempt's lane branch left after recovery: %s", branches)
+	}
+	if marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/returned/a/attempt-1") != returned {
+		t.Fatal("the returned attempt's record was removed")
+	}
+	want := "Marshal could not remove a finished task's branch " + statepath.RefName + "/lane-4567ef01/a: its working folder could not be removed."
+	if len(activity) != 1 || activity[0] != want {
+		t.Fatalf("activity = %q, want %q", activity, want)
+	}
+	if !strings.Contains(branches, "lane-4567ef01/a") {
+		t.Fatalf("the branch whose worktree stayed was removed: %s", branches)
+	}
+}
