@@ -71,7 +71,7 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 			fixes = append(fixes, setupFix{
 				checkID: check.ID, reason: check.Reason,
 				question: "Start a separate Git repository for this project here",
-				apply: func(ctx context.Context, root string) error {
+				apply: func(ctx context.Context, root string, out io.Writer) error {
 					_, err := prepareProjectRepository(ctx, root)
 					return err
 				},

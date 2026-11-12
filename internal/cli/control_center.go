@@ -37,7 +37,7 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return err
 	}
 	if started {
-		if _, err := initializeProject(ctx, c.root); err != nil {
+		if _, _, err := initializeProject(ctx, c.root); err != nil {
 			return err
 		}
 	}
