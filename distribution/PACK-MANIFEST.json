@@ -16546,8 +16546,8 @@
     },
     {
       "path": "tools/tests/test_clean_install.py",
-      "sha256": "498dd79fa3799beba80bacacfe3a7a9a85f941c503ae87c456607746a516730a",
-      "bytes": 6690
+      "sha256": "878ab7282a36cf8a83e3f84a3888316a0a9f179dc327ef7611e5db05a569ba9d",
+      "bytes": 6754
     },
     {
       "path": "tools/tests/test_install_dependencies.py",
