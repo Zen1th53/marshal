@@ -8,6 +8,11 @@
 - The Architecture view, key help and `/egress`, `/sandbox`, `/provider` no longer claim a network broker, credential leases or owner plan approval; the rules line shows the real telemetry state.
 - Telemetry registration succeeds on slower connections (900 ms per request).
 - A worker still changing files is no longer taken for stalled when its worktree check is slow.
+- The Board shows a task as working while its worker runs, a review is no longer shown as stalled, finished tasks stop their clock, and the inbox count matches what is listed.
+- A finished run no longer takes an amendment that would re-queue delivered work; the "what next?" card shows beside the chat.
+- Usage limits read "% left" everywhere; a limit Marshal cannot read says "limit unknown".
+- `marshal status` and `marshal tasks` work while the TUI is open; `marshal doctor` marks absent optional plugins as optional.
+- Marshal's tool errors to the Marshal are plain sentences; Activity lines and worker commits carry no internal IDs.
 
 ### Added
 - A project check at every start, with safe fixes and a Blocked screen (`r` checks again).
@@ -20,10 +25,7 @@
 - Architecture page: click a part to see its files and choose its builder; the plan follows the choice. A revision bar highlights changed parts, and a Design panel shows the design review.
 - `Space` / `Ctrl+K` opens one actions palette; `r` retries a stuck task; `w` chooses the model for a task.
 - Disk warning at 10 GB or 5% free, whichever is smaller.
-<!-- pending: P5-03, P5-06
-- The footer hint bar shows only the actions available now, and each can be clicked.
-- Every action on the Board can be clicked.
--->
+- The footer hint bar shows only the actions available now, and each can be clicked; palette rows and help lines can be clicked too. A click never decides: it opens the confirmation.
 
 ### Changed
 - The architecture is accepted only with the Accept button in the browser (`y` on the gate opens it); typing `accept architecture` in the chat no longer accepts.

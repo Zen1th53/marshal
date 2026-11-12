@@ -17,6 +17,18 @@
   900 ms instead of 750 ms, so a new install on a slower link is counted.
 - A worker that is still changing files is no longer mistaken for a stalled
   one when checking its worktree takes a while.
+- **The Board agrees with itself during a run.** A task shows as working while
+  its worker runs, a task in review is no longer shown as stalled, finished
+  tasks stop their clock, and the inbox count matches what is listed.
+- **A finished run stays finished.** The Marshal can no longer amend a closed
+  run in a way that would queue delivered work again, and the "what next?"
+  card now shows beside the chat.
+- **Usage limits read the same everywhere**, as "% left". A provider whose
+  limit Marshal cannot read shows "limit unknown".
+- `marshal status` and `marshal tasks` now work while Marshal is open in the
+  terminal, and `marshal doctor` marks missing optional plugins as optional.
+- Errors from Marshal's own tools reach the Marshal as plain sentences, and
+  Activity lines and worker commit messages no longer show internal IDs.
 
 ## Added
 
@@ -68,14 +80,13 @@
   runs it.
 - The disk warning now fires when free space drops below 10 GB or 5% of the
   disk, whichever is smaller.
-
-<!-- pending: P5-03, P5-06
 - **The footer shows what you can do now.** The hint bar at the bottom lists
   only the actions available in the current state, and each one can be
   clicked.
-- **Every action can be clicked.** Palette rows, cards, pickers and the Board's
-  buttons respond to the mouse as well as to their keys.
--->
+- **Every action can be clicked.** Palette rows, help lines, cards, pickers and
+  the Board's buttons respond to the mouse as well as to their keys. A click
+  never makes a decision for you: on an approval it opens the confirmation,
+  and a key confirms.
 
 ## Changed
 
@@ -122,7 +133,7 @@
 - On macOS, the host-watch CPU/temperature panel reads Linux counters and
   shows nothing; the rest of Marshal works.
 - Claude's usage limit is read from what Claude Code last saved, so it can be
-  old. agy and opencode report no limit; Marshal shows them as unavailable.
+  old. agy and opencode report no limit; Marshal shows "limit unknown" for them.
 
 ## Install
 
