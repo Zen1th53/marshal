@@ -30,6 +30,13 @@ class ReadmeTests(unittest.TestCase):
             prompt_block("README.md"),
         )
 
+    def test_setup_prompt_uses_current_quick_start(self):
+        block = prompt_block("README.md")
+        self.assertIn("marshal version", block)
+        self.assertIn("cd /path/to/your/repository && marshal", block)
+        self.assertNotIn("cd /path/to/your/repository && marshal init && marshal doctor", block)
+        self.assertNotIn("marshal opencode   # native OpenCode", block)
+
     def test_relative_links_and_anchors(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         # Fenced blocks are not links.

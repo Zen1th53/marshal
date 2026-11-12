@@ -221,6 +221,9 @@ func (v boardVisual) stateChipShort() string {
 
 // runWord is the run's state as the header says it, and its colour key.
 func (v boardVisual) runWord() (string, string) {
+	if v.board.Run.UserPaused {
+		return "paused", "waiting"
+	}
 	if s, ok := v.stopNotice(); ok {
 		if s.waiting {
 			return "waiting for you", "needs"

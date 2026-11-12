@@ -76,6 +76,17 @@ func TestProjectOrdersTasksByStateClassThenID(t *testing.T) {
 	}
 }
 
+func TestProjectCarriesLiveUserPauseForDisplay(t *testing.T) {
+	b := Project(Snapshot{RunID: "R1", Run: run(), UserPaused: true}, nil)
+	if b.Run.State != marshal.Dispatching || !b.Run.UserPaused {
+		t.Fatalf("pause display changed run state or was lost: %+v", b.Run)
+	}
+	b = Project(Snapshot{RunID: "R1", Run: run()}, nil)
+	if b.Run.UserPaused {
+		t.Fatalf("pause display remained after resume: %+v", b.Run)
+	}
+}
+
 func TestEventsSetSinceButNeverState(t *testing.T) {
 	// T-1 was returned after its dispatch; T-2 was merged once, then an
 	// amendment queued it again without a task event.

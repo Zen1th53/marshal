@@ -90,8 +90,13 @@ func TestExtremeUnansweredDecisionRedelivers(t *testing.T) {
 	w.mu.RLock()
 	activity := w.state.LastOutput
 	w.mu.RUnlock()
-	if strings.Count(activity, extremeUnansweredActivity) > 1 {
-		t.Fatalf("more than one activity line: %s", activity)
+	if strings.Count(activity, extremeUnansweredActivity) != 1 || extremeUnansweredActivity != "The Marshal was busy; sending your message again." {
+		t.Fatalf("unexpected activity wording or count: %s", activity)
+	}
+	for _, internal := range []string{"denial", "backoff", "delivery id"} {
+		if strings.Contains(extremeUnansweredActivity, internal) {
+			t.Fatalf("retry note contains internal term %q: %s", internal, extremeUnansweredActivity)
+		}
 	}
 	// An answer clears the re-delivery state.
 	w.finishBuildDecisionAs(t.Context(), req, "answer", false, "reviewed", "claude", "")

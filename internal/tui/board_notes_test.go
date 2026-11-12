@@ -42,7 +42,7 @@ func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
 	frameText(w, 170, 45)
 	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 't'})
 	background := []string{
-		"Marshal did not answer in time; no denial in Marshal, re-delivering with backoff: project-contract hello-uz",
+		"The Marshal was busy; sending your message again.",
 		"Recorded owner instruction for the project contract. instruction_ref=operator:b64f; contract_id=hello-uz; revision=1; digest=sha256:9089.\nAnswer the pending project-contract Decision for exactly this contract with allow.\n",
 		"Verified codex codex-cli 0.167.0 in sandbox through proxy; evidence PROBE-cbb5\nNative chat transport: none qualified for codex; the tmux-docked chat stays.",
 	}
@@ -53,7 +53,7 @@ func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
 	if strings.Contains(text, " ANSWER ") {
 		t.Fatalf("a background message opened the ANSWER overlay:\n%s", text)
 	}
-	for _, want := range []string{"note Marshal did not answer in time", "note Recorded owner instruction for the project contract", "note Verified codex codex-cli 0.167.0"} {
+	for _, want := range []string{"note The Marshal was busy", "note Recorded owner instruction for the project contract", "note Verified codex codex-cli 0.167.0"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Activity misses %q:\n%s", want, text)
 		}

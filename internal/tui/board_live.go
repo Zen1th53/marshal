@@ -140,7 +140,7 @@ func (w *Workspace) projectBoard(p *MarshalPanel, evs []events.Event) boardmodel
 	w.permissions.mu.Unlock()
 	workers := w.boardWorkers(p.RunID)
 	w.boardFeed.noteWorkers(p.RunID, workersFingerprint(workers))
-	return boardmodel.Project(boardmodel.Snapshot{RunID: p.RunID, Run: run, Requests: requests, Workers: workers, Driving: boardDriving(p, run.State) && w.marshalDriving(p.RunID)}, evs)
+	return boardmodel.Project(boardmodel.Snapshot{RunID: p.RunID, Run: run, Requests: requests, Workers: workers, Driving: boardDriving(p, run.State) && w.marshalDriving(p.RunID), UserPaused: w.marshalSession().pausedFor(p.RunID)}, evs)
 }
 
 // boardDriving reports whether the panel's run can be moving under this

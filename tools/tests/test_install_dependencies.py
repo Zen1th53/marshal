@@ -64,6 +64,9 @@ esac''')
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root / "installed/marshal").read_bytes(), binary.read_bytes())
             self.assertEqual((root / "installed/marshal").stat().st_mode & 0o777, 0o755)
+            self.assertIn("Next:\n  marshal version\n  cd /path/to/your/repository && marshal\n", result.stderr)
+            self.assertNotIn("marshal init", result.stderr)
+            self.assertNotIn("marshal opencode", result.stderr)
             return [line for line in result.stderr.splitlines() if line.startswith("Missing ")]
 
     def test_bsd_install_without_dash_D(self):

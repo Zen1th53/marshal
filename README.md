@@ -86,7 +86,7 @@ Rules for this job:
    Fixed: <what you changed, or "nothing">
    Needs you: <one line per remaining step, or "nothing">
    Telemetry: <on | off> (marshal telemetry disable turns it off)
-   Next: in one of your Git repositories run `marshal init`, then `marshal`.
+   Next, check the installed version with `marshal version`, then open a Git repository with `cd /path/to/your/repository && marshal`.
 ````
 <!-- setup-prompt:end -->
 

@@ -11,6 +11,21 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
+func TestPausedForTracksOnlyTheHeldRunAndClearsOnResume(t *testing.T) {
+	m := &marshalSession{}
+	if m.pausedFor("R1") {
+		t.Fatal("run was paused before a hold")
+	}
+	m.holdDispatch("R1")
+	if !m.pausedFor("R1") || m.pausedFor("R2") {
+		t.Fatal("pause display did not track only the held run")
+	}
+	m.releaseDispatch()
+	if m.pausedFor("R1") {
+		t.Fatal("pause display remained after resume")
+	}
+}
+
 // holdProposalLine builds a MARSHAL_PROPOSAL "hold" line. ids is the inner
 // JSON array as a string, the way the Marshal writes it.
 func holdProposalLine(ids, reason string) string {

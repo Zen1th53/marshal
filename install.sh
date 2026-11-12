@@ -117,8 +117,7 @@ esac
 info ""
 info "Next:"
 info "  marshal version"
-info "  cd /path/to/your/repository && marshal init && marshal doctor"
-info "  marshal opencode   # native OpenCode; conversation memory saves on exit"
+info "  cd /path/to/your/repository && marshal"
 
 # Dependencies are reported after a successful install; never installed here.
 package_manager=""
