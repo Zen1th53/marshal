@@ -296,7 +296,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	for _, key := range []struct{ raw, want string }{
 		{"\x1bOP", "Talk to the Marshal: /marshal chat"}, {"\x1bOQ", "Install Codex"},
 		{"\x1bOR", "Git Diff"}, {"\x1bOS", "Run:"},
-		{"\x1b[15~", "Discover models failed"}, {"\x1b[17~", "Install Codex"},
+		{"\x1b[15~", "Discover models failed"}, {"\x1b[17~", mcpNoFailure}, // F6 shows MCP only on failure
 		{"\x1b[18~", "Install Codex"}, {"\x1b[19~", "Install Claude"},
 		{"\x1b[20~", "OpenCode exited"}, {"\x1b[21~", "Update check failed"},
 		{"\x1b[24~", "Antigravity exited"},

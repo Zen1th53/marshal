@@ -12966,8 +12966,8 @@
     },
     {
       "path": "internal/tui/command_sweep_crosscut_test.go",
-      "sha256": "50f7e51cebd295fd17e93f8b2d944ced8a4a010e5d465d0efa950343579fe74a",
-      "bytes": 29574
+      "sha256": "b9c928b4c85123faf6c8a1b9371a4cfc2d283dec6c2841c2a8cf10d76fc4b9b6",
+      "bytes": 29603
     },
     {
       "path": "internal/tui/command_sweep_work_test.go",
