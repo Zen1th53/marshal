@@ -1376,21 +1376,49 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	return result, nil
 }
 
-func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error) {
+func (s *MarshalService) Close(ctx context.Context, runID string) error {
+	err := s.closeRun(ctx, runID)
+	var stage *closeVerificationError
+	if errors.As(err, &stage) {
+		return stage.err
+	}
+	return err
+}
+
+// closeVerificationError marks a close that stopped while verifying the
+// integrated result, so a run closing on its own can stop for the person the
+// way a separate verification does. A result means the verification ran and
+// did not pass.
+type closeVerificationError struct {
+	err    error
+	result verification.Decision
+}
+
+func (e *closeVerificationError) Error() string { return e.err.Error() }
+func (e *closeVerificationError) Unwrap() error { return e.err }
+
+func closeVerificationStage(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &closeVerificationError{err: err}
+}
+
+func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
-		return err
+		return closeVerificationStage(err)
 	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
 	if err != nil {
-		return err
+		return closeVerificationStage(err)
 	}
 	if err := s.requireUncancelledScope(ctx, runID, run, rev); err != nil {
-		return err
+		return closeVerificationStage(err)
 	}
 
 	if err = unfinishedMarshalOperation(run); err != nil {
-		return err
+		return closeVerificationStage(err)
 	}
 	if run.State != marshal.Verifying {
 		return errors.New("run is not verified")
@@ -1399,10 +1427,10 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 		return err
 	}
 	if s.Verify == nil {
-		return errors.New("verifier is unavailable")
+		return closeVerificationStage(errors.New("verifier is unavailable"))
 	}
 	if err = s.requireIndependentVerifier(ctx, run); err != nil {
-		return s.pauseUnavailableVerifier(ctx, runID, run, rev, err)
+		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
 	}
 	project, err := s.Store.Project(ctx)
 	if err != nil {
@@ -1422,25 +1450,25 @@ func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error)
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	head, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
-		return err
+		return closeVerificationStage(err)
 	}
 	if s.requiredIntegrationSource != nil {
 		if err := s.requiredIntegrationSource(ctx, runID, run, head); err != nil {
-			return err
+			return closeVerificationStage(err)
 		}
 	}
 	session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
 	if err != nil {
 		// Say why: a bare "not verified" hid a context or budget refusal
 		// behind a session that had in fact verified.
-		return fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+		return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
 	}
-	if verification.Evaluate(session, binding, s.clock()) != verification.VerifiedComplete {
-		return errors.New("integrated result is not verified")
+	if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
+		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result}
 	}
 	if run.Tier == marshal.Ultra && s.requiredCanonicalVerification == nil {
 		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
-			return err
+			return closeVerificationStage(err)
 		}
 	}
 	// What moves the target must be exactly the commit that was verified.

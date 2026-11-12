@@ -36,8 +36,10 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if started {
-		if _, _, err := initializeProject(ctx, c.root); err != nil {
+	if started.Started {
+		_, committed, err := initializeProject(ctx, c.root)
+		c.reportStartedRepository(started, committed)
+		if err != nil {
 			return err
 		}
 	}

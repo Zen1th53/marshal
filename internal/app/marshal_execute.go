@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -457,6 +458,12 @@ func (s *MarshalService) finish(ctx context.Context, runID string, current func(
 				}
 			}
 		}
+		// The close verifies the integrated head itself right before its
+		// gate. A run made on this runtime has nothing a separate pass would
+		// add, so it verifies once, in the close.
+		if run.Compatibility != nil && run.Compatibility.Disposition == "current" {
+			return s.verifyAndClose(ctx, runID, run, current)
+		}
 	}
 	if _, err := s.VerifyMerged(ctx, runID, unknownMarshalCharge()); err != nil {
 		run, _ := current()
@@ -473,6 +480,57 @@ func (s *MarshalService) finish(ctx context.Context, runID string, current func(
 		return current()
 	}
 	return run, nil
+}
+
+// verifyAndClose closes a self-closing run with the close's own
+// verification as its only one. The verification itself is unchanged: the
+// close runs every approved check and, where required, the fresh independent
+// verifier on the exact head it then delivers. Around it this does what a
+// separate VerifyMerged did: usage is charged and a budget that needs the
+// person stops before any verification; a result that does not pass, or a
+// verification that cannot run, leaves the same resumable pause.
+func (s *MarshalService) verifyAndClose(ctx context.Context, runID string, run marshal.Run, current func() (marshal.Run, error)) (marshal.Run, error) {
+	// The charge is unmeasured usage, so whether it stops the run does not
+	// depend on the verification's outcome.
+	budget, err := s.Charge(ctx, runID, "", "verification", unknownMarshalCharge())
+	if err != nil {
+		err = s.pauseVerificationFailure(ctx, runID, err)
+		after, _ := current()
+		return after, err
+	}
+	if len(budget.PlanExceeded) > 0 || budgetNeedsOperator(run.Budget, budget) {
+		return current()
+	}
+	head, err := gitMarshal(ctx, filepath.Join(s.Worktrees, integrationTaskID(runID, run)), "rev-parse", "HEAD")
+	if err != nil {
+		err = s.pauseVerificationFailure(ctx, runID, err)
+		after, _ := current()
+		return after, err
+	}
+	s.codeEvidenceVerify(ctx, runID, run, head)
+	err = s.closeRun(ctx, runID)
+	var stage *closeVerificationError
+	if errors.As(err, &stage) {
+		if stage.result != "" {
+			paused, rev, loadErr := s.load(ctx, runID)
+			if loadErr != nil {
+				return paused, loadErr
+			}
+			if paused.State == marshal.Verifying {
+				pauseMarshal(&paused, marshal.Pause{Reason: "verification failed: " + string(stage.result), Resolutions: []string{"/marshal resume to retry verification"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationFailed, Action: marshal.PauseResume})
+				if loadErr = s.save(ctx, runID, paused, rev); loadErr != nil {
+					return paused, loadErr
+				}
+			}
+			return current()
+		}
+		err = s.pauseVerificationFailure(ctx, runID, stage.err)
+	}
+	after, currentErr := current()
+	if err != nil {
+		return after, err
+	}
+	return after, currentErr
 }
 
 func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {

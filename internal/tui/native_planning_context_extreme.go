@@ -88,6 +88,17 @@ func (w *Workspace) readNativePlanningMCP(ctx context.Context, l *proposalMCPLea
 				Next    string `json:"next"`
 			}{view.ProjectPlanningInspection, "goal", marshalGoalNextStep})
 		}
+		if errors.Is(err, projectcontext.ErrReviewPending) && w.architectureAwaitsAccept(ownerCtx) {
+			// A confirmed Goal whose architecture the owner has not
+			// accepted in the browser yet is the normal middle of intake,
+			// not a failure: say what is missing and what to do. It is
+			// data only and mints no planning proof.
+			return boundedProjectContractJSON(struct {
+				app.ProjectPlanningInspection
+				Missing string `json:"missing"`
+				Next    string `json:"next"`
+			}{view.ProjectPlanningInspection, "architecture", marshalArchitectureNextStep})
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -281,4 +292,24 @@ func (w *Workspace) prepareUnleasedNativePlanningLaunch(ctx context.Context, pro
 		text += "\nCURRENT PLANNING CONTEXT — DATA ONLY\n" + view.Context
 	}
 	return appendNativePlanningHidden(provider, root, args, dir, text)
+}
+
+// marshalArchitectureNextStep tells the Marshal what to do while the
+// architecture waits for the owner's browser Accept.
+const marshalArchitectureNextStep = `The architecture is not accepted yet, so there is no project context to read. Carry on with the intake: submit the architecture with marshal_project_contract_submit if it is not submitted yet. It opens in the browser when the person presses y on the Board, and they accept it there. Call marshal_project_contract_context again after the runtime tells you the architecture was accepted.`
+
+// architectureAwaitsAccept reports whether the only reason the planning
+// context is unavailable is the architecture: the active Goal is confirmed
+// and no project contract is accepted yet. A pending required memory or an
+// unconfirmed Goal still reads as the refusal it is.
+func (w *Workspace) architectureAwaitsAccept(ctx context.Context) bool {
+	if w.store == nil || w.runtime == nil {
+		return false
+	}
+	goal, err := w.store.GetActiveGoalContract(ctx, w.sessionID)
+	if err != nil || !goal.Confirmation.Settled() {
+		return false
+	}
+	_, err = w.store.ReadAcceptedProjectContract(ctx, w.runtime.ProjectContractBinding())
+	return errors.Is(err, projectcontext.ErrReviewPending)
 }

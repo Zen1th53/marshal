@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.10
+
+### Fixed
+- The run-closed notice reaches the Marshal chat (in 0.2.9 it could stay at "sending" and block later messages).
+- A self-closing run verifies its result once instead of twice; the final check takes about half as long.
+- Left-out secret files are listed in `.gitignore` in Marshal's first commit; `.p12`/`.pfx` added to the default `.gitignore`.
+- The start-repository line names both commits; the launch scan ignores Marshal's own files.
+- The Marshal says the architecture opens on `y`; no failed context call during intake.
+- `marshal doctor`: vendor named once; resource pressure shown as WARN with its reason.
+
 ## 0.2.9
 
 ### Fixed

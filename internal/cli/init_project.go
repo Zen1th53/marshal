@@ -74,7 +74,9 @@ func initCommitNotice(files []string) string {
 }
 
 // Use Git's resolved path so this also works when .git is a worktree pointer.
-// The project .gitignore belongs to the user and is never changed by init.
+// The project .gitignore belongs to the user and is not changed here; only a
+// repository Marshal starts lists the files it left out there (see
+// prepareProjectRepository).
 func excludeRuntimeState(ctx context.Context, root string) error {
 	command, err := hostgit.Command(ctx, root, "rev-parse", "--git-path", "info/exclude")
 	if err != nil {
