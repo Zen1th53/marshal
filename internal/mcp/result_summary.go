@@ -65,8 +65,27 @@ func toolResultSummary(name, text string) string {
 		return ""
 	}
 	if list, ok := v.([]any); ok {
-		if name == "tasks_list" {
+		switch name {
+		case "tasks_list":
 			return countPhrase(len(list), "task") + "."
+		case "agents_list":
+			return countPhrase(len(list), "agent") + "."
+		case "artifacts_list":
+			return countPhrase(len(list), "artifact") + "."
+		case "process07_memory_search":
+			return countPhrase(len(list), "memory item") + "."
+		case "process07_memory_history":
+			return countPhrase(len(list), "memory revision") + "."
+		case "process07_playbooks":
+			return countPhrase(len(list), "playbook") + "."
+		case "task_memory_list":
+			return countPhrase(len(list), "task memory slot") + "."
+		case "process08_counterfactuals":
+			return countPhrase(len(list), "counterfactual") + "."
+		case "process08_manifests":
+			return countPhrase(len(list), "manifest") + "."
+		case "process08_canaries":
+			return countPhrase(len(list), "canary") + "."
 		}
 		return ""
 	}
@@ -78,6 +97,8 @@ func toolResultSummary(name, text string) string {
 	switch name {
 	case "run_digest":
 		return runDigestSummary(obj)
+	case "marshal_status":
+		return marshalStatusSummary(obj)
 	case "marshal_proposal_submit", "marshal_proposal_receipt":
 		return proposalReceiptSummary(state)
 	case "marshal_memory_candidate_submit", "marshal_memory_receipt", "memory_remember":
@@ -88,8 +109,93 @@ func toolResultSummary(name, text string) string {
 			return fmt.Sprintf("Task %q is %s.", title, words(status))
 		}
 		return "Task found."
+	case "task_claim":
+		return "Task claimed."
+	case "task_release":
+		return "Task released."
+	case "task_run":
+		return "Task run started."
+	case "verification_status":
+		if exit, ok := obj["exit_status"].(float64); ok {
+			if int(exit) == 0 {
+				return "Verification passed."
+			}
+			return fmt.Sprintf("Verification failed with exit status %d.", int(exit))
+		}
+		return "Verification completed."
+	case "process06_status":
+		return "Verification session read."
+	case "process07_memory_commit":
+		return "Memory commit read."
+	case "process07_memory_history":
+		return "Memory history read."
+	case "process07_routing_trust":
+		return "Routing trust read."
+	case "memory_status":
+		if healthy, _ := obj["healthy"].(bool); healthy {
+			if records, ok := obj["records"].(float64); ok {
+				return fmt.Sprintf("Memory status: healthy, %s.", countPhrase(int(records), "record"))
+			}
+			return "Memory status: healthy."
+		}
+		return "Memory status read."
+	case "task_memory_set":
+		return "Task memory slot saved."
+	case "task_memory_cas":
+		return "Task memory slot updated."
+	case "task_memory_promote":
+		return "Task memory slot promoted."
+	case "task_memory_grant":
+		return "Task memory access granted."
+	case "task_memory_revoke":
+		return "Task memory access revoked."
+	case "memory_handoff_create":
+		return "Memory handoff created."
+	case "memory_handoff_consume":
+		return "Memory handoff consumed."
+	case "process08_cycle":
+		return "Optimization cycle read."
+	case "design_record":
+		return "Design record saved."
 	}
 	return ""
+}
+
+func marshalStatusSummary(v map[string]any) string {
+	if noRun, _ := v["no_run"].(bool); noRun {
+		return "Status: no run yet."
+	}
+	tasks, _ := v["tasks"].([]any)
+	if run, ok := v["run"].(map[string]any); ok && len(tasks) == 0 {
+		tasks, _ = run["tasks"].([]any)
+	}
+	if len(tasks) > 0 {
+		done := 0
+		for _, t := range tasks {
+			task, _ := t.(map[string]any)
+			switch s, _ := task["state"].(string); marshal.TaskState(s) {
+			case marshal.Accepted, marshal.Merged:
+				done++
+			}
+		}
+		state, _ := v["state"].(string)
+		if state == "" {
+			if run, ok := v["run"].(map[string]any); ok {
+				state, _ = run["state"].(string)
+			}
+		}
+		if state == "" {
+			state = "running"
+		}
+		return fmt.Sprintf("Status: run %s, %d of %s done.", words(state), done, countPhrase(len(tasks), "task"))
+	}
+	if taskCount, ok := v["task_count"].(float64); ok {
+		if int(taskCount) == 0 {
+			return "Status: no run yet."
+		}
+		return fmt.Sprintf("Status: %s.", countPhrase(int(taskCount), "task"))
+	}
+	return "Status read."
 }
 
 func runDigestSummary(v map[string]any) string {

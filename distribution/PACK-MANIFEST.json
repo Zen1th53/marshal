@@ -7581,13 +7581,13 @@
     },
     {
       "path": "internal/mcp/result_summary.go",
-      "sha256": "0924c8b40e6c5ebc0532bb917afce402dd300b738dfc92906f6892577f7b8390",
-      "bytes": 5107
+      "sha256": "a9d5297d0ccd19be7aaf3da33774416acc755b56d2aeec81ba85b56d8488c4b8",
+      "bytes": 8452
     },
     {
       "path": "internal/mcp/result_summary_test.go",
-      "sha256": "82d809b58143046cdfea8ea12fe227b9c39fe5856e9d1cb99b03d19da80906f5",
-      "bytes": 4285
+      "sha256": "e6dc5164e17918073da2de95bb8060c53b6b23979f857c2cc502b3445069c8ce",
+      "bytes": 4724
     },
     {
       "path": "internal/mcp/run_digest.go",
