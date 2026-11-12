@@ -25,6 +25,9 @@
   card now shows beside the chat.
 - **Usage limits read the same everywhere**, as "% left". A provider whose
   limit Marshal cannot read shows "limit unknown".
+- **Quitting returns you to your shell.** `q` (or `Ctrl+C` twice) now ends
+  Marshal's own terminal session, chat included, instead of leaving you in the
+  chat pane; a session Marshal did not create is left alone.
 - `marshal status` and `marshal tasks` now work while Marshal is open in the
   terminal, and `marshal doctor` marks missing optional plugins as optional.
 - Errors from Marshal's own tools reach the Marshal as plain sentences, and
