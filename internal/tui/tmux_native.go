@@ -1933,7 +1933,7 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 		}
 	}
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
-	w.RecordActivity(fmt.Sprintf("A plan with %s is ready. Review it and approve it in the popup.", count(len(run.Tasks), "task", "tasks")))
+	w.RecordActivity(planReadyActivity(len(run.Tasks)))
 	w.queueMarshalPlanApproval()
 	return true
 }

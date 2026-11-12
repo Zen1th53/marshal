@@ -100,6 +100,12 @@ func (m *marshalSession) dispatchHeld() bool {
 	return m.pausedRunID != ""
 }
 
+func (m *marshalSession) pausedFor(runID string) bool {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	return runID != "" && m.pausedRunID == runID
+}
+
 // releaseDispatch ends holdDispatch's hold, waking a run that waits on it.
 func (m *marshalSession) releaseDispatch() {
 	m.holdMu.Lock()

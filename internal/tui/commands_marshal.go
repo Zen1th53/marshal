@@ -55,16 +55,16 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
 type marshalSession struct {
-	mu                      sync.Mutex
-	service                 *app.MarshalService
-	runID                   string
-	provider                string
-	conversationID          string
-	cancel                  context.CancelFunc
-	nativeCancels           []context.CancelFunc
-	draftCancel             context.CancelFunc
-	draftDone               chan struct{}
-	busy                    bool
+	mu             sync.Mutex
+	service        *app.MarshalService
+	runID          string
+	provider       string
+	conversationID string
+	cancel         context.CancelFunc
+	nativeCancels  []context.CancelFunc
+	draftCancel    context.CancelFunc
+	draftDone      chan struct{}
+	busy           bool
 	// nextProvider is a Marshal switch chosen while a step was running; it is
 	// applied when the step finishes (onIdle → applyQueuedMarshal).
 	nextProvider string
@@ -74,8 +74,8 @@ type marshalSession struct {
 	nextTaskMoves map[string]string
 	// onIdle runs after a reserved step finishes when a switch or a task move
 	// is queued.
-	onIdle              func()
-	integrityAlertRunID string
+	onIdle                  func()
+	integrityAlertRunID     string
 	approving               bool
 	amended                 bool
 	pending                 *marshalAmendment
@@ -650,7 +650,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
 	w.queueMarshalPlanApproval()
-	return result + "\n" + fmt.Sprintf("A plan with %s is ready. Review it and approve it in the popup.", count(len(run.Tasks), "task", "tasks")), nil
+	return result + "\n" + planReadyActivity(len(run.Tasks)), nil
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {

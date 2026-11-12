@@ -21,7 +21,7 @@ const (
 	extremeRedeliveryBackoff    = 15 * time.Second
 	extremeRedeliveryBackoffMax = 5 * time.Minute
 	extremeAwaitForever         = 100 * 365 * 24 * time.Hour
-	extremeUnansweredActivity   = "Marshal did not answer in time; no denial in Marshal, re-delivering with backoff: "
+	extremeUnansweredActivity   = "The Marshal was busy; sending your message again."
 	extremeUnansweredApplyNote  = "Marshal: the Marshal did not answer in time; this low-risk request applies automatically"
 )
 
@@ -80,7 +80,7 @@ func (w *Workspace) settleUnansweredDecision(ctx context.Context, req permission
 	w.permissions.queue.Add(req)
 	w.permissions.mu.Unlock()
 	if attempt == 1 {
-		w.RecordActivity(extremeUnansweredActivity + req.Kind + " " + req.Object)
+		w.RecordActivity(extremeUnansweredActivity)
 	}
 	if w.store != nil {
 		eventID, err := model.NewID("EVENT-PERMISSION-REDELIVERY-")
