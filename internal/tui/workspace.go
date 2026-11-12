@@ -284,6 +284,10 @@ type Workspace struct {
 	// it plans exists: the Board says the Marshal is planning instead of
 	// NO RUN YET (board_planning.go).
 	planning atomic.Bool
+	// closedGoal is the goal (its original request) the latest stored run
+	// delivered and closed; nil when none. A stored architecture Accept for
+	// that goal is not planning.
+	closedGoal atomic.Pointer[string]
 	// hostView is set while the Host view is painted in the Board's body.
 	hostView atomic.Bool
 	// memView is set while the Memory view is painted in the Board's body;

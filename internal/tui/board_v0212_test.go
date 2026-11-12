@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/usage"
@@ -54,7 +56,7 @@ func TestBoardPlanningAfterAccept(t *testing.T) {
 	if strings.Contains(got, firstUseCTA) {
 		t.Errorf("the planning Board still asks what to build:\n%s", got)
 	}
-	if w.planningNow(false) || w.planning.Load() {
+	if w.planningNow(false, model.GoalContract{}) || w.planning.Load() {
 		t.Fatal("the planning state outlived the run's start")
 	}
 	if got := frame(); !strings.Contains(got, "NO RUN YET") {
@@ -91,5 +93,42 @@ func TestProvidersViewListsInstalledProviders(t *testing.T) {
 		if strings.Contains(text, absent) {
 			t.Errorf("Providers view shows %q:\n%s", absent, text)
 		}
+	}
+}
+
+// TestBoardPlanningFromStoredAccept: a fresh Workspace (a restart mid
+// planning) over a stored accepted architecture, a goal on record and no run
+// shows PLANNING; a cancelled goal, or a goal a closed run already delivered,
+// shows NO RUN YET.
+func TestBoardPlanningFromStoredAccept(t *testing.T) {
+	frame := func(w *Workspace) string {
+		lines, _, _ := w.frameLines(160, 40)
+		return StripANSI(strings.Join(lines, "\n"))
+	}
+	fresh := func(t *testing.T, confirmation model.ConfirmationState) *Workspace {
+		w := emptyBoardWorkspace(t)
+		w.endOpening()
+		w.archSource = &fakeArchView{status: app.ArchitectureStatus{Exists: true, Revision: 2, Accepted: true}}
+		w.state.Goal = model.GoalContract{ID: "GOAL-1", OriginalRequest: "add square(n)", Confirmation: confirmation}
+		w.refreshArch(t.Context()) // the follower's first read at start
+		return w
+	}
+	w := fresh(t, model.ConfirmationApproved)
+	defer w.Close()
+	if w.planning.Load() {
+		t.Fatal("the test must not lean on the in-memory Accept flag")
+	}
+	if got := frame(w); !strings.Contains(got, " PLANNING ") || !strings.Contains(got, planningCard) || strings.Contains(got, "NO RUN YET") {
+		t.Fatalf("restart over a stored Accept:\n%s", got)
+	}
+	done := "add square(n)"
+	w.closedGoal.Store(&done)
+	if got := frame(w); !strings.Contains(got, "NO RUN YET") {
+		t.Fatalf("a goal a closed run delivered still plans:\n%s", got)
+	}
+	c := fresh(t, model.ConfirmationCancelled)
+	defer c.Close()
+	if got := frame(c); !strings.Contains(got, "NO RUN YET") || strings.Contains(got, " PLANNING ") {
+		t.Fatalf("a cancelled goal still plans:\n%s", got)
 	}
 }

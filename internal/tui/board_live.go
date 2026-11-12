@@ -452,7 +452,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
-	v.planning = w.planningNow(empty)
+	v.planning = w.planningNow(empty, state.Goal)
 	v.goalGiven = state.Goal.ID != "" && state.Goal.Confirmation != model.ConfirmationCancelled
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()

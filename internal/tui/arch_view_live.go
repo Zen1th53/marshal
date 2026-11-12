@@ -152,6 +152,9 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 	}
 	nowAccepted := w.arch.snap.Loaded && w.arch.snap.Status.Accepted
 	w.arch.mu.Unlock()
+	if nowAccepted {
+		w.readClosedGoal(ctx)
+	}
 	if logErr {
 		w.logTUIError("Architecture view", err)
 	}
