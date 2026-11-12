@@ -367,6 +367,7 @@ func TestBoardHelpGoldens(t *testing.T) {
 			v := boardViewVisual(memEpoch, th)
 			l := layout.Compute(tc.w, tc.h, layout.Split)
 			r := l.Overlay(0)
+			v.hints = goldenHints(v)
 			help, _ := v.helpOverlay(r.W, r.H, 0)
 			frame := overlayBoard(paintBoard(l, th, v.render), l, th, 0, help)
 			checkViewGolden(t, helpGoldenName, tc.name, frame, tc.w)

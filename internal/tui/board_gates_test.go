@@ -45,6 +45,9 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 			t.Errorf("first-use Board still shows %q:\n%s", gone, text)
 		}
 	}
+	if !strings.Contains(strings.Split(text, "\n")[39], "y reply") {
+		t.Errorf("footer does not offer y: %q", strings.Split(text, "\n")[39])
+	}
 
 	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
 	if !key(KeyEvent{Type: KeyRune, Rune: 'y'}) || w.gateArmed() != "" {

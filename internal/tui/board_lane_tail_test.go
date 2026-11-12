@@ -279,6 +279,7 @@ func tailFrame(w *Workspace, cols, rows int) []string {
 	v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, focus: layout.Tasks, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}}
 	v.tails = w.laneTailFor
 	v.tailWant = w.laneTailWant()
+	v.hints = goldenHints(v)
 	l := layout.ComputeFor(cols, rows, layout.Home, v.layoutCounts())
 	return paintBoard(l, th, v.render)
 }

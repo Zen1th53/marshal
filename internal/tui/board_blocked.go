@@ -79,7 +79,7 @@ func (v boardVisual) blockedBody(blockers []string, w, h, y int) []string {
 	// press takes.
 	retry := v.bg("rule", "[r]") + " Retry"
 	quit := v.bg("rule", "[q]") + " Quit"
-	hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen("[r]"), kind: hitKey, id: "r"})
+	hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen("[r]"), kind: hitAction, id: "launch.retry"})
 	add(pad + retry + "   " + quit)
 	return out
 }
