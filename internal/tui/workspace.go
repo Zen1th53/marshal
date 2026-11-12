@@ -1310,9 +1310,11 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 	}
 
 	// Esc on an empty composer does nothing: there is no menu to open.
-	if event.Type == KeyEsc && w.say.open.Load() {
+	if event.Type == KeyEsc && (w.say.open.Load() || w.boardVisible() && w.composer.Text() != "" && !w.completionOpen) {
 		// Esc closes the message to the Marshal; what was typed is
-		// dropped as Esc drops a command.
+		// dropped as Esc drops a command. On the Board a line that holds
+		// text is that same message line ("to the Marshal ›") even when
+		// typing, not s, opened it, so Esc closes it too.
 		w.say.open.Store(false)
 		w.composer.SetText("")
 		w.renderFullView()
