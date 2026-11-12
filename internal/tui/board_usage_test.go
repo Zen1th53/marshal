@@ -55,7 +55,7 @@ func TestUsageFromCodexFile(t *testing.T) {
 	if !ok || len(qs) == 0 || qs[0].Provider != "codex" || !qs[0].Known {
 		t.Fatalf("fresh file: %+v ok=%v", qs, ok)
 	}
-	if fig, pct, ok := limitFigure(qs[0], usageNow); !ok || pct != 51 || fig == "" {
+	if fig, pct, ok := limitFigure(qs[0], usageNow); !ok || pct != 49 || fig == "" {
 		t.Fatalf("fresh codex figure: %q pct=%d ok=%v", fig, pct, ok)
 	}
 	// A day later the same file is stale: unknown, not the old percent.

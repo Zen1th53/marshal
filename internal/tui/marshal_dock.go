@@ -400,9 +400,9 @@ func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
 	if g := providerGlyph(name, unicode); g != "" {
 		head = " MARSHAL" + sep + g + " " + name
 	}
-	// The chat provider's limit, when a reading has it: a used bar and the
-	// percent with its reset. A read entry that is not known shows
-	// "unavailable"; before the first reading, or for a provider with no
+	// The chat provider's limit, when a reading has it: a bar of what is left
+	// and the percent left with its reset. A read entry that is not known
+	// shows "limit unknown"; before the first reading, or for a provider with no
 	// entry, there is no limit part.
 	bar, fig := "", ""
 	if qs, ok := w.usageQuotas(); ok {
@@ -416,7 +416,7 @@ func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
 				}
 				bar, fig = " "+limitBar(pct, unicode), " "+figure
 			} else {
-				fig = " unavailable"
+				fig = " " + limitUnknown
 			}
 			break
 		}

@@ -6,7 +6,29 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"time"
+
+	"github.com/Zen1th53/marshal/internal/usage"
 )
+
+// TestBuilderLimitTextMatchesPicker: the design-review builder list says a
+// limit the way the launch picker and vitals row do: the percent left,
+// rounded down, and "limit unknown" when none can be read.
+func TestBuilderLimitTextMatchesPicker(t *testing.T) {
+	reset := time.Date(2026, 11, 12, 15, 4, 0, 0, time.Local)
+	qs := []usage.Quota{
+		{Provider: "codex", Known: true, Windows: []usage.Window{{Label: "wk", LeftPercent: 35.6, ResetsAt: reset}}},
+		{Provider: "claude", Reason: usage.ReasonNoFile},
+	}
+	if got := builderLimitText(qs, "codex"); got != "wk 35% left · resets 15:04" {
+		t.Fatalf("codex = %q", got)
+	}
+	for _, p := range []string{"claude", "opencode"} {
+		if got := builderLimitText(qs, p); got != "limit unknown" {
+			t.Fatalf("%s = %q, want limit unknown", p, got)
+		}
+	}
+}
 
 func TestArchitectureBuildersOrderAndPlainReasons(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())

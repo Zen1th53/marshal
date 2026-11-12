@@ -363,7 +363,7 @@ func probeUltra(env Environment) Check {
 		return Check{
 			ID: "env.ultra", Dimension: DimensionEnvironment, Status: StatusReady,
 			Required: false, Reason: ReasonOK,
-			Summary:      "ULTRA is available.",
+			Summary:      ultraReadySummary,
 			Capabilities: []Capability{CapUltra},
 		}
 	}

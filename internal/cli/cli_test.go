@@ -64,7 +64,8 @@ func TestCLIRuntimeNotRunningMessage(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	code := Execute(context.Background(), repo.Path(), []string{"status"}, strings.NewReader(""), &stdout, &stderr)
+	// status and tasks read the store without the service; agents needs it.
+	code := Execute(context.Background(), repo.Path(), []string{"agents"}, strings.NewReader(""), &stdout, &stderr)
 	want := "Marshal's background service isn't running in this project. Start it with `marshal daemon` in another terminal, then try again.\n"
 	if stderr.String() != want {
 		t.Fatalf("stderr = %q, want %q", stderr.String(), want)

@@ -195,7 +195,7 @@ func TestProjectScanBlockFormat(t *testing.T) {
 - active run: none
 - earlier runs: 2 (requirements under .marshal/marshal/runs/*/plan/)
 - earlier sessions: claude 14 loaded
-- limits: codex 42% · claude 94% · agy unavailable · opencode unavailable`
+- limits: codex 42% left · claude 94% left · agy limit unknown · opencode limit unknown`
 
 	got := scan.briefingBlock(nil)
 	if got != want {

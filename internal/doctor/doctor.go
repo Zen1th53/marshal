@@ -28,6 +28,9 @@ const (
 	Degraded Verdict = "DEGRADED"
 	Fail     Verdict = "FAIL"
 	NotRun   Verdict = "NOT_RUN"
+	// Optional is an optional add-on that is absent or unusable. It never
+	// changes the report's verdict: Marshal works without it.
+	Optional Verdict = "OPTIONAL"
 )
 
 type Result struct {
@@ -84,7 +87,7 @@ func Check(ctx context.Context, root string, options Options) Report {
 	report := Report{Verdict: Pass}
 	// Optional EGM failures select the built-in flow, leaving runtime health intact.
 	for _, status := range egm.All() {
-		report.Results = append(report.Results, Result{Name: "egm_" + status.Provider, Verdict: Pass, Method: "local plugin compatibility", Capability: "optional design review", Detail: status.String()})
+		report.Results = append(report.Results, egmResult(status))
 	}
 	add := func(result Result) {
 		report.Results = append(report.Results, result)
@@ -394,4 +397,22 @@ func formatBytes(value uint64) string {
 		return fmt.Sprintf("%.1f GiB", float64(value)/float64(gib))
 	}
 	return fmt.Sprintf("%d MiB", value>>20)
+}
+
+// egmResult is one provider's optional EGM design-review plugin as a doctor
+// line. Only a usable plugin passes; an absent one is OPTIONAL and says so in
+// plain words (the setup details stay in `marshal egm status`); one present
+// but unusable is OPTIONAL with its reason.
+func egmResult(status egm.Status) Result {
+	result := Result{Name: "egm_" + status.Provider, Verdict: Pass, Method: "local plugin compatibility", Capability: "optional design review", Detail: status.String()}
+	switch status.State {
+	case egm.Pinned, egm.Compatible:
+		return result
+	case egm.Missing:
+		result.Verdict = Optional
+		result.Detail = "EGM design-review plugin for " + status.Provider + " is not installed (optional); Marshal uses its built-in design review"
+	default:
+		result.Verdict = Optional
+	}
+	return result
 }

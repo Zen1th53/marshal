@@ -109,12 +109,12 @@ func TestPickerShownWhenSavedOutOfLimit(t *testing.T) {
 	}
 }
 
-func TestPickerUnknownLimitIsUnavailable(t *testing.T) {
+func TestPickerUnknownLimitIsLimitUnknown(t *testing.T) {
 	v := boardVisual{theme: NewTheme(ThemeNoColor, true, false), now: time.Now()}
 	v.pick = pickerView{cands: []pickerCand{{provider: "claude", known: false}}, sel: 0}
 	first := StripANSI(v.pickerBody(120, 6, 0)[0])
-	if !strings.Contains(first, "claude unavailable") {
-		t.Fatalf("first line = %q, want it to show claude unavailable", first)
+	if !strings.Contains(first, "claude limit unknown") {
+		t.Fatalf("first line = %q, want it to show claude limit unknown", first)
 	}
 	if strings.Contains(first, "%") {
 		t.Fatalf("first line shows a percent for an unknown limit: %q", first)
@@ -174,7 +174,7 @@ func TestPickerTextShape(t *testing.T) {
 		sel: 0,
 	}
 	first := strings.TrimRight(StripANSI(v.pickerBody(120, 6, 0)[0]), " ")
-	want := "Who plans?  ⬡ codex 42% · ✳ claude 94%"
+	want := "Who plans?  ⬡ codex 42% left · ✳ claude 94% left"
 	if first != want {
 		t.Fatalf("first line = %q, want %q", first, want)
 	}

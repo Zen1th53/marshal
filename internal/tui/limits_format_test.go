@@ -13,14 +13,16 @@ func TestLimitBar(t *testing.T) {
 		unicode bool
 		want    string
 	}{
-		{42, true, "▓▓░"},
+		{58, true, "▓▓░"},
+		{42, true, "▓░░"},
+		{35, true, "▓░░"},
 		{0, true, "░░░"},
 		{1, true, "▓░░"},
 		{100, false, "==="},
 		{100, true, "▓▓▓"},
-		{33, true, "▓░░"},
-		{34, true, "▓▓░"},
-		{67, true, "▓▓▓"},
+		{50, true, "▓▓░"},
+		{84, true, "▓▓▓"},
+		{83, true, "▓▓░"},
 		{-5, true, "░░░"},
 		{150, true, "▓▓▓"},
 		{50, false, "==-"},
@@ -59,12 +61,12 @@ func TestLimitFigure(t *testing.T) {
 		{Label: "5h", LeftPercent: 88, ResetsAt: now.Add(2 * time.Hour)},
 		{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(98 * time.Hour)},
 	}}
-	if s, pct, ok := limitFigure(fresh, now); !ok || s != "42% ·4d" || pct != 42 {
+	if s, pct, ok := limitFigure(fresh, now); !ok || s != "58% left ·4d" || pct != 58 {
 		t.Fatalf("fresh = %q %d %v", s, pct, ok)
 	}
 	old := fresh
 	old.Stale = true
-	if s, pct, ok := limitFigure(old, now); !ok || s != "~42% ·4d" || pct != 42 {
+	if s, pct, ok := limitFigure(old, now); !ok || s != "~58% left ·4d" || pct != 58 {
 		t.Fatalf("old = %q %d %v", s, pct, ok)
 	}
 	if _, _, ok := limitFigure(usage.Quota{Provider: "claude", Reason: usage.ReasonNoFile}, now); ok {

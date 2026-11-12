@@ -148,21 +148,16 @@ func (v boardVisual) providerLines(m providerPaint, w int) ([]string, int) {
 			q = usage.Quota{Provider: providerOf(p.Provider), Reason: usage.NotExposed}
 			hasQuota = true
 		}
-		limit, resets := v.fg("dim", "unavailable"), v.fg("dim", "—")
+		limit, resets := v.fg("dim", "unknown"), v.fg("dim", "—")
 		switch {
 		case st == "limit":
 			limit = v.fg("failed", cleanBoard(p.LastLimitReason))
 			resets = providerUntil(p.LimitUntil, v.now)
 		case q.Known:
 			if win, ok := q.Binding(); ok {
-				pct := win.UsedShown()
-				text := limitBar(pct, v.unicode()) + " " + fmt.Sprintf("%d%% used · %s", pct, win.Label)
-				colour := ""
-				if pct >= 90 {
-					colour = "failed"
-				} else if pct >= 70 {
-					colour = "waiting"
-				}
+				pct := usageLeft(win)
+				text := limitBar(pct, v.unicode()) + " " + fmt.Sprintf("%d%% left · %s", pct, win.Label)
+				colour := limitColour(pct)
 				if q.Stale {
 					text += " · " + resetIn(v.now.Sub(q.AsOf)) + " old"
 					colour = "dim"
