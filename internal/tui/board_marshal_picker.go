@@ -390,6 +390,11 @@ func (v boardVisual) marshalPickerOverlay(r layout.Rect, view marshalPickerView)
 			figure = "unavailable"
 		default:
 			figure = fmt.Sprintf("%d%%", c.left)
+			if c.age != "" {
+				// An old reading is dimmed and dated, as vitals shows it.
+				figure += " · " + c.age
+				colour = "dim"
+			}
 		}
 		row := marker + glyph + PadRight(marshalDisplayName(c.provider), 13) + " " + PadRight(mark, 4) + " " + figure
 		if c.busy {
