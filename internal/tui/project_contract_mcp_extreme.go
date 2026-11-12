@@ -99,11 +99,16 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 			return nil, err
 		}
-		if args.Limit == 0 {
+		// The page size only shapes inspection paging; completeness is still
+		// proven by the digest and the cursor. A missing, zero or negative
+		// limit reads as the default page and a larger one as the largest, so
+		// the page size a model naturally asks for is never a failed call.
+		if args.Limit < 1 {
 			args.Limit = 4
 		}
-		if args.Limit < 1 || args.Limit > 8 || len(args.After) > 256 || strings.ContainsRune(args.After, 0) {
-			return nil, fmt.Errorf("%w: limit must be from 1 to 8, and after must be empty or the next cursor from the previous page", model.ErrInvalid)
+		args.Limit = min(args.Limit, 8)
+		if len(args.After) > 256 || strings.ContainsRune(args.After, 0) {
+			return nil, fmt.Errorf("%w: after must be empty or the next_after_id from the previous page", model.ErrInvalid)
 		}
 		control := w.controlSource()
 		if control == nil {

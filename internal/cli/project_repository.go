@@ -402,6 +402,7 @@ func (c *command) prepareProjectRepository(ctx context.Context) (firstCommit, er
 // started; second lists the files of Marshal's own, second commit.
 func (c *command) reportStartedRepository(commit firstCommit, second []string) {
 	if commit.Started {
-		fmt.Fprintln(c.stderr, startedRepositoryLine(c.root, commit, second))
+		c.startedRepository = startedRepositoryLine(c.root, commit, second)
+		fmt.Fprintln(c.stderr, c.startedRepository)
 	}
 }

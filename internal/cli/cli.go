@@ -120,6 +120,10 @@ type command struct {
 	// stopTelemetry ends this process's telemetry; a session relaunch
 	// calls it before the exec that skips the deferred call.
 	stopTelemetry func()
+	// startedRepository is the "Started a new Git repository …" line this
+	// launch printed, for the control centre's first Activity line: the
+	// terminal line is covered by the TUI as soon as it opens.
+	startedRepository string
 }
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {

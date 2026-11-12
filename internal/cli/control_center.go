@@ -90,6 +90,18 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 	return werr
 }
 
+// tuiChildArgv is the in-tmux control centre's command line. A repository
+// this launch just started is carried to the child, ahead of any native
+// provider arguments, so its first Activity line repeats what the terminal
+// printed before the TUI covered it.
+func tuiChildArgv(exe, startedRepository string, args []string) []string {
+	cmd := []string{exe, "tui", telemetryChildFlag}
+	if startedRepository != "" {
+		cmd = append(cmd, startedRepositoryFlag+"="+startedRepository)
+	}
+	return append(cmd, args...)
+}
+
 func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []string) error {
 	if err := statepath.Validate(root); err != nil {
 		return err
@@ -99,8 +111,7 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 	if err != nil {
 		exe = "marshal"
 	}
-	cmd := []string{exe, "tui", telemetryChildFlag}
-	cmd = append(cmd, args...)
+	cmd := tuiChildArgv(exe, c.startedRepository, args)
 
 	if !tmux.HasSession(ctx, sessionName) {
 		cmd, err = prepareTUIChild(root, cmd)

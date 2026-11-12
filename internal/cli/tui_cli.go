@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -26,6 +27,11 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	options := parseWorkspaceArgs(args)
 	workspace := tui.NewWorkspace(runtime.Store(), runtime.ProjectID(), options.sessionID)
 	workspace.SetTheme(options.theme, options.animation)
+	// The terminal line about a repository Marshal just started is covered by
+	// the TUI at once; its first Activity line says it again.
+	if started := cmp.Or(options.startedRepository, c.startedRepository); started != "" {
+		workspace.RecordActivity(started)
+	}
 	if options.nativeCodex != nil {
 		workspace.StartWithNativeCodex(options.nativeCodex)
 	}
@@ -104,7 +110,14 @@ type workspaceOptions struct {
 	// nativeAntigravity carries agy's arguments when MARSHAL was launched as
 	// `marshal agy`.
 	nativeAntigravity []string
+	// startedRepository is the launcher's "Started a new Git repository …"
+	// line, shown again as the first Activity line.
+	startedRepository string
 }
+
+// startedRepositoryFlag carries the launcher's started-repository line to the
+// in-tmux control centre. It is internal: a relaunch drops it.
+const startedRepositoryFlag = "--marshal-internal-started-repository"
 
 func parseWorkspaceArgs(args []string) workspaceOptions {
 	options := workspaceOptions{
@@ -127,6 +140,8 @@ func parseWorkspaceArgs(args []string) workspaceOptions {
 		case arg == "--antigravity":
 			options.nativeAntigravity = append([]string{}, args[i+1:]...)
 			return options
+		case strings.HasPrefix(arg, startedRepositoryFlag+"="):
+			options.startedRepository = strings.TrimPrefix(arg, startedRepositoryFlag+"=")
 		case arg == "--no-animation":
 			options.animation = false
 		case arg == "--no-color":
