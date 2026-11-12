@@ -2,6 +2,8 @@
 
 Marshal is published as a standalone binary for Linux on x86_64 (`amd64`) and ARM64 (`arm64`).
 
+Prefer to let your coding agent do it? Paste the [setup prompt](SETUP-PROMPT.md) into Claude Code or Codex.
+
 > [!WARNING]
 > **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not process execution or network activity. Always review goals, plans, and generated code before approving work.
 
@@ -82,7 +84,7 @@ Check the installed version and verify runtime dependencies:
 # Display binary version, commit hash, and build timestamp
 marshal version
 
-# Run diagnostics on Git, tmux, and available tools
+# Inside a project: check Git, the project's state and its folders
 marshal doctor
 
 # Probe installed agent provider CLIs

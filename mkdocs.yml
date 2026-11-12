@@ -8,6 +8,7 @@ site_dir: site
 exclude_docs: |
   /**
   !/index.md
+  !/SETUP-PROMPT.md
   !/installation.md
   !/getting-started.md
   !/board-and-keys.md
@@ -16,6 +17,7 @@ exclude_docs: |
   !/memory-and-mcp.md
   !/configuration.md
   !/telemetry.md
+  !/faq.md
   !/troubleshooting.md
   !/upgrading.md
   !/CHANGELOG.md
@@ -69,6 +71,7 @@ plugins:
   - search
 nav:
   - Home: index.md
+  - Set up with your agent: SETUP-PROMPT.md
   - Installation: installation.md
   - Getting started: getting-started.md
   - The Board and keys: board-and-keys.md
@@ -77,6 +80,7 @@ nav:
   - Memory and MCP: memory-and-mcp.md
   - Configuration: configuration.md
   - Telemetry: telemetry.md
+  - FAQ: faq.md
   - Upgrading: upgrading.md
   - Troubleshooting: troubleshooting.md
   - Changelog: CHANGELOG.md

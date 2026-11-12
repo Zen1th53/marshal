@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "ac504fd9afc0c19f9f57f6ac730fff461607dbc3da33b25dbe88c491d1a9f981",
-      "bytes": 13067
+      "sha256": "cc13a1bbe8ec647709ee4a0d1d0e51eae187004b52cf97d761d18e8292aeaa44",
+      "bytes": 14104
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -525,6 +525,11 @@
       "bytes": 3651
     },
     {
+      "path": "docs/faq.md",
+      "sha256": "f10fbaba914124635593a6fd6510296999fd716cfd6bfe20aa35ee1644de9507",
+      "bytes": 1487
+    },
+    {
       "path": "docs/getting-started.md",
       "sha256": "c57821d650be6bab5a7f2fd494b1fc26f653c5eb1472ea2981932b03a20d0b20",
       "bytes": 4996
@@ -541,8 +546,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "2426f46b5e47f09108d890dea860db471cb3cac4fec4086d63506f754908aa3b",
-      "bytes": 3158
+      "sha256": "0cc903fac838e575aef1f16a5a7fd147a83436f9f6441be615c4df434c8a5410",
+      "bytes": 3282
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -15726,8 +15731,8 @@
     },
     {
       "path": "mkdocs.yml",
-      "sha256": "7cb2d36cde660c0da781b2373c63a45a6e8650a6a52bcb5b2937ce2aea668be8",
-      "bytes": 1957
+      "sha256": "ef5d0663e05694c95253205b370fe001dbee5ca4376bf3be94032c034a5d77e6",
+      "bytes": 2048
     },
     {
       "path": "release/INSTALL.md",
@@ -16333,6 +16338,11 @@
       "path": "tools/tests/test_pack_manifest_regen.py",
       "sha256": "3cf0f343725b95bd7ec2ff41c6df8c7d8f53e1e5b7cba2a1044828fc5a03fab2",
       "bytes": 4040
+    },
+    {
+      "path": "tools/tests/test_readme.py",
+      "sha256": "1e4c3815951ee078dd944e7d48c6d3191989155caf2d3095cda72af797d0c281",
+      "bytes": 2023
     },
     {
       "path": "tools/tests/test_release_trust.py",
