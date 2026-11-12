@@ -80,3 +80,33 @@ func runControllable(operation string, state execution.RunState) bool {
 		return !state.IsTerminal()
 	}
 }
+
+// noteRunControl counts this session's runs that pause and resume can take
+// now, for the palette's "pause the run" and "resume the run" rows. It reads
+// the runs, so it runs where the store is read already (RefreshState, the
+// Board's follow), never on the paint path.
+func (w *Workspace) noteRunControl(ctx context.Context) {
+	if w.cmd == nil {
+		return
+	}
+	_, runs, err := w.cmd.sessionRuns(ctx)
+	if err != nil {
+		return
+	}
+	pause, resume := runControlCounts(runs)
+	w.runPausable.Store(pause)
+	w.runResumable.Store(resume)
+}
+
+// runControlCounts is how many of runs /pause and /resume can each take.
+func runControlCounts(runs []execution.ExecutionRun) (pause, resume int32) {
+	for _, run := range runs {
+		if runControllable("pause", run.State) {
+			pause++
+		}
+		if runControllable("resume", run.State) {
+			resume++
+		}
+	}
+	return pause, resume
+}

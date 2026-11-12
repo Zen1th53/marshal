@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/execution"
 )
 
 // keyScope is where a boardKeymap entry's keys act: one view's or the
@@ -75,5 +77,16 @@ func TestPaletteRowsUnique(t *testing.T) {
 			t.Errorf("palette lists %s twice", a.ID)
 		}
 		ids = append(ids, a.ID)
+	}
+}
+
+// The palette's run-control rows count the runs /pause and /resume take.
+func TestRunControlCounts(t *testing.T) {
+	runs := []execution.ExecutionRun{{State: execution.RunRunning}, {State: execution.RunNeedsApproval}, {State: execution.RunPaused}, {State: execution.RunCancelled}, {State: execution.RunReady}}
+	if pause, resume := runControlCounts(runs); pause != 2 || resume != 1 {
+		t.Fatalf("pause %d resume %d, want 2 and 1", pause, resume)
+	}
+	if pause, resume := runControlCounts(nil); pause != 0 || resume != 0 {
+		t.Fatalf("no runs: pause %d resume %d", pause, resume)
 	}
 }

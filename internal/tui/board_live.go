@@ -228,6 +228,7 @@ func (w *Workspace) followBoard(ctx context.Context) {
 		case <-t.C:
 		}
 		w.refreshBoard(ctx)
+		w.noteRunControl(ctx)
 	}
 }
 

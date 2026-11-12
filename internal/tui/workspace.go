@@ -337,6 +337,10 @@ type Workspace struct {
 	archSource archViewSource
 	// boardHelp is set while the help overlay (?) is open over the Board.
 	boardHelp atomic.Bool
+	// runPausable and runResumable count this session's runs that /pause
+	// and /resume can take now (runControllable), noted by noteRunControl
+	// where the runs are read already, so the palette's rows read memory.
+	runPausable, runResumable atomic.Int32
 	// outputSeq counts command answers and status outputs, so the Board
 	// can tell an answer that arrived with a run note from an older one.
 	outputSeq atomic.Uint64
@@ -660,10 +664,10 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	return ws
 }
 
-// registryPaletteActions is paletteRegistryActions for a live workspace's
-// refresh closure.
+// registryPaletteActions is paletteRegistryRows for a live workspace's
+// refresh closure: each row's availability is the workspace's now.
 func (w *Workspace) registryPaletteActions() []PaletteAction {
-	return paletteRegistryActions()
+	return paletteRegistryRows(w)
 }
 
 // SetTheme configures the active theme mode and animation setting. NO_COLOR
@@ -719,6 +723,7 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 
 	// 1. Live Git status
 	state.GitStatus = ProbeGitStatus(workDir)
+	w.noteRunControl(ctx)
 
 	// 2. Reconcile participants with real live probes (honest state)
 	state.Participants = DiscoverTeamParticipants(state.Participants)

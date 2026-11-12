@@ -252,25 +252,65 @@ func boardPaletteActions(w *Workspace) []PaletteAction {
 	return append(views, keys...)
 }
 
+// paletteCommand is a palette row that runs a command no Board key runs.
+// When and Why work as a boardKey's do: When reads only in-memory state,
+// and Why says in one sentence why the row is off.
+type paletteCommand struct {
+	PaletteAction
+	When func(*Workspace) bool
+	Why  func(*Workspace) string
+}
+
 // shippedPaletteCommands is what the shipped palette lists after the
 // Board's keys: the user's commands no Board key runs. The capability
 // registry's menus (claims, evidence, budget, goal, team, policy…) are
 // machinery the Marshal runs, so the shipped palette does not list them;
-// their commands still type and complete.
-var shippedPaletteCommands = []PaletteAction{
-	{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"},
-	{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"},
+// their commands still type and complete. Stopping every worker is the
+// Board's Ctrl+X row (workers.stop).
+var shippedPaletteCommands = []paletteCommand{
+	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Dispatch no new task; a task in a provider turn finishes it", Command: "/pause"}, When: func(w *Workspace) bool { return w.runPausable.Load() == 1 }, Why: func(w *Workspace) string {
+		if w.runPausable.Load() > 1 {
+			return "More than one run is running; type /pause run:<id>."
+		}
+		return "No run is running to pause."
+	}},
+	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Start the paused run again", Command: "/resume"}, When: func(w *Workspace) bool { return w.runResumable.Load() == 1 }, Why: func(w *Workspace) string {
+		if w.runResumable.Load() > 1 {
+			return "More than one run is paused; type /resume run:<id>."
+		}
+		return "No run is paused."
+	}},
+	{PaletteAction: PaletteAction{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"}},
+	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"}},
 }
 
-// paletteRegistryActions is what the palette lists after the Board's keys.
+// row is the command as a palette row; with a workspace it is marked off,
+// with why, when it cannot run now. A nil workspace (the static
+// constructor) leaves it available, as boardPaletteActions does.
+func (c paletteCommand) row(w *Workspace) PaletteAction {
+	a := c.PaletteAction
+	if w != nil && c.When != nil && !c.When(w) {
+		a.Disabled, a.Reason = true, c.Why(w)
+	}
+	return a
+}
+
+// paletteRegistryActions is paletteRegistryRows for the static palette.
+func paletteRegistryActions() []PaletteAction { return paletteRegistryRows(nil) }
+
+// paletteRegistryRows is what the palette lists after the Board's keys.
 // The shipped edition lists shippedPaletteCommands only. The governed
 // edition lists the registry, without the per-provider Marshal-model rows
 // (the Marshal picker, m, owns choosing the model) and without a row whose
 // key or ID a Board row has (that Board row is the action, listed once), then
 // quit, which the registry has no row for.
-func paletteRegistryActions() []PaletteAction {
+func paletteRegistryRows(w *Workspace) []PaletteAction {
 	if editionExtreme {
-		return slices.Clone(shippedPaletteCommands)
+		out := make([]PaletteAction, 0, len(shippedPaletteCommands))
+		for _, c := range shippedPaletteCommands {
+			out = append(out, c.row(w))
+		}
+		return out
 	}
 	all := GlobalRegistry.ToPaletteActions()
 	out := make([]PaletteAction, 0, len(all)+1)
@@ -280,9 +320,9 @@ func paletteRegistryActions() []PaletteAction {
 		}
 		out = append(out, a)
 	}
-	for _, a := range shippedPaletteCommands {
-		if a.ID == "app.quit" {
-			out = append(out, a)
+	for _, c := range shippedPaletteCommands {
+		if c.ID == "app.quit" {
+			out = append(out, c.row(w))
 		}
 	}
 	return out
