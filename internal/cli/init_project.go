@@ -12,15 +12,25 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 )
 
+// initCommitSubject names the one commit init makes in the user's repository.
+const initCommitSubject = "Initialize MARSHAL project"
+
 // initializeProject is used only by explicit init and accepted setup offers.
-// Automatic runtime bootstrap must not commit project files.
-func initializeProject(ctx context.Context, root string) (project.Layout, error) {
+// Automatic runtime bootstrap must not commit project files. It returns the
+// files it committed, so the caller can say so; none on a repeated init.
+//
+// The files stay at the repository root and are committed: CAPABILITIES.yaml
+// is the project's capability policy, shared and reviewed with the code, and
+// the version files are read from the committed tree as source evidence.
+// Keeping them under the excluded .marshal/ directory would make the policy
+// per clone and unreviewed.
+func initializeProject(ctx context.Context, root string) (project.Layout, []string, error) {
 	layout, err := app.Bootstrap(ctx, root)
 	if err != nil {
-		return project.Layout{}, err
+		return project.Layout{}, nil, err
 	}
 	if err := excludeRuntimeState(ctx, layout.Root); err != nil {
-		return layout, err
+		return layout, nil, err
 	}
 
 	// Share policy/version defaults, but leave already tracked files and unrelated
@@ -29,11 +39,11 @@ func initializeProject(ctx context.Context, root string) (project.Layout, error)
 	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
 		command, err := hostgit.Command(ctx, layout.Root, "ls-tree", "--name-only", "HEAD", "--", name)
 		if err != nil {
-			return layout, err
+			return layout, nil, err
 		}
 		output, err := command.Output()
 		if err != nil {
-			return layout, fmt.Errorf("inspect init file %s: %w", name, err)
+			return layout, nil, fmt.Errorf("inspect init file %s: %w", name, err)
 		}
 		if len(output) == 0 {
 			files = append(files, name)
@@ -41,13 +51,26 @@ func initializeProject(ctx context.Context, root string) (project.Layout, error)
 	}
 	if len(files) > 0 {
 		if err := runGit(ctx, layout.Root, append([]string{"add", "--"}, files...)...); err != nil {
-			return layout, err
+			return layout, nil, err
 		}
-		if err := runGitCommit(ctx, layout.Root, append([]string{"--only", "-m", "Initialize MARSHAL project", "--"}, files...)...); err != nil {
-			return layout, fmt.Errorf("record MARSHAL project defaults: %w", err)
+		if err := runGitCommit(ctx, layout.Root, append([]string{"--only", "-m", initCommitSubject, "--"}, files...)...); err != nil {
+			return layout, nil, fmt.Errorf("record MARSHAL project defaults: %w", err)
 		}
 	}
-	return layout, nil
+	return layout, files, nil
+}
+
+// initCommitNotice is the one line telling the user what init committed to
+// their repository, or "" when it committed nothing.
+func initCommitNotice(files []string) string {
+	switch len(files) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf("Committed %s to your repository (commit %q).", files[0], initCommitSubject)
+	}
+	list := strings.Join(files[:len(files)-1], ", ") + " and " + files[len(files)-1]
+	return fmt.Sprintf("Committed %s to your repository (commit %q).", list, initCommitSubject)
 }
 
 // Use Git's resolved path so this also works when .git is a worktree pointer.

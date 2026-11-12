@@ -330,11 +330,18 @@ func (c command) init(ctx context.Context) error {
 	if err := c.ensureGitBaseline(ctx); err != nil {
 		return err
 	}
-	layout, err := initializeProject(ctx, c.root)
+	layout, committed, err := initializeProject(ctx, c.root)
 	if err != nil {
 		return err
 	}
-	return c.print(map[string]any{"status": "initialized", "runtime_dir": layout.RuntimeDir}, "initialized "+layout.RuntimeDir)
+	human := "initialized " + layout.RuntimeDir
+	if notice := initCommitNotice(committed); notice != "" {
+		human += "\n" + notice
+	}
+	if committed == nil {
+		committed = []string{}
+	}
+	return c.print(map[string]any{"status": "initialized", "runtime_dir": layout.RuntimeDir, "committed_files": committed}, human)
 }
 
 func (c command) doctor(ctx context.Context, args []string) int {

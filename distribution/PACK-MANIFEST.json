@@ -2491,8 +2491,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "8a7768327f7586c0c6e19ca546088e582e6538eb660a8ca509dfef2558e16974",
-      "bytes": 74362
+      "sha256": "5a86c62bf23754d56ea960e1406bed30a87d098ca2180d049cf8b65568cbf6d7",
+      "bytes": 74330
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -2576,8 +2576,8 @@
     },
     {
       "path": "internal/app/marshal_operations.go",
-      "sha256": "e1fa6efd5769041d9b9588c5d62032bca26c1106f270fdb5bc54f8e485ee03ab",
-      "bytes": 11707
+      "sha256": "44410c1fd1a5371c0fb18599992c2a479e6f92c5b1f179190595501c52955296",
+      "bytes": 11965
     },
     {
       "path": "internal/app/marshal_operator_test.go",
@@ -2701,8 +2701,8 @@
     },
     {
       "path": "internal/app/marshal_recovery_test.go",
-      "sha256": "a9bc44102b9bf577a8faee34b9a6b0706e9fe47ddbdc4c52605121e2aa1b291c",
-      "bytes": 33757
+      "sha256": "eeb7678eb05a3e41b950880dc53f8b39a8a00b4cb2980aec424bc96ba8421c7f",
+      "bytes": 34376
     },
     {
       "path": "internal/app/marshal_report.go",
@@ -4681,8 +4681,13 @@
     },
     {
       "path": "internal/cli/cli.go",
+<<<<<<< HEAD
       "sha256": "cac2f53d0f30bac88486e0c669569ae7ef0b0c6b4a59a47a48ec631e3734609f",
       "bytes": 43954
+=======
+      "sha256": "5c39ecdc256ea808d6b350363ee9f6b2ca12746eaaa255091fc67e0f340e67d2",
+      "bytes": 44074
+>>>>>>> 6a8b862 (git: keep internal IDs out of user commits and say what init commits)
     },
     {
       "path": "internal/cli/cli_mcp_default.go",
@@ -4826,8 +4831,8 @@
     },
     {
       "path": "internal/cli/init_identity_test.go",
-      "sha256": "5037f297143f02faa29d90eb5a7fff1859779d08911c91eeaf2ff6df08cf76e0",
-      "bytes": 2245
+      "sha256": "517cb065c10ea6eb37f2b6964889103399bdbf743e4cff527639675a22b203b5",
+      "bytes": 4330
     },
     {
       "path": "internal/cli/init_interactive_test.go",
@@ -4836,8 +4841,8 @@
     },
     {
       "path": "internal/cli/init_project.go",
-      "sha256": "723ef3fa36235b0dc83b26f0934512a2943320eee37d59650d02f98c00406b05",
-      "bytes": 2972
+      "sha256": "413b2051a30b6a0b3f69289d5047f7d24e2cb097e6c67d103060d46e9496d340",
+      "bytes": 4078
     },
     {
       "path": "internal/cli/init_test.go",
@@ -5006,8 +5011,13 @@
     },
     {
       "path": "internal/cli/setup_fix.go",
+<<<<<<< HEAD
       "sha256": "ac99464fda3540c57d0f114259728b801eb78f35e6f978619bb109b2b198b223",
       "bytes": 9986
+=======
+      "sha256": "d8aeb3b952ece6ad131c72bb7fb1ac4756ee79b21af65900fb02b9d73cf75692",
+      "bytes": 9933
+>>>>>>> 6a8b862 (git: keep internal IDs out of user commits and say what init commits)
     },
     {
       "path": "internal/cli/setup_fix_test.go",
@@ -5981,8 +5991,8 @@
     },
     {
       "path": "internal/execution/engine.go",
-      "sha256": "e9c0eb15dc6b732fbbe1b0cf903f58594823fbd2cf975e08a93b7bcd5d5593a0",
-      "bytes": 58697
+      "sha256": "228e768a2d33d968d5b7b01b79ec0414ecad8f7bed067ff0e44a8315176c70a8",
+      "bytes": 58686
     },
     {
       "path": "internal/execution/engine_test.go",
@@ -6061,13 +6071,13 @@
     },
     {
       "path": "internal/execution/m04_preserve_test.go",
-      "sha256": "46a57bc221d3ce3bfba7400113101a0167469eef283754fa5991e1f6365d4aa3",
-      "bytes": 8432
+      "sha256": "c429f0ad5fd47d6c03fb25a39e9741d34a2e43c7df0db535ee9a3445a17cb879",
+      "bytes": 8359
     },
     {
       "path": "internal/execution/metadata_identity_test.go",
-      "sha256": "3a106992979e29ef80ca477ce531b06118f7a833c1bec6a32dcb15e3a69f8b31",
-      "bytes": 2609
+      "sha256": "20f7c9a727a8770f5f9c6efeea9bc3bb545b6f823061a12e4403bb7f77db7ee4",
+      "bytes": 2602
     },
     {
       "path": "internal/execution/native_placeholder_default.go",
@@ -6266,8 +6276,8 @@
     },
     {
       "path": "internal/execution/signing_boundary_test.go",
-      "sha256": "f4a91906d1f8789bb8a091024f42299f8ec64b9010c2904126c5a8ffacacbb2f",
-      "bytes": 634
+      "sha256": "05ea7832950b93a48c2792d7c051a26490a4a81568d22eb19996ec5028590f67",
+      "bytes": 622
     },
     {
       "path": "internal/execution/snapshot_default.go",
@@ -6391,8 +6401,8 @@
     },
     {
       "path": "internal/execution/worktree.go",
-      "sha256": "ee5f8a4ccb5cda0bfb68320e5fcda599bd85778a18776c8e6293b9726c8dee63",
-      "bytes": 13748
+      "sha256": "37fdeb6b954c3463fe37d4ad53a4230eb07307205c73f5aad61df3a288c282a4",
+      "bytes": 13713
     },
     {
       "path": "internal/execution/worktree_test.go",
@@ -16241,8 +16251,13 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
+<<<<<<< HEAD
       "sha256": "5c643df521e45824fcbe5db01ee02d1919ec1f977e182808d3f5feb8b31d6f14",
       "bytes": 420585
+=======
+      "sha256": "1e71195d3e7ed56411c80688140fd9c32c9bcc4758c2f06c1da0c88e78788acf",
+      "bytes": 418041
+>>>>>>> 6a8b862 (git: keep internal IDs out of user commits and say what init commits)
     },
     {
       "path": "tools/extreme/prq/main_default.go",

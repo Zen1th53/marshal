@@ -1268,7 +1268,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	} else if sets {
 		err = errors.New("the hand-in declares a merge driver in .gitattributes")
 	} else {
-		_, err = gitMarshal(ctx, dir, "merge", "--no-ff", "-m", "marshal: merge "+taskID+"\n\nMarshal-Operation: "+op.ID, accepted)
+		_, err = gitMarshal(ctx, dir, "merge", "--no-ff", "-m", "marshal: merge "+taskID, accepted)
 	}
 	if err != nil {
 		_, _ = gitMarshal(ctx, dir, "merge", "--abort")

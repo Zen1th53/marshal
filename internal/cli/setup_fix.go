@@ -33,8 +33,9 @@ type setupFix struct {
 	reason startup.ReasonCode
 	// question is what the user is asked, without the prompt suffix.
 	question string
-	// apply performs the step.
-	apply func(ctx context.Context, root string) error
+	// apply performs the step, telling out about any change it made to the
+	// user's repository beyond what the question asked.
+	apply func(ctx context.Context, root string, out io.Writer) error
 }
 
 // setupFixes lists the steps on offer for an assessment, in the order they
@@ -79,7 +80,7 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 			fixes = append(fixes, setupFix{
 				checkID: check.ID, reason: check.Reason,
 				question: "Initialize a Git repository here",
-				apply: func(ctx context.Context, root string) error {
+				apply: func(ctx context.Context, root string, out io.Writer) error {
 					return runGit(ctx, root, "init")
 				},
 			})
@@ -90,7 +91,7 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 			fixes = append(fixes, setupFix{
 				checkID: check.ID, reason: check.Reason,
 				question: "Make an empty first commit as a baseline",
-				apply: func(ctx context.Context, root string) error {
+				apply: func(ctx context.Context, root string, out io.Writer) error {
 					err := runGit(ctx, root, "commit", "--allow-empty", "--only", "-m", "Initial commit")
 					if err != nil && strings.Contains(err.Error(), "Author identity unknown") {
 						// Git's own answer to this runs to a dozen lines. Who
@@ -107,8 +108,11 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 			fixes = append(fixes, setupFix{
 				checkID: check.ID, reason: check.Reason,
 				question: "Set up MARSHAL for this project",
-				apply: func(ctx context.Context, root string) error {
-					_, err := initializeProject(ctx, root)
+				apply: func(ctx context.Context, root string, out io.Writer) error {
+					_, committed, err := initializeProject(ctx, root)
+					if notice := initCommitNotice(committed); err == nil && notice != "" {
+						fmt.Fprintf(out, "  %s\n", notice)
+					}
 					if err != nil && strings.Contains(err.Error(), "ambiguous argument 'HEAD'") {
 						// The repository has no commit to anchor the project to.
 						// Git's wording is about revision parsing and says
@@ -188,7 +192,7 @@ func (c command) offerSetupFixes(ctx context.Context, assessment startup.Assessm
 			fmt.Fprintf(c.stdout, "  Skipped. %s is still yours to do.\n", fix.question)
 			continue
 		}
-		if err := fix.apply(ctx, c.root); err != nil {
+		if err := fix.apply(ctx, c.root, c.stdout); err != nil {
 			fmt.Fprintf(c.stdout, "  That step could not be completed: %v\n", err)
 			continue
 		}
@@ -269,7 +273,7 @@ func (c command) ensureGitBaseline(ctx context.Context) error {
 		if err != nil || !yes {
 			return fmt.Errorf("%s", instructions)
 		}
-		if err := next.apply(ctx, c.root); err != nil {
+		if err := next.apply(ctx, c.root, c.stdout); err != nil {
 			return err
 		}
 		assessment = startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
