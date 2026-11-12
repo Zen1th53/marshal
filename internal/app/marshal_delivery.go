@@ -115,16 +115,28 @@ func gitMarshalStdout(ctx context.Context, dir string, args ...string) (string, 
 	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
-// laneBranch is a Process05 lane's branch: marshal/lane-<id>/<task>.
-var laneBranch = regexp.MustCompile(`^refs/heads/` + regexp.QuoteMeta(statepath.RefName) + `/lane-[0-9a-f]+/(.+)$`)
+// laneBranch is a Process05 lane's branch: marshal/lane-<id>/<task>. A
+// serial Process05 run's own branch (marshal/run-<plan>-<n>/<task>) is not
+// one: its worktree stays, because the required-context attestation of the
+// close is checked against it afterwards.
+var laneBranch = regexp.MustCompile(`^refs/heads/` + regexp.QuoteMeta(statepath.RefName) + `/(lane-[0-9a-f]+)/(.+)$`)
 
-// cleanupDeliveredRun removes what a closed run leaves behind once its work is
-// in the target: the run's own worktrees in MARSHAL's state folder and their
-// marshal/* branches, but only those that are clean and whose commit the
-// target branch already contains. Anything unmerged, dirty, outside the state
-// folder or not on a MARSHAL branch is kept; the person's own branches and
-// worktrees are never candidates. It is best effort: a failure keeps the
-// item and is reported, never undoing the close.
+// preservedAttempt is a run's own record of a returned or provider-limited
+// attempt: refs/marshal/<run>/[r<n>/](returned|limited)/<task>/attempt-<n>.
+var preservedAttempt = regexp.MustCompile(`^(?:r[0-9]+/)?(?:returned|limited)/(.+)/attempt-[0-9]+$`)
+
+// cleanupDeliveredRun removes what a closed run leaves behind: the run's own
+// worktrees in MARSHAL's state folder and their marshal/* branches, but only
+// those that are clean and whose commit is kept elsewhere, either in the
+// target branch or in the run's own record of a returned attempt. A branch is
+// the run's when it is named for the run, or when it is a lane branch of one
+// of the run's tasks whose tip is one of the run's result or returned
+// commits. Anything unmerged and unrecorded, dirty, checked out elsewhere,
+// outside the state folder or not on a MARSHAL branch is kept; the person's
+// own branches and worktrees are never candidates. The close checkpoint ref
+// (refs/marshal/<run>/pre-close) is kept: it is the restore point that makes
+// the close reversible. It is best effort: a failure keeps the item, is
+// reported to Activity, and never undoes the close.
 func (s *MarshalService) cleanupDeliveredRun(ctx context.Context, runID string, run marshal.Run, target string) error {
 	if run.State != marshal.Closed || target == "" || s.Repository == "" {
 		return nil
@@ -139,25 +151,52 @@ func (s *MarshalService) cleanupDeliveredRun(ctx context.Context, runID string, 
 			results[t.ResultCommit] = true
 		}
 	}
-	// A lane branch is this run's when it holds one of the run's results for
-	// one of its tasks; a branch named for the run is this run's by its name.
+	// Commits the run keeps for its returned attempts, by task. A branch
+	// holding one loses nothing when it goes.
+	runRefs := "refs/" + statepath.RefName + "/" + runID + "/"
+	preserved := map[string]map[string]bool{}
+	recorded := map[string]bool{}
+	if refs, err := gitMarshal(ctx, s.Repository, "for-each-ref", "--format=%(refname) %(objectname)", runRefs); err == nil {
+		for _, line := range strings.Split(refs, "\n") {
+			name, tip, ok := strings.Cut(strings.TrimSpace(line), " ")
+			if !ok {
+				continue
+			}
+			if m := preservedAttempt.FindStringSubmatch(strings.TrimPrefix(name, runRefs)); m != nil && tasks[m[1]] {
+				if preserved[m[1]] == nil {
+					preserved[m[1]] = map[string]bool{}
+				}
+				preserved[m[1]][tip] = true
+				recorded[tip] = true
+			}
+		}
+	}
 	owned := func(branch, tip string) bool {
 		if strings.HasPrefix(branch, runBranches) {
 			return true
 		}
 		m := laneBranch.FindStringSubmatch(branch)
-		return m != nil && tasks[m[1]] && results[tip]
+		return m != nil && tasks[m[2]] && (results[tip] || preserved[m[2]][tip])
 	}
-	merged := func(tip string) bool {
+	kept := func(tip string) bool {
+		if recorded[tip] {
+			return true
+		}
 		_, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", tip, target)
 		return err == nil
+	}
+	var failures []error
+	failed := func(branch, reason string, err error) {
+		failures = append(failures, err)
+		if s.RecordActivity != nil {
+			s.RecordActivity("Marshal could not remove a finished task's branch " + strings.TrimPrefix(branch, "refs/heads/") + ": " + reason + ".")
+		}
 	}
 	roots := []string{realDir(s.Worktrees), realDir(filepath.Join(s.Repository, statepath.DirName, "branches"))}
 	list, err := gitMarshal(ctx, s.Repository, "worktree", "list", "--porcelain")
 	if err != nil {
 		return err
 	}
-	var failures []error
 	checkedOut := map[string]bool{}
 	for _, entry := range strings.Split(list, "\n\n") {
 		var path, head, branch string
@@ -181,7 +220,7 @@ func (s *MarshalService) cleanupDeliveredRun(ctx context.Context, runID string, 
 				inState = true
 			}
 		}
-		if !inState || !owned(branch, head) || !merged(head) {
+		if !inState || !owned(branch, head) || !kept(head) {
 			continue
 		}
 		if strings.HasPrefix(branch, runBranches) && !strings.HasPrefix(filepath.Base(path), "TASK-"+runID+"-") {
@@ -192,7 +231,7 @@ func (s *MarshalService) cleanupDeliveredRun(ctx context.Context, runID string, 
 			continue
 		}
 		if _, err := gitMarshal(ctx, s.Repository, "worktree", "remove", "--force", path); err != nil {
-			failures = append(failures, err)
+			failed(branch, "its working folder could not be removed", err)
 			continue
 		}
 		checkedOut[branch] = false
@@ -203,12 +242,12 @@ func (s *MarshalService) cleanupDeliveredRun(ctx context.Context, runID string, 
 	}
 	for _, line := range strings.Split(refs, "\n") {
 		branch, tip, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok || checkedOut[branch] || !owned(branch, tip) || !merged(tip) {
+		if !ok || checkedOut[branch] || !owned(branch, tip) || !kept(tip) {
 			continue
 		}
 		// Compare-and-delete: a branch that moved since it was read is kept.
 		if _, err := gitMarshal(ctx, s.Repository, "update-ref", "-d", branch, tip); err != nil {
-			failures = append(failures, err)
+			failed(branch, "it changed while Marshal was removing it", err)
 		}
 	}
 	return errors.Join(failures...)

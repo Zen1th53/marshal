@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "84a5ffa54a51d39b0fd20f0746418bfb8da0658db73e29ad7a8c556c6af98b2d",
-      "bytes": 9615
+      "sha256": "5562e8053049d840a2c11978ebf7255acb0b6ed62435e0da389d3fb86b2910f8",
+      "bytes": 8586
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -531,8 +531,8 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "3a8e5b3c7631cf4c46bac48c17fb0877a634f12be3532a407ca99f125336b2fc",
-      "bytes": 5532
+      "sha256": "c57821d650be6bab5a7f2fd494b1fc26f653c5eb1472ea2981932b03a20d0b20",
+      "bytes": 4996
     },
     {
       "path": "docs/how-it-works.md",
@@ -2296,13 +2296,13 @@
     },
     {
       "path": "internal/app/marshal_delivery.go",
-      "sha256": "eb1429ed485273d990825dcef8bbe2567e2232e49889b43105570f9a3dd7eaf5",
-      "bytes": 9051
+      "sha256": "7f5199bd0fe52a98fdd1ae4d3c5c27013e8423328eeabff65b5608a80696c9c5",
+      "bytes": 10893
     },
     {
       "path": "internal/app/marshal_delivery_test.go",
-      "sha256": "6ba3b68dae012cc9a48dd0e89736242f0dec77f16b29a16ad36128ae02802b27",
-      "bytes": 13126
+      "sha256": "ec7ca0aa5a5417b61571f38d3b43c9882212c16ab9c3c26d676f7cbd3e66ff7b",
+      "bytes": 18798
     },
     {
       "path": "internal/app/marshal_dispatch_default.go",
@@ -3556,8 +3556,8 @@
     },
     {
       "path": "internal/app/project_validation.go",
-      "sha256": "fdc3d6fa54b771ace3000dd05e45aa7b9be81524638e768b319ba41462220a48",
-      "bytes": 3766
+      "sha256": "f0b5d2606829f4123b154022db5904e0dc6e7b2e004011a1f0ee250a58762837",
+      "bytes": 3359
     },
     {
       "path": "internal/app/project_validation_test.go",
@@ -4681,13 +4681,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-<<<<<<< HEAD
-      "sha256": "cac2f53d0f30bac88486e0c669569ae7ef0b0c6b4a59a47a48ec631e3734609f",
-      "bytes": 43954
-=======
       "sha256": "5c39ecdc256ea808d6b350363ee9f6b2ca12746eaaa255091fc67e0f340e67d2",
       "bytes": 44074
->>>>>>> 6a8b862 (git: keep internal IDs out of user commits and say what init commits)
     },
     {
       "path": "internal/cli/cli_mcp_default.go",
@@ -4756,13 +4751,13 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "f57edd7aa7bc9e8381c63ef28c13bcc757f372789e08acd82b38b59c6076681a",
-      "bytes": 7249
+      "sha256": "f9e5289d69067f0572e894dd4f8d0b00dfc8c6a761233f685e6d0b4b76a42dcd",
+      "bytes": 6831
     },
     {
       "path": "internal/cli/control_center_test.go",
-      "sha256": "f77d5f31b30c914d2b77739e621ba5391b105495c1e4ac308bb92a6422a2eff5",
-      "bytes": 7347
+      "sha256": "a413e0efebee0b2ebe6f1823b6b57c1d569bf3da2fa464f2ddec9136c3920fc2",
+      "bytes": 6981
     },
     {
       "path": "internal/cli/design_memory_parity_test.go",
@@ -4771,8 +4766,8 @@
     },
     {
       "path": "internal/cli/dispatcher_test.go",
-      "sha256": "c26405e6732a019344c46a509c94df1920861847efe2a009058494e8a89a22c0",
-      "bytes": 11973
+      "sha256": "fdb21b369d0efe4cb707e1dc92bcfeb9d5e1827c149c73c4aad093b32fd59cdd",
+      "bytes": 11939
     },
     {
       "path": "internal/cli/egm.go",
@@ -4826,8 +4821,8 @@
     },
     {
       "path": "internal/cli/host_notice_test.go",
-      "sha256": "41ad15198fdf5e7bb032b712f03927ea0ec2e91acc706a6370fca3a0246b7b7d",
-      "bytes": 1505
+      "sha256": "ff797dc9f99d54bf1e37d27e988b4ec67d5b4274a6e6e0626322d23f815d6158",
+      "bytes": 1433
     },
     {
       "path": "internal/cli/init_identity_test.go",
@@ -4836,8 +4831,8 @@
     },
     {
       "path": "internal/cli/init_interactive_test.go",
-      "sha256": "53f38a4b7f26e0f1ebd5c8a7ccb261db709ac39994e489d2da3690388885652d",
-      "bytes": 3344
+      "sha256": "650665f82b8ac77c660374eddbdfef47e00690222f196c4b50b348c43299e9f9",
+      "bytes": 3168
     },
     {
       "path": "internal/cli/init_project.go",
@@ -4846,8 +4841,8 @@
     },
     {
       "path": "internal/cli/init_test.go",
-      "sha256": "51ba3ffa715b7eef118f547a8059bf3487addccb038e81c4ede1467d1cc295d7",
-      "bytes": 4572
+      "sha256": "9c9997d158346917f9eda1c18ac9a0ac8dbffdf6224a1c5a1165e2ec4e1977ef",
+      "bytes": 4512
     },
     {
       "path": "internal/cli/learning.go",
@@ -4970,16 +4965,6 @@
       "bytes": 1243
     },
     {
-      "path": "internal/cli/project_repository.go",
-      "sha256": "ba0caa04fb16e32ba7a8ba04c951d9a40704dae19254214c92ac96272981184b",
-      "bytes": 9599
-    },
-    {
-      "path": "internal/cli/project_repository_test.go",
-      "sha256": "98db574493d6cdf2ce748d188539fc5bc5e6a7bf3b1788f7a57dc2ef7e15e41d",
-      "bytes": 14075
-    },
-    {
       "path": "internal/cli/provider_testmain_isolation_test.go",
       "sha256": "b5452b87eca3aa854f53772bf28c8f0f5097f778230bac80d781a9527c00d0d8",
       "bytes": 612
@@ -5011,13 +4996,8 @@
     },
     {
       "path": "internal/cli/setup_fix.go",
-<<<<<<< HEAD
-      "sha256": "ac99464fda3540c57d0f114259728b801eb78f35e6f978619bb109b2b198b223",
-      "bytes": 9986
-=======
       "sha256": "d8aeb3b952ece6ad131c72bb7fb1ac4756ee79b21af65900fb02b9d73cf75692",
       "bytes": 9933
->>>>>>> 6a8b862 (git: keep internal IDs out of user commits and say what init commits)
     },
     {
       "path": "internal/cli/setup_fix_test.go",
@@ -5431,13 +5411,13 @@
     },
     {
       "path": "internal/constitution/marshal_protocol.go",
-      "sha256": "bdbd2c7b95e09e633230144030c4c8125717fe23ebbef57b70524f73823c51f8",
-      "bytes": 27232
+      "sha256": "68e9caeb550e8f228789bf4a97bef46c11d652a5d595c037f7ed7b63e2c5f8ab",
+      "bytes": 27028
     },
     {
       "path": "internal/constitution/marshal_protocol_test.go",
-      "sha256": "a0f9f5a681251f0bbccd4c108adcfa41ec2c44dcc4c96f398ef11626644ac2a4",
-      "bytes": 7097
+      "sha256": "c55d9131ea115a4eccde7a85bc56603eedaf6a640279ab106be95d12f611761a",
+      "bytes": 6894
     },
     {
       "path": "internal/constitution/protocol_browser_accept_extreme_test.go",
@@ -5451,7 +5431,7 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "457aa935d21f2b76a76876c7ef4a260bec97f4cbcd3e94a03c5abfbe7df840a2",
+      "sha256": "fdbdca33ee010b91a53a3f1e8e567d2cfe683e1dca208b7ae3501198b01da211",
       "bytes": 8986
     },
     {
@@ -5473,11 +5453,6 @@
       "path": "internal/constitution/protocol_q5_extreme_test.go",
       "sha256": "3040c2c5cac509dfc1b5df3f8798a15515784accb9d3f36d9c11fd2d611db2ac",
       "bytes": 584
-    },
-    {
-      "path": "internal/constitution/protocol_run_closed_test.go",
-      "sha256": "cbfc84cbf359ec0b522bdf9835ac82e3eaaa014cc38438f96c2fe25bfc1229be",
-      "bytes": 662
     },
     {
       "path": "internal/constitution/reason.go",
@@ -5651,8 +5626,8 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "9a05af3d6731d699e9de5359eb7a221d9cc7dd88fc02d16da6b9e80708b5a2e9",
-      "bytes": 18670
+      "sha256": "83ee72226d631e892dccbe993b5b1f03d8b46973d554c2ad52606ced9a069752",
+      "bytes": 17131
     },
     {
       "path": "internal/doctor/doctor_test.go",
@@ -10056,13 +10031,13 @@
     },
     {
       "path": "internal/startup/probe.go",
-      "sha256": "7a3bc877b3de4f2a16ddc8fa2200eba5b2f93edbfd8cc05db773cdd56a142c03",
-      "bytes": 15687
+      "sha256": "97f602b564603bc2648ffef1c0b74627766ec139f583fe9031bc34778ffed2cc",
+      "bytes": 14791
     },
     {
       "path": "internal/startup/probe_test.go",
-      "sha256": "b251debe81724bbdac57c20c05e5324e4439566b710c685bfc46b5c43f1fb9fb",
-      "bytes": 17554
+      "sha256": "3df10101cf5943746c42a19e254fa99109e305f9aa872547cd3cd89ebac18326",
+      "bytes": 16136
     },
     {
       "path": "internal/startup/project_identity.go",
@@ -10071,8 +10046,8 @@
     },
     {
       "path": "internal/startup/reason.go",
-      "sha256": "7a811acefe4bd7165793c7f6677bc3d2ca480e6b256bb86770677cf0cdb59291",
-      "bytes": 9130
+      "sha256": "db66a1661cef9a4abfe20aa8704c4b5a8314fea72a3bc6791c087bf7c719d39c",
+      "bytes": 8835
     },
     {
       "path": "internal/startup/repair.go",
@@ -10101,13 +10076,13 @@
     },
     {
       "path": "internal/statepath/migrate.go",
-      "sha256": "d3d7f810d0f6410dc709d004f837ba0438f67c345148d15e9c1aa400f2263078",
-      "bytes": 10043
+      "sha256": "e8b310bc54fc49f5976d44f562f3fb5092707429d275c73a9c7231bd42cb71fd",
+      "bytes": 8953
     },
     {
       "path": "internal/statepath/migrate_test.go",
-      "sha256": "0ff9e9a782d3d8fd0b330a53b821d04f843a0ce0c66904a4e54094c8672400e5",
-      "bytes": 5395
+      "sha256": "6b54bc2e35e831039d60074ee03754c2728b521edcb5bfc0afc5e163a2caa433",
+      "bytes": 5413
     },
     {
       "path": "internal/statepath/paths.go",
@@ -12606,13 +12581,8 @@
     },
     {
       "path": "internal/tui/board_next.go",
-      "sha256": "79af2122a95268cde7257d95a8e3089b742876b0081be9dd31acdfb4e1fc4b53",
-      "bytes": 7570
-    },
-    {
-      "path": "internal/tui/board_next_notice_test.go",
-      "sha256": "a9c749c81445949fe6888f79a3f09f066d95498cfbb0c18551237c00100acfbc",
-      "bytes": 5420
+      "sha256": "f12b3211858014ea07d6439f8514cdae762a5f292c382c08396f5e9ea6374907",
+      "bytes": 6069
     },
     {
       "path": "internal/tui/board_next_test.go",
@@ -15256,8 +15226,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "8b7b3744473831b181bdc1189fbbbf5c7fb7f793b64b3f49d9bd8ee362b4c9e6",
-      "bytes": 87491
+      "sha256": "66639449b87aa6f38399f6a388409c050a960794f9033287782f56670cd13129",
+      "bytes": 87420
     },
     {
       "path": "internal/tui/workspace_keys_test.go",
@@ -15810,11 +15780,6 @@
       "bytes": 1641
     },
     {
-      "path": "release/RELEASE_NOTES_0.2.9.md",
-      "sha256": "f3650f65d69eb907e58eae92314183cf0557d306ed88e40e4c205a8161b949ef",
-      "bytes": 2049
-    },
-    {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
       "sha256": "60da76751a5ad983b797e0ecae6816bdd0b60286c8d6ab508211c0a754d3bbf0",
       "bytes": 2823
@@ -16251,13 +16216,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-<<<<<<< HEAD
-      "sha256": "5c643df521e45824fcbe5db01ee02d1919ec1f977e182808d3f5feb8b31d6f14",
-      "bytes": 420585
-=======
-      "sha256": "1e71195d3e7ed56411c80688140fd9c32c9bcc4758c2f06c1da0c88e78788acf",
-      "bytes": 418041
->>>>>>> 6a8b862 (git: keep internal IDs out of user commits and say what init commits)
+      "sha256": "e1cda29e4510588ed41a98bcc07c5adb7194a4f7b014cc9f5c1f1a761a235b9c",
+      "bytes": 418716
     },
     {
       "path": "tools/extreme/prq/main_default.go",
