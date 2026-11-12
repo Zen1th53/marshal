@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // architectureReviewHooks connect the browser's Accept to this workspace.
@@ -66,6 +69,7 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 		w.wakeMarshalAfterAccept()
 	}
 	w.clearAnswer(architectureOpening)
+	w.clearAnswer(architectureOpened)
 	w.RecordActivity(fmt.Sprintf("Architecture accepted in the browser (rev %d).", n))
 	if w.archView.Load() {
 		w.closeArchView()
@@ -87,9 +91,57 @@ func (w *Workspace) openArchitectureReview() {
 }
 
 // architectureOpening is the footer answer while the browser opens; it is
-// cleared once the page has opened or the owner accepted it, so it never
-// outlives what it describes.
+// replaced once the page has opened (architectureOpened) or could not open
+// (architectureNoBrowser), and cleared once the owner accepted it, so it
+// never outlives what it describes.
 const architectureOpening = "Opening the architecture in your browser…"
+
+// architectureURLFile is where the review's private link is kept, relative
+// to the project. The link carries the page's key, so it is named, never
+// written to Activity.
+var architectureURLFile = filepath.Join(statepath.DirName, "architecture", "review", "url.txt")
+
+// architectureOpened is the footer answer once the browser was asked to open
+// the page; it stays until the owner accepts or does something else.
+var architectureOpened = "The architecture is open in your browser. No page? Open the link in " + architectureURLFile + "."
+
+// architectureNoBrowser is the footer answer when no browser could be opened.
+var architectureNoBrowser = "Your browser could not be opened. Open the link in " + architectureURLFile + " to review the architecture."
+
+// architectureShownURL is the review's address without its key, for Activity.
+func architectureShownURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "the review page"
+	}
+	return u.Scheme + "://" + u.Host + "/"
+}
+
+// architectureOpenedNote and architectureFailedNote are the Activity lines for
+// an open that worked or failed: the address without its key, and where the
+// full link is.
+func architectureOpenedNote(raw string) string {
+	return "Architecture view opened in your browser: " + architectureShownURL(raw) + " (the full link is in " + architectureURLFile + ")."
+}
+
+func architectureFailedNote(raw string) string {
+	return "Architecture view: your browser could not be opened. Open the link in " + architectureURLFile + " (" + architectureShownURL(raw) + ")."
+}
+
+// architectureOpenResult replaces the "Opening…" answer, while it is still
+// shown, with what happened.
+func (w *Workspace) architectureOpenResult(err error) {
+	text, isError := architectureOpened, false
+	if err != nil {
+		text, isError = architectureNoBrowser, true
+	}
+	w.mu.Lock()
+	still := w.answer == architectureOpening
+	w.mu.Unlock()
+	if still {
+		w.memoryAnswer(text, isError)
+	}
+}
 
 // clearAnswer removes the footer answer only while it is still text, so a
 // newer answer to something else is never wiped.

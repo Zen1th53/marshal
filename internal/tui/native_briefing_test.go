@@ -367,7 +367,7 @@ func TestResumeLaunchHasNoCue(t *testing.T) {
 	root := t.TempDir()
 	setLaunchActiveRun(root, true) // a fresh launch here would add Continue.
 
-	resumeArgs, _, dir, err := prepareMarshalLaunch("claude", root, nil, protocol, true)
+	resumeArgs, _, dir, err := prepareMarshalLaunch("claude", root, nil, protocol, true, "")
 	if dir != nil {
 		defer dir.remove()
 	}
@@ -381,7 +381,7 @@ func TestResumeLaunchHasNoCue(t *testing.T) {
 	}
 
 	// The control: a non-resume launch with the same root does add the cue.
-	freshArgs, _, dir2, err := prepareMarshalLaunch("claude", root, nil, protocol, false)
+	freshArgs, _, dir2, err := prepareMarshalLaunch("claude", root, nil, protocol, false, "")
 	if dir2 != nil {
 		defer dir2.remove()
 	}
@@ -439,7 +439,7 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
-		args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol, false)
+		args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol, false, "")
 		if dir != nil {
 			defer dir.remove()
 		}
@@ -496,7 +496,7 @@ func TestMarshalLaunchWithSavedIntakeRefusesMissingProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, protocol := range []string{"", " \n\t"} {
-		args, env, dir, err := prepareMarshalLaunch("codex", root, nil, protocol, false)
+		args, env, dir, err := prepareMarshalLaunch("codex", root, nil, protocol, false, "")
 		if err == nil || args != nil || env != nil || dir != nil {
 			t.Fatalf("protocol %q: launch material %v %v %v, err %v", protocol, args, env, dir, err)
 		}

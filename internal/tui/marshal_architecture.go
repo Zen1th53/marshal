@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 )
@@ -43,10 +44,9 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 				err := open(workerCtx, url)
 				w.resolveArchitectureProposal(occurrence, err)
 				if err != nil {
-					w.RecordActivity("Architecture view: " + err.Error() + ". URL: " + url)
-				} else {
-					w.clearAnswer(architectureOpening)
+					w.RecordActivity(architectureFailedNote(url))
 				}
+				w.architectureOpenResult(err)
 			}) {
 				return "", errors.New("workspace is closing")
 			}
@@ -111,22 +111,31 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		for _, id := range occurrences {
 			w.resolveArchitectureProposal(id, err)
 		}
+		url := existingURL
+		if session != nil {
+			url = session.URL
+		}
 		if err != nil {
-			message := "Architecture view failed: " + err.Error()
-			if session != nil {
-				message += ". URL: " + session.URL
-			}
-			w.RecordActivity(message)
-			if session == nil {
+			if session == nil && existingURL == "" {
+				// No page was made: say why, and the "Opening…" answer
+				// gives way to it.
+				w.RecordActivity("Architecture view failed: " + err.Error())
+				w.mu.Lock()
+				still := w.answer == architectureOpening
+				w.mu.Unlock()
+				if still {
+					w.memoryAnswer("The architecture could not be opened: "+plainArchitectureError(err), true)
+				}
 				return
 			}
+			// The page is up but no browser opened: where its link is.
+			w.RecordActivity(architectureFailedNote(url))
 		} else {
-			url := existingURL
-			if session != nil {
-				url = session.URL
-			}
-			w.RecordActivity("Architecture view: " + url)
-			w.clearAnswer(architectureOpening)
+			w.RecordActivity(architectureOpenedNote(url))
+		}
+		w.architectureOpenResult(err)
+		if session == nil {
+			return
 		}
 		if session == nil {
 			return
@@ -180,10 +189,24 @@ func openArchitectureBrowser(ctx context.Context, url string) error {
 		return fmt.Errorf("open browser: %w", err)
 	}
 	// The user's desktop browser has its own lifetime. Reap its launcher without
-	// terminating that browser when the MARSHAL workspace closes.
-	go func() { _ = process.Wait() }()
+	// terminating that browser when the MARSHAL workspace closes. A launcher
+	// that fails at once (no browser for the link) is a failed open; one still
+	// running after browserOpenWait is taken as opened.
+	exited := make(chan error, 1)
+	go func() { exited <- process.Wait() }()
+	select {
+	case err := <-exited:
+		if err != nil {
+			return fmt.Errorf("open browser: %w", err)
+		}
+	case <-time.After(browserOpenWait):
+	case <-ctx.Done():
+	}
 	return nil
 }
+
+// browserOpenWait is how long a browser launcher may take to fail.
+const browserOpenWait = 3 * time.Second
 
 func (w *Workspace) boundMarshalArchitectureSource() string {
 	w.tmuxMu.Lock()

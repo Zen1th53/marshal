@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.8
+
+### Fixed
+- The Codex and Claude Code Marshal chats start unable to write project files (only `.marshal/` plan files); with OpenCode or Antigravity the Board says when the Marshal changed files and recommends undo.
+- A finished run is delivered when the target checkout has uncommitted changes by telling you to stash or undo them, instead of a git instruction; caches like `__pycache__` are ignored; a stopped run shows its real reason.
+- Merged run worktrees and branches are cleaned up on close.
+- Answered cards close and never take a later `Enter`; `y` on the architecture card gives feedback; the header says "reviewing"; the vitals row keeps the picker's limit reading.
+
 ## 0.2.7
 
 v0.2.6 was tagged but never released: a release check stopped it on a Go standard-library vulnerability. Everything planned for 0.2.6 ships here, built with Go 1.26.11.

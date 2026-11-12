@@ -320,6 +320,10 @@ func (w *Workspace) handleChangeKey(event KeyEvent) bool {
 		if applying && !timedOut {
 			return true
 		}
+		if w.boardStopWaiting() {
+			// A stopped run leads the inbox: Enter is its key.
+			return false
+		}
 		w.changeApply()
 		return true
 	}
@@ -612,7 +616,11 @@ func (v boardVisual) changeEntry(c changeCard, x, row, w int) []string {
 			line += "  "
 			at += 2
 		}
-		button := v.bg("rule", "["+b.key+"]") + " " + b.label
+		key := b.key
+		if key == "Enter" {
+			key = v.cardEnterKey()
+		}
+		button := v.bg("rule", "["+key+"]") + " " + b.label
 		v.hit(boardHit{row: crow, x0: x + at, x1: x + min(w, at+VisibleLen(button)), kind: hitChange, id: b.id})
 		line += button
 		at += VisibleLen(button)

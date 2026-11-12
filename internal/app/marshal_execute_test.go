@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
@@ -233,7 +234,11 @@ func TestM09CloseRefusesDirtyCheckedOutTargetWithoutChangingRefOrWorktree(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Close(ctx, "run"); err == nil || !strings.Contains(err.Error(), "checked out at "+repo) || !strings.Contains(err.Error(), "switch it away") {
+	// The refusal names the uncommitted file and what to do, in plain words,
+	// and never asks the person to detach their checkout.
+	err = s.Close(ctx, "run")
+	var stop *DeliveryStopError
+	if !errors.As(err, &stop) || stop.Reason != "Your checkout of main has uncommitted changes (README.md)." || !strings.Contains(stop.Next, "press Enter to finish delivering") || strings.Contains(err.Error(), "detach") {
 		t.Fatalf("close error = %v", err)
 	}
 	if got := marshalGit(t, repo, "rev-parse", "refs/heads/main"); got != before {
@@ -277,7 +282,7 @@ func TestM09ExecuteClosesUnderStandingAuthorization(t *testing.T) {
 	if run.State != marshal.Closed {
 		t.Fatalf("state = %s, want closed", run.State)
 	}
-	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration") {
+	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != deliveredCommit(t, s, "run") {
 		t.Fatal("target was not fast-forwarded to the integration branch")
 	}
 	if got := marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/pre-close"); got != before {
@@ -426,7 +431,7 @@ func TestMarshalCloseAdvancesCleanMainWorktree(t *testing.T) {
 	if err := s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	head := marshalGit(t, repo, "rev-parse", statepath.RefName+"/run/integration")
+	head := deliveredCommit(t, s, "run")
 	if got := marshalGit(t, repo, "rev-parse", "HEAD"); got != head {
 		t.Fatalf("HEAD = %s, want %s", got, head)
 	}
@@ -545,7 +550,12 @@ func TestMarshalCloseRefusesOtherUnsafeCheckouts(t *testing.T) {
 			if err := s.Close(ctx, "run"); err == nil {
 				t.Fatal("unsafe close succeeded")
 			} else if kind == "linked" || kind == "staged" || kind == "untracked" {
-				if !strings.Contains(err.Error(), "checked out at "+checkout) || !strings.Contains(err.Error(), "switch it away") {
+				var stop *DeliveryStopError
+				want := "Your checkout of main has uncommitted changes (operator.txt)."
+				if kind == "linked" {
+					want = "main is checked out in another working folder, " + checkout + "."
+				}
+				if !errors.As(err, &stop) || stop.Reason != want || strings.Contains(err.Error(), "detach") {
 					t.Fatal(err)
 				}
 			}

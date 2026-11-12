@@ -21,7 +21,9 @@ import (
 //   - Codex: MARSHAL's own MCP server ("marshal") has its tools approved,
 //     approval_policy is "never" so shell commands do not stop for a person,
 //     and the sandbox stays workspace-write. --dangerously-bypass-approvals-
-//     and-sandbox is never used. Interactive launches also mark the project
+//     and-sandbox is never used. The Marshal chat is the exception: unless
+//     execution rights are small-tasks it runs under MARSHAL's read-only
+//     permission profile instead (marshal_confine.go). Interactive launches also mark the project
 //     trusted through a MARSHAL-owned Codex profile (see ensureCodexTrustProfile).
 //   - Claude Code: MARSHAL's MCP server tools are pre-allowed for the launch
 //     (--allowedTools mcp__marshal); its permission mode is left as it was.
@@ -43,7 +45,9 @@ func codexExtremeLaunchFlags(root string, args, env []string, role string) []str
 	if !bypass && !codexArgsHave(args, "-a", "--ask-for-approval", "--approve-for-me") && !codexConfigOverrides(args, "approval_policy") {
 		flags = append(flags, "-c", `approval_policy="never"`)
 	}
-	if !bypass && !codexArgsHave(args, "-s", "--sandbox") && !codexConfigOverrides(args, "sandbox_mode") {
+	// The Marshal chat's read-only permission profile (marshal_confine.go)
+	// already decides its sandbox.
+	if !bypass && !codexArgsHave(args, "-s", "--sandbox") && !codexConfigOverrides(args, "sandbox_mode") && !codexConfigOverrides(args, "default_permissions") {
 		flags = append(flags, "-c", `sandbox_mode="workspace-write"`)
 	}
 	// Headless `codex exec` workers never show the trust dialog.
@@ -53,39 +57,6 @@ func codexExtremeLaunchFlags(root string, args, env []string, role string) []str
 		}
 	}
 	return flags
-}
-
-func codexArgsHave(args []string, names ...string) bool {
-	for _, a := range args {
-		if a == "--" {
-			return false
-		}
-		for _, n := range names {
-			if a == n || strings.HasPrefix(a, n+"=") {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func codexConfigOverrides(args []string, key string) bool {
-	for i, a := range args {
-		value := ""
-		switch {
-		case (a == "-c" || a == "--config") && i+1 < len(args):
-			value = args[i+1]
-		case strings.HasPrefix(a, "--config="):
-			value = strings.TrimPrefix(a, "--config=")
-		default:
-			continue
-		}
-		k, _, _ := strings.Cut(value, "=")
-		if strings.TrimSpace(k) == key {
-			return true
-		}
-	}
-	return false
 }
 
 const codexTrustProfilePrefix = "marshal-trust-"
@@ -263,6 +234,20 @@ func pruneCodexTrustProfiles(home, keep string) {
 			}
 		}
 	}
+}
+
+// codexMarshalConfineEnforced: with approval_policy "never" a Codex write
+// outside the Marshal's directories is refused, never offered for approval.
+const codexMarshalConfineEnforced = true
+
+// claudeMarshalConfineFlags make the Marshal chat's Claude Code refuse,
+// without asking, every write it was not given: "dontAsk" denies whatever no
+// allow rule permits, and the only edit rules allowed are the Marshal's own
+// directories, passed as one --settings value (--allowedTools is variadic).
+// MARSHAL's MCP tools stay allowed (claudeMarshalToolAllowFlags); reading
+// needs no permission.
+func claudeMarshalConfineFlags() ([]string, bool) {
+	return []string{"--permission-mode", "dontAsk", "--settings", claudeMarshalWritableSettings()}, true
 }
 
 func claudeMarshalToolAllowFlags() []string {

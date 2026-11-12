@@ -1405,6 +1405,9 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 		if approvalRequiredRE.MatchString(err.Error()) {
 			return "stopped: " + err.Error()
 		}
+		if note := knownStopNote(err); note != "" {
+			return note
+		}
 		return "The run stopped unexpectedly."
 	}
 	switch run.State {
@@ -1576,6 +1579,15 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 		defer m.finish(cancel)
 		m.grant(runID, "close")
 		if err := service.Close(runCtx, runID); err != nil {
+			if note := knownCloseStopNote(err); note != "" {
+				// A refusal the person can fix is the Board's stop: its
+				// reason, what to do, and Enter to close again.
+				w.logTUIError("close stopped", err)
+				panel := w.marshalPanelWithNote(runID, provider, note)
+				panel.Stopped = true
+				w.marshalPublish(m, runID, panel)
+				return
+			}
 			w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "close failed: "+err.Error()))
 			return
 		}

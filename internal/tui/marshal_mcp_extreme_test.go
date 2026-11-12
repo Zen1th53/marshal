@@ -23,7 +23,7 @@ func TestExtremeMarshalMCPLaunchConfig(t *testing.T) {
 			root := t.TempDir()
 			protocol := "MARSHAL PROTOCOL\nTest extreme instructions"
 
-			args, env, dir, err := prepareMarshalLaunch(provider, root, nil, protocol, false)
+			args, env, dir, err := prepareMarshalLaunch(provider, root, nil, protocol, false, "")
 			if err != nil {
 				t.Fatalf("%s prepareMarshalLaunch failed: %v", provider, err)
 			}
@@ -150,7 +150,7 @@ func TestExtremeClaudeMCPConfigPreservesSavedIntakeOpening(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(`{"language":"Uzbek"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	args, _, dir, err := prepareMarshalLaunch("claude", root, nil, "MARSHAL PROTOCOL", false)
+	args, _, dir, err := prepareMarshalLaunch("claude", root, nil, "MARSHAL PROTOCOL", false, "")
 	if dir != nil {
 		defer dir.remove()
 	}
@@ -249,7 +249,7 @@ func TestExtremeMCPNeverEditsUserGlobalConfig(t *testing.T) {
 	root := t.TempDir()
 	// Run launch configuration for all providers
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
-		_, _, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL\nTest", false)
+		_, _, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL\nTest", false, "")
 		if err != nil {
 			t.Fatalf("%s launch failed: %v", provider, err)
 		}
@@ -287,7 +287,7 @@ func TestExtremeMCPWithFakeProviderCLIs(t *testing.T) {
 	root := t.TempDir()
 
 	for _, provider := range []string{"codex", "claude", "agy", "opencode"} {
-		args, env, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL\nTest", false)
+		args, env, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL\nTest", false, "")
 		if err != nil {
 			t.Fatalf("%s launch failed with fake CLIs: %v", provider, err)
 		}

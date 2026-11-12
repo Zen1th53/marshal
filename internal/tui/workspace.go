@@ -227,6 +227,10 @@ type Workspace struct {
 	req struct {
 		mu   sync.Mutex
 		card *reqCard
+		// confirmed is the text of each line the owner last confirmed,
+		// nil before any confirmation: the same card sent again is
+		// recorded, not shown, so it can never take a later Enter.
+		confirmed *[8]string
 	}
 	// change is the owner's open mid-run change card: the Marshal held the
 	// affected tasks and the owner chooses to apply the change or keep the

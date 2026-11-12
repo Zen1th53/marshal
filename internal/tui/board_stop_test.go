@@ -3,9 +3,11 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
@@ -241,5 +243,36 @@ func TestStoppedApprovalRefusalKeepsApprovalID(t *testing.T) {
 	note = marshalOutcomeNote(marshal.Run{}, errors.New("worker: exit 2: /tmp/x"))
 	if stop, _ := (boardVisual{board: b, stopped: true, note: note}).stopNotice(); note != "The run stopped unexpectedly." || stop.reason != "The run stopped unexpectedly." {
 		t.Fatalf("plain stop: %q %+v", note, stop)
+	}
+}
+
+// A stop whose error says why in plain words (a delivery the person's
+// checkout is in the way of) shows that reason and what to do, not "The run
+// stopped unexpectedly.", on the Board's stop card and footer.
+func TestBoardStopShowsKnownDeliveryReason(t *testing.T) {
+	stop := &app.DeliveryStopError{Reason: "Your checkout of master has uncommitted changes (calc.py, test_calc.py).", Next: "Stash them (git stash -u) or undo them, then press Enter to finish delivering.", Cause: errors.New("raw /tmp/x detail")}
+	err := fmt.Errorf("close: %w", stop)
+	note := marshalOutcomeNote(marshal.Run{}, err)
+	b := boardmodel.Board{Run: boardmodel.RunHead{State: marshal.Verifying}}
+	got, ok := (boardVisual{board: b, stopped: true, note: note}).stopNotice()
+	if !ok || got.reason != stop.Reason || got.next != stop.Next || strings.Join(got.commands, ",") != "/marshal resume" {
+		t.Fatalf("known stop: %+v (note %q)", got, note)
+	}
+	if strings.Contains(note, "/tmp/x") || strings.Contains(note, "detach") {
+		t.Fatalf("note leaks the raw cause: %q", note)
+	}
+	// The person's own /marshal close: Enter closes again.
+	got, ok = (boardVisual{board: b, stopped: true, note: knownCloseStopNote(err)}).stopNotice()
+	if !ok || got.reason != stop.Reason || strings.Join(got.commands, ",") != "/marshal close" {
+		t.Fatalf("known close stop: %+v", got)
+	}
+
+	w, _ := boardWorkspace(t)
+	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), note)
+	p.Stopped = true
+	w.setMarshalPanel(p)
+	frame := plainFrame(w, 170, 45)
+	if strings.Contains(frame, "stopped unexpectedly") || !strings.Contains(frame, "Your checkout of master has uncommitted changes") {
+		t.Fatalf("board frame:\n%s", frame)
 	}
 }

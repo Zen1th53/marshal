@@ -30,6 +30,10 @@ type askCard struct {
 	Question string
 	Choices  []askChoice
 	At       time.Time
+	// guard is the changed-files alert this question decides, nil when it
+	// is about something else (askAboutGuard): answering one resolves or
+	// updates the other.
+	guard *guardAlert
 }
 
 // errAskChoices is the one error parseAskChoices returns: the proposal is
@@ -93,8 +97,12 @@ func (w *Workspace) openAsk(p marshalProposal) {
 	if err != nil {
 		return
 	}
+	card := &askCard{Question: strings.TrimSpace(p.question), Choices: choices, At: time.Now()}
+	if a := w.guardAlertNow(); a != nil && askAboutGuard(card.Question, choices) {
+		card.guard = a
+	}
 	w.ask.mu.Lock()
-	w.ask.card = &askCard{Question: strings.TrimSpace(p.question), Choices: choices, At: time.Now()}
+	w.ask.card = card
 	w.ask.mu.Unlock()
 	w.RecordActivity("Marshal asks: " + p.question)
 	if w.store != nil {
@@ -129,6 +137,11 @@ func (w *Workspace) handleAskKey(event KeyEvent) bool {
 		return false
 	}
 	if event.Type == KeyEnter {
+		if w.boardStopWaiting() {
+			// A stopped run leads the inbox: Enter is its key, never a
+			// card's below it.
+			return false
+		}
 		w.answerAsk(0)
 		return true
 	}
@@ -164,6 +177,60 @@ func (w *Workspace) answerAsk(i int) {
 	w.clearAsk()
 	w.sayToMarshal(w.workers.context(), label)
 	w.RecordActivity("You answered: " + label)
+	// A question about the changed files answers their card too: keep
+	// keeps them; an undo choice leaves the card open, since nothing is
+	// undone yet, and the card says what was answered.
+	if card.guard != nil {
+		switch {
+		case askChoiceKeeps(label):
+			w.guardKeepAlert(card.guard)
+		case askChoiceUndoes(label):
+			w.guardAnswered(card.guard, label)
+		}
+	}
+}
+
+// askAboutGuard reports whether a question decides the changed-files alert
+// open when it was asked: it is about changes or files, and one of its
+// choices keeps or undoes them.
+func askAboutGuard(question string, choices []askChoice) bool {
+	q := strings.ToLower(question)
+	if !strings.Contains(q, "change") && !strings.Contains(q, "file") {
+		return false
+	}
+	for _, c := range choices {
+		if askChoiceKeeps(c.Label) || askChoiceUndoes(c.Label) {
+			return true
+		}
+	}
+	return false
+}
+
+// askChoiceKeeps and askChoiceUndoes read a choice's label as keeping or
+// undoing the changed files.
+func askChoiceKeeps(label string) bool {
+	l := strings.ToLower(label)
+	return strings.Contains(l, "keep") && !askChoiceUndoes(label)
+}
+
+func askChoiceUndoes(label string) bool {
+	l := strings.ToLower(label)
+	return strings.Contains(l, "undo") || strings.Contains(l, "revert") || strings.Contains(l, "discard")
+}
+
+// askForGuard is the open question about alert a and its choice that keeps
+// the files (-1 for none), or nil.
+func (w *Workspace) askForGuard(a *guardAlert) (*askCard, int) {
+	card := w.currentAsk()
+	if card == nil || a == nil || card.guard != a {
+		return nil, -1
+	}
+	for i, c := range card.Choices {
+		if askChoiceKeeps(c.Label) {
+			return card, i
+		}
+	}
+	return card, -1
 }
 
 // askEntry is the open card as the inbox shows it: the question on at most
@@ -197,7 +264,7 @@ func (v boardVisual) askEntry(c askCard, x, row, w int) []string {
 		}
 		key := ch.Key
 		if key == "enter" {
-			key = "Enter"
+			key = v.cardEnterKey()
 		}
 		button := v.bg("rule", "["+key+"]") + " " + ch.Label
 		v.hit(boardHit{row: crow, x0: x + at, x1: x + min(w, at+VisibleLen(button)), kind: hitAsk, id: strconv.Itoa(i)})

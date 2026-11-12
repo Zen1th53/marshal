@@ -37,20 +37,38 @@ const (
 )
 
 // readCodex reads the rate limits Codex last reported in its newest rollout
-// file under dir (dir/YYYY/MM/DD/rollout-*.jsonl).
+// file under dir (dir/YYYY/MM/DD/rollout-*.jsonl). A session that has not
+// reported yet (a chat just started, before its first turn) holds no report,
+// so the newest file that does is read: the last report Codex wrote.
 func readCodex(now time.Time, dir string) Quota {
 	q := Quota{Provider: "codex"}
-	path, mod, ok := newestRollout(dir)
-	if !ok {
+	files := rollouts(dir)
+	if len(files) == 0 {
 		q.Reason = ReasonNoFile
 		return q
 	}
-	if now.Sub(mod) >= staleAfter {
-		q.Reason = ReasonStale
-		return q
+	var line []byte
+	var mod time.Time
+	readable := false
+	for _, f := range files {
+		if now.Sub(f.mod) >= staleAfter {
+			if !readable {
+				q.Reason = ReasonStale
+				return q
+			}
+			break
+		}
+		l, err := lastRateLimitLine(f.path)
+		if err != nil {
+			continue
+		}
+		readable = true
+		if l != nil {
+			line, mod = l, f.mod
+			break
+		}
 	}
-	line, err := lastRateLimitLine(path)
-	if err != nil {
+	if !readable {
 		q.Reason = ReasonNoFile
 		return q
 	}
@@ -267,32 +285,47 @@ func lastRateLimitLine(path string) ([]byte, error) {
 	return nil, nil
 }
 
-// newestRollout is the most recently modified rollout-*.jsonl in the newest
-// dayFolders day folders under dir.
-func newestRollout(dir string) (string, time.Time, bool) {
+// rolloutFile is one rollout file and its modification time.
+type rolloutFile struct {
+	path string
+	mod  time.Time
+}
+
+// maxRollouts is how many of the newest rollouts are searched for a report.
+const maxRollouts = 8
+
+// rollouts is the rollout-*.jsonl files in the newest dayFolders non-empty
+// day folders under dir, most recently modified first, at most maxRollouts.
+func rollouts(dir string) []rolloutFile {
 	if dir == "" {
-		return "", time.Time{}, false
+		return nil
 	}
-	var best string
-	var bestMod time.Time
+	var out []rolloutFile
 	seen := 0
+	collect := func() []rolloutFile {
+		sort.SliceStable(out, func(i, j int) bool {
+			if !out[i].mod.Equal(out[j].mod) {
+				return out[i].mod.After(out[j].mod)
+			}
+			return filepath.Base(out[i].path) > filepath.Base(out[j].path)
+		})
+		return out[:min(len(out), maxRollouts)]
+	}
 	for _, year := range datedDirs(dir, 4) {
 		for _, month := range datedDirs(year, 2) {
 			for _, day := range datedDirs(month, 2) {
-				path, mod, ok := newestIn(day)
-				if !ok {
+				files := rolloutsIn(day)
+				if len(files) == 0 {
 					continue
 				}
-				if best == "" || mod.After(bestMod) {
-					best, bestMod = path, mod
-				}
+				out = append(out, files...)
 				if seen++; seen >= dayFolders {
-					return best, bestMod, true
+					return collect()
 				}
 			}
 		}
 	}
-	return best, bestMod, best != ""
+	return collect()
 }
 
 // datedDirs is dir's subdirectories named by width digits, newest first.
@@ -324,14 +357,13 @@ func allDigits(s string) bool {
 	return true
 }
 
-// newestIn is the most recently modified regular rollout-*.jsonl in dir.
-func newestIn(dir string) (string, time.Time, bool) {
+// rolloutsIn is the regular rollout-*.jsonl files in dir.
+func rolloutsIn(dir string) []rolloutFile {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", time.Time{}, false
+		return nil
 	}
-	var best string
-	var bestMod time.Time
+	var out []rolloutFile
 	for _, e := range entries {
 		name := e.Name()
 		if !e.Type().IsRegular() || !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
@@ -341,11 +373,9 @@ func newestIn(dir string) (string, time.Time, bool) {
 		if err != nil {
 			continue
 		}
-		if best == "" || info.ModTime().After(bestMod) || (info.ModTime().Equal(bestMod) && name > filepath.Base(best)) {
-			best, bestMod = filepath.Join(dir, name), info.ModTime()
-		}
+		out = append(out, rolloutFile{filepath.Join(dir, name), info.ModTime()})
 	}
-	return best, bestMod, best != ""
+	return out
 }
 
 // String is the quota for logs and tests.

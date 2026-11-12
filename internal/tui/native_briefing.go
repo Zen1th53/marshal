@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
 )
@@ -147,7 +148,11 @@ func marshalNotStarted(provider string, cause error) error {
 // prepareMarshalLaunch delivers mandatory instructions separately from the
 // opening turn. Every fresh launch and resume must rebuild this delivery;
 // saved argv may belong to an older version that exposed the protocol.
-func prepareMarshalLaunch(provider, root string, args []string, protocol string, resume bool) ([]string, []string, *briefingDir, error) {
+//
+// rights are the project's execution rights: unless they are small-tasks the
+// launch is confined so the CLI cannot write project files (confineMarshalChat);
+// "" stands for the default, read-only.
+func prepareMarshalLaunch(provider, root string, args []string, protocol string, resume bool, rights marshal.ExecutionRights) ([]string, []string, *briefingDir, error) {
 	channel := hiddenChannel(provider)
 	if channel == injectOff || strings.TrimSpace(protocol) == "" {
 		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("%s has no usable hidden instruction channel", providerDisplayName(provider)))
@@ -161,6 +166,10 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string,
 	args = append([]string(nil), args...)
 	if !resume {
 		args = append(args, marshalKickoffArgs(provider, root)...)
+	}
+	args, err := confineMarshalChat(provider, root, args, rights)
+	if err != nil {
+		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("read-only launch settings failed: %w", err))
 	}
 	if channel != injectMarshalDir {
 		updated, _, err := applyBriefing(provider, root, args, protocol, channel)
