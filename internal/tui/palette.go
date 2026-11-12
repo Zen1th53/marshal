@@ -88,6 +88,53 @@ func (cp *CommandPalette) IsOpen() bool {
 	return cp.active
 }
 
+// Selected is the index of the highlighted row in cp.filtered.
+func (cp *CommandPalette) Selected() int {
+	return cp.selected
+}
+
+// Select moves the highlight to row i of cp.filtered, clamped to the rows
+// that exist. A mouse click selects the row it reaches with it.
+func (cp *CommandPalette) Select(i int) {
+	switch {
+	case i < 0:
+		cp.selected = 0
+	case i >= len(cp.filtered):
+		cp.selected = max(0, len(cp.filtered)-1)
+	default:
+		cp.selected = i
+	}
+}
+
+// Layout is the palette box's geometry for a width-by-height overlay: the
+// box's width in cells and the half-open range [start, end) of cp.filtered
+// the box shows. Render and the mouse hit code both read it, so a row's
+// screen position is computed one way.
+func (cp *CommandPalette) Layout(width, height int) (boxWidth, start, end int) {
+	boxWidth = width - 8
+	if boxWidth > 76 {
+		boxWidth = 76
+	}
+	if boxWidth < 40 {
+		boxWidth = width
+	}
+	maxItems := 10
+	if height > 0 && maxItems > height-6 {
+		maxItems = height - 6
+	}
+	if maxItems < 3 {
+		maxItems = 3
+	}
+	if cp.selected >= maxItems {
+		start = cp.selected - maxItems + 1
+	}
+	end = start + maxItems
+	if end > len(cp.filtered) {
+		end = len(cp.filtered)
+	}
+	return boxWidth, start, end
+}
+
 // Open activates the command palette and resets query.
 func (cp *CommandPalette) Open() {
 	cp.active = true
@@ -270,13 +317,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 		return nil
 	}
 
-	boxWidth := width - 8
-	if boxWidth > 76 {
-		boxWidth = 76
-	}
-	if boxWidth < 40 {
-		boxWidth = width
-	}
+	boxWidth, start, end := cp.Layout(width, height)
 
 	var lines []string
 	// Header: ╭─ Actions ─────────────────────────────────────────╮
@@ -311,24 +352,8 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	)
 	lines = append(lines, sep)
 
-	// Action items (limit to 10 lines)
-	maxItems := 10
-	if height > 0 && maxItems > height-6 {
-		maxItems = height - 6
-	}
-	if maxItems < 3 {
-		maxItems = 3
-	}
-
-	start := 0
-	if cp.selected >= maxItems {
-		start = cp.selected - maxItems + 1
-	}
-	end := start + maxItems
-	if end > len(cp.filtered) {
-		end = len(cp.filtered)
-	}
-
+	// Action items: Layout gives the half-open [start, end) range the box
+	// shows, the same range the mouse hit code records regions for.
 	if len(cp.filtered) == 0 {
 		emptyMsg := "  (No matching actions)"
 		lines = append(lines, fmt.Sprintf("%s %s%s",

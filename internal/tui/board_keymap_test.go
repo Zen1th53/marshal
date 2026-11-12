@@ -82,7 +82,7 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 	th := NewTheme(ThemeNoColor, true, true)
 	v := boardViewVisual(memEpoch, th)
 	r := layout.Compute(120, 41, layout.Split).Overlay(0)
-	help, more := v.helpOverlay(r.W, 1000, 0)
+	help, more, _ := v.helpOverlay(r.W, 1000, 0)
 	if more != 0 {
 		t.Fatalf("help with a tall body still scrolls %d lines", more)
 	}
@@ -368,7 +368,7 @@ func TestBoardHelpGoldens(t *testing.T) {
 			l := layout.Compute(tc.w, tc.h, layout.Split)
 			r := l.Overlay(0)
 			v.hints = goldenHints(v)
-			help, _ := v.helpOverlay(r.W, r.H, 0)
+			help, _, _ := v.helpOverlay(r.W, r.H, 0)
 			frame := overlayBoard(paintBoard(l, th, v.render), l, th, 0, help)
 			checkViewGolden(t, helpGoldenName, tc.name, frame, tc.w)
 		})

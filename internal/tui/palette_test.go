@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -184,5 +185,50 @@ func TestPaletteHidesSlashCommandText(t *testing.T) {
 		if strings.Contains(StripANSI(line), "/marshal") {
 			t.Fatalf("a palette row shows a /command:\n%s", StripANSI(line))
 		}
+	}
+}
+
+// Layout is the geometry Render draws: the box width of every line and the
+// rows it shows, which scroll to keep the selection on screen. Select clamps to
+// the rows that exist and Selected reads it back.
+func TestPaletteLayoutSelectSelected(t *testing.T) {
+	var actions []PaletteAction
+	for i := range 25 {
+		actions = append(actions, PaletteAction{ID: fmt.Sprint("a", i), Category: "KEY", Title: fmt.Sprint("Action ", i)})
+	}
+	cp := NewCommandPalette(NewTheme(ThemeNoColor, true, true), actions)
+	cp.Open()
+	for _, size := range [][2]int{{120, 40}, {60, 12}, {44, 9}} {
+		boxWidth, start, end := cp.Layout(size[0], size[1])
+		lines := cp.Render(size[0], size[1])
+		if len(lines) != 3+(end-start)+1 {
+			t.Fatalf("%v: %d lines for rows [%d,%d)", size, len(lines), start, end)
+		}
+		// Every line but the footer (whose key hint can outgrow a narrow box)
+		// is the box's width, so a row's region [x, x+boxWidth) covers it.
+		for _, l := range lines[:len(lines)-1] {
+			if VisibleLen(l) != boxWidth {
+				t.Fatalf("%v: line %q is %d wide, Layout says %d", size, StripANSI(l), VisibleLen(l), boxWidth)
+			}
+		}
+		// The first shown row is line 3 of the box.
+		if !strings.Contains(StripANSI(lines[3]), cp.filtered[start].Title) {
+			t.Fatalf("%v: line 3 %q is not row %d", size, StripANSI(lines[3]), start)
+		}
+	}
+	cp.Select(20)
+	if cp.Selected() != 20 {
+		t.Fatalf("Select(20) left %d", cp.Selected())
+	}
+	if _, start, end := cp.Layout(120, 40); start > 20 || end <= 20 {
+		t.Fatalf("the selected row 20 is off the shown rows [%d,%d)", start, end)
+	}
+	cp.Select(99)
+	if cp.Selected() != 24 {
+		t.Fatalf("Select past the end left %d, want the last row 24", cp.Selected())
+	}
+	cp.Select(-3)
+	if cp.Selected() != 0 {
+		t.Fatalf("Select(-3) left %d, want 0", cp.Selected())
 	}
 }

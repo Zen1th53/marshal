@@ -436,30 +436,49 @@ var boardMouseHelp = []struct{ Where, What string }{
 	{"footer key", "press it; any click closes help"},
 }
 
+// helpLine is one line of the help overlay: its text and, for a key that a
+// click can run, the registry ID runBoardAction runs for it. A listed-only
+// key, a group heading and the mouse group carry no ID, so a click on them
+// only closes help.
+type helpLine struct {
+	text string
+	id   string
+}
+
 // boardHelpRows is the keymap as help lines, group by group, in columns
 // of w cells, and the mouse's click targets after it.
-func (v boardVisual) boardHelpRows(w int) [][]string {
-	var groups [][]string
+func (v boardVisual) boardHelpRows(w int) [][]helpLine {
+	var groups [][]helpLine
 	for i, k := range boardKeymap {
 		if i == 0 || boardKeymap[i-1].Group != k.Group {
-			groups = append(groups, []string{v.bold(v.fg("accent", k.Group))})
+			groups = append(groups, []helpLine{{text: v.bold(v.fg("accent", k.Group))}})
 		}
 		g := &groups[len(groups)-1]
+		// A key that opens a view, sends a key or runs a command is clickable
+		// (runBoardAction runs it, as its key does); a listed-only key does
+		// nothing, so its line stays plain text. A KeyConfirm key still only
+		// opens its confirmation, so the mouse never decides.
+		id := ""
+		if k.Press != nil || k.Command != "" || k.View != "" {
+			id = k.ID
+		}
 		// PadRight pads the common keys to a column but never clips a wider
 		// entry ("space  Ctrl+K"), so every key still shows in full.
-		*g = append(*g, PadCell(" "+v.fg("white", PadRight(k.Keys, 11))+" "+k.What, w))
+		*g = append(*g, helpLine{text: PadCell(" "+v.fg("white", PadRight(k.Keys, 11))+" "+k.What, w), id: id})
 	}
-	mouse := []string{v.bold(v.fg("accent", "MOUSE")) + v.fg("dim", " left click; never decides")}
+	mouse := []helpLine{{text: v.bold(v.fg("accent", "MOUSE")) + v.fg("dim", " left click; never decides")}}
 	for _, m := range boardMouseHelp {
-		mouse = append(mouse, PadCell(" "+v.fg("white", PadCell(m.Where, 14))+" "+m.What, w))
+		mouse = append(mouse, helpLine{text: PadCell(" "+v.fg("white", PadCell(m.Where, 14))+" "+m.What, w)})
 	}
 	return append(groups, mouse)
 }
 
 // helpOverlay is the Board's help (?): every key of boardKeymap in a box
 // w by h cells, in two columns when it is wide enough, scrolled down by
-// scroll lines. It returns the lines and the furthest useful scroll.
-func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int) {
+// scroll lines. It returns the lines, the furthest useful scroll, and the
+// click regions of the clickable key lines, placed box-relative (row 0 is
+// the box's top border, column 0 its left border) for the paint to offset.
+func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int, []boardHit) {
 	th := v.theme
 	if th == nil {
 		th = NewTheme(ThemeDefault, true, true)
@@ -471,7 +490,7 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int) {
 	}
 	colW := (inner - 3*(cols-1)) / cols
 	groups := v.boardHelpRows(colW)
-	var col [2][]string
+	var col [2][]helpLine
 	total := 0
 	for _, g := range groups {
 		total += len(g) + 1
@@ -487,17 +506,20 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int) {
 			c = 0
 		}
 		if len(col[c]) > 0 {
-			col[c] = append(col[c], "")
+			col[c] = append(col[c], helpLine{})
 		}
 		col[c] = append(col[c], g...)
 	}
 	var body []string
+	var bodyIDs [][2]string
 	for i := range max(len(col[0]), len(col[1])) {
 		line := ""
+		var ids [2]string
 		for k := range cols {
 			s := ""
 			if i < len(col[k]) {
-				s = col[k][i]
+				s = col[k][i].text
+				ids[k] = col[k][i].id
 			}
 			if k > 0 {
 				line += "   "
@@ -505,11 +527,27 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int) {
 			line += PadCell(s, colW)
 		}
 		body = append(body, line)
+		bodyIDs = append(bodyIDs, ids)
 	}
 	rows := max(1, h-3)
 	maxScroll := max(0, len(body)-rows)
 	scroll = min(max(0, scroll), maxScroll)
-	body = body[scroll:min(len(body), scroll+rows)]
+	lo, hi := scroll, min(len(body), scroll+rows)
+	body = body[lo:hi]
+	bodyIDs = bodyIDs[lo:hi]
+	// A clickable line gets a region over its column's cells. The box wraps
+	// each body line as BoxVert+" "+content, so a column's cells start two
+	// in from the box edge, each column colW wide after a three-cell gap.
+	var hits []boardHit
+	for j, ids := range bodyIDs {
+		for k := range cols {
+			if ids[k] == "" {
+				continue
+			}
+			x0 := 2 + k*(colW+3)
+			hits = append(hits, boardHit{row: 1 + j, x0: x0, x1: x0 + colW, kind: hitAction, id: ids[k]})
+		}
+	}
 	hint := "Esc or ? closes"
 	if maxScroll > 0 {
 		hint += fmt.Sprintf(" · j/k scroll · %d more lines", maxScroll-scroll)
@@ -529,7 +567,7 @@ func (v boardVisual) helpOverlay(w, h, scroll int) ([]string, int) {
 	if !v.unicode() {
 		out = hostASCII(boardASCIIGlyphs(out), w)
 	}
-	return out, maxScroll
+	return out, maxScroll, hits
 }
 
 // handleBoardHelpKey is the help overlay's keys while it is open: j, k,
