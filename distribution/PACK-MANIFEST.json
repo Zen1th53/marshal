@@ -12441,12 +12441,12 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "10a82d4cd648ce91ee067de6fbda6e5bc922bccb7507dfaa0e425dfe99ac50ed",
-      "bytes": 26977
+      "sha256": "a493ffdee9e4bc976621f639e0c5db567e346aa4418fdb117db50e6dbc4eb1eb",
+      "bytes": 27246
     },
     {
       "path": "internal/tui/board_keymap_test.go",
-      "sha256": "966c9d85caa67b11dc8be470715e8d5d06fd6685c5e0cc3219d1461f29450dc1",
+      "sha256": "2982e6b30d46ae255e19842bb7c42c082e46594fc286265b9dd6622f0d2bf5aa",
       "bytes": 12840
     },
     {
@@ -12466,8 +12466,8 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "742baf33aebf0e03fa18bb52121ded18aec85952e6227579032118c9baa18ecd",
-      "bytes": 38033
+      "sha256": "2d540900856e8865a6ef1cdc8c3fa999b80ed837ac1357f0a595c4282acbec9d",
+      "bytes": 38976
     },
     {
       "path": "internal/tui/board_live_test.go",
@@ -12548,6 +12548,16 @@
       "path": "internal/tui/board_requirements_test.go",
       "sha256": "32301dffc655f66b309eaa187084dd24a293a0a72732e9473e67761e8ebb24ac",
       "bytes": 9002
+    },
+    {
+      "path": "internal/tui/board_retry.go",
+      "sha256": "750a0347695dbb9e85d518108ef6393b5aa7a335ae71b78720dfa4218ae8770f",
+      "bytes": 5855
+    },
+    {
+      "path": "internal/tui/board_retry_test.go",
+      "sha256": "3e67202a20c4042942b19317454479d6812554404bad5a28478c3baf21c66889",
+      "bytes": 6361
     },
     {
       "path": "internal/tui/board_rows_test.go",
@@ -12861,8 +12871,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "d754e28413fcd45b9c757db6315a41df185b12d11aec798e2e817fb2a6eb75e9",
-      "bytes": 72960
+      "sha256": "f840a8a7ccb0d5202296f5a6e700c7b26d879161b2ac266f7fe24e1f4efa2222",
+      "bytes": 72974
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -13256,8 +13266,8 @@
     },
     {
       "path": "internal/tui/keymap_test.go",
-      "sha256": "93c8057bc233c08fa4356af751049d4af44b850097576e13204b80213f307b70",
-      "bytes": 18165
+      "sha256": "8d92d95e30b5db9f6ef8d9e4eac629b6e4ec41e2359ab6c537ec0b918e05ac74",
+      "bytes": 18343
     },
     {
       "path": "internal/tui/keysfix_test.go",
@@ -13301,8 +13311,8 @@
     },
     {
       "path": "internal/tui/m11_marshal_test.go",
-      "sha256": "173d4ec4d93c77b77a6eb0bfd82dd56d4b2de4b06e81b43aa78922ea16033439",
-      "bytes": 15096
+      "sha256": "e2e57ef547f63b0d94f36c014e3e87c070ba3e7049123155076ca0c3b6176e7f",
+      "bytes": 15101
     },
     {
       "path": "internal/tui/main_test.go",
@@ -14711,22 +14721,22 @@
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-120x40.golden",
-      "sha256": "838f01b6cea733f4cd1b956ccd11af71ad095edf56724ec7f3f09b6b6eb9dbb7",
+      "sha256": "66767444f7238462660d202307bd5d72107d71465bdb22d2b25a273896b98360",
       "bytes": 8196
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-80x24.golden",
-      "sha256": "373e24724f314a79d9bb24b97182bce9bca1c6031ba3ee76202751033ea2fa16",
+      "sha256": "c3d0dbfbb781c12e97793dbb87cecb6602e8773396ed07318fffcbba7bfcf6e6",
       "bytes": 3887
     },
     {
       "path": "internal/tui/testdata/board/help-split-120x40.golden",
-      "sha256": "08e72bd6259795030a6ae023ca796320d7eb2879e52d3ceac1eee78037991c9b",
+      "sha256": "01ec416133f47857c9baec238a718d218ff51f6e628f836a2bf404d8f07e12f2",
       "bytes": 8196
     },
     {
       "path": "internal/tui/testdata/board/help-split-80x24.golden",
-      "sha256": "f7b44fc88f937b6a5463fbeba0aba2056e5bc7303deade8f1145a9de04393b04",
+      "sha256": "a5fac3ed56aa1083c4947def2d649791c4f34555299756ef0dbf67ea1a451407",
       "bytes": 3887
     },
     {
@@ -15066,8 +15076,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "fb976e734eecdf0a1440617cdf5e9d17cca68a3db951da0e80cbe9ae6d1e30bd",
-      "bytes": 85595
+      "sha256": "3461c211126f8e2c038d16e595c7ce233464367514002028fc82c7d47a9b2599",
+      "bytes": 86102
     },
     {
       "path": "internal/tui/workspace_keys_test.go",

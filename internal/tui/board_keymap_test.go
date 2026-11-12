@@ -258,8 +258,8 @@ func TestBoardHelpOverlay(t *testing.T) {
 // Every registry row has a unique id, a Why wherever it gates itself, and
 // is reachable by that id.
 func TestBoardActionIDsUnique(t *testing.T) {
-	if len(boardKeymap) != 49 {
-		t.Fatalf("boardKeymap has %d rows, want 49", len(boardKeymap))
+	if len(boardKeymap) != 50 {
+		t.Fatalf("boardKeymap has %d rows, want 50", len(boardKeymap))
 	}
 	seen := map[string]bool{}
 	for _, k := range boardKeymap {
