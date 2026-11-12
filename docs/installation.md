@@ -58,7 +58,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## Building from Source
 
-To compile Marshal directly from the Git repository, you need a Go compiler (Go 1.26.10 or newer):
+To compile Marshal directly from the Git repository, you need a Go compiler (Go 1.26.11 or newer):
 
 ```bash
 # 1. Clone the repository

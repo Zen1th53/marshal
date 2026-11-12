@@ -25,6 +25,8 @@
   card now shows beside the chat.
 - **Usage limits read the same everywhere**, as "% left". A provider whose
   limit Marshal cannot read shows "limit unknown".
+- Built with Go 1.26.11, which fixes a standard-library `net/http`
+  vulnerability (GO-2026-6859).
 - **Quitting returns you to your shell.** `q` (or `Ctrl+C` twice) now ends
   Marshal's own terminal session, chat included, instead of leaving you in the
   chat pane; a session Marshal did not create is left alone.
