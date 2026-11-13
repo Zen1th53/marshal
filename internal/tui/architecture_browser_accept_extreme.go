@@ -8,11 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -26,7 +27,32 @@ func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.
 			return session, err
 		}
 	}
-	return rt.StartArchitectureReviewForSession(ctx, provider, goal, w.sessionID, w.architectureReviewHooks())
+	session, err := rt.StartArchitectureReviewForSession(ctx, provider, goal, w.sessionID, w.architectureReviewHooks())
+	if errors.Is(err, projectcontext.ErrReviewPending) && w.store != nil {
+		// A drafted review needs an accepted project contract, and none is
+		// accepted or waiting: only the Marshal's summary can start it.
+		if _, accepted := w.store.ReadAcceptedProjectContract(ctx, rt.ProjectContractBinding()); errors.Is(accepted, projectcontext.ErrReviewPending) {
+			if w.askMarshalForProjectSummary() {
+				return nil, fmt.Errorf("%w; it was asked to send it now, then open the architecture again", errArchitectureAwaitsSummary)
+			}
+			return nil, fmt.Errorf("%w; open the Marshal chat so it can send it, then open the architecture again", errArchitectureAwaitsSummary)
+		}
+	}
+	return session, err
+}
+
+// projectSummaryRequest asks the Marshal for the project contract the
+// architecture view is built from. It grants and accepts nothing.
+const projectSummaryRequest = marshalNotePrefix + "The owner asked to see the architecture, but no project summary is waiting. Read every marshal_project_contract_inventory page, then send the architecture with marshal_project_contract_submit. If it is refused, the error says what to fix."
+
+// askMarshalForProjectSummary sends projectSummaryRequest when a Marshal chat
+// is open, and reports whether it did.
+func (w *Workspace) askMarshalForProjectSummary() bool {
+	if w.sayPane() == "" && !w.nativeChatShown() {
+		return false
+	}
+	w.noticeToMarshal(w.workers.context(), projectSummaryRequest)
+	return true
 }
 
 // browserAcceptNudge wakes an idle Marshal after a recorded browser Accept.

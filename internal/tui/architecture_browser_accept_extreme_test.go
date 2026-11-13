@@ -4,6 +4,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/architecturereview"
 
 	"github.com/Zen1th53/marshal/internal/projectcontext"
@@ -313,4 +315,72 @@ func TestBrowserAcceptClearsTheOpeningAnswer(t *testing.T) {
 	if answer == architectureOpening {
 		t.Fatalf("footer still says %q after Accept", answer)
 	}
+}
+
+// With a confirmed Goal but no project contract accepted or waiting, opening
+// the architecture runs no model turn and does not fail with a raw code: it
+// says plainly that the Marshal's summary is missing and asks the open
+// Marshal chat to send it.
+func TestArchitectureWithoutContractAsksMarshalForSummary(t *testing.T) {
+	w, _, _ := liveMCPFixture(t)
+	bin := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "model-turn")
+	for _, name := range []string{"codex", "claude"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\ntouch "+marker+"\nexit 3\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	w.tmuxMu.Lock()
+	w.tmuxActiveWins["marshal-chat"].paneID = "%4243"
+	w.tmuxMu.Unlock()
+	ownerCtx, err := w.marshalOperationOwnerContext(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.runtime.CommandCreateGoal(ownerCtx, app.CommandEnvelope{ProjectID: w.runtime.ProjectIdentity(), SessionID: w.sessionID, TargetID: "GOAL-arch", IdempotencyKey: "goal-arch"}, "Build a voice assistant"); err != nil {
+		t.Fatal(err)
+	}
+	session, err := w.startArchitectureReviewSession(ownerCtx, w.runtime, "codex", "")
+	if session != nil || !errors.Is(err, errArchitectureAwaitsSummary) {
+		t.Fatalf("session %v, err %v", session, err)
+	}
+	if strings.Contains(err.Error(), "REQUIRED_CONTEXT") || !strings.Contains(err.Error(), "it was asked to send it now") {
+		t.Fatalf("not plain: %v", err)
+	}
+	if plain := plainArchitectureError(err); !strings.HasPrefix(plain, "the Marshal has not sent the project summary yet") {
+		t.Fatalf("Board answer: %q", plain)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a model turn ran without an accepted contract")
+	}
+	asked := 0
+	for _, e := range w.sayEchoList() {
+		if e.Text == projectSummaryRequest {
+			asked++
+		}
+	}
+	if asked != 1 {
+		t.Fatalf("Marshal asked %d times: %+v", asked, w.sayEchoList())
+	}
+}
+
+// A refused contract draft tells the Marshal the exact path to fix, through
+// the real MCP transport, not the masked general sentence.
+func TestContractSubmitRefusalNamesTheBadPath(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	var inventory store.ProjectContractInventoryPage
+	if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_inventory", map[string]any{"limit": 1}, true)), &inventory); err != nil {
+		t.Fatal(err)
+	}
+	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: w.runtime.ProjectContractBinding(), ID: "ultron", Revision: 1, Purpose: "Voice assistant", Components: []projectcontext.Component{{ID: "voice", Responsibility: "Listen", Paths: []string{"ultron/"}}}, Invariants: []string{"Ask before destructive commands"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
+	msg := child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "bad-path", "proposal": draft}, false)
+	for _, want := range []string{`"voice"`, `path "ultron/"`, "no trailing", "submit again"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("refusal lacks %q: %s", want, msg)
+		}
+	}
+	draft.Contract.Components[0].Paths = []string{"ultron"}
+	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "good-path", "proposal": draft}, true)
 }

@@ -944,3 +944,34 @@ func TestProjectContextExistingJournalLabelsCannotForgeDecision(t *testing.T) {
 		t.Fatal("trailing malformed JSON accepted")
 	}
 }
+
+// A durable memory the Marshal saved itself (agent authority) can never bind
+// as a rule. The refusal names that memory and says how the contract can
+// still be accepted, instead of a bare review-pending code.
+func TestProjectContractRefusalNamesMarshalSavedRequiredMemory(t *testing.T) {
+	s := projectStore(t)
+	if err := s.InitMCPProposals(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
+	r := contextStoreRecord("MEM-marshal-saved", now)
+	r.Authority = model.AuthorityAgent
+	r.ContentDigest = r.CanonicalDigest()
+	if err := s.WriteMemoryV2(t.Context(), r); err != nil {
+		t.Fatal(err)
+	}
+	c, a, now := contextStoreDraft(t, s, []model.MemoryRecordV2{r})
+	req := admitContextDecision(t, s, c, true, "agent")
+	_, err := s.CommitMCPProjectContractDecision(t.Context(), req, true, a, now, contextAudit(req, now))
+	if !errors.Is(err, projectcontext.ErrReviewPending) {
+		t.Fatal("a Marshal-saved memory bound as owner policy", err)
+	}
+	for _, want := range []string{projectcontext.RequiredMemoryDetail + "MEM-marshal-saved", "not confirmed by the owner", "contract.invariants"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("refusal lacks %q: %v", want, err)
+		}
+	}
+	if _, err = s.ReadAcceptedProjectContract(t.Context(), c.Project); !errors.Is(err, projectcontext.ErrReviewPending) {
+		t.Fatal("refused contract became accepted", err)
+	}
+}
