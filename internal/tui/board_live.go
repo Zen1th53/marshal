@@ -278,11 +278,12 @@ func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p 
 	}
 	workers := w.boardWorkers(p.RunID)
 	moved := w.boardFeed.noteWorkers(p.RunID, workersFingerprint(workers))
-	if len(fresh) == 0 && !moved {
+	paused := w.marshalSession().pausedFor(p.RunID)
+	if len(fresh) == 0 && !moved && paused == p.Board.Run.UserPaused {
 		return false
 	}
 	next := *p
-	if moved || p.Board.Seq != before {
+	if moved || p.Board.Seq != before || paused != p.Board.Run.UserPaused {
 		next.Board = w.projectBoard(p, all)
 	} else {
 		next.Board = p.Board.Tail(fresh)

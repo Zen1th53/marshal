@@ -12651,13 +12651,13 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "010551f38f0afb8bed2b3d56833f41be041a1f9a527eb92f6d508cce5957b790",
-      "bytes": 42993
+      "sha256": "32567af067857ab2676d39b7231598c1c22722662d62917b11d8e3f156d132a8",
+      "bytes": 43114
     },
     {
       "path": "internal/tui/board_live_test.go",
-      "sha256": "c0046130b20ee13305e42f93bc59faa30136685f98ed5a635a19024b49b1bc79",
-      "bytes": 24313
+      "sha256": "0dd227990b1f8bc22888a0b34077da5c0548019fa04a5678a700d26e8ecee9a5",
+      "bytes": 25822
     },
     {
       "path": "internal/tui/board_marshal_picker.go",

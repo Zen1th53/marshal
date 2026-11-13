@@ -259,6 +259,49 @@ func TestBoardFollowsTheRunIncrementally(t *testing.T) {
 	}
 }
 
+func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
+	w, src := boardWorkspace(t)
+	select {
+	case <-w.repaint:
+	default:
+	}
+	before := w.marshalPanel()
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "running") {
+		t.Fatalf("initial Board header does not say running:\n%s", got)
+	}
+
+	// A user pause changes only the session hold: there are no new decisions
+	// and the tracked workers stay the same.
+	w.marshalSession().holdDispatch(before.RunID)
+	if !w.refreshBoardFrom(t.Context(), src, before) {
+		t.Fatal("a changed pause hold was not published")
+	}
+	paused := w.marshalPanel()
+	if !paused.Board.Run.UserPaused {
+		t.Fatal("the projected Board did not record the pause hold")
+	}
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "paused") {
+		t.Fatalf("Board header does not say paused after hold:\n%s", got)
+	}
+	if n := drainRepaints(w, 50*time.Millisecond); n != 1 {
+		t.Fatalf("a pause hold change asked for %d repaints, want 1", n)
+	}
+
+	w.marshalSession().releaseDispatch()
+	if !w.refreshBoardFrom(t.Context(), src, paused) {
+		t.Fatal("a released pause hold was not published")
+	}
+	if w.marshalPanel().Board.Run.UserPaused {
+		t.Fatal("the projected Board kept the released pause hold")
+	}
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "running") {
+		t.Fatalf("Board header does not say running after release:\n%s", got)
+	}
+	if n := drainRepaints(w, 50*time.Millisecond); n != 1 {
+		t.Fatalf("a released pause hold asked for %d repaints, want 1", n)
+	}
+}
+
 // The follower polls only while a moving run is on the Board.
 func TestBoardFollowerSleepsWhenNothingMoves(t *testing.T) {
 	w, _ := boardWorkspace(t)
