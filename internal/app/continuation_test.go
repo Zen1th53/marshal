@@ -248,3 +248,29 @@ func TestProposedCandidateRecallableAfterCrossProcessPromotion(t *testing.T) {
 		t.Fatalf("recall after cross-process promote: response=%+v err=%v", response, err)
 	}
 }
+
+// A real owner's Codex sessions folder holds every project's sessions. One of
+// them (another project's, a huge one, one still being written) could not be
+// decoded and stopped the whole read: "The Marshal's decision on
+// ~/.codex/sessions could not be applied". Such a file is skipped; this
+// project's sessions still load.
+func TestReadContinuationSkipsUndecodableSessions(t *testing.T) {
+	r := openNetpolRuntime(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	grantTestRead(t, r, dir)
+	local := fmt.Sprintf("{\"type\":\"session_meta\",\"timestamp\":\"2026-10-01T10:00:00Z\",\"payload\":{\"id\":\"local\",\"cwd\":%q}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"phase\":\"final_answer\",\"content\":[{\"type\":\"output_text\",\"text\":\"Pending: implement feature\"}]}}\n", r.ProjectRoot())
+	if err := os.WriteFile(filepath.Join(dir, "b-local.jsonl"), []byte(local), 0600); err != nil {
+		t.Fatal(err)
+	}
+	huge := fmt.Sprintf("{\"type\":\"session_meta\",\"timestamp\":\"2026-10-01T10:00:00Z\",\"payload\":{\"id\":\"huge\",\"cwd\":%q}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":%q}]}}\n", t.TempDir(), strings.Repeat("x", 2<<20))
+	for name, data := range map[string]string{"a-huge-line.jsonl": huge, "c-partial.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	records, _, err := r.ReadContinuation(ctx, "codex", dir)
+	if err != nil || len(records) != 1 || records[0].SessionID != "local" {
+		t.Fatalf("one undecodable session stopped the read: %v %v", records, err)
+	}
+}

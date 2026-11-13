@@ -464,3 +464,21 @@ func TestInternalVerificationStopReadsPlain(t *testing.T) {
 		t.Fatalf("a check stop's activity lost its reason: %q", l.Detail)
 	}
 }
+
+// v0.2.12 and v0.2.13 recorded a final-check stop as the bare code
+// REQUIRED_CONTEXT_REVIEW_PENDING with a /marshal resume instruction. The
+// Board and Activity read it in plain words with Enter as the next step.
+func TestBareCodeVerificationStopReadsPlain(t *testing.T) {
+	plain := "Marshal could not finish checking the run: the final check could not be tied to the project's accepted design."
+	for _, raw := range []string{"REQUIRED_CONTEXT_REVIEW_PENDING", "integrated result is not verified: REQUIRED_CONTEXT_REVIEW_PENDING", "verification stopped: REQUIRED_CONTEXT_REVIEW_PENDING"} {
+		r := marshal.Run{State: marshal.AwaitingUser, Pause: &marshal.Pause{Reason: raw, Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume}}
+		b := Project(Snapshot{RunID: "R1", Run: r}, nil)
+		if b.Run.Paused != plain || !reflect.DeepEqual(b.Run.Next, []string{"Press Enter to let the Marshal retry."}) {
+			t.Fatalf("board stop for %q: %q %q", raw, b.Run.Paused, b.Run.Next)
+		}
+		l, ok := NewActivityLine(events.Event{Type: events.EventTypeMarshalEscalated, Data: map[string]any{"reason": raw, "role": "independent-verifier"}})
+		if !ok || l.Detail != plain {
+			t.Fatalf("activity for %q: %+v", raw, l)
+		}
+	}
+}

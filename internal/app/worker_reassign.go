@@ -202,6 +202,9 @@ func (r *Runtime) independentVerifierProvider(run marshal.Run) (string, error) {
 		if reason, limited := r.providerLimited(provider); limited {
 			reasons = append(reasons, "limited: "+reason)
 		}
+		if reason := requiredVerifierAttributionGap(provider); reason != "" {
+			reasons = append(reasons, reason)
+		}
 		if len(reasons) != 0 {
 			excluded = append(excluded, provider+": "+strings.Join(reasons, ", "))
 		} else {

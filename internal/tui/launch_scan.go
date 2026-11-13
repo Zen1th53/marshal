@@ -620,6 +620,16 @@ func loadedEarlierSessionsLine(provider string, count int) string {
 	return fmt.Sprintf("Loaded %d earlier %s %s for this project.", count, name, noun)
 }
 
+// earlierWorkFailedLine is the Activity line for earlier provider work that
+// could not be loaded. The run does not depend on it.
+func earlierWorkFailedLine(provider string, err error) string {
+	name := "Claude"
+	if provider == "codex" {
+		name = "Codex"
+	}
+	return fmt.Sprintf("Couldn't load earlier %s work for this project (%s). The run does not need it.", name, shortLaunchError(err))
+}
+
 func (w *Workspace) finishEarlierContinuation(folder string, err error) {
 	key := filepath.Clean(folder)
 	w.permissions.mu.Lock()

@@ -439,17 +439,23 @@ func init() {
 
 // plainVerificationRetry is what the person does about a verification stop
 // the runtime's own bookkeeping caused.
-const plainVerificationRetry = "Press Enter to let the Marshal retry."
+const plainVerificationRetry = marshal.VerificationRetry
 
 // plainVerificationStop is the plain sentence for a verification stop an
 // older build recorded with the runtime's raw execution-run error as its
 // reason; the runtime now records the sentence itself and keeps the raw
 // error as the pause's detail (app.internalVerificationStop).
+// An older build also recorded a required-context or verifier-output refusal
+// as its bare code (REQUIRED_CONTEXT_REVIEW_PENDING); it reads as the plain
+// sentence the runtime records now (marshal.PlainVerificationStop).
 func plainVerificationStop(reason string) (string, bool) {
 	for _, raw := range []string{"verification stopped: execution run conflict", "verification stopped: execution run invalid", "verification stopped: invalid state transition"} {
 		if strings.HasPrefix(reason, raw) {
 			return "Marshal could not finish checking the run.", true
 		}
+	}
+	if plain, _, ok := marshal.PlainVerificationStop(reason); ok {
+		return plain, true
 	}
 	return "", false
 }

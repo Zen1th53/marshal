@@ -466,6 +466,11 @@ func (w *Workspace) settledProposalMCP(req permission.Request) bool {
 	p, err := w.store.MCPProposal(context.Background(), w.projectID, req.SourceOccurrence)
 	return err == nil && p.State != "admitted" && p.State != "answer_accepted"
 }
+// errProposalSettled refuses a second decision on a live MCP proposal whose
+// application already started or ended: a duplicate delivery of the same
+// proposal. The first decision owns the outcome and its Activity line.
+var errProposalSettled = errors.New("proposal receipt is not pending")
+
 func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, error) error, error) {
 	if req.SourceLaunch == "" {
 		return func(bool, error) error { return nil }, nil
@@ -477,7 +482,11 @@ func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, er
 		return nil, errors.New("proposal permission belongs to inactive launch")
 	}
 	p, err := w.store.MCPProposal(context.Background(), w.projectID, req.SourceOccurrence)
-	if err != nil || p.Launch != l.id || (p.State != "admitted" && p.State != "answer_accepted") {
+	if err == nil && p.Launch == l.id && p.State != "admitted" && p.State != "answer_accepted" {
+		w.proposalMCP.mu.Unlock()
+		return nil, errProposalSettled
+	}
+	if err != nil || p.Launch != l.id {
 		w.proposalMCP.mu.Unlock()
 		return nil, errors.New("proposal receipt is not pending")
 	}

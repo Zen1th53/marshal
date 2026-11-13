@@ -55,6 +55,7 @@ func TestBoardRunStopNotice(t *testing.T) {
 func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
 	for name, pause := range map[string]marshal.Pause{
 		"plain":       {Reason: "Marshal could not finish checking the run (part of it was left paused).", Resolutions: []string{"Press Enter to let the Marshal retry."}, Detail: "verification stopped: execution run conflict: required completion child identity/state", Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
+		"bare code": {Reason: "REQUIRED_CONTEXT_REVIEW_PENDING", Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
 		"older build": {Reason: "verification stopped: execution run conflict: required completion child identity/state", Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -74,7 +75,7 @@ func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
 			if last := lines[len(lines)-1]; !strings.Contains(last, "▮ waits for you · Marshal could not finish checking the run") || !strings.Contains(last, "Enter: continue") {
 				t.Fatalf("footer: %s", last)
 			}
-			for _, raw := range []string{"execution run conflict", "identity/state", "inspect the retained", "/marshal"} {
+			for _, raw := range []string{"execution run conflict", "identity/state", "inspect the retained", "inspect the verification", "/marshal", "REQUIRED_"} {
 				if strings.Contains(got, raw) {
 					t.Fatalf("the stop shows %q:\n%s", raw, got)
 				}

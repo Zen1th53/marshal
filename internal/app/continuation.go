@@ -277,7 +277,7 @@ func (r *Runtime) ReadGranted(ctx context.Context, path string) ([]byte, error) 
 	}
 	data, err := io.ReadAll(io.LimitReader(f, 32<<20+1))
 	if len(data) > 32<<20 {
-		return nil, fmt.Errorf("history exceeds 32 MiB")
+		return nil, errHistoryTooLarge
 	}
 	return data, err
 }
@@ -619,6 +619,13 @@ func (r *Runtime) ContinuationCandidates() []model.MemoryRecordV2 {
 
 // ReadContinuation only traverses a recorded folder and only decodes visible
 // conversation fields. Project CWD is mandatory; foreign sessions are omitted.
+var errHistoryTooLarge = errors.New("history exceeds 32 MiB")
+
+// ReadContinuation proposes this project's sessions from a granted provider
+// history folder. A provider's folder holds every project's sessions; a file
+// that is too large or cannot be decoded (another project's, one still being
+// written) is skipped: it cannot be shown to belong to this project, so
+// nothing of it is proposed, and it no longer stops the whole read.
 func (r *Runtime) ReadContinuation(ctx context.Context, provider, folder string) ([]model.MemoryRecordV2, bool, error) {
 	if !r.HasReadGrant(folder) {
 		return nil, false, authz.ErrDenied
@@ -687,12 +694,15 @@ func (r *Runtime) ReadContinuation(ctx context.Context, provider, folder string)
 			return nil
 		}
 		raw, err := r.ReadGranted(ctx, path)
+		if errors.Is(err, errHistoryTooLarge) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
 		tr, err := adapter.Decode(raw)
 		if err != nil {
-			return fmt.Errorf("decode provider history: %w", err)
+			return nil
 		}
 		if canonicalSessionRoot(tr.CWD) != canonicalSessionRoot(r.ProjectRoot()) {
 			return nil

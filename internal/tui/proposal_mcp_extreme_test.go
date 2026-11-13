@@ -386,3 +386,26 @@ func TestLiveMCPIntakeLanguageOnlyAccepted(t *testing.T) {
 		t.Fatal("intake with unknown key accepted over MCP")
 	}
 }
+
+// A fresh v0.2.13 run showed "Antigravity verified." and, in the same second,
+// "Verifying Antigravity failed: proposal receipt is not pending": the same
+// live proposal was decided twice, and the second decision found it already
+// applied. That duplicate is not a failure and adds no Activity line.
+func TestLiveMCPDuplicateDecisionOfAppliedProposalIsSilent(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	submitMCP(t, cfg, `{"submission_id":"twice","proposal":{"action":"setting","key":"acceptance-mode","value":"marshal"}}`)
+	req := w.permissions.queue.Take(false)[0]
+	w.finishBuildDecisionAs(t.Context(), req, "first", true, "apply", "codex", "")
+	first := w.state.LastOutput
+	if _, err := w.beginProposalMCPApply(req); !errors.Is(err, errProposalSettled) {
+		t.Fatalf("settled proposal admitted again: %v", err)
+	}
+	w.finishBuildDecisionAs(t.Context(), req, "second", true, "apply", "codex", "")
+	if w.state.LastOutput != first || strings.Contains(w.state.LastOutput, "not pending") || strings.Contains(w.state.LastOutput, "could not be applied") {
+		t.Fatalf("duplicate decision added Activity: %q", strings.TrimPrefix(w.state.LastOutput, first))
+	}
+	stored, err := w.store.MCPProposal(t.Context(), w.projectID, req.SourceOccurrence)
+	if err != nil || stored.State != "applied" {
+		t.Fatalf("first application lost: %+v %v", stored, err)
+	}
+}

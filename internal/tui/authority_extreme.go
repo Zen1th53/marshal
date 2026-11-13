@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -318,10 +319,23 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 		ctx = app.WithExtremeRuntimeDecision(ctx, id, reason, req.Reason, provider, req.ApprovalBinding, decidedBy)
 	}
 	err := w.decidePermission(ctx, req, allow, "marshal")
+	if errors.Is(err, errProposalSettled) {
+		// A duplicate delivery of a proposal already being applied or
+		// applied: the first decision recorded the outcome and its line
+		// ("Antigravity verified."); this one adds neither.
+		w.permissions.mu.Lock()
+		delete(w.permissions.build.redeliver, req.Key())
+		w.permissions.mu.Unlock()
+		return
+	}
 	if err == nil && allow && req.Kind == "marshal-command" && strings.HasPrefix(req.Object, "/marshal approve-task ") {
 		w.queuePrivateProcess05Resume()
 	}
-	if text := marshalDecisionActivity(req.Object, allow, err); text != "" {
+	if text := marshalDecisionActivity(req.Object, allow, err); err != nil && allow && req.Kind == "read" && req.ContinuationProvider != "" {
+		// Loading earlier work is the runtime's own reading of the
+		// provider's history, not a Marshal decision the person made.
+		w.RecordActivity(earlierWorkFailedLine(req.ContinuationProvider, err))
+	} else if text != "" {
 		w.RecordActivity(text)
 	}
 

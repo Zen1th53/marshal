@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -118,5 +119,14 @@ func TestLaunchEarlierSessionsKeepOperatorDenial(t *testing.T) {
 	}
 	if inbox, _ := os.ReadFile(filepath.Join(runtime.ProjectRoot(), ".marshal", "inbox", "marshal.md")); strings.Contains(string(inbox), "granted continuation") || strings.Contains(string(inbox), "denied earlier content") {
 		t.Fatalf("earlier work delivered after an operator denial:\n%s", inbox)
+	}
+}
+
+// Earlier work that cannot be loaded reads as such, not as a Marshal decision
+// that "could not be applied".
+func TestEarlierWorkFailedLineIsPlain(t *testing.T) {
+	got := earlierWorkFailedLine("codex", errors.New("decode provider history: bufio.Scanner: token too long"))
+	if !strings.HasPrefix(got, "Couldn't load earlier Codex work for this project (") || !strings.HasSuffix(got, "The run does not need it.") || strings.Contains(got, "decision") {
+		t.Fatalf("line: %q", got)
 	}
 }
