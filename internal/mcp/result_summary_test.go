@@ -19,6 +19,12 @@ func TestMarshalResultStartsWithPlainSummary(t *testing.T) {
 		{"marshal_memory_receipt", `{"occurrence_id":"mcp:1","memory_id":"MEM-1","state":"committed"}`, "Memory candidate saved."},
 		{"task_get", `{"id":"TASK-9","title":"Add square","status":"in_progress"}`, `Task "Add square" is in progress.`},
 		{"tasks_list", `[{"id":"TASK-1"},{"id":"TASK-2"}]`, "2 tasks."},
+		{"agents_list", `[{"id":"AGENT-1"}]`, "1 agent."},
+		{"marshal_status", `{"no_run":true}`, "Status: no run yet."},
+		{"verification_status", `{"exit_status":0}`, "Verification passed."},
+		{"verification_status", `{"exit_status":2}`, "Verification failed with exit status 2."},
+		{"task_claim", `{"id":"TASK-1","lease":"L-1"}`, "Task claimed."},
+		{"memory_status", `{"healthy":true,"records":3}`, "Memory status: healthy, 3 records."},
 	} {
 		s := &Server{role: "marshal"}
 		content := s.marshalResultContent(tc.name, tc.text)
