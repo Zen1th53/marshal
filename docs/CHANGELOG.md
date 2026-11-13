@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.13
+
+### Fixed
+- A run paused while a task was working now finishes and delivers; in 0.2.12 it stopped at the final check with nothing delivered. A run that stays paused waits before the final check instead of stopping, "Resume all" resumes a task paused mid-turn, and a run 0.2.12 left stopped continues on Enter.
+- The Board header says "paused" while you hold the run.
+- An internal verification stop reads "Marshal could not finish checking the run" with Enter to retry, instead of the raw error.
+- After planning, Activity says the Marshal approved the plan and the tasks start; no mention of a popup. The busy-Marshal retry note is plain.
+- More Marshal tool results in the chat start with a plain line (status, tasks, agents, memory, verification).
+- The installer and quick start say `cd /path/to/your/repository && marshal`.
+
 ## 0.2.12
 
 ### Fixed
