@@ -2502,7 +2502,10 @@ func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, sta
 	}
 	note := "Marshal " + stage + "; consumed draft retained. Review it and any transferred plan pack before preparing a fresh handoff."
 	if stage == "canonical Process 04 evidence unavailable" {
-		note = "Marshal cannot offer plan approval until Process 04 verifies the current Goal, project context, and every selected worker profile. Inspect /harness status, verify the missing workers, then prepare a fresh draft. Consumed draft retained."
+		// The reason below names the missing evidence (a context read, a
+		// worker profile, Goal coverage, an existing plan); a fixed hint
+		// about workers sent the Marshal to re-verify a worker that was fine.
+		note = "Marshal cannot offer plan approval: the runtime refused this draft for the reason below. Fix what it names, then publish a fresh draft. Consumed draft retained."
 	}
 	// The exact runtime reason is what lets the Marshal correct and
 	// republish the draft. Draft validation errors can quote untrusted draft

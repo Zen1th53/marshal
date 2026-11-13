@@ -12286,8 +12286,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "c7cc0532e6b8fe684494c71b4549b5bdbd198cd43a8320f1797c8c59ed35c244",
-      "bytes": 20016
+      "sha256": "14d06f1e93f6c4757efb1b6e118ae65f528b5783584dd3e97e1ce044d83fd2b5",
+      "bytes": 22354
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -14201,13 +14201,13 @@
     },
     {
       "path": "internal/tui/native_planning_context_extreme.go",
-      "sha256": "8538e679b93d1fd07186cdb07f62df5d57eb612efd7136cebad0f4ba5d29aba9",
-      "bytes": 12747
+      "sha256": "239f45a695a55588a77c440de5c187f41e90fe018c3ca211e5ef37bf7d64dbd1",
+      "bytes": 13298
     },
     {
       "path": "internal/tui/native_planning_context_extreme_test.go",
-      "sha256": "c20cfef2538da3022f7ccce759d06c0ad792cea4424cbc8284728d7f7a5ed18f",
-      "bytes": 26637
+      "sha256": "27df78075a4b5d537e94b124d5311cf186a1a9d1800dc09ff29ce44b4647c4ae",
+      "bytes": 28827
     },
     {
       "path": "internal/tui/native_safety.go",
@@ -14541,8 +14541,8 @@
     },
     {
       "path": "internal/tui/proposal_refusal_extreme_test.go",
-      "sha256": "eb3c61a3cfb9efd388c9bf92051d699d558941eab8207b0b09a1e2667e6c0daa",
-      "bytes": 6739
+      "sha256": "11b2796b8aaaf4422bda6ab3709f1bf2dc969aa932df1af011b74b19f5e7d5b6",
+      "bytes": 9633
     },
     {
       "path": "internal/tui/provider_config_pty_test.go",
@@ -15321,8 +15321,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "3a152b208b8fc4f345256dc0533af5bf56102d9ad8cbf9cd0e5238015e942006",
-      "bytes": 83840
+      "sha256": "e6b4fb321198a0e6c9b6d4a2d84f1d33767087e9365a870e55a0fef1d566978b",
+      "bytes": 83973
     },
     {
       "path": "internal/tui/tmux_native_osc_test.go",
@@ -16521,8 +16521,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "7cd6a95c38f2014121b54dba06fbd529ffe6831d400b78b2cc0e610b1e0bda91",
-      "bytes": 439938
+      "sha256": "856ac208b4f25b0bc9ab144a2d6e13d771b005ceba432fbd32ff8b049daf0814",
+      "bytes": 440192
     },
     {
       "path": "tools/extreme/prq/main_default.go",

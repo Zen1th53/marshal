@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -158,6 +159,12 @@ func (w *Workspace) withNativePlanningDraftRead(ctx context.Context, provider, g
 // The task list has no canonical Goal authority. Only its deterministic
 // materializer placeholder may be replaced with the currently read host Goal;
 // any conflicting explicit canonical binding/pin is refused.
+// errNoNativePlanningRead is the refusal of a draft published without a
+// current marshal_project_contract_context read on the live launch. It keeps
+// the REQUIRED_CONTEXT_REVIEW_PENDING class and names the missing evidence,
+// so the Marshal reads the context instead of re-verifying workers.
+var errNoNativePlanningRead = fmt.Errorf("%w: this draft has no current project context read; call marshal_project_contract_context (its reply carries a read_id), then publish the draft again; one read admits one draft", projectcontext.ErrReviewPending)
+
 func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider string, service *app.MarshalService, runID string, draft app.MarshalDraft, budget marshal.Budget) (marshal.Run, error) {
 	w.proposalMCP.mu.Lock()
 	l := w.proposalMCP.active
@@ -168,7 +175,7 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 	p := l.planning
 	if p == nil {
 		w.proposalMCP.mu.Unlock()
-		return marshal.Run{}, projectcontext.ErrReviewPending
+		return marshal.Run{}, errNoNativePlanningRead
 	}
 	goalID, revision, contract := p.goalID, p.goalRevision, p.contract
 	w.proposalMCP.mu.Unlock()
