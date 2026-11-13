@@ -383,6 +383,20 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 			if saveErr := w.store.ResolveMarshalProposalRequest(context.WithoutCancel(ctx), w.projectID, req.Key(), req.ProposalID, outcome); saveErr != nil {
 				err = errors.Join(err, saveErr)
 			}
+		} else if req.SourceLaunch != "" && req.ProposalID != "" && req.SourceOccurrence != req.ProposalID && w.store != nil {
+			// A journalled proposal the live Marshal decided carries the
+			// decision's provenance, not its own: its journal entry is settled
+			// by its own occurrence, or recovery would ask about it again.
+			outcome := "declined"
+			if allow {
+				outcome = "applied"
+				if err != nil {
+					outcome = "failed"
+				}
+			}
+			if saveErr := w.store.ResolveMarshalProposal(context.WithoutCancel(ctx), w.projectID, req.ProposalID, outcome); saveErr != nil {
+				err = errors.Join(err, saveErr)
+			}
 		}
 		w.marshalProposalDecisionNotice(req, allow, err)
 	}()

@@ -632,7 +632,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if !verdict.Outcome.Permits() {
 		result = marshal.VerdictReturn
 		if proposal.Verdict == marshal.VerdictAccept {
-			proposal.Reasons = append(proposal.Reasons, "acceptance refused: "+string(verdict.Reason))
+			proposal.Reasons = append(proposal.Reasons, acceptanceRefusal(verdict.Reason, proposal.Independent))
 		}
 		if len(failing) > 0 {
 			proposal.Reasons = append(proposal.Reasons, "criteria without passing evidence: "+strings.Join(failing, "; "))
@@ -672,6 +672,21 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		return "", err
 	}
 	return result, s.record(ctx, runID, taskID, events.EventTypeMarshalTaskAccepted, eventData)
+}
+
+// acceptanceRefusal names why the gate refused a hand-in the Marshal
+// accepted. When the required independent review did not accept it, that is
+// the cause, and the line says so: the Marshal's own reasons read as an
+// acceptance, and the reviewer's reasons follow them in the return reasons.
+func acceptanceRefusal(reason constitution.ReasonCode, independent *marshal.IndependentReview) string {
+	if independent != nil && independent.Verdict != marshal.VerdictAccept {
+		who := independent.Provider
+		if who == "" {
+			who = independent.Reviewer
+		}
+		return "acceptance refused: the independent review by " + who + " did not accept it (" + string(independent.Verdict) + "); its reasons follow (" + string(reason) + ")"
+	}
+	return "acceptance refused: " + string(reason)
 }
 
 // finishMarshalReturn records the attempt's reasons and applies the rework
@@ -744,7 +759,7 @@ func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
 		t.State = marshal.Escalated
 		t.EscalationReason = "worker rework limit reached"
 		t.EscalationCode = escalationCode(marshal.CodeReworkLimit, t.EscalationReason)
-		pauseMarshal(run, marshal.Pause{Reason: "worker rework limit reached", Resolutions: []string{"resolve the escalation or amend the plan"}, Code: marshal.CodeReworkLimit, Action: marshal.PauseResume})
+		pauseMarshal(run, reworkLimitEscalationPause(*t))
 	}
 	return result
 }
