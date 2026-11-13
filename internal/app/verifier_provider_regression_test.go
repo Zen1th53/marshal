@@ -2,14 +2,18 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -53,7 +57,13 @@ func TestVerifierProviderExcludesAllWorkersAndLimits(t *testing.T) {
 	}
 	r.clearProviderLimit("codex")
 	p, err = s.VerifierProvider(t.Context(), run)
-	if err != nil || p != "codex" {
+	if gap := requiredVerifierAttributionGap("codex"); gap != "" {
+		// The shipped final check needs a verifier that names its model;
+		// Codex does not, so clearing its limit leaves no verifier.
+		if err == nil || p != "" || !strings.Contains(err.Error(), gap) {
+			t.Fatalf("unattributable Codex selected: %q %v", p, err)
+		}
+	} else if err != nil || p != "codex" {
 		t.Fatalf("successful harness verify did not restore independent Codex: %q %v", p, err)
 	}
 	run.Tasks = append(run.Tasks, marshal.Task{Worker: "codex"})
@@ -100,7 +110,7 @@ func TestUnavailableVerifierPausesRunWithExclusions(t *testing.T) {
 		t.Fatal("missing independent verifier accepted")
 	}
 	paused, err := s.Snapshot(t.Context(), "run")
-	if err != nil || paused.State != marshal.AwaitingUser || paused.Pause == nil || !strings.Contains(paused.Pause.Reason, "codex: not installed") || paused.Pause.ResumeState != marshal.Verifying {
+	if err != nil || paused.State != marshal.AwaitingUser || paused.Pause == nil || !strings.Contains(paused.Pause.Detail, "codex: not installed") || strings.Contains(paused.Pause.Reason, "/marshal") || !strings.Contains(paused.Pause.Resolutions[0], "press Enter") || paused.Pause.ResumeState != marshal.Verifying {
 		t.Fatalf("no durable verifier pause: %+v %v", paused, err)
 	}
 }
@@ -116,5 +126,64 @@ func TestVerifierProviderCanUseMarshalProvider(t *testing.T) {
 	provider, err := s.VerifierProvider(t.Context(), marshal.Run{Tasks: []marshal.Task{{Worker: "codex"}}})
 	if err != nil || provider != "claude" {
 		t.Fatalf("independent Marshal provider displaced: %q %v", provider, err)
+	}
+}
+
+// A verification stop whose cause is only a refusal code reads in plain words
+// with Enter as the next step; the code stays in the pause detail and the
+// recorded event's reason.
+func TestBareCodeVerificationStopReadsPlain(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		cause error
+		pause func(*MarshalService, string, marshal.Run, int64, error) error
+	}{
+		{"verifier review pending", projectcontext.ErrReviewPending, func(s *MarshalService, id string, run marshal.Run, rev int64, cause error) error {
+			return s.pauseUnavailableVerifier(t.Context(), id, run, rev, cause)
+		}},
+		{"verification changed", projectcontext.Changed("x.go:1"), func(s *MarshalService, id string, _ marshal.Run, _ int64, cause error) error {
+			return s.pauseVerificationFailure(t.Context(), id, cause)
+		}},
+		{"verifier output", fmt.Errorf("%w: 1 assessments for 2 criteria", errRequiredVerifierOutput), func(s *MarshalService, id string, run marshal.Run, rev int64, cause error) error {
+			return s.pauseUnavailableVerifier(t.Context(), id, run, rev, cause)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := marshalFixture(t, 1)
+			startIntegrityRun(t, s, marshal.Budget{})
+			run, rev, err := s.load(t.Context(), "run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			run.State = marshal.Verifying
+			if err = s.save(t.Context(), "run", run, rev); err != nil {
+				t.Fatal(err)
+			}
+			run, rev, _ = s.load(t.Context(), "run")
+			if err = tc.pause(s, "run", run, rev, tc.cause); !errors.Is(err, tc.cause) {
+				t.Fatalf("cause lost: %v", err)
+			}
+			paused, err := s.Snapshot(t.Context(), "run")
+			if err != nil || paused.Pause == nil {
+				t.Fatal(err)
+			}
+			p := paused.Pause
+			if !strings.HasPrefix(p.Reason, "Marshal could not finish checking the run: ") || strings.Contains(p.Reason, "REQUIRED_") || len(p.Resolutions) != 1 || p.Resolutions[0] != marshal.VerificationRetry || !strings.Contains(p.Detail, strings.SplitN(tc.cause.Error(), " ", 2)[0]) || p.Code != marshal.CodeVerificationStopped || p.ResumeState != marshal.Verifying {
+				t.Fatalf("stop words: %+v", p)
+			}
+			decisions, err := s.Store.MarshalDecisions(t.Context(), "run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorded := false
+			for _, ev := range decisions {
+				if ev.Type == events.EventTypeMarshalEscalated && ev.Data["summary"] == p.Reason && strings.Contains(fmt.Sprint(ev.Data["reason"]), strings.SplitN(tc.cause.Error(), " ", 2)[0]) {
+					recorded = true
+				}
+			}
+			if !recorded {
+				t.Fatal("escalation lost the raw reason or the summary")
+			}
+		})
 	}
 }

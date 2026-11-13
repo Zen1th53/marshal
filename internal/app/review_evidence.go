@@ -128,14 +128,35 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 	if cause.Error() == "independent verifier is unavailable" || cause.Error() == "verification refused" {
 		return cause
 	}
-	recovery := "inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"
+	pause := marshal.Pause{Reason: cause.Error(), Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume}
+	data := map[string]any{"reason": cause.Error(), "role": "independent-verifier"}
 	if errors.Is(cause, errIndependentVerifierUnavailable) {
-		recovery = "install or /harness verify an independent provider, then /marshal resume to retry verification"
+		// The person must make an independent checker available; the
+		// exclusions stay in the detail and the recorded event.
+		pause.Reason, pause.Detail = "The final check has no independent checker: each installed AI tool is doing this run's tasks, is limited, or cannot take this role.", cause.Error()
+		pause.Resolutions = []string{independentCheckerResolution()}
+		data["summary"] = pause.Reason
+	} else if reason, next, ok := plainContextVerificationStop(cause); ok {
+		// A bare refusal code reads as a plain sentence; the code stays in
+		// the detail and the recorded event.
+		pause.Reason, pause.Resolutions, pause.Detail = reason, []string{next}, cause.Error()
+		data["summary"] = pause.Reason
 	}
+	data["resolutions"] = pause.Resolutions
 	ctx = context.WithoutCancel(ctx)
-	pauseMarshal(&run, marshal.Pause{Reason: cause.Error(), Resolutions: []string{recovery}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume})
+	pauseMarshal(&run, pause)
 	if err := s.save(ctx, runID, run, revision); err != nil {
 		return errors.Join(cause, err)
 	}
-	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": cause.Error(), "role": "independent-verifier"}))
+	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, data))
+}
+
+// independentCheckerResolution says what makes an independent checker
+// available. In the shipped edition only Claude Code can be the final
+// checker, because only its answer names the model that gave it.
+func independentCheckerResolution() string {
+	if requiredVerifierAttributionGap("codex") != "" {
+		return "Install Claude Code or wait until its limit passes; it must not be doing this run's tasks. Then press Enter to let the Marshal retry."
+	}
+	return "Install an AI tool that is doing none of this run's tasks, or wait until one's limit passes. Then press Enter to let the Marshal retry."
 }

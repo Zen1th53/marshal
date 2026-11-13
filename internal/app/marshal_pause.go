@@ -11,6 +11,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
 func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID string, cause error) error {
@@ -35,8 +36,11 @@ func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID str
 		if s.process05Paused != nil && s.process05Paused(ctx, run) {
 			pause.Reason = "Marshal could not finish checking the run (part of it was left paused)."
 		}
-		pause.Resolutions = []string{"Press Enter to let the Marshal retry."}
+		pause.Resolutions = []string{marshal.VerificationRetry}
 		pause.Detail = machine
+		data["summary"] = pause.Reason
+	} else if reason, next, ok := plainContextVerificationStop(cause); ok {
+		pause.Reason, pause.Resolutions, pause.Detail = reason, []string{next}, machine
 		data["summary"] = pause.Reason
 	}
 	data["resolutions"] = pause.Resolutions
@@ -53,6 +57,24 @@ func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID str
 // project: a retry is the only thing to do about it.
 func internalVerificationStop(cause error) bool {
 	return errors.Is(cause, execution.ErrRunConflict) || errors.Is(cause, execution.ErrRunInvalid) || errors.Is(cause, execution.ErrInvalidStateTransition)
+}
+
+// errRequiredVerifierOutput marks a verifier answer that does not fit the
+// required assessment shape. It is the verifier's fault, not a change in the
+// project context, and the close can be retried with a fresh verifier turn.
+var errRequiredVerifierOutput = errors.New(marshal.RequiredVerifierOutputInvalid)
+
+// plainContextVerificationStop is the plain sentence and next step for a
+// verification stop caused by a required-context or verifier-output refusal,
+// whose raw error is only a code. The code itself stays in the pause detail
+// and the recorded event.
+func plainContextVerificationStop(cause error) (reason, next string, ok bool) {
+	for _, code := range []error{projectcontext.ErrReviewPending, projectcontext.ErrChanged, projectcontext.ErrMissing, projectcontext.ErrBudget, projectcontext.ErrInvalid, errRequiredVerifierOutput} {
+		if errors.Is(cause, code) {
+			return marshal.PlainVerificationStop(code.Error())
+		}
+	}
+	return "", "", false
 }
 
 func pauseMarshal(run *marshal.Run, p marshal.Pause) {

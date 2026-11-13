@@ -69,11 +69,27 @@ func (m *MarshalCLI) validateRequiredMarshalBinary() error {
 	return nil
 }
 
+// requiredMarshalReportsModel reports whether a provider's native CLI output
+// names the model that answered. Only Claude's final response does; Codex,
+// Antigravity and OpenCode output carries no model metadata.
+func requiredMarshalReportsModel(provider string) bool { return provider == "claude" }
+
+// requiredVerifierAttributionGap says why a provider cannot be the independent
+// verifier: the required check refuses a verdict whose model is unknown
+// (requiredVerifierKnownIdentity), so choosing it would spend a turn that can
+// only stop the run.
+func requiredVerifierAttributionGap(provider string) string {
+	if requiredMarshalReportsModel(provider) {
+		return ""
+	}
+	return "its answer does not name the model that gave it (the final check needs Claude Code)"
+}
+
 // Only an unambiguous typed native Claude final-response field is observed.
 // Requested selectors and model text inside structured output convey no model
 // identity. Other providers, absent metadata and conflicts remain UNKNOWN.
 func requiredMarshalObservedModel(provider string, raw []byte) string {
-	if provider != "claude" {
+	if !requiredMarshalReportsModel(provider) {
 		return ""
 	}
 	var envelope map[string]json.RawMessage

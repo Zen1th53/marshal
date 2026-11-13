@@ -432,11 +432,6 @@ func requiredSourceChangeCause(err error) error {
 	return fmt.Errorf("%w: %v", projectcontext.Changed("project_context_verification_producer_extreme.go:407"), err)
 }
 
-// errRequiredVerifierOutput marks a verifier answer that does not fit the
-// required assessment shape. It is the verifier's fault, not a change in the
-// project context, and the close can be retried with a fresh verifier turn.
-var errRequiredVerifierOutput = errors.New("REQUIRED_VERIFIER_OUTPUT_INVALID")
-
 func requiredVerifierEvidence(session verification.Session, criteria []requiredVerifierCriterion, result requiredVerifierResult, capture *requiredMarshalTurnCapture) (verification.Session, store.ProjectVerificationObservation, map[string][]byte, error) {
 	if capture == nil || !capture.consumed || result.Head != capture.preparation.head {
 		return verification.Session{}, store.ProjectVerificationObservation{}, nil, projectcontext.Changed("project_context_verification_producer_extreme.go:417")

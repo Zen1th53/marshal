@@ -29,7 +29,14 @@ func integrationSourceFixture(t *testing.T, configure ...func(*CreatePlanRequest
 
 func integrationSourceFixtureForCriteria(t *testing.T, criteria []string, configure ...func(*CreatePlanRequest)) (*Runtime, context.Context, *MarshalService, string, marshal.Run, string, execution.ExecutionRun) {
 	t.Helper()
-	client := &requiredOwnedFixtureAdapter{provider: "codex"}
+	return integrationSourceFixtureForWorker(t, "codex", criteria, configure...)
+}
+
+// integrationSourceFixtureForWorker builds the same integrated source with the
+// task done by the named provider's owned fixture adapter.
+func integrationSourceFixtureForWorker(t *testing.T, worker string, criteria []string, configure ...func(*CreatePlanRequest)) (*Runtime, context.Context, *MarshalService, string, marshal.Run, string, execution.ExecutionRun) {
+	t.Helper()
+	client := &requiredOwnedFixtureAdapter{provider: worker}
 	r, b, _, _ := requiredOwnedContextFixture(t, client)
 	if criteria != nil {
 		goal, err := r.store.GetGoalContract(t.Context(), b.GoalID, b.GoalRevision)
@@ -47,9 +54,9 @@ func integrationSourceFixtureForCriteria(t *testing.T, criteria []string, config
 		request.Tasks[0].Criteria = append([]string(nil), criteria...)
 	}
 	request.SessionID, request.ProjectID = b.Session, projectid.ID(r.ProjectIdentity())
-	capacity := goalintake.UnknownCapacity("codex", true)
-	request.Candidates = []goalintake.Candidate{{Provider: "codex", Model: "test-model", Capacity: capacity, Governance: constitution.GovernanceVerified}}
-	request.HarnessCandidates = []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: "codex", InstalledVersion: "1", SupportedModels: []string{"test-model"}, DefaultModel: "test-model", ProbeEvidenceID: "owned-provider-fixture", ProbedAt: time.Now().UTC()}, InstalledVersion: "1", Provider: "codex", Capacity: capacity}}
+	capacity := goalintake.UnknownCapacity(worker, true)
+	request.Candidates = []goalintake.Candidate{{Provider: worker, Model: "test-model", Capacity: capacity, Governance: constitution.GovernanceVerified}}
+	request.HarnessCandidates = []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: worker, InstalledVersion: "1", SupportedModels: []string{"test-model"}, DefaultModel: "test-model", ProbeEvidenceID: "owned-provider-fixture", ProbedAt: time.Now().UTC()}, InstalledVersion: "1", Provider: worker, Capacity: capacity}}
 	request.Tasks[0].Instructions = "Preserve the accepted history and fix the documented typo"
 
 	for _, apply := range configure {
@@ -63,7 +70,7 @@ func integrationSourceFixtureForCriteria(t *testing.T, criteria []string, config
 		t.Fatal(err)
 	}
 	service := r.Execution()
-	if _, err := r.RegisterAgent(t.Context(), RegisterAgentRequest{Name: "actual owned fixture worker", Role: model.RoleDeveloper, ModelProvider: "codex"}); err != nil {
+	if _, err := r.RegisterAgent(t.Context(), RegisterAgentRequest{Name: "actual owned fixture worker", Role: model.RoleDeveloper, ModelProvider: worker}); err != nil {
 		t.Fatal(err)
 	}
 	root, err := service.StartRun(t.Context(), b.Session, request.ProjectID)
