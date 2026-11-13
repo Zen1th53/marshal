@@ -17,19 +17,16 @@ Get from zero to an executed multi-agent run in four steps:
 # 1. Install Marshal to ~/.local/bin
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 
-# 2. Enter a Git repository and initialize Marshal
+# 2. Enter a Git repository and open Marshal
 cd /path/to/project
-marshal init
-
-# 3. Launch the interactive Board
 marshal
 ```
 
 Once inside the Board:
-1. **State your goal**: Press `s` to type your request directly to the Marshal, or focus the chat pane with `F11` or `Alt+←`.
-2. **Accept the architecture**: The Marshal clarifies requirements and drafts a project contract. When the `NEEDS YOU` gate appears, press `y` to open the architecture in your browser and click **Accept architecture**; the run then moves on by itself.
-3. **The Marshal plans**: The Marshal decomposes your goal into discrete tasks with verifiable criteria and approves the plan itself. You can stop the run at any time with `Ctrl+X`.
-4. **Watch the run**: Worker agents execute tasks in parallel branches, a cross-provider reviewer inspects the diffs, an independent verifier runs checks, and accepted changes are closed to `main`.
+1. **Confirm requirements**: The Marshal fills a requirements card. Press `Enter` to confirm all, or `e` to edit an answer.
+2. **Accept the architecture**: Press `y` to open the architecture in your browser and accept it. This is the owner gate.
+3. **The Marshal plans**: The Marshal creates and approves the plan itself; there is no plan approval popup. Tasks run, then a final independent check reruns the checks. The final ULTRA check needs Claude Code installed and unused as a worker in that run.
+4. **Finish**: The run closes to `main`, and the chat says `[Marshal] The run closed: …`.
 
 ---
 
@@ -47,8 +44,8 @@ Once inside the Board:
 ## Documentation Guide
 
 - [Installation](installation.md) — System requirements, `install.sh`, building from source, and setup verification.
-- [Getting Started](getting-started.md) — End-to-end walkthrough from `marshal init` to completed run.
-- [The Board and Keys](board-and-keys.md) — Screen layout, focus switching, shortcuts, inspector action row, and `NEEDS YOU` gates.
+- [Getting Started](getting-started.md) — End-to-end walkthrough from opening a project to a completed run.
+- [The Board and Keys](board-and-keys.md) — Screen layout, focus switching, shortcuts, and `NEEDS YOU` gates.
 - [Providers](providers.md) — Configuring Claude Code, Codex, OpenCode, and Antigravity, plus harness verification.
 - [How a Run Works](how-it-works.md) — Planning, workers, cross-provider review, independent verification, and closing to `main`.
 - [Memory and MCP](memory-and-mcp.md) — Using the MCP server, memory commands, and candidate review.

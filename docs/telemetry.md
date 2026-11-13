@@ -25,8 +25,9 @@ When telemetry is enabled, Marshal sends periodic heartbeat and startup events c
 
 ## Exactly What Is Sent, on the Wire
 
-Two HTTPS requests, JSON bodies. Every field either party sees is below — there
-is no other payload.
+Normal telemetry uses registration and event requests over HTTPS. Disabling it
+sends one bounded opt-out event when the endpoint is enabled; its fields are
+listed below too.
 
 **Registration** (once per install), over HTTPS:
 
@@ -65,7 +66,7 @@ over HTTPS, a batched array:
 
 | Field | Always | Values |
 |---|---|---|
-| `kind` | yes | `registration`, `app_start`, `heartbeat`, `mode_change`, `activation_success`, `activation_failure`, `renewal_success`, `renewal_failure`, `error_class` |
+| `kind` | yes | `registration`, `app_start`, `heartbeat`, `mode_change`, `activation_success`, `activation_failure`, `renewal_success`, `renewal_failure`, `error_class`, `telemetry_opt_out` |
 | `installation_id` | yes | the random ID above |
 | `client_version`, `os`, `arch` | yes | e.g. `0.2.4`, `linux`, `amd64` |
 | `mode` | when known | `standard` or `ultra` |
@@ -95,7 +96,7 @@ Marshal adheres to strict privacy guarantees. Telemetry **never** collects, tran
 
 ## Checking Telemetry Status
 
-To check your current telemetry configuration:
+`/status` and the Board help footer say whether anonymous telemetry is on or off. To check the CLI configuration directly:
 
 ```bash
 marshal telemetry status
@@ -123,7 +124,10 @@ Disable telemetry with a single command:
 marshal telemetry disable
 ```
 
-Marshal immediately stops all telemetry reporting and transmits an anonymous opt-out signal to the endpoint so the installation ID is unlinked.
+Marshal turns telemetry off for this installation. The command does not send project content.
+When cloud telemetry is enabled, disabling also sends one opt-out event with only
+`kind`, `installation_id`, `client_version`, `os`, and `arch`. Re-enabling creates
+a new anonymous installation identity and keypair.
 
 To verify:
 

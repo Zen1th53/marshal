@@ -20,19 +20,19 @@ git commit --allow-empty -m "Initial commit"
 
 A Git repository must have at least one commit so Marshal can establish a clean baseline for worker branches and merges.
 
-You can also skip the Git steps: in a folder that is in no Git repository, or inside your home folder's repository (common if you keep dotfiles in Git), `marshal` and `marshal init` start a separate repository in that folder and make its first commit with your own Git name and email. A folder without a `.gitignore` gets a short default one first, and files that look like secrets (`.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `credentials*.json`) are left untracked. Marshal never uses your home folder or `/` itself as a project.
+Opening `marshal` in a Git repository that is not set up adds the project files and commits them as `Initialize MARSHAL project`. In a folder outside a Git repository, Marshal can create a project repository for that folder; it leaves files that look like secrets untracked. It will not use your home folder or `/` itself as a project.
 
 ---
 
-## 2. Initialize Marshal (`marshal init`)
+## 2. Open the Board and set up the project
 
-Run `marshal init` from the root of your project:
+From your project root, open Marshal:
 
 ```bash
-marshal init
+marshal
 ```
 
-What `marshal init` does:
+On first open, Marshal sets up the project automatically. You can also run `marshal init` yourself as an optional explicit setup command. Setup:
 - Creates the local state directory at `.marshal/`, where runtime databases and task logs reside.
 - Writes initial project configuration files: `CAPABILITIES.yaml`, `PACK-VERSION.yaml`, and `RUNTIME-VERSION.yaml`.
 - Configures Git to ignore the `.marshal/` runtime state using `.git/info/exclude`, leaving your personal `.gitignore` clean and untouched.
@@ -40,18 +40,13 @@ What `marshal init` does:
 
 ---
 
-## 3. Open the Board (`marshal`)
-
-Launch Marshal:
-
-```bash
-marshal
-```
-
 Marshal opens inside a managed tmux environment displaying **the Board**.
 
+## 3. Board Layout
+
 The Board is divided into clean operational sections:
-- **Header**: Displays run status, active tasks, inbox count, and `NEEDS YOU` operator gates.
+- **Vitals row**: Shows provider limits and host vitals on every screen.
+- **Header**: Displays run status and `NEEDS YOU` gates.
 - **Docked Chat (left)**: Conversation pane with the Marshal model.
 - **Tasks Pane (center)**: Current tasks, their status (`queued`, `dispatched`, `reviewing`, `merged`), and assigned workers.
 - **Lanes Pane (right)**: Live status of active worker processes.
@@ -77,13 +72,14 @@ Example goal:
 After receiving your goal, the Marshal reviews your repository structure, asks clarifying questions if needed, and drafts an **architecture proposal** and project contract.
 
 When the draft is ready:
-1. The Board header alerts with an orange **`NEEDS YOU`** banner:
+1. The Marshal fills a requirements card. Press `Enter` to confirm all answers, or `e` to edit one.
+2. The Board header alerts with **`NEEDS YOU`** for the architecture:
    ```text
    ⚑ architecture · waits for you in the browser
        [y] open in browser
    ```
-2. Press `y` on the Board. The architecture opens in your browser.
-3. Review it and click **Accept architecture**. The page shows "Accepted — the run continues in your terminal.", and the Marshal moves on by itself; no key is needed.
+3. Press `y` on the Board. The architecture opens in your browser.
+4. Review it and accept it there. The Marshal moves on by itself; no key is needed.
 
 The accepted architecture becomes the binding contract for all subsequent tasks.
 
@@ -96,7 +92,7 @@ Next, the Marshal decomposes the architecture into discrete, small tasks. Each t
 - Scope of files to create or modify.
 - Concrete check criteria (e.g. `go test -v ./...` or `npm test`).
 
-When the plan is ready, the Marshal approves it itself and starts the workers. Press `7` to read the plan. You can stop the run at any time with `Ctrl+X`.
+When the plan is ready, the Marshal approves it itself and starts the workers; there is no plan approval popup. Press `7` to read the plan after a run exists. You can stop the run at any time with `Ctrl+X`.
 
 ---
 
@@ -107,7 +103,7 @@ Once the plan is approved, Marshal runs the work automatically:
 1. **Dispatch**: Tasks are assigned to worker agents. Each task runs in a separate Git worktree so workers never overwrite each other's in-progress changes.
 2. **Execution**: The worker implements the changes and submits them for review.
 3. **Cross-Provider Review**: A different provider inspects the diff against the task's criteria. If issues are found, the work is returned for rework (`r`).
-4. **Independent Verifier**: An independent model that did not author any of the task changes evaluates test results and criteria.
+4. **Final check**: An independent check reruns the checks against the integrated result. This final ULTRA check needs Claude Code installed and unused as a worker in that run. Otherwise the run stops before the check and asks you to install Claude Code or wait for its limit, then press `Enter`.
 
 You can inspect any running or completed task at any time:
 - Highlight a task with `j` / `k` (or `↑` / `↓`) and press `Enter` to open its **Inspector**.
@@ -120,5 +116,6 @@ You can inspect any running or completed task at any time:
 When all tasks pass review and verification:
 - Marshal merges the task branches cleanly into your project's `main` branch.
 - The run state transitions to `CLOSED`.
+- The chat receives a `[Marshal] The run closed: …` message.
 - You can review the completed commits with standard Git commands (`git log`, `git diff HEAD~1`).
 - Press `Ctrl+C` twice or type `/exit` in the command line to leave the Board.

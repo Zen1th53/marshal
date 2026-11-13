@@ -39,7 +39,7 @@ Changes apply to the **next** drafted plan.
 
 ## Project Files
 
-When you initialize a project with `marshal init`, Marshal creates standard configuration files in your repository root:
+When Marshal sets up a project (on first open, or with `marshal init`), it creates standard configuration files in your repository root:
 
 | File | Location | Purpose |
 |---|---|---|
@@ -49,7 +49,7 @@ When you initialize a project with `marshal init`, Marshal creates standard conf
 | `.marshal/` | Project root (ignored) | Project runtime directory containing `state.db` (SQLite store), task logs, and session data. |
 
 > [!NOTE]
-> `marshal init` excludes `.marshal/` from Git tracking by appending it to `.git/info/exclude`, leaving your `.gitignore` untouched.
+> Project setup excludes `.marshal/` from Git tracking by appending it to `.git/info/exclude`, leaving your `.gitignore` untouched.
 
 ---
 
