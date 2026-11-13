@@ -74,7 +74,63 @@ func (e *Engine) controlRunLocked(ctx context.Context, runID, operation string, 
 	// A parent run is still executing while any of its task lanes is.
 	_, executing := e.activeRuns[runID]
 	executing = executing || e.taskLanesExecuting(runID)
+	if operation == "resume" && !executing && workComplete(run) {
+		// Its last task finished while it was paused and no executor is
+		// left to end it: it ends now as the execution loop ends a run.
+		if err := e.completePendingVerification(ctx, &run); err != nil {
+			return RunControlResult{Run: run}, err
+		}
+	}
 	return RunControlResult{Run: run, Executing: executing}, nil
+}
+
+// workComplete reports whether every task of run completed pending
+// verification: its own tasks, or for a task lane parent the task of every
+// lane, as the parent's lane summary records it.
+func workComplete(run ExecutionRun) bool {
+	if len(run.Tasks) == 0 {
+		return false
+	}
+	if len(run.TaskLanes) > 0 && len(run.TaskLanes) != len(run.Tasks) {
+		return false
+	}
+	for id, task := range run.Tasks {
+		state := task.State
+		if len(run.TaskLanes) > 0 {
+			state = run.TaskLaneStates[id]
+		}
+		if state != TaskCompletedPendingVerify {
+			return false
+		}
+	}
+	return true
+}
+
+// SettleCompletedRun ends a run whose every task completed but that no
+// executor owns any more and that is not done: one paused while its last
+// task's turn ran (the turn finishes, the run stays paused) and never
+// resumed, or one resumed just as its executor returned. A paused run is
+// resumed and a running one completed, through the same transitions as an
+// operator resume and the execution loop. It reports whether the run
+// changed; any other run is left as it is.
+func (e *Engine) SettleCompletedRun(ctx context.Context, runID string) (bool, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
+	if _, active := e.activeRuns[runID]; active || e.taskLanesExecuting(runID) {
+		return false, nil
+	}
+	run, err := e.store.GetRun(ctx, runID)
+	if err != nil {
+		return false, err
+	}
+	if (run.State != RunPaused && run.State != RunRunning) || !workComplete(run) {
+		return false, nil
+	}
+	if run.State == RunPaused {
+		_, err = e.controlRunLocked(ctx, runID, "resume", run.Version)
+		return err == nil, err
+	}
+	return true, e.completePendingVerification(ctx, &run)
 }
 
 // IsExecuting reports whether an executor currently owns the run.

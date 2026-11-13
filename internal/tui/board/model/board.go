@@ -437,6 +437,23 @@ func init() {
 	}
 }
 
+// plainVerificationRetry is what the person does about a verification stop
+// the runtime's own bookkeeping caused.
+const plainVerificationRetry = "Press Enter to let the Marshal retry."
+
+// plainVerificationStop is the plain sentence for a verification stop an
+// older build recorded with the runtime's raw execution-run error as its
+// reason; the runtime now records the sentence itself and keeps the raw
+// error as the pause's detail (app.internalVerificationStop).
+func plainVerificationStop(reason string) (string, bool) {
+	for _, raw := range []string{"verification stopped: execution run conflict", "verification stopped: execution run invalid", "verification stopped: invalid state transition"} {
+		if strings.HasPrefix(reason, raw) {
+			return "Marshal could not finish checking the run.", true
+		}
+	}
+	return "", false
+}
+
 // NewActivityLine projects an event into a line, or reports false when the
 // event is not a state change.
 func NewActivityLine(e events.Event) (ActivityLine, bool) {
@@ -451,6 +468,9 @@ func NewActivityLine(e events.Event) (ActivityLine, bool) {
 		detail, _ = e.Data["worker"].(string)
 	}
 	detail, _, _ = strings.Cut(detail, "\n")
+	if plain, ok := plainVerificationStop(detail); ok && e.Type == events.EventTypeMarshalEscalated {
+		detail = plain
+	}
 	line := ActivityLine{Seq: e.Sequence, At: e.At, Type: e.Type, TaskID: e.TaskID, Detail: detail, State: eventStates[e.Type]}
 	switch e.Type {
 	case events.EventTypeMarshalRunClosed:
@@ -498,6 +518,11 @@ func Project(s Snapshot, evs []events.Event) Board {
 	b := Board{Run: RunHead{ID: s.RunID, State: s.Run.State, Total: len(s.Run.Tasks), TokenLimit: s.Run.Budget.Tokens.Plan, LaneCap: laneCap(s.Run.Settings), Driving: s.Driving, UserPaused: s.UserPaused}, PlanID: s.Run.PlanID, Budget: s.Run.Budget}
 	if s.Run.State == marshal.AwaitingUser && s.Run.Pause != nil {
 		b.Run.Paused, b.Run.Next = s.Run.Pause.Reason, slices.Clone(s.Run.Pause.Resolutions)
+		if s.Run.Pause.Code == marshal.CodeVerificationStopped {
+			if reason, ok := plainVerificationStop(s.Run.Pause.Reason); ok {
+				b.Run.Paused, b.Run.Next = reason, []string{plainVerificationRetry}
+			}
+		}
 		b.Run.PauseAction, b.Run.PauseTask, b.Run.PauseCode = s.Run.Pause.Action, s.Run.Pause.TaskID, s.Run.Pause.Code
 		b.Run.PauseKind, b.Run.PauseUntil = s.Run.Pause.Kind, s.Run.Pause.Until
 	}

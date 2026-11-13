@@ -573,26 +573,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			}
 
 			if allComplete {
-				run.State = RunDonePendingVerification
-				run.CurrentPhase = PhaseCompletedPending
-				run.SelectedTask = ""
-				now := time.Now().UTC()
-				run.EndedAt = &now
-				if err := e.persistRun(ctx, &run); err != nil {
-					return &run, err
-				}
-
-				_, _ = e.journal.Append(JournalEvent{
-					RunID:       run.RunID,
-					Timestamp:   now,
-					Actor:       "MARSHAL_ENGINE",
-					EventType:   "RUN_COMPLETED_PENDING_VERIFY",
-					StateBefore: string(RunRunning),
-					StateAfter:  string(RunDonePendingVerification),
-					Summary:     "All tasks completed pending verification",
-				})
-
-				return &run, nil
+				return &run, e.completePendingVerification(ctx, &run)
 			}
 
 			// Some tasks blocked or needing approval
@@ -1125,6 +1106,34 @@ func (e *Engine) persistRun(ctx context.Context, run *ExecutionRun) error {
 	}
 	run.Version++
 	run.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+// completePendingVerification ends a running run whose every task completed:
+// it is done pending verification with no task selected. The execution loop
+// ends a run this way, and so does a resume of a run whose work finished
+// while it was paused (run_control.go).
+func (e *Engine) completePendingVerification(ctx context.Context, run *ExecutionRun) error {
+	if run.State != RunRunning {
+		return fmt.Errorf("%w: cannot complete run from state %s", ErrInvalidStateTransition, run.State)
+	}
+	run.State = RunDonePendingVerification
+	run.CurrentPhase = PhaseCompletedPending
+	run.SelectedTask = ""
+	now := time.Now().UTC()
+	run.EndedAt = &now
+	if err := e.persistRun(ctx, run); err != nil {
+		return err
+	}
+	_, _ = e.journal.Append(JournalEvent{
+		RunID:       run.RunID,
+		Timestamp:   now,
+		Actor:       "MARSHAL_ENGINE",
+		EventType:   "RUN_COMPLETED_PENDING_VERIFY",
+		StateBefore: string(RunRunning),
+		StateAfter:  string(RunDonePendingVerification),
+		Summary:     "All tasks completed pending verification",
+	})
 	return nil
 }
 

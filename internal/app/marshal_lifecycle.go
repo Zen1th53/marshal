@@ -1338,6 +1338,9 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		return verification.Blocked, err
 	}
 	s.codeEvidenceVerify(ctx, runID, run, head)
+	if err := s.settleFinishedExecution(ctx, run); err != nil {
+		return verification.Blocked, err
+	}
 	if s.requiredIntegrationSource != nil {
 		if err := s.requiredIntegrationSource(ctx, runID, run, head); err != nil {
 			return verification.Blocked, err
@@ -1454,6 +1457,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	head, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
+		return closeVerificationStage(err)
+	}
+	if err := s.settleFinishedExecution(ctx, run); err != nil {
 		return closeVerificationStage(err)
 	}
 	if s.requiredIntegrationSource != nil {
