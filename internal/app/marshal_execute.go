@@ -152,6 +152,14 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		case marshal.AwaitingUser, marshal.Closed, marshal.Drafting:
 			return run, nil
 		case marshal.Verifying:
+			// The person paused part of the run and has not resumed it:
+			// the run waits, as paused, before its final check.
+			if waited, err := s.waitPausedExecution(ctx, run); err != nil {
+				return run, err
+			} else if waited {
+				round--
+				continue
+			}
 			return s.finish(ctx, runID, current)
 		}
 		progressed, err := s.mergeAccepted(ctx, runID, run)
@@ -411,6 +419,53 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		}
 	}
 	return launched, nil
+}
+
+// pauseHolds reports whether the person's pause (or change) holds any task
+// of run.
+func (s *MarshalService) pauseHolds(run marshal.Run) bool {
+	if s.HeldTask == nil {
+		return false
+	}
+	for _, t := range run.Tasks {
+		if s.HeldTask(t.PlanTaskID) {
+			return true
+		}
+	}
+	return false
+}
+
+// waitPausedExecution blocks, before the final check, while the person's
+// pause holds the run and part of its canonical execution is paused, until
+// the hold changes or ctx ends. Checking the run then would only find a
+// paused part and stop on it; the run waits as paused instead. It reports
+// whether it waited.
+func (s *MarshalService) waitPausedExecution(ctx context.Context, run marshal.Run) (bool, error) {
+	if s.HoldChanged == nil || s.process05Paused == nil {
+		return false, nil
+	}
+	changed := s.HoldChanged()
+	if !s.pauseHolds(run) || !s.process05Paused(ctx, run) {
+		return false, nil
+	}
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-changed:
+		return true, nil
+	}
+}
+
+// settleFinishedExecution ends each part of the run's canonical execution
+// whose work finished while it was paused (Runtime.settleProcess05), right
+// before the final check, which needs every part ended. Execute reaches it
+// only once the person's pause no longer holds the run
+// (waitPausedExecution); the person's own close may reach it during a hold.
+func (s *MarshalService) settleFinishedExecution(ctx context.Context, run marshal.Run) error {
+	if s.process05Settle == nil {
+		return nil
+	}
+	return s.process05Settle(ctx, run)
 }
 
 // waitHeldTasks blocks while nothing else can move and a held task that has

@@ -440,3 +440,27 @@ func TestAcceptedActivityHasNoGateCode(t *testing.T) {
 		t.Fatalf("Detail %q leaks the gate code", l.Detail)
 	}
 }
+
+// A verification stop an older build recorded with the runtime's raw
+// execution-run error reads in plain words on the Board and in Activity;
+// any other stop keeps its own reason.
+func TestInternalVerificationStopReadsPlain(t *testing.T) {
+	raw := "verification stopped: execution run conflict: required completion child identity/state"
+	r := marshal.Run{State: marshal.AwaitingUser, Pause: &marshal.Pause{Reason: raw, Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume}}
+	b := Project(Snapshot{RunID: "R1", Run: r}, nil)
+	if b.Run.Paused != "Marshal could not finish checking the run." || !reflect.DeepEqual(b.Run.Next, []string{"Press Enter to let the Marshal retry."}) {
+		t.Fatalf("board stop: %q %q", b.Run.Paused, b.Run.Next)
+	}
+	l, ok := NewActivityLine(events.Event{Type: events.EventTypeMarshalEscalated, Data: map[string]any{"reason": raw, "role": "verification"}})
+	if !ok || l.Detail != "Marshal could not finish checking the run." {
+		t.Fatalf("activity: %+v %v", l, ok)
+	}
+	check := "verification stopped: go test ./... failed (exit 1)"
+	r.Pause.Reason = check
+	if b := Project(Snapshot{RunID: "R1", Run: r}, nil); b.Run.Paused != check {
+		t.Fatalf("a check stop lost its reason: %q", b.Run.Paused)
+	}
+	if l, _ := NewActivityLine(events.Event{Type: events.EventTypeMarshalEscalated, Data: map[string]any{"reason": check}}); l.Detail != check {
+		t.Fatalf("a check stop's activity lost its reason: %q", l.Detail)
+	}
+}

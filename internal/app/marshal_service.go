@@ -105,7 +105,12 @@ type MarshalService struct {
 	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
 	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
 	process05WaitPause            func(context.Context, string) error
-	now                           func() time.Time
+	// process05Paused reports whether part of the run's canonical execution
+	// is paused (the person paused it); process05Settle ends any part whose
+	// work all finished while it was paused (Runtime.settleProcess05).
+	process05Paused func(context.Context, marshal.Run) bool
+	process05Settle func(context.Context, marshal.Run) error
+	now             func() time.Time
 	// codeEvidence is the Extreme code evidence host (nil when disabled);
 	// Community's field type is empty.
 	codeEvidence codeEvidenceHostField

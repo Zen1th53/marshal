@@ -252,3 +252,73 @@ func marshalProcess05ReviewRecords(ctx context.Context, lane, result string, obs
 	}
 	return records, nil
 }
+
+// process05Runs is the canonical execution root bound to the Marshal run's
+// approved plan, with its task lanes after it. It is empty when the run is
+// not Process05-bound or no single root matches: required completion
+// validation reports that case itself.
+func (r *Runtime) process05Runs(ctx context.Context, run marshal.Run) ([]execution.ExecutionRun, error) {
+	service := r.Execution()
+	if !run.Process05Bound || service == nil {
+		return nil, nil
+	}
+	runs, err := service.ListRuns(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var roots []execution.ExecutionRun
+	for _, candidate := range runs {
+		if candidate.ParentRunID == "" && string(candidate.ProjectID) == r.ProjectIdentity() && candidate.PlanID == run.PlanID && candidate.PlanVersion == run.PlanVersion {
+			roots = append(roots, candidate)
+		}
+	}
+	if len(roots) != 1 {
+		return nil, nil
+	}
+	parts := []execution.ExecutionRun{roots[0]}
+	for _, laneID := range roots[0].TaskLanes {
+		for _, candidate := range runs {
+			if candidate.RunID == laneID && candidate.ParentRunID == roots[0].RunID {
+				parts = append(parts, candidate)
+			}
+		}
+	}
+	return parts, nil
+}
+
+// process05Paused reports whether the person left part of the run's
+// canonical execution paused.
+func (r *Runtime) process05Paused(ctx context.Context, run marshal.Run) bool {
+	parts, err := r.process05Runs(ctx, run)
+	if err != nil {
+		return false
+	}
+	for _, part := range parts {
+		if part.State == execution.RunPaused {
+			return true
+		}
+	}
+	return false
+}
+
+// settleProcess05 ends each part of the run's canonical execution whose
+// work all finished but that a pause left unended: a lane paused mid-turn
+// finishes its turn and its task is accepted, yet the lane stays paused
+// when the Marshal, not the person's resume, continued it. Lanes settle
+// before the root, whose summary they update. It runs only where the run
+// may continue (no hold of the person's pause), right before the run's
+// completion is checked.
+func (r *Runtime) settleProcess05(ctx context.Context, run marshal.Run) error {
+	parts, err := r.process05Runs(ctx, run)
+	if err != nil || len(parts) == 0 {
+		return err
+	}
+	engine := r.Execution().Engine()
+	for _, lane := range parts[1:] {
+		if _, err := engine.SettleCompletedRun(ctx, lane.RunID); err != nil {
+			return err
+		}
+	}
+	_, err = engine.SettleCompletedRun(ctx, parts[0].RunID)
+	return err
+}

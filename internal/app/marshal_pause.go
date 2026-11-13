@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
@@ -22,12 +23,36 @@ func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID str
 	if run.State != marshal.Verifying {
 		return cause
 	}
-	pauseMarshal(&run, marshal.Pause{Reason: "verification stopped: " + cause.Error(),
-		Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume})
+	machine := "verification stopped: " + cause.Error()
+	pause := marshal.Pause{Reason: machine,
+		Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume}
+	data := map[string]any{"reason": machine, "role": "verification"}
+	if internalVerificationStop(cause) {
+		// The runtime's own run bookkeeping stopped the check; nothing in
+		// it is the person's to fix. They read a plain sentence; the raw
+		// error stays in the pause detail and the recorded event.
+		pause.Reason = "Marshal could not finish checking the run."
+		if s.process05Paused != nil && s.process05Paused(ctx, run) {
+			pause.Reason = "Marshal could not finish checking the run (part of it was left paused)."
+		}
+		pause.Resolutions = []string{"Press Enter to let the Marshal retry."}
+		pause.Detail = machine
+		data["summary"] = pause.Reason
+	}
+	data["resolutions"] = pause.Resolutions
+	pauseMarshal(&run, pause)
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return errors.Join(cause, err)
 	}
-	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": run.Pause.Reason, "role": "verification", "resolutions": run.Pause.Resolutions}))
+	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, data))
+}
+
+// internalVerificationStop reports whether a verification stop came from the
+// runtime's own execution-run bookkeeping (a run conflict, an invalid run or
+// state transition) rather than from a check, a provider or the person's
+// project: a retry is the only thing to do about it.
+func internalVerificationStop(cause error) bool {
+	return errors.Is(cause, execution.ErrRunConflict) || errors.Is(cause, execution.ErrRunInvalid) || errors.Is(cause, execution.ErrInvalidStateTransition)
 }
 
 func pauseMarshal(run *marshal.Run, p marshal.Pause) {

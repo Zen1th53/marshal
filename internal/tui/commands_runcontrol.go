@@ -55,6 +55,12 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 			return fmt.Sprintf("%s was NOT performed: more than one run qualifies; name one: %s", verb, strings.Join(ids, ", ")), nil
 		}
 	}
+	if operation == "resume" && h.marshalOpen() && marshalContinues(*target, runsExecuting(a)) {
+		// A lane paused before its turn: the Marshal continues it under its
+		// own dispatch once the hold is released (as "resume all" does).
+		h.releaseHoldIfResumed(ctx)
+		return fmt.Sprintf("Run %s resumed; the Marshal continues its task.", target.RunID), nil
+	}
 	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "run:" + target.RunID,
 		ExpectedVersion: target.Version, IdempotencyKey: uuid.NewString()}
 	result, err := a.runtime.CommandRunControl(a.localControl.Context(ctx), e, operation)
@@ -69,10 +75,7 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 		h.holdMarshalDispatch()
 	case "resume":
 		// Once no run of the session is paused, the hold is released.
-		h.ws.noteRunControl(ctx)
-		if h.ws.runResumable.Load() == 0 {
-			h.ws.marshalSession().releaseDispatch()
-		}
+		h.releaseHoldIfResumed(ctx)
 	}
 	switch {
 	case operation == "resume":
@@ -82,6 +85,48 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 	default:
 		return fmt.Sprintf("Run %s %s; no task is executing.", target.RunID, state), nil
 	}
+}
+
+// marshalOpen reports whether a Marshal run is open in this session.
+func (h *CommandHandler) marshalOpen() bool {
+	m := h.ws.marshalSession()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.runID != ""
+}
+
+// releaseHoldIfResumed releases the pause's hold of the Marshal's dispatch
+// once nothing of the session is left for the person to resume: every
+// paused run is resumed or is a lane the Marshal continues once released.
+// It refreshes the palette's counts.
+func (h *CommandHandler) releaseHoldIfResumed(ctx context.Context) {
+	a, runs, err := h.sessionRuns(ctx)
+	if err == nil {
+		_, resume := runControlCounts(runs, waitingForMarshal(h.marshalOpen(), false, runsExecuting(a)))
+		if resume == 0 {
+			h.ws.marshalSession().releaseDispatch()
+		}
+	}
+	h.ws.noteRunControl(ctx)
+}
+
+// runExecuting reports whether an executor still owns a run: a lane paused
+// mid-turn whose turn is still finishing. Tests replace it.
+var runExecuting = func(service *app.ExecutionService, runID string) bool {
+	return service.Engine().IsExecuting(runID)
+}
+
+// runsExecuting is runExecuting for the session's execution service; it
+// reports false for every run when there is none.
+func runsExecuting(a *runtimeControlAuthority) func(string) bool {
+	if a == nil {
+		return func(string) bool { return false }
+	}
+	service, err := a.execution()
+	if err != nil {
+		return func(string) bool { return false }
+	}
+	return func(runID string) bool { return runExecuting(service, runID) }
 }
 
 // holdMarshalDispatch holds the current Marshal run's dispatch (none when no
@@ -115,7 +160,7 @@ func (w *Workspace) noteRunControl(ctx context.Context) {
 	if w.cmd == nil {
 		return
 	}
-	_, runs, err := w.cmd.sessionRuns(ctx)
+	a, runs, err := w.cmd.sessionRuns(ctx)
 	if err != nil {
 		return
 	}
@@ -123,7 +168,7 @@ func (w *Workspace) noteRunControl(ctx context.Context) {
 	m.mu.Lock()
 	open := m.runID != ""
 	m.mu.Unlock()
-	pause, resume := runControlCounts(runs, waitingForMarshal(open, m.dispatchHeld()))
+	pause, resume := runControlCounts(runs, waitingForMarshal(open, m.dispatchHeld(), runsExecuting(a)))
 	w.runPausable.Store(pause)
 	w.runResumable.Store(resume)
 }
@@ -147,9 +192,9 @@ func runControlCounts(runs []execution.ExecutionRun, waiting func(execution.Exec
 // as far as the person is concerned: a Marshal run is open, its dispatch is
 // no longer held, and the run is a lane the Marshal continues itself
 // (marshalContinues) on its next dispatch.
-func waitingForMarshal(marshalOpen, held bool) func(execution.ExecutionRun) bool {
+func waitingForMarshal(marshalOpen, held bool, executing func(string) bool) func(execution.ExecutionRun) bool {
 	return func(run execution.ExecutionRun) bool {
-		return marshalOpen && !held && marshalContinues(run)
+		return marshalOpen && !held && marshalContinues(run, executing)
 	}
 }
 
@@ -175,7 +220,8 @@ func (h *CommandHandler) handleRunControlAll(ctx context.Context, operation stri
 	m.mu.Lock()
 	marshalRun := m.runID
 	m.mu.Unlock()
-	waiting := waitingForMarshal(marshalRun != "", m.dispatchHeld())
+	executing := runsExecuting(a)
+	waiting := waitingForMarshal(marshalRun != "", m.dispatchHeld(), executing)
 	var targets []execution.ExecutionRun
 	for _, run := range runs {
 		if runControllable(operation, run.State) && !(operation == "resume" && waiting(run)) {
@@ -196,7 +242,7 @@ func (h *CommandHandler) handleRunControlAll(ctx context.Context, operation stri
 	failed := map[string]error{}
 	continued := map[string]bool{}
 	for _, t := range targets {
-		if operation == "resume" && marshalRun != "" && marshalContinues(t) {
+		if operation == "resume" && marshalRun != "" && marshalContinues(t, executing) {
 			// The Marshal continues this lane itself once its hold is
 			// released, under its own dispatch, so it collects the result.
 			continued[t.RunID] = true
@@ -278,11 +324,14 @@ func runControlName(run execution.ExecutionRun) string {
 }
 
 // marshalContinues reports whether the Marshal continues a paused run itself
-// on resume: a task lane whose task has not finished. Its dispatch reopens
-// the same lane and runs it under the Marshal's own collection; resuming it
-// here would restart it outside that.
-func marshalContinues(run execution.ExecutionRun) bool {
-	if run.ParentRunID == "" || run.LaneTaskID == "" {
+// on resume: a task lane whose task has not finished and that no executor
+// owns (it was paused before its turn). Its dispatch reopens the same lane
+// and runs it under the Marshal's own collection; resuming it here would
+// restart it outside that. A lane paused mid-turn is still owned by its
+// executor, which finishes the turn: it is resumed like any run, so that
+// executor ends the lane as it ends one never paused.
+func marshalContinues(run execution.ExecutionRun, executing func(string) bool) bool {
+	if run.ParentRunID == "" || run.LaneTaskID == "" || executing(run.RunID) {
 		return false
 	}
 	state := run.Tasks[run.LaneTaskID].State
