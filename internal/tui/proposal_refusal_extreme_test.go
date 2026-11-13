@@ -175,3 +175,73 @@ func TestFileRunProposalDecidedByMarshalAppliesOnceAndSettles(t *testing.T) {
 		})
 	}
 }
+
+// A journalled run proposal bound to an older state of its run (a stale
+// amend from state revision 54 while the run is at 144) is settled by the
+// runtime instead of being asked again. Before, it could never apply ("Marshal
+// proposal expired"), the Marshal rightly ignored it, and every re-delivery
+// and restart opened a fresh decision request for it.
+func TestStaleRunProposalIsSettledNotAskedAgain(t *testing.T) {
+	w, _, _ := liveMCPFixture(t)
+	service := w.runtime.Marshal()
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.service, m.runID = service, "RUN-stale-proposal"
+	m.mu.Unlock()
+	run := marshal.Run{PlanID: "PLAN-stale", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "T.1", State: marshal.HandedIn, ResultCommit: "result"}}}
+	w.setMarshalPanel(newMarshalPanel(m.runID, "codex", run, "review"))
+	rev, err := service.Store.SetMarshalRun(t.Context(), service.ProjectID, m.runID, run, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Store.SetMarshalTask(t.Context(), m.runID, run.Tasks[0], 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Store.SetMarshalHandIn(t.Context(), m.runID, "T.1", 1, marshal.HandIn{ResultCommit: "result"}); err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	t.Cleanup(tmux.ResetBinaryPath)
+	root := w.runtime.ProjectRoot()
+	dir := filepath.Join(root, statepath.DirName, "proposals")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "accept.json"), []byte(`{"action":"accept","id":"T.1"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.observeMarshalProposalFiles(root)
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].ProposalID == "" || batch[0].RunID == "" {
+		t.Fatalf("not a journalled run proposal: %+v", batch)
+	}
+	req := batch[0]
+	// The run moves on (a new state revision) before anyone answers.
+	if _, err := service.Store.SetMarshalRun(t.Context(), service.ProjectID, m.runID, run, rev); err != nil {
+		t.Fatal(err)
+	}
+	if !w.routeBuildPermission(t.Context(), req) {
+		t.Fatal("stale proposal not handled")
+	}
+	w.permissions.mu.Lock()
+	asked := len(w.permissions.build.pending)
+	w.permissions.mu.Unlock()
+	if asked != 0 {
+		t.Fatalf("stale run proposal was sent to the Marshal as a decision request (%d pending)", asked)
+	}
+	pending, err := w.store.PendingMarshalProposals(t.Context(), w.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("stale run proposal is still pending and would reopen after a restart: %+v", pending)
+	}
+	w.recoverMarshalProposals()
+	if again := w.permissions.queue.Take(false); len(again) != 0 {
+		t.Fatalf("stale run proposal reopened on recovery: %+v", again)
+	}
+}

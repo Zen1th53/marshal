@@ -512,3 +512,46 @@ func TestNativePlanningAbortClearsExactReadBeforeActualDraftWrite(t *testing.T) 
 		t.Fatal("clear-only JSON restored read authority")
 	}
 }
+
+// A draft published without a current marshal_project_contract_context read
+// is refused with a reason that names the missing read. Before, the refusal
+// was the bare REQUIRED_CONTEXT_REVIEW_PENDING code under a note telling the
+// Marshal to verify workers, so a real Marshal re-verified a healthy worker
+// and published the same unread draft again.
+func TestNativePlanningDraftWithoutReadNamesTheMissingRead(t *testing.T) {
+	w, _, _, _, _ := nativePlanningFixture(t)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\necho 'codex-cli 0.159.2'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	nativePlanningVerifiedCodex(t, w)
+	service := w.runtime.Marshal()
+	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"future-task","title":"Preserve policy","criteria":["Every required policy is loaded"],"paths":["src/policy.txt"],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["Every required policy is loaded"]}]}]}`), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.persistNativePlanningDraft(t.Context(), "codex", service, "RUN-unread-draft", draft, marshal.Budget{})
+	if !errors.Is(err, projectcontext.ErrReviewPending) || !strings.Contains(err.Error(), "marshal_project_contract_context") {
+		t.Fatalf("unread draft refusal does not name the missing read: %v", err)
+	}
+	if _, err := w.store.GetMarshalRun(t.Context(), w.projectID, "RUN-unread-draft"); err == nil {
+		t.Fatal("unread draft persisted")
+	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.runID = "RUN-watched"
+	m.mu.Unlock()
+	w.marshalDraftRejected(m, "RUN-watched", "codex", "canonical Process 04 evidence unavailable", err)
+	inbox, readErr := os.ReadFile(inboxPath(w.workDir, "marshal"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	text := string(inbox)
+	if !strings.Contains(text, "call marshal_project_contract_context") {
+		t.Fatalf("Marshal inbox does not say which evidence is missing:\n%s", text)
+	}
+	if strings.Contains(text, "verify the missing workers") {
+		t.Fatalf("Marshal inbox still sends the Marshal to verify workers for a missing read:\n%s", text)
+	}
+}

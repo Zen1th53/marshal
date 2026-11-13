@@ -90,6 +90,11 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 	if privateProcess05QuestionIntent(req) && w.settledProcess05Approval(req) {
 		return true
 	}
+	// A run proposal bound to an older state of its run can no longer be
+	// applied; it is settled here instead of being asked again.
+	if w.expiredRunProposal(ctx, req) {
+		return true
+	}
 	launch := w.proposalLaunchID()
 	w.permissions.mu.Lock()
 	for id, p := range w.permissions.build.pending {
@@ -485,4 +490,61 @@ func (w *Workspace) settledProcess05Approval(req permission.Request) bool {
 	}
 	a, err := w.runtime.Execution().Engine().ApprovalManager().GetApproval(id)
 	return err == nil && a.Status != execution.ApprovalRequested
+}
+
+// expiredRunProposal settles a run proposal whose bound plan version and
+// state revision no longer match its run, and reports whether it did. Its
+// application would only refuse ("Marshal proposal expired"), so asking the
+// Marshal again re-opened a question it could not usefully answer: a stale
+// amend kept coming back on every re-delivery and restart. A delivery
+// confirmation is bound to the approval scope instead and is left alone.
+func (w *Workspace) expiredRunProposal(ctx context.Context, req permission.Request) bool {
+	if req.Kind != "marshal-command" || req.RunID == "" || req.ProposalID == "" || req.Object == "/marshal deliver" || w.runtime == nil || w.store == nil {
+		return false
+	}
+	planVersion, revision, ok := parseRunProposalBinding(req.TaskID)
+	if !ok {
+		return false
+	}
+	service := w.runtime.Marshal()
+	if service == nil {
+		return false
+	}
+	record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, req.RunID)
+	if err != nil || (record.Value.PlanVersion == planVersion && record.Revision == revision) {
+		return false
+	}
+	if err := w.store.ResolveMarshalProposalRequest(context.WithoutCancel(ctx), w.projectID, req.Key(), req.ProposalID, "expired"); err != nil {
+		return false
+	}
+	w.permissions.mu.Lock()
+	delete(w.permissions.runProposals, req.Key())
+	delete(w.permissions.outstanding, req.Key())
+	delete(w.permissions.build.redeliver, req.Key())
+	delete(w.permissions.build.awaiting, req.Key())
+	for id, p := range w.permissions.build.pending {
+		if p.request.Key() == req.Key() {
+			delete(w.permissions.build.pending, id)
+		}
+	}
+	w.permissions.mu.Unlock()
+	return true
+}
+
+// parseRunProposalBinding reads the plan version and state revision a run
+// proposal was bound to (marshalRunProposalBinding).
+func parseRunProposalBinding(binding string) (planVersion, revision int64, ok bool) {
+	parts := strings.SplitN(binding, ":", 3)
+	if len(parts) < 2 {
+		return 0, 0, false
+	}
+	planVersion, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	revision, err = strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return planVersion, revision, true
 }
