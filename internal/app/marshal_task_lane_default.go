@@ -7,7 +7,9 @@ import (
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/risk"
 )
 
@@ -16,6 +18,11 @@ func (r *Runtime) selectProcess05TaskLane(_ context.Context, _ *MarshalService, 
 }
 
 func bindPrivateProcess05Tier(*marshal.Run, plan.ExecutionPlan) {}
+
+// continuePriorTaskLanes has nothing to number: this edition runs no task lanes.
+func continuePriorTaskLanes(context.Context, *MarshalService, *marshal.Run, model.GoalContract, projectid.ID) error {
+	return nil
+}
 
 // process05RiskAssessmentID names a provider turn's risk assessment for its
 // canonical task.

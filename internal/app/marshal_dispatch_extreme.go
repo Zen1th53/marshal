@@ -274,11 +274,31 @@ func pauseReturnedProcess05Task(run *marshal.Run, task marshal.Task) {
 	}
 	if run.Process05Parallel {
 		pauseMarshal(run, marshal.Pause{Reason: "governed task " + task.PlanTaskID + " reached its rework limit",
-			Resolutions: []string{"review the retained return reasons; resolve the task or create and approve a new plan, then use /marshal use-plan"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
+			Resolutions: []string{reworkLimitResolution(task.PlanTaskID)}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
 		return
 	}
 	pauseMarshal(run, marshal.Pause{Reason: "returned governed task " + task.PlanTaskID + " requires a new approved Process 04 plan",
 		Resolutions: []string{"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
+}
+
+// reworkLimitResolution is the working way on from a rework-limit stop: the
+// task moves to another worker inside this run, so its returns stay counted
+// and the run keeps its merged and accepted work. /marshal use-plan would
+// start every task of the plan again instead.
+func reworkLimitResolution(taskID string) string {
+	return "Move " + taskID + " to another worker: /marshal reassign " + taskID + " <worker>, then /marshal resume (the Marshal proposes {\"action\":\"reassign\",\"task_id\":\"" + taskID + "\",\"target_worker\":\"<worker>\"}). Its returns stay counted and the run keeps its merged and accepted work; /marshal use-plan would start every task again."
+}
+
+// reworkLimitEscalationPause stops a task returned again after its
+// reassignment. The stop is the person's, and it names the way on: Enter
+// gives the task one more attempt with its current worker (/marshal retry,
+// then /marshal resume), whose next brief carries every return reason; or the
+// task moves to another worker. Earlier returns stay counted, so a further
+// return stops again. A plain resume would leave the task escalated.
+func reworkLimitEscalationPause(t marshal.Task) marshal.Pause {
+	return marshal.Pause{Reason: "worker rework limit reached for " + t.PlanTaskID,
+		Resolutions: []string{"Press Enter to give " + t.PlanTaskID + " one more attempt with " + t.Worker + " (/marshal retry " + t.PlanTaskID + ", then /marshal resume), or move it to another worker with /marshal reassign " + t.PlanTaskID + " <worker>. Its return reasons go with it."},
+		Code:        marshal.CodeReworkLimit, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID}
 }
 
 // reworkInTaskLane reports whether a returned task reruns in a fresh task lane

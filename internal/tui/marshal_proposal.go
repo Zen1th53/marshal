@@ -114,8 +114,8 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		if _, err := parseHoldIDs(p.ids); err != nil {
 			return p, invalid
 		}
-		if strings.TrimSpace(p.reason) == "" || len(p.reason) > 500 {
-			return p, invalid
+		if err := proposalReasonError(invalid, p.reason); err != nil {
+			return p, err
 		}
 	case "release":
 		keys = []string{"action", "ids"}
@@ -218,8 +218,8 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		return p, invalid
 	}
 	if p.action == "return" || p.action == "amend" || p.action == "architecture" {
-		if strings.TrimSpace(p.reason) == "" || len(p.reason) > 500 {
-			return p, invalid
+		if err := proposalReasonError(invalid, p.reason); err != nil {
+			return p, err
 		}
 	}
 	if len(fields) != len(keys) {
@@ -231,6 +231,21 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		}
 	}
 	return p, nil
+}
+
+// maxProposalReason is the longest reason a proposal may carry, in bytes.
+const maxProposalReason = 500
+
+// proposalReasonError says why a proposal reason is refused, so the Marshal
+// can correct it: an empty reason, or one over the limit with its length.
+func proposalReasonError(invalid error, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		return fmt.Errorf("%w: reason is empty", invalid)
+	}
+	if len(reason) > maxProposalReason {
+		return fmt.Errorf("%w: reason is %d bytes; the limit is %d, shorten it and submit again", invalid, len(reason), maxProposalReason)
+	}
+	return nil
 }
 
 func (p marshalProposal) command() string {
@@ -841,6 +856,12 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		line := marshalProposalPrefix + strings.TrimSpace(string(data))
 		proposal, parseErr := parseMarshalProposal(line)
 		if parseErr != nil {
+			// A complete proposal that is refused says why, once: the file
+			// is set aside with the cause beside it, so it is not read again
+			// and the Marshal can correct it. An incomplete write stays.
+			if json.Valid(data) {
+				w.rejectMarshalProposalFile(fs, name, parseErr)
+			}
 			continue
 		}
 		sessionID := fmt.Sprintf("proposal-file:%s:%d:%x", name, info.ModTime().UnixNano(), sha256.Sum256(data))
@@ -870,6 +891,16 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		}
 		w.observeMarshalProposalSource(importer.SessionTranscript{SessionID: sessionID, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id, who)
 	}
+}
+
+// rejectMarshalProposalFile sets a refused proposal file aside as
+// <name>.rejected, writes the refusal to <name>.error and records it.
+func (w *Workspace) rejectMarshalProposalFile(fs *os.Root, name string, cause error) {
+	if fs.Rename(name, name+".rejected") != nil {
+		return
+	}
+	_ = fs.WriteFile(name+".error", []byte(cause.Error()+"\n"), 0o600)
+	w.RecordActivity("Marshal proposal " + name + " refused: " + cause.Error())
 }
 
 // Recovery queues the original bound request. Reconstructing a fresh binding

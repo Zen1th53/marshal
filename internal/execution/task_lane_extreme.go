@@ -73,6 +73,17 @@ func TaskLaneID(parentID, taskID string, rework int) string {
 	return taskLaneID(parentID, taskID, rework)
 }
 
+// TaskLaneAttempt reports the attempt number of lane for taskID under
+// parentID, and whether lane is such an attempt at all.
+func TaskLaneAttempt(parentID, taskID, lane string) (int, bool) {
+	for n := 0; n <= maxTaskLaneReworks; n++ {
+		if lane == taskLaneID(parentID, taskID, n) {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
 // OpenTaskLaneRework reserves the execution domain for one attempt of a task.
 // Rework n > 0 is a returned task's next attempt inside the same approved
 // parent: it opens a fresh lane from the same original task binding and base,

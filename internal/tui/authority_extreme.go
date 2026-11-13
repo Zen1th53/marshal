@@ -122,11 +122,12 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 			original := req
 			req.SourceLaunch = p.launchID
 			req.SourceOccurrence = p.occurrence
-			// Runtime run questions start without model provenance. Once an
+			// Runtime run questions, and run proposals that came through the
+			// file channel, start without model provenance. Once an
 			// authenticated decide receipt supplies it, retain the exact run
 			// proposal under the resulting permission key. The canonical apply
 			// path still checks the live lease, receipt and run revision.
-			if allow && original == p.request && original.ProposalID == "" && original.SourceLaunch == "" && original.SourceOccurrence == "" && original.Kind == "marshal-command" && original.RunID != "" {
+			if allow && original == p.request && original.SourceLaunch == "" && original.SourceOccurrence == "" && original.Kind == "marshal-command" && original.RunID != "" {
 				if proposal, ok := w.permissions.runProposals[original.Key()]; ok && proposal.command() == original.Object {
 					delete(w.permissions.runProposals, original.Key())
 					w.permissions.runProposals[req.Key()] = proposal

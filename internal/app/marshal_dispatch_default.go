@@ -58,6 +58,12 @@ func shouldStopAfterLaunchGate(_ marshal.CapabilityGate, run marshal.Run, t mars
 
 func pauseReturnedProcess05Task(_ *marshal.Run, _ marshal.Task) {}
 
+// reworkLimitEscalationPause stops a task returned again after its
+// reassignment; the person resolves the escalation.
+func reworkLimitEscalationPause(marshal.Task) marshal.Pause {
+	return marshal.Pause{Reason: "worker rework limit reached", Resolutions: []string{"resolve the escalation or amend the plan"}, Code: marshal.CodeReworkLimit, Action: marshal.PauseResume}
+}
+
 func reworkInTaskLane(_ marshal.Run, _ marshal.Task) bool { return false }
 
 func prepareReturnedTaskRetry(_ marshal.Run, _ *marshal.Task) {}
