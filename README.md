@@ -18,6 +18,12 @@ and only verified work lands on `main`.**
 
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
 
+<p align="center">
+  <img src=".github/assets/demo.gif" alt="The Marshal Board from launch to a finished run: the opening, the Who plans? picker with each provider's limit (Codex is chosen), a goal said from the Board, the requirements card confirmed with Enter, the architecture accepted in the browser, then Codex, Claude, Antigravity and OpenCode building four tasks in parallel, each hand-in reviewed by a different provider, verified and merged, ending on the What next? card." width="100%">
+  <br>
+  <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → Codex → say the goal → requirements card, <code>Enter</code> confirms → accept the architecture in the browser → Codex, Claude, Antigravity and OpenCode build in parallel → each hand-in reviewed by a different provider → verify → merge → <b>What next?</b></sub>
+</p>
+
 [Set up](#set-up-with-your-agent) ·
 [How it works](#how-it-works) ·
 [Why Marshal](#why-marshal) ·
@@ -105,14 +111,6 @@ and approves the plan itself, starts the workers, and runs a final independent c
 **Telemetry:** Marshal sends anonymous usage telemetry (a random install ID, version,
 OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 `marshal telemetry disable` turns it off. [Exactly what is sent →](docs/telemetry.md)
-
-<br>
-
-<p align="center">
-  <img src=".github/assets/demo.gif" alt="The Marshal Board from launch to a finished run: the opening, the Who plans? picker with each provider's limit (Codex is chosen), a goal said from the Board, the requirements card confirmed with Enter, the architecture accepted in the browser, then Codex, Claude, Antigravity and OpenCode building four tasks in parallel, each hand-in reviewed by a different provider, verified and merged, ending on the What next? card." width="100%">
-  <br>
-  <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → Codex → say the goal → requirements card, <code>Enter</code> confirms → accept the architecture in the browser → Codex, Claude, Antigravity and OpenCode build in parallel → each hand-in reviewed by a different provider → verify → merge → <b>What next?</b></sub>
-</p>
 
 ---
 
