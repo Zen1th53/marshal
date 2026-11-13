@@ -481,7 +481,7 @@ func requiredVerifierEvidence(session verification.Session, criteria []requiredV
 			passes = 1
 		}
 		next.Claims[i].EvidenceIDs = append(next.Claims[i].EvidenceIDs, eid)
-		next.Evidence = append(next.Evidence, verification.Evidence{ID: eid, ClaimID: next.Claims[i].ID, Kind: "fresh-independent-native-verifier", Status: a.Status, ContentDigest: hex.EncodeToString(sum[:]), TreeDigest: session.Binding.TreeDigest, EnvironmentDigest: session.Binding.EnvironmentDigest, Producer: observation.ID, Provider: observation.Provider, Oracle: "independent-semantic-model-review", ClusterID: "native-verifier-" + observation.ID, InputsDigest: observation.InputDigest, OutputDigest: observation.OutputDigest, Attempts: 1, Passes: passes, CreatedAt: observation.FinishedAt})
+		next.Evidence = append(next.Evidence, verification.Evidence{ID: eid, ClaimID: next.Claims[i].ID, Kind: "fresh-independent-native-verifier", Status: a.Status, ContentDigest: hex.EncodeToString(sum[:]), TreeDigest: session.Binding.TreeDigest, EnvironmentDigest: session.Binding.EnvironmentDigest, Producer: observation.ID, Provider: observation.Provider, Oracle: "independent-semantic-model-review", ClusterID: "native-verifier-" + observation.ID, InputsDigest: observation.InputDigest, OutputDigest: observation.OutputDigest, Attempts: 1, Passes: passes, CreatedAt: observation.FinishedAt, Reason: strings.TrimSpace(a.Reason)})
 		payloads["evidence/"+eid+".json"] = data
 	}
 	checksRaw, _ := json.Marshal(session.RuntimeProof)
