@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.14
+
+### Fixed
+- ULTRA runs whose tasks are done by Antigravity or Claude finish their final check and deliver; the independent checker is now a provider that can name its model (Claude Code) instead of Codex, which always stopped with "REQUIRED_CONTEXT_REVIEW_PENDING". The check itself is unchanged.
+- With no independent checker available the run stops before spending a model turn and says to install Claude Code or wait for its limit, then press Enter.
+- Final-check stops read in plain words with Enter to retry, also for stops recorded by earlier versions.
+- The Board header turns "paused" and back as soon as you pause or resume.
+- No false "Verifying Antigravity failed" after "Antigravity verified"; earlier Codex work still loads when another project's Codex session file cannot be read.
+
+### Known limit
+- Only Claude Code can be the final ULTRA checker in this build; it must be installed and not be one of the run's workers.
+
 ## 0.2.13
 
 ### Fixed
