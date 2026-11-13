@@ -36,11 +36,11 @@ Marshal requires an initialized, valid Git project before launching the runtime 
    git init
    git commit --allow-empty -m "Initial commit"
    ```
-3. **Run `marshal init`**:
+3. **Open Marshal**. In a Git repository, first open sets up the project automatically and reports any files committed:
    ```bash
-   marshal init
+   marshal
    ```
-   This generates the `.marshal/` directory and creates default metadata files (`CAPABILITIES.yaml`, `PACK-VERSION.yaml`, `RUNTIME-VERSION.yaml`).
+   This creates missing project metadata (`CAPABILITIES.yaml`, `PACK-VERSION.yaml`, `RUNTIME-VERSION.yaml`) and commits those files as `Initialize MARSHAL project`. You can also run `marshal init` yourself as an optional explicit setup command.
 4. **Verify project readiness**:
    ```bash
    marshal doctor
@@ -102,7 +102,7 @@ To resume where you left off:
    marshal
    ```
 2. Marshal automatically detects the latest unfinished run in `.marshal/state.db` and reloads the Board.
-3. If the run was waiting for you (for example, to accept the architecture), the orange **`NEEDS YOU`** gate reappears. Press **`y`** and **`Enter`** to continue; on the architecture gate, **`y`** opens the architecture in your browser, where you click **Accept architecture**.
+3. If the run was waiting for you, the **`NEEDS YOU`** prompt reappears. Reply as requested; for the architecture, press **`y`** to open it in your browser and accept it there.
 4. If workers were stopped while dispatching, Marshal releases stale leases, reschedules incomplete tasks, and resumes execution.
 
 ---

@@ -13,16 +13,16 @@ Marshal coordinates multiple AI coding agents to complete software engineering g
 
 ## 1. Plan (Drafting Phase)
 
-A run begins when you provide a goal—either by pressing `s` on the Board or typing into the docked chat pane.
+A run begins when you provide a goal—either by pressing `s` on the Board or typing into the docked chat pane. The Marshal fills a requirements card; press `Enter` to confirm all, or `e` to edit an answer.
 
 1. **Clarification**: The model acting as the **Marshal** analyzes your repository structure, asks clarifying questions if requirements are ambiguous, and aligns on technical constraints.
-2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract defining components, invariants, and file paths. A `NEEDS YOU` gate appears on the Board; press `y` to open the architecture in your browser, review it and click **Accept architecture**.
+2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract. A `NEEDS YOU` gate appears on the Board; press `y` to open the architecture in your browser and accept it there. This is the owner gate.
 3. **Task Decomposition**: The Marshal breaks the architecture down into small, discrete tasks. Each task specifies:
    - Target files or directories.
    - Assigned worker provider.
    - Objective acceptance criteria.
    - Executable verification checks (e.g., unit test commands, linter runs).
-4. **Plan Approval**: The Marshal checks the drafted task graph and approves it itself; there is no plan-approval gate. You can read the plan on the Plan view (`7`) and stop the run at any time with `Ctrl+X`.
+4. **Plan Approval**: The Marshal checks and approves its own plan; there is no plan approval popup. You can read the plan on view `7` after a run starts and stop workers at any time with `Ctrl+X`.
 
 ---
 
@@ -46,12 +46,12 @@ To prevent models from overlooking their own mistakes, Marshal enforces **cross-
 
 ---
 
-## 4. Independent Verifier (Verifying Phase)
+## 4. Final Independent Check
 
-After all individual tasks have been accepted, Marshal prepares for integration:
+After the tasks finish, Marshal prepares for integration:
 
-- **Independent Verification**: An independent verifier model—selected from providers other than the worker providers that authored changes—evaluates the integrated solution.
-- **Check Execution**: The verifier runs the project's actual build and test commands (e.g. `go test ./...`, `pytest`, `cargo test`) on your computer, against the integrated result.
+- **Final check**: An independent check evaluates the integrated solution and reruns its checks.
+- **Claude Code requirement**: The final ULTRA check requires Claude Code installed and not used as a worker in that run. If unavailable, the run stops before the check and tells you to install Claude Code or wait for its limit, then press `Enter`.
 - **Objective Proof**: Completion is based on real execution status, process exit codes, and test outputs, not on model self-assertions.
 
 ---
@@ -62,4 +62,4 @@ When the independent verifier confirms that all tests and criteria pass:
 
 1. **Merge**: Marshal integrates the task branches cleanly into your repository's `main` branch.
 2. **State Finalization**: Run metrics, completion proofs, and task history are durably written to `.marshal/state.db`.
-3. **Closure**: The run state transitions to `CLOSED`. You have verified code in your main branch with a full Git commit history.
+3. **Closure**: The run closes to `main`; the chat receives `[Marshal] The run closed: …`.

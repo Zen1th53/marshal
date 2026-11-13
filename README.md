@@ -96,10 +96,10 @@ Or install it yourself (Linux, macOS, Windows via WSL2; checksum-verified, no su
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-Then, in a Git repository of yours, run `marshal init` and then `marshal`. Say what you want
-built in the chat on the left; when the Board shows **NEEDS YOU**, press `y` to open the
-architecture in your browser and click **Accept architecture** there. The Marshal then plans
-the tasks, approves the plan itself and starts the workers. You need at least one coding agent CLI, installed and signed in
+Then, in a Git repository of yours, run `marshal`. Say what you want
+built in the chat on the left. Confirm the requirements card with `Enter` (or edit an answer with `e`); when the Board shows **NEEDS YOU**, press `y` to open the
+architecture in your browser and accept it there. That is the owner gate. The Marshal then plans
+and approves the plan itself, starts the workers, and runs a final independent check. You need at least one coding agent CLI, installed and signed in
 ([requirements](#requirements)); Marshal has no model costs of its own.
 
 **Telemetry:** Marshal sends anonymous usage telemetry (a random install ID, version,
@@ -183,18 +183,19 @@ the right.
 
 | Key | Action |
 |---|---|
-| `Alt+←` / `Alt+→` (or `F11`) | Move between the chat and the Board |
+| `F11` | Switch between chat and the Board |
 | `s` | Say something to the Marshal from the Board |
-| `y` | Answer a **NEEDS YOU** gate; `Enter` sends it. On the architecture gate, `y` opens the browser page where you accept |
+| `y` | Arm a yes reply to a waiting request; press `Enter` to confirm. On the architecture gate, `y` opens the browser page where you accept |
 | `Enter` | Inspect the highlighted task; on a lane, open the worker's session |
 | `v` | Verify a provider |
-| `1`–`8` | Views: Board, Host, Memory, Providers, Verify, Security, Plan, Architecture |
-| `Space` or `Ctrl+K` | All actions; type to filter |
+| `1`–`8` | Board, Host, Memory, Providers, Verify, Security, Plan, Architecture (5–7 need a run) |
+| `Space` or `Ctrl+K` | Open the action palette; type to filter |
 | `Ctrl+X` | Stop all workers (never the Marshal) |
 | `?` | Every key |
 
-The task inspector offers `[a]` approve, `[d]` deny, `[r]` rework, `[x]` cancel
-and `[o]` open the worker pane. [All keys →](docs/board-and-keys.md)
+Press `m` (or click `[m]`) to change the Marshal model; select a task and press `w` to change its model. `F6` appears only after an MCP failure. The top vitals row appears on every screen. The final ULTRA check requires Claude Code installed and not used as a worker in that run; if unavailable, the run stops before checking and tells you to install Claude Code or wait for its limit, then press `Enter`.
+
+Select a task and press `Enter` to inspect it; press `o` in the inspector to open its worker pane. [All keys →](docs/board-and-keys.md)
 
 ---
 
