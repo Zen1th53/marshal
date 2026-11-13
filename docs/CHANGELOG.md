@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.15
+
+### Fixed
+- Opening the architecture before the Marshal sent its project summary says so plainly and asks the Marshal for it; a refused summary tells the Marshal exactly why; a Marshal-saved memory no longer blocks the architecture silently.
+- A plan change the Marshal decides is applied once; a too-long reason says so (500-byte limit); `/marshal use-plan` no longer stops with "its workspace didn't match the approved plan"; the rework-limit stop says how to continue; a review refusal names the review.
+- When the final check does not accept a run, the Board names the rejected criteria and the reasons.
+
 ## 0.2.14
 
 ### Fixed
