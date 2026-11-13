@@ -604,3 +604,18 @@ func ApplicableContractDigest(c Contract, selection Selection) (string, error) {
 // Changed is ErrChanged naming the check that refused, so an operator or
 // the Marshal can see which binding moved. errors.Is still matches it.
 func Changed(where string) error { return fmt.Errorf("%w (%s)", ErrChanged, where) }
+
+// RequiredMemoryDetail opens the detail of a refusal that names one required
+// memory reference. A tool error shows such a detail to the Marshal; other
+// details stay internal.
+const RequiredMemoryDetail = "required memory "
+
+// RequiredMemory is class refused for the required memory id, with a plain
+// reason and what to do. errors.Is still matches class.
+func RequiredMemory(class error, id, why string) error {
+	return fmt.Errorf("%w: %s%s %s", class, RequiredMemoryDetail, id, why)
+}
+
+// ValidPath reports whether p is a contract component path: repository
+// relative and clean, with no leading "/" or "./", no trailing "/" and no "..".
+func ValidPath(p string) bool { return validPath(p) }

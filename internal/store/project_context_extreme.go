@@ -520,9 +520,17 @@ func validateProjectContractReferences(ctx context.Context, tx *sql.Tx, c projec
 	}
 	for _, r := range inventory {
 		ref, ok := byID[r.ID]
-		if !ok || ref.Revision != r.Revision || ref.StateFingerprint != projectcontext.MemoryFingerprint(r) {
-			return projectcontext.ErrReviewPending
+		if !ok {
+			return projectcontext.RequiredMemory(projectcontext.ErrReviewPending, r.ID, "is listed by marshal_project_contract_inventory but missing from required; read every inventory page and classify each entry in required")
 		}
+		if ref.Revision != r.Revision || ref.StateFingerprint != projectcontext.MemoryFingerprint(r) {
+			return projectcontext.RequiredMemory(projectcontext.ErrReviewPending, r.ID, "changed after the inventory was read; read marshal_project_contract_inventory again and submit with its current revision and state_fingerprint")
+		}
+	}
+	// A memory the Marshal saved itself is never owner authority: it cannot
+	// bind as a rule. Naming it tells the Marshal how the draft can pass.
+	notOwnerConfirmed := func(ref projectcontext.MemoryRef) error {
+		return projectcontext.RequiredMemory(projectcontext.ErrReviewPending, ref.ID, "was saved by the Marshal and not confirmed by the owner, so it cannot be required as "+ref.Class+"; remove it from required and state the rule in contract.invariants instead")
 	}
 	for _, ref := range c.Required {
 		if err := authorizeProjectMemoryID(ctx, tx, ref.ProjectID, ref.ID, audience); err != nil {
@@ -530,18 +538,24 @@ func validateProjectContractReferences(ctx context.Context, tx *sql.Tx, c projec
 		}
 		r, err := getMemoryV2(ctx, tx, ref.ProjectID, ref.ID)
 		if err != nil {
-			return projectcontext.ErrMissing
+			return projectcontext.RequiredMemory(projectcontext.ErrMissing, ref.ID, "was not found; remove it from required")
 		}
 		if !projectRecordAuthorized(r, audience) {
 			return authz.ErrUnauthorized
 		}
 		if ref.Class == projectcontext.ContextOnly {
-			if !projectcontext.EligibleAcceptedRecord(r) || r.Scope != ref.Scope || r.ScopeID != ref.ScopeID || r.Revision != ref.Revision || r.ContentDigest != ref.ContentDigest || projectcontext.MemoryFingerprint(r) != ref.StateFingerprint {
+			if !projectcontext.EligibleAcceptedRecord(r) {
+				return notOwnerConfirmed(ref)
+			}
+			if r.Scope != ref.Scope || r.ScopeID != ref.ScopeID || r.Revision != ref.Revision || r.ContentDigest != ref.ContentDigest || projectcontext.MemoryFingerprint(r) != ref.StateFingerprint {
 				return projectcontext.ErrReviewPending
 			}
 			continue
 		}
 		if err = projectcontext.ValidateRequiredRecord(r, ref, now); err != nil {
+			if err == projectcontext.ErrReviewPending && !projectcontext.EligibleAcceptedRecord(r) {
+				return notOwnerConfirmed(ref)
+			}
 			return err
 		}
 		if err = validateProjectEvidence(ctx, tx, r, ref); err != nil {

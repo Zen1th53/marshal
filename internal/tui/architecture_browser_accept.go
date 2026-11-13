@@ -162,10 +162,17 @@ func (w *Workspace) clearAnswer(text string) {
 	}
 }
 
+// errArchitectureAwaitsSummary: no architecture can be drawn yet, because no
+// project contract is accepted and the Marshal has not sent one to review.
+var errArchitectureAwaitsSummary = errors.New("the Marshal has not sent the project summary yet")
+
 // plainArchitectureError turns an open error into plain English.
 func plainArchitectureError(err error) string {
 	if errors.Is(err, os.ErrNotExist) {
 		return "the Marshal has not drafted it yet"
+	}
+	if errors.Is(err, errArchitectureAwaitsSummary) {
+		return err.Error() + "."
 	}
 	return "try again in a moment"
 }

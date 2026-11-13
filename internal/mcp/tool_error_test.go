@@ -78,3 +78,37 @@ func TestTaskGetErrorsOverStdioArePlain(t *testing.T) {
 		t.Fatalf("unknown task: %q", got)
 	}
 }
+
+// A refusal that carries the runtime's own explanation reaches the Marshal
+// with that explanation, as an error value or as parent transport text;
+// a bare code still reads as the general sentence.
+func TestToolErrorsKeepTheRefusalReason(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want []string
+		code string
+	}{
+		{fmt.Errorf("%w: component \"voice\" path \"ultron/\" must be a clean repository path", projectcontext.ErrInvalid), []string{`path "ultron/"`, "submit again"}, "required context invalid"},
+		{errors.New(`required context invalid: component "voice" path "./ultron" must be a clean repository path; expected {"action":"project-contract"}`), []string{`path "./ultron"`, `"action":"project-contract"`}, "required context invalid"},
+		{projectcontext.RequiredMemory(projectcontext.ErrReviewPending, "MEM-f870", "was saved by the Marshal and not confirmed by the owner"), []string{"MEM-f870", "not confirmed by the owner"}, "REQUIRED_CONTEXT_REVIEW_PENDING"},
+		{errors.New("REQUIRED_CONTEXT_MISSING: required memory MEM-gone was not found; remove it from required"), []string{"MEM-gone", "remove it from required"}, "REQUIRED_CONTEXT_MISSING"},
+		{projectcontext.ErrInvalid, []string{"did not pass its checks. Read marshal_project_contract_context again"}, "required context invalid"},
+	} {
+		got := toolError("marshal_project_contract_submit", tc.err)
+		if got.Data == nil || got.Data.Code != tc.code {
+			t.Fatalf("%v -> %+v", tc.err, got)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(got.Message, want) {
+				t.Fatalf("%v -> %q lacks %q", tc.err, got.Message, want)
+			}
+		}
+		if strings.Contains(got.Message, "REQUIRED_CONTEXT") {
+			t.Fatalf("raw code kept: %q", got.Message)
+		}
+	}
+	// Other details stay internal.
+	if got := toolError("marshal_project_contract_context", fmt.Errorf("%w: no completed canonical Process05 root", projectcontext.ErrReviewPending)); strings.Contains(got.Message, "Process05") {
+		t.Fatalf("internal detail shown: %q", got.Message)
+	}
+}

@@ -51,11 +51,36 @@ func explainProjectContractSubmission(sub store.ProjectContractSubmission, err e
 			break
 		}
 	}
+	ids := map[string]int{}
+	for _, component := range c.Components {
+		ids[component.ID]++
+	}
+	for _, component := range c.Components {
+		if ids[component.ID] > 1 {
+			problems = append(problems, fmt.Sprintf("component id %q is used more than once", component.ID))
+			ids[component.ID] = 0
+		}
+		for _, p := range component.Paths {
+			if !projectcontext.ValidPath(p) {
+				problems = append(problems, fmt.Sprintf("component %q path %q must be a clean repository path such as \"src/app\": no leading \"/\" or \"./\", no trailing \"/\", no \"..\"", component.ID, p))
+			}
+		}
+		for _, dep := range component.Dependencies {
+			if dep == component.ID {
+				problems = append(problems, fmt.Sprintf("component %q cannot depend on itself", component.ID))
+			} else if _, ok := ids[dep]; !ok {
+				problems = append(problems, fmt.Sprintf("component %q depends on %q, which is not a component id in this contract", component.ID, dep))
+			}
+		}
+	}
 	if len(c.Invariants) == 0 {
 		problems = append(problems, "contract.invariants needs at least one invariant")
 	}
 	if c.ReviewedInventoryDigest == "" {
 		problems = append(problems, "contract.reviewed_inventory_digest must be the inventory's completeness_digest")
+	}
+	if len(problems) == 0 && len(c.Required) > 0 {
+		problems = append(problems, "a required entry is malformed: copy scope, scope_id, id, project_id, revision, content_digest and state_fingerprint from its inventory entry and give class, reason, acceptance_occurrence and applies; when the inventory has no entries, required is []")
 	}
 	if len(problems) == 0 {
 		problems = append(problems, "a component path, dependency or required reference is malformed")

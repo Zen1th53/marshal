@@ -37,7 +37,19 @@ func toolError(tool string, err error) *rpcErr {
 	} {
 		code := known.sentinel.Error()
 		if errors.Is(err, known.sentinel) || strings.Contains(msg, code) {
-			return &rpcErr{Code: toolErrorCode, Message: known.text, Data: &rpcErrData{Code: code}}
+			text := known.text
+			if detail := contextDetail(msg, code); detail != "" {
+				switch {
+				case strings.HasPrefix(detail, projectcontext.RequiredMemoryDetail):
+					// One named reference refused: say which and what to do,
+					// in place of the general advice that cannot fix it.
+					text = "The project contract was not accepted: " + detail + "."
+				case known.sentinel == projectcontext.ErrInvalid:
+					// The runtime's own explanation of a refused draft.
+					text = "The project context did not pass its checks: " + detail + ". Fix that and submit again with a new submission_id."
+				}
+			}
+			return &rpcErr{Code: toolErrorCode, Message: text, Data: &rpcErrData{Code: code}}
 		}
 	}
 	if errors.Is(err, sql.ErrNoRows) || strings.Contains(msg, sql.ErrNoRows.Error()) {
@@ -65,6 +77,16 @@ func toolError(tool string, err error) *rpcErr {
 		return &rpcErr{Code: toolErrorCode, Message: text, Data: &rpcErrData{Code: "invalid_input"}}
 	}
 	return &rpcErr{Code: toolErrorCode, Message: msg}
+}
+
+// contextDetail is the text after "code: " in msg, without a trailing period,
+// or "" when the code carries no detail.
+func contextDetail(msg, code string) string {
+	i := strings.Index(msg, code+": ")
+	if i < 0 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimSpace(msg[i+len(code)+2:]), ".")
 }
 
 // sentinelDetail reports whether msg is the sentinel's text, alone or followed
