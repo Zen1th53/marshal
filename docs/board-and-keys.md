@@ -9,6 +9,7 @@ Marshal's Board shows the run, tasks, inbox, worker lanes and activity. A vitals
 - **`m`** or click **`[m]`** to choose the Marshal model.
 - Highlight a task and press **`w`** to choose its model.
 - **`y`** opens the architecture in your browser when the architecture is waiting for you. Accept it in the browser.
+- **`v`** verifies the next unverified provider (in the Providers view, the selected one); press `Enter` to run the check.
 - **`Ctrl+X`** stops all workers, not the Marshal.
 
 The Marshal fills a requirements card before the architecture gate. Press **`Enter`** to confirm all answers or **`e`** to edit an answer. The architecture acceptance is the owner gate. The Marshal then plans and approves the plan itself; there is no plan approval popup.

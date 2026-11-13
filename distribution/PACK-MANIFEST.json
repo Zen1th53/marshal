@@ -516,8 +516,8 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "2a8e7fafbca24d0314f2c287458cc5fb30f2bb261e808a710416aecd7be3f88c",
-      "bytes": 2197
+      "sha256": "ab7aa0f587dbd1466b6a7ab302c8c4751853c20d9c857e152f5274d8c7b8a91b",
+      "bytes": 2320
     },
     {
       "path": "docs/configuration.md",
