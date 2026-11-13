@@ -35,6 +35,10 @@ func TestRequiredCanonicalVerifierNeedsExactMappedChecksAndEveryIndependentCrite
 	if err != nil || verification.Evaluate(next, b, time.Now().UTC()) != verification.VerifiedComplete {
 		t.Fatal("two distinct oracle clusters did not cover exact criterion", err)
 	}
+	// The verifier's own reason is kept on its evidence so a stop can say why.
+	if got := next.Evidence[len(next.Evidence)-1]; got.Kind != "fresh-independent-native-verifier" || got.Reason != "Exact runtime observation and independent semantic fixture agree" {
+		t.Fatalf("verifier reason not kept: %+v", got)
+	}
 	for _, fault := range []string{"missing assessment", "foreign criterion", "foreign check", "duplicate check", "unknown", "fail", "wrong head"} {
 		t.Run(fault, func(t *testing.T) {
 			raw, _ := json.Marshal(result)

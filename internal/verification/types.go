@@ -75,6 +75,10 @@ type Evidence struct {
 	Attempts, Passes                      int
 	CreatedAt                             time.Time  `json:"created_at"`
 	ExpiresAt                             *time.Time `json:"expires_at,omitempty"`
+	// Reason is the producer's own words for its status, kept so a person can
+	// read why a criterion was not accepted. It is data for people; the
+	// decision reads only Status.
+	Reason string `json:"reason,omitempty"`
 }
 
 type Contradiction struct {

@@ -14,6 +14,24 @@ const VerificationRetry = "Press Enter to let the Marshal retry."
 // fit the required assessment shape (app.errRequiredVerifierOutput).
 const RequiredVerifierOutputInvalid = "REQUIRED_VERIFIER_OUTPUT_INVALID"
 
+// VerificationNotAccepted opens the plain reason of a final check that ran and
+// did not pass; the runtime appends each criterion not accepted and why.
+const VerificationNotAccepted = "The final check did not accept the result."
+
+// VerificationNotAcceptedNext is what the person does about it: the result
+// itself has to change, so a plain retry checks the same result again.
+const VerificationNotAcceptedNext = "Fix the project or amend the plan for these points; press Enter only to check the same result again."
+
+// PlainVerificationFailed returns the plain reason for a failed-check pause an
+// older build recorded as the bare code ("verification failed: <DECISION>"),
+// or false for any other reason. Display text only.
+func PlainVerificationFailed(raw string) (string, bool) {
+	if strings.HasPrefix(strings.TrimSpace(raw), "verification failed: ") {
+		return VerificationNotAccepted + " Its reasons were not kept by the build that ran it; press Enter to check again and see them.", true
+	}
+	return "", false
+}
+
 var plainContextStops = []struct{ code, text string }{
 	{projectcontext.ErrReviewPending.Error(), "Marshal could not finish checking the run: the final check could not be tied to the project's accepted design."},
 	{projectcontext.ErrChanged.Error(), "Marshal could not finish checking the run: the project changed while it was being checked."},

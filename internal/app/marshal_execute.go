@@ -572,7 +572,7 @@ func (s *MarshalService) verifyAndClose(ctx context.Context, runID string, run m
 				return paused, loadErr
 			}
 			if paused.State == marshal.Verifying {
-				pauseMarshal(&paused, marshal.Pause{Reason: "verification failed: " + string(stage.result), Resolutions: []string{"/marshal resume to retry verification"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationFailed, Action: marshal.PauseResume})
+				pauseMarshal(&paused, verificationFailedPause(stage.session, stage.result))
 				if loadErr = s.save(ctx, runID, paused, rev); loadErr != nil {
 					return paused, loadErr
 				}

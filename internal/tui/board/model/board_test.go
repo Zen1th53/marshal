@@ -482,3 +482,25 @@ func TestBareCodeVerificationStopReadsPlain(t *testing.T) {
 		}
 	}
 }
+
+// v0.2.14 and older recorded a final check that ran and did not pass as the
+// bare code "verification failed: VERIFICATION_FAILED". The Board and
+// Activity say in plain words that the check did not accept the result; a
+// pause that already carries the verifier's reasons keeps them.
+func TestFailedVerificationReadsPlain(t *testing.T) {
+	raw := "verification failed: VERIFICATION_FAILED"
+	r := marshal.Run{State: marshal.AwaitingUser, Pause: &marshal.Pause{Reason: raw, Resolutions: []string{"/marshal resume to retry verification"}, Code: marshal.CodeVerificationFailed, ResumeState: marshal.Verifying, Action: marshal.PauseResume}}
+	b := Project(Snapshot{RunID: "R1", Run: r}, nil)
+	if !strings.HasPrefix(b.Run.Paused, "The final check did not accept the result.") || strings.Contains(b.Run.Paused, "VERIFICATION_FAILED") || !reflect.DeepEqual(b.Run.Next, []string{"Press Enter to let the Marshal retry."}) {
+		t.Fatalf("board stop: %q %q", b.Run.Paused, b.Run.Next)
+	}
+	l, ok := NewActivityLine(events.Event{Type: events.EventTypeMarshalEscalated, Data: map[string]any{"reason": raw}})
+	if !ok || strings.Contains(l.Detail, "VERIFICATION_FAILED") || !strings.HasPrefix(l.Detail, "The final check did not accept the result.") {
+		t.Fatalf("activity: %+v %v", l, ok)
+	}
+	reasoned := "The final check did not accept the result. Not accepted: Voice — no Uzbek speech model is bundled."
+	r.Pause.Reason, r.Pause.Resolutions = reasoned, []string{marshal.VerificationNotAcceptedNext}
+	if b := Project(Snapshot{RunID: "R1", Run: r}, nil); b.Run.Paused != reasoned || !reflect.DeepEqual(b.Run.Next, []string{marshal.VerificationNotAcceptedNext}) {
+		t.Fatalf("a reasoned stop lost its words: %q %q", b.Run.Paused, b.Run.Next)
+	}
+}

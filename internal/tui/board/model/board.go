@@ -477,6 +477,9 @@ func NewActivityLine(e events.Event) (ActivityLine, bool) {
 	if plain, ok := plainVerificationStop(detail); ok && e.Type == events.EventTypeMarshalEscalated {
 		detail = plain
 	}
+	if plain, ok := marshal.PlainVerificationFailed(detail); ok && e.Type == events.EventTypeMarshalEscalated {
+		detail = plain
+	}
 	line := ActivityLine{Seq: e.Sequence, At: e.At, Type: e.Type, TaskID: e.TaskID, Detail: detail, State: eventStates[e.Type]}
 	switch e.Type {
 	case events.EventTypeMarshalRunClosed:
@@ -527,6 +530,11 @@ func Project(s Snapshot, evs []events.Event) Board {
 		if s.Run.Pause.Code == marshal.CodeVerificationStopped {
 			if reason, ok := plainVerificationStop(s.Run.Pause.Reason); ok {
 				b.Run.Paused, b.Run.Next = reason, []string{plainVerificationRetry}
+			}
+		}
+		if s.Run.Pause.Code == marshal.CodeVerificationFailed {
+			if reason, ok := marshal.PlainVerificationFailed(s.Run.Pause.Reason); ok {
+				b.Run.Paused, b.Run.Next = reason, []string{marshal.VerificationRetry}
 			}
 		}
 		b.Run.PauseAction, b.Run.PauseTask, b.Run.PauseCode = s.Run.Pause.Action, s.Run.Pause.TaskID, s.Run.Pause.Code

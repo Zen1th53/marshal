@@ -89,7 +89,7 @@ func TestAutoCloseFailedVerificationPausesForResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if run.State != marshal.AwaitingUser || run.Pause == nil || run.Pause.Code != marshal.CodeVerificationFailed || run.Pause.ResumeState != marshal.Verifying || !strings.HasPrefix(run.Pause.Reason, "verification failed: ") {
+	if run.State != marshal.AwaitingUser || run.Pause == nil || run.Pause.Code != marshal.CodeVerificationFailed || run.Pause.ResumeState != marshal.Verifying || !strings.HasPrefix(run.Pause.Reason, marshal.VerificationNotAccepted) || !strings.HasPrefix(run.Pause.Detail, "verification failed: ") {
 		t.Fatalf("failed verification pause: %s %+v", run.State, run.Pause)
 	}
 	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != before {

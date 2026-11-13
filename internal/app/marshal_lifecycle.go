@@ -1390,7 +1390,7 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		run.Compatibility.Disposition = "reviewed-current-runtime"
 	}
 	if result != verification.VerifiedComplete {
-		pauseMarshal(&run, marshal.Pause{Reason: "verification failed: " + string(result), Resolutions: []string{"/marshal resume to retry verification"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationFailed, Action: marshal.PauseResume})
+		pauseMarshal(&run, verificationFailedPause(session, result))
 	}
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return result, err
@@ -1412,8 +1412,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 // way a separate verification does. A result means the verification ran and
 // did not pass.
 type closeVerificationError struct {
-	err    error
-	result verification.Decision
+	err     error
+	result  verification.Decision
+	session verification.Session
 }
 
 func (e *closeVerificationError) Error() string { return e.err.Error() }
@@ -1489,7 +1490,7 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 		return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
 	}
 	if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
-		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result}
+		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
 	}
 	if run.Tier == marshal.Ultra && s.requiredCanonicalVerification == nil {
 		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
