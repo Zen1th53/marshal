@@ -432,7 +432,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:4a3d1e99bda6010fa46b120ba7178c018dacfe15d3bc6ec39df7e5839ab04af9"
+const MarshalProtocolDigest = "sha256:f934268b5173c4e1d76f7d796a57997ba475f3b9c67e4b26f125b8cf6caaf594"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

@@ -5471,7 +5471,7 @@
     },
     {
       "path": "internal/constitution/marshal_protocol.go",
-      "sha256": "d385543f0b86085dce9a4f316d84be7787999e4fbc21d703a1daa1600730dde3",
+      "sha256": "e75a1c52ecfd1b0a58dd060cf7ef28f16b1eba80704a8be99e39f37a489fff2e",
       "bytes": 28051
     },
     {
@@ -5496,7 +5496,7 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "e7d1c20bc9a8d3c61a3c43adcdbf61bf97c410d5c57705ed722e66434fab2350",
+      "sha256": "fce99574d297a89375d30e36cab249569f4bfc1150b6bc1aa93c513d72dd690a",
       "bytes": 11565
     },
     {
