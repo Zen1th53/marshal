@@ -1223,8 +1223,11 @@ func TestMarshalInterruptedLaunchPreservesHoneypotRequirement(t *testing.T) {
 
 func TestMarshalReplacementVerificationUsesRevisionTree(t *testing.T) {
 	s := mergedRecoveryFixture(t)
-	draft := s.Model.(marshalFakeModel).draft
+	// A replacement changes merged task a; unchanged merged work is kept.
+	draft := cloneMarshalDraft(s.Model.(marshalFakeModel).draft)
 	draft.Plan.Budget.MaxTasks = 100
+	draft.Tasks[0].Instructions = "write a.txt again"
+	draft.Plan.Tasks[0].Instructions = draft.Tasks[0].Instructions
 	run, err := s.ApplyAmendDraft(t.Context(), "run", "larger budget", draft)
 	if err != nil {
 		t.Fatal(err)
