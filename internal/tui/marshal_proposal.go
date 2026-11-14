@@ -31,7 +31,7 @@ type marshalProposal struct {
 	action, key, value, provider, path, id, reason, language string
 	taskID, targetWorker, model                              string
 	question, choices, card                                               string
-	ids                                                                   string
+	ids, until                                                            string
 	freshSession                                                          bool
 }
 
@@ -88,7 +88,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
 	p.revision, p.digest, p.instructionRef, p.criteria = fields["revision"], fields["digest"], fields["instruction_ref"], fields["criteria"]
 	p.question, p.choices, p.card = fields["question"], fields["choices"], fields["card"]
-	p.ids = fields["ids"]
+	p.ids, p.until = fields["ids"], fields["until"]
 	var keys []string
 	switch p.action {
 	case "intake":
@@ -113,6 +113,14 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		}
 	case "hold":
 		keys = []string{"action", "ids", "reason"}
+		// "until":"release" is the owner's own hold (no goal change): it
+		// stays until a release, never released by a change answer.
+		if _, hasUntil := fields["until"]; hasUntil {
+			if p.until != "release" {
+				return p, invalid
+			}
+			keys = append(keys, "until")
+		}
 		if _, err := parseHoldIDs(p.ids); err != nil {
 			return p, invalid
 		}

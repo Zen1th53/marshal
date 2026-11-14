@@ -83,8 +83,10 @@ type MarshalService struct {
 	// they finish and are reviewed and verified as normal. The hold lives in
 	// the TUI session only (never persisted), so after a restart it is gone
 	// and the Marshal holds again if the change is still open. Nil means no
-	// hold is in force.
-	HeldTask func(planTaskID string) bool
+	// hold is in force. runID is the run being dispatched: a hold names its
+	// run, so a service wired before a draft superseded the run still checks
+	// the run it is executing, never a run ID captured at wiring time.
+	HeldTask func(runID, planTaskID string) bool
 	// HoldChanged returns a channel that is closed the next time the held
 	// set changes. When nothing else can move and a task that has not started
 	// is held, Execute waits on it instead of reporting that the run cannot
@@ -97,7 +99,7 @@ type MarshalService struct {
 	// atomic: a hold either lands before the claim (the task is skipped) or
 	// sees the claim (the task is counted as already running). Nil means no
 	// claim is needed.
-	ClaimDispatch                 func(planTaskID string) (end func(), ok bool)
+	ClaimDispatch                 func(runID, planTaskID string) (end func(), ok bool)
 	workerRecall                  func(context.Context, authz.Principal, RecallRequest) (RecallResponse, error)
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error

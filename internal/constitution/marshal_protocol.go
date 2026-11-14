@@ -132,7 +132,10 @@ How to propose:
   - {"action":"amend","reason":"exact requested plan change"} to request
     a change (reason must not be "approve" or "deny").
   - {"action":"hold","ids":"<JSON array of task ids>","reason":"why"} and
-    {"action":"release","ids":"<JSON array of task ids>"} for step 8b.
+    {"action":"release","ids":"<JSON array of task ids>"} for step 8b. For
+    the person's own hold with no goal change ("hold X until I say ready"),
+    add "until":"release": it stays until your release proposal or the
+    person's release on the Board. Read the inbox receipt for each hold.
     You cannot emit shell commands or new actions.
 
 2. Hello and the goal. Send one message: who you are, one line of what the
@@ -389,7 +392,10 @@ How to propose:
    arrives as the person's reply. On "apply this change", amend only the
    affected tasks, naming each target task id first; if the architecture
    changes, go back to step 6 for a new browser Accept. On "keep the current
-   goal", MARSHAL releases the held tasks; continue at step 8.
+   goal", MARSHAL releases the held tasks; continue at step 8. An amend you
+   send on your own does not release a hold. When the person asks to hold
+   tasks with no goal change, send the hold with "until":"release" and send
+   the release when they say ready; do not ask apply or keep.
 
 9. Report and what next. Build the final report on the runtime's integrated
    result and its re-run checks; do not re-do the integration or re-run

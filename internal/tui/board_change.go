@@ -6,12 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // Change cards: the owner types a new goal or a change while a run executes.
@@ -20,11 +24,21 @@ import (
 // delays dispatch, it grants nothing), lets running ones finish, and shows a
 // one-key card: [Enter] apply this change, or [k] keep the current goal.
 //
-// The hold lives in memory on the marshalSession, never in the run state:
-// persisting it would race the executing operation's revision writes. After a
-// restart the hold is gone, and the Marshal holds again if the change is still
-// open. dispatchReady skips a held task that has not started (marshal_execute.go,
-// wired through MarshalService.HeldTask in commands_marshal.go).
+// The hold lives on the marshalSession, never in the run state: persisting
+// it there would race the executing operation's revision writes. A change
+// hold is memory only: after a restart it is gone, and the Marshal holds
+// again if the change is still open. Only the owner's pressing "apply this
+// change" (and the amendment that follows) or "keep the current goal"
+// releases it; an amendment the Marshal sends on its own leaves it in place.
+//
+// An owner's hold ("until":"release": hold these tasks until I say ready, no
+// goal change) is pinned: no change answer releases it, it is saved beside
+// the run state (marshal-holds.json) so a restart keeps it, and the Board
+// shows it plainly as held with [x] release the hold. Only a release
+// proposal or that key ends it. dispatchReady skips a held task that has not
+// started (marshal_execute.go, wired through MarshalService.HeldTask in
+// commands_marshal.go, which is asked about the run being dispatched).
+// Every hold, refusal and release is reported to the Marshal in its inbox.
 
 // changeCard is the open mid-run change as the inbox shows it.
 type changeCard struct {
@@ -39,8 +53,17 @@ type changeCard struct {
 	// it when the run could not be paused within the budget.
 	applying bool
 	timedOut bool
-	at       time.Time
+	// ownerApplied is set when the owner pressed "apply this change": only
+	// then does the amendment that follows release the hold.
+	ownerApplied bool
+	// held is non-empty for the owner's own hold card: the pinned task IDs,
+	// shown plainly as held with a release key instead of the change keys.
+	held []string
+	at   time.Time
 }
+
+// ownerHold reports whether the card is the owner's own hold, not a change.
+func (c changeCard) ownerHold() bool { return len(c.held) > 0 }
 
 // errHoldIDs is the one error parseHoldIDs returns: the proposal is refused
 // as invalid, like any other malformed Marshal proposal.
@@ -167,7 +190,7 @@ func (m *marshalSession) notifyHoldLocked() {
 // holdMu so no dispatch claim can slip between the count and the hold. It
 // returns how many held tasks had not started (and are now paused) and how
 // many were running or past it, or the first ID that is not in the run.
-func (m *marshalSession) holdTasks(runID string, ids []string, load func() (marshal.Run, bool)) (notStarted, running int, unknown string, ok bool) {
+func (m *marshalSession) holdTasks(runID string, ids []string, pin bool, load func() (marshal.Run, bool)) (notStarted, running int, unknown string, ok bool) {
 	m.holdMu.Lock()
 	defer m.holdMu.Unlock()
 	run, found := load()
@@ -188,6 +211,7 @@ func (m *marshalSession) holdTasks(runID string, ids []string, load func() (mars
 	if m.heldRunID != runID || m.held == nil {
 		m.heldRunID = runID
 		m.held = map[string]bool{}
+		m.pinned = nil
 	}
 	for id := range held {
 		if taskNotStarted(state[id]) && m.launching[runID+"\x00"+id] == 0 {
@@ -196,28 +220,134 @@ func (m *marshalSession) holdTasks(runID string, ids []string, load func() (mars
 			running++
 		}
 		m.held[id] = true
+		if pin {
+			if m.pinned == nil {
+				m.pinned = map[string]bool{}
+			}
+			m.pinned[id] = true
+		}
 	}
+	m.saveHoldsLocked()
 	m.notifyHoldLocked()
 	return notStarted, running, "", true
 }
 
-// releaseTasks drops ids from the held set.
+// releaseTasks drops ids from the held set, pinned or not.
 func (m *marshalSession) releaseTasks(ids []string) {
 	m.holdMu.Lock()
 	defer m.holdMu.Unlock()
 	for _, id := range ids {
 		delete(m.held, id)
+		delete(m.pinned, id)
 	}
+	m.saveHoldsLocked()
 	m.notifyHoldLocked()
 }
 
-// releaseAllHeld clears the whole held set.
+// releaseChangeHeld ends the change's hold: every held task the owner did not
+// pin is released. It returns the pinned IDs still held, sorted.
+func (m *marshalSession) releaseChangeHeld() []string {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	for id := range m.held {
+		if !m.pinned[id] {
+			delete(m.held, id)
+		}
+	}
+	if len(m.held) == 0 {
+		m.held, m.pinned, m.heldRunID = nil, nil, ""
+	}
+	m.notifyHoldLocked()
+	return sortedHoldIDs(m.pinned)
+}
+
+// releaseAllHeld clears the whole held set, pinned holds included.
 func (m *marshalSession) releaseAllHeld() {
 	m.holdMu.Lock()
 	defer m.holdMu.Unlock()
-	m.held = nil
+	m.held, m.pinned = nil, nil
 	m.heldRunID = ""
+	m.saveHoldsLocked()
 	m.notifyHoldLocked()
+}
+
+// pinnedIDs is the owner's held task IDs, sorted.
+func (m *marshalSession) pinnedIDs() []string {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	return sortedHoldIDs(m.pinned)
+}
+
+func sortedHoldIDs(set map[string]bool) []string {
+	ids := make([]string, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// ownerHolds is the saved form of the owner's pinned holds.
+type ownerHolds struct {
+	RunID string   `json:"run_id"`
+	IDs   []string `json:"ids"`
+}
+
+// saveHoldsLocked writes the pinned holds to holdsFile (removing it when none
+// remain), so the owner's hold survives a restart. holdMu is held. A failed
+// write leaves the in-memory hold in force.
+func (m *marshalSession) saveHoldsLocked() {
+	if m.holdsFile == "" {
+		return
+	}
+	if len(m.pinned) == 0 || m.heldRunID == "" {
+		_ = os.Remove(m.holdsFile)
+		return
+	}
+	data, err := json.Marshal(ownerHolds{RunID: m.heldRunID, IDs: sortedHoldIDs(m.pinned)})
+	if err != nil {
+		return
+	}
+	tmp := m.holdsFile + ".tmp"
+	if os.WriteFile(tmp, data, 0o600) == nil {
+		_ = os.Rename(tmp, m.holdsFile)
+	}
+}
+
+// restoreOwnerHolds binds m to the project's saved owner holds and restores
+// them, with their held card, after a restart. Called once, when the session
+// is created.
+func (w *Workspace) restoreOwnerHolds(m *marshalSession) {
+	if w.workDir == "" {
+		return
+	}
+	dir := filepath.Join(w.workDir, statepath.DirName)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return
+	}
+	m.holdsFile = filepath.Join(dir, "marshal-holds.json")
+	data, err := os.ReadFile(m.holdsFile)
+	if err != nil {
+		return
+	}
+	var saved ownerHolds
+	if json.Unmarshal(data, &saved) != nil || saved.RunID == "" || len(saved.IDs) == 0 {
+		return
+	}
+	encoded, _ := json.Marshal(saved.IDs)
+	ids, err := parseHoldIDs(string(encoded))
+	if err != nil {
+		return
+	}
+	m.heldRunID, m.held, m.pinned = saved.RunID, map[string]bool{}, map[string]bool{}
+	for _, id := range ids {
+		m.held[id], m.pinned[id] = true, true
+	}
+	w.change.mu.Lock()
+	if w.change.card == nil {
+		w.change.card = &changeCard{runID: saved.RunID, held: sortedHoldIDs(m.pinned), at: time.Now()}
+	}
+	w.change.mu.Unlock()
 }
 
 // heldCount is how many tasks the session currently holds.
@@ -255,7 +385,7 @@ func taskNotStarted(s marshal.TaskState) bool {
 func (w *Workspace) applyHold(p marshalProposal) {
 	ids, err := parseHoldIDs(p.ids)
 	if err != nil {
-		w.rejectChange(p, "malformed hold ids")
+		w.rejectHold(p, "malformed hold ids")
 		return
 	}
 	m := w.marshalSession()
@@ -265,24 +395,86 @@ func (w *Workspace) applyHold(p marshalProposal) {
 	// The run is read under the hold's lock, so the count matches what
 	// dispatch will do: a task whose launch is already claimed counts as
 	// running, and every task counted as paused is refused by dispatch.
-	notStarted, running, unknown, ok := m.holdTasks(runID, ids, func() (marshal.Run, bool) {
+	pin := p.until == "release"
+	notStarted, running, unknown, ok := m.holdTasks(runID, ids, pin, func() (marshal.Run, bool) {
 		_, id, run, ok := w.currentMarshalRun()
 		return run, ok && id == runID
 	})
 	if unknown != "" {
-		w.rejectChange(p, "task "+unknown+" is not in the active run")
+		w.rejectHold(p, "task "+unknown+" is not in the active run")
 		return
 	}
 	if !ok {
-		w.rejectChange(p, "no active run to change")
+		w.rejectHold(p, "no active run to change")
 		return
 	}
 	w.change.mu.Lock()
-	w.change.card = &changeCard{runID: runID, notStarted: notStarted, running: running, at: time.Now()}
+	c := w.change.card
+	switch {
+	case !pin:
+		// A change: its card replaces an owner-hold card, whose tasks stay
+		// held and reappear once the change is answered.
+		w.change.card = &changeCard{runID: runID, notStarted: notStarted, running: running, at: time.Now()}
+	case c == nil || c.ownerHold():
+		w.change.card = &changeCard{runID: runID, held: m.pinnedIDs(), at: time.Now()}
+	}
+	// An owner's hold arriving while a change card is open leaves that card:
+	// the hold is in force and shows once the change is answered.
 	w.change.mu.Unlock()
-	w.RecordActivity(changeHoldHeadline(notStarted, running))
+	headline := changeHoldHeadline(notStarted, running)
+	if pin {
+		headline = ownerHoldHeadline(ids)
+	}
+	w.RecordActivity(headline)
 	w.resolveChangeProposal(p, "applied")
+	w.holdNotice("hold applied", holdAppliedNotice(ids, notStarted, running, pin), runID)
 	w.requestRepaint()
+}
+
+// holdAppliedNotice is the Marshal's inbox receipt for an applied hold.
+func holdAppliedNotice(ids []string, notStarted, running int, pin bool) string {
+	text := "Held: " + strings.Join(ids, ", ") + ". "
+	if notStarted > 0 {
+		text += fmt.Sprintf("%d not started and will not be dispatched while held. ", notStarted)
+	}
+	if running > 0 {
+		text += fmt.Sprintf("%d already running or past dispatch; a hold does not stop it. ", running)
+	}
+	if pin {
+		return text + "This is the owner's hold: it stays until a release proposal or the owner's [x] release on the Board; no change answer and no amendment releases it."
+	}
+	return text + "The Board asks the owner: [Enter] apply this change or [k] keep the current goal. For a hold with no goal change, send the hold with \"until\":\"release\"."
+}
+
+// holdNotice writes one runtime line to the Marshal's inbox.
+func (w *Workspace) holdNotice(event, text, runID string) {
+	root := w.workDir
+	if w.runtime != nil {
+		root = w.runtime.ProjectRoot()
+	}
+	if root == "" {
+		return
+	}
+	view, err := openInboxView(root, "marshal", false)
+	if err != nil {
+		return
+	}
+	if runID != "" {
+		text += "\nRun: " + runID
+	}
+	if view.write(fmt.Sprintf("## runtime · %s · %s\n\n%s\n", time.Now().UTC().Format(time.RFC3339), event, text)) == nil {
+		_ = view.trim()
+	}
+}
+
+// rejectHold refuses a hold or release and tells the Marshal why.
+func (w *Workspace) rejectHold(p marshalProposal, reason string) {
+	w.rejectChange(p, reason)
+	m := w.marshalSession()
+	m.mu.Lock()
+	runID := m.runID
+	m.mu.Unlock()
+	w.holdNotice(p.action+" refused", "The "+p.action+" was not applied: "+reason+".", runID)
 }
 
 // applyRelease drops the named tasks from the held set and closes the card
@@ -290,16 +482,39 @@ func (w *Workspace) applyHold(p marshalProposal) {
 func (w *Workspace) applyRelease(p marshalProposal) {
 	ids, err := parseHoldIDs(p.ids)
 	if err != nil {
-		w.rejectChange(p, "malformed release ids")
+		w.rejectHold(p, "malformed release ids")
 		return
 	}
 	m := w.marshalSession()
+	m.mu.Lock()
+	runID := m.runID
+	m.mu.Unlock()
 	m.releaseTasks(ids)
+	w.refreshHoldCard()
+	w.resolveChangeProposal(p, "applied")
+	w.RecordActivity("Released: " + strings.Join(ids, ", ") + ".")
+	w.holdNotice("hold released", "Released: "+strings.Join(ids, ", ")+". A released task starts once its dependencies are merged.", runID)
+	w.requestRepaint()
+}
+
+// refreshHoldCard closes the card when nothing is held any more, and keeps an
+// owner-hold card's task list current.
+func (w *Workspace) refreshHoldCard() {
+	m := w.marshalSession()
 	if m.heldCount() == 0 {
 		w.clearChange()
+		return
 	}
-	w.resolveChangeProposal(p, "applied")
-	w.requestRepaint()
+	pinned := m.pinnedIDs()
+	w.change.mu.Lock()
+	if c := w.change.card; c != nil && c.ownerHold() {
+		if len(pinned) == 0 {
+			w.change.card = nil
+		} else {
+			c.held = pinned
+		}
+	}
+	w.change.mu.Unlock()
 }
 
 // rejectChange records an ignored proposal and resolves it as rejected, the
@@ -330,10 +545,70 @@ func (w *Workspace) clearChange() {
 	w.requestRepaint()
 }
 
-// releaseChange releases the whole held set and closes the card.
+// releaseChange ends the change: its held tasks are released and its card
+// closes. The owner's pinned holds stay, and their held card takes its place.
 func (w *Workspace) releaseChange() {
-	w.marshalSession().releaseAllHeld()
-	w.clearChange()
+	pinned := w.marshalSession().releaseChangeHeld()
+	if len(pinned) == 0 {
+		w.clearChange()
+		return
+	}
+	w.change.mu.Lock()
+	runID := ""
+	if w.change.card != nil {
+		runID = w.change.card.runID
+	}
+	w.change.card = &changeCard{runID: runID, held: pinned, at: time.Now()}
+	w.change.mu.Unlock()
+	w.requestRepaint()
+}
+
+// releaseOwnerHold is the owner's [x] on the held card: the pinned tasks are
+// released and the Marshal is told in its inbox.
+func (w *Workspace) releaseOwnerHold() {
+	m := w.marshalSession()
+	ids := m.pinnedIDs()
+	if len(ids) == 0 {
+		w.refreshHoldCard()
+		return
+	}
+	m.mu.Lock()
+	runID := m.runID
+	m.mu.Unlock()
+	m.releaseTasks(ids)
+	w.refreshHoldCard()
+	w.RecordActivity("You released the hold on " + strings.Join(ids, ", ") + ".")
+	w.holdNotice("hold released", "The owner released the hold on "+strings.Join(ids, ", ")+" from the Board. A released task starts once its dependencies are merged.", runID)
+	w.requestRepaint()
+}
+
+// keepHoldAfterAmend ends the busy-apply sequence of an amendment the owner
+// did not ask for through the card: the hold stays and the card returns to
+// its keys.
+func (w *Workspace) keepHoldAfterAmend() {
+	w.change.mu.Lock()
+	c := w.change.card
+	runID := ""
+	if c != nil {
+		c.applying, c.timedOut = false, false
+		runID = c.runID
+	}
+	w.change.mu.Unlock()
+	if ids := sortedHoldIDs(w.marshalSession().heldSet()); len(ids) > 0 {
+		w.holdNotice("hold kept", "The amendment ran; the hold on "+strings.Join(ids, ", ")+" stays. Only the owner's answer on the Board or a release proposal ends it.", runID)
+	}
+	w.requestRepaint()
+}
+
+// heldSet is a copy of the held set.
+func (m *marshalSession) heldSet() map[string]bool {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	out := make(map[string]bool, len(m.held))
+	for id := range m.held {
+		out[id] = true
+	}
+	return out
 }
 
 // handleChangeKey is the change card's keys on the Board, taken after the ask
@@ -348,8 +623,17 @@ func (w *Workspace) handleChangeKey(event KeyEvent) bool {
 		return false
 	}
 	w.change.mu.Lock()
-	applying, timedOut := card.applying, card.timedOut
+	applying, timedOut, ownerHold := card.applying, card.timedOut, card.ownerHold()
 	w.change.mu.Unlock()
+	if ownerHold {
+		// The owner's own hold: x releases it; Enter and k keep their
+		// ordinary meaning, so no stray key ends the hold.
+		if event.Type == KeyRune && event.Rune == 'x' && !w.inboxView.Confirming() {
+			w.releaseOwnerHold()
+			return true
+		}
+		return false
+	}
 	if event.Type == KeyEnter {
 		if applying && !timedOut {
 			return true
@@ -382,6 +666,8 @@ func (w *Workspace) clickChange(id string) {
 		w.changeApply()
 	case "keep":
 		w.changeKeep()
+	case "release":
+		w.releaseOwnerHold()
 	}
 }
 
@@ -401,6 +687,7 @@ func (w *Workspace) changeApply() {
 	if w.change.card != nil {
 		w.change.card.applying = true
 		w.change.card.timedOut = false
+		w.change.card.ownerApplied = true
 	}
 	w.change.mu.Unlock()
 	w.sayToMarshal(w.workers.context(), "apply this change")
@@ -460,6 +747,10 @@ func (w *Workspace) beginChangeApply(p marshalProposal) {
 	w.resolveChangeProposal(p, "applied")
 	w.change.mu.Lock()
 	if w.change.card != nil {
+		// A card already applying is the owner's "apply this change".
+		if w.change.card.applying {
+			w.change.card.ownerApplied = true
+		}
 		w.change.card.applying = true
 		w.change.card.timedOut = false
 	}
@@ -497,16 +788,29 @@ func (w *Workspace) applyChangeSequence(ctx context.Context, reason string) {
 		return
 	}
 	major, err := amendFn(ctx, reason)
-	if err != nil {
-		// The panel already shows why the amendment failed. Release the hold
-		// and close the card so the run is not left held.
+	if err == nil && !major {
+		_, _ = resumeFn(ctx)
+	}
+	// Only the owner's "apply this change" ends the hold with the
+	// amendment (on failure too, so the run is not left held; the panel
+	// shows why). An amendment the Marshal sent on its own while the card
+	// was open leaves the owner's hold in place.
+	w.change.mu.Lock()
+	owner := w.change.card != nil && w.change.card.ownerApplied
+	w.change.mu.Unlock()
+	if owner {
 		w.releaseChange()
 		return
 	}
-	if !major {
-		_, _ = resumeFn(ctx)
+	w.keepHoldAfterAmend()
+}
+
+// ownerHoldHeadline is the owner-hold card's line, from the verified IDs.
+func ownerHoldHeadline(ids []string) string {
+	if len(ids) == 1 {
+		return ids[0] + " is held until you release it; it will not start."
 	}
-	w.releaseChange()
+	return fmt.Sprintf("%d tasks are held until you release them; they will not start: %s.", len(ids), strings.Join(ids, ", "))
 }
 
 // changeSeams returns the busy-apply steps, falling back to the real
@@ -615,10 +919,16 @@ func (v boardVisual) changeEntry(c changeCard, x, row, w int) []string {
 	if !v.unicode() {
 		flag = "! "
 	}
-	head := v.fg("waiting", flag+"change") + v.fg("dim", " · ")
+	label := "change"
+	if c.ownerHold() {
+		label = "held"
+	}
+	head := v.fg("waiting", flag+label) + v.fg("dim", " · ")
 	prefix := VisibleLen(head)
 	var headline string
 	switch {
+	case c.ownerHold():
+		headline = ownerHoldHeadline(c.held)
 	case c.timedOut:
 		headline = "I couldn't pause the run to apply the change. Press Enter to try again."
 	case c.applying:
@@ -636,6 +946,8 @@ func (v boardVisual) changeEntry(c changeCard, x, row, w int) []string {
 	}
 	var buttons []changeButton
 	switch {
+	case c.ownerHold():
+		buttons = []changeButton{{"x", "release the hold", "release"}}
 	case c.timedOut:
 		buttons = []changeButton{{"Enter", "try again", "apply"}}
 	case c.applying:

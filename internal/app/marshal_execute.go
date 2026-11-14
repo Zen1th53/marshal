@@ -154,7 +154,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		case marshal.Verifying:
 			// The person paused part of the run and has not resumed it:
 			// the run waits, as paused, before its final check.
-			if waited, err := s.waitPausedExecution(ctx, run); err != nil {
+			if waited, err := s.waitPausedExecution(ctx, runID, run); err != nil {
 				return run, err
 			} else if waited {
 				round--
@@ -211,7 +211,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			// A task the owner's change holds can still run once the hold
 			// is released: wait for that instead of ending the run. The
 			// wait does not use up a round.
-			if waited, err := s.waitHeldTasks(ctx, run); err != nil {
+			if waited, err := s.waitHeldTasks(ctx, runID, run); err != nil {
 				after, _ := current()
 				return after, err
 			} else if waited {
@@ -354,7 +354,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		// The owner's mid-run change holds this task: skip it so it does not
 		// launch until the hold is released. A task already running is past
 		// this point and is never held.
-		if s.HeldTask != nil && s.HeldTask(t.PlanTaskID) {
+		if s.HeldTask != nil && s.HeldTask(runID, t.PlanTaskID) {
 			continue
 		}
 		if !marshalDepsMerged(run, t) {
@@ -400,7 +400,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		// launch under the hold's own lock so the two cannot cross.
 		end := func() {}
 		if s.ClaimDispatch != nil {
-			claimEnd, ok := s.ClaimDispatch(t.PlanTaskID)
+			claimEnd, ok := s.ClaimDispatch(runID, t.PlanTaskID)
 			if !ok {
 				continue
 			}
@@ -423,12 +423,12 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 
 // pauseHolds reports whether the person's pause (or change) holds any task
 // of run.
-func (s *MarshalService) pauseHolds(run marshal.Run) bool {
+func (s *MarshalService) pauseHolds(runID string, run marshal.Run) bool {
 	if s.HeldTask == nil {
 		return false
 	}
 	for _, t := range run.Tasks {
-		if s.HeldTask(t.PlanTaskID) {
+		if s.HeldTask(runID, t.PlanTaskID) {
 			return true
 		}
 	}
@@ -440,12 +440,12 @@ func (s *MarshalService) pauseHolds(run marshal.Run) bool {
 // the hold changes or ctx ends. Checking the run then would only find a
 // paused part and stop on it; the run waits as paused instead. It reports
 // whether it waited.
-func (s *MarshalService) waitPausedExecution(ctx context.Context, run marshal.Run) (bool, error) {
+func (s *MarshalService) waitPausedExecution(ctx context.Context, runID string, run marshal.Run) (bool, error) {
 	if s.HoldChanged == nil || s.process05Paused == nil {
 		return false, nil
 	}
 	changed := s.HoldChanged()
-	if !s.pauseHolds(run) || !s.process05Paused(ctx, run) {
+	if !s.pauseHolds(runID, run) || !s.process05Paused(ctx, run) {
 		return false, nil
 	}
 	select {
@@ -475,14 +475,14 @@ func (s *MarshalService) settleFinishedExecution(ctx context.Context, run marsha
 // reports whether it waited, so Execute takes another round with the new
 // hold. The change channel is taken before the held check, so a release in
 // between is not missed.
-func (s *MarshalService) waitHeldTasks(ctx context.Context, run marshal.Run) (bool, error) {
+func (s *MarshalService) waitHeldTasks(ctx context.Context, runID string, run marshal.Run) (bool, error) {
 	if s.HeldTask == nil || s.HoldChanged == nil {
 		return false, nil
 	}
 	changed := s.HoldChanged()
 	held := false
 	for _, t := range run.Tasks {
-		if (t.State == marshal.Queued || t.State == marshal.Returned || t.State == marshal.Reassigned) && marshalDepsMerged(run, t) && s.HeldTask(t.PlanTaskID) {
+		if (t.State == marshal.Queued || t.State == marshal.Returned || t.State == marshal.Reassigned) && marshalDepsMerged(run, t) && s.HeldTask(runID, t.PlanTaskID) {
 			held = true
 			break
 		}
