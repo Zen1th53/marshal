@@ -412,7 +412,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	}
 	if err = s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, d.Plan, 0, run, 0, selectionEvent); err != nil {
 		if s.requireOwner != nil && s.requiresCanonicalGovernedApproval() && d.Plan.RequiredProjectContract != nil && errors.Is(err, plan.ErrPlanConflict) {
-			return marshal.Run{}, fmt.Errorf("%w: a Process 04 plan already exists for this confirmed Goal; review the existing Marshal run or use /goal edit, reconfirm the revised Goal, then start a new draft", err)
+			return marshal.Run{}, fmt.Errorf("%w: a Process 04 plan already exists for this confirmed Goal; to change or add work in the existing Marshal run, propose /marshal amend <task-id> <change> with an existing task ID as the first word (added work extends that task's scope); otherwise use /goal edit, reconfirm the revised Goal, then start a new draft", err)
 		}
 		return marshal.Run{}, err
 	}
