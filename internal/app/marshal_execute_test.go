@@ -41,8 +41,14 @@ func TestDispatchReadySkipsHeldTask(t *testing.T) {
 	}
 	// Held: the one ready task is skipped, nothing launches, and it stays
 	// queued so a later pass can still take it.
-	s.HeldTask = func(id string) bool { return id == "a" }
+	// The hook is asked about the run being dispatched, not a run captured
+	// when the service was wired.
+	var asked []string
+	s.HeldTask = func(runID, id string) bool { asked = append(asked, runID); return id == "a" }
 	launched, err := s.dispatchReady(ctx, "run", run, marshalBrief)
+	if len(asked) == 0 || asked[0] != "run" {
+		t.Fatalf("the hold hook was not asked about the dispatched run: %v", asked)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +63,7 @@ func TestDispatchReadySkipsHeldTask(t *testing.T) {
 		t.Fatalf("held task left queued, got %s", again.Tasks[0].State)
 	}
 	// Unheld (the hold covers a different id): the same ready task launches.
-	s.HeldTask = func(id string) bool { return id == "zzz" }
+	s.HeldTask = func(_, id string) bool { return id == "zzz" }
 	launched, err = s.dispatchReady(ctx, "run", again, marshalBrief)
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +90,7 @@ func TestExecuteWaitsForHeldTaskInsteadOfStopping(t *testing.T) {
 	held := true
 	changed := make(chan struct{})
 	waiting := make(chan struct{}, 1)
-	s.HeldTask = func(id string) bool { mu.Lock(); defer mu.Unlock(); return held && id == "b" }
+	s.HeldTask = func(_, id string) bool { mu.Lock(); defer mu.Unlock(); return held && id == "b" }
 	s.HoldChanged = func() <-chan struct{} {
 		select {
 		case waiting <- struct{}{}:
@@ -147,8 +153,8 @@ func TestDispatchReadyHonoursRefusedClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.HeldTask = func(string) bool { return false }
-	s.ClaimDispatch = func(string) (func(), bool) { return nil, false }
+	s.HeldTask = func(string, string) bool { return false }
+	s.ClaimDispatch = func(string, string) (func(), bool) { return nil, false }
 	launched, err := s.dispatchReady(ctx, "run", run, marshalBrief)
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +170,7 @@ func TestDispatchReadyHonoursRefusedClaim(t *testing.T) {
 		t.Fatalf("refused task left %s, want queued", again.Tasks[0].State)
 	}
 	ended := 0
-	s.ClaimDispatch = func(string) (func(), bool) { return func() { ended++ }, true }
+	s.ClaimDispatch = func(string, string) (func(), bool) { return func() { ended++ }, true }
 	launched, err = s.dispatchReady(ctx, "run", again, marshalBrief)
 	if err != nil {
 		t.Fatal(err)

@@ -85,17 +85,22 @@ type marshalSession struct {
 	architectureOccurrences []string
 	architectureStart       func(context.Context, string, string) (*app.ArchitectureReviewSession, error)
 	architectureBrowser     func(context.Context, string) error
-	// held is the set of plan task IDs the owner's open change holds, keyed
-	// by heldRunID so a hold never touches another run's tasks. It lives in
-	// memory only (never persisted); dispatchReady skips a held task that has
-	// not started (board_change.go). holdMu guards held, heldRunID, launching
-	// and holdCh, and is the one lock a hold and a dispatch claim share, so
+	// held is the set of plan task IDs the Marshal's holds cover, keyed by
+	// heldRunID so a hold never touches another run's tasks; pinned is the
+	// part of it the owner asked to hold until released (a hold with
+	// "until":"release"), which no change answer releases and which is saved
+	// to holdsFile so it survives a restart. dispatchReady skips a held task
+	// that has not started (board_change.go). holdMu guards held, pinned,
+	// heldRunID, launching and holdCh, and is the one lock a hold and a
+	// dispatch claim share, so
 	// the two cannot cross. launching counts dispatches claimed but not yet
 	// returned, keyed by run and task; holdCh is closed when the held set
 	// changes, waking a run that waits on its held tasks.
 	holdMu    sync.Mutex
 	heldRunID string
 	held      map[string]bool
+	pinned    map[string]bool
+	holdsFile string
 	launching map[string]int
 	holdCh    chan struct{}
 	// pausedRunID is the Marshal run the person paused from the palette
@@ -148,6 +153,7 @@ func (w *Workspace) marshalSession() *marshalSession {
 	defer w.mu.Unlock()
 	if w.marshal == nil {
 		w.marshal = &marshalSession{}
+		w.restoreOwnerHolds(w.marshal)
 		// A task move or Marshal switch chosen mid-step drains once the step
 		// releases its reservation, on the UI goroutine so each runs like a
 		// key. Task moves drain first, then the Marshal switch.
@@ -855,8 +861,11 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	}
 	service.RecordActivity = w.RecordActivity
 	service.QuotaLeft = w.providerLeft
-	service.HeldTask = func(planTaskID string) bool { return m.isHeldFor(runID, planTaskID) }
-	service.ClaimDispatch = func(planTaskID string) (func(), bool) { return m.claimDispatch(runID, planTaskID) }
+	// The hooks take the run being dispatched, not runID: a draft that
+	// supersedes the run keeps this service for the new run ID, and a hold
+	// applies to that new run (board_change.go).
+	service.HeldTask = m.isHeldFor
+	service.ClaimDispatch = m.claimDispatch
 	service.HoldChanged = m.holdChanged
 	return service, provider, note, nil
 }

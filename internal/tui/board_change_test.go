@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -244,7 +245,7 @@ func TestChangeCardApplySays(t *testing.T) {
 func TestBusyAmendMajorDoesNotResume(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
-	w.change.card = &changeCard{runID: "run", notStarted: 1, applying: true}
+	w.change.card = &changeCard{runID: "run", notStarted: 1, applying: true, ownerApplied: true}
 	resumed := false
 	w.change.stopFn = func() string { return "" }
 	w.change.busyFn = func() bool { return false }
@@ -489,5 +490,185 @@ func TestAmendWhileIdleClosesChangeCard(t *testing.T) {
 	chatWaitFor(t, "the card to close", func() bool { return w.currentChange() == nil })
 	if w.marshalSession().heldCount() != 0 {
 		t.Fatal("the hold was not released after the amendment")
+	}
+}
+
+func ownerHoldProposalLine(ids, reason string) string {
+	data, err := json.Marshal(map[string]string{"action": "hold", "ids": ids, "reason": reason, "until": "release"})
+	if err != nil {
+		panic(err)
+	}
+	return marshalProposalPrefix + string(data)
+}
+
+func marshalInboxText(t *testing.T, w *Workspace) string {
+	t.Helper()
+	data, err := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+// The regression from a live run: a draft that superseded the watched run
+// kept the service wired for the old run ID, while the hold was keyed to the
+// new run, so dispatch never saw the hold and launched the task once its
+// dependency merged. The service's hooks now take the run being dispatched.
+func TestHoldReachesServiceWiredForASupersededRun(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"live-voice", marshal.Queued}})
+	service, _, _, err := w.marshalService(t.Context(), "RUN-superseded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.service = service // as importWatchedMarshalDraft keeps it for the new run
+	m.mu.Unlock()
+	hp, err := parseMarshalProposal(holdProposalLine(`["live-voice"]`, "Owner: hold live-voice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.applyHold(hp)
+	if !service.HeldTask("run", "live-voice") {
+		t.Fatal("the service does not see the hold on the run it dispatches")
+	}
+	if _, ok := service.ClaimDispatch("run", "live-voice"); ok {
+		t.Fatal("the service's dispatch claim was granted for a held task")
+	}
+	if service.HeldTask("RUN-superseded", "live-voice") {
+		t.Fatal("the hold leaked onto another run")
+	}
+}
+
+// An amendment the Marshal sends on its own while a change card is open runs
+// through the busy-apply sequence but does not release the hold: only the
+// owner's "apply this change" does. The Marshal is told the hold stays.
+func TestMarshalAmendWithoutOwnerApplyKeepsHold(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
+	hp, _ := parseMarshalProposal(holdProposalLine(`["a"]`, "Owner: hold a until ready"))
+	w.applyHold(hp)
+	w.change.stopFn = func() string { return "" }
+	w.change.busyFn = func() bool { return false }
+	amended := make(chan struct{}, 1)
+	w.change.amendFn = func(context.Context, string) (bool, error) { amended <- struct{}{}; return false, nil }
+	w.change.resumeFn = func(context.Context) (string, error) { return "", nil }
+	w.beginChangeApply(marshalProposal{action: "amend", reason: "b: scope change"})
+	<-amended
+	chatWaitFor(t, "the sequence to finish", func() bool {
+		w.change.mu.Lock()
+		defer w.change.mu.Unlock()
+		return !w.change.inFlight
+	})
+	if !w.marshalSession().isHeldFor("run", "a") {
+		t.Fatal("the Marshal's own amendment released the hold")
+	}
+	card := w.currentChange()
+	if card == nil || card.applying {
+		t.Fatalf("the card did not return to its keys: %+v", card)
+	}
+	if text := marshalInboxText(t, w); !strings.Contains(text, "hold kept") {
+		t.Fatalf("the Marshal was not told the hold stays:\n%s", text)
+	}
+}
+
+// The owner's own hold ("until":"release") shows plainly as held with a
+// release key, survives a change being answered, is receipted in the
+// Marshal's inbox, survives a restart, and ends only on release.
+func TestOwnerHoldIsPinnedUntilReleased(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"live-voice", marshal.Queued}, {"b", marshal.Queued}})
+	hp, err := parseMarshalProposal(ownerHoldProposalLine(`["live-voice"]`, "Owner: hold live-voice until ready"))
+	if err != nil {
+		t.Fatalf("the owner hold did not parse: %v", err)
+	}
+	w.applyHold(hp)
+	m := w.marshalSession()
+	if !m.isHeldFor("run", "live-voice") {
+		t.Fatal("the owner's hold was not applied")
+	}
+	card := w.currentChange()
+	if card == nil || !card.ownerHold() {
+		t.Fatalf("no held card: %+v", card)
+	}
+	text := frameText(w, 120, 40)
+	if !strings.Contains(text, "live-voice is held until you release it") || !strings.Contains(text, "[x] release the hold") || strings.Contains(text, "apply this change") {
+		t.Fatalf("the held card is not shown plainly:\n%s", text)
+	}
+	if inbox := marshalInboxText(t, w); !strings.Contains(inbox, "hold applied") || !strings.Contains(inbox, "Held: live-voice.") {
+		t.Fatalf("no hold receipt in the Marshal's inbox:\n%s", inbox)
+	}
+	// Enter and k are not the held card's keys: they never release it.
+	w.handleChangeKey(KeyEvent{Type: KeyEnter})
+	w.handleChangeKey(KeyEvent{Type: KeyRune, Rune: 'k'})
+	if !m.isHeldFor("run", "live-voice") {
+		t.Fatal("Enter or k released the owner's hold")
+	}
+
+	// A change arrives and the owner keeps the current goal: the change's
+	// task is released, the owner's hold stays and its card returns.
+	cp, _ := parseMarshalProposal(holdProposalLine(`["b"]`, "switch b"))
+	w.applyHold(cp)
+	if c := w.currentChange(); c == nil || c.ownerHold() {
+		t.Fatalf("the change card did not open: %+v", c)
+	}
+	w.changeKeep()
+	if m.isHeldFor("run", "b") {
+		t.Fatal("keep did not release the change's task")
+	}
+	if !m.isHeldFor("run", "live-voice") {
+		t.Fatal("keep released the owner's hold")
+	}
+	if c := w.currentChange(); c == nil || !c.ownerHold() {
+		t.Fatalf("the held card did not return: %+v", c)
+	}
+
+	// A restart keeps the owner's hold and its card.
+	restarted := &Workspace{workDir: w.workDir}
+	rm := &marshalSession{}
+	restarted.restoreOwnerHolds(rm)
+	if !rm.isHeldFor("run", "live-voice") {
+		t.Fatalf("the owner's hold did not survive a restart (file %q)", rm.holdsFile)
+	}
+	if c := restarted.change.card; c == nil || !c.ownerHold() {
+		t.Fatalf("the held card was not restored: %+v", c)
+	}
+
+	// x releases it, the card closes, and the Marshal is told.
+	if !w.handleChangeKey(KeyEvent{Type: KeyRune, Rune: 'x'}) {
+		t.Fatal("x was not taken by the held card")
+	}
+	if m.isHeldFor("run", "live-voice") || w.currentChange() != nil {
+		t.Fatal("x did not release the hold and close the card")
+	}
+	if inbox := marshalInboxText(t, w); !strings.Contains(inbox, "hold released") {
+		t.Fatalf("no release receipt:\n%s", inbox)
+	}
+	if _, err := os.Stat(rm.holdsFile); !os.IsNotExist(err) {
+		t.Fatalf("the saved hold outlived its release: %v", err)
+	}
+}
+
+// A release proposal ends the owner's hold; a refused hold tells the Marshal
+// why in its inbox; "until" takes only "release" and only on a hold.
+func TestOwnerHoldReleaseProposalAndRefusalReceipt(t *testing.T) {
+	w, _ := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
+	hp, _ := parseMarshalProposal(ownerHoldProposalLine(`["a"]`, "Owner: hold a"))
+	w.applyHold(hp)
+	rp, _ := parseMarshalProposal(releaseProposalLine(`["a"]`))
+	w.applyRelease(rp)
+	if w.marshalSession().isHeldFor("run", "a") || w.currentChange() != nil {
+		t.Fatal("the release proposal did not end the owner's hold")
+	}
+	bad, _ := parseMarshalProposal(ownerHoldProposalLine(`["nope"]`, "Owner: hold"))
+	w.applyHold(bad)
+	if inbox := marshalInboxText(t, w); !strings.Contains(inbox, "hold refused") || !strings.Contains(inbox, "task nope is not in the active run") {
+		t.Fatalf("no refusal receipt:\n%s", inbox)
+	}
+	for _, line := range []string{
+		marshalProposalPrefix + `{"action":"hold","ids":"[\"a\"]","reason":"r","until":"later"}`,
+		marshalProposalPrefix + `{"action":"release","ids":"[\"a\"]","until":"release"}`,
+	} {
+		if _, err := parseMarshalProposal(line); err == nil {
+			t.Errorf("parsed but should be refused: %s", line)
+		}
 	}
 }

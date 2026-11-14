@@ -132,7 +132,10 @@ How to propose:
   - {"action":"amend","reason":"exact requested plan change"} to request
     a change (reason must not be "approve" or "deny").
   - {"action":"hold","ids":"<JSON array of task ids>","reason":"why"} and
-    {"action":"release","ids":"<JSON array of task ids>"} for step 8b.
+    {"action":"release","ids":"<JSON array of task ids>"} for step 8b. For
+    the person's own hold with no goal change ("hold X until I say ready"),
+    add "until":"release": it stays until your release proposal or the
+    person's release on the Board. Read the inbox receipt for each hold.
     You cannot emit shell commands or new actions.
 
 2. Hello and the goal. Send one message: who you are, one line of what the
@@ -389,7 +392,10 @@ How to propose:
    arrives as the person's reply. On "apply this change", amend only the
    affected tasks, naming each target task id first; if the architecture
    changes, go back to step 6 for a new browser Accept. On "keep the current
-   goal", MARSHAL releases the held tasks; continue at step 8.
+   goal", MARSHAL releases the held tasks; continue at step 8. An amend you
+   send on your own does not release a hold. When the person asks to hold
+   tasks with no goal change, send the hold with "until":"release" and send
+   the release when they say ready; do not ask apply or keep.
 
 9. Report and what next. Build the final report on the runtime's integrated
    result and its re-run checks; do not re-do the integration or re-run
@@ -426,7 +432,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:4a3d1e99bda6010fa46b120ba7178c018dacfe15d3bc6ec39df7e5839ab04af9"
+const MarshalProtocolDigest = "sha256:f934268b5173c4e1d76f7d796a57997ba475f3b9c67e4b26f125b8cf6caaf594"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

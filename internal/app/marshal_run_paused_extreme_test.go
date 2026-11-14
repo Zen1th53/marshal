@@ -62,7 +62,7 @@ func pauseHeldDispatchNeverBreaksRun(t *testing.T) {
 	launches := map[string]int{}
 	started := make(chan string, 4)
 	paused := make(chan struct{})
-	s.HeldTask = func(string) bool { mu.Lock(); defer mu.Unlock(); return held }
+	s.HeldTask = func(string, string) bool { mu.Lock(); defer mu.Unlock(); return held }
 	s.HoldChanged = func() <-chan struct{} { mu.Lock(); defer mu.Unlock(); return changed }
 	s.Drivers["worker"] = driver.Governed{Provider: "test", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
 		id := req.Task.PlanTaskID
@@ -285,7 +285,7 @@ func pausedProcess05LaneRun(t *testing.T, when pausedLaneResume) {
 	var mu sync.Mutex
 	held := false
 	changed := make(chan struct{})
-	s.HeldTask = func(string) bool { mu.Lock(); defer mu.Unlock(); return held }
+	s.HeldTask = func(string, string) bool { mu.Lock(); defer mu.Unlock(); return held }
 	s.HoldChanged = func() <-chan struct{} { mu.Lock(); defer mu.Unlock(); return changed }
 	hold := func(on bool) {
 		mu.Lock()
