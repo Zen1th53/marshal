@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.16
+
+### Fixed
+- A new revision of an accepted architecture opens in the browser review and can be accepted; a revision missing the fields needed to replace the current one is refused when sent, naming them.
+- A refused plan names the project read the Marshal is missing; proposals left over from an ended run are closed.
+
 ## 0.2.15
 
 ### Fixed
