@@ -18,7 +18,7 @@ import (
 )
 
 // startArchitectureReviewSession opens the review on the pending project
-// contract when no contract is accepted yet (no model turn may run then),
+// contract when one waits for the owner (a first draft or a new revision),
 // otherwise the model-drafted review.
 func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.Runtime, provider, goal string) (*app.ArchitectureReviewSession, error) {
 	if strings.TrimSpace(goal) == "" {

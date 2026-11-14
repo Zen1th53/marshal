@@ -5,6 +5,7 @@ package tui
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -383,4 +384,102 @@ func TestContractSubmitRefusalNamesTheBadPath(t *testing.T) {
 	}
 	draft.Contract.Components[0].Paths = []string{"ultron"}
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "good-path", "proposal": draft}, true)
+}
+
+// Once a contract is accepted, a new revision the Marshal submits waits for
+// the owner like the first draft did: opening the architecture shows that
+// revision, not the accepted page, and its Accept binds that revision so the
+// Marshal's allow makes it current. A revision that does not name what it
+// supersedes could never be accepted, so its submit is refused and says why.
+func TestBrowserReviewShowsPendingRevisionOfAcceptedContract(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	submit := func(revision int64, supersedes store.AcceptedProjectContract, purpose, submission string, linked bool) (store.ProjectContractSubmission, string) {
+		t.Helper()
+		var inventory store.ProjectContractInventoryPage
+		if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_inventory", map[string]any{"limit": 1}, true)), &inventory); err != nil {
+			t.Fatal(err)
+		}
+		draft := store.ProjectContractSubmission{Action: "project-contract", ExpectedVersion: supersedes.Version, Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: w.runtime.ProjectContractBinding(), ID: "ultron-architecture", Revision: revision, Purpose: purpose, Components: []projectcontext.Component{{ID: "core", Responsibility: purpose, Paths: []string{"main.go"}}}, Invariants: []string{"none"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
+		if linked && supersedes.Version > 0 {
+			draft.Contract.SupersedesDigest, draft.Contract.RevisionReason = supersedes.Digest, "owner asked for a change"
+		}
+		return draft, child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": submission, "proposal": draft}, linked)
+	}
+	acceptInBrowser := func(draft store.ProjectContractSubmission, submission string) store.AcceptedProjectContract {
+		t.Helper()
+		digest, _ := draft.Contract.CanonicalDigest()
+		session, err := w.startArchitectureReviewSession(t.Context(), w.runtime, "codex", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = session.Close(); <-session.Done }()
+		location, err := url.Parse(session.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := location.Query().Get("token")
+		call := func(body map[string]any) (map[string]any, int) {
+			t.Helper()
+			method, payload := http.MethodGet, ""
+			if body != nil {
+				method = http.MethodPost
+				raw, _ := json.Marshal(body)
+				payload = string(raw)
+			}
+			request, _ := http.NewRequest(method, "http://"+location.Host+"/api/review", strings.NewReader(payload))
+			request.Header.Set("Authorization", "Bearer "+token)
+			if body != nil {
+				request.Header.Set("Origin", "http://"+location.Host)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			var state map[string]any
+			_ = json.NewDecoder(response.Body).Decode(&state)
+			return state, response.StatusCode
+		}
+		state, _ := call(nil)
+		graph := state["architecture"].(map[string]any)
+		source := graph["source_contract"].(map[string]any)
+		if source["revision"] != float64(draft.Contract.Revision) || source["digest"] != digest || graph["purpose"] != draft.Contract.Purpose || state["approved"] != false {
+			t.Fatalf("page does not show pending revision %d: approved=%v %v", draft.Contract.Revision, state["approved"], graph)
+		}
+		_ = os.Remove(inboxPath(w.runtime.ProjectRoot(), "marshal"))
+		accepted, status := call(map[string]any{"protocol_version": architecturereview.Version, "action": "approve", "revision": state["revision"], "digest": state["digest"], "ui_digest": state["ui_digest"], "language": state["language"], "builders_digest": state["builders_digest"]})
+		if status != http.StatusOK || accepted["approved"] != true {
+			t.Fatalf("Accept of revision %d: %d %v", draft.Contract.Revision, status, accepted["error"])
+		}
+		want := fmt.Sprintf("contract_id=ultron-architecture; revision=%d; digest=%s", draft.Contract.Revision, digest)
+		var inbox string
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !strings.Contains(inbox, "Continue: plan and launch now."); time.Sleep(20 * time.Millisecond) {
+			raw, _ := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal"))
+			inbox = string(raw)
+		}
+		if !strings.Contains(inbox, want) {
+			t.Fatalf("Accept did not bind revision %d: %s", draft.Contract.Revision, inbox)
+		}
+		authorizeTestMemory(t, w, cfg, true) // the Marshal's own allow Decision
+		var receipt projectContractMCPReceipt
+		if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_receipt", map[string]string{"submission_id": submission}, true)), &receipt); err != nil {
+			t.Fatal(err)
+		}
+		current, err := w.store.ReadAcceptedProjectContract(t.Context(), draft.Contract.Project)
+		if err != nil || !receipt.Accepted || !receipt.Current || current.Digest != digest || current.Contract.Revision != draft.Contract.Revision {
+			t.Fatalf("revision %d not current after the browser Accept: %+v %+v %v", draft.Contract.Revision, receipt, current, err)
+		}
+		return current
+	}
+	draft, _ := submit(1, store.AcceptedProjectContract{}, "First draft", "rev-1", true)
+	first := acceptInBrowser(draft, "rev-1")
+	if _, msg := submit(2, first, "Unlinked revision", "rev-2-unlinked", false); !strings.Contains(msg, "contract.supersedes_digest") || !strings.Contains(msg, "contract.revision_reason") {
+		t.Fatalf("unlinked revision refusal does not say what to fix: %s", msg)
+	}
+	if c, err := w.readPendingContract(t.Context()); err != nil || c != nil {
+		t.Fatalf("refused revision waits for the owner: %+v %v", c, err)
+	}
+	draft, _ = submit(2, first, "Second revision", "rev-2", true)
+	acceptInBrowser(draft, "rev-2")
 }
