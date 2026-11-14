@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -391,10 +390,9 @@ func (v boardVisual) marshalPickerOverlay(r layout.Rect, view marshalPickerView)
 			// be usable, so it is never "unavailable".
 			figure = limitUnknown
 		default:
-			figure = fmt.Sprintf("%d%% left", c.left)
+			figure = pickerFigure(c)
 			if c.age != "" {
 				// An old reading is dimmed and dated, as vitals shows it.
-				figure += " · " + c.age
 				colour = "dim"
 			}
 		}

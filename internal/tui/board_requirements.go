@@ -36,9 +36,16 @@ type reqCard struct {
 	At      time.Time
 }
 
-// errReqCard is the one error parseRequirementsCard returns: the proposal is
-// refused as invalid, like any other malformed Marshal proposal.
+// errReqCard is what every parseRequirementsCard error wraps: the proposal is
+// refused as invalid, like any other malformed Marshal proposal. The wrapped
+// message names the line and the rule it broke, so the Marshal can correct
+// that line and send the whole card again (a card is always sent whole: it is
+// how a line already shown is updated).
 var errReqCard = errors.New("invalid requirements card")
+
+func reqCardError(format string, args ...any) error {
+	return fmt.Errorf("%w: "+format+"; fix it and send the whole card again", append([]any{errReqCard}, args...)...)
+}
 
 // parseRequirementsCard reads the proposal's card array: exactly 8 objects
 // with exactly the string keys line, text and source. The line values are
@@ -55,30 +62,34 @@ func parseRequirementsCard(s string) ([8]reqLine, error) {
 		Source string `json:"source"`
 	}
 	if err := dec.Decode(&raw); err != nil {
-		return out, errReqCard
+		return out, reqCardError("card must be a JSON array, sent as a string, of objects with only line, text and source")
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return out, errReqCard
+		return out, reqCardError("card has data after its array")
 	}
 	if len(raw) != 8 {
-		return out, errReqCard
+		return out, reqCardError("card has %d lines, it needs all 8 (a to h)", len(raw))
 	}
 	for i, c := range raw {
-		if c.Line != string(rune('a'+i)) {
-			return out, errReqCard
+		want := string(rune('a' + i))
+		if c.Line != want {
+			return out, reqCardError("line %d is %q, want %q (lines a to h in order)", i+1, c.Line, want)
 		}
-		if len(c.Text) > 200 || len(c.Source) > 80 {
-			return out, errReqCard
+		if len(c.Text) > 200 {
+			return out, reqCardError("line %s text is %d bytes, at most 200", want, len(c.Text))
+		}
+		if len(c.Source) > 80 {
+			return out, reqCardError("line %s source is %d bytes, at most 80", want, len(c.Source))
 		}
 		if strings.ContainsFunc(c.Text, unicode.IsControl) || strings.ContainsFunc(c.Source, unicode.IsControl) {
-			return out, errReqCard
+			return out, reqCardError("line %s has a control character", want)
 		}
 		if c.Text == "" {
 			if c.Source != "" {
-				return out, errReqCard
+				return out, reqCardError("line %s is blank but has a source; a blank line has text and source both empty", want)
 			}
 		} else if c.Source == "" {
-			return out, errReqCard
+			return out, reqCardError("line %s has text but no source", want)
 		}
 		out[i] = reqLine{Line: c.Line, Text: c.Text, Source: c.Source}
 	}

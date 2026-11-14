@@ -4801,8 +4801,8 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "1271035518b342eea4312165fcdcc0aaee656269df91731dee543a774a4d414d",
-      "bytes": 8360
+      "sha256": "ccda5cbf1fe95ec1d2b89e7bd83785025d6849bc620250d9ba11d6bb29eed0ee",
+      "bytes": 8580
     },
     {
       "path": "internal/cli/control_center_test.go",
@@ -4838,6 +4838,11 @@
       "path": "internal/cli/execution_test.go",
       "sha256": "42cbdd097d23bbf1cb92e335329dee640cda15aebf33163097fc6e76a998e17a",
       "bytes": 8971
+    },
+    {
+      "path": "internal/cli/foreign_tmux_test.go",
+      "sha256": "af6767b2d50881e117a5de789c947bcf5fbdfec30643160cd1f9c73823777fcb",
+      "bytes": 2938
     },
     {
       "path": "internal/cli/goal.go",
@@ -5131,8 +5136,8 @@
     },
     {
       "path": "internal/cli/tmux_cli_test.go",
-      "sha256": "7c4e55f3404fed253bf4f6110b7f313ac826ccb921ae86e79b4305bfe03ef824",
-      "bytes": 13531
+      "sha256": "5d89c22413cc0a0a2036a2c54dd803022c0c2b69f442c4276e5fdbf7002a32f5",
+      "bytes": 13621
     },
     {
       "path": "internal/cli/tui_child.go",
@@ -12061,8 +12066,8 @@
     },
     {
       "path": "internal/tmux/tmux.go",
-      "sha256": "8c53c6c8aa2b0bb0daec2cdb25d0a7f3e652862fa32096b20d169a93dfbbe2c9",
-      "bytes": 40495
+      "sha256": "c3ed38e6384277e96a6cda0100de7c93a830cd9f190d14b6ed6ac57aeb30fe12",
+      "bytes": 42358
     },
     {
       "path": "internal/tmux/tmux_test.go",
@@ -12686,8 +12691,8 @@
     },
     {
       "path": "internal/tui/board_marshal_picker.go",
-      "sha256": "f6c3dd0ed4d28c6fecdfa4daeecd99e154c041371204b869f36dd1964d3dc7dc",
-      "bytes": 13501
+      "sha256": "b0e456b346ea9d748ec0e97dfbb68b6e5502a7c397c79dae1b511fb1ccf6a4d3",
+      "bytes": 13448
     },
     {
       "path": "internal/tui/board_marshal_picker_test.go",
@@ -12751,8 +12756,8 @@
     },
     {
       "path": "internal/tui/board_picker.go",
-      "sha256": "1872d6201dd2383fe2223e5fc542d39b731b7f6a95f8c1b52cce240cba5959f9",
-      "bytes": 14228
+      "sha256": "8b342d5a8752304c501d84895183666064f1f5a6d5e889440c2b853f89bf11a5",
+      "bytes": 14974
     },
     {
       "path": "internal/tui/board_picker_test.go",
@@ -12776,8 +12781,8 @@
     },
     {
       "path": "internal/tui/board_requirements.go",
-      "sha256": "e84c309265d75d3ed8ef3a61386d874db2877dc08588321bfbce047861031864",
-      "bytes": 12569
+      "sha256": "dae1480afe1a56c1fdbe5cf66da8b4110b802e53e680df44cceafc18be1490bf",
+      "bytes": 13559
     },
     {
       "path": "internal/tui/board_requirements_test.go",
@@ -13811,8 +13816,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "81ab9cbb158a8637e0c427ccee768ae1bf94edcc01469e9ac197da86e5748c24",
-      "bytes": 38492
+      "sha256": "28de1e99beed9de96cd006476d62eb2c492dd62405e351ed946c7d26da36fa33",
+      "bytes": 38643
     },
     {
       "path": "internal/tui/marshal_proposal_default_test.go",
@@ -14320,6 +14325,11 @@
       "bytes": 2780
     },
     {
+      "path": "internal/tui/picker_stale_limit_test.go",
+      "sha256": "d79c8dab27ba687127757e7f5377038a2fa64ab177d87bef5783dad1e432e6fa",
+      "bytes": 1882
+    },
+    {
       "path": "internal/tui/plain_answers_extreme_test.go",
       "sha256": "4a25420e80957af20a212c9cecd34c52b181df9e8e6621390492f045bd461405",
       "bytes": 1865
@@ -14743,6 +14753,11 @@
       "path": "internal/tui/required_worker_context_fixture_extreme_test.go",
       "sha256": "381be3e4f39f65f608eab8b7e1d4fe4e9775eddad533cc2434f804edc2fe6f02",
       "bytes": 4698
+    },
+    {
+      "path": "internal/tui/requirements_update_test.go",
+      "sha256": "3aaa9319b6a01c9ef1c9611e06f4fef99009bd6a0b93e1c38bdd54b492fbf227",
+      "bytes": 1439
     },
     {
       "path": "internal/tui/rollback_pty_test.go",

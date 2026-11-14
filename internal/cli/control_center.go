@@ -80,7 +80,12 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 	// Decision 1: The MARSHAL TUI ALWAYS runs inside tmux.
 	// If MARSHAL is not started inside tmux, it creates (or re-attaches to) a dedicated
 	// per-project tmux session and runs itself inside it. If it is already inside tmux,
-	// it uses the current session (never nest tmux).
+	// it uses the current session (never nest tmux). An unrelated tmux the
+	// operator started marshal from is left instead: MARSHAL's own server is
+	// used and its session attached nested in that pane.
+	if !directPTYTest {
+		tmux.LeaveForeignTmux(ctx, canonicalRoot)
+	}
 	if !directPTYTest && !tmux.IsInsideTmux() && (c.isInteractiveTerminal() || os.Getenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH") == "1") {
 		// A missing coding tool does not block the control center from opening,
 		// but nothing can run until one is installed, so say it up front rather
