@@ -105,8 +105,12 @@ func TestMajorAmendmentDispatchKeepsOldArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := s.Model.(marshalFakeModel).draft
+	// The amendment changes merged task a, so its work is redone on a new
+	// artifact revision; unchanged merged tasks would keep their state.
+	d := cloneMarshalDraft(s.Model.(marshalFakeModel).draft)
 	d.Plan.Budget.MaxTasks = 100
+	d.Tasks[0].Instructions = "write a.txt again"
+	d.Plan.Tasks[0].Instructions = d.Tasks[0].Instructions
 	run, err := s.ApplyAmendDraft(t.Context(), "run", "larger budget", d)
 	if err != nil {
 		t.Fatal(err)

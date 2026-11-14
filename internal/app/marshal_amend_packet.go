@@ -46,7 +46,11 @@ func marshalAmendPacket(run marshal.Run, reason string) ([]byte, int, error) {
 		target = 0
 	}
 	if target < 0 {
-		return nil, -1, fmt.Errorf("amendment needs a target task ID as the first word")
+		ids := make([]string, 0, len(run.Tasks))
+		for _, task := range run.Tasks {
+			ids = append(ids, task.PlanTaskID)
+		}
+		return nil, -1, fmt.Errorf("amendment needs a target task ID as the first word: write \"<task-id> <change>\", for example \"/marshal amend %s add tests/x to scope\"; to add work, extend the existing task it belongs with; task IDs: %s", ids[0], strings.Join(ids, ", "))
 	}
 	item := proposalFromRun(marshal.Run{Tasks: []marshal.Task{run.Tasks[target]}}).Tasks[0]
 	packet := struct {

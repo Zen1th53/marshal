@@ -9,6 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -1679,6 +1680,9 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	if err = validateAmendModes(run, p, d); err != nil {
 		return MarshalDraft{}, false, err
 	}
+	if err = validateAmendRoutes(run, p, d); err != nil {
+		return MarshalDraft{}, false, err
+	}
 	_, err = p.AmendScoped(p.Version, reason, d.Plan)
 	return d, err != nil, nil
 }
@@ -1718,6 +1722,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if err = validateAmendModes(run, p, d); err != nil {
 		return run, err
 	}
+	if err = validateAmendRoutes(run, p, d); err != nil {
+		return run, err
+	}
 	amended, err := p.AmendScoped(p.Version, reason, d.Plan)
 	major := err != nil
 	if major {
@@ -1728,14 +1735,27 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		amended.Tasks = d.Plan.Tasks
 		amended.Graph = d.Plan.Graph
 		amended.Checks = d.Plan.Checks
-		amended.Budget = d.Plan.Budget
+		amended.Budget = amendedPlanBudget(p.Budget, d.Plan.Budget, len(d.Plan.Tasks))
 		amended.State = plan.StateReady
 		amended.ApprovedScope = nil
 		amended.ApprovalScopeDigest = ""
-		run.ArtifactRevision = amended.Version
+		// Delivered work the amendment does not change stays delivered:
+		// re-queueing it would redo merged or accepted tasks. The run keeps its
+		// integration branch, which already holds that merged work. Only when
+		// the amendment changes or removes a merged task does the integration
+		// start over on a new artifact revision with every task queued again.
+		keep, merged := keepsMergedWork(run.Tasks, d.Tasks)
+		if !keep || !merged {
+			run.ArtifactRevision = amended.Version
+		}
 		run.Pause = nil
+		previous := run.Tasks
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
+			if old := taskIndex(marshal.Run{Tasks: previous}, run.Tasks[i].PlanTaskID); keep && old >= 0 && marshalTaskFinished(previous[old].State) && marshalTaskDefinitionUnchanged(previous[old], run.Tasks[i]) {
+				run.Tasks[i] = previous[old]
+				continue
+			}
 			run.Tasks[i].EvidenceAttemptBase, err = s.Store.MarshalLastAttempt(ctx, runID, run.Tasks[i].PlanTaskID)
 			if err != nil {
 				return run, err
@@ -1823,6 +1843,73 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		return run, err
 	}
 	return run, s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, amended, p.Version, run, rev, &event)
+}
+
+// amendedPlanBudget keeps the approved budget contract across a major
+// amendment. Model-authored amendment drafts carry no budget, and a plan
+// without MaxTasks is refused by the Process 05 entry gate. The task bound
+// grows to cover tasks the amendment adds; the owner re-approves the plan.
+func amendedPlanBudget(current, proposed plan.Budget, tasks int) plan.Budget {
+	if proposed.MaxTasks > 0 {
+		return proposed
+	}
+	budget := current
+	if budget.MaxTasks > 0 && budget.MaxTasks < tasks {
+		budget.MaxTasks = tasks
+	}
+	return budget
+}
+
+// keepsMergedWork reports whether every merged task survives the amendment
+// unchanged, so the integration branch holds only work the amended plan keeps,
+// and whether there is any merged work to keep.
+func keepsMergedWork(previous, next []marshal.Task) (keep, merged bool) {
+	for _, old := range previous {
+		if old.State != marshal.Merged {
+			continue
+		}
+		merged = true
+		i := taskIndex(marshal.Run{Tasks: next}, old.PlanTaskID)
+		if i < 0 || !marshalTaskDefinitionUnchanged(old, next[i]) {
+			return false, true
+		}
+	}
+	return true, merged
+}
+
+func marshalTaskFinished(state marshal.TaskState) bool {
+	return state == marshal.Merged || state == marshal.Accepted
+}
+
+// marshalTaskDefinitionUnchanged reports whether an amended task asks for the
+// same work as before: same type, scope, criteria, checks and instructions.
+func marshalTaskDefinitionUnchanged(old, next marshal.Task) bool {
+	if old.PlanTaskID != next.PlanTaskID || old.EffectiveType() != next.EffectiveType() || old.Instructions != next.Instructions || old.ExpectedOutput != next.ExpectedOutput ||
+		!slices.Equal(old.Files, next.Files) || !slices.Equal(old.Criteria, next.Criteria) || !slices.Equal(old.DependsOn, next.DependsOn) || len(old.Checks) != len(next.Checks) {
+		return false
+	}
+	for i := range old.Checks {
+		if old.Checks[i].Command != next.Checks[i].Command || !slices.Equal(old.Checks[i].Criteria, next.Checks[i].Criteria) {
+			return false
+		}
+	}
+	return true
+}
+
+// validateAmendRoutes refuses, before owner approval, an amendment that adds a
+// task to a Process 05 run. Routes and governed assignments come only from the
+// approved Process 04 plan, so the entry gate would refuse every worker of the
+// amended plan for the unrouted task.
+func validateAmendRoutes(run marshal.Run, current plan.ExecutionPlan, next MarshalDraft) error {
+	if !run.Process05Bound {
+		return nil
+	}
+	for _, task := range next.Plan.Tasks {
+		if route, ok := current.Routes[task.ID]; !ok || strings.TrimSpace(route.Provider) == "" {
+			return fmt.Errorf("amendment adds task %q, which has no approved route in this run; extend an existing task instead: /marshal amend <task-id> <change>, with the task the work belongs with as the first word", task.ID)
+		}
+	}
+	return nil
 }
 
 // A replacement worker or split child must keep the approved execution mode.
