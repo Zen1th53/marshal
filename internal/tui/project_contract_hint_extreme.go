@@ -39,6 +39,12 @@ func explainProjectContractSubmission(sub store.ProjectContractSubmission, err e
 	if c.Revision != sub.ExpectedVersion+1 {
 		problems = append(problems, "contract.revision must be expected_version+1")
 	}
+	if sub.ExpectedVersion > 0 && c.SupersedesDigest == "" {
+		problems = append(problems, "a revision of the accepted contract needs contract.supersedes_digest: the digest of the inventory's current_contract")
+	}
+	if sub.ExpectedVersion > 0 && strings.TrimSpace(c.RevisionReason) == "" {
+		problems = append(problems, "a revision of the accepted contract needs contract.revision_reason: why it changes")
+	}
 	if strings.TrimSpace(c.Purpose) == "" {
 		problems = append(problems, "contract.purpose is required")
 	}

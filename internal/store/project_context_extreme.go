@@ -301,6 +301,12 @@ func (s *Store) AdmitMCPProjectContract(ctx context.Context, source MCPProposal,
 	if source.ID == "" || source.Launch == "" || source.Owner == "" || source.Provider == "" || source.Submission == "" {
 		return MCPProposal{}, false, projectcontext.ErrInvalid
 	}
+	// A revision of the accepted contract can only be accepted when it names
+	// what it supersedes and why; one that cannot be accepted is refused now,
+	// not after the owner accepted it.
+	if sub.ExpectedVersion > 0 && (sub.Contract.SupersedesDigest == "" || strings.TrimSpace(sub.Contract.RevisionReason) == "") {
+		return MCPProposal{}, false, projectcontext.ErrInvalid
+	}
 	payload, err := json.Marshal(sub)
 	if err != nil {
 		return MCPProposal{}, false, err

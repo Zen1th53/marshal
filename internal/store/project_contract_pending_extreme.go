@@ -99,13 +99,19 @@ func (s *Store) ReadPendingProjectContract(ctx context.Context, project projectc
 		return PendingProjectContract{}, false, nil
 	}
 	var current int64
-	err = s.db.QueryRowContext(ctx, `SELECT cas_version FROM extreme_project_contract_active WHERE project_id=?`, project.CanonicalID).Scan(&current)
+	var currentID, currentDigest string
+	err = s.db.QueryRowContext(ctx, `SELECT cas_version,coalesce(contract_id,''),coalesce(digest,'') FROM extreme_project_contract_active WHERE project_id=?`, project.CanonicalID).Scan(&current, &currentID, &currentDigest)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) && !noSuchTable(err) {
 		return PendingProjectContract{}, false, err
 	}
 	if current != sub.ExpectedVersion {
 		// Accepted since, or drafted against another version: an owner
 		// instruction would not bind to it.
+		return PendingProjectContract{}, false, nil
+	}
+	if current > 0 && (c.ID != currentID || c.SupersedesDigest != currentDigest || strings.TrimSpace(c.RevisionReason) == "") {
+		// A revision that does not supersede the accepted contract can never
+		// be accepted, so it does not wait for the owner.
 		return PendingProjectContract{}, false, nil
 	}
 	var instructed int
