@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.17
+
+### Fixed
+- A mid-run plan change keeps merged and accepted work that it does not change, and keeps the run's budget (no more "budget contract defines no MaxTasks limit"); refusals show the `/marshal amend <task-id> <change>` format.
+- A Marshal hold stops dispatch in the right run, is not released by the Marshal's own amendments, can be pinned until the owner releases it (survives restart), and is recorded in the inbox.
+- Marshal starts inside another tmux session; stale usage readings no longer block the provider picker; refused requirements cards name the line and rule.
+
 ## 0.2.16
 
 ### Fixed
