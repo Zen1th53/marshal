@@ -107,7 +107,9 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	case "requirements":
 		keys = []string{"action", "card"}
 		if _, err := parseRequirementsCard(p.card); err != nil {
-			return p, invalid
+			// The refusal names the line and the rule, so the Marshal
+			// can correct the card instead of guessing why it failed.
+			return p, fmt.Errorf("%w: %w", invalid, err)
 		}
 	case "hold":
 		keys = []string{"action", "ids", "reason"}

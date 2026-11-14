@@ -121,6 +121,57 @@ func IsInsideTmux() bool {
 	return strings.TrimSpace(os.Getenv("TMUX")) != ""
 }
 
+// OwnSocketPath is the socket of MARSHAL's own tmux server: tmux's default
+// socket under the TMUX_TMPDIR every MARSHAL tmux call runs with.
+func OwnSocketPath() string {
+	dir := os.Getenv("TMUX_TMPDIR")
+	if dir == "" {
+		dir = filepath.Join(os.TempDir(), fmt.Sprintf(statepath.Name+"-tmux-%d", os.Getuid()))
+	}
+	return filepath.Join(dir, fmt.Sprintf("tmux-%d", os.Getuid()), "default")
+}
+
+// enclosingSocketPath is the server socket $TMUX names, or "".
+func enclosingSocketPath() string {
+	s := os.Getenv("TMUX")
+	if i := strings.IndexByte(s, ','); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
+
+func sameSocket(a, b string) bool {
+	clean := func(p string) string {
+		if r, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+			return filepath.Join(r, filepath.Base(p))
+		}
+		return filepath.Clean(p)
+	}
+	return clean(a) == clean(b)
+}
+
+// LeaveForeignTmux detaches this process from an enclosing tmux server that
+// is not MARSHAL's own (a shell inside the operator's `tmux` or `tmux -L
+// other`). tmux prefers $TMUX over TMUX_TMPDIR, so while it is set every
+// MARSHAL tmux call would reach that unrelated server and the chat and
+// worker windows could never open. When the enclosing session is not this
+// project's, TMUX and TMUX_PANE are removed from this process's environment
+// so MARSHAL starts or attaches its own session, nested in the operator's
+// pane, and it reports true. Inside MARSHAL's own server, or in a session
+// that belongs to root, nothing changes.
+func LeaveForeignTmux(ctx context.Context, root string) bool {
+	if !IsInsideTmux() || sameSocket(enclosingSocketPath(), OwnSocketPath()) {
+		return false
+	}
+	session, _, _, err := CurrentSessionAndWindow(ctx)
+	if err != nil || session == "" || SessionBelongs(session, root) {
+		return false
+	}
+	_ = os.Unsetenv("TMUX")
+	_ = os.Unsetenv("TMUX_PANE")
+	return true
+}
+
 // CurrentSessionAndWindow queries tmux for the active session, window name, and window ID.
 // It supports tab-delimited formatting to safely handle session or window names with spaces,
 // while falling back to whitespace splitting for mock compatibility.

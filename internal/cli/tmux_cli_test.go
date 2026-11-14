@@ -130,19 +130,21 @@ func TestStartInsideTmuxUsesCurrentSessionWithoutNesting(t *testing.T) {
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "tmux_argv.log")
 	fakeTmux := filepath.Join(tempDir, "tmux")
+	repo := cliRepo(t)
 
+	// Already inside this project's own session: it is used, never nested.
 	script := fmt.Sprintf(`#!/bin/sh
 echo "$@" >> %q
 case "$1" in
   display-message)
-    printf 'existing-session main-win @1\n'
+    printf '%s main-win @1\n'
     exit 0
     ;;
   *)
     exit 0
     ;;
 esac
-`, logFile)
+`, logFile, tmux.SessionName(repo.Path()))
 
 	if err := os.WriteFile(fakeTmux, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -154,7 +156,6 @@ esac
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,12345,0")
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH", "1")
 
-	repo := cliRepo(t)
 	var stdout, stderr bytes.Buffer
 
 	// Initialize project

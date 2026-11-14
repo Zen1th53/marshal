@@ -44,6 +44,10 @@ type pickerCand struct {
 	busy     bool
 	until    time.Time
 	age      string
+	// dated is set on a reading at 0% left that is old (usage.FreshFor or
+	// more): the limit may have reset since, so it is shown with "may be out
+	// of date" and can still be chosen rather than blocking the provider.
+	dated bool
 }
 
 // pickerView is a frame's copy of the picker, read under the lock once and
@@ -153,8 +157,14 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 			if known {
 				cands[i].age = readAgo(q, now)
 			}
+			// Only a current reading blocks. An old one at 0% may predate a
+			// reset the provider has not written yet, so it stays choosable.
 			if known && left == 0 {
-				cands[i].out = true
+				if q.Stale {
+					cands[i].dated = true
+				} else {
+					cands[i].out = true
+				}
 			}
 		}
 		if st, ok := overview[p]; ok {
@@ -409,10 +419,8 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 		case !c.known:
 			figure = limitUnknown
 		default:
-			figure = fmt.Sprintf("%d%% left", c.left)
+			figure = pickerFigure(c)
 			if c.age != "" {
-				// An old reading is dimmed and dated, as vitals shows it.
-				figure += " · " + c.age
 				colour = "dim"
 			}
 		}
@@ -451,4 +459,18 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 	keys := fmt.Sprintf("[Enter] keep %s · [%s] or click to change · [1-%d] pick", sel, arrows, len(p.cands))
 	add(v.fg("dim", keys))
 	return out[:min(len(out), h)]
+}
+
+// pickerFigure is a known, choosable candidate's limit as both pickers show
+// it: "32% left", dated as vitals dates it when old ("· read 2h ago"), and
+// "may be out of date" on an old 0% reading that does not block.
+func pickerFigure(c pickerCand) string {
+	figure := fmt.Sprintf("%d%% left", c.left)
+	if c.age != "" {
+		figure += " · " + c.age
+	}
+	if c.dated {
+		figure += ", may be out of date"
+	}
+	return figure
 }
