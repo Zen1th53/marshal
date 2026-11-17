@@ -282,6 +282,9 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 	if strings.HasPrefix(method, "project_contract_") {
 		return w.projectContractMCP(ctx, l, method, raw)
 	}
+	if method == "architecture_request_answer" {
+		return w.answerArchitectureRequestMCP(l, raw)
+	}
 	if method == "memory_submit" {
 		return w.submitMemoryMCP(ctx, l, raw)
 	}

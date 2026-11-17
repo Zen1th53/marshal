@@ -981,7 +981,9 @@ func checkResult(envelope, result map[string]any, layouts map[string]Layout) err
 		return errors.New("change added or removed project fields")
 	}
 	for key, value := range before {
-		if key != "components" && key != "connections" && !equalJSON(value, after[key]) {
+		// source_contract names the project contract a page was built from;
+		// a change answered with a revised contract moves it to that revision.
+		if key != "components" && key != "connections" && key != "source_contract" && !equalJSON(value, after[key]) {
 			return errors.New("change edited unselected project fields")
 		}
 	}

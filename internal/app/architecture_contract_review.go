@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/architecturereview"
@@ -37,7 +38,6 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 	}
 	components := make([]any, 0, len(c.Components))
 	connections := []any{}
-	uiComponents, uiConnections := []any{}, []any{}
 	known := map[string]bool{}
 	for _, v := range c.Components {
 		known[v.ID] = true
@@ -46,14 +46,12 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 		paths := append([]string{}, v.Paths...)
 		deps := append([]string{}, v.Dependencies...)
 		components = append(components, map[string]any{"id": v.ID, "name": v.ID, "responsibility": v.Responsibility, "technology": "", "files": paths, "dependencies": deps})
-		uiComponents = append(uiComponents, map[string]any{"id": v.ID, "name": v.ID, "responsibility": orNotGiven(v.Responsibility)})
 		for _, dep := range v.Dependencies {
 			if !known[dep] || dep == v.ID {
 				continue
 			}
 			id := v.ID + "--" + dep
 			connections = append(connections, map[string]any{"id": id, "source": v.ID, "target": dep, "label": "", "protocol": ""})
-			uiConnections = append(uiConnections, map[string]any{"id": id, "label": contractNotGiven, "caption": contractNotGiven})
 		}
 	}
 	source := contractReviewSource{ID: c.ID, Revision: c.Revision, Digest: digest}
@@ -68,9 +66,46 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 	if err := architecturereview.ValidateArchitecture(architecture); err != nil {
 		return nil, fmt.Errorf("the project summary cannot be drawn: %w", err)
 	}
+	ui, err := contractUIFor(architecture, language)
+	if err != nil {
+		return nil, err
+	}
+	return &contractReviewSeed{Architecture: architecture, UI: ui, Source: source}, nil
+}
+
+// contractUIFor is the display overlay of a contract-built architecture: the
+// page's English labels and each part's own id and responsibility. No model
+// turn writes any of it.
+func contractUIFor(architecture json.RawMessage, language string) (json.RawMessage, error) {
+	var graph struct {
+		Components []struct {
+			ID             string `json:"id"`
+			Responsibility string `json:"responsibility"`
+		} `json:"components"`
+		Connections []struct {
+			ID    string `json:"id"`
+			Label string `json:"label"`
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(architecture, &graph); err != nil {
+		return nil, err
+	}
+	uiComponents, uiConnections := []any{}, []any{}
+	for _, c := range graph.Components {
+		uiComponents = append(uiComponents, map[string]any{"id": c.ID, "name": c.ID, "responsibility": orNotGiven(c.Responsibility)})
+	}
+	for _, c := range graph.Connections {
+		uiConnections = append(uiConnections, map[string]any{"id": c.ID, "label": orNotGiven(c.Label), "caption": orNotGiven(c.Label)})
+	}
+	strings := architecturereview.EnglishUIStrings()
+	keys := make([]string, 0, len(strings))
+	for key := range strings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
 	texts := []any{}
-	for key, text := range architecturereview.EnglishUIStrings() {
-		texts = append(texts, map[string]any{"key": key, "text": text})
+	for _, key := range keys {
+		texts = append(texts, map[string]any{"key": key, "text": strings[key]})
 	}
 	ui, err := json.Marshal(map[string]any{"language": language, "strings": texts, "components": uiComponents, "connections": uiConnections})
 	if err != nil {
@@ -79,7 +114,7 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 	if _, err := architecturereview.ValidateUI(ui, language, architecture); err != nil {
 		return nil, fmt.Errorf("the project summary cannot be drawn: %w", err)
 	}
-	return &contractReviewSeed{Architecture: architecture, UI: ui, Source: source}, nil
+	return ui, nil
 }
 
 func orNotGiven(text string) string {
