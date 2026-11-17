@@ -1235,6 +1235,26 @@
       "bytes": 2695
     },
     {
+      "path": "internal/app/architecture_conformance.go",
+      "sha256": "3f8cb8b0d332d199a79a5b5d7715e077782a43ff3a494dbf3ef7afcb05a4047a",
+      "bytes": 446
+    },
+    {
+      "path": "internal/app/architecture_conformance_default.go",
+      "sha256": "8f17e62dcf604050dce6d2847442f804f5d097e442bb8e75d7670b7d3c61bc42",
+      "bytes": 292
+    },
+    {
+      "path": "internal/app/architecture_conformance_extreme.go",
+      "sha256": "0ec558ea0b2747c2166e9862c92ce0e545627b0d1c9f5ac014507ff493676b7b",
+      "bytes": 8274
+    },
+    {
+      "path": "internal/app/architecture_conformance_extreme_test.go",
+      "sha256": "e16759dedc91623037a7421362ef8baf8d1c77e0bc0411844f974c098f5b8877",
+      "bytes": 4086
+    },
+    {
       "path": "internal/app/architecture_context.go",
       "sha256": "2ff855ef47c7e628ac44a0155080cf4e47c836c1b4b3af435fdce6a4d175e74c",
       "bytes": 4565
@@ -4288,6 +4308,16 @@
       "path": "internal/app/worktree_retention_test.go",
       "sha256": "3aa5df6f1274102a8ed2b20182c3abe26ad15591c7eab45458a7434c6b027a75",
       "bytes": 3477
+    },
+    {
+      "path": "internal/archconform/archconform.go",
+      "sha256": "b75ade1e5f992b18fbe29a2ba5b1aa42edbb23ca325027f55e68937a07ec8aa7",
+      "bytes": 8476
+    },
+    {
+      "path": "internal/archconform/archconform_test.go",
+      "sha256": "6586ef36005a25ed7c7c8095256c7c900555fc176757b47d3080985f19b14795",
+      "bytes": 3806
     },
     {
       "path": "internal/architecturecodec/approval.go",
