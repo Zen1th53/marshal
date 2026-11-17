@@ -40,7 +40,13 @@ type layoutChain struct {
 	backward bool // drawn right-to-left
 }
 
+type layoutConn struct{ id, source, target, caption string }
+
 // GenericLayouts places declared objects; it never supplies missing topology.
+// Each level of the architecture gets its own drawing: the top-level parts in
+// TopView, and the parts inside a component in its sub-architecture view.
+// A connection is drawn once, in the view of the lowest part that contains
+// both ends, between the parts of that view that hold them.
 func GenericLayouts(proposal json.RawMessage) (map[string]Layout, error) {
 	a, err := decodeObject(proposal)
 	if err != nil {
@@ -49,16 +55,39 @@ func GenericLayouts(proposal json.RawMessage) (map[string]Layout, error) {
 	if err = validateArchitecture(a); err != nil {
 		return nil, err
 	}
-	var ids []string
+	parents := ParentsOf(a)
+	members := map[string][]string{}
+	var order []string
 	for _, value := range a["components"].([]any) {
-		ids = append(ids, value.(map[string]any)["id"].(string))
+		id := value.(map[string]any)["id"].(string)
+		view := ViewFor(parents[id])
+		if _, seen := members[view]; !seen {
+			order = append(order, view)
+		}
+		members[view] = append(members[view], id)
 	}
-	type conn struct{ id, source, target, caption string }
-	var conns []conn
+	conns := map[string][]layoutConn{}
 	for _, value := range a["connections"].([]any) {
 		c := value.(map[string]any)
-		conns = append(conns, conn{c["id"].(string), c["source"].(string), c["target"].(string), c["label"].(string)})
+		id, source, target, caption := c["id"].(string), c["source"].(string), c["target"].(string), c["label"].(string)
+		if source == target {
+			view := ViewFor(parents[source])
+			conns[view] = append(conns[view], layoutConn{id, source, source, caption})
+			continue
+		}
+		view, from, to, _ := DrawnBetween(parents, source, target)
+		conns[view] = append(conns[view], layoutConn{id, from, to, caption})
 	}
+	views := map[string]Layout{}
+	for _, view := range order {
+		views[view] = layeredView(members[view], conns[view])
+	}
+	return views, nil
+}
+
+// layeredView draws one level: ids in declaration order and the connections
+// between them.
+func layeredView(ids []string, conns []layoutConn) Layout {
 	index := map[string]int{}
 	for i, id := range ids {
 		index[id] = i
@@ -477,7 +506,7 @@ func GenericLayouts(proposal json.RawMessage) (map[string]Layout, error) {
 		view.Edges = append(view.Edges, Edge{ID: c.id, Points: clean, Caption: c.caption})
 	}
 	placeCaptions(&view)
-	return map[string]Layout{"architecture": view}, nil
+	return view
 }
 
 // placeCaptions puts each caption above the longest free horizontal piece of

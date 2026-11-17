@@ -45,7 +45,11 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 	for _, v := range c.Components {
 		paths := append([]string{}, v.Paths...)
 		deps := append([]string{}, v.Dependencies...)
-		components = append(components, map[string]any{"id": v.ID, "name": v.ID, "responsibility": v.Responsibility, "technology": "", "files": paths, "dependencies": deps})
+		component := map[string]any{"id": v.ID, "name": v.ID, "responsibility": v.Responsibility, "technology": "", "files": paths, "dependencies": deps}
+		if v.Parent != "" {
+			component["parent"] = v.Parent
+		}
+		components = append(components, component)
 		for _, dep := range v.Dependencies {
 			if !known[dep] || dep == v.ID {
 				continue

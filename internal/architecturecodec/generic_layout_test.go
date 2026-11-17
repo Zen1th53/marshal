@@ -83,7 +83,17 @@ func TestGenericLayoutIsReadable(t *testing.T) {
 			if err := validateLayouts(a, views); err != nil {
 				t.Fatalf("layout does not validate: %v", err)
 			}
-			v := views["architecture"]
+			for viewID, v := range views {
+				t.Run(viewID, func(t *testing.T) { checkReadable(t, a, v) })
+			}
+		})
+	}
+}
+
+func checkReadable(t *testing.T, a map[string]any, v Layout) {
+	t.Helper()
+	{
+		{
 			ends := map[string][2]string{}
 			for _, value := range a["connections"].([]any) {
 				c := value.(map[string]any)
@@ -128,7 +138,7 @@ func TestGenericLayoutIsReadable(t *testing.T) {
 				}
 				captions = append(captions, b)
 			}
-		})
+		}
 	}
 }
 
@@ -163,4 +173,96 @@ func must(v map[string]Layout, err error) map[string]Layout {
 		panic(err)
 	}
 	return v
+}
+
+func hierarchyJSON() json.RawMessage {
+	return json.RawMessage(`{"title":"T","purpose":"P","summary":"S","components":[
+{"id":"web","name":"Website","responsibility":"r","technology":"t","files":[],"evidence":[]},
+{"id":"login","name":"Login","responsibility":"r","technology":"t","files":[],"evidence":[],"parent":"web"},
+{"id":"signup","name":"Sign up","responsibility":"r","technology":"t","files":[],"evidence":[],"parent":"web"},
+{"id":"captcha","name":"Captcha","responsibility":"r","technology":"t","files":[],"evidence":[],"parent":"signup"},
+{"id":"db","name":"DB","responsibility":"r","technology":"t","files":[],"evidence":[]},
+{"id":"api","name":"API","responsibility":"r","technology":"t","files":[],"evidence":[]}],
+"connections":[
+{"id":"c1","source":"login","target":"db","label":"users","protocol":"p"},
+{"id":"c2","source":"signup","target":"login","label":"after sign up","protocol":"p"},
+{"id":"c3","source":"api","target":"web","label":"serve","protocol":"p"},
+{"id":"c4","source":"captcha","target":"api","label":"verify","protocol":"p"}],
+"constraints":[],"assumptions":[],"workers":[]}`)
+}
+
+func TestSubArchitecturesGetTheirOwnDrawing(t *testing.T) {
+	raw := hierarchyJSON()
+	views, err := GenericLayouts(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := decodeObject(raw)
+	if err := validateLayouts(a, views); err != nil {
+		t.Fatal(err)
+	}
+	nodes := func(view string) map[string]bool {
+		got := map[string]bool{}
+		for _, n := range views[view].Nodes {
+			got[n.ID] = true
+		}
+		return got
+	}
+	edges := func(view string) map[string]bool {
+		got := map[string]bool{}
+		for _, e := range views[view].Edges {
+			got[e.ID] = true
+		}
+		return got
+	}
+	want := map[string][2][]string{
+		"architecture": {{"web", "db", "api"}, {"c1", "c3", "c4"}},
+		"sub:web":      {{"login", "signup"}, {"c2"}},
+		"sub:signup":   {{"captcha"}, {}},
+	}
+	if len(views) != len(want) {
+		t.Fatalf("views = %v", len(views))
+	}
+	for view, w := range want {
+		n, e := nodes(view), edges(view)
+		if len(n) != len(w[0]) || len(e) != len(w[1]) {
+			t.Errorf("%s: nodes %v edges %v", view, n, e)
+		}
+		for _, id := range w[0] {
+			if !n[id] {
+				t.Errorf("%s lacks part %s", view, id)
+			}
+		}
+		for _, id := range w[1] {
+			if !e[id] {
+				t.Errorf("%s lacks connection %s", view, id)
+			}
+		}
+		checkReadable(t, a, views[view])
+	}
+}
+
+func TestHierarchyRefusals(t *testing.T) {
+	for name, edit := range map[string]func(string) string{
+		"unknown parent": func(s string) string { return strings.Replace(s, `"parent":"web"}`, `"parent":"nope"}`, 1) },
+		"self parent": func(s string) string {
+			return strings.Replace(s, `"id":"db","name":"DB","responsibility":"r","technology":"t","files":[],"evidence":[]}`, `"id":"db","name":"DB","responsibility":"r","technology":"t","files":[],"evidence":[],"parent":"db"}`, 1)
+		},
+		"cycle": func(s string) string {
+			return strings.Replace(s, `{"id":"web","name":"Website","responsibility":"r","technology":"t","files":[],"evidence":[]}`, `{"id":"web","name":"Website","responsibility":"r","technology":"t","files":[],"evidence":[],"parent":"captcha"}`, 1)
+		},
+		"part joins its container": func(s string) string {
+			return strings.Replace(s, `"source":"login","target":"db"`, `"source":"login","target":"web"`, 1)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			raw := json.RawMessage(edit(string(hierarchyJSON())))
+			if string(raw) == string(hierarchyJSON()) {
+				t.Fatal("fixture edit did not apply")
+			}
+			if _, err := GenericLayouts(raw); err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
 }

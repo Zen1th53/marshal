@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/architecturereview"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
@@ -100,5 +101,24 @@ func TestContractUIIsDeterministic(t *testing.T) {
 	}
 	if string(ui) != string(seed.UI) {
 		t.Fatal("the overlay of a redrawn contract must equal the seed's")
+	}
+}
+
+func TestContractSeedDrawsSubArchitectures(t *testing.T) {
+	c := projectcontext.Contract{ID: "site", Revision: 1, Purpose: "Web", Components: []projectcontext.Component{
+		{ID: "web", Responsibility: "Pages", Paths: []string{"web"}},
+		{ID: "login", Responsibility: "Sign in", Paths: []string{"web/login"}, Parent: "web", Dependencies: []string{"db"}},
+		{ID: "db", Responsibility: "Data", Paths: []string{"db"}},
+	}}
+	seed, err := contractReviewSeedFor(c, "d", "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	views, err := architecturereview.GenericLayouts(seed.Architecture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := views["sub:web"]; !ok || len(views["architecture"].Edges) != 1 {
+		t.Fatalf("views = %v", views)
 	}
 }

@@ -54,31 +54,43 @@ func BindStoredLayouts(architecture, raw json.RawMessage) (map[string]Layout, ma
 	if err != nil {
 		return nil, nil, "", err
 	}
-	if len(object) != 1 {
+	// One drawing for the top level and one per part that has parts inside.
+	expected := map[string]bool{TopView: true}
+	for _, parent := range ParentsOf(a) {
+		if parent != "" {
+			expected[ViewFor(parent)] = true
+		}
+	}
+	if len(object) != len(expected) {
 		return nil, nil, "", errors.New("architecture drawing views are invalid")
 	}
-	view, ok := object["architecture"].(map[string]any)
-	if !ok || !layoutFields(view, map[string]string{"version": "string", "width": "number", "height": "number", "nodes": "array", "edges": "array"}) {
-		return nil, nil, "", errors.New("architecture drawing fields are invalid")
-	}
-	for _, value := range view["nodes"].([]any) {
-		if !layoutFields(value, map[string]string{"id": "string", "x": "number", "y": "number", "width": "number", "height": "number"}) {
-			return nil, nil, "", errors.New("drawing node fields are invalid")
+	for name, value := range object {
+		if !expected[name] {
+			return nil, nil, "", errors.New("architecture drawing views are invalid")
 		}
-	}
-	for _, value := range view["edges"].([]any) {
-		if !layoutFields(value, map[string]string{"id": "string", "points": "array", "label_at": "array", "caption": "string", "secondary": "bool"}) {
-			return nil, nil, "", errors.New("drawing edge fields are invalid")
+		view, ok := value.(map[string]any)
+		if !ok || !layoutFields(view, map[string]string{"version": "string", "width": "number", "height": "number", "nodes": "array", "edges": "array"}) {
+			return nil, nil, "", errors.New("architecture drawing fields are invalid")
 		}
-		edge := value.(map[string]any)
-		label := edge["label_at"].([]any)
-		if len(label) != 2 || !layoutNumbers(label) {
-			return nil, nil, "", errors.New("drawing edge label is invalid")
+		for _, value := range view["nodes"].([]any) {
+			if !layoutFields(value, map[string]string{"id": "string", "x": "number", "y": "number", "width": "number", "height": "number"}) {
+				return nil, nil, "", errors.New("drawing node fields are invalid")
+			}
 		}
-		for _, point := range edge["points"].([]any) {
-			coordinates, ok := point.([]any)
-			if !ok || len(coordinates) != 2 || !layoutNumbers(coordinates) {
-				return nil, nil, "", errors.New("drawing edge point is invalid")
+		for _, value := range view["edges"].([]any) {
+			if !layoutFields(value, map[string]string{"id": "string", "points": "array", "label_at": "array", "caption": "string", "secondary": "bool"}) {
+				return nil, nil, "", errors.New("drawing edge fields are invalid")
+			}
+			edge := value.(map[string]any)
+			label := edge["label_at"].([]any)
+			if len(label) != 2 || !layoutNumbers(label) {
+				return nil, nil, "", errors.New("drawing edge label is invalid")
+			}
+			for _, point := range edge["points"].([]any) {
+				coordinates, ok := point.([]any)
+				if !ok || len(coordinates) != 2 || !layoutNumbers(coordinates) {
+					return nil, nil, "", errors.New("drawing edge point is invalid")
+				}
 			}
 		}
 	}
@@ -142,6 +154,7 @@ func validateLayouts(a map[string]any, views map[string]Layout) error {
 		c := v.(map[string]any)
 		connections[c["id"].(string)] = c
 	}
+	parents := ParentsOf(a)
 	seenNodes, seenEdges := map[string]bool{}, map[string]bool{}
 	for diagram, view := range views {
 		if diagram == "" || view.Version == "" || !finite(view.Width, view.Height) || view.Width <= 0 || view.Height <= 0 {
@@ -161,7 +174,9 @@ func validateLayouts(a map[string]any, views map[string]Layout) error {
 			if connection == nil || edges[e.ID] || len(e.Points) < 2 || !finite(e.LabelAt[:]...) {
 				return fmt.Errorf("invalid drawing edge %q", e.ID)
 			}
-			source, target := nodes[connection["source"].(string)], nodes[connection["target"].(string)]
+			// In a level's drawing a connection ends at the parts of that
+			// level that contain its declared endpoints (or are them).
+			source, target := holder(nodes, parents, connection["source"].(string)), holder(nodes, parents, connection["target"].(string))
 			if source.ID == "" || target.ID == "" || !onBoundary(e.Points[0], source) || !onBoundary(e.Points[len(e.Points)-1], target) {
 				return fmt.Errorf("drawing edge %q does not terminate at its declared endpoints", e.ID)
 			}
@@ -348,4 +363,30 @@ func layoutIDs(views map[string]Layout) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// ValidateLayouts checks that every architecture object has drawing geometry
+// that terminates at its declared endpoints.
+func ValidateLayouts(architecture map[string]any, views map[string]Layout) error {
+	return validateLayouts(architecture, views)
+}
+
+// BindTarget re-derives an owner's selection from the authoritative drawing.
+func BindTarget(views map[string]Layout, target map[string]any) (map[string]any, error) {
+	return bindTarget(views, target)
+}
+
+// SelectionFor is the exact architecture objects an owner's target names.
+func SelectionFor(architecture map[string]any, views map[string]Layout, target map[string]any) map[string]any {
+	return selectionFor(architecture, views, target)
+}
+
+// holder is the node of a drawing that is id or contains it.
+func holder(nodes map[string]Node, parents map[string]string, id string) Node {
+	for _, x := range chainOf(parents, id) {
+		if n, ok := nodes[x]; ok {
+			return n
+		}
+	}
+	return Node{}
 }

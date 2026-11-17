@@ -57,6 +57,9 @@ func explainProjectContractSubmission(sub store.ProjectContractSubmission, err e
 			break
 		}
 	}
+	if problem := projectcontext.HierarchyProblem(c.Components); problem != "" {
+		problems = append(problems, problem)
+	}
 	ids := map[string]int{}
 	for _, component := range c.Components {
 		ids[component.ID]++

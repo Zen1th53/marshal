@@ -975,6 +975,9 @@ func checkResult(envelope, result map[string]any, layouts map[string]Layout) err
 			if collection == "connections" && (original["source"] != proposed["source"] || original["target"] != proposed["target"]) {
 				return errors.New("changing endpoints requires a separate topology review")
 			}
+			if collection == "components" && original["parent"] != proposed["parent"] {
+				return errors.New("moving a part into another part requires a new project summary")
+			}
 		}
 	}
 	if len(before) != len(after) {

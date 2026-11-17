@@ -199,7 +199,25 @@ func validateArchitecture(a map[string]any) error {
 				return errors.New("component description must be a string")
 			}
 		}
+		if parent, exists := c["parent"]; exists {
+			if p, ok := parent.(string); !ok || !identifier.MatchString(p) {
+				return errors.New("a component parent must be another component's id")
+			}
+		}
 		ids[id] = true
+	}
+	parents := ParentsOf(a)
+	for id, parent := range parents {
+		if parent != "" && (!ids[parent] || parent == id) {
+			return fmt.Errorf("component %q is inside %q, which is not another component", id, parent)
+		}
+		seen := map[string]bool{id: true}
+		for up := parent; up != ""; up = parents[up] {
+			if seen[up] {
+				return fmt.Errorf("component %q is nested inside itself", id)
+			}
+			seen[up] = true
+		}
 	}
 	connections, ok := a["connections"].([]any)
 	if !ok {
@@ -220,6 +238,11 @@ func validateArchitecture(a map[string]any) error {
 		for _, key := range []string{"label", "protocol"} {
 			if _, ok := e[key].(string); !ok {
 				return errors.New("connection description must be a string")
+			}
+		}
+		if source != target {
+			if _, _, _, drawn := DrawnBetween(parents, source, target); !drawn {
+				return fmt.Errorf("connection %q joins a part to the part that contains it", id)
 			}
 		}
 		edges[id] = true
