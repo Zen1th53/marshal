@@ -21,10 +21,11 @@ const legacyDivergentSchemaMax = 96
 // Canonical migration IDs. Extreme-only steps are registered only by the
 // Marshal; IDs never collide across editions.
 const (
-	schemaExtremeMemorySnapshots = 100
-	schemaExtremeApprovedCells   = 101
-	schemaExtremeSnapshotGuards  = 102
-	schemaExtremeProjectContext  = 103
+	schemaExtremeMemorySnapshots     = 100
+	schemaExtremeApprovedCells       = 101
+	schemaExtremeSnapshotGuards      = 102
+	schemaExtremeProjectContext      = 103
+	schemaExtremeArchitectureCommits = 110
 )
 
 // LatestSchemaVersion is the highest canonical migration registered in this

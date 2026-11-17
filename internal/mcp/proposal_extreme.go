@@ -50,6 +50,10 @@ func (s *Server) ConfigureProposalMCP(cfg proposalmcp.Config) {
 			method = "project_contract_context_abort"
 		case "marshal_architecture_request_answer":
 			method = "architecture_request_answer"
+		case "marshal_architecture_at":
+			method = "project_contract_at_commit"
+		case "marshal_architecture_history":
+			method = "project_contract_history"
 		}
 		return proposalmcp.Call(ctx, cfg, method, raw)
 	}
@@ -57,7 +61,7 @@ func (s *Server) ConfigureProposalMCP(cfg proposalmcp.Config) {
 
 func liveProposalTool(name string) bool {
 	switch name {
-	case "marshal_proposal_submit", "marshal_proposal_receipt", "marshal_memory_candidate_submit", "marshal_memory_receipt", "memory_remember", "marshal_architecture_request_answer", "marshal_project_contract_submit", "marshal_project_contract_receipt", "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context":
+	case "marshal_proposal_submit", "marshal_proposal_receipt", "marshal_memory_candidate_submit", "marshal_memory_receipt", "memory_remember", "marshal_architecture_request_answer", "marshal_architecture_at", "marshal_architecture_history", "marshal_project_contract_submit", "marshal_project_contract_receipt", "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context":
 		return true
 	default:
 		return false
@@ -66,7 +70,7 @@ func liveProposalTool(name string) bool {
 
 func projectContractTool(name string) bool {
 	switch name {
-	case "marshal_project_contract_submit", "marshal_project_contract_receipt", "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context":
+	case "marshal_project_contract_submit", "marshal_project_contract_receipt", "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context", "marshal_architecture_at", "marshal_architecture_history":
 		return true
 	default:
 		return false
@@ -86,6 +90,8 @@ func (s *Server) proposalTools() []Tool {
 		{Name: "marshal_memory_receipt", Description: "Inspect candidate retention and indexing; pending is not persisted", InputSchema: objectSchema(map[string]any{"submission_id": stringSchema()}, "submission_id")},
 		{Name: "marshal_proposal_submit", Description: "Submit an exact validated proposal from this live Marshal launch; admitted is not applied. Harness verification: {action:harness-verify,provider:codex|claude|opencode|agy,model:<optional explicit selector>}; verify only, never accept architecture. Operator proposals: {action:reassign,task_id:<task>,target_worker:<worker>}, {action:resume}, {action:retry,task_id:<task>,fresh_session:true|false}, {action:amend-approve}, {action:amend-deny}. The parent validates supported actions and requires the same owner acceptance as local controls; inspect the receipt for rejection, pending decision, failure or application. Decision proposals require exactly four fields: action=decide, nonempty id, boolean allow, and nonblank reason of at most 500 UTF-8 bytes with no control characters.", InputSchema: objectSchema(map[string]any{"submission_id": stringSchema(), "proposal": map[string]any{"type": "object"}}, "submission_id", "proposal")},
 		{Name: "marshal_architecture_request_answer", Description: "Answer one owner request from the architecture page; its request_id, the owner's words and the exact selection are in your inbox entry \"architecture request <id>\". status answered: reply only, change nothing. needs_clarification: reply plus 1-8 questions. proposed_change: first submit the revised project contract with marshal_project_contract_submit changing only the selected parts, then answer; the page draws that pending contract and refuses changes outside the selection, added or removed parts and moved dependencies.", InputSchema: objectSchema(map[string]any{"request_id": stringSchema(), "status": map[string]any{"type": "string", "enum": []string{"answered", "needs_clarification", "proposed_change"}}, "reply": stringSchema(), "questions": map[string]any{"type": "array", "maxItems": 8, "items": stringSchema()}}, "request_id", "status", "reply")},
+		{Name: "marshal_architecture_at", Description: "Exact architecture at a commit, from Marshal's record only: the accepted project contract revision bound to that commit (when the owner accepted it, a task was merged or the run was delivered) or to its nearest first-parent ancestor, with commits_since_binding. bound=false means nothing was recorded; never guess one. commit: id, branch, tag or HEAD expression (default HEAD). component: keep only that part and the parts inside it.", InputSchema: objectSchema(map[string]any{"commit": stringSchema(), "component": stringSchema()})},
+		{Name: "marshal_architecture_history", Description: "Recorded architecture bindings, newest first: commit, event (accepted, merged, delivered), task and contract revision. With component, each entry carries that part as it was and component_changed where it differs from the entry before. limit 1 to 200 (default 20).", InputSchema: objectSchema(map[string]any{"component": stringSchema(), "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200}})},
 		{Name: "marshal_proposal_receipt", Description: "Read durable proposal acceptance and application outcome for this launch", InputSchema: objectSchema(map[string]any{"submission_id": stringSchema()}, "submission_id")}}
 }
 

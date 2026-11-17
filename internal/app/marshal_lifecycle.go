@@ -1310,6 +1310,8 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 		return err
 	}
 	effectCompleted = true
+	// The merge commit is made under the accepted architecture.
+	s.recordArchitectureCommit(ctx, dir, "", "merged", taskID)
 	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
@@ -1630,6 +1632,8 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return err
 	}
+	// The delivered commit is now the target branch's head.
+	s.recordArchitectureCommit(ctx, s.Repository, head, "delivered", "")
 	// The run's own merged worktrees and branches are done with; a failure
 	// keeps them and never undoes the close.
 	_ = s.cleanupDeliveredRun(ctx, runID, next, target)

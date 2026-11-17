@@ -95,6 +95,10 @@ func (r *Runtime) commitBrokerProjectContractPermission(ctx context.Context, req
 	// Marshal's acceptance on the owner's command, so the same transaction
 	// consumes the owner's recorded instruction for this exact contract.
 	_, err = r.store.CommitMCPProjectContractDecisionOnInstruction(ctx, req, allow, audience, time.Now().UTC(), audit)
+	if err == nil && allow {
+		// The accepted architecture applies from the project's current commit.
+		r.recordArchitectureCommit(ctx, r.ProjectRoot(), "", "accepted", "")
+	}
 	return true, err
 }
 

@@ -2516,8 +2516,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "35c5a224ce532df0b7a0b4dff72e9e669fe25253e00d5c2fcd9e66259c40e9b5",
-      "bytes": 80821
+      "sha256": "2db8d019d0201b8ce6643fd6b4cd4ca1193bc4f63141c19722ca06b6f1f6fb80",
+      "bytes": 81071
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -3546,8 +3546,8 @@
     },
     {
       "path": "internal/app/project_contract_extreme.go",
-      "sha256": "a2d24d2e1028ad6cc77873993c97211f9fa20ddce657d76cd0b30c0a23e8d0bb",
-      "bytes": 7572
+      "sha256": "a6028960551169c58ad35a93ad62dd8433d1536c8862bf753abc2808951774d1",
+      "bytes": 7746
     },
     {
       "path": "internal/app/project_contract_extreme_test.go",
@@ -5536,8 +5536,8 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "ac6a55e0bb7aec1874d73add5bdb4723bcda3186ac89b0e3a0bcea5489366e2b",
-      "bytes": 11865
+      "sha256": "c07923288aa22eb20bca55f9b1fdbfbdb08c21a8bece3b017e9aefe9cc91bf8b",
+      "bytes": 12029
     },
     {
       "path": "internal/constitution/protocol_extreme_test.go",
@@ -7621,8 +7621,8 @@
     },
     {
       "path": "internal/mcp/proposal_capability_extreme_test.go",
-      "sha256": "2ff8a49f6cfb72a5654e07117e2887f2a1dda45039bec22b2336b81e8f9bcfd6",
-      "bytes": 4040
+      "sha256": "d9885c9ae9dc4a51650d101b8ce0f7cc2d105ed0dfda4875b1b64d55fa8b55d4",
+      "bytes": 4113
     },
     {
       "path": "internal/mcp/proposal_capability_test.go",
@@ -7636,8 +7636,8 @@
     },
     {
       "path": "internal/mcp/proposal_extreme.go",
-      "sha256": "3007c103552abc00722f911c6f377da56e80e861082a72e526cf17e3be5e1741",
-      "bytes": 9372
+      "sha256": "c384cae46f6d677eba949bcc211aa7cc1d43c1ee6483c9aff69681ccdffb772c",
+      "bytes": 10697
     },
     {
       "path": "internal/mcp/proposal_extreme_test.go",
@@ -7676,8 +7676,8 @@
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "348d5bc04e3ae966c7c16f0521f85ed47482f27a398e55196f5c2935cee7650a",
-      "bytes": 42524
+      "sha256": "b6da333e45c7837664213f5d36aab5f0e04d7938c541109c5f4d4bfbcf26a0e6",
+      "bytes": 42583
     },
     {
       "path": "internal/mcp/server_default_test.go",
@@ -11296,8 +11296,8 @@
     },
     {
       "path": "internal/store/migrations_canonical.go",
-      "sha256": "68be8baea8d366c2a99c532d67afc417baef5a8df5e4ff06028ce7bb38967470",
-      "bytes": 4110
+      "sha256": "1910876f1fe97a1aa9b846008559c8b6e8a0c26eb7ac2dd2077bb80aa2d90409",
+      "bytes": 4166
     },
     {
       "path": "internal/store/migrations_canonical_test.go",
@@ -14546,8 +14546,8 @@
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme.go",
-      "sha256": "b23e9214f4ba6753fdc06d1f60405d17c7e78f02eb2488ba654a6984eb6a0b8a",
-      "bytes": 10420
+      "sha256": "dd4fd71af6f6be255a6947cb0b75637897cdc4baaf4e17c0527e5a712311387f",
+      "bytes": 11858
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme_test.go",

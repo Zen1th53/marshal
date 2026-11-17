@@ -91,6 +91,35 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 			return nil, err
 		}
 		return w.encodeProjectContractMCP(ctx, p)
+	case "project_contract_at_commit":
+		var args struct {
+			Commit    string `json:"commit,omitempty"`
+			Component string `json:"component,omitempty"`
+		}
+		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
+			return nil, err
+		}
+		at, err := w.runtime.ArchitectureAtCommit(ctx, args.Commit, args.Component)
+		if err != nil {
+			return nil, err
+		}
+		return boundedArchitectureJSON(at, "pass component to read one part and the parts inside it")
+	case "project_contract_history":
+		var args struct {
+			Component string `json:"component,omitempty"`
+			Limit     int    `json:"limit,omitempty"`
+		}
+		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
+			return nil, err
+		}
+		if args.Limit < 1 {
+			args.Limit = 20
+		}
+		history, err := w.runtime.ArchitectureHistory(ctx, args.Component, min(args.Limit, 200))
+		if err != nil {
+			return nil, err
+		}
+		return boundedArchitectureJSON(map[string]any{"bindings": history}, "reduce limit")
 	case "project_contract_inventory", "project_contract_read":
 		var args struct {
 			After string `json:"after,omitempty"`
@@ -265,4 +294,17 @@ func redactProjectContractSubmission(sub *store.ProjectContractSubmission) error
 	}
 	*sub = clean
 	return nil
+}
+
+// boundedArchitectureJSON bounds an architecture answer below the proposal
+// transport's frame, with room for the JSON-RPC envelope.
+func boundedArchitectureJSON(v any, narrower string) (json.RawMessage, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > 10<<10 { // escaped inside the tool result it stays under 16 KiB
+		return nil, fmt.Errorf("%w: the answer is too large; %s", projectcontext.ErrBudget, narrower)
+	}
+	return raw, nil
 }

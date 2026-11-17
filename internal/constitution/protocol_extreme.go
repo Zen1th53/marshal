@@ -54,6 +54,9 @@ page with the exact parts they selected; answer it with
 marshal_architecture_request_answer for that request_id. For a change, first
 submit the revised contract changing only the selected parts, then answer
 proposed_change.
+Which architecture applied at a commit is recorded, never inferred: read it
+with marshal_architecture_at, and how a part changed with
+marshal_architecture_history.
 Only after the runtime delivers the browser acceptance for that exact contract
 answer its Decision with allow; if it was denied or expired, resubmit the
 identical contract and allow its new Decision once it is accepted in the browser.
@@ -135,7 +138,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:bdd73dbbe8dfd9ea3840efc2969f34c366feda37c65c2abbea884e8f002c5fb6"
+const ExtremeProtocolDigest = "sha256:1d849caaa93e2ce13b71cc48c4031e32f2e69ce449c2e46f8e98deb4bbfc0081"
 
 // shippedProtocolStripper rewrites the base protocol's operator-popup and
 // press-A instructions out of the shipped (untagged) edition. This edition's

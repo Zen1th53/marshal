@@ -36,6 +36,7 @@ func TestLiveToolsHTTPUseExplicitCapabilitiesAndRawDispatch(t *testing.T) {
 		"marshal_project_contract_inventory": true, "marshal_project_contract_read": true,
 		"marshal_project_contract_context": true, "marshal_project_contract_receipt": true,
 		"marshal_memory_receipt": true, "marshal_proposal_receipt": true,
+		"marshal_architecture_at": true, "marshal_architecture_history": true,
 	}
 	for _, tool := range s.proposalTools() {
 		cap := auth.CapTaskExecute
