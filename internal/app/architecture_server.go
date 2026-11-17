@@ -38,6 +38,13 @@ type ArchitectureReviewHooks struct {
 	BeforeAccept  func(context.Context, json.RawMessage) error
 	AcceptBlocked func() string
 	Accepted      func(json.RawMessage)
+	// Forward hands an owner's request on a contract-built page to the live
+	// Marshal chat and waits for its answer. Without it such requests stay
+	// closed.
+	Forward func(context.Context, ArchitectureRequest) (ArchitectureAnswer, error)
+	// pendingContract, set with fromContract, reads the newest pending
+	// project contract of the launch as a review seed.
+	pendingContract func(context.Context) (*contractReviewSeed, error)
 	// fromContract, set only by StartArchitectureReviewFromContract, opens
 	// the review on the pending project contract itself: no model turn.
 	fromContract *contractReviewSeed
@@ -265,9 +272,29 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		defer turnCancel()
 		return cli.GenerateArchitectureUI(turnCtx, language, architecture)
 	}
-	if seed != nil {
+	if seed != nil && (hooks.Forward == nil || hooks.pendingContract == nil) {
 		config.Feedback = func(context.Context, json.RawMessage) (json.RawMessage, error) { return nil, contractRequestsClosed }
 		config.Localize = func(context.Context, string, json.RawMessage) (json.RawMessage, error) { return nil, contractRequestsClosed }
+	} else if seed != nil {
+		// The owner's selected request goes to the live Marshal chat; a change
+		// comes back as the revised pending contract. No hidden model turn runs.
+		forward := contractFeedback(hooks.Forward, hooks.pendingContract)
+		config.Feedback = func(_ context.Context, envelope json.RawMessage) (json.RawMessage, error) {
+			mu.Lock()
+			if closed {
+				mu.Unlock()
+				return nil, context.Canceled
+			}
+			turns.Add(1)
+			mu.Unlock()
+			defer turns.Done()
+			turnCtx, turnCancel := context.WithTimeout(serverCtx, 600*time.Second)
+			defer turnCancel()
+			return forward(turnCtx, envelope)
+		}
+		config.Localize = func(_ context.Context, language string, architecture json.RawMessage) (json.RawMessage, error) {
+			return contractUIFor(architecture, language)
+		}
 	}
 	review, err := architecturereview.New(config)
 	if err != nil {

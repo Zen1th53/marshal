@@ -16,7 +16,7 @@ import (
 
 // architectureReviewHooks connect the browser's Accept to this workspace.
 func (w *Workspace) architectureReviewHooks() app.ArchitectureReviewHooks {
-	return app.ArchitectureReviewHooks{BeforeAccept: w.beforeBrowserAccept(), AcceptBlocked: w.browserAcceptBlocked(), Accepted: w.browserAccepted}
+	return app.ArchitectureReviewHooks{BeforeAccept: w.beforeBrowserAccept(), AcceptBlocked: w.browserAcceptBlocked(), Accepted: w.browserAccepted, Forward: w.forwardArchitectureRequest}
 }
 
 // browserAccepted runs after the owner's browser Accept was saved. It tells

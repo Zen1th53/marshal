@@ -436,6 +436,10 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		// Advisory unless code_evidence.on_invalidated is "return".
 		validationErr = errors.Join(validationErr, s.codeEvidenceHandIn(ctx, runID, run, *t, handin))
 	}
+	// Code that disagrees with the accepted architecture is returned with
+	// the exact places, so the worker fixes it or the Marshal revises the
+	// architecture for the owner.
+	validationErr = errors.Join(validationErr, s.architectureHandIn(ctx, *t, handin))
 	attempt := 1 + t.EvidenceAttemptBase
 	attempt += taskReturns(*t)
 	t.ResultCommit = handin.ResultCommit
@@ -1310,6 +1314,8 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 		return err
 	}
 	effectCompleted = true
+	// The merge commit is made under the accepted architecture.
+	s.recordArchitectureCommit(ctx, dir, "", "merged", taskID)
 	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
@@ -1630,6 +1636,8 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return err
 	}
+	// The delivered commit is now the target branch's head.
+	s.recordArchitectureCommit(ctx, s.Repository, head, "delivered", "")
 	// The run's own merged worktrees and branches are done with; a failure
 	// keeps them and never undoes the close.
 	_ = s.cleanupDeliveredRun(ctx, runID, next, target)

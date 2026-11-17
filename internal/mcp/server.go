@@ -949,10 +949,10 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapTaskRead
 	}
 	switch toolName {
-	case "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context",
+	case "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context", "marshal_architecture_at", "marshal_architecture_history", "marshal_architecture_conformance",
 		"marshal_project_contract_receipt", "marshal_memory_receipt", "marshal_proposal_receipt":
 		return auth.CapTaskRead
-	case "marshal_project_contract_submit", "marshal_memory_candidate_submit", "marshal_proposal_submit", ChatPermissionToolName:
+	case "marshal_project_contract_submit", "marshal_memory_candidate_submit", "marshal_proposal_submit", "marshal_architecture_request_answer", ChatPermissionToolName:
 		// The bound parent validates actions and retains owner acceptance.
 		// These tools submit requests; they cannot confer approval authority.
 		return auth.CapTaskExecute

@@ -60,6 +60,9 @@ type Component struct {
 	Responsibility string   `json:"responsibility"`
 	Paths          []string `json:"paths"`
 	Dependencies   []string `json:"dependencies,omitempty"`
+	// Parent makes this component part of another one's sub-architecture
+	// ("login" inside "website"). Its paths lie inside the parent's paths.
+	Parent string `json:"parent,omitempty"`
 }
 type Applicability struct {
 	ProjectWide bool     `json:"project_wide,omitempty"`
@@ -325,6 +328,9 @@ func (c Contract) Canonical() (Contract, error) {
 				return c, ErrInvalid
 			}
 		}
+	}
+	if HierarchyProblem(c.Components) != "" {
+		return c, ErrInvalid
 	}
 	sort.Slice(c.Components, func(i, j int) bool { return c.Components[i].ID < c.Components[j].ID })
 	for _, v := range c.Components {
@@ -619,3 +625,60 @@ func RequiredMemory(class error, id, why string) error {
 // ValidPath reports whether p is a contract component path: repository
 // relative and clean, with no leading "/" or "./", no trailing "/" and no "..".
 func ValidPath(p string) bool { return validPath(p) }
+
+// HierarchyProblem explains why the components' sub-architecture nesting is
+// invalid, or returns "": a parent must be another declared component, the
+// nesting has no cycle, and every path of a child lies inside one of its
+// parent's paths.
+func HierarchyProblem(components []Component) string {
+	byID := map[string]Component{}
+	for _, v := range components {
+		byID[v.ID] = v
+	}
+	for _, v := range components {
+		if v.Parent == "" {
+			continue
+		}
+		parent, ok := byID[v.Parent]
+		if !ok || v.Parent == v.ID {
+			return fmt.Sprintf("component %q names parent %q, which is not another declared component", v.ID, v.Parent)
+		}
+		seen := map[string]bool{v.ID: true}
+		for up := v.Parent; up != ""; up = byID[up].Parent {
+			if seen[up] {
+				return fmt.Sprintf("component %q is nested inside itself through its parents", v.ID)
+			}
+			seen[up] = true
+		}
+		for _, p := range v.Paths {
+			inside := false
+			for _, q := range parent.Paths {
+				if p == q || strings.HasPrefix(p, strings.TrimSuffix(q, "/")+"/") {
+					inside = true
+					break
+				}
+			}
+			if !inside {
+				return fmt.Sprintf("path %q of component %q is not inside any path of its parent %q", p, v.ID, v.Parent)
+			}
+		}
+	}
+	contains := func(container, id string) bool {
+		seen := map[string]bool{}
+		for x := id; x != "" && !seen[x]; x = byID[x].Parent {
+			if x == container {
+				return true
+			}
+			seen[x] = true
+		}
+		return false
+	}
+	for _, v := range components {
+		for _, dep := range v.Dependencies {
+			if dep != v.ID && (contains(dep, v.ID) || contains(v.ID, dep)) {
+				return fmt.Sprintf("component %q depends on %q, which contains it or is inside it; dependencies join separate parts", v.ID, dep)
+			}
+		}
+	}
+	return ""
+}

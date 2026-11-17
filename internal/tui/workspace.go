@@ -49,6 +49,10 @@ type Workspace struct {
 	browserContractMu sync.Mutex
 	browserContract   *app.OperatorInstructionBinding
 
+	// architectureRequests are owner requests from the architecture page
+	// waiting for the Marshal chat's answer.
+	architectureRequests architectureRequestBox
+
 	egressGate ioGate
 	mu         sync.RWMutex
 	store      *store.Store

@@ -37,8 +37,13 @@ func EnglishUIStrings() map[string]string {
 		"revision_changed_one": "rev {rev} · 1 part changed since rev {prev}", "changed_badge": "changed", "design": "Design",
 		"design_brief": "Brief", "design_findings": "Review by {provider}", "design_resolutions": "How each finding was resolved",
 		"design_no_resolutions": "No resolutions recorded yet.", "design_shortened": "(shortened)", "accept_with_design": "design included",
+		"open_sub": "Open sub-architecture", "parts_inside": "{n} parts inside",
 	}
 }
+
+// laterUIStringKeys were added after translations were cached; a translation
+// without them stays valid and the page shows them in English.
+var laterUIStringKeys = map[string]bool{"open_sub": true, "parts_inside": true}
 
 // legacyUIStringKeys is the interface label set that existed before the browser
 // v2 keys were added. A stored translation covering exactly these keys stays
@@ -167,11 +172,15 @@ func uiStringKeys() []string {
 }
 
 func uiStringsCover(texts map[string]any, keys []string) bool {
-	if len(texts) != len(keys) {
-		return false
-	}
+	known := map[string]bool{}
 	for _, key := range keys {
-		if !nonempty(texts[key]) {
+		known[key] = true
+		if !nonempty(texts[key]) && !laterUIStringKeys[key] {
+			return false
+		}
+	}
+	for key, text := range texts {
+		if !known[key] || !nonempty(text) {
 			return false
 		}
 	}

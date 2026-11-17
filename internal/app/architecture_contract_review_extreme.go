@@ -46,6 +46,13 @@ func (r *Runtime) StartArchitectureReviewFromContract(ctx context.Context, provi
 		return nil, true, err
 	}
 	hooks.fromContract = seed
+	hooks.pendingContract = func(ctx context.Context) (*contractReviewSeed, error) {
+		next, found, err := r.store.ReadPendingProjectContract(ctx, binding, launch)
+		if err != nil || !found {
+			return nil, err
+		}
+		return contractReviewSeedFor(next.Contract, next.Digest, language)
+	}
 	session, err = r.StartArchitectureReviewForSession(ctx, provider, "", sessionID, hooks)
 	return session, true, err
 }
