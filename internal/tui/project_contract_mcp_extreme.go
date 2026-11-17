@@ -120,6 +120,18 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 			return nil, err
 		}
 		return boundedArchitectureJSON(map[string]any{"bindings": history}, "reduce limit")
+	case "project_contract_conformance":
+		var args struct {
+			Commit string `json:"commit,omitempty"`
+		}
+		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
+			return nil, err
+		}
+		report, err := w.runtime.ArchitectureConformance(ctx, args.Commit)
+		if err != nil {
+			return nil, err
+		}
+		return boundedArchitectureJSON(report, "fix the reported findings first")
 	case "project_contract_inventory", "project_contract_read":
 		var args struct {
 			After string `json:"after,omitempty"`
