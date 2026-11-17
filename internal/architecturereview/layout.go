@@ -6,37 +6,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/architecturecodec"
 	"math"
 	"reflect"
 	"sort"
 )
 
-type Rect struct {
-	X      float64 `json:"x"`
-	Y      float64 `json:"y"`
-	Width  float64 `json:"width"`
-	Height float64 `json:"height"`
-}
-type Node struct {
-	ID     string  `json:"id"`
-	X      float64 `json:"x"`
-	Y      float64 `json:"y"`
-	Width  float64 `json:"width"`
-	Height float64 `json:"height"`
-}
-type Edge struct {
-	ID        string       `json:"id"`
-	Points    [][2]float64 `json:"points"`
-	LabelAt   [2]float64   `json:"label_at"`
-	Caption   string       `json:"caption"`
-	Secondary bool         `json:"secondary"`
-}
-type Layout struct {
-	Version string  `json:"version"`
-	Width   float64 `json:"width"`
-	Height  float64 `json:"height"`
-	Nodes   []Node  `json:"nodes"`
-	Edges   []Edge  `json:"edges"`
+// The drawing types and the generic layout live in architecturecodec; the
+// review uses them as is.
+type (
+	Rect   = architecturecodec.Rect
+	Node   = architecturecodec.Node
+	Edge   = architecturecodec.Edge
+	Layout = architecturecodec.Layout
+)
+
+// GenericLayouts places declared objects; it never supplies missing topology.
+func GenericLayouts(proposal json.RawMessage) (map[string]Layout, error) {
+	return architecturecodec.GenericLayouts(proposal)
 }
 
 // BindStoredLayouts validates the original persisted geometry and applies the
@@ -127,49 +114,6 @@ func layoutNumbers(values []any) bool {
 		}
 	}
 	return true
-}
-
-// GenericLayouts places declared objects; it never supplies missing topology.
-func GenericLayouts(proposal json.RawMessage) (map[string]Layout, error) {
-	a, err := decodeObject(proposal)
-	if err != nil {
-		return nil, err
-	}
-	if err = validateArchitecture(a); err != nil {
-		return nil, err
-	}
-	components := a["components"].([]any)
-	columns := 3
-	if len(components) < columns {
-		columns = len(components)
-	}
-	view := Layout{Version: "generic-v1", Width: float64(columns*280 + 160), Height: float64(((len(components)+columns-1)/columns)*200 + 160), Nodes: []Node{}, Edges: []Edge{}}
-	byID := map[string]Node{}
-	for i, value := range components {
-		c := value.(map[string]any)
-		n := Node{ID: c["id"].(string), X: float64(80 + (i%columns)*280), Y: float64(80 + (i/columns)*200), Width: 180, Height: 88}
-		view.Nodes = append(view.Nodes, n)
-		byID[n.ID] = n
-	}
-	for _, value := range a["connections"].([]any) {
-		c := value.(map[string]any)
-		source, target := byID[c["source"].(string)], byID[c["target"].(string)]
-		start := [2]float64{source.X + source.Width, source.Y + source.Height/2}
-		end := [2]float64{target.X, target.Y + target.Height/2}
-		mid := (start[0] + end[0]) / 2
-		points := [][2]float64{start, {mid, start[1]}, {mid, end[1]}, end}
-		if source.ID == target.ID {
-			points = [][2]float64{start, {start[0] + 24, start[1]}, {start[0] + 24, source.Y - 24}, {source.X - 24, source.Y - 24}, {source.X - 24, end[1]}, end}
-		}
-		clean := [][2]float64{}
-		for _, point := range points {
-			if len(clean) == 0 || clean[len(clean)-1] != point {
-				clean = append(clean, point)
-			}
-		}
-		view.Edges = append(view.Edges, Edge{ID: c["id"].(string), Points: clean, LabelAt: [2]float64{mid, (start[1]+end[1])/2 - 12}, Caption: c["label"].(string)})
-	}
-	return map[string]Layout{"architecture": view}, nil
 }
 
 func validateLayouts(a map[string]any, views map[string]Layout) error {
