@@ -1215,6 +1215,26 @@
       "bytes": 75
     },
     {
+      "path": "internal/app/architecture_commits.go",
+      "sha256": "d4718b598cfc248e3aff5bb2abe07a4f4921e2bca88333ce9e1e6865e2e2516d",
+      "bytes": 701
+    },
+    {
+      "path": "internal/app/architecture_commits_default.go",
+      "sha256": "6e3ee3750416ca76fdd642a2f74cc7632938be9d23c2093dbb2c65153530f668",
+      "bytes": 209
+    },
+    {
+      "path": "internal/app/architecture_commits_extreme.go",
+      "sha256": "297c6f4f9575650c9a177c86270855346a19ec65259658b5f86cedce67486e39",
+      "bytes": 6768
+    },
+    {
+      "path": "internal/app/architecture_commits_extreme_test.go",
+      "sha256": "30f0c8a27edd354518e0accad4d8e415d665556f8684109b1e4d36c99d89ce3b",
+      "bytes": 2695
+    },
+    {
       "path": "internal/app/architecture_context.go",
       "sha256": "2ff855ef47c7e628ac44a0155080cf4e47c836c1b4b3af435fdce6a4d175e74c",
       "bytes": 4565
@@ -10305,6 +10325,11 @@
       "bytes": 874
     },
     {
+      "path": "internal/store/architecture_commits_extreme.go",
+      "sha256": "a25eb92538af5d17e01aeb993fcceba79948ef399e03338d31a0ea3008a2ba89",
+      "bytes": 5853
+    },
+    {
       "path": "internal/store/architecture_instruction.go",
       "sha256": "3d5133514d1556548b0a90f7feb4e906a57616688369ce5e8ec9010fa8ad7632",
       "bytes": 307
@@ -16606,8 +16631,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "9a4676b6d74d30bd403c1ad49bc6607b0cf1f66328950861cf29bab2c0bf78be",
-      "bytes": 441476
+      "sha256": "7c99e7821c37ba5da89874c7d0fbd6036c9fd8c27c42af65d2c95bd873114539",
+      "bytes": 446955
     },
     {
       "path": "tools/extreme/prq/main_default.go",
