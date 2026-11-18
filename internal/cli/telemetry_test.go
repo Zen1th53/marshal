@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -178,5 +179,49 @@ func TestCloudClientVersionNeverSendsBuildText(t *testing.T) {
 		if got := cloudClientVersion(v); got != "0.0.0-dev" {
 			t.Fatalf("build version %q sent as %q", v, got)
 		}
+	}
+}
+
+func TestTelemetryRegisterCountsTheInstall(t *testing.T) {
+	var registrations atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/installations/register" {
+			registrations.Add(1)
+		}
+		io.WriteString(w, `{}`)
+	}))
+	defer server.Close()
+	for _, tc := range []struct {
+		name, endpoint string
+		disabled       bool
+		want           string
+		registered     int32
+	}{
+		{"registers", server.URL, false, "Anonymous telemetry: enabled; this installation is registered.\n", 1},
+		{"unreachable", "http://127.0.0.1:1", false, "Anonymous telemetry: enabled; registration will be retried when Marshal starts.\n", 0},
+		{"disabled", server.URL, true, "Anonymous telemetry: disabled.\n", 0},
+		{"endpoint off", "off", false, "Anonymous telemetry: off (MARSHAL_CLOUD_ENDPOINT=off; nothing is sent).\n", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registrations.Store(0)
+			config := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", config)
+			t.Setenv(cloud.EnvEndpoint, tc.endpoint)
+			if tc.disabled {
+				if _, _, err := cloud.NewStore(filepath.Join(config, "marshal")).SetTelemetryEnabled(t.Context(), false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var out, errout bytes.Buffer
+			if code := Execute(t.Context(), t.TempDir(), []string{"telemetry", "register"}, nil, &out, &errout); code != 0 {
+				t.Fatalf("exit %d: %s", code, errout.String())
+			}
+			if out.String() != tc.want {
+				t.Fatalf("output = %q, want %q", out.String(), tc.want)
+			}
+			if got := registrations.Load(); got != tc.registered {
+				t.Fatalf("registrations = %d, want %d", got, tc.registered)
+			}
+		})
 	}
 }

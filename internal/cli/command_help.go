@@ -15,6 +15,7 @@ const commandSynopsis = baseCommandSynopsis + editionCommandSynopsis
 const baseCommandSynopsis = `telemetry status
 telemetry disable
 telemetry enable
+telemetry register
 ultra request
 init
 doctor [--probe-providers] [--deep]
