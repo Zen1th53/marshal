@@ -12471,8 +12471,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "14d06f1e93f6c4757efb1b6e118ae65f528b5783584dd3e97e1ce044d83fd2b5",
-      "bytes": 22354
+      "sha256": "04bc2e0a38615c5b0bfb0fb109a21d20869a5b76abd9ea3c65d4ecc32c7daaf6",
+      "bytes": 24500
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -12491,8 +12491,8 @@
     },
     {
       "path": "internal/tui/authority_timeout_extreme_test.go",
-      "sha256": "180849fa7f482039185cd68dbc295badc91bbcb902ba2b8bcc8ffafcac46552e",
-      "bytes": 5809
+      "sha256": "a89717861bba20d7d8da591468a688531cc3c808135bdf837c8635cbd7ffff42",
+      "bytes": 7441
     },
     {
       "path": "internal/tui/autocomplete.go",
@@ -16731,8 +16731,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "baf222963c896b54f15efedd5089646acd4b0bf6b446ccb3ed9ab41a46dc0532",
-      "bytes": 451097
+      "sha256": "f2f989ba0ac49e11b4a4d2139c26d0159a3a8dc567ee50960a13e322f2dd7f72",
+      "bytes": 451930
     },
     {
       "path": "tools/extreme/prq/main_default.go",
