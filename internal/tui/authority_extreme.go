@@ -62,6 +62,8 @@ type buildPendingDecision struct {
 	provider   string
 	answer     *bool
 	reason     string
+	// bound marks a private review deadline that must hold as set.
+	bound bool
 }
 
 // Queue processing remains asynchronous: stop and proposal polling never wait
@@ -96,6 +98,17 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		return true
 	}
 	launch := w.proposalLaunchID()
+	// The chat pane is read only when a decision for this request is due,
+	// and before the lock.
+	w.permissions.mu.Lock()
+	due := false
+	for _, p := range w.permissions.build.pending {
+		if p.request.Key() == req.Key() && p.answer == nil && !p.bound && !time.Now().Before(p.deadline) {
+			due = true
+		}
+	}
+	w.permissions.mu.Unlock()
+	working := due && w.marshalChatWorking(ctx)
 	w.permissions.mu.Lock()
 	for id, p := range w.permissions.build.pending {
 		if p.request.Key() != req.Key() {
@@ -104,6 +117,13 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		// A request delivered to an earlier Marshal launch can no longer be
 		// answered by it; treat it as unanswered so the live Marshal gets it.
 		relaunched := p.launchID != "" && launch != "" && p.launchID != launch
+		// A Marshal still in the turn it was in when the request arrived has
+		// not had a chance to answer. Re-issuing the request under a new id
+		// then only grew a queue the Marshal spent its next turns
+		// investigating, so the same request keeps waiting instead.
+		if p.answer == nil && !p.bound && !relaunched && working && !time.Now().Before(p.deadline) {
+			p.deadline = time.Now().Add(marshalBusyDecisionGrace)
+		}
 		if p.answer == nil && time.Now().Before(p.deadline) && !relaunched {
 			w.permissions.mu.Unlock()
 			if p.provider == "codex" {
@@ -229,7 +249,7 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		// without a deadline (a relaunch still re-delivers it).
 		deadline = registered.Add(extremeAwaitForever)
 	}
-	p := &buildPendingDecision{request: req, provider: provider, paneID: pane, deadline: deadline, launchID: w.proposalLaunchID()}
+	p := &buildPendingDecision{request: req, provider: provider, paneID: pane, deadline: deadline, launchID: w.proposalLaunchID(), bound: boundReview}
 	description := map[string]string{"id": id, "kind": req.Kind, "object": req.Object, "scope": req.Scope, "scope_detail": req.Detail, "reason": req.Reason}
 	if boundReview {
 		description["deadline_utc"] = deadline.UTC().Format(time.RFC3339Nano)
@@ -548,3 +568,39 @@ func parseRunProposalBinding(binding string) (planVersion, revision int64, ok bo
 	}
 	return planVersion, revision, true
 }
+
+// marshalBusyDecisionGrace is how much longer a decision waits each time it
+// falls due while the Marshal chat is still working.
+const marshalBusyDecisionGrace = time.Minute
+
+// marshalChatWorking reports whether the Marshal chat is in the middle of a
+// turn (its pane is not idle at an empty prompt).
+func (w *Workspace) marshalChatWorking(ctx context.Context) bool {
+	if marshalChatWorkingOverride != nil {
+		return marshalChatWorkingOverride()
+	}
+	pane := w.sayPane()
+	if pane == "" {
+		return false
+	}
+	// Only a pane that is really there and shows a turn running counts:
+	// one that cannot be read must not hold a decision back.
+	status, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{pane_dead}")
+	if err != nil || strings.TrimSpace(string(status)) != pane+" 0" {
+		return false
+	}
+	frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+	if err != nil {
+		return false
+	}
+	lower := strings.ToLower(string(frame))
+	for _, word := range []string{"esc to interrupt", "esc to cancel", "ctrl+c to interrupt"} {
+		if strings.Contains(lower, word) {
+			return true
+		}
+	}
+	return false
+}
+
+// marshalChatWorkingOverride replaces the pane check in tests.
+var marshalChatWorkingOverride func() bool

@@ -14,6 +14,9 @@ var infraFailureKinds = []struct {
 	kind    string
 	markers []string
 }{
+	// Checked first: a platform that cannot host the worker is not a
+	// passing network fault, and retrying or cooling providers cannot help.
+	{platformUnsupported, []string{"on this platform", "requires linux", "requires private linux", "linux supervision"}},
 	{"provider quota or rate limit", []string{"usage limit", "rate limit", "rate-limit", "quota", "hit your limit", "5-hour limit", "too many requests", "resource_exhausted", "out of credits", "insufficient credits"}},
 	{"provider sign-in or credentials", []string{"sign-in", "signin", "credential", "unauthorized", "authentication", "not logged in", "login required", "access token", "401"}},
 	{"provider cooldown or failover refusal", []string{"provider cooldown", "provider failover", "not limited by its provider", "provider execution failure"}},
@@ -41,8 +44,14 @@ func classifyInfraFailure(text string) (kind, reason string) {
 	return "worker process failure", reason
 }
 
+// platformUnsupported is the failure kind of a worker this computer cannot
+// run at all (governed workers need Linux amd64 confinement).
+const platformUnsupported = "platform cannot run this worker"
+
 func plainInfraKind(kind string) string {
 	switch kind {
+	case platformUnsupported:
+		return "platform limit"
 	case "provider quota or rate limit":
 		return "usage limit"
 	case "provider sign-in or credentials":

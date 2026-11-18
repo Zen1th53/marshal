@@ -132,3 +132,37 @@ func TestExtremeUnansweredImportReviewIsPlain(t *testing.T) {
 		t.Fatalf("import Activity: %q", activity)
 	}
 }
+
+// A decision that falls due while the Marshal is still in its turn keeps
+// waiting under the same id: re-issuing it built a queue a slow Marshal then
+// spent its turns investigating (four ids in ten minutes in the agy POC).
+func TestExtremeDecisionWaitsWhileTheMarshalWorks(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-extreme-busy-marshal", false)
+	working := true
+	marshalChatWorkingOverride = func() bool { return working }
+	t.Cleanup(func() { marshalChatWorkingOverride = nil })
+	req := permission.Request{ProposalID: "contract", Kind: "project-contract", Object: "architecture-review-fixes", Who: "Marshal", Reason: "Review"}
+	w.permissions.build.pending = map[string]*buildPendingDecision{"waiting": {request: req, deadline: time.Now().Add(-time.Second), provider: "agy"}}
+	if !w.routeBuildPermission(t.Context(), req) {
+		t.Fatal("not handled")
+	}
+	p := w.permissions.build.pending["waiting"]
+	if p == nil || !p.deadline.After(time.Now()) {
+		t.Fatalf("a decision due while the Marshal works was not kept waiting: %+v", w.permissions.build.pending)
+	}
+	events, _ := rt.Store().ListEvents(t.Context())
+	for _, e := range events {
+		if e.Type == "PERMISSION_REDELIVERY_SCHEDULED" {
+			t.Fatalf("re-issued while the Marshal was working: %+v", e.Data)
+		}
+	}
+	// Once the Marshal is idle and the deadline passes, the usual re-delivery runs.
+	working = false
+	p.deadline = time.Now().Add(-time.Second)
+	if !w.routeBuildPermission(t.Context(), req) {
+		t.Fatal("not handled")
+	}
+	if _, still := w.permissions.build.pending["waiting"]; still {
+		t.Fatal("an idle Marshal's overdue decision was kept forever")
+	}
+}
