@@ -195,6 +195,15 @@ func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
 	}
 
 	now := time.Now()
+	// `marshal agy` (or codex, claude, opencode) names who leads: asking
+	// "Who plans?" with another provider preselected contradicts the owner.
+	if named := providerWorker(w.nativeStartupProvider); named != "" {
+		if i := slices.IndexFunc(cands, func(c pickerCand) bool { return c.provider == named }); i >= 0 && !cands[i].out {
+			_ = saveDefaultProvider(root, named)
+			w.closePicker()
+			return false
+		}
+	}
 	savedIdx := slices.IndexFunc(cands, func(c pickerCand) bool { return c.provider == saved })
 	// A saved provider that is installed and not out of limit needs no picker.
 	if savedIdx >= 0 && !cands[savedIdx].out {

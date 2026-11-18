@@ -1145,6 +1145,11 @@
       "bytes": 1213
     },
     {
+      "path": "internal/app/agy_verify_route.go",
+      "sha256": "ee7c3156cc7c87a4b9919a01496122da5f35709a1d8036c1d8ae25b20c38a807",
+      "bytes": 307
+    },
+    {
       "path": "internal/app/alignment_decisions.go",
       "sha256": "9c78c664c1f144488e16569e1468fa52ed3a9f8ed19c820867086f704c9effc4",
       "bytes": 3764
@@ -4761,18 +4766,18 @@
     },
     {
       "path": "internal/chattransport/claude.go",
-      "sha256": "8f1b5559edc4b0cd792b0e24d3ce0aa7e04e13d9615864f60de21609a6feae5a",
-      "bytes": 13308
+      "sha256": "dbfc84a10d02ff57960075683dbe29d3574b6bffa4ff3a8c206b551ebf9e2e13",
+      "bytes": 13264
     },
     {
       "path": "internal/chattransport/claude_test.go",
-      "sha256": "4e884d2a66a158559b65726c75e67abd23c3bd9185ff8e2ba5411491c94a76c9",
-      "bytes": 11777
+      "sha256": "ab04c4d14d1be8665341b4c8eab641ec579d0fdeaaae25d6398482ce05aa1d70",
+      "bytes": 12071
     },
     {
       "path": "internal/chattransport/transport.go",
-      "sha256": "0a77f66ca426a5e3a86f47161886df5007846f34c64ae7736bdcc54c1df4a468",
-      "bytes": 8798
+      "sha256": "6a4e344b9a35c121850b9f03a773309d8796485e35816e3e17b5b9c611cd773c",
+      "bytes": 9103
     },
     {
       "path": "internal/cli/adapter_observe.go",
@@ -12676,8 +12681,8 @@
     },
     {
       "path": "internal/tui/board_empty.go",
-      "sha256": "bf6a625036f268a1d5088f05d51f9a7d92f4d5c61ba44378a8e7d7dbcb7ee4e2",
-      "bytes": 16930
+      "sha256": "bb44dbeda87d791382d9a935f71a56acbd3bfdee9dcc065cc78e5168ef7738b6",
+      "bytes": 17524
     },
     {
       "path": "internal/tui/board_empty_test.go",
@@ -12741,13 +12746,13 @@
     },
     {
       "path": "internal/tui/board_hints.go",
-      "sha256": "8d93f5727ed60a99ab5d4830bcb873c6c425d26273c8f4e7af95594d7f885980",
-      "bytes": 15702
+      "sha256": "10eb9513039ee5b1c8e634708a405a2c90795e9d187ebb10186f8c188777b6ce",
+      "bytes": 15738
     },
     {
       "path": "internal/tui/board_hints_test.go",
-      "sha256": "9c95749af65f9fe78c729f54ca9a8660f7cf49265ddeff22cbfd05ed6b5ef3b2",
-      "bytes": 16258
+      "sha256": "4e871137cd736ce206b5f5117b74b41a10bc0d325ceb6b8117f78af2c1d2f858",
+      "bytes": 16276
     },
     {
       "path": "internal/tui/board_inbox.go",
@@ -12793,6 +12798,11 @@
       "path": "internal/tui/board_launch_vitals_test.go",
       "sha256": "183fd7b465c3649954f0485a798ce31875546d395326000b4f39aaeecee99405",
       "bytes": 1866
+    },
+    {
+      "path": "internal/tui/board_lead_verify_test.go",
+      "sha256": "0cb2ca6849a9fe0dac832e014f2dc4f052835bc7e856e00e0121c35067962598",
+      "bytes": 707
     },
     {
       "path": "internal/tui/board_live.go",
@@ -12871,8 +12881,8 @@
     },
     {
       "path": "internal/tui/board_picker.go",
-      "sha256": "8b342d5a8752304c501d84895183666064f1f5a6d5e889440c2b853f89bf11a5",
-      "bytes": 14974
+      "sha256": "74625ba60556fd26cede1683bf2edcd9c39de6ae716d436642aec8b02f654eb3",
+      "bytes": 15386
     },
     {
       "path": "internal/tui/board_picker_test.go",
@@ -13221,8 +13231,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "a4493947fe0ae42f21a9eba1112f615ebc7b22a198636bbc447c370661d10ff5",
-      "bytes": 60736
+      "sha256": "fa740d4bca4799dc5458247d9f982323edc333ba8fe2716cbde8bad086cce142",
+      "bytes": 61211
     },
     {
       "path": "internal/tui/commands_fingerprint.go",
@@ -14181,8 +14191,8 @@
     },
     {
       "path": "internal/tui/native_chat.go",
-      "sha256": "7d62ce047a5a51c3ff0e5826e4310dcaa25b800d498e6898812d51aa32973001",
-      "bytes": 31449
+      "sha256": "0db32150338bba1a640f4ee1c1a4373097d9f39e768039d6d375e88e1f9362c2",
+      "bytes": 31343
     },
     {
       "path": "internal/tui/native_chat_broker_default.go",
@@ -14201,8 +14211,8 @@
     },
     {
       "path": "internal/tui/native_chat_test.go",
-      "sha256": "d47f8ce4786866aeecc9693d2543d698cdaf2f49b29bf1085db1d511cce1e1ee",
-      "bytes": 19549
+      "sha256": "fcd92dedfac333083092c86e9c2cd0152cfa4221d762a3d2ead89a9f05ad6a32",
+      "bytes": 19574
     },
     {
       "path": "internal/tui/native_claude.go",
