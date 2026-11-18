@@ -98,8 +98,17 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		return true
 	}
 	launch := w.proposalLaunchID()
-	// Asked before the lock: it reads the chat pane.
-	working := w.marshalChatWorking(ctx)
+	// The chat pane is read only when a decision for this request is due,
+	// and before the lock.
+	w.permissions.mu.Lock()
+	due := false
+	for _, p := range w.permissions.build.pending {
+		if p.request.Key() == req.Key() && p.answer == nil && !p.bound && !time.Now().Before(p.deadline) {
+			due = true
+		}
+	}
+	w.permissions.mu.Unlock()
+	working := due && w.marshalChatWorking(ctx)
 	w.permissions.mu.Lock()
 	for id, p := range w.permissions.build.pending {
 		if p.request.Key() != req.Key() {
@@ -574,8 +583,23 @@ func (w *Workspace) marshalChatWorking(ctx context.Context) bool {
 	if pane == "" {
 		return false
 	}
-	_, idle := w.chatIdleFrame(ctx, pane)
-	return !idle
+	// Only a pane that is really there and shows a turn running counts:
+	// one that cannot be read must not hold a decision back.
+	status, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{pane_dead}")
+	if err != nil || strings.TrimSpace(string(status)) != pane+" 0" {
+		return false
+	}
+	frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+	if err != nil {
+		return false
+	}
+	lower := strings.ToLower(string(frame))
+	for _, word := range []string{"esc to interrupt", "esc to cancel", "ctrl+c to interrupt"} {
+		if strings.Contains(lower, word) {
+			return true
+		}
+	}
+	return false
 }
 
 // marshalChatWorkingOverride replaces the pane check in tests.

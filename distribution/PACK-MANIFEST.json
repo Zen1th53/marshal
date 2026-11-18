@@ -12461,8 +12461,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "f39cc7e5905b7ae138fd66d7021cee4ed2b5f0a781bb0fb6555121cea29a4396",
-      "bytes": 23636
+      "sha256": "04bc2e0a38615c5b0bfb0fb109a21d20869a5b76abd9ea3c65d4ecc32c7daaf6",
+      "bytes": 24500
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -16721,8 +16721,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "ad70862f8eabdca8a68650f3b918638a4386495b1d344ee31977cd010118f69b",
-      "bytes": 451134
+      "sha256": "5d5bca1f8a7d0501d12cc5ece88ced4c3ddbdb00183c5c58222cda9af2edaf36",
+      "bytes": 451815
     },
     {
       "path": "tools/extreme/prq/main_default.go",
