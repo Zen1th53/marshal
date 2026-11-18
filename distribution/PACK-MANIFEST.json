@@ -14645,14 +14645,14 @@
       "bytes": 1620
     },
     {
-      "path": "internal/tui/proposal_file_linux.go",
-      "sha256": "a1330462d7d4f6f911ae75cbb16c848307012dde58f047ffb36abffea4a3dd51",
-      "bytes": 222
+      "path": "internal/tui/proposal_file_other.go",
+      "sha256": "a745bbfa828851356ca32c1969961abdeb1a9ecb4bbf92ab4645528a31165fe9",
+      "bytes": 211
     },
     {
-      "path": "internal/tui/proposal_file_other.go",
-      "sha256": "8a3a6c34696b51be37dbd0647649ae2723ea6d9cff660f1c4eaa3ba73fbb2c71",
-      "bytes": 212
+      "path": "internal/tui/proposal_file_unix.go",
+      "sha256": "a17cf8042fd11ed9daf104ef73593baf8b72b3ab2e466d86b8a5985ae5c86367",
+      "bytes": 221
     },
     {
       "path": "internal/tui/proposal_mcp_default.go",
