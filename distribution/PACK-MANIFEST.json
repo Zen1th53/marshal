@@ -4921,13 +4921,23 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "ccda5cbf1fe95ec1d2b89e7bd83785025d6849bc620250d9ba11d6bb29eed0ee",
-      "bytes": 8580
+      "sha256": "1739fa5d5a91f08f3615b3086bf6253a034ee745957a5f33f99a94f66b0816a5",
+      "bytes": 9292
     },
     {
       "path": "internal/cli/control_center_test.go",
       "sha256": "115dfdacebd41659665ef14c91a91ec39a1b7aa53c86d04d9a8c6f331fe20877",
       "bytes": 8998
+    },
+    {
+      "path": "internal/cli/control_centre_binary.go",
+      "sha256": "536077ad7a7774a07ec5905896f2e59b8f216702a1a46e132ccfc6bb197ed041",
+      "bytes": 2237
+    },
+    {
+      "path": "internal/cli/control_centre_binary_test.go",
+      "sha256": "cae2b2e90fae2f571160bc258ae7b7b5f85c3f36fa061ba95aea2cb8b642a0aa",
+      "bytes": 1457
     },
     {
       "path": "internal/cli/design_memory_parity_test.go",
@@ -16721,8 +16731,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d1e6c9d38a45dc316fd9661a89e29adf99cc6552d6fd31a329862e56a57a316c",
-      "bytes": 450982
+      "sha256": "c4fa6cccaab8c7afdd392a118ffe14287ad17a284afaacad4bbe76a70f293ad4",
+      "bytes": 451526
     },
     {
       "path": "tools/extreme/prq/main_default.go",
