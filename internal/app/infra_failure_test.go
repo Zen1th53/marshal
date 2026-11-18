@@ -16,6 +16,10 @@ func TestClassifyInfraFailureNamesKind(t *testing.T) {
 		"dial tcp 1.2.3.4:443: connection refused":                                 "transport or network",
 		"codex: error: Exceeded skills context budget":                             "harness context or tool output",
 		"run failed: one or more tasks failed":                                     "worker process failure",
+		// Seen on macOS: every governed dispatch failed this way and was
+		// reported as a network problem, retried and cooled providers down.
+		"unavailable: probe Codex version failed: worker terminal transport unavailable on this platform": platformUnsupported,
+		"socket confinement requires Linux amd64":                                                         platformUnsupported,
 	} {
 		if got, reason := classifyInfraFailure(text); got != want || reason == "" {
 			t.Errorf("%q: got %q (%q), want %q", text, got, reason, want)

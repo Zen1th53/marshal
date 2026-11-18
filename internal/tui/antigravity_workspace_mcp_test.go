@@ -107,3 +107,27 @@ func TestExcludeFromGitInALinkedWorktree(t *testing.T) {
 		t.Fatalf("exclude = %q, %v", data, err)
 	}
 }
+
+// The agy Marshal may call MARSHAL's tools without a prompt per tool; the
+// person's own --settings are never replaced.
+func TestAntigravityMarshalToolsAreAllowedForTheSession(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MARSHAL_MCP_BINARY", "/usr/bin/true")
+	dir, err := newBriefingDir(root, "antigravity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.remove()
+	args, _, err := configureAntigravityMCP(dir, root, []string{"--print", "x"}, nil, "marshal", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(args, "\x00")
+	if !strings.Contains(joined, "--settings\x00"+antigravityMarshalToolSettings) {
+		t.Fatalf("no session permission for marshal tools: %q", args)
+	}
+	own := []string{"--settings", `{"theme":"dark"}`, "--print", "x"}
+	if got := allowMarshalToolsForAntigravity(root, own); strings.Count(strings.Join(got, " "), "--settings") != 1 {
+		t.Fatalf("the person's --settings were replaced or doubled: %q", got)
+	}
+}
