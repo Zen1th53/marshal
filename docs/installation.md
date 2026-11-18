@@ -28,7 +28,14 @@ Marshal does not bundle provider binaries or manage API subscriptions; it uses t
 
 ## Recommended: Install via `install.sh`
 
-The official installer downloads the release binary, verifies its SHA-256 checksum against published release hashes, and installs it to your local binary folder. Nothing runs with `sudo` and no system directories are modified.
+The official installer downloads the release binary, verifies its SHA-256 checksum against published release hashes, installs it to your local binary folder, and then sets the machine up so `marshal` works right away:
+
+- **PATH** — if the install folder is not on your `PATH`, it adds one line to your shell's startup file (`~/.zshrc`, `~/.bashrc` or `~/.bash_profile` on macOS, fish's `conf.d`, or `~/.profile`) and tells you which file it changed.
+- **Git and tmux 3.3a+** — checked. On macOS with Homebrew a missing one is installed with `brew install` (no password). On Linux the installer asks before running the `sudo` command for your package manager; with no terminal to answer (CI, a coding agent) it prints the command instead and never runs `sudo`.
+- **Coding agents** — lists which of Claude Code, Codex, OpenCode and Antigravity it found. It never installs or signs in to them.
+- **Anonymous telemetry** — registers this installation's random ID once, so the install is counted (see [Telemetry](telemetry.md); `marshal telemetry disable` turns it off).
+
+It ends with what is left to do, if anything, and the command to start.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
@@ -42,6 +49,9 @@ You can override default settings using environment variables:
 |---|---|---|
 | `MARSHAL_INSTALL_DIR` | Destination folder for the `marshal` binary | `$HOME/.local/bin` |
 | `MARSHAL_VERSION` | Specific release tag to install (e.g. `v0.2.0`) | Latest release |
+| `MARSHAL_NO_MODIFY_PATH` | `1` leaves shell startup files alone | unset |
+| `MARSHAL_INSTALL_DEPS` | `0` only reports a missing Git or tmux, never installs it | `1` |
+| `MARSHAL_INSTALL_YES` | `1` answers yes to the installer's questions | unset |
 
 Example:
 
@@ -50,7 +60,7 @@ MARSHAL_INSTALL_DIR="/usr/local/bin" MARSHAL_VERSION="v0.2.0" \
   curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-Ensure your installation directory is included in your shell's `$PATH`:
+The installer puts the installation directory on your `PATH` for new terminals; for the terminal you installed from it prints the one line to run:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"

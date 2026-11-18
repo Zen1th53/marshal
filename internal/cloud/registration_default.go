@@ -16,7 +16,12 @@ func (c *Client) ensureRegistered(ctx context.Context, st State, force bool) (bo
 	}
 	// Serialize enrollment separately from preferences, so a background network
 	// attempt never holds up the interactive notice or preference commands.
-	ctx, cancel := context.WithTimeout(ctx, telemetryTimeout)
+	// A caller that set its own deadline (the installer's registration allows
+	// a slow first connection) keeps it; any other call is bounded here.
+	cancel := func() {}
+	if _, ok := ctx.Deadline(); !ok {
+		ctx, cancel = context.WithTimeout(ctx, telemetryTimeout)
+	}
 	defer cancel()
 	registered := false
 	key := RequestKey{Endpoint: c.endpoint, InstallationID: st.InstallationID, SessionID: "sess-1111111111111111"}

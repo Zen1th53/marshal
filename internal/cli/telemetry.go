@@ -23,9 +23,7 @@ func (c *command) startTelemetry(ctx context.Context, args []string) (context.Co
 	// A control-center launcher owns this user-visible start. Its tmux child
 	// still needs an ActiveMode for authorization, but must not report a second
 	// start for the same launch.
-	if len(args) > 1 && args[0] == "tui" && args[1] == telemetryChildFlag {
-		return ctx, noop
-	}
+	child := len(args) > 1 && args[0] == "tui" && args[1] == telemetryChildFlag
 	// Preference commands must not race an app_start against disable.
 	if len(args) > 0 && args[0] == "telemetry" {
 		return ctx, noop
@@ -38,6 +36,11 @@ func (c *command) startTelemetry(ctx context.Context, args []string) (context.Co
 	if err != nil {
 		return ctx, noop
 	}
+	if child {
+		// The child outlives the launcher once the terminal detaches, so it
+		// keeps the installation's heartbeat; the start is not reported twice.
+		return ctx, cloud.StartInstallationHeartbeat(ctx, cfg, dir, cloudClientVersion(Version), mode)
+	}
 	store := cloud.NewStore(dir)
 	if !c.json && c.isInteractiveTerminal() && store.TakeTelemetryNotice(ctx) {
 		fmt.Fprintln(c.stderr, "Anonymous telemetry is on: random ID/public key, version, OS/arch, mode and start/heartbeat times; no project content. Disable: marshal telemetry disable.")
@@ -46,12 +49,15 @@ func (c *command) startTelemetry(ctx context.Context, args []string) (context.Co
 }
 
 func (c *command) telemetry(ctx context.Context, args []string) error {
-	if len(args) != 1 || (args[0] != "status" && args[0] != "enable" && args[0] != "disable") {
-		return fmt.Errorf("usage: marshal telemetry status|disable|enable")
+	if len(args) != 1 || (args[0] != "status" && args[0] != "enable" && args[0] != "disable" && args[0] != "register") {
+		return fmt.Errorf("usage: marshal telemetry status|disable|enable|register")
 	}
 	dir, err := c.machineCloudDir()
 	if err != nil {
 		return err
+	}
+	if args[0] == "register" {
+		return c.registerTelemetry(ctx, dir)
 	}
 	store := cloud.NewStore(dir)
 	st, err := store.TelemetryPreference(ctx)
@@ -89,6 +95,33 @@ func (c *command) telemetry(ctx context.Context, args []string) error {
 	return c.print(struct {
 		Enabled bool `json:"enabled"`
 	}{cfg.Enabled() && !st.TelemetryDisabled}, detail)
+}
+
+// registerTelemetry is what the installer runs: it counts this install now,
+// before Marshal is first opened, and says what it did. A failed network
+// attempt is not an error; the next start retries it.
+func (c *command) registerTelemetry(ctx context.Context, dir string) error {
+	cfg := cloud.LoadConfig()
+	registered, err := cloud.RegisterInstallation(ctx, cfg, dir, cloudClientVersion(Version))
+	store := cloud.NewStore(dir)
+	st, prefErr := store.TelemetryPreference(ctx)
+	if prefErr == nil && !st.TelemetryDisabled && cfg.Enabled() {
+		// The installer has just told the user; the first start need not repeat it.
+		store.TakeTelemetryNotice(ctx)
+	}
+	detail := "Anonymous telemetry: enabled; this installation is registered."
+	switch {
+	case !cfg.Enabled():
+		detail = "Anonymous telemetry: off (MARSHAL_CLOUD_ENDPOINT=off; nothing is sent)."
+	case prefErr == nil && st.TelemetryDisabled:
+		detail = "Anonymous telemetry: disabled."
+	case !registered || err != nil:
+		detail = "Anonymous telemetry: enabled; registration will be retried when Marshal starts."
+	}
+	return c.print(struct {
+		Enabled    bool `json:"enabled"`
+		Registered bool `json:"registered"`
+	}{cfg.Enabled() && prefErr == nil && !st.TelemetryDisabled, registered}, detail)
 }
 
 func observeCloudAuthorization(ctx context.Context, a cloud.Authorization) {

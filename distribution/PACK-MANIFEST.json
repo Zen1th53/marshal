@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "0883955fe7892917ef979babf0bc163dd31f05818af28c637e45dae6b83706a1",
-      "bytes": 14641
+      "sha256": "206b81df88ad15e91b0d8b1fb7984cf3dbc5c4d4639fbff8fdf71857e8298072",
+      "bytes": 14172
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -506,8 +506,8 @@
     },
     {
       "path": "docs/SETUP-PROMPT.md",
-      "sha256": "634e6258b63b559ad28fefb57065dff6f8a2357b5ddf9c2624f7d5e57279d8e3",
-      "bytes": 5428
+      "sha256": "0a09c4b5dd3484aff463d3e2b897135c89edebb8bf5b673962096a922182a2d7",
+      "bytes": 4959
     },
     {
       "path": "docs/assets/marshal-tui.png",
@@ -521,8 +521,8 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "f25acdaad34a8c387a2e44bc0678cd19277e2bb990a6acf0830ca8e2a0e7c328",
-      "bytes": 3765
+      "sha256": "65535b6875629104636f315f3e4bc3bf75e2d540df02f9d98ab628f4fe768eab",
+      "bytes": 4091
     },
     {
       "path": "docs/faq.md",
@@ -546,8 +546,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "377b32fbb8811f923f0d24e3d26bfe12f985d3e52c24adb9dbaca8adeeeb3b5e",
-      "bytes": 3381
+      "sha256": "1d19d6cf3bc87308044677298c9d0b5eb1cfd79509cd4eaa46126d3e38bcc185",
+      "bytes": 4626
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -611,8 +611,8 @@
     },
     {
       "path": "docs/telemetry.md",
-      "sha256": "5dc64a4942fd9d3544748f28bcf7fb9e6367e0d9cbe49b9ddd3a0ab112d2ba0e",
-      "bytes": 4944
+      "sha256": "312a75b3fade1a81bf00870b90cf8c49983dba6b91a72d8f2be0e2bd39fee87a",
+      "bytes": 5321
     },
     {
       "path": "docs/troubleshooting.md",
@@ -661,8 +661,8 @@
     },
     {
       "path": "install.sh",
-      "sha256": "b640ae04af3ba2631b2ce0fca1943108925c7e35adae0f68eff4dc55dfd14ff6",
-      "bytes": 5305
+      "sha256": "a3767fd66d1feb99a6f7d264c52fa1880a6f2ce7aac100a94c3a7d01ec5cdc70",
+      "bytes": 11868
     },
     {
       "path": "internal/a2a/a2a_test.go",
@@ -4846,8 +4846,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "bf1e87a85a6e40a319a356144b43b421d2f15ecbed3fdb083f5bdd8e6c265297",
-      "bytes": 44880
+      "sha256": "b6c682558d7623a7b7fcee704aed192dbdc78509ac92a4370cfbe766cc793ffc",
+      "bytes": 44891
     },
     {
       "path": "internal/cli/cli_mcp_default.go",
@@ -4891,8 +4891,8 @@
     },
     {
       "path": "internal/cli/command_help.go",
-      "sha256": "df66be3b2b5c52f01602fa8d56071b028ad394b599e0ba6374d379157281fa57",
-      "bytes": 7001
+      "sha256": "70be61a8c1a09f75fcc688b1d091cd26b843abb14c27598e25dbff819cb36c84",
+      "bytes": 7020
     },
     {
       "path": "internal/cli/command_help_default.go",
@@ -4931,8 +4931,8 @@
     },
     {
       "path": "internal/cli/dispatcher_test.go",
-      "sha256": "c26405e6732a019344c46a509c94df1920861847efe2a009058494e8a89a22c0",
-      "bytes": 11973
+      "sha256": "57e6bf75408ff12cba256533e9ee79e64133f5c1dcfe915ed3a94907be0dd8eb",
+      "bytes": 11982
     },
     {
       "path": "internal/cli/egm.go",
@@ -5231,8 +5231,8 @@
     },
     {
       "path": "internal/cli/telemetry.go",
-      "sha256": "d71bad434e247321a77e21550aafd0b4877566dcd266c06c504afa5a1aa0ce04",
-      "bytes": 3207
+      "sha256": "a075ddf4f12387a25aba15e9d051e6e33c0ed4e76ea6ac9323fbedb86e021f25",
+      "bytes": 4801
     },
     {
       "path": "internal/cli/telemetry_extreme.go",
@@ -5246,8 +5246,8 @@
     },
     {
       "path": "internal/cli/telemetry_test.go",
-      "sha256": "1f780626e971e7e7bea734b034dfbd325eddbebcbf61db158b4be6914b36ab9f",
-      "bytes": 6078
+      "sha256": "aa6873c70525457a840f255fd587a1f486069094d3a03c1dd7a0da1f48973f8c",
+      "bytes": 7746
     },
     {
       "path": "internal/cli/tmux_cli_test.go",
@@ -5375,9 +5375,14 @@
       "bytes": 5711
     },
     {
+      "path": "internal/cloud/installation_register_test.go",
+      "sha256": "2cb232eba8c501824b2cebefd3bcd80cf84f131ce6d69e04677799e600508416",
+      "bytes": 4228
+    },
+    {
       "path": "internal/cloud/installation_telemetry.go",
-      "sha256": "7643128701c4e133745210dfcd5304a72a3872b7647e9966919aebcedf1e7902",
-      "bytes": 9503
+      "sha256": "ffa40cf6a743fee4e3b36ab7cb9012f2356f9b8601828a61980c2b0c49d5fbc5",
+      "bytes": 11937
     },
     {
       "path": "internal/cloud/installation_telemetry_test.go",
@@ -5401,8 +5406,8 @@
     },
     {
       "path": "internal/cloud/registration_default.go",
-      "sha256": "e4ca81c719e41bcc59d87a9d020498b76efa8766494d237b0a20740a27247a64",
-      "bytes": 2858
+      "sha256": "73bb9a48262763c15c2d37df02e9fbc19ac5f1e6dbf59a4691e4217348d3b913",
+      "bytes": 3064
     },
     {
       "path": "internal/cloud/registration_test.go",
@@ -16801,8 +16806,8 @@
     },
     {
       "path": "tools/tests/test_install_dependencies.py",
-      "sha256": "ebd5b417d1efa3b43878696879c893c1e979a01c4aa60b71eed8079c1004822a",
-      "bytes": 5034
+      "sha256": "83e2b7c749acc786fa4ca9431cc14eec1a9c71754c276840dde3cdb70941195d",
+      "bytes": 8405
     },
     {
       "path": "tools/tests/test_marshal.py",

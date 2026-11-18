@@ -31,7 +31,7 @@ func fullSweepTree() map[string]string {
 
 // Keep this independent of the help catalog: include aliases and all dispatcher branches.
 var sweepTree = map[string]string{
-	"telemetry": "status disable enable", "ultra": "request",
+	"telemetry": "status disable enable register", "ultra": "request",
 	"init": "", "doctor": "", "status": "", "agent": "register", "agents": "", "tasks": "",
 	"task": "import show claim release", "run": "", "logs": "", "cancel": "", "adapters": "", "adapter": "probe",
 	"mcp": "serve status stdio", "egm": "status install record", "a2a": "serve status", "events": "", "artifacts": "", "verify": "", "reconcile": "",

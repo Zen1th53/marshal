@@ -29,7 +29,11 @@ Normal telemetry uses registration and event requests over HTTPS. Disabling it
 sends one bounded opt-out event when the endpoint is enabled; its fields are
 listed below too.
 
-**Registration** (once per install), over HTTPS:
+**Registration** (once per install), over HTTPS. The installer sends it right
+after installing (`marshal telemetry register`), so an install is counted before
+Marshal is first opened; if that attempt fails, the next start retries it within
+seconds. Disabling telemetry or `MARSHAL_CLOUD_ENDPOINT=off` before installing
+means nothing is sent:
 
 ```json
 {
@@ -47,7 +51,8 @@ listed below too.
   private key never leaves it.
 - `client_version`, `os`, `arch` — describe the build, not who runs it.
 
-**Events** (app start, then a heartbeat every 2 minutes) —
+**Events** (app start, then a heartbeat every 2 minutes while Marshal runs,
+including while its tmux session keeps working after you detach) —
 over HTTPS, a batched array:
 
 ```json
