@@ -158,20 +158,20 @@ func configureOpenCodeMCP(dir *briefingDir, root string, env []string, role, tas
 // with the session. A file the person already has is left untouched and the
 // session falls back to the shell-tool knowledge transport.
 func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, role, taskID string) ([]string, []string, error) {
+	note := antigravityShellMCPNote
 	// Workers keep their own sealed MCP binding; only the person-facing
 	// chats get the workspace file.
-	if role == "worker" {
-		// fall through to the shell-tool transport below
-	} else if path, ok, err := writeAntigravityWorkspaceMCP(root, role, taskID); err != nil {
-		return nil, nil, err
-	} else if ok {
-		dir.workspaceMCP = path
-		if _, err := dir.add("MCP: MARSHAL's tools are attached to this Antigravity session as the MCP server named marshal (from .agents/mcp_config.json, created for this session). Call them as tools."); err != nil {
+	if role != "worker" {
+		path, created, err := writeAntigravityWorkspaceMCP(root, role, taskID)
+		if err != nil {
 			return nil, nil, err
 		}
-		return args, env, nil
+		if created {
+			dir.workspaceMCP = path
+			note = antigravityWorkspaceMCPNote
+		}
 	}
-	if _, err := dir.add("MCP availability: this Antigravity CLI has no documented per-session MCP configuration. MARSHAL did not change your global or project provider configuration. MARSHAL_KNOWLEDGE_MCP supplies a JSON argv array for the bound stdio source-query transport. Use it through the provider shell tool and keep one query session open; do not claim MCP tool results unless they were actually returned."); err != nil {
+	if _, err := dir.add(note); err != nil {
 		return nil, nil, err
 	}
 	hasDir := false
@@ -186,6 +186,11 @@ func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, 
 	updated, env, _, err := sessionmcp.ConfigureMarshal("agy", root, args, env)
 	return updated, env, err
 }
+
+const (
+	antigravityShellMCPNote     = "MCP availability: this Antigravity CLI has no documented per-session MCP configuration. MARSHAL did not change your global or project provider configuration. MARSHAL_KNOWLEDGE_MCP supplies a JSON argv array for the bound stdio source-query transport. Use it through the provider shell tool and keep one query session open; do not claim MCP tool results unless they were actually returned."
+	antigravityWorkspaceMCPNote = "MCP: MARSHAL's tools are attached to this Antigravity session as the MCP server named marshal (from .agents/mcp_config.json, created for this session only). Call them as tools; do not reach MARSHAL through shell scripts."
+)
 
 func configureMarshalMCP(provider, root string, args, env []string, dir *briefingDir, role, taskID string) ([]string, []string, *briefingDir, error) {
 	if !nativeMarshalAuthority && role == "marshal" {
