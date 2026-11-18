@@ -139,6 +139,7 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 		if err := tmux.NewSession(ctx, sessionName, root, statepath.Name, cmd); err != nil {
 			return tuiChildResult(root, fmt.Errorf("start tmux session: %w", err))
 		}
+		recordControlCentreBinary(root, exe)
 	} else {
 		// Session already exists: verify Marshal window is alive, repair/respawn if exited.
 		// The window is named exactly ("=name"): a bare name also matches
@@ -153,6 +154,7 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 			if err != nil {
 				return tuiChildResult(root, err)
 			}
+			recordControlCentreBinary(root, exe)
 		} else if dead, _ := tmux.IsPaneDead(ctx, controlCentreTarget(sessionName)); dead {
 			cmd, err = prepareTUIChild(root, cmd)
 			if err == nil {
@@ -160,6 +162,22 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 			}
 			if err != nil {
 				return tuiChildResult(root, err)
+			}
+			recordControlCentreBinary(root, exe)
+		} else if controlCentreOutdated(root, exe) {
+			// The control centre keeps running after the terminal closes, so
+			// an updated Marshal was never loaded: relaunching re-attached
+			// to the old one.
+			if c.isInteractiveTerminal() && c.confirmRestartUpdated() {
+				if cmd, err = prepareTUIChild(root, cmd); err == nil {
+					err = tmux.RespawnWindowIn(ctx, controlCentreTarget(sessionName), root, cmd)
+				}
+				if err != nil {
+					return tuiChildResult(root, err)
+				}
+				recordControlCentreBinary(root, exe)
+			} else {
+				fmt.Fprintln(c.stderr, controlCentreOutdatedNotice)
 			}
 		}
 	}
