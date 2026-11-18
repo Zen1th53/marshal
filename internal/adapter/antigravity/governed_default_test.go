@@ -12,20 +12,18 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-func TestGovernedAntigravityDefaultRefusesUnverifiedNewerAndUnqualified(t *testing.T) {
-	// In default / community edition, any unqualified version (including unverified newer)
-	// MUST be refused for governed mode.
+// The community edition never runs a governed agy (every governed invocation
+// is refused as unavailable), whatever its version. The version number is not
+// the gate: a plain version probes, only an unreadable one is refused.
+func TestGovernedAntigravityDefaultRefusesGovernedUseAtAnyVersion(t *testing.T) {
 	for _, tc := range []struct {
 		version string
-		desc    string
+		probes  bool
 	}{
-		{"1.5.0", "unverified newer"},
-		{"2.0.0", "major newer"},
-		{"1.3.2", "divergent contract"},
-		{"1.2.13", "older"},
-		{"1.2.14 arbitrary", "malformed"},
+		{"1.5.0", true}, {"2.0.0", true}, {"1.3.2", true}, {"1.2.13", true},
+		{"1.2.14 arbitrary", false},
 	} {
-		t.Run(tc.desc, func(t *testing.T) {
+		t.Run(tc.version, func(t *testing.T) {
 			runner := &mockRunner{runFn: func(_ context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
 				if len(cmd.Args) == 1 && cmd.Args[0] == "--version" {
 					return adapter.ProcessResult{Stdout: []byte(tc.version)}, nil
@@ -35,9 +33,16 @@ func TestGovernedAntigravityDefaultRefusesUnverifiedNewerAndUnqualified(t *testi
 				}
 				return adapter.ProcessResult{}, nil
 			}}
-			client := antigravity.NewGovernedProbe("agy", runner)
-			if _, err := client.Probe(t.Context()); !errors.Is(err, model.ErrUnavailable) {
-				t.Fatalf("default edition admitted unqualified governed version %s: %v", tc.version, err)
+			_, err := antigravity.NewGovernedProbe("agy", runner).Probe(t.Context())
+			if tc.probes && err != nil {
+				t.Fatalf("version %s refused for its number: %v", tc.version, err)
+			}
+			if !tc.probes && !errors.Is(err, model.ErrUnavailable) {
+				t.Fatalf("unreadable version %q admitted: %v", tc.version, err)
+			}
+			req := adapter.Request{TaskID: "T", Title: "t", Worktree: t.TempDir(), Model: "gemini-3.8-flash-high"}
+			if _, err := antigravity.NewGoverned("agy", runner).Run(t.Context(), req); !errors.Is(err, model.ErrUnavailable) {
+				t.Fatalf("community edition ran a governed agy at %s: %v", tc.version, err)
 			}
 		})
 	}
