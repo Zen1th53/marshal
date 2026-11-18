@@ -12331,8 +12331,8 @@
     },
     {
       "path": "internal/tui/antigravity_workspace_mcp_test.go",
-      "sha256": "386f82dfa993238fd49ca72193a9c45215ab7b69a497ae888a1d9c710c3ee4c2",
-      "bytes": 4144
+      "sha256": "31add0a0e44bcc6ca56f4b5743c7e3fac33acb46580afd352679dd90b6ca8bab",
+      "bytes": 5090
     },
     {
       "path": "internal/tui/apply_pty_test.go",
@@ -13926,8 +13926,8 @@
     },
     {
       "path": "internal/tui/marshal_mcp.go",
-      "sha256": "22d85d0507fb0e9a2aafe02d05a3b6f89e2cce5db9c7e2fb6bf8be8944dbd77f",
-      "bytes": 17330
+      "sha256": "1c568dfac66d1160ba2ec982b2e9324ebd65bb6c6a87ca08bb018f6c581db392",
+      "bytes": 18257
     },
     {
       "path": "internal/tui/marshal_mcp_default.go",
@@ -14756,8 +14756,8 @@
     },
     {
       "path": "internal/tui/provider_dialect_test.go",
-      "sha256": "93d70b6ae9d3e1d779572e18dc525b3a2931937f9236bd0dafc8b2f7e065170b",
-      "bytes": 15901
+      "sha256": "56634d29ccc63723e4f665a19409d8d70dc200ddbc39e85ab4c4354d444c4a54",
+      "bytes": 15927
     },
     {
       "path": "internal/tui/provider_grammar.go",
