@@ -1285,6 +1285,16 @@
       "bytes": 8452
     },
     {
+      "path": "internal/app/architecture_contract_drawable.go",
+      "sha256": "39cdc9fae22ef4bc713be43078715793fe3a3ef96100d7665f72559d4a212a40",
+      "bytes": 684
+    },
+    {
+      "path": "internal/app/architecture_contract_drawable_test.go",
+      "sha256": "91554292d1a51e0bccafd5ae36f2d4f553a8ff0b8969ff9f8042cc6f75ccccaf",
+      "bytes": 1213
+    },
+    {
       "path": "internal/app/architecture_contract_requests.go",
       "sha256": "af892ae576aee5650ec3fea95a82be469cbe421350719a8fa9f499d31d71820a",
       "bytes": 4082
@@ -14661,8 +14671,8 @@
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme.go",
-      "sha256": "f979009e71df7af337ac3f6498a7e1d7c48e472f3375cf796c132f38bfa1687e",
-      "bytes": 12235
+      "sha256": "173f067916d50921bc1a9afec85ca87d139f8f383895fbaaaeec4219953de28d",
+      "bytes": 12438
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme_test.go",
