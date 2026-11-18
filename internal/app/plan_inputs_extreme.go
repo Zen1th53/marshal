@@ -79,11 +79,10 @@ func (s *PlanService) applyModelPlanInputs(ctx context.Context, built *plan.Exec
 		if provider != "codex" && provider != "claude" && provider != "opencode" && !(provider == "agy" && privateAGYEnabled()) {
 			return fmt.Errorf("%w: unsupported governed provider %s", model.ErrInvalid, provider)
 		}
-		profile, err := s.runtime.store.GetHarnessProfile(ctx, marshalHarnessName(provider))
-		if err != nil || profile == nil {
-			return fmt.Errorf("%w: verified harness profile required for %s", model.ErrInvalid, provider)
+		profile, installed, err := s.runtime.currentHarnessProfile(ctx, provider)
+		if err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
-		installed := installedCLIVersion(ctx, provider)
 		role := plan.Role(task.Role)
 		if role == "" {
 			role = plan.RoleDeveloper

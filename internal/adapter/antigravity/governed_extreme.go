@@ -49,12 +49,7 @@ func (c *Client) prepareInvocation(ctx context.Context, req adapter.Request, arg
 	if !nativeIdentifier(req.Model) || session != "" && !nativeIdentifier(session) {
 		return ctx, nil, nil, noop, fmt.Errorf("%w: invalid governed Antigravity model/session selector", model.ErrInvalid)
 	}
-	// In Extreme, an unverified newer version must not block work. It runs
-	// the same governed invocation as a qualified one (accept-edits with the
-	// bound worker MCP) and its evidence is flagged unverified_version. It
-	// used to keep read-only plan mode, so every edit and command was denied
-	// and governed work on a newer agy always ended blocked.
-	if !c.unverifiedNewer && !isQualifiedGovernedVersion(c.version) {
+	if !isQualifiedGovernedVersion(c.version) {
 		return ctx, nil, nil, noop, fmt.Errorf("%w: governed Antigravity requires a qualified probe (%s)", model.ErrUnavailable, GovernedCLIVersionRange)
 	}
 	if c.probeOnly {
@@ -74,14 +69,7 @@ func (c *Client) validateGovernedVersion(version string) error {
 	if !c.governed {
 		return nil
 	}
-	c.unverifiedNewer = false
 	if isQualifiedGovernedVersion(version) {
-		return nil
-	}
-	if isUnverifiedNewerVersion(version) {
-		// In Extreme, an unverified newer version must not block work:
-		// mark to proceed natively with evidence.
-		c.unverifiedNewer = true
 		return nil
 	}
 	observed := "UNKNOWN"

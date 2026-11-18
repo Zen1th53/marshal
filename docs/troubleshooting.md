@@ -73,7 +73,7 @@ Marshal requires an initialized, valid Git project before launching the runtime 
    ```text
    /model select claude claude-3-7-sonnet
    /model select codex o3-mini
-   /model select agy gemini-3.8-flash-high
+   /model select agy fast
    ```
 4. **Reduce concurrency**:
    If you hit aggressive API rate limits, reduce the number of concurrent worker lanes:
