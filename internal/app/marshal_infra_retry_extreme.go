@@ -107,6 +107,17 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{"Press Enter to retry the task; the kept work stays in its own branch."}, Detail: machine, Code: marshal.CodeFailedAttemptRecovery, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
 		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
+	} else if kind == platformUnsupported {
+		// Every provider fails the same way here, so neither a retry nor a
+		// provider cooldown can help: stop at once and say why.
+		t.State = marshal.Escalated
+		machine := fmt.Sprintf("%s: %s", infraRetryEscalation, reason)
+		t.EscalationReason = machine
+		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
+		plain := fmt.Sprintf("This computer cannot run %s workers (%s). Governed workers need Linux on amd64; run Marshal there to execute this plan.", t.Mode, reason)
+		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{"Run this project with Marshal on a Linux amd64 machine, then press Enter to retry."}, Detail: machine, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
+		data["reason"], data["summary"] = machine, plain
+		kindEvent = events.EventTypeMarshalEscalated
 	} else if t.InfraRetries > infraRetryLimit {
 		t.State = marshal.Escalated
 		machine := fmt.Sprintf("%s: %d attempts ended without a hand-in; last on %s (%s): %s", infraRetryEscalation, t.InfraRetries, t.Worker, kind, reason)

@@ -275,3 +275,34 @@ func TestExtremeAdmissionFailoverKeepsReworkAllowance(t *testing.T) {
 		}
 	}
 }
+
+// A worker this computer cannot host (governed workers on macOS) stops the
+// task at once with the real cause: no retry, no provider cooldown, and no
+// "network problem". On a Mac every dispatch failed this way and the run
+// ended as "waiting_on_quota" after cooling every provider.
+func TestExtremePlatformRefusalStopsWithoutRetryOrCooldown(t *testing.T) {
+	ResetProviderCooldowns()
+	t.Cleanup(ResetProviderCooldowns)
+	s, _, _ := parallelWaitFixture(t, 1)
+	run, rev, err := s.load(t.Context(), "par")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := 0
+	run.Tasks[i].State = marshal.Dispatched
+	cause := "worker failed: run failed: one or more tasks failed: unavailable: probe Codex version failed: worker terminal transport unavailable on this platform"
+	if err = s.returnInfraFailure(t.Context(), "par", run, rev, i, cause); err != nil {
+		t.Fatal(err)
+	}
+	if isProviderUnavailable("worker", s.clock()) {
+		t.Fatal("a platform refusal cooled the provider")
+	}
+	run, _, _ = s.load(t.Context(), "par")
+	task := run.Tasks[i]
+	if task.State != marshal.Escalated || task.InfraRetries != 1 {
+		t.Fatalf("task %s after %d attempts; want escalated after the first", task.State, task.InfraRetries)
+	}
+	if run.Pause == nil || !strings.Contains(run.Pause.Reason, "cannot run") || !strings.Contains(run.Pause.Reason, "Linux") || strings.Contains(run.Pause.Reason, "network") {
+		t.Fatalf("pause does not name the platform: %+v", run.Pause)
+	}
+}
