@@ -194,6 +194,9 @@ Select a task and press `Enter` to inspect it; press `o` in the inspector to ope
 
 - Linux or macOS (amd64 or Apple Silicon/arm64). On Windows, use WSL2: run
   the installer inside your WSL2 Linux distribution.
+- Governed workers (sandboxed, socket-confined) run on **Linux amd64** only.
+  On macOS and Linux arm64 Marshal plans, reviews and shows the architecture,
+  and says plainly that it cannot run the governed workers there.
 - Git and tmux 3.3a or newer
 - At least one provider CLI, installed and signed in:
   `claude` (Claude Code), `codex` (OpenAI Codex), `opencode` (OpenCode) or
