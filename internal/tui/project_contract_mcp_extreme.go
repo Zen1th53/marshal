@@ -71,6 +71,10 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := redactProjectContractSubmission(&sub); err != nil {
 			return nil, err
 		}
+		// Refuse now, with the reason, what the owner could not open later.
+		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
 		p, _, err := w.store.AdmitMCPProjectContract(ctx, store.MCPProposal{ID: occurrenceMCP(l.id, args.SubmissionID), Launch: l.id, Owner: l.owner, Provider: l.provider, Submission: args.SubmissionID}, sub)
 		if err != nil {
 			return nil, explainProjectContractSubmission(sub, err)
