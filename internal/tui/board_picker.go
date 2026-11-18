@@ -48,6 +48,9 @@ type pickerCand struct {
 	// more): the limit may have reset since, so it is shown with "may be out
 	// of date" and can still be chosen rather than blocking the provider.
 	dated bool
+	// offer is, for a provider that reports model families instead of
+	// figures (agy), the short family summary shown in place of a figure.
+	offer string
 }
 
 // pickerView is a frame's copy of the picker, read under the lock once and
@@ -152,6 +155,11 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 		if q, ok := quotas[p]; ok {
 			left, known, reset := providerLeft(q)
 			cands[i].left, cands[i].known, cands[i].until = left, known, reset
+			if len(q.Offer) > 0 {
+				cands[i].offer, _, _ = offerText(q)
+				// Every family spent: nothing can run on it now.
+				cands[i].out = q.OfferedNone()
+			}
 			// The same age mark vitals shows for this reading, so the
 			// picker and vitals never look different for it.
 			if known {
@@ -425,6 +433,8 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 				figure += " until " + c.until.In(v.now.Location()).Format("15:04")
 			}
 			colour = "failed"
+		case !c.known && c.offer != "":
+			figure = c.offer
 		case !c.known:
 			figure = limitUnknown
 		default:

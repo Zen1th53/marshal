@@ -72,7 +72,7 @@ func (w *Workspace) readUsage(now time.Time) []usage.Quota {
 	if err != nil {
 		dir = ""
 	}
-	src := usage.Sources{CodexDir: dir, ClaudeFile: usage.ClaudeConfigFile()}
+	src := usage.Sources{CodexDir: dir, ClaudeFile: usage.ClaudeConfigFile(), ClaudeEvents: usage.ClaudeRateLimitCache(), AgySeenGroups: usage.AgySeenGroupsFile()}
 	return usage.Read(now, src)
 }
 

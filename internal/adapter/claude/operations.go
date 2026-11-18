@@ -6,6 +6,7 @@ package claude
 // authentication state. It is deliberately not a general CLI passthrough.
 
 import (
+	"github.com/Zen1th53/marshal/internal/usage"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -194,6 +195,7 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 	activeModel := ""
 	for _, line := range strings.Split(string(result.Stdout), "\n") {
 		line = strings.TrimSpace(line)
+		usage.RecordClaudeRateLimit([]byte(line))
 		if line == "" || !strings.HasPrefix(line, "{") {
 			continue
 		}
