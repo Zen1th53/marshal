@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/usage"
 	"strings"
 	"sync"
 )
@@ -344,6 +345,8 @@ func (p *claudeParser) parse(line []byte) []Event {
 	if len(line) == 0 || line[0] != '{' {
 		return nil
 	}
+	// Claude reports its limits only in this stream now; keep the latest.
+	usage.RecordClaudeRateLimit(line)
 	var l claudeLine
 	if json.Unmarshal(line, &l) != nil {
 		return nil

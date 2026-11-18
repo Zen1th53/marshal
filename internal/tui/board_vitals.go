@@ -107,6 +107,13 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 		case !v.vitals.read:
 			full := mk + v.fg("dim", p+" "+ellip)
 			left = append(left, vitalsLeft{"limit:" + p, full, full, mk + v.fg("dim", ellip), true, 0})
+		case !known && found && len(q.Offer) > 0:
+			text, short, colour := offerText(q)
+			if colour == "" {
+				colour = "dim"
+			}
+			full := mk + v.fg("dim", p) + " " + v.fg(colour, text)
+			left = append(left, vitalsLeft{"limit:" + p, full, full, mk + v.fg(colour, short), false, 0})
 		case !known:
 			full := mk + v.fg("dim", p+" "+limitUnknown)
 			// Every provider whose limit cannot be read says so the same

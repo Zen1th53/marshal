@@ -44,6 +44,10 @@ type Quota struct {
 	// figures came from (Codex: the rollout's newest turn_context), as the
 	// provider's own bottom line shows it; "" when it named none.
 	Model string
+	// Offer is, for a provider that reports no figures but drops a model
+	// family while its quota is spent (agy), every family this account has
+	// been offered and whether it is offered now.
+	Offer []ModelGroup
 }
 
 // Binding is the known window closest to its limit: the highest used
@@ -78,14 +82,36 @@ var Providers = []string{"codex", "claude", "opencode", "agy"}
 type Sources struct {
 	CodexDir   string // Codex's sessions directory
 	ClaudeFile string // Claude Code's .claude.json
+	// ClaudeEvents is MARSHAL's record of Claude's last rate_limit_event
+	// (ClaudeRateLimitCache), read when .claude.json has no figures.
+	ClaudeEvents string
+	// AgySeenGroups enables reading agy's model offer (it runs `agy models`
+	// at most every two minutes) and keeps the families seen
+	// (AgySeenGroupsFile).
+	AgySeenGroups string
 }
 
 // Read returns each provider's quota at now, in the order of Providers.
 func Read(now time.Time, src Sources) []Quota {
+	agy := Quota{Provider: "agy", Reason: NotExposed}
+	if src.AgySeenGroups != "" {
+		agy = readAgy(now, src.AgySeenGroups)
+	}
 	return []Quota{
 		readCodex(now, src.CodexDir),
-		readClaude(now, src.ClaudeFile),
+		readClaudeWithEvents(now, src.ClaudeFile, src.ClaudeEvents),
 		{Provider: "opencode", Reason: NotExposed},
-		{Provider: "agy", Reason: NotExposed},
+		agy,
 	}
+}
+
+// readClaudeWithEvents is Claude's quota from .claude.json, or from the last
+// rate_limit_event MARSHAL recorded when that is newer or the file has none.
+func readClaudeWithEvents(now time.Time, file, events string) Quota {
+	q := readClaude(now, file)
+	ev, ok := readClaudeEvents(now, events)
+	if ok && (!q.Known || ev.AsOf.After(q.AsOf)) {
+		return ev
+	}
+	return q
 }

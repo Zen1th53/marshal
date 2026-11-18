@@ -103,3 +103,26 @@ func limitReason(q usage.Quota) string {
 		return p + "'s usage report could not be read"
 	}
 }
+
+// offerText describes a provider that reports which model families it can
+// run instead of figures (agy): "ok: Flash, Claude · out: Gemini 4",
+// a short "2/3 ok", and the colour of the worst state.
+func offerText(q usage.Quota) (full, short, colour string) {
+	var ok, out []string
+	for _, g := range q.Offer {
+		if g.Offered {
+			ok = append(ok, g.Name)
+		} else {
+			out = append(out, g.Name)
+		}
+	}
+	switch {
+	case len(ok) == 0:
+		full, colour = "out: "+strings.Join(out, ", "), "failed"
+	case len(out) == 0:
+		full, colour = "ok: "+strings.Join(ok, ", "), ""
+	default:
+		full, colour = "ok: "+strings.Join(ok, ", ")+" · out: "+strings.Join(out, ", "), "waiting"
+	}
+	return full, fmt.Sprintf("%d/%d ok", len(ok), len(q.Offer)), colour
+}

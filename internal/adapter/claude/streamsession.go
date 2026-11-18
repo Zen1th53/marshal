@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/usage"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -413,6 +414,8 @@ func (c *streamConnection) waitTurn(ctx context.Context, expected StreamTurn, wo
 		if line == "" || !strings.HasPrefix(line, "{") {
 			continue
 		}
+		// Claude reports its limits only in this stream now; keep the latest.
+		usage.RecordClaudeRateLimit([]byte(line))
 		var event streamEvent
 		if json.Unmarshal([]byte(line), &event) != nil {
 			continue
