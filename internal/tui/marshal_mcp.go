@@ -162,12 +162,15 @@ func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, 
 	// Workers keep their own sealed MCP binding; only the person-facing
 	// chats get the workspace file.
 	if role != "worker" {
-		path, created, err := writeAntigravityWorkspaceMCP(root, role, taskID)
+		path, created, ours, err := writeAntigravityWorkspaceMCP(root)
 		if err != nil {
 			return nil, nil, err
 		}
 		if created {
 			dir.workspaceMCP = path
+		}
+		if ours {
+			dir.workspaceMCPAttached = true
 			note = antigravityWorkspaceMCPNote
 		}
 	}
@@ -404,46 +407,61 @@ func bindMarshalMCPChildEnvironment(provider, root string, args, env []string, d
 	return args, env, nil
 }
 
-// writeAntigravityWorkspaceMCP creates root/.agents/mcp_config.json naming
-// MARSHAL's stdio server, unless the project already has that file. It
-// reports whether it created the file.
-func writeAntigravityWorkspaceMCP(root, role, taskID string) (string, bool, error) {
-	path := filepath.Join(root, ".agents", "mcp_config.json")
-	if _, err := os.Lstat(path); err == nil || !os.IsNotExist(err) {
-		return "", false, nil
-	}
+// antigravityWorkspaceMCPConfig is the .agents/mcp_config.json MARSHAL
+// writes: only its own stdio server in the Marshal role, no secret (the
+// session's lease travels in agy's environment). Every MARSHAL session in
+// the project writes the same bytes, so one finding the file can tell it is
+// MARSHAL's.
+func antigravityWorkspaceMCPConfig(root string) ([]byte, error) {
 	binary := marshalMCPBinary()
 	if resolved, err := filepath.EvalSymlinks(binary); err == nil {
 		binary = resolved
 	}
 	data, err := json.MarshalIndent(map[string]any{"mcpServers": map[string]any{"marshal": map[string]any{
 		"command": binary,
-		"args":    marshalMCPServerArgs(root, role, taskID),
+		"args":    marshalMCPServerArgs(root, "marshal", ""),
 	}}}, "", "  ")
+	return append(data, '\n'), err
+}
+
+// writeAntigravityWorkspaceMCP creates root/.agents/mcp_config.json naming
+// MARSHAL's server unless the project already has that file. It reports
+// whether it created the file, and whether the file there now is MARSHAL's
+// (created now, or by another MARSHAL session); a file the person owns is
+// neither and is never touched.
+func writeAntigravityWorkspaceMCP(root string) (path string, created, ours bool, err error) {
+	path = filepath.Join(root, ".agents", "mcp_config.json")
+	data, err := antigravityWorkspaceMCPConfig(root)
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
+	}
+	if existing, readErr := os.ReadFile(path); readErr == nil {
+		return path, false, string(existing) == string(data), nil
+	} else if !os.IsNotExist(readErr) {
+		return path, false, false, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
-			return "", false, nil
+			existing, _ := os.ReadFile(path)
+			return path, false, string(existing) == string(data), nil
 		}
-		return "", false, err
+		return "", false, false, err
 	}
-	if _, err = f.Write(append(data, '\n')); err == nil {
+	if _, err = f.Write(data); err == nil {
 		err = f.Close()
 	} else {
 		_ = f.Close()
 	}
 	if err != nil {
 		_ = os.Remove(path)
-		return "", false, err
+		return "", false, false, err
 	}
 	excludeFromGit(root, ".agents/mcp_config.json")
-	return path, true, nil
+	return path, true, true, nil
 }
 
 // excludeFromGit adds pattern to the repository's local exclude file, so a

@@ -12280,9 +12280,14 @@
       "bytes": 5924
     },
     {
+      "path": "internal/tui/antigravity_lease_extreme_test.go",
+      "sha256": "db02846daf55bf6e70647a7f3a0769e21a337bbbc6c4e8ec6afb2336d9cda277",
+      "bytes": 2843
+    },
+    {
       "path": "internal/tui/antigravity_workspace_mcp_test.go",
-      "sha256": "391825deab6583fbf08f5c70db61a4bd0221ab914cb2eab0a646f9cb28efe0aa",
-      "bytes": 4026
+      "sha256": "386f82dfa993238fd49ca72193a9c45215ab7b69a497ae888a1d9c710c3ee4c2",
+      "bytes": 4144
     },
     {
       "path": "internal/tui/apply_pty_test.go",
@@ -13036,8 +13041,8 @@
     },
     {
       "path": "internal/tui/briefing_dir.go",
-      "sha256": "7f11e015a405f492e45a9f545f51b3b86853841834b0820a6d0617d4a1532199",
-      "bytes": 4416
+      "sha256": "7c3d0be6ebb9473e337fc3dca419a0b788ee7a97c37a66664cf25b23721cdb7e",
+      "bytes": 4600
     },
     {
       "path": "internal/tui/briefing_dir_test.go",
@@ -13876,8 +13881,8 @@
     },
     {
       "path": "internal/tui/marshal_mcp.go",
-      "sha256": "c42ff4c3e9422322a5572d1d2fa879a0bf81e1c685a3f17c1bc55d62ac40da3b",
-      "bytes": 16478
+      "sha256": "22d85d0507fb0e9a2aafe02d05a3b6f89e2cce5db9c7e2fb6bf8be8944dbd77f",
+      "bytes": 17330
     },
     {
       "path": "internal/tui/marshal_mcp_default.go",
@@ -14666,8 +14671,8 @@
     },
     {
       "path": "internal/tui/proposal_mcp_extreme.go",
-      "sha256": "286cc9d84bfe963cdc13ba6898509b7f4599960a0b63d92840d828a4f4c7116e",
-      "bytes": 20161
+      "sha256": "8b8f5a2d50b3105ac669f7ccd1c98e6e12039b7dd938c16f924d5f893d186f37",
+      "bytes": 20163
     },
     {
       "path": "internal/tui/proposal_mcp_extreme_test.go",
@@ -16681,8 +16686,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "8fbcf73926e5cd4ffc6bb14b9fe4994d678c603187284db45ef73e6264e42946",
-      "bytes": 449857
+      "sha256": "c3ba73841859cdfef57389f63192f6b35f1b2277717eb27860d173d6ea7f2160",
+      "bytes": 449849
     },
     {
       "path": "tools/extreme/prq/main_default.go",

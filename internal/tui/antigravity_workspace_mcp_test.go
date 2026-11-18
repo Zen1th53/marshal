@@ -17,9 +17,9 @@ func TestAntigravityWorkspaceMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MARSHAL_MCP_BINARY", "/usr/bin/true")
-	path, ok, err := writeAntigravityWorkspaceMCP(root, "marshal", "")
-	if err != nil || !ok {
-		t.Fatalf("created = %v, %v", ok, err)
+	path, ok, ours, err := writeAntigravityWorkspaceMCP(root)
+	if err != nil || !ok || !ours {
+		t.Fatalf("created = %v, ours = %v, %v", ok, ours, err)
 	}
 	data, _ := os.ReadFile(path)
 	var cfg struct {
@@ -45,9 +45,10 @@ func TestAntigravityWorkspaceMCP(t *testing.T) {
 	if !strings.Contains(string(exclude), "/.agents/mcp_config.json") {
 		t.Fatalf("not excluded from git: %q", exclude)
 	}
-	// A second session finds the file and leaves it (it may be the person's).
-	if _, again, err := writeAntigravityWorkspaceMCP(root, "marshal", ""); err != nil || again {
-		t.Fatalf("second write = %v, %v", again, err)
+	// A second MARSHAL session finds the file, recognises it as MARSHAL's
+	// (and is attached through it) but does not take it over.
+	if _, again, ours, err := writeAntigravityWorkspaceMCP(root); err != nil || again || !ours {
+		t.Fatalf("second session: created %v, ours %v, %v", again, ours, err)
 	}
 	excludeFromGit(root, ".agents/mcp_config.json")
 	exclude2, _ := os.ReadFile(filepath.Join(root, ".git", "info", "exclude"))
@@ -64,8 +65,8 @@ func TestAntigravityWorkspaceMCP(t *testing.T) {
 	mine := filepath.Join(own, ".agents", "mcp_config.json")
 	_ = os.MkdirAll(filepath.Dir(mine), 0o755)
 	_ = os.WriteFile(mine, []byte(`{"mcpServers":{"mine":{"command":"x"}}}`), 0o644)
-	if _, ok, err := writeAntigravityWorkspaceMCP(own, "marshal", ""); err != nil || ok {
-		t.Fatalf("overwrote the person's file: %v %v", ok, err)
+	if _, ok, ours, err := writeAntigravityWorkspaceMCP(own); err != nil || ok || ours {
+		t.Fatalf("took over the person's file: created %v ours %v %v", ok, ours, err)
 	}
 	if data, _ := os.ReadFile(mine); !strings.Contains(string(data), `"mine"`) {
 		t.Fatalf("the person's file changed: %s", data)

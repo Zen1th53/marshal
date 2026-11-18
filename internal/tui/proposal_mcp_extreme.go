@@ -603,4 +603,4 @@ func (w *Workspace) revokeNativeProposalMCP(dir *briefingDir) {
 
 // antigravityWorkspaceMCP reports whether this agy session has MARSHAL's MCP
 // server attached through the workspace file it created.
-func antigravityWorkspaceMCPReady(dir *briefingDir) bool { return dir != nil && dir.workspaceMCP != "" }
+func antigravityWorkspaceMCPReady(dir *briefingDir) bool { return dir != nil && dir.workspaceMCPAttached }
