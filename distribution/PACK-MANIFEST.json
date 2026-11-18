@@ -741,8 +741,8 @@
     },
     {
       "path": "internal/adapter/antigravity/governed_default_test.go",
-      "sha256": "8971d27d70e40ae7a26377fc20b658d5780b249a9f82944f569f780c21f883a3",
-      "bytes": 3545
+      "sha256": "365ba1b1af1b0448ff159f295606d377631785dfd8f81b8fe59e3881f5a15ad1",
+      "bytes": 3974
     },
     {
       "path": "internal/adapter/antigravity/governed_extreme.go",
