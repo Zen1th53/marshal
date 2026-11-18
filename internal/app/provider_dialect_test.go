@@ -95,7 +95,9 @@ func TestProviderDialectProbeBoundedAndCancelled(t *testing.T) {
 	}
 	start := time.Now()
 	d := ObserveProviderDialect(context.Background(), "codex")
-	if d.Version != "UNKNOWN" || d.QualifiedVersion != "" || time.Since(start) > 4*time.Second {
+	// The bound allows a cold node-based CLI (Claude Code takes over 3 s) to
+	// answer, and still stops a CLI that hangs.
+	if d.Version != "UNKNOWN" || d.QualifiedVersion != "" || time.Since(start) > 7*time.Second {
 		t.Fatalf("unbounded/qualified failed probe: %+v %v", d, time.Since(start))
 	}
 	ctx, cancel := context.WithCancel(context.Background())

@@ -54,8 +54,10 @@ func TestAGYUnsupportedMetadataRefusesBeforeCredentialDecision(t *testing.T) {
 			if requests != 0 {
 				t.Fatalf("unsupported CLI requested account access before version rejection: requests=%d err=%v", requests, err)
 			}
-			if err == nil || !strings.Contains(err.Error(), "1.3.2") || !strings.Contains(err.Error(), "1.2.14") {
-				t.Fatalf("missing finite observed/qualified mismatch: %v", err)
+			// No version is refused for its number; this CLI fails the probe
+			// itself, and still never reaches account access.
+			if err == nil || !strings.Contains(err.Error(), "exit code 87") {
+				t.Fatalf("a CLI that fails the probe was accepted: %v", err)
 			}
 			if profile.ProbeEvidenceID != "" || len(r.egressRuns) != 0 || len(r.honeypots) != 0 {
 				t.Fatal("unsupported metadata acquired execution state")
@@ -101,7 +103,7 @@ func TestAGYMetadataUsesHostRunnerWithoutBwrap(t *testing.T) {
 	write := filepath.Join(host, "host-runner")
 	script := fmt.Sprintf("#!/bin/sh\nprintf 'host' > %q\nprintf '1.3.2\\n'\n", write)
 	agyPreflightScriptFixture(t, script)
-	if err := privateHarnessProbePreflight(t.Context(), "agy"); err == nil || !strings.Contains(err.Error(), "observed=1.3.2") {
+	if err := privateHarnessProbePreflight(t.Context(), "agy"); err == nil || !strings.Contains(err.Error(), "lacks required flag") {
 		t.Fatalf("host metadata version check not enforced: %v", err)
 	}
 	if data, err := os.ReadFile(write); err != nil || string(data) != "host" {

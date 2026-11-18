@@ -54,7 +54,8 @@ Type `/` on the Board to open the command prompt:
 ```text
 /harness verify codex
 /harness verify claude claude-3-7-sonnet
-/harness verify-native agy
+/harness verify-native agy        # auto: the best model agy offers
+/harness verify-native agy fast
 /provider status
 ```
 
@@ -86,11 +87,40 @@ Marshal allows you to configure which models each provider uses:
 # Select a model for a specific harness
 /model select claude claude-3-7-sonnet
 /model select codex o3-mini
-/model select agy gemini-3.8-flash-high
+/model select agy best
 
 # List available models
 /models
 ```
+
+### Antigravity: name a need, not a model
+
+agy is never tied to one model. Give Marshal a selector and it picks the
+exact model from what your signed-in agy offers right now (`agy models`), so a
+new model is used as soon as your plan has it, with no Marshal update:
+
+| Selector | Picks | With Google AI Ultra today |
+|---|---|---|
+| `auto` (or nothing) | the Orchestrator (a planner model plans, Hydrogen executes), else `best` | `gemini-pro-orchestrator` (Carbon plans) |
+| `best`, `plan` | newest generation, strongest family, high effort | `gemini-4-carbon-high` |
+| `fast` | newest fast family (Hydrogen, then Flash), high effort | `gemini-4-hydrogen-high` |
+| `carbon`, `argon`, `hydrogen`, `flash`, `orchestrator` | that family's newest model | e.g. `gemini-4-argon-high` |
+| `carbon-low`, `hydrogen-xhigh`, … | that family at that effort | `gemini-4-hydrogen-xhigh` |
+| an exact ID | that model, if agy offers it | `claude-opus-4-6-thinking` |
+
+On a Pro plan `auto` takes the Argon Orchestrator; with only Flash it takes
+Flash. Verification probes the exact model the selector resolved to, and the
+evidence records that model.
+
+## Provider versions
+
+Marshal does not keep a list of allowed provider versions. A CLI is used at
+whatever version is installed once its probe passes: Marshal runs it, checks
+its output, and records the result. When a provider updates itself, Marshal
+notices the new version and re-runs the probe on its own, before planning, at
+dispatch and in the background, instead of asking you to run
+`/harness verify` again. Which commands a provider offers (`/agy mcp add`,
+`/claude plugin install`, …) is read from that CLI's own `--help`.
 
 ---
 

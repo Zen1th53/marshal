@@ -71,13 +71,9 @@ func (r *Runtime) PrepareNativeMarshalDraft(ctx context.Context, sessionID strin
 			continue
 		}
 		seen[provider] = true
-		profile, e := r.store.GetHarnessProfile(ctx, marshalHarnessName(provider))
-		if e != nil || profile == nil || strings.TrimSpace(profile.DefaultModel) == "" || strings.TrimSpace(profile.ProbeEvidenceID) == "" {
-			return MarshalDraft{}, fmt.Errorf("%w: verified harness profile required for %s; run /harness verify %s <model>", model.ErrInvalid, provider, provider)
-		}
-		installed := installedCLIVersion(ctx, provider)
-		if installed == "" || harness.AssessGovernance(*profile, installed, time.Now().UTC()).State != constitution.GovernanceVerified {
-			return MarshalDraft{}, fmt.Errorf("%w: current verified harness profile required for %s; run /harness verify %s <model>", model.ErrInvalid, provider, provider)
+		profile, installed, e := r.currentHarnessProfile(ctx, provider)
+		if e != nil {
+			return MarshalDraft{}, fmt.Errorf("%w: %v", model.ErrInvalid, e)
 		}
 		capacity := goalintake.UnknownCapacity(provider, true)
 		request.Candidates = append(request.Candidates, goalintake.Candidate{Provider: provider, Model: profile.DefaultModel, Capacity: capacity, Governance: constitution.GovernanceVerified})

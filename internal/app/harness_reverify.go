@@ -44,7 +44,10 @@ type harnessReverifyCandidate struct {
 // returns only verified profiles that are inside the expiry margin, not in
 // limit cooldown, not already being probed and not retried too soon after a
 // failure. A provider appears at most once.
-func harnessProfilesDueForReverify(profiles []model.HarnessProfile, states map[string]harnessReverifyState, cooling map[string]bool, now time.Time) []harnessReverifyCandidate {
+// installed maps a provider to the version its CLI reports now; a profile
+// probed on another version is due at once, so a provider updating itself
+// is re-verified without the owner and without waiting for expiry.
+func harnessProfilesDueForReverify(profiles []model.HarnessProfile, states map[string]harnessReverifyState, cooling map[string]bool, now time.Time, installed map[string]string) []harnessReverifyCandidate {
 	now = now.UTC()
 	var due []harnessReverifyCandidate
 	seen := make(map[string]bool)
@@ -61,7 +64,8 @@ func harnessProfilesDueForReverify(profiles []model.HarnessProfile, states map[s
 		}
 		// Only a profile that is still valid but close to expiry is due. An
 		// already expired profile is left for the owner, exactly as before.
-		if !now.Before(profile.ExpiresAt) || profile.ExpiresAt.Sub(now) > harnessReverifyMargin {
+		updated := installed[provider] != "" && installed[provider] != profile.InstalledVersion
+		if !updated && (!now.Before(profile.ExpiresAt) || profile.ExpiresAt.Sub(now) > harnessReverifyMargin) {
 			continue
 		}
 		if !harnessReverifyProviderSupported(provider) {
@@ -182,7 +186,14 @@ func (h *harnessReverifier) runOnce(ctx context.Context) {
 			cooling[provider] = true
 		}
 	}
-	for _, candidate := range harnessProfilesDueForReverify(profiles, h.snapshot(), cooling, now) {
+	installed := make(map[string]string)
+	for _, profile := range profiles {
+		provider := harnessReverifyProvider(profile.Harness)
+		if harnessReverifyProviderSupported(provider) {
+			installed[provider] = installedCLIVersion(ctx, provider)
+		}
+	}
+	for _, candidate := range harnessProfilesDueForReverify(profiles, h.snapshot(), cooling, now, installed) {
 		if ctx.Err() != nil {
 			return
 		}

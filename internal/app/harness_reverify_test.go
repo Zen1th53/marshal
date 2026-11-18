@@ -27,7 +27,7 @@ func TestHarnessProfileReverifyDueInsideMargin(t *testing.T) {
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	profile := harnessReverifyTestProfile("codex", "gpt-test", now.Add(-23*time.Hour), now.Add(time.Hour))
 
-	due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, nil, nil, now)
+	due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, nil, nil, now, nil)
 	if len(due) != 1 {
 		t.Fatalf("due profiles = %d, want 1", len(due))
 	}
@@ -37,7 +37,7 @@ func TestHarnessProfileReverifyDueInsideMargin(t *testing.T) {
 
 	native := harnessReverifyTestProfile("antigravity", "agy-test", now.Add(-23*time.Hour), now.Add(time.Hour))
 	native.FeatureSupport = map[string]model.FeatureStatus{"headless": model.StatusNative, "sandbox": model.StatusUnsupported}
-	due = harnessProfilesDueForReverify([]model.HarnessProfile{native}, nil, nil, now)
+	due = harnessProfilesDueForReverify([]model.HarnessProfile{native}, nil, nil, now, nil)
 	if len(due) != 1 || due[0].Provider != "agy" || due[0].Model != "agy-test" || !due[0].Native {
 		t.Fatalf("native reverify candidate = %+v", due)
 	}
@@ -59,7 +59,7 @@ func TestHarnessProfileReverifyNotDueOutsideMargin(t *testing.T) {
 		profile model.HarnessProfile
 	}{"never verified", neverVerified})
 	for _, tc := range cases {
-		if due := harnessProfilesDueForReverify([]model.HarnessProfile{tc.profile}, nil, nil, now); len(due) != 0 {
+		if due := harnessProfilesDueForReverify([]model.HarnessProfile{tc.profile}, nil, nil, now, nil); len(due) != 0 {
 			t.Fatalf("%s profile was due: %+v", tc.name, due)
 		}
 	}
@@ -69,18 +69,18 @@ func TestHarnessProfileReverifyNotDueDuringCooldownOrAfterFailure(t *testing.T) 
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 	profile := harnessReverifyTestProfile("codex", "gpt-test", now.Add(-23*time.Hour), now.Add(time.Hour))
 
-	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, nil, map[string]bool{"codex": true}, now); len(due) != 0 {
+	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, nil, map[string]bool{"codex": true}, now, nil); len(due) != 0 {
 		t.Fatalf("cooling provider was due: %+v", due)
 	}
-	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, map[string]harnessReverifyState{"codex": {InFlight: true}}, nil, now); len(due) != 0 {
+	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, map[string]harnessReverifyState{"codex": {InFlight: true}}, nil, now, nil); len(due) != 0 {
 		t.Fatalf("in-flight provider was due: %+v", due)
 	}
 	failed := map[string]harnessReverifyState{"codex": {LastFailed: true, LastAttempt: now.Add(-5 * time.Minute)}}
-	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, failed, nil, now); len(due) != 0 {
+	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, failed, nil, now, nil); len(due) != 0 {
 		t.Fatalf("provider retried too soon after failure: %+v", due)
 	}
 	retry := map[string]harnessReverifyState{"codex": {LastFailed: true, LastAttempt: now.Add(-harnessReverifyRetryInterval - time.Minute)}}
-	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, retry, nil, now); len(due) != 1 {
+	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, retry, nil, now, nil); len(due) != 1 {
 		t.Fatalf("provider not retried after retry interval: %+v", due)
 	}
 }
@@ -196,5 +196,21 @@ func TestHarnessProfileReverifySuccessRenewsEvidence(t *testing.T) {
 	}
 	if calls != 1 || after.ProbeEvidenceID != "PROBE-renewed" || !after.ExpiresAt.Equal(now.Add(24*time.Hour)) || !strings.Contains(activity, "PROBE-renewed") {
 		t.Fatalf("renewal: calls=%d profile=%+v activity=%q", calls, after, activity)
+	}
+}
+
+// A provider that updated itself is re-verified at once, not at expiry.
+func TestHarnessReverifyIsDueAfterAProviderUpdate(t *testing.T) {
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	profile := model.HarnessProfile{Harness: "codex", InstalledVersion: "codex-cli 0.159.2", DefaultModel: "gpt-5.5", ProbeEvidenceID: "ev-1", ProbedAt: now.Add(-time.Hour), ExpiresAt: now.Add(20 * time.Hour)}
+	if err := profile.Validate(); err != nil {
+		t.Skipf("fixture profile is not valid here: %v", err)
+	}
+	if due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, nil, nil, now, map[string]string{"codex": "codex-cli 0.159.2"}); len(due) != 0 {
+		t.Fatalf("an unchanged, fresh profile was due: %v", due)
+	}
+	due := harnessProfilesDueForReverify([]model.HarnessProfile{profile}, nil, nil, now, map[string]string{"codex": "codex-cli 0.169.0"})
+	if len(due) != 1 || due[0].Provider != "codex" || due[0].Model != "gpt-5.5" {
+		t.Fatalf("an updated provider was not due: %v", due)
 	}
 }

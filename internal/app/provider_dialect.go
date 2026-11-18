@@ -335,7 +335,9 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 		return cached.dialect
 	}
 	providerDialectCache.Unlock()
-	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	// A cold start of some CLIs (Claude Code, node-based ones) takes several
+	// seconds; a short bound reported their version as UNKNOWN.
+	probeCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(probeCtx, path, "--version")
 	cmd.WaitDelay = 100 * time.Millisecond
@@ -343,10 +345,13 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 	cmd.Stdout, cmd.Stderr = output, output
 	if err := cmd.Run(); err != nil || output.truncated {
 		d.Binary = path
-		return d
+		return d // a CLI that does not answer --version would not answer --help
 	}
 	d = QualifiedProviderDialect(provider, strings.TrimSpace(string(output.data)))
 	d.Binary = path
+	// The grammar comes from the installed CLI's own help, whatever version
+	// that is.
+	learnGrammarFromHelp(ctx, path, &d)
 	// Re-check the executable identity after the probe; never cache a result
 	// across replacement during discovery. The bound avoids process-lifetime
 	// growth when many isolated projects use different provider doubles.
