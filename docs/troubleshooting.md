@@ -127,3 +127,25 @@ marshal logs <TASK-ID>
 # Check current project status and active tasks
 marshal status
 ```
+
+## Governed Workers on macOS or Linux arm64
+
+### Symptom
+
+The run stops with **"This computer cannot run governed workers (…). Governed workers need Linux on amd64."**
+
+### Why
+
+Governed workers run inside Linux confinement (bubblewrap and a socket supervisor built for amd64). macOS and Linux arm64 have neither, so every worker would fail the same way. Earlier versions reported this as a network problem, retried and cooled the providers down; it is now named at once.
+
+### How to Fix It
+
+Open the project with Marshal on a Linux amd64 machine (a server, a cloud VM, or an x86_64 VM). Planning, requirements and the architecture review work on any platform.
+
+## Marshal Was Updated but Still Behaves the Old Way
+
+The control centre keeps running in its own tmux session after you close the terminal, so an update is not loaded until it restarts. When you start `marshal` after an update it now asks **"Restart it now to load the update? [Y/n]"**. Without a terminal it prints how to do it: type `/quit` in the control centre, then run `marshal` again.
+
+## The Architecture Was Refused When the Marshal Sent It
+
+`marshal_project_contract_submit` now refuses an architecture the browser could not draw, with the rule. The most common cause is a package path used as a component ID: IDs are short identifiers (letters, digits, `.`, `_`, `-`; no `/`); put the package path in the component's `paths` instead.

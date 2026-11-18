@@ -131,3 +131,27 @@ If an AI provider encounters rate limits, billing caps, or network errors during
 2. The affected provider lane is marked as limited.
 3. If an alternate verified provider is available, Marshal reassigns pending tasks according to the approved plan.
 4. If no eligible provider remains, the run pauses with an orange **`NEEDS YOU`** alert on the Board, allowing you to re-verify, select a different model, or resolve the quota before resuming.
+
+## Antigravity as the Marshal
+
+Started with `marshal agy`, Antigravity leads the project with the same tools
+as Codex and Claude. agy has no per-session MCP setting, so when the project
+has no `.agents/mcp_config.json` of its own Marshal writes one naming only its
+own server (no secret: the session's token and lease reach the server through
+agy's environment), keeps it out of git and removes it with the session; a
+file you own is never touched. The session also starts with
+`--settings '{"permissions":{"allow":["mcp(marshal/*)"]}}'`, applied to that
+session only, so agy does not ask you to approve each Marshal tool.
+
+## Provider Limits on the Board
+
+The top row shows what each provider reports, never a guess:
+
+- **Codex** — % left and reset time from its last session, marked with its age.
+- **Claude** — % left of the 5-hour and weekly windows and when they reset, from
+  the `rate_limit_event` Claude Code prints while Marshal runs it.
+- **agy** — which model families it can run now and which ones your account
+  had are spent, e.g. `ok: Flash, Claude, GPT-OSS · out: Gemini 4,
+  Orchestrator` (agy publishes no figures, but drops a family from
+  `agy models` while its quota is spent). agy is marked out of limit in the
+  planner picker only when no family is offered.

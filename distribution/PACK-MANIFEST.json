@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "206b81df88ad15e91b0d8b1fb7984cf3dbc5c4d4639fbff8fdf71857e8298072",
-      "bytes": 14172
+      "sha256": "12cd2efc985afb9000494ad8d0d3596379f6d4624a943269ebfa5569b90c8d6a",
+      "bytes": 14393
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "2d37e8414ca7303f24eddffdb7a73bda8e4418b7ecfd53dc621f1941413c156f",
-      "bytes": 17473
+      "sha256": "33b25076a2c8ed44db347d02cf3dc3678789d4b83b47a526624adde6257f2652",
+      "bytes": 18840
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -526,8 +526,8 @@
     },
     {
       "path": "docs/faq.md",
-      "sha256": "f10fbaba914124635593a6fd6510296999fd716cfd6bfe20aa35ee1644de9507",
-      "bytes": 1487
+      "sha256": "48e5d5b3e025545fa3fb39025e1b3d16c8c6a87bfbbfcca1275e723db01ad854",
+      "bytes": 1976
     },
     {
       "path": "docs/getting-started.md",
@@ -596,8 +596,8 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "851758c63c8d12b44a4d5312ce0bb9e66757f05e29c3cdce467794f293d5521b",
-      "bytes": 5665
+      "sha256": "ba93536ed24823ec255e6563c99ff4236db733d09544647e82da673e5e113127",
+      "bytes": 6955
     },
     {
       "path": "docs/requirements.txt",
@@ -616,8 +616,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "bad3bdbd8c3b0b9c3041ff85c038937d78f5e978cb4c1da65838af542465cd58",
-      "bytes": 4318
+      "sha256": "593ecca495f8701a8e6a5d02c9acde8bda522c7d4e8f9854b115bfb908f3dd61",
+      "bytes": 5729
     },
     {
       "path": "docs/upgrading.md",
@@ -16283,6 +16283,11 @@
       "path": "release/RELEASE_NOTES_0.2.17.md",
       "sha256": "456488b0b8d6f3517678a2ced776a6c8a2f056d7110a4d27d7b0a09ddb062311",
       "bytes": 1548
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.2.18.md",
+      "sha256": "d33e14d169404c4789dfc94d4875eab1dcb393677d5c0159fbcddca48b635a69",
+      "bytes": 3110
     },
     {
       "path": "release/RELEASE_NOTES_0.2.2.md",

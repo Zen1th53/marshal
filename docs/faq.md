@@ -26,6 +26,14 @@ run it inside **WSL2** — the Linux binary installs and runs there as usual.
 There is no native Windows build: the TUI requires tmux, which has no native
 Windows build.
 
+Governed workers (the sandboxed workers that write code) need **Linux on
+amd64**: their confinement uses Linux bubblewrap and a socket supervisor built
+for amd64. On macOS and on Linux arm64 Marshal still sets up the project,
+gathers requirements, reviews the design and architecture and plans the run;
+when a governed task would start it stops with "This computer cannot run
+governed workers" instead of retrying. To run the plan, open the project with
+Marshal on a Linux amd64 machine.
+
 ## Is it production-ready?
 
 It is young (v0.2). The run loop ([how a run works](how-it-works.md)) is tested end to end on fresh

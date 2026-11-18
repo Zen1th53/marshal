@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.18
+
+### Added
+- The installer sets the machine up (PATH, Git and tmux, coding agents) and registers the anonymous install count right away (`marshal telemetry register`).
+- Antigravity model selectors (`auto`, `best`, `fast`, `plan`, families) resolved against the live `agy models` offer; `/model select agy <selector>`.
+- Antigravity as a full Marshal: Marshal's MCP tools and proposal lease through a session-only `.agents/mcp_config.json`, with Marshal tools allowed for the session.
+- Claude limits from Claude Code's `rate_limit_event`; agy limits as available and spent model families.
+
+### Changed
+- No provider version list: any version that passes its check is used, and a provider that updates itself is re-verified automatically.
+
+### Fixed
+- macOS: the Marshal's proposal file reaches the Board, so the architecture opens.
+- A platform that cannot run governed workers (macOS, Linux arm64) is named at once, with no retries or provider cooldown.
+- An architecture the browser cannot draw is refused on submit with the rule.
+- A due decision waits while the Marshal is mid-turn instead of being re-issued.
+- After an update, Marshal offers to restart the control centre that runs the previous version.
+- `v` / `/harness verify agy` work on every platform, verify the lead provider first and name the model; `marshal agy` skips the planner picker.
+
 ## 0.2.17
 
 ### Fixed
