@@ -12461,8 +12461,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "14d06f1e93f6c4757efb1b6e118ae65f528b5783584dd3e97e1ce044d83fd2b5",
-      "bytes": 22354
+      "sha256": "f39cc7e5905b7ae138fd66d7021cee4ed2b5f0a781bb0fb6555121cea29a4396",
+      "bytes": 23636
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -12481,8 +12481,8 @@
     },
     {
       "path": "internal/tui/authority_timeout_extreme_test.go",
-      "sha256": "180849fa7f482039185cd68dbc295badc91bbcb902ba2b8bcc8ffafcac46552e",
-      "bytes": 5809
+      "sha256": "a89717861bba20d7d8da591468a688531cc3c808135bdf837c8635cbd7ffff42",
+      "bytes": 7441
     },
     {
       "path": "internal/tui/autocomplete.go",
