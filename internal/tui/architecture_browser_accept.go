@@ -87,6 +87,9 @@ func (w *Workspace) openArchitectureReview() {
 	// returns, and its clear must find this text to remove.
 	w.memoryAnswer(architectureOpening, false)
 	if _, err := w.marshalArchitecture(w.workers.context(), "", ""); err != nil {
+		// The screen stays plain; the exact cause is kept for whoever
+		// has to find out why "try again" keeps coming back.
+		w.logTUIError("open architecture", err)
 		w.memoryAnswer("The architecture could not be opened: "+plainArchitectureError(err), true)
 	}
 }

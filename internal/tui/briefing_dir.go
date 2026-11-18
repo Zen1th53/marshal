@@ -18,6 +18,12 @@ type briefingDir struct {
 	mcpToken, mcpTokenID string
 	authMgr              *auth.Manager
 	revokeProposal       func()
+	// workspaceMCP is the agy workspace MCP file this session created; it
+	// is removed with the session (a file the person owns is never touched).
+	workspaceMCP string
+	// workspaceMCPAttached: MARSHAL's server is attached to this agy session
+	// through the workspace file (this session's or another MARSHAL one's).
+	workspaceMCPAttached bool
 	provider             string
 	path                 string
 	size                 int
@@ -98,6 +104,9 @@ func (d *briefingDir) remove() {
 		}
 		if d.authMgr != nil && d.mcpTokenID != "" {
 			_ = d.authMgr.RevokeToken(d.mcpTokenID)
+		}
+		if d.workspaceMCP != "" {
+			_ = os.Remove(d.workspaceMCP)
 		}
 		_ = os.RemoveAll(d.path)
 	}

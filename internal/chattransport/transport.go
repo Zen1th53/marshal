@@ -218,7 +218,9 @@ func (v version) less(o version) bool {
 
 func (v version) String() string { return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2]) }
 
-// Range is a qualified [Min, Below) version range.
+// Range is a qualified [Min, Below) version range. An empty Below has no
+// upper end: a newer release is used until it actually fails to speak the
+// protocol, rather than being refused for its number.
 type Range struct{ Min, Below string }
 
 // Qualify reports whether reported (a `--version` line) lies in r.
@@ -228,8 +230,14 @@ func (r Range) Qualify(reported string) error {
 		return fmt.Errorf("%w: unreadable version %q", ErrUnqualified, strings.TrimSpace(reported))
 	}
 	lo, _ := parseVersion(r.Min)
+	if v.less(lo) {
+		return fmt.Errorf("%w: version %s is older than %s, the first with this protocol", ErrUnqualified, v, r.Min)
+	}
+	if r.Below == "" {
+		return nil
+	}
 	hi, _ := parseVersion(r.Below)
-	if v.less(lo) || !v.less(hi) {
+	if !v.less(hi) {
 		return fmt.Errorf("%w: version %s is outside the qualified range >=%s <%s", ErrUnqualified, v, r.Min, r.Below)
 	}
 	return nil

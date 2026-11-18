@@ -124,7 +124,7 @@ func TestBoardHintsFollowState(t *testing.T) {
 		w.endOpening()
 		ids, row := footerIDs(t, w, 170, 45)
 		lead := []string{"say.build", "firstuse.chat"}
-		if nextUnverified(w.firstUseChips(time.Now())) != "" {
+		if nextUnverified(w.firstUseChips(time.Now()), w.leadProvider()) != "" {
 			lead = append(lead, "firstuse.verify")
 		}
 		lead = append(lead, "marshal.pick")

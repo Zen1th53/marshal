@@ -962,14 +962,14 @@ func (w *Workspace) recordChatTransportQualification(ctx context.Context, provid
 		data["range_min"], data["range_below"] = r.Min, r.Below
 		if err := r.Qualify(version); err != nil {
 			data["result"], data["reason"] = "refused", err.Error()
-			line = fmt.Sprintf("Native chat transport: refused for %s %s (qualified >=%s <%s); the tmux-docked chat stays.", provider, version, r.Min, r.Below)
+			line = fmt.Sprintf("Chat: %s %s is older than %s, so its chat stays in its own pane.", provider, version, r.Min)
 		} else {
 			data["result"] = "qualified"
-			line = fmt.Sprintf("Native chat transport: qualified for %s %s (stream-json, range >=%s <%s).", provider, version, r.Min, r.Below)
+			line = fmt.Sprintf("Chat: %s %s can also chat inside the Board.", provider, version)
 		}
 	} else {
 		data["result"], data["reason"] = "unsupported", "no structured chat transport is qualified for this provider"
-		line = "Native chat transport: none qualified for " + provider + "; the tmux-docked chat stays."
+		line = "Chat: " + provider + " chats in its own pane beside the Board."
 	}
 	if w.store == nil {
 		return line, errors.New("store unavailable: native chat transport contract not recorded")

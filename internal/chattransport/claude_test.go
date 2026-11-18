@@ -139,7 +139,7 @@ func TestClaudeArgsAreStructuredFlagsThenLaunchArgs(t *testing.T) {
 }
 
 func TestClaudeRefusesUnqualifiedVersionBeforeAnyProcess(t *testing.T) {
-	for _, v := range []string{"1.0.99 (Claude Code)", "3.0.0 (Claude Code)", "garbage"} {
+	for _, v := range []string{"1.0.99 (Claude Code)", "garbage"} {
 		r := newFakeRunner(v)
 		c := NewClaude(r)
 		err := c.Start(context.Background(), Session{Binary: "claude"})
@@ -360,5 +360,14 @@ func TestOneLineAndSummarize(t *testing.T) {
 	}
 	if got := Summarize(json.RawMessage(`{"file_path":"/a/b.go","content":"x"}`), 40); got != "/a/b.go" {
 		t.Fatalf("Summarize: %q", got)
+	}
+}
+
+// A newer major version is used, not refused for its number.
+func TestClaudeAcceptsNewerMajorVersions(t *testing.T) {
+	for _, v := range []string{"2.1.326 (Claude Code)", "3.0.0 (Claude Code)", "4.2.1 (Claude Code)"} {
+		if err := ClaudeRange.Qualify(v); err != nil {
+			t.Fatalf("%q refused: %v", v, err)
+		}
 	}
 }

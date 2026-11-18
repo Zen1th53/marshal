@@ -726,10 +726,16 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		}
 		var profile model.HarnessProfile
 		var err error
-		if strings.EqualFold(args[0], "verify-native") {
-			if provider := canonicalNeutralProvider(args[1]); provider != "agy" {
-				return "Usage: /harness verify-native agy [model]", nil
-			}
+		native := strings.EqualFold(args[0], "verify-native")
+		if native && canonicalNeutralProvider(args[1]) != "agy" {
+			return "Usage: /harness verify-native agy [model]", nil
+		}
+		// "verify agy" takes the probe agy actually supports here, so the
+		// owner never needs to know there are two.
+		if canonicalNeutralProvider(args[1]) == "agy" && app.AgyVerifiesNatively() {
+			native = true
+		}
+		if native {
 			profile, err = h.ws.runtime.VerifyNativeAgyWorker(ctx, modelName)
 		} else {
 			profile, err = h.ws.runtime.VerifyMarshalWorker(ctx, args[1], modelName)
@@ -737,9 +743,15 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		if err != nil {
 			return "", err
 		}
-		verified := fmt.Sprintf("Verified %s %s in sandbox through proxy; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID)
+		// The first line is what the owner needs: the provider is ready and
+		// which model it runs. How it was checked follows as detail.
+		ready := fmt.Sprintf("%s is ready (%s)", canonicalNeutralProvider(args[1]), profile.InstalledVersion)
+		if profile.DefaultModel != "" {
+			ready += " · runs " + profile.DefaultModel
+		}
+		verified := ready + fmt.Sprintf("\nDetails: verified in sandbox through proxy; evidence %s", profile.ProbeEvidenceID)
 		if profile.FeatureSupport["sandbox"] == model.StatusUnsupported {
-			verified = fmt.Sprintf("Verified %s %s native print; CLI-owned permissions and authentication; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID)
+			verified = ready + fmt.Sprintf("\nDetails: native print with the CLI's own permissions and sign-in; evidence %s", profile.ProbeEvidenceID)
 		}
 		// The verified version is also checked against the native chat
 		// transport's qualified range, and the contract is recorded.

@@ -151,9 +151,30 @@ func configureOpenCodeMCP(dir *briefingDir, root string, env []string, role, tas
 }
 
 // Antigravity documents global and active-project MCP files, but no
-// per-session override. Keep authentication and provider settings intact.
+// per-session override. When the project has no .agents/mcp_config.json of
+// its own, MARSHAL writes one naming only its own stdio server (no secret:
+// agy passes its environment to the server, which is how the session's
+// token and proposal lease reach it), keeps it out of git, and removes it
+// with the session. A file the person already has is left untouched and the
+// session falls back to the shell-tool knowledge transport.
 func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, role, taskID string) ([]string, []string, error) {
-	if _, err := dir.add("MCP availability: this Antigravity CLI has no documented per-session MCP configuration. MARSHAL did not change your global or project provider configuration. MARSHAL_KNOWLEDGE_MCP supplies a JSON argv array for the bound stdio source-query transport. Use it through the provider shell tool and keep one query session open; do not claim MCP tool results unless they were actually returned."); err != nil {
+	note := antigravityShellMCPNote
+	// Workers keep their own sealed MCP binding; only the person-facing
+	// chats get the workspace file.
+	if role != "worker" {
+		path, created, ours, err := writeAntigravityWorkspaceMCP(root)
+		if err != nil {
+			return nil, nil, err
+		}
+		if created {
+			dir.workspaceMCP = path
+		}
+		if ours {
+			dir.workspaceMCPAttached = true
+			note = antigravityWorkspaceMCPNote
+		}
+	}
+	if _, err := dir.add(note); err != nil {
 		return nil, nil, err
 	}
 	hasDir := false
@@ -168,6 +189,11 @@ func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, 
 	updated, env, _, err := sessionmcp.ConfigureMarshal("agy", root, args, env)
 	return updated, env, err
 }
+
+const (
+	antigravityShellMCPNote     = "MCP availability: this Antigravity CLI has no documented per-session MCP configuration. MARSHAL did not change your global or project provider configuration. MARSHAL_KNOWLEDGE_MCP supplies a JSON argv array for the bound stdio source-query transport. Use it through the provider shell tool and keep one query session open; do not claim MCP tool results unless they were actually returned."
+	antigravityWorkspaceMCPNote = "MCP: MARSHAL's tools are attached to this Antigravity session as the MCP server named marshal (from .agents/mcp_config.json, created for this session only). Call them as tools; do not reach MARSHAL through shell scripts."
+)
 
 func configureMarshalMCP(provider, root string, args, env []string, dir *briefingDir, role, taskID string) ([]string, []string, *briefingDir, error) {
 	if !nativeMarshalAuthority && role == "marshal" {
@@ -379,4 +405,124 @@ func bindMarshalMCPChildEnvironment(provider, root string, args, env []string, d
 		env = updated
 	}
 	return args, env, nil
+}
+
+// antigravityWorkspaceMCPConfig is the .agents/mcp_config.json MARSHAL
+// writes: only its own stdio server in the Marshal role, no secret (the
+// session's lease travels in agy's environment). Every MARSHAL session in
+// the project writes the same bytes, so one finding the file can tell it is
+// MARSHAL's.
+func antigravityWorkspaceMCPConfig(root string) ([]byte, error) {
+	binary := marshalMCPBinary()
+	if resolved, err := filepath.EvalSymlinks(binary); err == nil {
+		binary = resolved
+	}
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": map[string]any{"marshal": map[string]any{
+		"command": binary,
+		"args":    marshalMCPServerArgs(root, "marshal", ""),
+	}}}, "", "  ")
+	return append(data, '\n'), err
+}
+
+// writeAntigravityWorkspaceMCP creates root/.agents/mcp_config.json naming
+// MARSHAL's server unless the project already has that file. It reports
+// whether it created the file, and whether the file there now is MARSHAL's
+// (created now, or by another MARSHAL session); a file the person owns is
+// neither and is never touched.
+func writeAntigravityWorkspaceMCP(root string) (path string, created, ours bool, err error) {
+	path = filepath.Join(root, ".agents", "mcp_config.json")
+	data, err := antigravityWorkspaceMCPConfig(root)
+	if err != nil {
+		return "", false, false, err
+	}
+	if existing, readErr := os.ReadFile(path); readErr == nil {
+		return path, false, string(existing) == string(data), nil
+	} else if !os.IsNotExist(readErr) {
+		return path, false, false, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", false, false, err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			existing, _ := os.ReadFile(path)
+			return path, false, string(existing) == string(data), nil
+		}
+		return "", false, false, err
+	}
+	if _, err = f.Write(data); err == nil {
+		err = f.Close()
+	} else {
+		_ = f.Close()
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		return "", false, false, err
+	}
+	excludeFromGit(root, ".agents/mcp_config.json")
+	return path, true, true, nil
+}
+
+// excludeFromGit adds pattern to the repository's local exclude file, so a
+// file MARSHAL creates for a session never shows up as a change to commit.
+func excludeFromGit(root, pattern string) {
+	common := gitCommonDir(root)
+	if common == "" {
+		return
+	}
+	exclude := filepath.Join(common, "info", "exclude")
+	data, _ := os.ReadFile(exclude)
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == pattern || strings.TrimSpace(line) == "/"+pattern {
+			return
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(exclude), 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(exclude, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	prefix := ""
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		prefix = "\n"
+	}
+	_, _ = f.WriteString(prefix + "/" + pattern + "\n")
+}
+
+// gitCommonDir is the repository's shared git directory for root: .git
+// itself, or for a linked worktree the directory its gitdir's commondir
+// names. It is "" when root is not a repository.
+func gitCommonDir(root string) string {
+	dotgit := filepath.Join(root, ".git")
+	info, err := os.Stat(dotgit)
+	if err != nil {
+		return ""
+	}
+	if info.IsDir() {
+		return dotgit
+	}
+	data, err := os.ReadFile(dotgit)
+	if err != nil {
+		return ""
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir: ")
+	if !ok {
+		return ""
+	}
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(root, gitdir)
+	}
+	common, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
+	if err != nil {
+		return gitdir
+	}
+	dir := strings.TrimSpace(string(common))
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(gitdir, dir)
+	}
+	return filepath.Clean(dir)
 }

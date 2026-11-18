@@ -15,11 +15,11 @@ import (
 // comes from the Board inbox; Claude never shows a prompt of its own.
 const ClaudePermissionTool = "mcp__marshal__marshal_permission_prompt"
 
-// ClaudeRange is the Claude Code version range whose stream-json input and
-// output, --include-partial-messages and --permission-prompt-tool contract
-// this transport was qualified against. Outside it the transport refuses
-// before any turn is sent.
-var ClaudeRange = Range{Min: "2.0.0", Below: "3.0.0"}
+// ClaudeRange is where the stream-json input and output,
+// --include-partial-messages and --permission-prompt-tool contract starts.
+// It has no upper end: a newer Claude Code is used, not refused for its
+// version number.
+var ClaudeRange = Range{Min: "2.0.0"}
 
 // Claude drives `claude -p --input-format stream-json --output-format
 // stream-json`. One process carries the whole conversation: each operator
