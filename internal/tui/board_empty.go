@@ -132,9 +132,15 @@ func (w *Workspace) firstUseChips(now time.Time) []providerChip {
 	return chips
 }
 
-// nextUnverified is the first provider v verifies: installed and not yet
-// verified.
-func nextUnverified(chips []providerChip) string {
+// nextUnverified is the provider v verifies next: the one that leads (the
+// Marshal) when it is not verified yet, because nothing can be planned
+// before it is; otherwise the first installed provider not yet verified.
+func nextUnverified(chips []providerChip, lead string) string {
+	for _, c := range chips {
+		if c.name == lead && c.state == "unverified" {
+			return c.name
+		}
+	}
 	for _, c := range chips {
 		if c.state == "unverified" {
 			return c.name
@@ -243,7 +249,7 @@ func (w *Workspace) handleFirstUseKey(ctx context.Context, event KeyEvent) bool 
 	}
 	switch {
 	case event.Type == KeyRune && event.Rune == 'v':
-		w.armFirstUseVerify(nextUnverified(w.firstUseChips(time.Now())))
+		w.armFirstUseVerify(nextUnverified(w.firstUseChips(time.Now()), w.leadProvider()))
 		return true
 	case event.Type == KeyEnter:
 		w.focusChatFromBoard(ctx)
@@ -545,4 +551,13 @@ func (v boardVisual) trunc(s string, w int) string {
 		r = r[:len(r)-1]
 	}
 	return string(r) + ellipsis
+}
+
+// leadProvider is the provider that leads this project (the Marshal), as a
+// first-use chip names it, or "" before one is chosen.
+func (w *Workspace) leadProvider() string {
+	if w.nativeStartupProvider != "" {
+		return providerWorker(w.nativeStartupProvider)
+	}
+	return providerWorker(loadDefaultProvider(w.providerRoot()))
 }

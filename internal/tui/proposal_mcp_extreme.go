@@ -68,7 +68,9 @@ func occurrenceMCP(launch, submission string) string {
 	return "mcp:" + hex.EncodeToString(sum[:])
 }
 func (w *Workspace) prepareProposalMCP(provider, root string, args, env []string, dir *briefingDir) ([]string, []string, *briefingDir, error) {
-	if provider == "agy" || provider == "antigravity" {
+	if (provider == "agy" || provider == "antigravity") && !antigravityWorkspaceMCPReady(dir) {
+		// Without MARSHAL's server attached (the project has its own
+		// .agents/mcp_config.json), agy cannot call the proposal tools.
 		var err error
 		args, err = w.prepareUnleasedNativePlanningLaunch(context.Background(), provider, root, args, dir)
 		return args, env, dir, err
@@ -598,3 +600,7 @@ func (w *Workspace) revokeNativeProposalMCP(dir *briefingDir) {
 		w.revokeProposalLease(l)
 	}
 }
+
+// antigravityWorkspaceMCP reports whether this agy session has MARSHAL's MCP
+// server attached through the workspace file it created.
+func antigravityWorkspaceMCPReady(dir *briefingDir) bool { return dir != nil && dir.workspaceMCPAttached }

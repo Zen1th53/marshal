@@ -540,7 +540,7 @@ func TestHarnessVerifyRecordsChatTransportRange(t *testing.T) {
 	}
 	for _, c := range cases {
 		line, err := w.recordChatTransportQualification(t.Context(), c.provider, c.version, "EV-1")
-		if err != nil || !strings.Contains(line, "Native chat transport") {
+		if err != nil || !strings.HasPrefix(line, "Chat: ") || strings.Contains(line, "transport") {
 			t.Fatalf("%v: %q %v", c, line, err)
 		}
 	}

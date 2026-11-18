@@ -75,7 +75,9 @@ func TestMarshalLaunchHiddenProtocolMatrix(t *testing.T) {
 				}
 				wantHidden := strings.TrimSpace(protocol)
 				if provider == "antigravity" {
-					wantHidden += "\n\nMCP availability: this Antigravity CLI has no documented per-session MCP configuration. MARSHAL did not change your global or project provider configuration. MARSHAL_KNOWLEDGE_MCP supplies a JSON argv array for the bound stdio source-query transport. Use it through the provider shell tool and keep one query session open; do not claim MCP tool results unless they were actually returned."
+					// The test project has no .agents/mcp_config.json of its
+					// own, so the session attaches MARSHAL's server there.
+					wantHidden += "\n\n" + antigravityWorkspaceMCPNote
 				}
 				if hidden != wantHidden {
 					t.Fatal("hidden channel lost or changed protocol")
