@@ -172,6 +172,7 @@ func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, 
 		if ours {
 			dir.workspaceMCPAttached = true
 			note = antigravityWorkspaceMCPNote
+			args = allowMarshalToolsForAntigravity(root, args)
 		}
 	}
 	if _, err := dir.add(note); err != nil {
@@ -525,4 +526,22 @@ func gitCommonDir(root string) string {
 		dir = filepath.Join(gitdir, dir)
 	}
 	return filepath.Clean(dir)
+}
+
+// antigravityMarshalToolSettings lets this agy session call MARSHAL's own
+// tools without asking the owner for each one (agy asked separately for
+// every marshal tool, with a six-option prompt). It is passed with
+// --settings, which agy applies to this session only and never saves; the
+// governed worker configuration allows the same tools.
+const antigravityMarshalToolSettings = `{"permissions":{"allow":["mcp(marshal/*)"]}}`
+
+// allowMarshalToolsForAntigravity adds the session-only setting unless the
+// launch already carries the person's own --settings.
+func allowMarshalToolsForAntigravity(root string, args []string) []string {
+	for _, arg := range args {
+		if arg == "--settings" || strings.HasPrefix(arg, "--settings=") {
+			return args
+		}
+	}
+	return insertBeforeKickoff("antigravity", root, args, []string{"--settings", antigravityMarshalToolSettings})
 }
