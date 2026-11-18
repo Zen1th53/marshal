@@ -14,6 +14,11 @@ func TestMain(m *testing.M) {
 	if os.Getenv("MARSHAL_CLOUD_ENDPOINT") == "" {
 		_ = os.Setenv("MARSHAL_CLOUD_ENDPOINT", "off")
 	}
+	if os.Getenv("MARSHAL_NO_USAGE_PROBES") == "" {
+		// The Board lists agy's models in the background; tests that count
+		// every provider call must not see it.
+		_ = os.Setenv("MARSHAL_NO_USAGE_PROBES", "1")
+	}
 	if os.Getenv("MARSHAL_NO_UPDATE_CHECK") == "" {
 		_ = os.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
 	}

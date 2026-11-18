@@ -107,6 +107,12 @@ func AgySeenGroupsFile() string {
 
 func readAgy(now time.Time, seenFile string) Quota {
 	q := Quota{Provider: "agy"}
+	// Tests that count every provider call turn the background listing off,
+	// as they turn off the update check.
+	if os.Getenv("MARSHAL_NO_USAGE_PROBES") != "" {
+		q.Reason = NotExposed
+		return q
+	}
 	offered, ok := agyOfferedGroups(now)
 	if !ok {
 		q.Reason = NotExposed
