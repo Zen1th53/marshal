@@ -784,15 +784,18 @@ func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string
 		return h.renderModelSelections(ctx)
 	}
 	if !strings.EqualFold(args[0], "select") || len(args) != 3 {
-		return "Usage: /model select <codex|claude> <model_name>  (or /model show)", nil
+		return "Usage: /model select <codex|claude|agy> <model_name>  (or /model show; agy also takes auto, best, fast, carbon, argon, hydrogen)", nil
 	}
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
 		return msgNothingChanged, nil
 	}
 	adapter := strings.ToLower(args[1])
-	if adapter != "codex" && adapter != "claude" {
-		return fmt.Sprintf("Model selection was NOT applied: %s runs do not read a model preference. Supported: codex, claude.", args[1]), nil
+	if adapter == "antigravity" {
+		adapter = "agy"
+	}
+	if adapter != "codex" && adapter != "claude" && adapter != "agy" {
+		return fmt.Sprintf("Model selection was NOT applied: %s runs do not read a model preference. Supported: codex, claude, agy.", args[1]), nil
 	}
 	revision, _, err := a.runtime.ModelPreferenceRevision(ctx, adapter)
 	if err != nil {

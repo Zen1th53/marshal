@@ -1,6 +1,7 @@
 package antigravity
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,11 +15,11 @@ import (
 )
 
 const (
-	DefaultModel            = "gemini-3.8-flash-high"
-	GovernedCLIVersion      = "1.2.14" // Pinned baseline qualification
-	GovernedCLIMinVersion   = "1.2.14"
-	GovernedCLIMaxVersion   = "1.4.2"
-	GovernedCLIVersionRange = "1.2.14..1.4.2"
+	DefaultModel       = "gemini-3.8-flash-high"
+	GovernedCLIVersion = "1.2.14" // Pinned baseline qualification
+	// GovernedCLIVersionRange describes which agy versions governed use
+	// accepts: any whose probe passes.
+	GovernedCLIVersionRange = "any version whose probe passes"
 )
 
 var safeObservedVersion = regexp.MustCompile(`^[0-9]{1,8}\.[0-9]{1,8}\.[0-9]{1,8}$`)
@@ -76,30 +77,12 @@ func compareSemver(v1, v2 string) int {
 	return 0
 }
 
-func isQualifiedGovernedVersion(v string) bool {
-	if !safeObservedVersion.MatchString(v) {
-		return false
-	}
-	if v == "1.2.14" {
-		return true
-	}
-	// 1.3.x broke the single-JSON output format with multiple stream-JSON chunks in response
-	if strings.HasPrefix(v, "1.3.") {
-		return false
-	}
-	// 1.4.0 through 1.4.2 (validated against installed agy 1.4.2 contract)
-	if compareSemver(v, "1.4.0") >= 0 && compareSemver(v, GovernedCLIMaxVersion) <= 0 {
-		return true
-	}
-	return false
-}
-
-func isUnverifiedNewerVersion(v string) bool {
-	if !safeObservedVersion.MatchString(v) {
-		return false
-	}
-	return compareSemver(v, GovernedCLIMaxVersion) > 0
-}
+// isQualifiedGovernedVersion accepts every version agy reports in a plain
+// form. Qualification is not a list of versions: the probe runs the installed
+// CLI and its result envelope is checked, so a new agy is used as soon as it
+// passes, and one that changed its contract fails the probe, not a version
+// comparison.
+func isQualifiedGovernedVersion(v string) bool { return safeObservedVersion.MatchString(v) }
 
 // Client wraps the native Antigravity (agy) print CLI. Registration as a Marshal
 // governed driver and launch-scoped MCP configuration are separate capabilities.
@@ -108,7 +91,6 @@ type Client struct {
 	runner              adapter.ProcessRunner
 	version             string
 	governed, probeOnly bool
-	unverifiedNewer     bool
 }
 
 func New(binary string, runner adapter.ProcessRunner) *Client {
@@ -181,6 +163,17 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	}, nil
 }
 
+// resolveModel turns a selector (auto, best, fast, a family name, or none)
+// into the exact model the signed-in agy offers now; an exact ID is kept.
+// A governed run is pinned to the exact model its probe verified, so it is
+// never resolved here; harness verification resolves the selector first.
+func (c *Client) resolveModel(ctx context.Context, selector string) (string, error) {
+	if c.governed || !IsSelector(selector) {
+		return selector, nil
+	}
+	return ResolveInstalled(ctx, c.binary, c.runner, selector)
+}
+
 func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Result, error) {
 	if c.runner == nil || c.binary == "" || request.TaskID == "" || request.Title == "" || request.Worktree == "" {
 		return adapter.Result{}, fmt.Errorf("%w: incomplete Antigravity run request", model.ErrInvalid)
@@ -194,6 +187,14 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	args, err := commandArguments(request, prompt, "")
 	if err != nil {
 		return adapter.Result{}, err
+	}
+	if resolved, err := c.resolveModel(ctx, request.Model); err != nil {
+		return adapter.Result{}, err
+	} else if resolved != request.Model {
+		request.Model = resolved
+		if args, err = commandArguments(request, prompt, ""); err != nil {
+			return adapter.Result{}, err
+		}
 	}
 	ctx, args, env, cleanup, err := c.prepareInvocation(ctx, request, args, "")
 	if err != nil {
@@ -229,6 +230,14 @@ func (c *Client) Resume(ctx context.Context, sessionID string, request adapter.R
 	args, err := commandArguments(request, prompt, sessionID)
 	if err != nil {
 		return adapter.Result{}, err
+	}
+	if resolved, err := c.resolveModel(ctx, request.Model); err != nil {
+		return adapter.Result{}, err
+	} else if resolved != request.Model {
+		request.Model = resolved
+		if args, err = commandArguments(request, prompt, sessionID); err != nil {
+			return adapter.Result{}, err
+		}
 	}
 	ctx, args, env, cleanup, err := c.prepareInvocation(ctx, request, args, sessionID)
 	if err != nil {
@@ -358,10 +367,28 @@ func parseAntigravityOutput(output []byte, result *adapter.Result) string {
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(output, &response); err != nil {
-		if result.Status == adapter.StatusSuccess {
-			result.Status = adapter.StatusFailure
+		// Some agy releases print the result as a series of JSON objects;
+		// the last one carrying a status is the final envelope.
+		decoder := json.NewDecoder(bytes.NewReader(output))
+		found := false
+		for {
+			var chunk json.RawMessage
+			if decoder.Decode(&chunk) != nil {
+				break
+			}
+			var probe struct {
+				Status *string `json:"status"`
+			}
+			if json.Unmarshal(chunk, &probe) == nil && probe.Status != nil && json.Unmarshal(chunk, &response) == nil {
+				found = true
+			}
 		}
-		return "invalid_json"
+		if !found {
+			if result.Status == adapter.StatusSuccess {
+				result.Status = adapter.StatusFailure
+			}
+			return "invalid_json"
+		}
 	}
 	result.SessionID = response.ConversationID
 	result.FinalText = response.Response
@@ -404,13 +431,7 @@ func (c *Client) CollectEvidence(result adapter.Result) map[string]any {
 	}
 	if c.governed && nativeOutcomeMetadataValid(result) {
 		outcome := map[string]any{"status": string(result.Status), "exit_code": result.ExitCode, "timed_out": result.TimedOut, "cancelled": result.Cancelled, "output_truncated": result.OutputTruncated, "native_envelope": result.NativeEnvelope}
-		if c.unverifiedNewer {
-			outcome["execution_mode"] = "native"
-		}
 		metadata["process_outcome"] = outcome
-	}
-	if c.unverifiedNewer {
-		metadata["unverified_version"] = true
 	}
 	return metadata
 }

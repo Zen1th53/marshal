@@ -150,9 +150,12 @@ func governedRunner(run func(context.Context, adapter.Command) (adapter.ProcessR
 		return run(ctx, cmd)
 	}}
 }
-func TestGovernedAntigravityRefusesUnqualifiedVersion(t *testing.T) {
+
+// Qualification does not depend on the version number: only a version that
+// is not a plain number is refused before anything runs.
+func TestGovernedAntigravityRefusesUnreadableVersion(t *testing.T) {
 	called := false
-	for _, version := range []string{"1.2.13", "1.2.15", "1.3.2", "1.2.14 arbitrary"} {
+	for _, version := range []string{"1.2.14 arbitrary", "", "v1.5; rm -rf /"} {
 		client := antigravity.NewGovernedProbe("agy", &mockRunner{runFn: func(_ context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
 			if len(cmd.Args) == 1 && cmd.Args[0] == "--version" {
 				return adapter.ProcessResult{Stdout: []byte(version)}, nil
@@ -175,8 +178,8 @@ func TestGovernedAntigravityRefusesUnqualifiedVersion(t *testing.T) {
 	}
 }
 
-func TestGovernedAntigravityAcceptsSupportedRange(t *testing.T) {
-	for _, version := range []string{"1.2.14", "1.4.0", "1.4.1", "1.4.2"} {
+func TestGovernedAntigravityAcceptsAnyVersionThatPassesTheProbe(t *testing.T) {
+	for _, version := range []string{"1.2.13", "1.2.14", "1.3.2", "1.4.2", "1.5.10", "2.0.0"} {
 		t.Run(version, func(t *testing.T) {
 			runner := governedRunnerWithVersion(version, func(ctx context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
 				return adapter.ProcessResult{Stdout: []byte(`{"status":"SUCCESS","response":"MARSHAL_PROBE_OK"}`)}, nil
@@ -277,12 +280,12 @@ func TestGovernedAntigravityExtremeUnverifiedNewerEditsWithBoundMCP(t *testing.T
 	if evidence["adapter_version"] != newerVersion {
 		t.Fatalf("evidence adapter_version = %v, want %s", evidence["adapter_version"], newerVersion)
 	}
-	if evidence["unverified_version"] != true {
-		t.Fatalf("evidence missing unverified_version flag: %v", evidence)
+	if _, flagged := evidence["unverified_version"]; flagged {
+		t.Fatalf("a version that passed the probe is still flagged unverified: %v", evidence)
 	}
 	outcome, ok := evidence["process_outcome"].(map[string]any)
-	if !ok || outcome["execution_mode"] != "native" {
-		t.Fatalf("process_outcome missing execution_mode native: %v", outcome)
+	if !ok || outcome["status"] != "success" {
+		t.Fatalf("process_outcome missing: %v", outcome)
 	}
 }
 

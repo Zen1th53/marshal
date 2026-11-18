@@ -287,12 +287,22 @@ func (r *Runtime) harnessProbeModel(ctx context.Context, provider, modelName str
 	if modelName == "" && provider == "opencode" {
 		modelName = strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL"))
 	}
-	if modelName == "" && (provider == "codex" || provider == "claude" || (provider == "agy" && privateAGYEnabled())) && r != nil && r.store != nil {
+	if modelName == "" && (provider == "codex" || provider == "claude" || provider == "agy") && r != nil && r.store != nil {
 		preference, err := r.store.GetExecutionModelPreference(ctx, localProjectID, provider)
 		if err != nil && !errors.Is(err, model.ErrNotFound) {
 			return "", err
 		}
 		modelName = strings.TrimSpace(preference.Model)
+	}
+	if provider == "agy" && antigravity.IsSelector(modelName) {
+		// agy is asked for a need (auto, best, fast, a family), never a
+		// fixed model: the selector is resolved against what the signed-in
+		// agy offers now, and the probe then verifies that exact model.
+		binary, err := project.FindBinary("agy")
+		if err != nil {
+			return "", err
+		}
+		return antigravity.ResolveInstalled(ctx, binary, worker.New(60*time.Second, 2*time.Second, 8<<20), modelName)
 	}
 	if modelName == "" && r != nil && r.store != nil {
 		// A previous exact probe of the installed CLI is useful for re-probing,

@@ -85,7 +85,7 @@ func TestPTYNativeAntigravityOwnsInputAndSavesMemory(t *testing.T) {
 
 	binDir := t.TempDir()
 	script := `#!/bin/sh
-for arg do case "$arg" in --version) printf '1.2.5\n'; exit 0 ;; esac; done
+for arg do case "$arg" in --version) printf '1.2.5\n'; exit 0 ;; --help) printf 'Available subcommands:\n  models          List available models\n'; exit 0 ;; esac; done
 printf 'AGY-NATIVE-READY\n'
 for arg do printf 'AGY-ARG:<%s>\n' "$arg"; done
 IFS= read -r answer

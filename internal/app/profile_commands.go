@@ -19,7 +19,7 @@ import (
 // ModelPreferenceAdapters are the adapters whose governed dispatch reads the
 // project's execution model preference. A selection for any other harness
 // would be a preference nothing honours, so it is refused.
-var ModelPreferenceAdapters = []string{"codex", "claude"}
+var ModelPreferenceAdapters = []string{"codex", "claude", "agy"}
 
 // CommandSetModel records the model future governed runs of an adapter use,
 // through the operator boundary. The model is validated against the adapter's
@@ -32,7 +32,10 @@ func (r *Runtime) CommandSetModel(ctx context.Context, e CommandEnvelope, adapte
 	}
 	adapter = strings.ToLower(strings.TrimSpace(adapter))
 	modelName = strings.TrimSpace(modelName)
-	if adapter != "codex" && adapter != "claude" {
+	if adapter == "antigravity" {
+		adapter = "agy"
+	}
+	if adapter != "codex" && adapter != "claude" && adapter != "agy" {
 		return model.ExecutionModelPreference{}, fmt.Errorf("%w: %s runs do not read a model preference; supported: %s", model.ErrInvalid, adapter, strings.Join(ModelPreferenceAdapters, ", "))
 	}
 	if modelName == "" || e.TargetID != "model:"+adapter || e.ExpectedVersion < 0 || strings.TrimSpace(e.IdempotencyKey) == "" || len(e.IdempotencyKey) > 256 {
@@ -58,8 +61,11 @@ func (r *Runtime) CommandSetModel(ctx context.Context, e CommandEnvelope, adapte
 		CapabilityGrantID: decision.CapabilityGrantID}
 	read := r.CodexModelPreference
 	set := r.SetCodexModelPreference
-	if adapter == "claude" {
+	switch adapter {
+	case "claude":
 		read, set = r.ClaudeModelPreference, r.SetClaudeModelPreference
+	case "agy":
+		read, set = r.AgyModelPreference, r.SetAgyModelPreference
 	}
 	if _, found, err := r.store.CommandResult(ctx, record); err != nil {
 		return model.ExecutionModelPreference{}, err
@@ -80,8 +86,11 @@ func (r *Runtime) CommandSetModel(ctx context.Context, e CommandEnvelope, adapte
 // when the adapter has no preference yet.
 func (r *Runtime) ModelPreferenceRevision(ctx context.Context, adapter string) (int64, string, error) {
 	read := r.CodexModelPreference
-	if adapter == "claude" {
+	switch adapter {
+	case "claude":
 		read = r.ClaudeModelPreference
+	case "agy", "antigravity":
+		read = r.AgyModelPreference
 	}
 	preference, err := read(ctx)
 	if errors.Is(err, model.ErrNotFound) {
