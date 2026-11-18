@@ -80,3 +80,6 @@ marshal --json memory list
 | `MARSHAL_CLOUD_ENDPOINT` | Specify the community cloud endpoint (default: `https://marshal.blackhat.uz`), or set to `off` to disable telemetry and cloud communication entirely. |
 | `MARSHAL_INSTALL_DIR` | Target installation folder when running `install.sh` (default: `$HOME/.local/bin`). |
 | `MARSHAL_VERSION` | Specific release tag to install with `install.sh`. |
+| `MARSHAL_NO_MODIFY_PATH` | `1` stops `install.sh` from adding the install folder to a shell startup file. |
+| `MARSHAL_INSTALL_DEPS` | `0` stops `install.sh` from installing a missing Git or tmux; it only reports them. |
+| `MARSHAL_INSTALL_YES` | `1` answers yes to `install.sh`'s questions (sudo still needs a terminal). |

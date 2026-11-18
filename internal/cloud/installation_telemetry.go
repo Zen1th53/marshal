@@ -15,6 +15,15 @@ const telemetryTimeout = 900 * time.Millisecond
 const startupTelemetryTimeout = 300 * time.Millisecond
 const telemetryInterval = 2 * time.Minute
 
+// registerTimeout bounds `marshal telemetry register`, which the installer
+// runs once: a first HTTPS connection from far away can take over a second.
+const registerTimeout = 8 * time.Second
+
+// telemetryRetry is how soon a failed attempt is retried before falling back
+// to the normal interval, so one dropped connection at start does not leave
+// an installation unregistered and invisible for minutes.
+var telemetryRetry = []time.Duration{10 * time.Second, 30 * time.Second, time.Minute}
+
 // ActiveMode shares the canonical lease gate and execution bit with the reporter.
 // No workspace, prompt or project data crosses this boundary.
 type ActiveMode struct {
@@ -139,6 +148,49 @@ func StartInstallationTelemetry(ctx context.Context, cfg Config, dir, version st
 	return cancel
 }
 
+// StartInstallationHeartbeat keeps reporting that this installation is in
+// use without reporting a start. The control centre inside tmux runs it: the
+// launcher reported the start, but the launcher exits when the terminal is
+// detached or closed while the control centre and its agents keep working.
+func StartInstallationHeartbeat(ctx context.Context, cfg Config, dir, version string, mode *ActiveMode) context.CancelFunc {
+	ctx, cancel := context.WithCancel(ctx)
+	if !cfg.Enabled() {
+		return cancel
+	}
+	go runInstallationTelemetry(ctx, cfg, NewStore(dir), version, mode, telemetryInterval, true)
+	return cancel
+}
+
+// RegisterInstallation enrolls this machine's anonymous identity now, so an
+// install is counted before Marshal is first opened. It honours the opt-out
+// and an endpoint switched off, reporting registered false for both.
+func RegisterInstallation(ctx context.Context, cfg Config, dir, version string) (bool, error) {
+	if !cfg.Enabled() {
+		return false, nil
+	}
+	store := NewStore(dir)
+	st, err := store.TelemetryPreference(ctx)
+	if err != nil || st.TelemetryDisabled {
+		return false, err
+	}
+	client, err := NewClient(cfg.Endpoint, version)
+	if err != nil {
+		return false, err
+	}
+	return registerInstallationClient(ctx, client, store, st)
+}
+
+func registerInstallationClient(ctx context.Context, client *Client, store *Store, st State) (bool, error) {
+	client.store = store
+	client.telemetryOnly = true
+	attempt, cancel := context.WithTimeout(ctx, registerTimeout)
+	defer cancel()
+	if _, err := client.ensureRegistered(attempt, st, false); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // sendInstallationStart makes one bounded foreground attempt so short-lived
 // commands have a chance to report their start. Every failure is deliberately
 // silent; telemetry never changes command success.
@@ -193,15 +245,20 @@ func runInstallationTelemetryClientStarted(ctx context.Context, client *Client, 
 		return
 	}
 	reporter := NewReporter(client, st.InstallationID, "", version, nil)
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-	if started {
+	wait := func(d time.Duration) bool {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			return
-		case <-tick.C:
+			return false
+		case <-timer.C:
+			return true
 		}
 	}
+	if started && !wait(interval) {
+		return
+	}
+	failures := 0
 	for {
 		current, err := store.Load()
 		if err != nil {
@@ -216,6 +273,7 @@ func runInstallationTelemetryClientStarted(ctx context.Context, client *Client, 
 			attempt, cancel := context.WithTimeout(ctx, telemetryTimeout)
 			_, err = client.ensureRegistered(attempt, st, false)
 			cancel()
+			sent := false
 			if err == nil {
 				if !started {
 					reporter.Record(KindAppStart, mode.modeForInstallation(st.InstallationID), "")
@@ -227,18 +285,25 @@ func runInstallationTelemetryClientStarted(ctx context.Context, client *Client, 
 				// drop the first app_start/heartbeat and defer them a full
 				// interval. Each network op still stays within telemetryTimeout.
 				flush, flushCancel := context.WithTimeout(ctx, telemetryTimeout)
-				_ = reporter.Flush(flush)
+				sent = reporter.Flush(flush) == nil
 				flushCancel()
+			}
+			if sent {
+				failures = 0
+			} else {
+				failures++
 			}
 			// No retries/backlog: a later heartbeat describes current activity.
 			reporter.mu.Lock()
 			reporter.queue = nil
 			reporter.mu.Unlock()
 		}
-		select {
-		case <-ctx.Done():
+		next := interval
+		if failures > 0 && failures <= len(telemetryRetry) && telemetryRetry[failures-1] < interval {
+			next = telemetryRetry[failures-1]
+		}
+		if !wait(next) {
 			return
-		case <-tick.C:
 		}
 	}
 }

@@ -100,48 +100,203 @@ tar -xzf "$tmp/$archive" -C "$tmp" ||
     install -m 755 "$tmp/marshal" "$INSTALL_DIR/marshal"; } ||
     die "could not install to $INSTALL_DIR; set MARSHAL_INSTALL_DIR to a writable directory"
 
-info ""
-info "Marshal $tag installed to $INSTALL_DIR/marshal"
 
-# A binary the shell cannot find is not installed as far as the user is
-# concerned, so say so rather than letting the next command fail.
+# ---------------------------------------------------------------------------
+# Setup. Everything below makes the install usable without a second step:
+# PATH, Git, tmux and the coding agents are checked and, where it is safe,
+# fixed. A step that needs sudo is only run after a yes typed at the terminal;
+# without a terminal (CI, an agent, a pipe with no tty) it is printed instead.
+#
+#   MARSHAL_NO_MODIFY_PATH=1   leave shell startup files alone
+#   MARSHAL_INSTALL_DEPS=0     never install Git or tmux, only report them
+#   MARSHAL_INSTALL_YES=1      answer yes to every question (still no sudo
+#                              without a terminal to type the password in)
+# ---------------------------------------------------------------------------
+
+bin="$INSTALL_DIR/marshal"
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+    green=$(printf '\033[32m'); yellow=$(printf '\033[33m'); bold=$(printf '\033[1m'); dim=$(printf '\033[2m'); reset=$(printf '\033[0m')
+else
+    green=""; yellow=""; bold=""; dim=""; reset=""
+fi
+ok() { info "  ${green}✓${reset} $*"; }
+warn() { info "  ${yellow}!${reset} $*"; }
+todo=""
+now=""
+# short shows a path the way a person types it.
+short() { case "$1" in "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;; *) printf '%s' "$1" ;; esac; }
+add_todo() { todo="$todo
+  $*"; }
+
+# A question needs someone to answer it: a terminal that is not CI.
+can_ask() {
+    [ -z "${CI:-}" ] && [ -z "${MARSHAL_INSTALL_NONINTERACTIVE:-}" ] &&
+        { : </dev/tty; } 2>/dev/null
+}
+ask() {
+    [ "${MARSHAL_INSTALL_YES:-}" = 1 ] && return 0
+    can_ask || return 1
+    printf '  %s [Y/n] ' "$1" >&2
+    read -r answer </dev/tty || return 1
+    case "$answer" in "" | y | Y | yes | YES | Yes) return 0 ;; esac
+    return 1
+}
+
+info ""
+info "${bold}Marshal $tag installed${reset} ${dim}($(short "$bin"))${reset}"
+info ""
+info "Setting up:"
+
+# PATH: a binary the shell cannot find is not installed as far as the user
+# is concerned.
 case ":$PATH:" in
-    *":$INSTALL_DIR:"*) ;;
+    *":$INSTALL_DIR:"*) ok "$(short "$INSTALL_DIR") is on PATH" ;;
     *)
-        info ""
-        info "$INSTALL_DIR is not on your PATH. Add it:"
-        info "  export PATH=\"$INSTALL_DIR:\$PATH\""
+        rc=""
+        line="export PATH=\"$INSTALL_DIR:\$PATH\""
+        case "${SHELL##*/}" in
+            zsh) rc="${ZDOTDIR:-$HOME}/.zshrc" ;;
+            bash) if [ "$os" = darwin ]; then rc="$HOME/.bash_profile"; else rc="$HOME/.bashrc"; fi ;;
+            fish) rc="$HOME/.config/fish/conf.d/marshal.fish"; line="fish_add_path $INSTALL_DIR" ;;
+            *) rc="$HOME/.profile" ;;
+        esac
+        if [ -n "${MARSHAL_NO_MODIFY_PATH:-}" ]; then
+            warn "$(short "$INSTALL_DIR") is not on PATH (left alone: MARSHAL_NO_MODIFY_PATH)"
+            add_todo "$line"
+        elif [ -f "$rc" ] && grep -F "$INSTALL_DIR" "$rc" >/dev/null 2>&1; then
+            ok "$(short "$INSTALL_DIR") is in $(short "$rc") (new terminals find marshal)"
+            now="$line"
+        elif { mkdir -p "${rc%/*}" && printf '\n# Added by the Marshal installer\n%s\n' "$line" >>"$rc"; } 2>/dev/null; then
+            ok "Added $(short "$INSTALL_DIR") to PATH in $(short "$rc") (new terminals find marshal)"
+            now="$line"
+        else
+            warn "$(short "$INSTALL_DIR") is not on PATH and $(short "$rc") could not be changed"
+            add_todo "$line"
+        fi
         ;;
 esac
 
-info ""
-info "Next:"
-info "  marshal version"
-info "  cd /path/to/your/repository && marshal"
-
-# Dependencies are reported after a successful install; never installed here.
 package_manager=""
-for manager in pacman apt apt-get dnf zypper brew; do
+for manager in brew pacman apt-get apt dnf zypper; do
     if command -v "$manager" >/dev/null 2>&1; then
         package_manager="$manager"
         break
     fi
 done
-for tool in tmux; do
-    if command -v "$tool" >/dev/null 2>&1; then
-        continue
-    fi
-    pkg="$tool"
+# On macOS Homebrew wins; on Linux a system manager does (Linuxbrew is rare
+# and would install a second tmux beside the system one).
+if [ "$os" = linux ] && [ "$package_manager" = brew ]; then
+    for manager in pacman apt-get apt dnf zypper; do
+        if command -v "$manager" >/dev/null 2>&1; then package_manager="$manager"; break; fi
+    done
+fi
+sudo=""
+if [ "$(id -u 2>/dev/null || echo 1)" != 0 ]; then sudo="sudo "; fi
+install_command() {
     case "$package_manager" in
-        pacman) command="sudo pacman -S $pkg" ;;
-        apt | apt-get) command="sudo $package_manager install $pkg" ;;
-        dnf) command="sudo dnf install $pkg" ;;
-        zypper) command="sudo zypper install $pkg" ;;
-        brew) command="brew install $pkg" ;;
-        *) command="install $pkg with your system's package manager" ;;
+        brew) echo "brew install $1" ;;
+        pacman) echo "${sudo}pacman -S --needed --noconfirm $1" ;;
+        apt | apt-get) echo "${sudo}$package_manager install -y $1" ;;
+        dnf) echo "${sudo}dnf install -y $1" ;;
+        zypper) echo "${sudo}zypper install -y $1" ;;
+        *) echo "" ;;
     esac
-    case "$tool" in
-        tmux) reason="the Marshal TUI requires it (minimum 3.3a; Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source)" ;;
-    esac
-    info "Missing $tool: $reason; $command"
+}
+
+# provide installs a missing tool when it is safe to: Homebrew needs no
+# password and runs unasked; sudo runs only after a yes at the terminal.
+provide() {
+    tool="$1" reason="$2"
+    command=$(install_command "$tool")
+    if [ -z "$command" ]; then
+        warn "$tool is missing: $reason"
+        add_todo "install $tool with your system's package manager"
+        return 1
+    fi
+    if [ "${MARSHAL_INSTALL_DEPS:-1}" != 0 ]; then
+        run=""
+        case "$command" in
+            sudo\ *) can_ask && ask "$tool is missing ($reason). Install it now with: $command?" && run=1 ;;
+            *) if [ "$package_manager" = brew ] || ask "$tool is missing ($reason). Install it now with: $command?"; then run=1; fi ;;
+        esac
+        if [ -n "$run" ]; then
+            info "  ${dim}→ $command${reset}"
+            if can_ask; then input=/dev/tty; else input=/dev/null; fi
+            if /bin/sh -c "$command" <"$input" >&2 2>&1 && command -v "$tool" >/dev/null 2>&1; then
+                return 0
+            fi
+            warn "installing $tool failed"
+        fi
+    fi
+    warn "$tool is missing: $reason"
+    add_todo "$command"
+    return 1
+}
+
+# Git
+if command -v git >/dev/null 2>&1; then
+    ok "$(git --version 2>/dev/null | head -n 1)"
+elif [ "$os" = darwin ] && [ "$package_manager" != brew ]; then
+    warn "Git is missing: Marshal works inside Git repositories"
+    add_todo "xcode-select --install   ${dim}# installs Git${reset}"
+elif provide git "Marshal works inside Git repositories"; then
+    ok "$(git --version 2>/dev/null | head -n 1) (installed)"
+fi
+
+# tmux 3.3a or newer
+tmux_new_enough() {
+    version=$(tmux -V 2>/dev/null | sed -n 's/^tmux [^0-9]*\([0-9][0-9]*\)\.\([0-9][0-9]*\)\([a-z]\{0,1\}\).*/\1 \2 \3/p')
+    [ -n "$version" ] || return 0 # a build without a version number is assumed current
+    set -- $version
+    [ "$1" -gt 3 ] || { [ "$1" -eq 3 ] && { [ "$2" -gt 3 ] || { [ "$2" -eq 3 ] && [ -n "${3:-}" ]; }; }; }
+}
+tmux_reason="the Marshal TUI runs in it"
+if command -v tmux >/dev/null 2>&1; then
+    if tmux_new_enough; then
+        ok "$(tmux -V)"
+    else
+        warn "$(tmux -V) is too old; Marshal needs 3.3a or newer (Ubuntu 24.04+, Debian 12+, or tmux built from source)"
+        add_todo "upgrade tmux to 3.3a or newer"
+    fi
+elif provide tmux "$tmux_reason"; then
+    ok "$(tmux -V) (installed)"
+fi
+
+# Coding agents: Marshal leads them, so at least one is needed. They are
+# never installed here; each has its own sign-in.
+agents=""
+for agent in claude codex opencode agy; do
+    if command -v "$agent" >/dev/null 2>&1; then agents="$agents $agent"; fi
 done
+if [ -n "$agents" ]; then
+    ok "Coding agents:$agents"
+else
+    warn "No coding agent found: install at least one of Claude Code (claude), Codex (codex), OpenCode (opencode) or Antigravity (agy)"
+    add_todo "install a coding agent: Claude Code, Codex, OpenCode or Antigravity"
+fi
+
+# The binary itself, and the anonymous install count. Registration happens
+# here so an install is counted even before Marshal is first opened; it
+# honours `marshal telemetry disable` and MARSHAL_CLOUD_ENDPOINT=off, and a
+# failure changes nothing.
+if "$bin" version >/dev/null 2>&1; then
+    telemetry=$("$bin" telemetry register 2>/dev/null | head -n 1) || telemetry=""
+    case "$telemetry" in
+        *disabled* | *off*) ok "Anonymous telemetry is off" ;;
+        "") ;;
+        *) ok "Anonymous telemetry is on ${dim}(random ID, version, OS; never code or prompts · marshal telemetry disable)${reset}" ;;
+    esac
+else
+    warn "$bin does not run on this machine"
+fi
+
+if [ -n "$todo" ]; then
+    info ""
+    info "${bold}Left to do:${reset}$todo"
+fi
+info ""
+info "${bold}Start:${reset}"
+if [ -n "$now" ]; then
+    info "  $now   ${dim}# only in this terminal${reset}"
+fi
+info "  cd /path/to/your/repository && marshal"

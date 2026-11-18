@@ -54,7 +54,7 @@ func init() {
 const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
-  telemetry status | disable | enable
+  telemetry status | disable | enable | register
   ultra request
   init
   doctor [--probe-providers] [--deep]
