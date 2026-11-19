@@ -467,6 +467,9 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		v.goalText = goalSummaryText(goal)
 		v.goalSince = goalStartedAt(goal)
 	}
+	if v.planning || v.goalGiven {
+		v.milestone = w.milestone.Load()
+	}
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
 	v.req = w.currentReq()

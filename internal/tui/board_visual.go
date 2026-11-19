@@ -98,6 +98,9 @@ type boardVisual struct {
 	// goalSince is when the active goal was created (or last updated when
 	// CreatedAt is zero), so the home card can show how long since.
 	goalSince time.Time
+	// milestone is the Marshal's planning milestone for the home card, nil
+	// when none is known yet.
+	milestone *planningMark
 	// project is the project's name, for the first-use header.
 	project string
 	// chips is each provider's readiness for the first-use card; armed is

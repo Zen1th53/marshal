@@ -255,6 +255,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 	told := map[int]bool{}
 	var watch *sayWatch
 	var shown chatWait     // what the Board last said the chat waits for
+	var shownReview string // the review command the Board last described
 	var errTold string     // the network error the Board last showed
 	var pausedFrame string // frame where a twice-failed network error paused queued messages
 	// held is the last time the chat waited on the owner or lost a turn to
@@ -308,13 +309,22 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		if !idle {
 			wait = chatWaitingFor(frame)
 		}
+		// The Marshal's own draft review is said in plain words; the raw
+		// command line is kept in Activity for an owner who wants to check it.
+		var review chatReviewAsk
+		if wait == chatWaitPermission {
+			review, _ = chatReviewAskIn(frame)
+		}
 		if wait != chatWaitNone {
 			held = time.Now()
 		}
-		if wait != shown {
-			shown = wait
+		if wait != shown || review.argv != shownReview {
+			shown, shownReview = wait, review.argv
 			if wait != chatWaitNone {
-				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, queued, item.runtime), false)
+				if review.argv != "" {
+					w.addNote(review.plain+". The command the Marshal chat asks to run: "+review.argv, false)
+				}
+				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, queued, item.runtime, review), false)
 			}
 			if queued {
 				told[item.id] = true
@@ -439,7 +449,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			}
 			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Why: why, Runtime: item.runtime})
 			if wait != chatWaitNone {
-				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, true, item.runtime), false)
+				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, true, item.runtime, review), false)
 			} else if pausedFrame == "" && !item.runtime {
 				w.memoryAnswer("Marshal chat busy: your message is queued for its next prompt.", false)
 			}
@@ -564,13 +574,17 @@ const (
 )
 
 // chatWaitWords puts a provider prompt in plain words: who is waiting for
-// whom, and the key that takes the owner straight to it.
-func chatWaitWords(who string, wait chatWait, queued, runtime bool) string {
+// whom, and the key that takes the owner straight to it. review, when its
+// plain words are set, is the Marshal's own draft review the permission
+// prompt is for.
+func chatWaitWords(who string, wait chatWait, queued, runtime bool, review chatReviewAsk) string {
 	var msg string
-	switch wait {
-	case chatWaitTrust:
+	switch {
+	case wait == chatWaitTrust:
 		msg = "Waiting for you: " + who + " asks to trust this folder — open the chat (F11) and choose Yes."
-	case chatWaitPermission:
+	case wait == chatWaitPermission && review.plain != "":
+		msg = "Waiting for you: " + review.plain + " — open the chat (F11) and choose Yes or No. Activity has the exact command."
+	case wait == chatWaitPermission:
 		msg = "Waiting for you: " + who + " asks permission to continue — open the chat (F11) and choose Yes or No."
 	default:
 		return ""
@@ -579,6 +593,92 @@ func chatWaitWords(who string, wait chatWait, queued, runtime bool) string {
 		msg += sayWhose(runtime, " Your message stays queued until you answer.", " Marshal's notice stays queued until you answer.")
 	}
 	return msg
+}
+
+// chatReviewAsk is a permission prompt in the Marshal chat for the
+// Marshal's own fresh-context review of its draft: the protocol's built-in
+// design review starts another provider's CLI (for example
+// "codex exec --ephemeral --skip-git-repo-check -s read-only …"). The Board
+// says it in plain words; the command itself, as the chat shows it, goes to
+// Activity, where a click shows all of it.
+type chatReviewAsk struct {
+	plain string // "The Marshal asks Codex to review its design draft (read-only)"
+	argv  string // the command as the chat's prompt shows it, redacted
+}
+
+// reviewCLIs are the provider CLIs' one-shot forms the Marshal starts a
+// reviewer with, and the reviewer's name in plain words.
+var reviewCLIs = []struct {
+	re   *regexp.Regexp
+	name string
+}{
+	{regexp.MustCompile(`\bcodex\s+exec\b`), "Codex"},
+	{regexp.MustCompile(`\bclaude\s+(-p|--print)\b`), "Claude"},
+	{regexp.MustCompile(`\bgemini\s+(-p|--prompt)\b`), "Gemini"},
+	{regexp.MustCompile(`\bopencode\s+run\b`), "OpenCode"},
+}
+
+// reviewReadOnly and reviewWritable decide "(read-only)". Only a sandbox the
+// command itself asks for counts, and any flag that widens it wins: the plain
+// words must never call a command read-only that is not.
+var (
+	reviewReadOnly = regexp.MustCompile(`(-s|--sandbox)[\s=]+read-only\b|--permission-mode[\s=]+plan\b`)
+	reviewWritable = regexp.MustCompile(`danger-full-access|workspace-write|--full-auto|--yolo|--dangerously|bypass|--permission-mode[\s=]+(acceptEdits|bypassPermissions)`)
+)
+
+// chatReviewAskIn finds, in a chat frame waiting on a permission prompt, a
+// provider CLI started to review the Marshal's draft and describes it. The
+// command may wrap over a few lines in a narrow pane; it ends at the
+// prompt's question or its choices. ok is false for any other command, which
+// keeps the generic "asks permission to continue" words.
+func chatReviewAskIn(frame string) (chatReviewAsk, bool) {
+	lines := plainPaneLines(frame)
+	tail := lines[max(0, len(lines)-20):]
+	for i, line := range tail {
+		for _, cli := range reviewCLIs {
+			loc := cli.re.FindStringIndex(line)
+			if loc == nil {
+				continue
+			}
+			parts := []string{line[loc[0]:]}
+			for _, more := range tail[i+1 : min(len(tail), i+6)] {
+				if reviewPromptChrome(more) {
+					break
+				}
+				parts = append(parts, more)
+			}
+			argv := strings.Join(parts, " ")
+			what := "its draft"
+			low := strings.ToLower(argv)
+			switch {
+			case strings.Contains(low, "concepts_brief") || strings.Contains(low, "concepts brief"):
+				what = "its concepts brief"
+			case strings.Contains(low, "design"):
+				what = "its design draft"
+			}
+			plain := "The Marshal asks " + cli.name + " to review " + what
+			if reviewReadOnly.MatchString(argv) && !reviewWritable.MatchString(argv) {
+				plain += " (read-only)"
+			}
+			return chatReviewAsk{plain: plain, argv: chattransport.OneLine(cleanBoard(RedactContent(argv, nil)), 2000)}, true
+		}
+	}
+	return chatReviewAsk{}, false
+}
+
+// reviewPromptChrome is a line of the permission prompt around a command:
+// the question, a numbered or arrowed choice, or a confirm hint.
+func reviewPromptChrome(line string) bool {
+	low := strings.ToLower(strings.TrimSpace(line))
+	if strings.HasSuffix(low, "?") || linesContainAny([]string{low}, chatPermissionPhrases) {
+		return true
+	}
+	for _, p := range []string{"❯", "›", "> ", "1.", "2.", "3.", "yes", "no,", "no ", "esc "} {
+		if strings.HasPrefix(low, p) {
+			return true
+		}
+	}
+	return false
 }
 
 var (
