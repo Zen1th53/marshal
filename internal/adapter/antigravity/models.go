@@ -60,15 +60,34 @@ type modelTraits struct {
 	planner      string // the planning family of an Orchestrator
 }
 
-func traitsOf(id string) (modelTraits, bool) {
+// strengthOf ranks a family. A Gemini family Marshal does not know yet is
+// taken as the newest and so the strongest: new families appear under new
+// names (Neon arrived as Carbon left), and holding a list would make Marshal
+// prefer an older model until its next release.
+func strengthOf(family string) int {
+	if s, ok := familyStrength[family]; ok {
+		return s
+	}
+	if family == "" || family == "orchestrator" {
+		return 0
+	}
+	return 5
+}
+
+// plannerName is the planning family agy names in an Orchestrator's display
+// name ("Orchestrator (Neon)"); the ID does not always carry it
+// (gemini-pro-orchestrator-g1-pro is "Orchestrator (Argon)").
+var plannerName = regexp.MustCompile(`(?i)orchestrator\s*\(([a-z0-9 ]+)\)`)
+
+func traitsOf(id, name string) (modelTraits, bool) {
 	t := modelTraits{id: id}
 	lower := strings.ToLower(id)
 	if strings.Contains(lower, "orchestrator") {
-		t.orchestrator, t.family, t.planner = true, "orchestrator", "carbon"
-		for family := range familyStrength {
-			if strings.HasSuffix(lower, "-"+family) {
-				t.planner = family
-			}
+		t.orchestrator, t.family = true, "orchestrator"
+		if m := plannerName.FindStringSubmatch(name); m != nil {
+			t.planner = strings.ToLower(strings.TrimSpace(m[1]))
+		} else if i := strings.LastIndex(lower, "orchestrator-"); i >= 0 {
+			t.planner = lower[i+len("orchestrator-"):]
 		}
 		return t, true
 	}
@@ -89,7 +108,9 @@ func IsSelector(s string) bool {
 		return true
 	}
 	family, effort, hasEffort := strings.Cut(s, "-")
-	if _, ok := familyStrength[family]; !ok {
+	// Any single family word is a selector (a family Marshal does not know
+	// yet included); exact model IDs carry a generation and so a digit.
+	if family == "" || strings.ContainsAny(family, "0123456789.") {
 		return false
 	}
 	if !hasEffort {
@@ -116,7 +137,7 @@ func Resolve(selector string, models []Model) (string, error) {
 	}
 	var gemini, orchestrators []modelTraits
 	for _, m := range models {
-		t, ok := traitsOf(m.ID)
+		t, ok := traitsOf(m.ID, m.Name)
 		switch {
 		case !ok:
 		case t.orchestrator:
@@ -181,8 +202,8 @@ func strongest(candidates []modelTraits, keep func(modelTraits) bool, effort str
 		if a.generation != b.generation {
 			return a.generation > b.generation
 		}
-		if familyStrength[a.family] != familyStrength[b.family] {
-			return familyStrength[a.family] > familyStrength[b.family]
+		if strengthOf(a.family) != strengthOf(b.family) {
+			return strengthOf(a.family) > strengthOf(b.family)
 		}
 		if distance(a) != distance(b) {
 			return distance(a) < distance(b)
@@ -197,7 +218,7 @@ func strongest(candidates []modelTraits, keep func(modelTraits) bool, effort str
 
 func strongestOrchestrator(orchestrators []modelTraits) string {
 	sort.SliceStable(orchestrators, func(i, j int) bool {
-		a, b := familyStrength[orchestrators[i].planner], familyStrength[orchestrators[j].planner]
+		a, b := strengthOf(orchestrators[i].planner), strengthOf(orchestrators[j].planner)
 		if a != b {
 			return a > b
 		}
