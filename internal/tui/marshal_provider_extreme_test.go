@@ -145,6 +145,8 @@ func TestExtremeOpenCodeMarshalSelectionProtocolKickoffAndResume(t *testing.T) {
 }
 
 func TestExtremeOpenCodeMarshalProposalAndAuthenticatedDecisions(t *testing.T) {
+	// Model an empty composer, our paste, and submission for delivery checks.
+	t.Setenv("MARSHAL_FAKE_TMUX_COMPOSER", "1")
 	marshalDecidesWork(t)
 	for _, allow := range []bool{true, false} {
 		t.Run(map[bool]string{true: "allow", false: "deny"}[allow], func(t *testing.T) {
