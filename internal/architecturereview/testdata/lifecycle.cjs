@@ -51,4 +51,26 @@ assert.ok(get('change-detail').children[0].children.some(row=>row.children.some(
 run(`state.architecture.components.find(c=>c.id==='edited').parent='untouched';$('only-changes').checked=true;draw()`);
 assert.ok(part('untouched'));
 
+// The runtime's own seed: the contract revision is source_contract.revision
+// (state.revision counts review updates), and history and build status come
+// from /api/history and /api/conformance.
+(async()=>{
+run(`state.architecture.components.find(c=>c.id==='edited').parent=undefined;delete state.history;state.approved=false;state.revision=17;state.base_revision=3;state.architecture.source_contract={id:'project',revision:4,digest:'d'};$('only-changes').checked=false;draw()`);
+assert.equal(get('revision-bar').textContent,'rev 3 → 4 · proposed');
+const replies={'/api/history':{revisions:[{revision:3,date:'2026-11-18',goal:'Goal B',run:'Run B',accepted_by:'Owner B',digest:'sha256:x'}]},
+ '/api/history?revision=3':{revision:3,base_revision:2,date:'2026-11-18',goal:'Goal B',run:'Run B',accepted_by:'Owner B',architecture:fixture.architecture,layouts:fixture.layouts,read_only:true},
+ '/api/conformance':{present:true,revision:4,components:[{id:'current',status:'built'},{id:'untouched',status:'differs from the architecture'},{id:'removed',status:'not built'}]}};
+const asked=[];context.fetch=async path=>{asked.push(path);return {ok:true,json:async()=>JSON.parse(JSON.stringify(replies[path]))};};
+await run('historyAt=0;progressAt=0;Promise.all([loadHistory(),loadProgress()])');
+assert.ok(part('current').children.some(n=>n.textContent==='built'));
+assert.ok(part('untouched').children.some(n=>n.textContent==='differs from the architecture'));
+assert.ok(!part('removed').children.some(n=>n.textContent==='built'));
+const entry=get('history-list').children[0].children[0];
+assert.ok(entry.children[0].textContent.includes('Accepted by: Owner B'));assert.equal(entry.disabled,false);
+entry.onclick();await new Promise(r=>setTimeout(r,0));await new Promise(r=>setTimeout(r,0));
+assert.ok(asked.includes('/api/history?revision=3'));
+assert.equal(get('revision-bar').textContent,'rev 3 · current');assert.equal(run('state.revision'),17);
+get('history-live').onclick();assert.equal(get('revision-bar').textContent,'rev 3 → 4 · proposed');
+run('state.current=true;state.read_only=true;state.base_revision=3;draw()');assert.equal(get('revision-bar').textContent,'rev 4 · current');
 console.log('Lifecycle rendering and interactions passed');
+})().catch(e=>{console.error(e);process.exit(1);});
