@@ -67,7 +67,7 @@ func (s Status) String() string {
 // Compatible means the release metadata matches but no Git commit was available;
 // it is a compatibility check, not a cryptographic integrity attestation.
 func Inspect(provider, root string) Status {
-	s := Status{Provider: provider, Path: root, State: Missing, Fallback: true, Reason: "installed plugin not found locally"}
+	s := Status{Provider: provider, Path: root, State: Missing, Fallback: true, Reason: missingReason(provider)}
 	info, err := os.Stat(root)
 	if root == "" || err != nil || !info.IsDir() {
 		return s
@@ -184,7 +184,11 @@ func ValidProvider(provider string) bool {
 func Check(provider string) Status {
 	key := "MARSHAL_EGM_" + strings.ToUpper(provider) + "_ROOT"
 	if root := os.Getenv(key); root != "" {
-		return Inspect(provider, root)
+		s := Inspect(provider, root)
+		if s.State == Missing {
+			s.Reason += "; " + key + " points at " + root + ", which is not a folder"
+		}
+		return s
 	}
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, "."+provider)
@@ -240,8 +244,23 @@ func Check(provider string) Status {
 		return ambiguous(provider, key)
 	}
 	s := Inspect(provider, "")
-	s.Reason += "; set " + key + " to the installed whole-plugin root"
+	s.Reason += "; " + installHint(provider, key)
 	return s
+}
+
+// missingReason says in plain words what is missing and why it matters: a
+// bare "egm/codex: missing" left owners guessing what EGM even is.
+func missingReason(provider string) string {
+	return "the optional EGM (Elephant Goldfish Model) design-review plugin is not installed for " + provider + "; it adds a structured design review before task planning"
+}
+
+// installHint is the exact next step for a missing plugin: the command that
+// prints the pinned install steps, or why there is none for provider.
+func installHint(provider, key string) string {
+	if _, err := InstallRecipe(provider); err != nil {
+		return "EGM has no installer for " + provider + ", so nothing needs doing"
+	}
+	return "to install it, run `marshal egm install --provider " + provider + "` and follow the printed steps; if it is installed somewhere Marshal does not look, set " + key + " to that plugin folder"
 }
 
 func ambiguous(provider, key string) Status {

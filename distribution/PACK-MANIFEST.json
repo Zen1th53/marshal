@@ -1911,13 +1911,13 @@
     },
     {
       "path": "internal/app/failover_extreme.go",
-      "sha256": "c2a41e208fbaba896efec026e7014ee278a9038d3be800dc6f5bd044a0c38877",
-      "bytes": 17589
+      "sha256": "8e83096f2cbcaa5b459bac5262c27353f9872a8fca69464036524703fd665244",
+      "bytes": 18121
     },
     {
       "path": "internal/app/failover_extreme_test.go",
-      "sha256": "0cc7055e6b3215ef01e5c1556f0aa3d14447da014c8930edb5fa55c36038ac58",
-      "bytes": 24830
+      "sha256": "499e2f5db92e9fd1a81fa2bfa7784f11c9b943e8b4a08d9bcd6bd15e0fce4fb7",
+      "bytes": 25991
     },
     {
       "path": "internal/app/failover_rank_extreme_test.go",
@@ -5916,13 +5916,13 @@
     },
     {
       "path": "internal/egm/compatibility.go",
-      "sha256": "ae58d586b70f4f87ce97af1a43aa6669b535852c473518d49f09239cd38d8797",
-      "bytes": 9621
+      "sha256": "0a120b6a9a88ba725f63bd91ae7da606270c0b134296049c55a77b378b1e8fa7",
+      "bytes": 10593
     },
     {
       "path": "internal/egm/compatibility_test.go",
-      "sha256": "f4cb925a4ffa7770f33c2b808673cd6eee6de9056789a79cb95cab1ef63eda7a",
-      "bytes": 5560
+      "sha256": "889d3e62f56f601387f5690fcda63dd407f20d5fa6201d591ac64ece5da66e70",
+      "bytes": 6905
     },
     {
       "path": "internal/epistemic/adversarial_test.go",
@@ -12441,8 +12441,8 @@
     },
     {
       "path": "internal/tui/architecture_browser_accept.go",
-      "sha256": "46f6c428b63d725ccd36fe4fc370132d75450926608eff5c8d732987eb248fda",
-      "bytes": 7038
+      "sha256": "aae9cc5ec4232033590d81886fde44bf1c37f693ffb162b89be16ccf5809775d",
+      "bytes": 7941
     },
     {
       "path": "internal/tui/architecture_browser_accept_default.go",
@@ -12458,6 +12458,11 @@
       "path": "internal/tui/architecture_browser_accept_extreme_test.go",
       "sha256": "4d754ce4f490ac388eb4a2153c228d2c810a52ca6ef8e974f5ec02333430ef93",
       "bytes": 25276
+    },
+    {
+      "path": "internal/tui/architecture_error_test.go",
+      "sha256": "243c1711f35ca63c47ba72f1c246a84e680db532ea595a4f6083f1c6288bbd9d",
+      "bytes": 1166
     },
     {
       "path": "internal/tui/architecture_requests.go",
@@ -13081,8 +13086,8 @@
     },
     {
       "path": "internal/tui/board_stop_test.go",
-      "sha256": "4ac035877c1c7a8c81cf4eeab08af34adca4a4cd384ba24e8bf6b99165b44ee9",
-      "bytes": 14575
+      "sha256": "7f3c4502aca060e897997b81dbf65967c4195aec94de65e7fc04c0304cf87369",
+      "bytes": 16065
     },
     {
       "path": "internal/tui/board_task_diff.go",
