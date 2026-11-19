@@ -109,6 +109,7 @@ func TestMarshalArchitectureSingletonSurvivesCommandDeadlineAndStopsWithWorkspac
 
 func TestBoardAOpensProjectArchitectureBetweenGoals(t *testing.T) {
 	w, _ := realControlWorkspace(t, "SESSION-architecture-key", false)
+	w.screen = NewScreen(NewTerminal(strings.NewReader(""), &strings.Builder{}))
 	w.homeBoard = true
 	w.endOpening()
 	opened := make(chan string, 1)

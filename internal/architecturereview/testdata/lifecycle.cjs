@@ -57,6 +57,10 @@ assert.ok(part('untouched'));
 (async()=>{
 run(`state.architecture.components.find(c=>c.id==='edited').parent=undefined;delete state.history;state.approved=false;state.revision=17;state.base_revision=3;state.architecture.source_contract={id:'project',revision:4,digest:'d'};$('only-changes').checked=false;draw()`);
 assert.equal(get('revision-bar').textContent,'rev 3 → 4 · proposed');
+// The part panel names the contract revision too, never the review-state counter.
+run("target={kind:'component',id:'edited'};openEditor()");assert.equal(get('selection-meta').textContent,'Revision 4 · edited');run('closeEditor()');
+// The whole connection carries its full label as a tooltip; the caption may be cut.
+assert.ok(part('existing-edge').children.some(n=>n.tagName==='title'&&n.textContent==='Current traffic'));
 const replies={'/api/history':{revisions:[{revision:3,date:'2026-11-18',goal:'Goal B',run:'Run B',accepted_by:'Owner B',digest:'sha256:x'}]},
  '/api/history?revision=3':{revision:3,base_revision:2,date:'2026-11-18',goal:'Goal B',run:'Run B',accepted_by:'Owner B',architecture:fixture.architecture,layouts:fixture.layouts,read_only:true},
  '/api/conformance':{present:true,revision:4,components:[{id:'current',status:'built'},{id:'untouched',status:'differs from the architecture'},{id:'removed',status:'not built'}]}};

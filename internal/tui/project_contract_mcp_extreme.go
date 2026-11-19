@@ -71,6 +71,16 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := redactProjectContractSubmission(&sub); err != nil {
 			return nil, err
 		}
+		// Quality rules first, so a thin draft is told exactly what to fill in
+		// (a blank responsibility or carries also cannot be drawn):
+		// responsibilities, described connections, coverage.
+		requirements, err := w.activeContractRequirements(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("cannot check architecture coverage: %w; retry submission", err)
+		}
+		if err := app.ValidateContractQuality(sub.Contract, requirements); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
 		// Refuse now, with the reason, what the owner could not open later.
 		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
 			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
@@ -79,14 +89,6 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		// component, and a first contract describes the whole project.
 		if err := w.runtime.ValidateProjectContractSubmission(ctx, sub.Contract); err != nil {
 			return nil, err
-		}
-		// Quality rules: responsibilities, described connections, coverage.
-		requirements, err := w.activeContractRequirements(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("cannot check architecture coverage: %w; retry submission", err)
-		}
-		if err := app.ValidateContractQuality(sub.Contract, requirements); err != nil {
-			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
 		p, _, err := w.store.AdmitMCPProjectContract(ctx, store.MCPProposal{ID: occurrenceMCP(l.id, args.SubmissionID), Launch: l.id, Owner: l.owner, Provider: l.provider, Submission: args.SubmissionID}, sub)
 		if err != nil {
