@@ -144,3 +144,37 @@ func TestIsSelector(t *testing.T) {
 		}
 	}
 }
+
+// The offer of 19 November: Carbon gone, a Neon family and two
+// Orchestrators whose planners only their names say. A family Marshal does
+// not know is taken as the newest, so best is Neon, not the older Argon.
+const ultraListingNeon = "Fetching available models...\n" +
+	"gemini-4-neon-high\tGemini 4 Neon (High)\n" +
+	"gemini-4-neon-xhigh\tGemini 4 Neon (XHigh)\n" +
+	"gemini-4-neon-medium\tGemini 4 Neon (Medium)\n" +
+	"gemini-4-neon-low\tGemini 4 Neon (Low)\n" +
+	"gemini-4-argon-medium\tGemini 4 Argon (Medium)\n" +
+	"gemini-4-argon-high\tGemini 4 Argon (High)\n" +
+	"gemini-4-hydrogen-high\tGemini 4 Hydrogen (High)\n" +
+	"gemini-4-hydrogen-low\tGemini 4 Hydrogen (Low)\n" +
+	"gemini-pro-orchestrator-neon\tOrchestrator (Neon)\n" +
+	"gemini-pro-orchestrator-g1-pro\tOrchestrator (Argon)\n" +
+	"gemini-3.8-flash-high\tGemini 3.8 Flash (High)\n" +
+	"claude-opus-5-5-high\tClaude Opus 5.5 (High)\n" +
+	"gpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n"
+
+func TestSelectorsFollowNewFamilies(t *testing.T) {
+	models := ParseModels(ultraListingNeon)
+	for selector, want := range map[string]string{
+		"auto": "gemini-pro-orchestrator-neon", "orchestrator": "gemini-pro-orchestrator-neon",
+		"best": "gemini-4-neon-high", "neon": "gemini-4-neon-high", "neon-xhigh": "gemini-4-neon-xhigh",
+		"argon": "gemini-4-argon-high", "fast": "gemini-4-hydrogen-high", "flash": "gemini-3.8-flash-high",
+	} {
+		if got, err := Resolve(selector, models); err != nil || got != want {
+			t.Errorf("Resolve(%q) = %q, %v; want %q", selector, got, err, want)
+		}
+	}
+	if !IsSelector("neon") || IsSelector("gemini-4-neon-high") {
+		t.Fatal("a new family word is not a selector, or an exact id became one")
+	}
+}

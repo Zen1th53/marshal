@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.19
+
+First published release of the 0.2.18 changes below (v0.2.18 was tagged but not published).
+
+### Added
+- The Board's agy row shows agy's own figures: % left and reset time of each quota group (Gemini, Claude and GPT, Gemini 4 Argon; 5-hour and weekly), from `agy -p /usage`.
+
+### Changed
+- agy selectors follow new model families without a Marshal update: an unknown Gemini family is taken as the newest, any family word (`neon`, `argon`, …) is a selector, and an Orchestrator's planner is read from its display name (`auto` is now the Neon Orchestrator, `best` is Gemini 4 Neon).
+
+### Fixed
+- Tests can turn off the Board's background `agy models` listing (`MARSHAL_NO_USAGE_PROBES`).
+
 ## 0.2.18
 
 ### Added
