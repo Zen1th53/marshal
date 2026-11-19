@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/user"
@@ -399,6 +400,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		fmt.Sprintf("- Current limits: rework-limit %d; ultra-concurrency %d; task-tokens %d; plan-tokens %d; task-money %d; plan-money %d; task-wall-seconds %d; plan-wall-seconds %d.\n", settings.ReworkLimit, settings.UltraConcurrency, settings.Budget.Tokens.Task, settings.Budget.Tokens.Plan, settings.Budget.Money.Task, settings.Budget.Money.Plan, settings.Budget.WallTime.Task, settings.Budget.WallTime.Plan)+
 		runAuthority.control+
 		runAuthority.goal+
+		"- "+app.MarshalTaskDecomposition+"\n"+
 		"- "+app.MarshalCheckContract+"\n"+
 		"- Write the plan pack to "+app.MarshalPackRelativePath+"/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task. A governed worker's worktree has no copy of the pack: the runtime delivers its own tasks/<id>.md text inside a brief of at most 4 KiB and refuses a draft whose governed task note does not fit, so keep each such note under 3.5 KiB and name in it every path the worker must write.\n"+
 		"- Write the task list to "+marshalDraftRelativePath+" as JSON of the form "+
@@ -1452,6 +1454,9 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 		}
 		if note := knownStopNote(err); note != "" {
 			return note
+		}
+		if strings.Contains(err.Error(), "stderr:") {
+			return knownStopPrefix + "Worker failed: " + adapter.DiagnosticSummary(err.Error(), 1000)
 		}
 		return "The run stopped unexpectedly."
 	}

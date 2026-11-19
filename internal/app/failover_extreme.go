@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
@@ -245,6 +246,11 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	}
 	t := &run.Tasks[i]
 	currentWorker := t.Worker
+	failureText, _ := workerFailureText(nil, handin, dispatch.Handle)
+	diagnostic := ""
+	if strings.Contains(failureText, "stderr:") {
+		diagnostic = adapter.DiagnosticSummary(failureText, 1000)
+	}
 
 	now := s.clock()
 	until := now.Add(cooldown)
@@ -296,6 +302,12 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 				pause.Until = qerr.until
 				reason = "All AI providers are at their usage limit until " + formatLocalUntil(qerr.until, s.clock()) + "."
 			}
+		}
+		if diagnostic != "" {
+			machine += "; " + diagnostic
+			t.EscalationReason = machine
+			pause.Detail = machine
+			reason += " " + diagnostic
 		}
 		pause.Reason = reason
 		pauseMarshal(&run, pause)
@@ -455,6 +467,9 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 	}
 	next, err := s.selectFailoverWorker(ctx, t.Worker, t.Mode, drivers, GetEffectiveFailoverOrder(run.Settings))
 	if err != nil {
+		if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {
+			err = fmt.Errorf("%w; %s", err, reason)
+		}
 		return rev, err
 	}
 	if next == t.Worker {
