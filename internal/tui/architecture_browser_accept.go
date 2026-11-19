@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
@@ -67,6 +68,9 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 	} else {
 		// The inbox is read on the Marshal's next turn; wake an idle one.
 		w.wakeMarshalAfterAccept()
+	}
+	for _, id := range w.clearDeferredArchitecture() {
+		w.resolveArchitectureProposal(id, nil)
 	}
 	w.clearAnswer(architectureOpening)
 	w.clearAnswer(architectureOpened)
@@ -173,6 +177,9 @@ var errArchitectureAwaitsSummary = errors.New("the Marshal has not sent the proj
 func plainArchitectureError(err error) string {
 	if errors.Is(err, os.ErrNotExist) {
 		return "the Marshal has not drafted it yet"
+	}
+	if errors.Is(err, model.ErrGoalNotFound) {
+		return "waiting for the confirmed goal; try again in a moment"
 	}
 	if errors.Is(err, errArchitectureAwaitsSummary) {
 		return err.Error() + "."

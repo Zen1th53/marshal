@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -30,10 +32,26 @@ type askCard struct {
 	Question string
 	Choices  []askChoice
 	At       time.Time
+	// digest identifies this question and its choices so an already-answered
+	// ask proposal is not shown again after a control-centre restart.
+	digest string
 	// guard is the changed-files alert this question decides, nil when it
 	// is about something else (askAboutGuard): answering one resolves or
 	// updates the other.
 	guard *guardAlert
+}
+
+// askCardDigest hashes the normalized question and choices of an ask card.
+func askCardDigest(question string, choices []askChoice) string {
+	var b strings.Builder
+	b.WriteString(strings.Join(strings.Fields(question), " "))
+	for _, c := range choices {
+		b.WriteByte('\x00')
+		b.WriteString(c.Key)
+		b.WriteByte('=')
+		b.WriteString(strings.TrimSpace(c.Label))
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(b.String())))
 }
 
 // errAskChoices is the one error parseAskChoices returns: the proposal is
@@ -97,7 +115,8 @@ func (w *Workspace) openAsk(p marshalProposal) {
 	if err != nil {
 		return
 	}
-	card := &askCard{Question: strings.TrimSpace(p.question), Choices: choices, At: time.Now()}
+	question := strings.TrimSpace(p.question)
+	card := &askCard{Question: question, Choices: choices, At: time.Now(), digest: askCardDigest(question, choices)}
 	if a := w.guardAlertNow(); a != nil && askAboutGuard(card.Question, choices) {
 		card.guard = a
 	}
@@ -108,6 +127,7 @@ func (w *Workspace) openAsk(p marshalProposal) {
 	if w.store != nil {
 		_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 	}
+	w.recordProposalCardLatest("ask")
 	w.requestRepaint()
 }
 
@@ -175,6 +195,7 @@ func (w *Workspace) answerAsk(i int) {
 	}
 	label := card.Choices[i].Label
 	w.clearAsk()
+	w.recordAskAnswered(card.digest)
 	w.sayToMarshal(w.workers.context(), label)
 	w.RecordActivity("You answered: " + label)
 	// A question about the changed files answers their card too: keep

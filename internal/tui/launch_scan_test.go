@@ -435,3 +435,113 @@ func TestProjectScanDominantLanguage(t *testing.T) {
 		}
 	}
 }
+
+// TestDefaultScanUnmergedExcludesSquashMergedBranches checks that branches
+// whose changes are already in HEAD (single-commit squash-merge, multi-commit
+// squash-merge, and multi-commit squash-merge followed by later main edits)
+// are treated as merged, while genuinely unmerged branches and branches with
+// extra post-squash commits remain listed, without modifying .git/index.
+func TestDefaultScanUnmergedExcludesSquashMergedBranches(t *testing.T) {
+	root := newLaunchRepo(t)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("layout.go", "package layout\n\nfunc Draw() string { return \"v1\" }\n")
+	write("single.go", "package layout\n\nfunc Single() int { return 1 }\n")
+	write("multi.go", "package layout\n\nfunc Multi() int { return 1 }\n")
+	git("add", ".")
+	git("commit", "-q", "-m", "base")
+
+	// 1. Single-commit branch, squash-merged onto main.
+	git("checkout", "-q", "-b", "squash/single")
+	write("single.go", "package layout\n\nfunc Single() int { return 2 }\n")
+	git("add", "single.go")
+	git("commit", "-q", "-m", "single change")
+	git("checkout", "-q", "main")
+	git("merge", "--squash", "-q", "squash/single")
+	git("commit", "-q", "-m", "PR: single change")
+
+	// 2. Multi-commit branch, squash-merged onto main (tree still matches).
+	git("checkout", "-q", "-b", "squash/multi")
+	write("multi.go", "package layout\n\nfunc Multi() int { return 2 }\n")
+	git("add", "multi.go")
+	git("commit", "-q", "-m", "multi part 1")
+	write("multi.go", "package layout\n\nfunc Multi() int { return 3 }\n")
+	git("add", "multi.go")
+	git("commit", "-q", "-m", "multi part 2")
+	git("checkout", "-q", "main")
+	git("merge", "--squash", "-q", "squash/multi")
+	git("commit", "-q", "-m", "PR: multi change")
+
+	// 3. Multi-commit branch, squash-merged onto main, then main later edited
+	// the same file (like PR #258 architecture/layered-layout + follow-up PRs).
+	git("checkout", "-q", "-b", "architecture/layered-layout")
+	write("layout.go", "package layout\n\nfunc Draw() string { return \"layered-wip\" }\n")
+	git("add", "layout.go")
+	git("commit", "-q", "-m", "layered part 1")
+	write("layout.go", "package layout\n\nfunc Draw() string { return \"layered\" }\n")
+	git("add", "layout.go")
+	git("commit", "-q", "-m", "layered part 2")
+	git("checkout", "-q", "main")
+	git("merge", "--squash", "-q", "architecture/layered-layout")
+	git("commit", "-q", "-m", "PR #258: layered layout")
+	write("layout.go", "package layout\n\nfunc Draw() string { return \"layered-v2\" }\n")
+	git("add", "layout.go")
+	git("commit", "-q", "-m", "follow-up on layout")
+
+	// 4. Squash-merged branch that later gained another unmerged commit.
+	git("checkout", "-q", "-b", "feature/more-work")
+	write("extra.go", "package layout\n\nvar Extra = 1\n")
+	git("add", "extra.go")
+	git("commit", "-q", "-m", "extra 1")
+	git("checkout", "-q", "main")
+	git("merge", "--squash", "-q", "feature/more-work")
+	git("commit", "-q", "-m", "PR: extra 1")
+	git("checkout", "-q", "feature/more-work")
+	write("extra.go", "package layout\n\nvar Extra = 2\n")
+	git("add", "extra.go")
+	git("commit", "-q", "-m", "extra 2 unmerged")
+	git("checkout", "-q", "main")
+
+	// 5. Genuinely unmerged branch.
+	git("checkout", "-q", "-b", "feature/open")
+	write("open.go", "package layout\n\nvar Open = true\n")
+	git("add", "open.go")
+	git("commit", "-q", "-m", "open work")
+	git("checkout", "-q", "main")
+
+	indexPath := filepath.Join(root, ".git", "index")
+	before, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := defaultScanUnmerged(t.Context(), root)
+	if err != nil {
+		t.Fatalf("defaultScanUnmerged: %v", err)
+	}
+	want := "feature/more-work,feature/open"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("defaultScanUnmerged = %v, want [%s]", got, want)
+	}
+
+	after, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("defaultScanUnmerged rewrote .git/index; it must be read only")
+	}
+}

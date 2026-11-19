@@ -10,8 +10,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -24,15 +27,15 @@ import (
 const marshalProposalPrefix = "MARSHAL_PROPOSAL "
 
 type marshalProposal struct {
-	reviewed                                                              *app.PlanApprovalSnapshot
-	occurrence                                                            string
-	who                                                                   string
-	sourceSession, revision, digest, instructionRef, criteria             string
-	action, key, value, provider, path, id, reason, language string
-	taskID, targetWorker, model                              string
-	question, choices, card                                               string
-	ids, until                                                            string
-	freshSession                                                          bool
+	reviewed                                                  *app.PlanApprovalSnapshot
+	occurrence                                                string
+	who                                                       string
+	sourceSession, revision, digest, instructionRef, criteria string
+	action, key, value, provider, path, id, reason, language  string
+	taskID, targetWorker, model                               string
+	question, choices, card                                   string
+	ids, until                                                string
+	freshSession                                              bool
 }
 
 // Parse a single visible assistant line, never shell source. Reject unknown,
@@ -802,6 +805,128 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 	}
 }
 
+var workspaceInstanceSeq atomic.Uint64
+
+func (w *Workspace) workspaceInstanceID() string {
+	w.permissions.mu.Lock()
+	defer w.permissions.mu.Unlock()
+	if w.permissions.instanceID == "" {
+		w.permissions.instanceID = fmt.Sprintf("ws-%d-%d-%d", os.Getpid(), time.Now().UnixNano(), workspaceInstanceSeq.Add(1))
+	}
+	return w.permissions.instanceID
+}
+
+const (
+	markerAskAnsweredPrefix  = "card:ask-answered:"
+	markerReqConfirmedPrefix = "card:requirements-confirmed:"
+	markerCardLatestPrefix   = "card:latest:"
+)
+
+func (w *Workspace) recordAskAnswered(digest string) {
+	if digest == "" || w.store == nil || w.projectID == "" {
+		return
+	}
+	_ = w.store.RecordMarshalProposalMarker(context.Background(), w.projectID, markerAskAnsweredPrefix+digest, "", "answered")
+}
+
+func (w *Workspace) askAnsweredInStore(digest string) bool {
+	if digest == "" || w.store == nil || w.projectID == "" {
+		return false
+	}
+	_, ok, err := w.store.MarshalProposalMarker(context.Background(), w.projectID, markerAskAnsweredPrefix+digest)
+	return err == nil && ok
+}
+
+func (w *Workspace) recordRequirementsConfirmed(texts [8]string) {
+	if w.store == nil || w.projectID == "" {
+		return
+	}
+	_ = w.store.RecordMarshalProposalMarker(context.Background(), w.projectID, markerReqConfirmedPrefix+reqTextsDigest(texts), "", "confirmed")
+}
+
+func (w *Workspace) requirementsConfirmedInStore(texts [8]string) bool {
+	if w.store == nil || w.projectID == "" {
+		return false
+	}
+	_, ok, err := w.store.MarshalProposalMarker(context.Background(), w.projectID, markerReqConfirmedPrefix+reqTextsDigest(texts))
+	return err == nil && ok
+}
+
+func (w *Workspace) recordProposalCardLatest(kind string) {
+	if kind == "" || w.store == nil || w.projectID == "" {
+		return
+	}
+	val := fmt.Sprintf("%s\t%d", w.workspaceInstanceID(), time.Now().UnixNano())
+	_ = w.store.RecordMarshalProposalMarker(context.Background(), w.projectID, markerCardLatestPrefix+kind, val, "recorded")
+}
+
+// supersededByEarlierSessionCard reports whether a card proposal file from
+// before a control-centre restart is older than a card of kind that an earlier
+// Workspace instance already applied or confirmed.
+func (w *Workspace) supersededByEarlierSessionCard(kind string, modTime time.Time) bool {
+	if modTime.IsZero() || w.store == nil || w.projectID == "" {
+		return false
+	}
+	raw, ok, err := w.store.MarshalProposalMarker(context.Background(), w.projectID, markerCardLatestPrefix+kind)
+	if err != nil || !ok {
+		return false
+	}
+	inst, nsText, ok := strings.Cut(raw, "\t")
+	if !ok || inst == "" || inst == w.workspaceInstanceID() {
+		return false
+	}
+	ns, err := strconv.ParseInt(nsText, 10, 64)
+	if err != nil {
+		return false
+	}
+	return modTime.UnixNano() < ns
+}
+
+// proposalCardAlreadyHandled reports whether an ask or requirements proposal
+// was already answered, confirmed, resolved through another channel, or
+// superseded before a restart.
+func (w *Workspace) proposalCardAlreadyHandled(p marshalProposal, line string, modTime time.Time) bool {
+	if p.action != "ask" && p.action != "requirements" {
+		return false
+	}
+	if w.store != nil && w.projectID != "" {
+		if resolved, err := w.store.HasResolvedMarshalProposalLine(context.Background(), w.projectID, line); err == nil && resolved {
+			return true
+		}
+	}
+	switch p.action {
+	case "ask":
+		if choices, err := parseAskChoices(p.choices); err == nil {
+			if w.askAnsweredInStore(askCardDigest(strings.TrimSpace(p.question), choices)) {
+				return true
+			}
+		}
+		if w.supersededByEarlierSessionCard("ask", modTime) || w.supersededByEarlierSessionCard("requirements", modTime) {
+			return true
+		}
+	case "requirements":
+		if lines, err := parseRequirementsCard(p.card); err == nil {
+			if w.requirementsConfirmedInStore(reqTexts(lines)) {
+				return true
+			}
+		}
+		if w.supersededByEarlierSessionCard("requirements", modTime) {
+			return true
+		}
+	}
+	return false
+}
+
+type pendingProposalFile struct {
+	name      string
+	modTime   time.Time
+	sessionID string
+	id        string
+	who       string
+	line      string
+	proposal  marshalProposal
+}
+
 // Files are suggestions, never authority. Only the live Marshal monitor consumes
 // them; parsing and the ordinary operator popup remain mandatory.
 func (w *Workspace) observeMarshalProposalFiles(root string) {
@@ -836,6 +961,7 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		return
 	}
 
+	var files []pendingProposalFile
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".json") || !entry.Type().IsRegular() {
@@ -887,19 +1013,60 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		if w.store == nil {
 			continue
 		}
-		pending, admitErr := w.store.AdmitMarshalProposal(context.Background(), w.projectID, id, line)
+		files = append(files, pendingProposalFile{
+			name:      name,
+			modTime:   info.ModTime(),
+			sessionID: sessionID,
+			id:        id,
+			who:       who,
+			line:      line,
+			proposal:  proposal,
+		})
+	}
+
+	// Process proposal files in chronological order rather than filename order
+	// so an edited requirements card is never overwritten by an older version,
+	// and skip cards already superseded within the batch or before a restart.
+	sort.Slice(files, func(i, j int) bool {
+		if !files[i].modTime.Equal(files[j].modTime) {
+			return files[i].modTime.Before(files[j].modTime)
+		}
+		return files[i].name < files[j].name
+	})
+
+	lastAsk, lastReq, lastIntake := -1, -1, -1
+	for i, f := range files {
+		switch f.proposal.action {
+		case "ask":
+			lastAsk = i
+		case "requirements":
+			lastReq = i
+		case "intake":
+			lastIntake = i
+		}
+	}
+
+	for i, f := range files {
+		pending, admitErr := w.store.AdmitMarshalProposal(context.Background(), w.projectID, f.id, f.line)
 		if admitErr != nil {
 			continue
 		}
 		// Durable admission precedes source consumption. A crash on either
 		// side of the rename replays the same occurrence, not a new request.
-		if err := fs.Rename(name, name+".consumed"); err != nil {
+		if err := fs.Rename(f.name, f.name+".consumed"); err != nil {
 			continue
 		}
 		if !pending {
 			continue
 		}
-		w.observeMarshalProposalSource(importer.SessionTranscript{SessionID: sessionID, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id, who)
+		superseded := (f.proposal.action == "ask" && (i < lastAsk || i < lastReq)) ||
+			(f.proposal.action == "requirements" && i < lastReq) ||
+			(f.proposal.action == "intake" && i < lastIntake)
+		if superseded || w.proposalCardAlreadyHandled(f.proposal, f.line, f.modTime) {
+			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, f.id, "superseded")
+			continue
+		}
+		w.observeMarshalProposalSource(importer.SessionTranscript{SessionID: f.sessionID, Messages: []importer.Message{{Role: "assistant", Content: f.line}}}, f.id, f.who)
 	}
 }
 
@@ -923,7 +1090,30 @@ func (w *Workspace) recoverMarshalProposals() {
 	if err != nil {
 		return
 	}
-	for _, record := range pending {
+	// Pre-scan unbound pending records (ordered by rowid) so superseded ask,
+	// requirements, or intake admissions from before a restart are resolved
+	// instead of replayed.
+	lastAsk, lastReq, lastIntake := -1, -1, -1
+	parsedUnbound := make([]marshalProposal, len(pending))
+	hasParsed := make([]bool, len(pending))
+	for i, record := range pending {
+		if record.RequestJSON != "" || w.staleProposalMCP(record.ID) {
+			continue
+		}
+		if p, err := parseMarshalProposal(record.Line); err == nil {
+			parsedUnbound[i] = p
+			hasParsed[i] = true
+			switch p.action {
+			case "ask":
+				lastAsk = i
+			case "requirements":
+				lastReq = i
+			case "intake":
+				lastIntake = i
+			}
+		}
+	}
+	for i, record := range pending {
 		if w.staleProposalMCP(record.ID) {
 			continue
 		}
@@ -931,6 +1121,16 @@ func (w *Workspace) recoverMarshalProposals() {
 			continue
 		}
 		if record.RequestJSON == "" {
+			if hasParsed[i] {
+				p := parsedUnbound[i]
+				superseded := (p.action == "ask" && (i < lastAsk || i < lastReq)) ||
+					(p.action == "requirements" && i < lastReq) ||
+					(p.action == "intake" && i < lastIntake)
+				if superseded || w.proposalCardAlreadyHandled(p, record.Line, time.Time{}) {
+					_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, record.ID, "superseded")
+					continue
+				}
+			}
 			// Admissions interrupted before binding still need parsing and a popup.
 			w.observePendingMarshalProposal(record.ID, record.Line)
 			continue
@@ -1008,8 +1208,12 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 		var openErr error
 		if p.who != "Marshal" || !strings.HasPrefix(p.occurrence, "runtime:") {
 			openErr = errors.New("architecture auto-open requires the bound live Marshal source; use /marshal architecture")
+		} else if w.currentReq() != nil {
+			// Wait until the owner confirms the open requirements card so we
+			// do not drop this request with "goal contract not found".
+			w.holdArchitectureRequest([]string{p.occurrence}, p.reason)
 		} else {
-			_, openErr = w.marshalArchitecture(w.workers.context(), "", p.occurrence)
+			_, openErr = w.marshalArchitectureProposal(w.workers.context(), p.occurrence, p.reason)
 		}
 		if openErr != nil {
 			w.resolveArchitectureProposal(p.occurrence, openErr)
