@@ -140,7 +140,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:6482dde50450936491e4f64cad46bbe650ea925ac3c1506d4d60a308a80d8d2d"
+const ExtremeProtocolDigest = "sha256:4ee2e0e882cd2cf35aef7f02c306b034fae104b088b365bd588ccd0d28b72ed2"
 
 // shippedProtocolStripper rewrites the base protocol's operator-popup and
 // press-A instructions out of the shipped (untagged) edition. This edition's
