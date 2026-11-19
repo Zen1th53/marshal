@@ -8986,8 +8986,8 @@
     },
     {
       "path": "internal/opencodecli/contract.go",
-      "sha256": "08260d0b218a6d609482f2862295fa6fcec7eba2c6f7572616b1ca4fe259837c",
-      "bytes": 5625
+      "sha256": "c4e7240a2a83732eed99757cdf1c0105470ca5b03941c16aff9ed0e639b62e61",
+      "bytes": 5736
     },
     {
       "path": "internal/opencodecli/contract_test.go",
