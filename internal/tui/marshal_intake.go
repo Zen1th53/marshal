@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -65,5 +66,9 @@ func (w *Workspace) marshalContinuityBriefing(root, brief string) string {
 	if strings.Contains(brief, "PROJECT SCAN (data, read only, taken at launch):") {
 		scan = ""
 	}
-	return w.appendProjectKnowledge(root, appendMarshalIntake(root, brief)+scan)
+	handoff := ""
+	if !strings.Contains(brief, app.MarshalGoalHandoffHeader) {
+		handoff = w.marshalGoalHandoffBlock(root)
+	}
+	return w.appendProjectKnowledge(root, appendMarshalIntake(root, brief)+scan+handoff)
 }
