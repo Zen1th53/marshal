@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -11,7 +12,22 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/model"
 )
+
+func TestMarshalChatUsesSavedCodexEffort(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-marshal-effort")
+	ctx := context.Background()
+	if _, err := rt.Store().SetExecutionModelPreference(ctx, model.ExecutionModelPreference{
+		ProjectID: rt.ProjectID(), Adapter: "codex", Model: "gpt-test", Effort: "low",
+	}, 0); err != nil {
+		t.Fatal(err)
+	}
+	args, err := w.marshalChatEffortArgs(ctx, "codex", rt.ProjectRoot(), []string{marshalKickoff})
+	if err != nil || !hasPair(args, "-c", `model_reasoning_effort="low"`) {
+		t.Fatalf("saved effort not used: %q (%v)", args, err)
+	}
+}
 
 func TestNativeArgsPreserveQuotesWithoutShellExpansion(t *testing.T) {
 	got, err := nativeArgs(`-i "a b.png" -c 'model="some-model"' -- 'fix $(touch nope); please' ""`)
