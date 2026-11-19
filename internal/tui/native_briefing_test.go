@@ -317,13 +317,15 @@ func TestCodexBriefingsJoinInOneDeveloperInstruction(t *testing.T) {
 	}
 }
 
-// Each CLI gets its opening turn in the form it accepts.
+// Each CLI gets its opening turn in the form it accepts; Antigravity loads the
+// hidden briefing from --add-dir and opens with no automatic turn.
 func TestMarshalKickoffArgsPerProvider(t *testing.T) {
 	for provider, want := range map[string][]string{
 		"codex":       {marshalKickoff},
 		"claude":      {marshalKickoff},
 		"opencode":    {"--prompt", marshalKickoff},
-		"antigravity": {"--prompt-interactive", marshalKickoff},
+		"antigravity": nil,
+		"agy":         nil,
 	} {
 		if got := marshalKickoffArgs(provider); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 			t.Errorf("%s kickoff = %q, want %q", provider, got, want)
@@ -333,7 +335,8 @@ func TestMarshalKickoffArgsPerProvider(t *testing.T) {
 
 // An active run found by the launch scan opens with Continue even when no
 // intake is saved, and every call site agrees because each computes the cue
-// from marshalOpening for the same root.
+// from marshalOpening for the same root. Antigravity still opens with no
+// automatic turn.
 func TestOpeningContinueOnActiveRun(t *testing.T) {
 	root := t.TempDir()
 	// No intake file written: the only reason to continue is the active run.
@@ -350,7 +353,7 @@ func TestOpeningContinueOnActiveRun(t *testing.T) {
 		"codex":       {marshalKickoffContinue},
 		"claude":      {marshalKickoffContinue},
 		"opencode":    {"--prompt", marshalKickoffContinue},
-		"antigravity": {"--prompt-interactive", marshalKickoffContinue},
+		"antigravity": nil,
 	} {
 		if got := marshalKickoffArgs(provider, root); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 			t.Errorf("%s kickoff = %q, want %q", provider, got, want)
@@ -400,7 +403,13 @@ func TestResumeLaunchHasNoCue(t *testing.T) {
 func TestKickoffRecognisedAfterIntakeChangesMidLaunch(t *testing.T) {
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		root := t.TempDir()
-		args := append([]string{"-x"}, marshalKickoffArgs(provider, root)...) // Start.
+		cue := marshalKickoffArgs(provider, root)
+		if provider == "antigravity" {
+			// Earlier Marshal versions launched agy with --prompt-interactive;
+			// a saved argv carrying that cue is still recognised.
+			cue = []string{"--prompt-interactive", marshalKickoff}
+		}
+		args := append([]string{"-x"}, cue...) // Start.
 		if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -411,12 +420,12 @@ func TestKickoffRecognisedAfterIntakeChangesMidLaunch(t *testing.T) {
 			t.Fatal("fixture: intake did not change the opening")
 		}
 		got := insertBeforeKickoff(provider, root, args, []string{"--flag", "v"})
-		want := append([]string{"-x", "--flag", "v"}, marshalCueArgs(provider, marshalKickoff)...)
+		want := append([]string{"-x", "--flag", "v"}, cue...)
 		if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 			t.Fatalf("%s insert = %q, want %q", provider, got, want)
 		}
 		stripped, opening := stripMarshalKickoff(provider, root, args)
-		if len(marshalCueArgs(provider, "")) == 1 {
+		if len(cue) == 1 {
 			if opening != marshalKickoff || strings.Join(stripped, "\x00") != "-x" {
 				t.Fatalf("%s strip = %q %q", provider, stripped, opening)
 			}
@@ -447,12 +456,20 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		opening := args[len(args)-1]
-		if opening != marshalKickoffContinue {
-			t.Fatalf("%s opening = %q, want %q", provider, opening, marshalKickoffContinue)
-		}
-		if strings.Contains(opening, "Uzbek") || strings.Contains(opening, "{") || strings.Contains(opening, "MARSHAL PROTOCOL") {
-			t.Fatalf("%s visible opening leaked intake: %s", provider, opening)
+		if provider == "antigravity" {
+			for _, a := range args {
+				if a == "--prompt-interactive" || a == marshalKickoff || a == marshalKickoffContinue || strings.Contains(a, "Uzbek") || strings.Contains(a, "MARSHAL PROTOCOL") {
+					t.Fatalf("antigravity launch carried an automatic turn or leaked intake: %q", args)
+				}
+			}
+		} else {
+			opening := args[len(args)-1]
+			if opening != marshalKickoffContinue {
+				t.Fatalf("%s opening = %q, want %q", provider, opening, marshalKickoffContinue)
+			}
+			if strings.Contains(opening, "Uzbek") || strings.Contains(opening, "{") || strings.Contains(opening, "MARSHAL PROTOCOL") {
+				t.Fatalf("%s visible opening leaked intake: %s", provider, opening)
+			}
 		}
 		var hidden string
 		switch provider {
@@ -515,8 +532,12 @@ func TestOpeningCueIsPlainAndLegacyCuesAreRecognised(t *testing.T) {
 		}
 	}
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
-		for _, legacy := range legacyMarshalCues {
-			args := append([]string{"-c", "x", "--"}, marshalCueArgs(provider, legacy)...)
+		for _, legacy := range append([]string{marshalKickoff, marshalKickoffContinue}, legacyMarshalCues...) {
+			cue := marshalCueArgs(provider, legacy)
+			if provider == "antigravity" {
+				cue = []string{"--prompt-interactive", legacy}
+			}
+			args := append([]string{"-c", "x", "--"}, cue...)
 			if got := dropMarshalCue(provider, args); !slices.Equal(got, []string{"-c", "x"}) {
 				t.Fatalf("%s: legacy cue %q not stripped: %q", provider, legacy, got)
 			}

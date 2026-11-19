@@ -37,11 +37,19 @@ func TestMarshalLaunchHiddenProtocolMatrix(t *testing.T) {
 				}
 				defer dir.remove()
 				opening := marshalKickoffArgs(provider)
-				if strings.Join(args[len(args)-len(opening):], "\x00") != strings.Join(opening, "\x00") {
-					t.Fatalf("wrong kickoff: %q", args)
-				}
-				if containsMarshalProtocol(args[len(args)-1]) {
-					t.Fatal("protocol in visible opening")
+				if provider == "antigravity" {
+					for _, a := range args {
+						if a == "--prompt-interactive" || a == marshalKickoff || a == marshalKickoffContinue {
+							t.Fatalf("antigravity carried an automatic opening turn: %q", args)
+						}
+					}
+				} else {
+					if strings.Join(args[len(args)-len(opening):], "\x00") != strings.Join(opening, "\x00") {
+						t.Fatalf("wrong kickoff: %q", args)
+					}
+					if containsMarshalProtocol(args[len(args)-1]) {
+						t.Fatal("protocol in visible opening")
+					}
 				}
 				var hidden string
 				switch provider {
@@ -64,7 +72,7 @@ func TestMarshalLaunchHiddenProtocolMatrix(t *testing.T) {
 					if provider == "opencode" && (len(env) != 1 || !strings.Contains(env[0], dir.file())) {
 						t.Fatal("instructions not configured")
 					}
-					if provider == "antigravity" && (args[0] != "--add-dir" || args[1] != dir.path) {
+					if provider == "antigravity" && hiddenFlagValue(args, "--add-dir", "") != dir.path {
 						t.Fatal("workspace not configured")
 					}
 					for _, arg := range args {
@@ -422,18 +430,28 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				visibleOpening := args[len(args)-1]
-				wantOpening := "Hello."
-				if mode != "fresh" {
-					wantOpening = "Hello again."
-				}
-				if visibleOpening != wantOpening {
-					t.Fatalf("visible opening = %q, want %q", visibleOpening, wantOpening)
-				}
-				if strings.Contains(visibleOpening, "{") || strings.Contains(visibleOpening, "Uzbek") ||
-					strings.Contains(visibleOpening, "Begin at step") || strings.Contains(visibleOpening, "protocol") ||
-					strings.Contains(visibleOpening, "intake") {
-					t.Fatalf("protocol or JSON leaked into visible opening: %q", visibleOpening)
+				if provider == "antigravity" {
+					for _, a := range args {
+						if a == "--prompt-interactive" || a == marshalKickoff || a == marshalKickoffContinue ||
+							strings.Contains(a, "Uzbek") || strings.Contains(a, "Begin at step") ||
+							strings.Contains(a, "MARSHAL PROTOCOL") {
+							t.Fatalf("antigravity carried an automatic turn or leaked intake: %q", args)
+						}
+					}
+				} else {
+					visibleOpening := args[len(args)-1]
+					wantOpening := "Hello."
+					if mode != "fresh" {
+						wantOpening = "Hello again."
+					}
+					if visibleOpening != wantOpening {
+						t.Fatalf("visible opening = %q, want %q", visibleOpening, wantOpening)
+					}
+					if strings.Contains(visibleOpening, "{") || strings.Contains(visibleOpening, "Uzbek") ||
+						strings.Contains(visibleOpening, "Begin at step") || strings.Contains(visibleOpening, "protocol") ||
+						strings.Contains(visibleOpening, "intake") {
+						t.Fatalf("protocol or JSON leaked into visible opening: %q", visibleOpening)
+					}
 				}
 				// Verify hidden instruction channel delivery
 				var hidden string

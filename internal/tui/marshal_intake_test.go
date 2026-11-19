@@ -45,6 +45,12 @@ func TestIntakeLanguageOnlyAccepted(t *testing.T) {
 
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		args := marshalKickoffArgs(provider, rt.ProjectRoot())
+		if provider == "antigravity" {
+			if len(args) != 0 {
+				t.Fatalf("%s marshalKickoffArgs = %v, want no automatic turn", provider, args)
+			}
+			continue
+		}
 		if len(args) == 0 || args[len(args)-1] != marshalKickoffContinue {
 			t.Fatalf("%s marshalKickoffArgs = %v, want last element %q", provider, args, marshalKickoffContinue)
 		}
