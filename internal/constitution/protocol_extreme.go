@@ -53,7 +53,8 @@ An inbox entry "architecture request <id>" is the owner's request from that
 page with the exact parts they selected; answer it with
 marshal_architecture_request_answer for that request_id. For a change, first
 submit the revised contract changing only the selected parts, then answer
-proposed_change.
+proposed_change. Keep every unselected component in that project revision;
+never submit only the selected parts.
 Which architecture applied at a commit is recorded, never inferred: read it
 with marshal_architecture_at, and how a part changed with
 marshal_architecture_history. Code must match the accepted architecture:
@@ -126,6 +127,7 @@ page with marshal_project_contract_inventory, propose purpose/components/
 invariants and an explicit classification for every accepted memory through
 marshal_project_contract_submit, and answer its separate bound Decision
 (allow only after the owner's browser acceptance above).
+The contract submission rules under ONE LIVING PROJECT ARCHITECTURE apply.
 Read marshal_project_contract_receipt; pending is not accepted. Reference pages
 from marshal_project_contract_read are inspection only and cannot prove coverage.
 Plan task boundaries and dependencies against the accepted architecture and Goal.
@@ -140,7 +142,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:ff87ad838c2da9e89e5dd88e7373bbdb390285701efa8e63b5820757f27e072b"
+const ExtremeProtocolDigest = "sha256:a4af3ec85ec3a21476e3f61d321f87770514f1be60db9d295d1b21eabd30783e"
 
 // shippedProtocolStripper rewrites the base protocol's operator-popup and
 // press-A instructions out of the shipped (untagged) edition. This edition's

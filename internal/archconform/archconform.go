@@ -46,6 +46,9 @@ type Map struct {
 func NewMap(c projectcontext.Contract) *Map {
 	m := &Map{contract: c, parent: map[string]string{}, deps: map[string]map[string]bool{}}
 	for _, v := range c.Components {
+		if v.Removed {
+			continue
+		}
 		m.parent[v.ID] = v.Parent
 		m.deps[v.ID] = map[string]bool{}
 		for _, d := range v.Dependencies {
@@ -65,6 +68,9 @@ func (m *Map) owner(p string) (string, int) {
 	p = clean(p)
 	best, length := "", -1
 	for _, v := range m.contract.Components {
+		if v.Removed {
+			continue
+		}
 		for _, q := range v.Paths {
 			q = clean(q)
 			if (q == "." || p == q || strings.HasPrefix(p, q+"/")) && len(q) > length {

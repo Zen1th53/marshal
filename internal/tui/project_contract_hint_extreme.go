@@ -13,7 +13,7 @@ import (
 
 // projectContractSubmissionShape is the exact proposal the runtime admits
 // through marshal_project_contract_submit, stated for the Marshal.
-const projectContractSubmissionShape = `{"action":"project-contract","expected_version":<current_version from marshal_project_contract_inventory>,"contract":{"format_version":1,"project":<project from the inventory>,"id":"<contract id>","revision":<expected_version+1>,"purpose":"...","components":[{"id":"...","responsibility":"...","paths":["<repo path>"],"dependencies":["<component id>"]}],"invariants":["..."],"required":[<one ref per inventory entry that must stay mandatory, else []>],"reviewed_inventory_digest":"<completeness_digest from the last inventory page>"}}`
+const projectContractSubmissionShape = `{"action":"project-contract","expected_version":<current_version from marshal_project_contract_inventory>,"contract":{"format_version":1,"project":<project from the inventory>,"id":"<contract id>","revision":<expected_version+1>,"purpose":"...","components":[{"id":"...","responsibility":"...","paths":["<repo path>"],"dependencies":["<component id>"],"covers":["<goal success criterion or confirmed requirement text>"]}],"connections":[{"from":"<component id>","to":"<dependency id>","carries":"<what flows over this connection>"}],"invariants":["..."],"required":[<one ref per inventory entry that must stay mandatory, else []>],"reviewed_inventory_digest":"<completeness_digest from the last inventory page>"}}`
 
 // explainProjectContractSubmission names what makes a contract draft
 // inadmissible. A bare "required context invalid" left the Marshal guessing

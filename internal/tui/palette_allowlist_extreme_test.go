@@ -14,7 +14,7 @@ import (
 // budget, goal, team, policy…) cannot creep back.
 var shippedPaletteAllowList = []string{
 	"view.board", "view.host", "view.memory", "view.providers", "view.verify", "view.security", "view.plan", "view.architecture",
-	"board.move", "board.inspect", "board.focus", "board.pane", "board.close", "inspector.events", "inspector.walk", "inspector.pane", "task.diff", "task.retry", "task.model",
+	"board.move", "board.inspect", "board.focus", "board.pane", "board.close", "inspector.events", "inspector.walk", "inspector.pane", "task.diff", "task.retry", "task.model", "architecture.browse",
 	"inbox.reply", "inbox.decide", "inbox.reason", "run.stopped", "inbox.cancel", "inbox.hardgate",
 	"memory.decide", "memory.scroll", "providers.verify", "providers.route", "verify.return", "security.decide", "plan.inspect", "arch.open",
 	"marshal.pick", "marshal.chat", "marshal.say", "command.line", "palette", "help", "workers.stop", "interrupt",

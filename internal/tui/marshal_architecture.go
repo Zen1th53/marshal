@@ -46,6 +46,27 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		case <-m.architecture.Done:
 			m.architecture = nil
 		default:
+			existing := m.architecture
+			m.mu.Unlock()
+			current, err := w.architectureSessionCurrent(ctx, existing)
+			if err != nil {
+				return "", err
+			}
+			m.mu.Lock()
+			if m.architecture != existing {
+				m.mu.Unlock()
+				return w.marshalArchitecture(ctx, goal, occurrence)
+			}
+			if !current {
+				stale := m.architecture
+				m.mu.Unlock()
+				// Close outside the session lock: an in-flight browser callback
+				// may need that lock while shutdown waits for it to finish.
+				if err := stale.Close(); err != nil {
+					return "", err
+				}
+				return w.marshalArchitecture(ctx, goal, occurrence)
+			}
 			url := m.architecture.URL
 			m.mu.Unlock()
 			if strings.TrimSpace(goal) != "" {
@@ -90,9 +111,6 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		var err error
 		if start == nil {
 			workerCtx, err = w.marshalOperationOwnerContext(workerCtx)
-			if err == nil {
-				_, provider, _, err = w.marshalService(workerCtx, "")
-			}
 			if err == nil {
 				session, err = w.startArchitectureReviewSession(workerCtx, rt, provider, goal)
 			}
@@ -168,9 +186,6 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 			w.RecordActivity(architectureOpenedNote(url))
 		}
 		w.architectureOpenResult(err)
-		if session == nil {
-			return
-		}
 		if session == nil {
 			return
 		}

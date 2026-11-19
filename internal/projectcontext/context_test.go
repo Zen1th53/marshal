@@ -320,3 +320,97 @@ func TestRequiredContextPlanningModePreservesLegacyWorkerBytes(t *testing.T) {
 		t.Fatal("unaccepted malformed contract produced planning selector", err)
 	}
 }
+
+func TestContractConnectionsAndCoversCanonicalizeAndValidate(t *testing.T) {
+	base := contextContract()
+	base.Components = []Component{
+		{ID: "api", Responsibility: "Serve requests", Paths: []string{"internal/api"}, Dependencies: []string{"store", "auth"}, Covers: []string{"Criterion B", "Criterion A"}},
+		{ID: "auth", Responsibility: "Check tokens", Paths: []string{"internal/auth"}, Covers: []string{"Criterion C"}},
+		{ID: "store", Responsibility: "Persist state", Paths: []string{"internal/store"}},
+	}
+	base.Connections = []Connection{
+		{From: "api", To: "store", Carries: "reads and writes records"},
+		{From: "api", To: "auth", Carries: "verifies caller token"},
+	}
+	d1, err := base.CanonicalDigest()
+	if err != nil {
+		t.Fatalf("valid contract with connections and covers refused: %v", err)
+	}
+	reordered := base
+	reordered.Components = []Component{base.Components[2], base.Components[1], base.Components[0]}
+	reordered.Components[2].Covers = []string{"Criterion A", "Criterion B"}
+	reordered.Connections = []Connection{base.Connections[1], base.Connections[0]}
+	d2, err := reordered.CanonicalDigest()
+	if err != nil || d1 != d2 {
+		t.Fatalf("order changed digest: %s vs %s (%v)", d1, d2, err)
+	}
+	applicable, err := ApplicableContractDigest(base, Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*Contract){
+		"carries": func(c *Contract) { c.Connections[0].Carries = "query results" },
+		"covers":  func(c *Contract) { c.Components[0].Covers = []string{"Criterion D"} },
+	} {
+		t.Run(name+"_changes_digest", func(t *testing.T) {
+			changed := base
+			changed.Components = append([]Component(nil), base.Components...)
+			changed.Connections = append([]Connection(nil), base.Connections...)
+			mutate(&changed)
+			digest, err := changed.CanonicalDigest()
+			if err != nil || digest == d1 {
+				t.Fatalf("changed %s did not change contract digest: %v", name, err)
+			}
+			digest, err = ApplicableContractDigest(changed, Selection{})
+			if err != nil || digest == applicable {
+				t.Fatalf("changed %s did not change applicable digest: %v", name, err)
+			}
+		})
+	}
+	packet, err := Render(Manifest{
+		Contract: base, Goal: Goal{ID: "GOAL-1", Revision: 1, Outcome: "Cover criteria"},
+		Binding: Binding{Project: base.Project, Contract: ContractRef{ID: base.ID, Revision: base.Revision, Digest: d1}},
+		Records: []model.MemoryRecordV2{contextRecord()},
+	}, 16<<10)
+	if err != nil || !strings.Contains(packet.Text, `"carries":"reads and writes records"`) || !strings.Contains(packet.Text, `"covers":["Criterion A","Criterion B"]`) {
+		t.Fatalf("context packet lost connection labels or coverage: %s, %v", packet.Text, err)
+	}
+	for name, mutate := range map[string]func(*Contract){
+		"blank_cover":        func(c *Contract) { c.Components[0].Covers = []string{"   "} },
+		"blank_conn_carries": func(c *Contract) { c.Connections[0].Carries = "  " },
+		"undeclared_conn": func(c *Contract) {
+			c.Connections = append(c.Connections, Connection{From: "auth", To: "store", Carries: "queries"})
+		},
+		"duplicate_conn":   func(c *Contract) { c.Connections = append(c.Connections, c.Connections[0]) },
+		"nul_conn_carries": func(c *Contract) { c.Connections[0].Carries = "http\x00bad" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := base
+			bad.Components = append([]Component(nil), base.Components...)
+			bad.Connections = append([]Connection(nil), base.Connections...)
+			mutate(&bad)
+			if _, err := bad.CanonicalDigest(); err == nil {
+				t.Fatalf("%s: invalid contract accepted", name)
+			}
+		})
+	}
+}
+
+func TestContractLegacyDependenciesRemainReadable(t *testing.T) {
+	c := contextContract()
+	c.Components = append(c.Components, Component{ID: "api", Responsibility: "Serve requests", Paths: []string{"internal/api"}, Dependencies: []string{"store"}})
+	before, err := c.CanonicalDigest()
+	if err != nil {
+		t.Fatalf("legacy contract without connections or covers refused: %v", err)
+	}
+	c.Connections = []Connection{}
+	c.Components[0].Covers = []string{}
+	after, err := c.CanonicalDigest()
+	if err != nil || before != after {
+		t.Fatalf("absent optional fields changed legacy digest: %v", err)
+	}
+	raw, err := json.Marshal(c)
+	if err != nil || strings.Contains(string(raw), `"connections"`) || strings.Contains(string(raw), `"covers"`) {
+		t.Fatalf("empty optional fields changed legacy JSON: %s, %v", raw, err)
+	}
+}

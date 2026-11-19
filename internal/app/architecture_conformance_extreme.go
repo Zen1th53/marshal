@@ -151,6 +151,9 @@ func (r *Runtime) ArchitectureConformance(ctx context.Context, commit string) (A
 		}
 	}
 	for _, v := range accepted.Contract.Components {
+		if v.Removed {
+			continue
+		}
 		if !used[v.ID] {
 			out.UnimplementedParts = append(out.UnimplementedParts, v.ID)
 		}
