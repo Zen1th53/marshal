@@ -34,6 +34,7 @@ type permissionState struct {
 	continuations          map[string]string
 	continuationDone       map[string]chan error
 	proposalsSeen          map[string]bool
+	instanceID             string
 	planApprovalPending    bool
 	planApprovalRunID      string
 	planApprovalOccurrence string

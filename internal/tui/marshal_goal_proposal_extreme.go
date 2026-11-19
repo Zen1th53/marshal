@@ -64,6 +64,9 @@ func (w *Workspace) applyMarshalGoalProposal(p marshalProposal) {
 		_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, outcome)
 	}
 	w.RecordActivity(note)
+	if err == nil && goal.Confirmation.Settled() {
+		w.offerDeferredArchitecture()
+	}
 }
 
 func (w *Workspace) formalizeMarshalGoal(ctx context.Context, p marshalProposal) (model.GoalContract, error) {

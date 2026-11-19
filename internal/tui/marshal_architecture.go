@@ -10,7 +10,18 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
 )
+
+func (w *Workspace) marshalArchitectureProposal(ctx context.Context, occurrence, reason string) (string, error) {
+	m := w.marshalSession()
+	m.mu.Lock()
+	if strings.TrimSpace(reason) != "" {
+		m.architectureReason = strings.TrimSpace(reason)
+	}
+	m.mu.Unlock()
+	return w.marshalArchitecture(ctx, "", occurrence)
+}
 
 // marshalArchitecture keeps generation and the HTTP view in the workspace's
 // managed lifecycle. Command deadlines never cut off an owner-requested draft.
@@ -43,6 +54,9 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 			if !w.startBackground(w.workers.context(), func(workerCtx context.Context) {
 				err := open(workerCtx, url)
 				w.resolveArchitectureProposal(occurrence, err)
+				for _, id := range w.clearDeferredArchitecture() {
+					w.resolveArchitectureProposal(id, err)
+				}
 				if err != nil {
 					w.RecordActivity(architectureFailedNote(url))
 				}
@@ -104,16 +118,36 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		m.architectureStarting = false
 		occurrences := append([]string(nil), m.architectureOccurrences...)
 		m.architectureOccurrences = nil
+		reason := m.architectureReason
+		m.architectureReason = ""
 		if session != nil {
 			m.architecture = session
 		}
 		m.mu.Unlock()
+		if errors.Is(err, model.ErrGoalNotFound) && strings.TrimSpace(goal) == "" && (len(occurrences) > 0 || w.hasDeferredArchitecture()) {
+			// The Marshal asked to open the architecture before a confirmed
+			// goal existed. Keep the request and offer it once the
+			// requirements are confirmed instead of dropping it.
+			w.holdArchitectureRequest(occurrences, reason)
+			w.mu.Lock()
+			still := w.answer == architectureOpening
+			w.mu.Unlock()
+			if still {
+				w.memoryAnswer("The architecture could not be opened yet: "+plainArchitectureError(err), true)
+			}
+			return
+		}
 		for _, id := range occurrences {
 			w.resolveArchitectureProposal(id, err)
 		}
 		url := existingURL
 		if session != nil {
 			url = session.URL
+		}
+		if session != nil || existingURL != "" {
+			for _, id := range w.clearDeferredArchitecture() {
+				w.resolveArchitectureProposal(id, err)
+			}
 		}
 		if err != nil {
 			if session == nil && existingURL == "" {
@@ -154,6 +188,7 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		m.mu.Lock()
 		m.architectureStarting = false
 		m.architectureOccurrences = nil
+		m.architectureReason = ""
 		m.mu.Unlock()
 		return "", errors.New("workspace is closing")
 	}

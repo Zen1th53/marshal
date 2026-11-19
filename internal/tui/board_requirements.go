@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,9 +116,15 @@ func (w *Workspace) openRequirements(p marshalProposal) {
 	if err != nil {
 		return
 	}
+	texts := reqTexts(lines)
+	confirmedBefore := w.requirementsConfirmedInStore(texts)
 	card := &reqCard{Lines: lines, At: time.Now()}
 	w.req.mu.Lock()
-	again := w.req.confirmed != nil && *w.req.confirmed == reqTexts(lines)
+	again := (w.req.confirmed != nil && *w.req.confirmed == texts) || confirmedBefore
+	if again && w.req.confirmed == nil {
+		c := texts
+		w.req.confirmed = &c
+	}
 	if !again {
 		w.req.card = card
 	}
@@ -138,6 +145,7 @@ func (w *Workspace) openRequirements(p marshalProposal) {
 	if w.store != nil {
 		_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 	}
+	w.recordProposalCardLatest("requirements")
 	w.requestRepaint()
 }
 
@@ -149,6 +157,12 @@ func reqTexts(lines [8]reqLine) [8]string {
 		out[i] = strings.Join(strings.Fields(l.Text), " ")
 	}
 	return out
+}
+
+// reqTextsDigest hashes the normalized requirement texts so a confirmation
+// survives control-centre restarts.
+func reqTextsDigest(texts [8]string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(texts[:], "\x00"))))
 }
 
 // currentReq is the open card, nil for none.
@@ -229,9 +243,12 @@ func (w *Workspace) confirmRequirements() {
 	w.req.mu.Lock()
 	w.req.confirmed = &texts
 	w.req.mu.Unlock()
+	w.recordRequirementsConfirmed(texts)
+	w.recordProposalCardLatest("requirements")
 	w.clearReq()
 	w.sayToMarshal(w.workers.context(), "confirm all")
 	w.RecordActivity("You confirmed the requirements.")
+	w.offerDeferredArchitecture()
 }
 
 // beginRequirementsEdit prefills the composer with the chosen line's current
