@@ -23,7 +23,12 @@ import (
 // the Marshal never needs a pane switch. The native chat takes it as a user
 // turn. The tmux chat is a provider CLI MARSHAL does not own, so the message
 // is typed into it only while it sits idle at an empty prompt; while the
-// Marshal is busy it waits in a queue, and the Board says so.
+// Marshal is busy it waits in a queue, and the Board says so. "Busy" is not
+// always the Marshal working: the CLI may sit on a question only the owner
+// can answer (trust this folder, allow this step), or end a turn on a
+// network error and wait for nothing. The deliverer reads the same pane
+// captures it already takes to tell those apart, so the Board says what is
+// waiting for whom, and a turn lost to the network is sent once more.
 
 // sayEcho is one message as Activity shows it.
 type sayEcho struct {
@@ -73,7 +78,23 @@ var (
 	sayGiveUp = 10 * time.Minute
 	sayPoll   = 700 * time.Millisecond
 	saySettle = 250 * time.Millisecond
+	// sayTurnSettle is how long after a message is typed an idle chat that
+	// was never seen busy counts as having answered it: a fast turn can
+	// start and end between two looks.
+	sayTurnSettle = 1500 * time.Millisecond
 )
+
+// sayWatch is a message Marshal typed into the tmux chat whose turn has not
+// been seen to end yet. The deliverer keeps looking at the chat until it
+// does, so a turn that ends on a provider network error is noticed (the
+// provider does not retry by itself) and the message is sent once more.
+type sayWatch struct {
+	item    sayItem
+	before  string    // the plain frame just before it was typed
+	at      time.Time // when it was typed
+	started bool      // the chat was seen not idle since
+	retried bool      // already sent again once after a network error
+}
 
 // composing reports whether the composer has the keyboard: it holds text,
 // or s opened it for a message to the Marshal.
@@ -196,18 +217,63 @@ func (w *Workspace) sayPane() string {
 	return ""
 }
 
+// sayProvider is the tmux chat's provider name as the operator knows it
+// (e.g. "agy", "claude", "codex"), or "the Marshal chat" when unknown.
+func (w *Workspace) sayProvider() string {
+	w.tmuxMu.Lock()
+	var p string
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
+		p = a.provider
+	}
+	w.tmuxMu.Unlock()
+	if name := providerWorker(strings.TrimSpace(p)); name != "" {
+		return name
+	}
+	return "the Marshal chat"
+}
+
+// sayWait pauses one poll interval before looking at the chat again; it
+// releases any queued messages and returns false if ctx ends first.
+func (w *Workspace) sayWait(ctx context.Context) bool {
+	t := time.NewTimer(sayPoll)
+	select {
+	case <-ctx.Done():
+		t.Stop()
+		w.dropSaid()
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
 // deliverSaid types the queued messages into the tmux chat, oldest first,
-// each only once the chat is idle at an empty prompt.
+// each only once the chat is idle at an empty prompt. After typing one it
+// keeps looking at the chat until that turn ends, so a turn lost to a
+// network error is sent again once; and while the chat waits on the owner
+// it says so instead of "busy".
 func (w *Workspace) deliverSaid(ctx context.Context) {
 	told := map[int]bool{}
+	var watch *sayWatch
+	var shown chatWait     // what the Board last said the chat waits for
+	var errTold string     // the network error the Board last showed
+	var pausedFrame string // frame where a twice-failed network error paused queued messages
+	// held is the last time the chat waited on the owner or lost a turn to
+	// the network. Neither is the Marshal staying busy, so the give-up clock
+	// of a queued message starts again from it: a queued message is kept
+	// for as long as the owner or the network holds the chat up.
+	var held time.Time
 	for {
 		w.say.mu.Lock()
-		if len(w.say.pending) == 0 {
+		queued := len(w.say.pending) > 0
+		if !queued && watch == nil {
 			w.say.running = false
 			w.say.mu.Unlock()
 			return
 		}
-		item := w.say.pending[0]
+		var item sayItem
+		if queued {
+			item = w.say.pending[0]
+		}
 		w.say.mu.Unlock()
 		pop := func() {
 			w.say.mu.Lock()
@@ -217,14 +283,138 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			w.say.mu.Unlock()
 		}
 		pane := w.sayPane()
-		err := errChatBusy
+		frame, idle := "", false
 		if pane != "" {
-			err = w.typeIntoChat(ctx, pane, item.text)
+			frame, idle = w.chatIdleFrame(ctx, pane)
+		} else {
+			// No chat, no turn to watch.
+			watch = nil
+			pausedFrame = ""
+		}
+		if watch != nil && !idle {
+			watch.started = true
+		}
+		if pausedFrame != "" {
+			if frame != "" && frame != pausedFrame && (!idle || chatNetworkError(frame, "", "") == "") {
+				pausedFrame = ""
+			} else {
+				held = time.Now()
+			}
+		}
+
+		// A question only the owner can answer: say what waits for whom,
+		// once, and mark the queued message as waiting on them.
+		wait := chatWaitNone
+		if !idle {
+			wait = chatWaitingFor(frame)
+		}
+		if wait != chatWaitNone {
+			held = time.Now()
+		}
+		if wait != shown {
+			shown = wait
+			if wait != chatWaitNone {
+				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, queued, item.runtime), false)
+			}
+			if queued {
+				told[item.id] = true
+				why := ""
+				if wait != chatWaitNone {
+					why = "waiting for you in the chat"
+				}
+				w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Why: why, Runtime: item.runtime})
+			}
+		}
+
+		// A turn that ended on a network error: the provider gave up on it,
+		// so Marshal sends the message again, once. Queued messages stay
+		// queued behind it.
+		if wait == chatWaitNone && pane != "" && pausedFrame == "" && (watch != nil || queued) {
+			sent, before := "", ""
+			if watch != nil {
+				sent, before = watch.item.text, watch.before
+			}
+			if line := chatNetworkError(frame, before, sent); line != "" {
+				held = time.Now()
+				who := w.sayProvider()
+				switch {
+				case watch != nil && !watch.retried:
+					b, err := w.typeIntoChat(ctx, pane, watch.item.text)
+					if err == nil {
+						watch = &sayWatch{item: watch.item, before: b, at: time.Now(), retried: true}
+						errTold = line
+						msg := "Network error in the Marshal chat: " + who + " said “" + line + "”. Marshal sent the last message again"
+						if queued {
+							msg += "; queued messages stay queued."
+						} else {
+							msg += "."
+						}
+						w.memoryAnswer(msg, false)
+						if !w.sayWait(ctx) {
+							return
+						}
+						continue
+					}
+					if ctx.Err() == nil && !errors.Is(err, errChatBusy) {
+						watch = nil
+						w.memoryAnswer("Network error in the Marshal chat: "+who+" said “"+line+"”. Marshal could not send the last message again: "+err.Error(), true)
+					} else if errTold != line {
+						// Not back at its prompt yet: say so, and try again
+						// at the next look.
+						errTold = line
+						w.memoryAnswer("Network error in the Marshal chat: "+who+" said “"+line+"”. Marshal sends the last message again once the chat is back at its prompt.", true)
+					}
+				case watch != nil:
+					watch = nil
+					errTold = line
+					msg := "Network error again in the Marshal chat: " + who + " said “" + line + "”. Marshal already sent the last message again once, so it stops there: open the chat (F11) and send it when the connection is back."
+					if queued {
+						pausedFrame = frame
+						told[item.id] = true
+						w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Why: "paused after network error", Runtime: item.runtime})
+						msg += " Queued messages stay queued."
+					}
+					w.memoryAnswer(msg, true)
+				case errTold != line:
+					// A turn Marshal did not type (the briefing, or the
+					// owner in the chat): nothing to send again.
+					errTold = line
+					if idle {
+						w.memoryAnswer("Network error in the Marshal chat: "+who+" said “"+line+"”. "+sayWhose(item.runtime, "Sending your queued message now.", "Sending Marshal's queued notice now."), true)
+					} else {
+						told[item.id] = true
+						w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Why: "chat hit a network error", Runtime: item.runtime})
+						w.memoryAnswer("Network error in the Marshal chat: "+who+" said “"+line+"”. "+sayWhose(item.runtime, "Your queued message stays queued for its next prompt.", "Marshal's notice stays queued for its next prompt."), true)
+					}
+				}
+			} else if watch != nil && (idle && (watch.started || time.Since(watch.at) > sayTurnSettle) || time.Since(watch.at) > sayGiveUp) {
+				// The turn ended cleanly (or was watched long enough).
+				watch = nil
+				errTold = ""
+			}
+		}
+
+		if !queued {
+			if !w.sayWait(ctx) {
+				return
+			}
+			continue
+		}
+		err := errChatBusy
+		var before string
+		if idle && watch == nil && pausedFrame == "" {
+			before, err = w.typeIntoChat(ctx, pane, item.text)
+		}
+		giveUpFrom := item.at
+		if held.After(giveUpFrom) {
+			giveUpFrom = held
 		}
 		switch {
 		case err == nil:
 			pop()
 			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: saySent, Runtime: item.runtime})
+			watch = &sayWatch{item: item, before: before, at: time.Now()}
+			errTold = ""
 			continue
 		case ctx.Err() != nil:
 			w.dropSaid()
@@ -234,25 +424,28 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: err.Error(), Runtime: item.runtime})
 			w.memoryAnswer(sayWhose(item.runtime, "Your message did not reach the Marshal chat: ", "Marshal's notice did not reach the Marshal chat: ")+err.Error(), true)
 			continue
-		case time.Since(item.at) > sayGiveUp:
+		case time.Since(giveUpFrom) > sayGiveUp:
 			pop()
 			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayFailed, Why: "the chat stayed busy", Runtime: item.runtime})
 			w.memoryAnswer(sayWhose(item.runtime, "The Marshal chat stayed busy, so your message was not sent: press m to type it there.", "The Marshal chat stayed busy, so Marshal's notice was not sent."), true)
 			continue
 		case !told[item.id]:
 			told[item.id] = true
-			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Runtime: item.runtime})
-			if !item.runtime {
+			why := ""
+			if wait != chatWaitNone {
+				why = "waiting for you in the chat"
+			} else if pausedFrame != "" {
+				why = "paused after network error"
+			}
+			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Why: why, Runtime: item.runtime})
+			if wait != chatWaitNone {
+				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, true, item.runtime), false)
+			} else if pausedFrame == "" && !item.runtime {
 				w.memoryAnswer("Marshal chat busy: your message is queued for its next prompt.", false)
 			}
 		}
-		t := time.NewTimer(sayPoll)
-		select {
-		case <-ctx.Done():
-			t.Stop()
-			w.dropSaid()
+		if !w.sayWait(ctx) {
 			return
-		case <-t.C:
 		}
 	}
 }
@@ -284,48 +477,54 @@ var errChatBusy = errors.New("the Marshal chat is busy")
 
 // typeIntoChat pastes text into the chat's prompt and submits it, only when
 // the chat is idle at an empty prompt; otherwise it returns errChatBusy and
-// types nothing.
-func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) error {
+// types nothing. On success it returns the plain frame captured just before
+// pasting so the deliverer can tell new turn output from older lines.
+func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string, error) {
 	w.chatTypeMu.Lock()
 	defer w.chatTypeMu.Unlock()
 	before, ok := w.chatIdleFrame(ctx, pane)
 	if !ok {
-		return errChatBusy
+		return "", errChatBusy
 	}
 	buffer := "marshal-say"
 	if _, err := tmux.RunCommand(ctx, "set-buffer", "-b", buffer, "--", text); err != nil {
-		return err
+		return "", err
 	}
 	if _, err := tmux.RunCommand(ctx, "paste-buffer", "-d", "-p", "-b", buffer, "-t", pane); err != nil {
 		_, _ = tmux.RunCommand(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer)
-		return err
+		return "", err
 	}
 	// The paste must have landed in the prompt before Enter submits it.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if string(frame) != before {
 			break
 		}
 		if time.Now().After(deadline) {
-			return errors.New("the chat did not show the pasted message")
+			return "", errors.New("the chat did not show the pasted message")
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return "", ctx.Err()
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	_, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "Enter")
-	return err
+	if _, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "Enter"); err != nil {
+		return "", err
+	}
+	return before, nil
 }
 
 // chatIdleFrame reports whether the chat pane sits idle at an empty prompt,
 // with the plain frame it judged: not in copy mode, not dead, the frame
-// unchanged across saySettle, and chatPromptIdle on it.
+// unchanged across saySettle, and chatPromptIdle on it. When not idle it
+// still returns the plain text of the frame it already captured so the
+// deliverer can tell a provider prompt or network error from busy work
+// without an extra capture-pane call.
 func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, bool) {
 	status, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{pane_in_mode} #{pane_dead}")
 	if err != nil || strings.TrimSpace(string(status)) != pane+" 0 0" {
@@ -341,19 +540,366 @@ func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, boo
 	case <-time.After(saySettle):
 	}
 	second, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-e", "-t", pane)
-	if err != nil || string(first) != string(second) || !chatPromptIdle(string(second)) {
+	if err != nil {
 		return "", false
+	}
+	if string(first) != string(second) || !chatPromptIdle(string(second)) {
+		return StripANSI(string(second)), false
 	}
 	plain, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
 	if err != nil {
-		return "", false
+		return StripANSI(string(second)), false
 	}
 	return string(plain), true
 }
 
+// chatWait names a provider prompt in the tmux chat that only the owner can
+// answer (Marshal never clicks through provider trust or permission prompts).
+type chatWait int
+
+const (
+	chatWaitNone chatWait = iota
+	chatWaitTrust
+	chatWaitPermission
+)
+
+// chatWaitWords puts a provider prompt in plain words: who is waiting for
+// whom, and the key that takes the owner straight to it.
+func chatWaitWords(who string, wait chatWait, queued, runtime bool) string {
+	var msg string
+	switch wait {
+	case chatWaitTrust:
+		msg = "Waiting for you: " + who + " asks to trust this folder — open the chat (F11) and choose Yes."
+	case chatWaitPermission:
+		msg = "Waiting for you: " + who + " asks permission to continue — open the chat (F11) and choose Yes or No."
+	default:
+		return ""
+	}
+	if queued {
+		msg += sayWhose(runtime, " Your message stays queued until you answer.", " Marshal's notice stays queued until you answer.")
+	}
+	return msg
+}
+
+var (
+	chatTrustPhrases = []string{
+		"do you trust the contents of",
+		"do you trust the files in",
+		"do you trust this folder",
+		"do you trust this project",
+		"do you trust this directory",
+		"do you trust this workspace",
+		"trust this folder",
+		"trust the files in this folder",
+		"is this a project you created or one you trust",
+	}
+	chatPermissionPhrases = []string{
+		"allow once",
+		"allow always",
+		"allow for this session",
+		"would you like to run the following command",
+		"press enter to confirm or esc to cancel",
+		"enter to submit | esc to cancel",
+		"enter to confirm",
+		"waiting for approval",
+		"waiting for your approval",
+		"needs your approval",
+	}
+	chatNetworkPhrases = []string{
+		"there was a network issue",
+		"network issue connecting",
+		"network error",
+		"apiconnectionerror",
+		"connection error",
+		"connection reset",
+		"connection refused",
+		"connection timed out",
+		"connection lost",
+		"lost connection",
+		"failed to connect",
+		"unable to connect",
+		"could not connect",
+		"cannot connect to",
+		"error connecting to",
+		"stream disconnected",
+		"stream closed unexpectedly",
+		"socket hang up",
+		"fetch failed",
+		"request timed out",
+		"upstream connect error",
+		"econnreset",
+		"econnrefused",
+		"etimedout",
+		"enotfound",
+	}
+)
+
+// chatWaitingFor inspects a captured chat frame and reports whether the
+// provider CLI is sitting on a trust or permission prompt waiting for the
+// owner. Trust is checked before permission because trust dialogs often also
+// carry "Enter to confirm".
+func chatWaitingFor(frame string) chatWait {
+	lines := plainPaneLines(frame)
+	if len(lines) == 0 || chatActiveWork(lines) {
+		return chatWaitNone
+	}
+	tail := lines[max(0, len(lines)-20):]
+	if linesContainAny(tail, chatTrustPhrases) {
+		return chatWaitTrust
+	}
+	if linesContainAny(tail, chatPermissionPhrases) {
+		return chatWaitPermission
+	}
+	for _, line := range tail {
+		low := strings.ToLower(line)
+		// Claude's "Do you want to proceed?" and similar prompts start the
+		// line; a conversational question like "How do you want to proceed?"
+		// does not.
+		if strings.HasPrefix(low, "do you want to ") ||
+			strings.HasPrefix(low, "allow the ") && strings.Contains(low, "mcp server to run tool") ||
+			strings.HasPrefix(low, "allow ") && strings.HasSuffix(low, "?") ||
+			strings.HasSuffix(low, "[y/n]") ||
+			strings.HasSuffix(low, "(y/n)") {
+			return chatWaitPermission
+		}
+	}
+	return chatWaitNone
+}
+
+// chatNetworkError reports a provider network error that ended the latest
+// turn in frame, or "" if none is present. When sent is non-empty it looks
+// only after the last echoed occurrence of sent (or compares against before
+// when sent was collapsed by paste), so an earlier error still visible above
+// a retry never falsely fails the retry.
+func chatNetworkError(frame, before, sent string) string {
+	lines := plainPaneLines(frame)
+	if len(lines) == 0 || chatActiveWork(lines) {
+		return ""
+	}
+	if before != "" && strings.TrimSpace(StripANSI(frame)) == strings.TrimSpace(StripANSI(before)) {
+		return ""
+	}
+	if sent != "" {
+		if idx := findSentLine(lines, sent); idx >= 0 {
+			return networkErrorFromTail(lines[idx+1:])
+		}
+		// Sent text was not echoed verbatim (e.g. collapsed paste marker):
+		// only report when frame has more network error lines than before.
+		beforeLines := plainPaneLines(before)
+		if countNetworkErrors(lines) <= countNetworkErrors(beforeLines) {
+			return ""
+		}
+	}
+	return networkErrorFromTail(lines)
+}
+
+func networkErrorFromTail(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	lastPrompt := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if isPromptLine(lines[i]) {
+			lastPrompt = i
+			break
+		}
+	}
+	// First check lines after the last prompt (e.g. error printed before the
+	// next prompt appears).
+	if lastPrompt >= 0 && lastPrompt+1 < len(lines) {
+		if match := scanNetworkErrorWindow(lines[lastPrompt+1:]); match != "" {
+			return match
+		}
+	}
+	// If the last prompt sits at the bottom (with at most two footer/status
+	// lines below it), check the end of the turn immediately above that
+	// prompt, stopping at any earlier prompt line so an old turn's error
+	// never leaks past a newer turn.
+	end := len(lines)
+	if lastPrompt >= 0 && len(lines)-1-lastPrompt <= 2 {
+		end = lastPrompt
+	}
+	start := max(0, end-3)
+	for i := end - 1; i >= start; i-- {
+		if isPromptLine(lines[i]) {
+			start = i + 1
+			break
+		}
+	}
+	return scanNetworkErrorWindow(lines[start:end])
+}
+
+func scanNetworkErrorWindow(window []string) string {
+	for i := len(window) - 1; i >= 0; i-- {
+		if isPromptLine(window[i]) {
+			continue
+		}
+		if isNetworkErrorLine(window[i]) {
+			return chattransport.OneLine(cleanBoard(window[i]), 140)
+		}
+		// A narrow docked pane can wrap one error sentence across two lines;
+		// join with the line above when the lower line is a continuation or
+		// the upper line alone did not already complete a match.
+		if i > 0 && !isPromptLine(window[i-1]) && (!isNetworkErrorLine(window[i-1]) || startsLower(window[i])) {
+			joined := window[i-1] + " " + window[i]
+			if isNetworkErrorLine(joined) {
+				return chattransport.OneLine(cleanBoard(joined), 140)
+			}
+		}
+	}
+	return ""
+}
+
+func isNetworkErrorLine(line string) bool {
+	low := strings.ToLower(line)
+	for _, p := range chatNetworkPhrases {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func countNetworkErrors(lines []string) int {
+	n := 0
+	for i := 0; i < len(lines); i++ {
+		if isPromptLine(lines[i]) {
+			continue
+		}
+		if isNetworkErrorLine(lines[i]) {
+			n++
+			continue
+		}
+		if i+1 < len(lines) && !isPromptLine(lines[i+1]) && !isNetworkErrorLine(lines[i+1]) && isNetworkErrorLine(lines[i]+" "+lines[i+1]) {
+			n++
+			i++
+		}
+	}
+	return n
+}
+
+func linesContainAny(lines, phrases []string) bool {
+	for i, line := range lines {
+		low := strings.ToLower(line)
+		for _, p := range phrases {
+			if strings.Contains(low, p) {
+				return true
+			}
+		}
+		if i+1 < len(lines) {
+			joined := low + " " + strings.ToLower(lines[i+1])
+			for _, p := range phrases {
+				if strings.Contains(joined, p) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// chatActiveWork reports whether the bottom of the pane shows a running-turn
+// interrupt hint: a provider that is actively working is neither sitting on
+// a modal prompt nor finished with a network error.
+func chatActiveWork(lines []string) bool {
+	for _, line := range lines[max(0, len(lines)-6):] {
+		low := strings.ToLower(line)
+		if strings.Contains(low, "esc to interrupt") || strings.Contains(low, "ctrl+c to interrupt") {
+			return true
+		}
+	}
+	return false
+}
+
+// plainPaneLines strips ANSI escapes and box borders from frame and returns
+// its non-empty text lines.
+func plainPaneLines(frame string) []string {
+	var out []string
+	for _, raw := range strings.Split(StripANSI(frame), "\n") {
+		line := strings.TrimSpace(strings.Trim(strings.TrimSpace(raw), "│┃║|"))
+		if line != "" && !isBoxRule(line) {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func isBoxRule(line string) bool {
+	for _, r := range line {
+		if !strings.ContainsRune("─━═╭╮╰╯┌┐└┘├┤┬┴┼+- ", r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isPromptLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	for _, m := range promptMarkers {
+		if trimmed == m || strings.HasPrefix(trimmed, m+" ") || strings.HasPrefix(trimmed, m+"\u00a0") {
+			return true
+		}
+	}
+	return false
+}
+
+func startsLower(s string) bool {
+	r, _ := utf8.DecodeRuneInString(strings.TrimSpace(s))
+	return unicode.IsLower(r)
+}
+
+// findSentLine returns the index of the last line in lines that echoes the
+// opening of sent, so only output after the latest send is inspected.
+func findSentLine(lines []string, sent string) int {
+	needle := ""
+	for _, l := range strings.Split(sent, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			needle = l
+			break
+		}
+	}
+	if needle == "" {
+		return -1
+	}
+	// Cap the needle so a long message wrapped by a narrow pane still matches
+	// on its first line.
+	if runes := []rune(needle); len(runes) > 40 {
+		needle = string(runes[:40])
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := lines[i]
+		if len(needle) >= 6 {
+			if strings.Contains(line, needle) {
+				return i
+			}
+			continue
+		}
+		// Short messages (e.g. "hi", "in") only match as the prompt's own
+		// body, never as a substring inside a provider error word like "again".
+		body := strings.TrimSpace(stripPromptPrefix(line))
+		if body == needle || strings.HasPrefix(body, needle+" ") {
+			return i
+		}
+	}
+	return -1
+}
+
+func stripPromptPrefix(line string) string {
+	for _, p := range []string{"got:", ">", "›", "❯"} {
+		if after, ok := strings.CutPrefix(line, p); ok {
+			return after
+		}
+	}
+	return line
+}
+
 // chatBusyWords are what provider CLIs show near their prompt while a turn
 // runs or a dialog waits for a choice.
-var chatBusyWords = []string{"esc to interrupt", "esc to cancel", "ctrl+c to interrupt", "enter to submit", "enter to confirm", "do you want to"}
+var chatBusyWords = []string{
+	"esc to interrupt", "esc to cancel", "ctrl+c to interrupt",
+	"enter to submit", "enter to confirm", "do you want to",
+	"do you trust the contents of", "do you trust the files in", "trust this folder",
+}
 
 // promptMarkers start a provider CLI's input line: Claude Code's ">" in a
 // box, Codex's "›", and the "❯" of others.
@@ -522,7 +1068,11 @@ func (v boardVisual) echoLine(e sayEcho, w int) string {
 	col := map[string]string{saySending: "working", sayQueued: "waiting", saySent: "merged", sayFailed: "failed"}[state]
 	switch state {
 	case sayQueued:
-		state = "queued · chat is busy"
+		if e.Why != "" {
+			state = "queued · " + e.Why
+		} else {
+			state = "queued · chat is busy"
+		}
 	case saySent:
 		state = "sent to chat"
 	case sayFailed:
