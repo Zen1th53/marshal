@@ -1,7 +1,14 @@
 # Marshal v0.2.19
 
 v0.2.18 was tagged but not published (a test caught the Board's background
-agy listing before the build); everything below ships in v0.2.19.
+agy listing before the build); everything below ships in v0.2.19, plus:
+
+- **agy limits from agy itself.** The Board reads `agy -p /usage`: % left and
+  reset time for each quota group (Gemini, Claude and GPT, Gemini 4 Argon),
+  5-hour and weekly, like Codex and Claude.
+- **New agy families are picked up automatically.** agy replaced Carbon with
+  Neon overnight; selectors now take an unknown family as the newest, so
+  `auto` is the Neon Orchestrator and `best` is Gemini 4 Neon with no update.
 
 This release comes from running Marshal on itself with Antigravity as the
 Marshal, as a real owner would, on a Mac. It makes setup one step, counts
