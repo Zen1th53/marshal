@@ -150,3 +150,22 @@ func TestAgyUsageFigures(t *testing.T) {
 		}
 	}
 }
+
+// A spent quota group: `agy -p /usage` as it read when three sessions had
+// used the Claude and GPT 5-hour group down. The low group binds, so the
+// Board's low-limit note and vitals row name it, and 0% stays known.
+func TestAgyUsageLowGroupBinds(t *testing.T) {
+	now, _ := time.Parse(time.RFC3339, "2026-11-19T04:00:00Z")
+	out := "Gemini Models\tFive Hour Limit Remaining\t64%\t2026-11-19T08:51:20Z\n" +
+		"Claude and GPT models\tFive Hour Limit Remaining\t12.5%\t2026-11-19T06:32:00Z\n" +
+		"Claude and GPT models\tWeekly Limit Remaining\t71%\t2026-11-26T03:51:20Z\n"
+	q := Quota{Provider: "agy", Known: true, Windows: parseAgyUsage([]byte(out), now)}
+	w, ok := q.Binding()
+	if !ok || w.Label != "Claude and GPT 5h" || w.UsedShown() != 88 {
+		t.Fatalf("binding = %+v %v; want Claude and GPT 5h at 12%% left", w, ok)
+	}
+	spent := parseAgyUsage([]byte("Claude and GPT models\tFive Hour Limit Remaining\t0%\t2026-11-19T06:32:00Z\n"), now)
+	if len(spent) != 1 || !spent[0].Known() || spent[0].UsedShown() != 100 {
+		t.Fatalf("spent group = %+v; want a known window at 0%% left", spent)
+	}
+}

@@ -51,6 +51,10 @@ type ownerGate struct {
 	// sent is set once the reply went to the chat: the gate then waits
 	// for the Marshal and offers no button until it changes.
 	sent bool
+	// limits is the plan's one-line limit check, "" when not read yet;
+	// limitsLow is set when a provider it uses is under 20% in a window.
+	limits    string
+	limitsLow bool
 }
 
 // deferredArchitecture is an "open architecture" request from the Marshal that
@@ -244,7 +248,9 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 		if b.Run.Title != "" {
 			summary = firstLine(b.Run.Title) + " · " + summary
 		}
-		out = append(out, ownerGate{key: "plan:" + b.Run.ID + ":" + b.PlanID, kind: "plan", title: title, summary: summary, reply: gateReplyPlan, details: '7'})
+		g := ownerGate{key: "plan:" + b.Run.ID + ":" + b.PlanID, kind: "plan", title: title, summary: summary, reply: gateReplyPlan, details: '7'}
+		g.limits, g.limitsLow, _ = w.planLimits(p)
+		out = append(out, g)
 	}
 	for i := range out {
 		if at, ok := sent[out[i].key]; ok && time.Since(at) < gateResend {
@@ -447,5 +453,15 @@ func (v boardVisual) gateEntry(g ownerGate, x, row, w int) []string {
 		gap("  ")
 		button(v.bg("rule", "["+string(g.details)+"]")+" "+details, g.details)
 	}
-	return []string{PadCell(first, w), PadCell(second, w)}
+	lines := []string{PadCell(first, w), PadCell(second, w)}
+	if g.limits != "" {
+		// The plan's limit check, under its buttons: amber when a
+		// provider it uses is under 20% in a window.
+		col := "dim"
+		if g.limitsLow {
+			col = "waiting"
+		}
+		lines = append(lines, PadCell("    "+v.fg(col, v.trunc(g.limits, max(8, w-4))), w))
+	}
+	return lines
 }
