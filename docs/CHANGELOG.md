@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.19
+
+First published release of the 0.2.18 changes below (v0.2.18 was tagged but not published).
+
+### Fixed
+- Tests can turn off the Board's background `agy models` listing (`MARSHAL_NO_USAGE_PROBES`).
+
 ## 0.2.18
 
 ### Added
