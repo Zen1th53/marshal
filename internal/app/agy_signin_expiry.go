@@ -9,10 +9,10 @@ import (
 )
 
 // agySigninExpiryReason names an agy worker failure caused by an expired
-// sign-in token. Failure text carrying it is a provider limit, not a retry.
+// sign-in token. It is an authentication failure, never a quota cooldown.
 const agySigninExpiryReason = "agy sign-in expired"
 
-// agySigninExpiryCooldown is how long agy is skipped after its sign-in expired.
+// agySigninExpiryCooldown bounds one deduplicated sign-in notice episode.
 const agySigninExpiryCooldown = time.Hour
 
 // agySigninQuickExit bounds the "ends almost at once with no output" signature

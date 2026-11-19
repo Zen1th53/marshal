@@ -90,6 +90,16 @@ func TestManagerRejectsOutputOverflowExplicitly(t *testing.T) {
 	}
 }
 
+func TestStderrBufferKeepsFirstAndLastBytes(t *testing.T) {
+	b := &limitedBuffer{limit: 16, keepTail: true}
+	for _, part := range []string{"FIRST---", "progress-progress-progress", "---LAST!"} {
+		_, _ = b.Write([]byte(part))
+	}
+	if got := string(b.Bytes()); got != "FIRST------LAST!" || !b.Truncated() {
+		t.Fatalf("stderr tail lost: %q, truncated=%v", got, b.Truncated())
+	}
+}
+
 func TestSandboxedRunnerWrapsExactCommandAndPreservesProcessInputs(t *testing.T) {
 	process := &captureProcessRunner{}
 	wrapper := &captureWrapper{}

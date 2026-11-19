@@ -55,7 +55,7 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 			command.OutputObserver("stdout", p)
 		}
 	}}
-	stderr := &limitedBuffer{limit: m.outputLimit, observe: func(p []byte) {
+	stderr := &limitedBuffer{limit: m.outputLimit, keepTail: true, observe: func(p []byte) {
 		stall.output(p)
 		live.observe(p, false)
 		if command.OutputObserver != nil {
@@ -252,6 +252,7 @@ type limitedBuffer struct {
 	data      []byte
 	limit     int
 	truncated bool
+	keepTail  bool
 	observe   func([]byte)
 }
 
@@ -261,6 +262,13 @@ func (b *limitedBuffer) Write(value []byte) (int, error) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.keepTail && b.limit > 0 && len(b.data)+len(value) > b.limit {
+		joined := append(b.data, value...)
+		head := b.limit / 2
+		b.data = append(append([]byte(nil), joined[:head]...), joined[len(joined)-(b.limit-head):]...)
+		b.truncated = true
+		return len(value), nil
+	}
 	remaining := b.limit - len(b.data)
 	if remaining > 0 {
 		count := len(value)

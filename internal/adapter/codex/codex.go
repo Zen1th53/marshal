@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -102,10 +103,10 @@ func (c *Client) probeCommand(ctx context.Context, budget time.Duration, name st
 	result, err := c.runner.Run(commandCtx, adapter.Command{Path: c.binary, Args: args})
 	cause := errors.Join(err, commandCtx.Err())
 	if cause != nil {
-		return adapter.ProcessResult{}, fmt.Errorf("%w: probe Codex %s failed: %w", model.ErrUnavailable, name, cause)
+		return result, &adapter.ProcessError{Cause: fmt.Errorf("%w: probe Codex %s failed: %w", model.ErrUnavailable, name, cause), Stderr: result.Stderr}
 	}
 	if result.ExitCode != 0 {
-		return adapter.ProcessResult{}, fmt.Errorf("%w: probe Codex %s failed: exit code %d", model.ErrUnavailable, name, result.ExitCode)
+		return result, &adapter.ProcessError{Cause: fmt.Errorf("%w: probe Codex %s failed: exit code %d", model.ErrUnavailable, name, result.ExitCode), Stderr: result.Stderr}
 	}
 	return result, nil
 }
@@ -221,7 +222,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	// fixed external-sandbox option. Native sessions use a separate launcher.
 	args = append(args, "--dangerously-bypass-approvals-and-sandbox", "-")
 
-	args, env, cleanup, err := sessionmcp.Configure(ctx, "codex", args, nil)
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "codex", args, os.Environ())
 	if err != nil {
 		return adapter.Result{}, err
 	}
@@ -236,9 +237,6 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		HeartbeatInterval: request.HeartbeatInterval,
 		Liveness:          adapter.WorkerLiveness(request, ClassifyStreamLine),
 	})
-	if err != nil {
-		return adapter.Result{}, fmt.Errorf("run Codex process: %w", err)
-	}
 	result := adapter.Result{
 		Adapter:          "codex",
 		AdapterVersion:   c.version,
@@ -255,6 +253,10 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		Status:           adapter.StatusSuccess,
 		StoppedAfterDone: process.StoppedAfterDone,
 		IdleTimedOut:     process.IdleTimedOut,
+	}
+	if err != nil {
+		result.Status = adapter.StatusFailure
+		return result, fmt.Errorf("run Codex process: %w", err)
 	}
 	if process.StoppedAfterDone && !process.TimedOut && !process.Cancelled {
 		// turn.completed was observed; the lingering process was stopped.

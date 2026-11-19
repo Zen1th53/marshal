@@ -172,7 +172,7 @@ func TestAgySigninKeepaliveRefreshesStaleSigninBeforeDispatch(t *testing.T) {
 	}
 }
 
-func TestAgySigninKeepaliveFailureUsesCooldownAndOneNotice(t *testing.T) {
+func TestAgySigninKeepaliveFailureUsesAuthNoticeWithoutCooldown(t *testing.T) {
 	resetAgySigninKeepalive(t)
 	callsPath, scriptPath := agySigninKeepaliveFixture(t, true)
 	r := openNetpolRuntime(t)
@@ -184,8 +184,8 @@ func TestAgySigninKeepaliveFailureUsesCooldownAndOneNotice(t *testing.T) {
 
 	r.keepAgySigninFresh(t.Context())
 
-	if !isProviderUnavailable("agy", time.Now()) {
-		t.Fatal("a classified refresh failure did not put agy into its sign-in cooldown")
+	if isProviderUnavailable("agy", time.Now()) {
+		t.Fatal("a classified sign-in failure put agy into quota cooldown")
 	}
 	if n := agySigninExpiryNotices(t, r); n != 1 {
 		t.Fatalf("owner notices = %d, want 1", n)
@@ -204,7 +204,7 @@ func TestAgySigninKeepaliveFailureUsesCooldownAndOneNotice(t *testing.T) {
 		t.Fatalf("owner notices = %d after a repeated failure, want 1", n)
 	}
 
-	// A later successful refresh clears the sign-in cooldown.
+	// A later successful refresh ends the sign-in notice episode.
 	success := "#!/bin/sh\nprintf '%s\\n' \"$0 $*\" >> \"" + callsPath + "\"\nprintf '%s\\n' 'ok'\nexit 0\n"
 	if err := os.WriteFile(scriptPath, []byte(success), 0700); err != nil {
 		t.Fatal(err)
@@ -213,7 +213,7 @@ func TestAgySigninKeepaliveFailureUsesCooldownAndOneNotice(t *testing.T) {
 	r.keepAgySigninFresh(t.Context())
 
 	if isProviderUnavailable("agy", time.Now()) {
-		t.Fatal("a successful refresh did not clear the sign-in cooldown")
+		t.Fatal("a successful refresh left agy in quota cooldown")
 	}
 	if n := agySigninKeepaliveEventCount(t, r, agySigninRefreshEvent); n != 1 {
 		t.Fatalf("success events = %d, want 1", n)
@@ -272,6 +272,15 @@ func TestAgySigninKeepaliveNeverTouchesCredentials(t *testing.T) {
 	}
 	if !after.ModTime().Equal(before.ModTime()) {
 		t.Fatal("the credential file was rewritten by the keep-alive")
+	}
+}
+
+func TestSuccessfulAgySigninPreservesActualQuotaCooldown(t *testing.T) {
+	resetAgySigninKeepalive(t)
+	markProviderUnavailable("agy", time.Now().Add(time.Hour))
+	clearAgySigninExpiryEpisode()
+	if !isProviderUnavailable("agy", time.Now()) {
+		t.Fatal("successful sign-in cleared a real quota cooldown")
 	}
 }
 

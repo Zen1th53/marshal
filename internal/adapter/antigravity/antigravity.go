@@ -211,7 +211,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		HeartbeatInterval: request.HeartbeatInterval,
 	})
 	if err != nil {
-		return adapter.Result{}, fmt.Errorf("run Antigravity process: %w", err)
+		return c.processResult(process), fmt.Errorf("run Antigravity process: %w", err)
 	}
 
 	return c.processResult(process), nil
@@ -254,7 +254,7 @@ func (c *Client) Resume(ctx context.Context, sessionID string, request adapter.R
 		HeartbeatInterval: request.HeartbeatInterval,
 	})
 	if err != nil {
-		return adapter.Result{}, fmt.Errorf("resume Antigravity process: %w", err)
+		return c.processResult(process), fmt.Errorf("resume Antigravity process: %w", err)
 	}
 
 	return c.processResult(process), nil

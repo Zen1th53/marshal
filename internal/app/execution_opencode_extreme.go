@@ -97,7 +97,7 @@ func (r *Runtime) executeProcess05OpenCode(ctx context.Context, task execution.T
 	}
 	probe, err := provider.Probe(ctx)
 	if err != nil {
-		return execution.TaskResult{TaskID: task.TaskID}, err
+		return execution.TaskResult{TaskID: task.TaskID}, r.workerProviderError(ctx, err)
 	}
 	trustedHeader, err := r.providerConstraintPrompt(ctx, task, pkg, worktree)
 	if err != nil {
@@ -134,13 +134,14 @@ func (r *Runtime) executeProcess05OpenCode(ctx context.Context, task execution.T
 	if contextErr := finishContext(); contextErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "required project context changed; provider result quarantined"}, contextErr
 	}
-	if runErr != nil {
-		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: runErr.Error()}, runErr
-	}
 	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
 	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
 	if stdoutErr != nil || stderrErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "provider output rejected by evidence sanitizer"}, fmt.Errorf("sanitize OpenCode Process 05 output: stdout=%v stderr=%v", stdoutErr, stderrErr)
+	}
+	if runErr != nil {
+		failure := workerFailureMessage(runErr.Error(), stderr, stdout)
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: failure}, fmt.Errorf("%w: %s", runErr, failure)
 	}
 	digest := sha256.Sum256(append(append([]byte(nil), stdout...), stderr...))
 	evidenceID, err := model.NewID("EVID-P05-OPENCODE-")
@@ -168,15 +169,15 @@ func (r *Runtime) executeProcess05OpenCode(ctx context.Context, task execution.T
 				return ""
 			}
 			if result.Cancelled {
-				return "OpenCode execution cancelled"
+				return workerFailureMessage("OpenCode execution cancelled", stderr, stdout)
 			}
 			if result.TimedOut {
-				return "OpenCode execution timed out"
+				return workerFailureMessage("OpenCode execution timed out", stderr, stdout)
 			}
 			if result.OutputTruncated {
-				return "OpenCode output was truncated"
+				return workerFailureMessage("OpenCode output was truncated", stderr, stdout)
 			}
-			return "OpenCode execution did not complete successfully"
+			return workerFailureMessage("OpenCode execution did not complete successfully", stderr, stdout)
 		}(),
 	}, nil
 }

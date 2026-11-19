@@ -154,6 +154,11 @@ var providerLimitPattern = regexp.MustCompile(`(?i)free messages|quota|rate[ -]?
 // error message counts, never an informational event or a raw JSON line.
 func providerLimitReason(outputs ...[]byte) string {
 	for _, output := range outputs {
+		if isProviderAuthFailure(string(output)) {
+			return ""
+		}
+	}
+	for _, output := range outputs {
 		for _, line := range strings.Split(providerLimitText(string(output)), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || !providerLimitPattern.MatchString(line) {

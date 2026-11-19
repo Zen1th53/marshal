@@ -43,6 +43,9 @@ func infraRetryApplies(run marshal.Run, t marshal.Task) bool { return reworkFail
 // attempt fails over. Past infraRetryLimit the task escalates.
 func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, run marshal.Run, rev int64, i int, cause string) error {
 	t := &run.Tasks[i]
+	if isProviderAuthFailure(cause) {
+		return s.pauseWorkerAuth(ctx, runID, run.Tasks[i].PlanTaskID, cause)
+	}
 	// Capture the actual branch before clearing delivery identity. A Process05
 	// import can advance it before a later hand-in step fails.
 	var recoveryErr error
@@ -83,7 +86,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	}
 	data := map[string]any{
 		"reason":                note,
-		"summary":               fmt.Sprintf("%s: %s hit a %s. Retrying (%d of %d); this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), ProviderDisplayName(t.Worker), plainInfraKind(kind), t.InfraRetries, infraRetryLimit),
+		"summary":               fmt.Sprintf("%s: %s hit a %s. Retrying (%d of %d); this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), ProviderDisplayName(t.Worker), plainInfraKind(kind), t.InfraRetries, infraRetryLimit) + " " + reason,
 		"return_attempt":        fmt.Sprint(attempt),
 		"return_reasons":        []string{note},
 		"counted":               false,
@@ -124,7 +127,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
 		provider := ProviderDisplayName(t.Worker)
-		plain := fmt.Sprintf("%s failed %d times in a row (%s).", provider, t.InfraRetries, plainInfraKind(kind))
+		plain := fmt.Sprintf("%s failed %d times in a row (%s).", provider, t.InfraRetries, plainInfraKind(kind)) + " " + reason
 		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{fmt.Sprintf("Check %s on the Providers view (press 4), then press Enter to retry.", provider)}, Detail: machine, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
 		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
@@ -132,7 +135,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		t.State = marshal.Returned
 		if t.InfraStreak >= infraFailoverStreak && s.otherWorker(t.Worker, t.Mode) != "" {
 			until := s.clock().Add(infraFailureCooldown)
-			providerHealth.Mark(t.Worker, "infrastructure failure: "+kind, until)
+			providerHealth.Mark(t.Worker, "infrastructure failure ("+kind+"): "+reason, until)
 			data["provider_cooldown_until"] = until.UTC().Format(time.RFC3339)
 			t.InfraStreakWorker, t.InfraStreak = "", 0
 		}
@@ -154,4 +157,11 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 // operator retries it.
 func resetInfraRetries(t *marshal.Task) {
 	t.InfraRetries, t.InfraStreakWorker, t.InfraStreak = 0, "", 0
+}
+
+// The failed auth lane remains evidence; retry after sign-in opens a new one.
+func retireWorkerAuthLane(run marshal.Run, t *marshal.Task) {
+	if reworkFailedLaneWorker(run, *t) {
+		t.LaneReworkBase++
+	}
 }

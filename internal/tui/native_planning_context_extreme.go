@@ -180,6 +180,7 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 	goalID, revision, contract := p.goalID, p.goalRevision, p.contract
 	w.proposalMCP.mu.Unlock()
 	var run marshal.Run
+	var warnings []string
 	err := w.withNativePlanningDraftRead(ctx, provider, goalID, revision, func(fenced context.Context) error {
 		goal, err := w.store.GetActiveGoalContract(fenced, w.sessionID)
 		if err != nil {
@@ -195,6 +196,7 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 		if draft.Plan.RequiredProjectContract != nil && *draft.Plan.RequiredProjectContract != contract {
 			return projectcontext.Changed("native_planning_context_extreme.go:178")
 		}
+		warnings = plan.DecompositionWarnings(goal, draft.Plan.Tasks)
 		objective := goal.DesiredOutcome
 		if err := app.ValidateNativePlanningModes(objective, draft.Tasks); err != nil {
 			return err
@@ -221,6 +223,9 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 		run, err = service.StartPlanningFromDraft(fenced, runID, goal.OriginalRequest, draft, budget)
 		return err
 	})
+	if adviceErr := writeMarshalPlanningAdvice(service.Repository, runID, warnings); adviceErr != nil {
+		w.logTUIError("planning advice not delivered", adviceErr)
+	}
 	return run, err
 }
 

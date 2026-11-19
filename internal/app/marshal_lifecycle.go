@@ -361,6 +361,10 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if isGovernedHarnessMismatch(err) {
 		return marshal.HandIn{}, errors.Join(s.escalateGovernedHarnessMismatch(context.WithoutCancel(ctx), runID, dispatch.TaskID))
 	}
+	failureText, failed := workerFailureText(err, handin, dispatch.Handle)
+	if failed && !errors.Is(err, context.Canceled) && isProviderAuthFailure(failureText) {
+		return marshal.HandIn{}, s.pauseWorkerAuth(context.WithoutCancel(ctx), runID, dispatch.TaskID, failureText)
+	}
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && (dispatch.Deadline.IsZero() || time.Now().Before(dispatch.Deadline)) {
 		if isLimit, reason, cooldown := classifyProviderLimitAt(err, handin, dispatch.Handle, s.clock()); isLimit {
 			return s.handleWorkerLimit(ctx, runID, dispatch, handin, reason, cooldown)
@@ -380,7 +384,7 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 			var returnErr error
 			if infraRetryApplies(run, run.Tasks[i]) {
 				// No hand-in was delivered, so this is not rework.
-				returnErr = s.returnInfraFailure(ctx, runID, run, rev, i, "worker stopped at the wall-time ceiling: "+err.Error())
+				returnErr = s.returnInfraFailure(ctx, runID, run, rev, i, "worker stopped at the wall-time ceiling: "+failureText)
 			} else {
 				_, returnErr = s.finishMarshalReturn(ctx, runID, run, rev, i, marshal.Review{Reviewer: "marshal-runtime", Reasons: []string{"worker stopped at the wall-time ceiling"}}, nil)
 			}
@@ -403,7 +407,7 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 				// transport, harness or tool failure is retried (with
 				// failover) under its own bound, never as rework (bug #23).
 				run.State = marshal.Reviewing
-				if returnErr := s.returnInfraFailure(ctx, runID, run, rev, i, "worker failed: "+err.Error()); returnErr != nil {
+				if returnErr := s.returnInfraFailure(ctx, runID, run, rev, i, "worker failed: "+failureText); returnErr != nil {
 					return handin, errors.Join(err, returnErr)
 				}
 				return marshal.HandIn{}, nil

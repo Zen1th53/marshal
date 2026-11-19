@@ -163,13 +163,12 @@ func (r *Runtime) refreshAgySignin(ctx context.Context, now time.Time) {
 		agySigninKeepaliveState.Lock()
 		agySigninKeepaliveState.lastSuccess = now
 		agySigninKeepaliveState.Unlock()
-		clearAgySigninExpiryCooldown(r)
+		clearAgySigninExpiryEpisode()
 		r.recordAgySigninRefresh(ctx, true, "")
 		return
 	}
 	if classifyAgySigninExpiry(runErr, exitCode, stdout.Bytes(), stderr.Bytes(), elapsed) {
-		// Only the sign-in-expiry classification applies the existing cooldown
-		// and its single owner notice.
+		// Only the sign-in-expiry classification sends the single owner notice.
 		_, _ = r.noteAgySigninExpiry(context.WithoutCancel(ctx), execution.TaskExecution{TaskID: agySigninKeepaliveID}, runErr, result)
 		r.recordAgySigninRefresh(ctx, false, agySigninExpiryReason)
 		return
@@ -185,16 +184,13 @@ func (r *Runtime) agySigninUsesHostCLI() bool {
 	return r != nil && r.adapters["agy"] == nil && r.adapters["antigravity"] == nil
 }
 
-// clearAgySigninExpiryCooldown ends an active sign-in episode after a
-// successful refresh, so agy is offered again.
-func clearAgySigninExpiryCooldown(r *Runtime) {
+// clearAgySigninExpiryEpisode ends a sign-in notice episode after a successful
+// refresh. Sign-in and quota are separate: preserve any genuine usage limit.
+func clearAgySigninExpiryEpisode() {
 	agySigninEpisode.Lock()
-	active := !agySigninEpisode.until.IsZero() && time.Now().Before(agySigninEpisode.until)
 	agySigninEpisode.until = time.Time{}
+	agySigninEpisode.runID = ""
 	agySigninEpisode.Unlock()
-	if active && r != nil {
-		r.clearProviderLimit("agy")
-	}
 }
 
 // agySigninLiveWorker reports whether any unfinished Process 05 run still holds

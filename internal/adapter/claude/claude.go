@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -67,11 +68,11 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 		}
 		result, runErr := c.runner.Run(phaseCtx, adapter.Command{Path: c.binary, Args: []string{flag}})
 		if err := errors.Join(runErr, phaseCtx.Err()); err != nil {
-			return adapter.ProcessResult{}, fmt.Errorf("%w: probe Claude %s failed: %w", model.ErrUnavailable, flag, err)
+			return result, &adapter.ProcessError{Cause: fmt.Errorf("%w: probe Claude %s failed: %w", model.ErrUnavailable, flag, err), Stderr: result.Stderr}
 		}
 		if result.ExitCode != 0 || result.TimedOut || result.Cancelled || result.OutputTruncated {
-			return adapter.ProcessResult{}, fmt.Errorf("%w: probe Claude %s failed (exit=%d timeout=%t cancelled=%t truncated=%t)",
-				model.ErrUnavailable, flag, result.ExitCode, result.TimedOut, result.Cancelled, result.OutputTruncated)
+			return result, &adapter.ProcessError{Cause: fmt.Errorf("%w: probe Claude %s failed (exit=%d timeout=%t cancelled=%t truncated=%t)",
+				model.ErrUnavailable, flag, result.ExitCode, result.TimedOut, result.Cancelled, result.OutputTruncated), Stderr: result.Stderr}
 		}
 		return result, nil
 	}
@@ -130,7 +131,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		}
 		args = append(args, "--model", request.Model)
 	}
-	args, env, cleanup, err := sessionmcp.Configure(ctx, "claude", args, nil)
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "claude", args, os.Environ())
 	if err != nil {
 		return adapter.Result{}, err
 	}
@@ -142,9 +143,6 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		HeartbeatInterval: request.HeartbeatInterval,
 		Liveness:          quietWorkerLiveness(request),
 	})
-	if err != nil {
-		return adapter.Result{}, fmt.Errorf("run Claude process: %w", err)
-	}
 	result := adapter.Result{
 		Adapter: "claude", AdapterVersion: c.version, ExitCode: process.ExitCode,
 		Stdout: process.Stdout, Stderr: process.Stderr, StartedAt: process.StartedAt,
@@ -153,6 +151,10 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		Isolation:        process.Isolation,
 		Status:           adapter.StatusSuccess,
 		StoppedAfterDone: process.StoppedAfterDone, IdleTimedOut: process.IdleTimedOut,
+	}
+	if err != nil {
+		result.Status = adapter.StatusFailure
+		return result, fmt.Errorf("run Claude process: %w", err)
 	}
 	if process.StoppedAfterDone && !process.TimedOut && !process.Cancelled {
 		result.ExitCode = 0 // the final result event was observed

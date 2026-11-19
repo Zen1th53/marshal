@@ -6,11 +6,11 @@ package claude
 // authentication state. It is deliberately not a general CLI passthrough.
 
 import (
-	"github.com/Zen1th53/marshal/internal/usage"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
+	"github.com/Zen1th53/marshal/internal/usage"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,14 +91,22 @@ func EnsureGovernedClaudeHome() (string, error) {
 	// hooks on the next run, so remove it rather than trusting it is absent.
 	_ = os.Remove(filepath.Join(target, "settings.json"))
 
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		hostClaude := filepath.Join(home, ".claude")
+	hostClaude := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR"))
+	if hostClaude == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			hostClaude = filepath.Join(home, ".claude")
+		}
+	}
+	if hostClaude != "" {
 		for _, name := range []string{".credentials.json"} {
 			hostPath := filepath.Join(hostClaude, name)
 			if info, statErr := os.Stat(hostPath); statErr == nil && !info.IsDir() {
 				if data, readErr := os.ReadFile(hostPath); readErr == nil {
 					_ = os.WriteFile(filepath.Join(target, name), data, 0o600)
 				}
+			} else if os.IsNotExist(statErr) {
+				// A different owner home must not reuse an earlier account.
+				_ = os.Remove(filepath.Join(target, name))
 			}
 		}
 	}

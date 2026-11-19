@@ -23,20 +23,21 @@ const agySigninExpiryEvent = "AGY_SIGNIN_EXPIRED"
 var agySigninEpisode struct {
 	sync.Mutex
 	until time.Time
+	runID string
 }
 
 // noteAgySigninExpiry classifies a failed agy run from its own output. On a
-// sign-in expiry it cools agy down and, once per episode, notifies the owner.
+// sign-in expiry it notifies the owner once per episode, without a quota cooldown.
 func (r *Runtime) noteAgySigninExpiry(ctx context.Context, task execution.TaskExecution, runErr error, result adapter.Result) (bool, error) {
 	if !classifyAgySigninExpiry(runErr, result.ExitCode, result.Stdout, result.Stderr, result.EndedAt.Sub(result.StartedAt)) {
 		return false, nil
 	}
 	now := time.Now()
 	agySigninEpisode.Lock()
-	ongoing := isProviderUnavailable("agy", now) && now.Before(agySigninEpisode.until)
+	ongoing := agySigninEpisode.runID == task.RunID && now.Before(agySigninEpisode.until)
 	if !ongoing {
 		agySigninEpisode.until = now.Add(agySigninExpiryCooldown)
-		markProviderUnavailable("agy", agySigninEpisode.until)
+		agySigninEpisode.runID = task.RunID
 	}
 	agySigninEpisode.Unlock()
 	if ongoing {
