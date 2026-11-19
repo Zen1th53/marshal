@@ -768,6 +768,15 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	if w.handleGateKey(event, w.state.Marshal) {
 		return true
 	}
+	// a opens the project architecture in the browser between goals and
+	// during a run. While the inbox holds a decision a is its "allow once",
+	// so the Board leaves the key to the inbox. It never answers a
+	// permission or accepts a draft.
+	if event.Type == KeyRune && event.Rune == 'a' && !w.anyBodyView() && ui.inspect == "" && !w.inboxView.Inspecting() && len(w.boardInbox()) == 0 {
+		response, err := w.marshalArchitecture(context.Background(), "", "")
+		w.recordCommandResult("/marshal architecture", response, err)
+		return true
+	}
 	// r armed a stuck task's retry: Enter runs it, any other key cancels.
 	if w.handleRetryKey(event) {
 		return true

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -47,8 +48,51 @@ func (r *Review) Handler(token string) http.Handler {
 			_, _ = io.WriteString(w, page)
 			return
 		}
-		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
+		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
 			reply(http.StatusForbidden, map[string]any{"error": "Review access denied"})
+			return
+		}
+		if q.URL.Path == "/api/conformance" {
+			if q.Method != http.MethodGet {
+				reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported review method"})
+				return
+			}
+			if r.config.Conformance == nil {
+				reply(http.StatusOK, map[string]any{"present": false})
+				return
+			}
+			value, err := r.config.Conformance(q.Context())
+			if err != nil {
+				reply(http.StatusServiceUnavailable, map[string]any{"error": err.Error()})
+				return
+			}
+			reply(http.StatusOK, value)
+			return
+		}
+		if q.URL.Path == "/api/history" {
+			if q.Method != http.MethodGet {
+				reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported review method"})
+				return
+			}
+			revision := int64(0)
+			if value := q.URL.Query().Get("revision"); value != "" {
+				var err error
+				revision, err = strconv.ParseInt(value, 10, 64)
+				if err != nil || revision < 1 {
+					reply(http.StatusBadRequest, map[string]any{"error": "Revision must be a positive number"})
+					return
+				}
+			}
+			if r.config.History == nil {
+				reply(http.StatusOK, map[string]any{"revisions": []any{}})
+				return
+			}
+			value, err := r.config.History(q.Context(), revision)
+			if err != nil {
+				reply(http.StatusNotFound, map[string]any{"error": err.Error()})
+				return
+			}
+			reply(http.StatusOK, value)
 			return
 		}
 		if q.URL.Path == "/api/builders" {
@@ -112,6 +156,10 @@ func (r *Review) Handler(token string) http.Handler {
 		}
 		if q.Method != http.MethodPost {
 			reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported review method"})
+			return
+		}
+		if r.config.ReadOnly {
+			reply(http.StatusConflict, map[string]any{"error": "This is the accepted architecture. Submit a new project revision to change it."})
 			return
 		}
 		if origin := q.Header.Get("Origin"); origin != "" && origin != "http://"+q.Host {

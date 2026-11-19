@@ -27,6 +27,13 @@ func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.
 			return session, err
 		}
 	}
+	if provider == "" {
+		var err error
+		_, provider, _, err = w.marshalService(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+	}
 	session, err := rt.StartArchitectureReviewForSession(ctx, provider, goal, w.sessionID, w.architectureReviewHooks())
 	if errors.Is(err, projectcontext.ErrReviewPending) && w.store != nil {
 		// A drafted review needs an accepted project contract, and none is
@@ -41,9 +48,24 @@ func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.
 	return session, err
 }
 
+func (w *Workspace) architectureSessionCurrent(ctx context.Context, session *app.ArchitectureReviewSession) (bool, error) {
+	if session.SourceContractDigest == "" {
+		return true, nil
+	}
+	pending, found, err := w.store.ReadPendingProjectContract(ctx, w.runtime.ProjectContractBinding(), w.proposalLaunchID())
+	if err != nil {
+		return false, err
+	}
+	if found {
+		return pending.Digest == session.SourceContractDigest, nil
+	}
+	accepted, err := w.store.ReadAcceptedProjectContract(ctx, w.runtime.ProjectContractBinding())
+	return err == nil && accepted.Digest == session.SourceContractDigest, err
+}
+
 // projectSummaryRequest asks the Marshal for the project contract the
 // architecture view is built from. It grants and accepts nothing.
-const projectSummaryRequest = marshalNotePrefix + "The owner asked to see the architecture, but no project summary is waiting. Read every marshal_project_contract_inventory page, then send the architecture with marshal_project_contract_submit. If it is refused, the error says what to fix."
+const projectSummaryRequest = marshalNotePrefix + "The owner asked to see the architecture, but no project summary is waiting. Read every marshal_project_contract_inventory page, then submit a baseline of the whole project's top-level code with marshal_project_contract_submit: give every component a non-empty responsibility, give every dependency a contract.connections entry whose carries says what flows over it, and cover every goal success criterion and confirmed requirement in at least one component's covers list (copy the full text of goal criteria, confirmed goal scope/constraints/do-not-do, and filled confirmed requirements card lines without their captions). If it is refused, the error says what to fix."
 
 // askMarshalForProjectSummary sends projectSummaryRequest when a Marshal chat
 // is open, and reports whether it did.

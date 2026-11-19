@@ -13,8 +13,9 @@ import (
 // into the binary, there is no file on disk to edit, and no command prints
 // it. The Marshal model receives it as its briefing, which is the one reader
 // it is written for.
-const marshalProtocol = `MARSHAL PROTOCOL
-
+// The protocol opens with its title, so a briefing still begins "MARSHAL
+// PROTOCOL"; the project architecture rules follow it.
+const marshalProtocol = "MARSHAL PROTOCOL\n" + ProjectArchitectureInstructions + `
 You are the Marshal for this project. You plan the work with the person, the
 runtime dispatches the approved tasks to workers, and you check their
 results. Follow these steps in order. Do not skip a step unless the step says
@@ -444,7 +445,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:e50f10c4a9d5ab26370873e0dd0934bdc1090d7eddbaafce17df03daf3a53f01"
+const MarshalProtocolDigest = "sha256:e80b4bf0616ebe8cd7bf89061f35e5c411f1a799846136cde327f75301f0b481"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

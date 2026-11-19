@@ -63,3 +63,15 @@ When the independent verifier confirms that all tests and criteria pass:
 1. **Merge**: Marshal integrates the task branches cleanly into your repository's `main` branch.
 2. **State Finalization**: Run metrics, completion proofs, and task history are durably written to `.marshal/state.db`.
 3. **Closure**: The run closes to `main`; the chat receives `[Marshal] The run closed: …`.
+
+## Architecture lifecycle
+
+The project has one living architecture. For its baseline, the Marshal describes the whole project, with all parts marked new. Each later goal proposes the next revision: the Marshal keeps existing parts, describes what each connection carries, and ties the requirements to components.
+
+Press **`a`** on the Board, or use **`/marshal architecture`**, to open the current architecture at any time. **`y`** opens a proposal waiting for your acceptance. The browser header shows `rev N → N+1 · proposed` while waiting and `rev N · current` after acceptance.
+
+Solid borders show current parts. Dashed borders and edges show additions connected to the current architecture. Changed parts have a dashed accent outline and a “changed” tag; open a part or connection to see its before and after fields. Removed parts are faded and struck through. Use **Only this goal’s changes** to focus on the proposal while keeping connected existing parts as context.
+
+Comment on the drawing, choose builders if available, and select **Accept architecture** when ready. The Marshal then plans the work and continues the run. **History** lists revisions with their date, goal, run, and who accepted them. Select a revision to inspect its drawing and changes against the preceding revision; return to the latest architecture to comment or accept.
+
+After a run, components whose paths were changed can show **built**. A failed conformance check marks them **differs from the architecture**, so you can see where the implementation needs attention. These marks appear when the run supplies conformance results.

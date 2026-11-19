@@ -1,0 +1,227 @@
+{
+  "revision": 4,
+  "base_revision": 3,
+  "approved": false,
+  "comments": [],
+  "architecture": {
+    "components": [
+      {
+        "id": "current",
+        "name": "Current part",
+        "responsibility": "Context",
+        "files": [
+          "current.go"
+        ],
+        "change": "existing"
+      },
+      {
+        "id": "added",
+        "name": "New part",
+        "responsibility": "New work",
+        "change": "new",
+        "conformance": "built"
+      },
+      {
+        "id": "edited",
+        "name": "Changed part",
+        "responsibility": "After",
+        "change": "changed",
+        "before": {
+          "responsibility": "Before"
+        },
+        "conformance": "differs"
+      },
+      {
+        "id": "removed",
+        "name": "Removed part",
+        "responsibility": "Old work",
+        "change": "removed"
+      },
+      {
+        "id": "untouched",
+        "name": "Unconnected part",
+        "change": "existing"
+      }
+    ],
+    "connections": [
+      {
+        "id": "existing-edge",
+        "source": "current",
+        "target": "edited",
+        "label": "Current traffic",
+        "change": "existing"
+      },
+      {
+        "id": "new-edge",
+        "source": "added",
+        "target": "current",
+        "label": "New traffic",
+        "change": "new"
+      },
+      {
+        "id": "changed-edge",
+        "source": "edited",
+        "target": "current",
+        "label": "After traffic",
+        "change": "changed",
+        "before": {
+          "label": "Before traffic"
+        }
+      },
+      {
+        "id": "removed-edge",
+        "source": "removed",
+        "target": "current",
+        "label": "Old traffic",
+        "change": "removed"
+      },
+      {
+        "id": "implicit-edge",
+        "source": "current",
+        "target": "added",
+        "label": "Implicit addition"
+      }
+    ]
+  },
+  "layouts": {
+    "architecture": {
+      "width": 1000,
+      "height": 700,
+      "version": "v1",
+      "nodes": [
+        {
+          "id": "current",
+          "x": 50,
+          "y": 50,
+          "width": 180,
+          "height": 100
+        },
+        {
+          "id": "added",
+          "x": 300,
+          "y": 50,
+          "width": 180,
+          "height": 100
+        },
+        {
+          "id": "edited",
+          "x": 50,
+          "y": 300,
+          "width": 180,
+          "height": 100
+        },
+        {
+          "id": "removed",
+          "x": 300,
+          "y": 300,
+          "width": 180,
+          "height": 100
+        },
+        {
+          "id": "untouched",
+          "x": 600,
+          "y": 300,
+          "width": 180,
+          "height": 100
+        }
+      ],
+      "edges": [
+        {
+          "id": "existing-edge",
+          "points": [
+            [
+              140,
+              150
+            ],
+            [
+              140,
+              300
+            ]
+          ],
+          "label_at": [
+            140,
+            225
+          ],
+          "caption": "Current traffic"
+        },
+        {
+          "id": "new-edge",
+          "points": [
+            [
+              300,
+              100
+            ],
+            [
+              230,
+              100
+            ]
+          ],
+          "label_at": [
+            265,
+            100
+          ],
+          "caption": "New traffic"
+        },
+        {
+          "id": "changed-edge",
+          "points": [
+            [
+              50,
+              300
+            ],
+            [
+              50,
+              150
+            ]
+          ],
+          "label_at": [
+            50,
+            225
+          ],
+          "caption": "After traffic"
+        },
+        {
+          "id": "removed-edge",
+          "points": [
+            [
+              300,
+              350
+            ],
+            [
+              230,
+              350
+            ],
+            [
+              230,
+              100
+            ]
+          ],
+          "label_at": [
+            265,
+            350
+          ],
+          "caption": "Old traffic"
+        },
+        {
+          "id": "implicit-edge",
+          "points": [
+            [
+              230,
+              120
+            ],
+            [
+              300,
+              120
+            ]
+          ],
+          "label_at": [
+            265,
+            120
+          ],
+          "caption": "Implicit addition"
+        }
+      ]
+    }
+  },
+  "history": []
+}

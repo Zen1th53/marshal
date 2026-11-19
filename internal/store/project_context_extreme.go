@@ -307,6 +307,13 @@ func (s *Store) AdmitMCPProjectContract(ctx context.Context, source MCPProposal,
 	if sub.ExpectedVersion > 0 && (sub.Contract.SupersedesDigest == "" || strings.TrimSpace(sub.Contract.RevisionReason) == "") {
 		return MCPProposal{}, false, projectcontext.ErrInvalid
 	}
+	if accepted, readErr := s.ReadAcceptedProjectContract(ctx, sub.Contract.Project); readErr == nil && accepted.Version == sub.ExpectedVersion {
+		if err := projectcontext.ValidateContractRevision(accepted.Contract, sub.Contract); err != nil {
+			return MCPProposal{}, false, err
+		}
+	} else if readErr != nil && !errors.Is(readErr, projectcontext.ErrReviewPending) {
+		return MCPProposal{}, false, readErr
+	}
 	payload, err := json.Marshal(sub)
 	if err != nil {
 		return MCPProposal{}, false, err
@@ -479,6 +486,15 @@ func (s *Store) commitMCPProjectContractDecision(ctx context.Context, req permis
 	}
 	if currentVersion != sub.ExpectedVersion || sub.Contract.Revision != currentVersion+1 || (currentVersion > 0 && (currentID != sub.Contract.ID || sub.Contract.SupersedesDigest != currentDigest || strings.TrimSpace(sub.Contract.RevisionReason) == "")) {
 		return projectcontext.Contract{}, model.ErrConflict
+	}
+	if currentVersion > 0 {
+		previous, _, _, err := readProjectContract(ctx, tx, sub.Contract.Project)
+		if err != nil {
+			return projectcontext.Contract{}, err
+		}
+		if err := projectcontext.ValidateContractRevision(previous, sub.Contract); err != nil {
+			return projectcontext.Contract{}, err
+		}
 	}
 	if ownerInstruction {
 		if _, err = consumeProjectContractInstructionTx(ctx, tx, req.Scope, req.SourceLaunch, decision.ID, sub, contractDigest); err != nil {
