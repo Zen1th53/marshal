@@ -55,7 +55,7 @@ func TestBoardRunStopNotice(t *testing.T) {
 func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
 	for name, pause := range map[string]marshal.Pause{
 		"plain":       {Reason: "Marshal could not finish checking the run (part of it was left paused).", Resolutions: []string{"Press Enter to let the Marshal retry."}, Detail: "verification stopped: execution run conflict: required completion child identity/state", Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
-		"bare code": {Reason: "REQUIRED_CONTEXT_REVIEW_PENDING", Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
+		"bare code":   {Reason: "REQUIRED_CONTEXT_REVIEW_PENDING", Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
 		"older build": {Reason: "verification stopped: execution run conflict: required completion child identity/state", Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -310,6 +310,36 @@ func TestBoardStopShowsKnownDeliveryReason(t *testing.T) {
 	w.setMarshalPanel(p)
 	frame := plainFrame(w, 170, 45)
 	if strings.Contains(frame, "stopped unexpectedly") || !strings.Contains(frame, "Your checkout of master has uncommitted changes") {
+		t.Fatalf("board frame:\n%s", frame)
+	}
+}
+
+// quotaStop is a stop error the way app's quota wait reports one: a raw
+// machine message plus the plain reason and retry time.
+type quotaStop struct{}
+
+func (quotaStop) Error() string {
+	return "waiting_on_quota: every provider for governed mode is cooling down until 2026-11-19T18:00:00Z"
+}
+func (quotaStop) StopReason() (string, string) {
+	return "Every AI provider for governed mode is at its usage limit until 18:00.", "Press Enter after that time to try again."
+}
+
+// A run stopped because every provider is cooling down shows that reason and
+// when it can retry on its inbox card, not "The run stopped unexpectedly.".
+func TestBoardStopShowsQuotaWaitReason(t *testing.T) {
+	note := marshalOutcomeNote(marshal.Run{}, fmt.Errorf("dispatch: %w", quotaStop{}))
+	b := boardmodel.Board{Run: boardmodel.RunHead{State: marshal.Verifying}}
+	got, ok := (boardVisual{board: b, stopped: true, note: note}).stopNotice()
+	if !ok || got.reason != "Every AI provider for governed mode is at its usage limit until 18:00." || got.next != "Press Enter after that time to try again." {
+		t.Fatalf("quota stop: %+v (note %q)", got, note)
+	}
+	w, _ := boardWorkspace(t)
+	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), note)
+	p.Stopped = true
+	w.setMarshalPanel(p)
+	frame := plainFrame(w, 170, 45)
+	if strings.Contains(frame, "stopped unexpectedly") || !strings.Contains(frame, "usage limit until 18:00") || strings.Contains(frame, "waiting_on_quota") {
 		t.Fatalf("board frame:\n%s", frame)
 	}
 }

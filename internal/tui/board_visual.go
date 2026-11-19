@@ -44,6 +44,9 @@ type boardVisual struct {
 	// typing, an armed retry, or the last command's answer until the next
 	// key.
 	status string
+	// indexing is the background project-knowledge indexing progress line,
+	// shown in the footer while initial indexing runs.
+	indexing string
 	// hints is the hint bar: registry IDs in display order (boardHints),
 	// each a button for its action.
 	hints []string
@@ -665,6 +668,8 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		s = v.stopLine(stop) + "   "
 	} else if note := strings.TrimSpace(cleanBoard(v.note)); note != "" {
 		s = v.fg("waiting", "› ") + note + "   "
+	} else if indexing := strings.TrimSpace(cleanBoard(v.indexing)); indexing != "" {
+		s = v.fg("working", v.frame.Spinner(true)+" ") + v.fg("dim", indexing) + "   "
 	}
 	// A host notice follows the run's note, and only when it fits whole.
 	if v.host != nil && v.host.Notice != "" {

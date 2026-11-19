@@ -546,6 +546,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		}
 	}
 	// The hint bar follows the state this paint shows (board_hints.go).
+	v.indexing = w.knowledgeIndexLine(v.unicode())
 	v.hints = w.boardHints(v)
 	v.tails = w.laneTailFor
 	v.tailWant = w.laneTailWant()

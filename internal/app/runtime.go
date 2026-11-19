@@ -131,6 +131,10 @@ type Runtime struct {
 	// resumeRun restarts canonical execution of a resumed run; nil means
 	// ExecuteRun. Tests replace it to observe the restart without executing.
 	resumeRun func(runID string)
+
+	// knowledge tracks deferred background project knowledge indexing when
+	// opened with Options{DeferKnowledgeIndex: true}.
+	knowledge *knowledgeIndexState
 }
 
 // AttachULTRA wires the canonical ULTRA gate into the runtime.
@@ -192,21 +196,25 @@ func (r *Runtime) WorkspaceEntitlementRequests() *ULTRARequestService {
 
 type Options struct {
 	// KnowledgeReadOnly is used by bound query children; their owner prepares indexes.
-	KnowledgeReadOnly  bool
-	Adapters           map[string]adapter.Adapter
-	EvidenceAuthorizer evidence.Authorizer
-	EvidenceSanitizer  evidence.Sanitizer
-	Metrics            *evidence.MetricsRecorder
-	RuntimePolicy      *RuntimePolicyConfig
-	CapabilityBroker   capability.Broker
-	CellManager        *cell.Manager
-	SecretBroker       secrets.Broker
-	GateEngine         *gate.Engine
-	RiskEngine         *risk.Engine
-	AuthorityPrincipal *authz.Principal
-	ProcessAuthority   authz.Authority
-	HandoffAuthorizer  protocol.Authorizer
-	QuorumEngine       *quorum.Engine
+	KnowledgeReadOnly bool
+	// DeferKnowledgeIndex skips synchronous project knowledge indexing during
+	// OpenWithOptions so interactive UIs can paint first and build the index in
+	// the background via StartKnowledgeIndex.
+	DeferKnowledgeIndex bool
+	Adapters            map[string]adapter.Adapter
+	EvidenceAuthorizer  evidence.Authorizer
+	EvidenceSanitizer   evidence.Sanitizer
+	Metrics             *evidence.MetricsRecorder
+	RuntimePolicy       *RuntimePolicyConfig
+	CapabilityBroker    capability.Broker
+	CellManager         *cell.Manager
+	SecretBroker        secrets.Broker
+	GateEngine          *gate.Engine
+	RiskEngine          *risk.Engine
+	AuthorityPrincipal  *authz.Principal
+	ProcessAuthority    authz.Authority
+	HandoffAuthorizer   protocol.Authorizer
+	QuorumEngine        *quorum.Engine
 	// AllowProcessOnlyFallback is retained for source compatibility. Process-only
 	// provider execution is no longer permitted because it cannot enforce the
 	// filesystem or network boundary.
@@ -293,7 +301,18 @@ type versionDocument struct {
 	PackVersion   string `yaml:"pack_version"`
 }
 
+type BootstrapOptions struct {
+	// DeferKnowledgeIndex skips synchronous project knowledge indexing during
+	// bootstrap so interactive first-start flows can paint the Board first and
+	// build the index in the background.
+	DeferKnowledgeIndex bool
+}
+
 func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
+	return BootstrapWithOptions(ctx, root, BootstrapOptions{})
+}
+
+func BootstrapWithOptions(ctx context.Context, root string, options BootstrapOptions) (project.Layout, error) {
 	layout, err := project.Discover(root)
 	if err != nil {
 		return project.Layout{}, err
@@ -334,8 +353,10 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	// A failure here does not fail setup: the project is usable, and the
 	// identity will be established on first open instead.
 	_, _ = projectid.Adopt(ctx, nil, layout.Root, layout.RuntimeDir)
-	if err := ensureProjectKnowledge(ctx, layout); err != nil {
-		return project.Layout{}, err
+	if !options.DeferKnowledgeIndex {
+		if err := ensureProjectKnowledge(ctx, layout); err != nil {
+			return project.Layout{}, err
+		}
 	}
 	return layout, nil
 }
@@ -467,7 +488,9 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		if admission.Rebound {
 			previousRoot = identity.Repository
 		}
-		if err := ensureProjectKnowledge(ctx, layout, previousRoot); err != nil {
+		if options.DeferKnowledgeIndex {
+			rt.knowledge = newKnowledgeIndexState(previousRoot)
+		} else if err := ensureProjectKnowledge(ctx, layout, previousRoot); err != nil {
 			return nil, err
 		}
 	}
@@ -918,6 +941,7 @@ func (r *Runtime) Close() error {
 			r.harnessReverifyCancel()
 			r.harnessReverifyCancel = nil
 		}
+		r.stopKnowledgeIndex()
 		if r.store != nil {
 			r.closeErr = errors.Join(r.closeErr, r.store.RevokeRuntimeKnowledgeReadLeases(context.Background(), r.runtimeInstanceID))
 		}

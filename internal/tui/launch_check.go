@@ -48,13 +48,14 @@ type launchProgress struct {
 
 // launchState is the shared result of the per-start project check.
 type launchState struct {
-	mu       sync.Mutex
-	phase    launchPhase
-	blockers []string
-	warnings []string
-	started  time.Time
-	scan     projectScan
-	progress launchProgress
+	mu                sync.Mutex
+	phase             launchPhase
+	blockers          []string
+	warnings          []string
+	started           time.Time
+	scan              projectScan
+	knowledgeProgress string
+	progress          launchProgress
 	// pending holds afterLaunchCheck callbacks waiting for the check to
 	// finish ready; they run once then, and a later retry that turns ready
 	// runs any registered since.
