@@ -35,7 +35,7 @@ text=pathlib.Path(%q)
 mode=state.read_text() if state.exists() else 'ready'
 if args[0]=='set-buffer': text.write_text(args[-1])
 if args[0]=='paste-buffer': state.write_text(%q)
-if args[0]=='display-message': print('%%42\t2\t0\t3\t0')
+if args[0]=='display-message': print('%%42 0 0' if args[-1]=='#{pane_id} #{pane_in_mode} #{pane_dead}' else '%%42\t2\t0\t3\t0')
 if args[0]=='capture-pane':
     if mode=='modal': print('› 1. Allow\n  enter to submit | esc to cancel\n  GPT-6.1-Sol default · /owned')
     elif mode=='busy': print('› \n  esc to interrupt\n  GPT-6.1-Sol default · /owned')
@@ -266,5 +266,49 @@ func TestCodexDecisionCancellationRevocationExpiryAndConcurrentRetry(t *testing.
 				t.Fatal("transport granted authority")
 			}
 		})
+	}
+}
+
+func TestQueuedNonCodexDecisionPreservesOwnerDraft(t *testing.T) {
+	w := startupCodexDecisionWorkspace(t)
+	log, mode := fakeCodexDecisionPane(t, "full")
+	if err := os.WriteFile(mode, []byte("draft"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	req := permission.Request{Kind: "test", Object: "draft-blocked"}
+	p := &buildPendingDecision{paneID: "%42", provider: "agy", text: "Decision request", request: req, deadline: time.Now().Add(time.Minute)}
+	w.permissions.build.pending = map[string]*buildPendingDecision{"same-id": p}
+	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
+	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
+	if w.permissions.build.pending["same-id"] != p || p.delivered {
+		t.Fatal("blocked decision was lost or marked delivered")
+	}
+	if !p.blocked {
+		t.Fatal("blocked delivery not recorded")
+	}
+	if activityCount(w, "Marshal decision queued: chat input is not empty or ready. Send or clear your unsent text in the chat pane to unblock delivery.") != 1 {
+		t.Fatal("missing or repeated Board notice")
+	}
+	for _, call := range decisionCalls(t, log) {
+		if call.Args[0] != "capture-pane" && call.Args[0] != "display-message" {
+			t.Fatalf("owner draft mutated: %v", call.Args)
+		}
+	}
+	if err := os.WriteFile(mode, []byte("ready"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
+	if !p.delivered || w.permissions.build.pending["same-id"] != p {
+		t.Fatal("same decision was not delivered after draft cleared")
+	}
+	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
+	enters := 0
+	for _, call := range decisionCalls(t, log) {
+		if call.Args[0] == "send-keys" {
+			enters++
+		}
+	}
+	if enters != deliverEnterTries {
+		t.Fatalf("Enter count %d; fake leaves own text pending, expected %d", enters, deliverEnterTries)
 	}
 }

@@ -87,9 +87,17 @@ type boardVisual struct {
 	// empty is set when no run is open: the body is the first-use card
 	// (board_empty.go) and the header names the project instead of a run.
 	empty bool
-	// goalGiven is set once the person has given the Marshal a goal (the
-	// active Goal): the first-use card stops asking for one.
+	// goalGiven is set once the person has given the Marshal an active,
+	// undelivered goal: the home card stops asking for one and shows what
+	// the Marshal is working on.
 	goalGiven bool
+	// goalText is the active goal's short plain-English summary (desired
+	// outcome, or original request), shown on the home card while the
+	// Marshal plans it before a run exists.
+	goalText string
+	// goalSince is when the active goal was created (or last updated when
+	// CreatedAt is zero), so the home card can show how long since.
+	goalSince time.Time
 	// project is the project's name, for the first-use header.
 	project string
 	// chips is each provider's readiness for the first-use card; armed is

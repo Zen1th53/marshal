@@ -292,7 +292,8 @@ func (v boardVisual) firstUseGlyph(state string) string {
 }
 
 // firstUseHeaderLine is the header with no run: the brand and edition, the
-// project, NO RUN YET, the inbox, provider health and the clock.
+// project, NO RUN YET (or PLANNING once a goal exists or architecture is
+// accepted, or NEEDS YOU when a decision waits), the inbox, and the clock.
 func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 	brand := v.bold(v.fg("white", "Marshal"))
 	full := brand
@@ -310,7 +311,10 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 		headerPart{"project", v.fg("dim", "project ") + v.fg("accent", project), v.fg("accent", project)},
 		headerPart{"state", v.bg("sel", v.fg("waiting", " NO RUN YET ")), v.fg("waiting", "NO RUN")},
 	)
-	if v.planning {
+	if v.planning || v.goalGiven {
+		// Once a goal exists (requirements, design, architecture) or the
+		// architecture is accepted, the Marshal is actively planning rather
+		// than sitting idle before a goal.
 		parts[len(parts)-1] = headerPart{"state", v.bg("sel", v.fg("working", " PLANNING ")), v.fg("working", "PLANNING")}
 	}
 	if v.ownerWaits() {
@@ -336,6 +340,13 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 
 // firstUseCTA is the call to action's label.
 const firstUseCTA = "Tell the Marshal what to build"
+
+// workingGoalPrefix and workingGoalFallback are the home card's lead line once
+// an active goal exists before a run starts (requirements, design, architecture).
+const (
+	workingGoalPrefix   = "The Marshal is working on: "
+	workingGoalFallback = "The Marshal is working on your goal"
+)
 
 // paintFirstUse paints the first-use card in the Board's body: decisions
 // already waiting first, then the call to action, the three steps, the
@@ -427,8 +438,33 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 	// given, or the Marshal already filled its requirements, there is
 	// nothing left to ask for: the button goes and the chat keys stay.
 	given := v.goalGiven || v.req != nil || v.planning
-	if v.planning {
+	switch {
+	case v.planning:
 		add(pad + v.fg("working", v.frame.Spinner(true)) + " " + v.bold(v.fg("white", planningCard)))
+	case v.goalGiven:
+		arrow := "▸"
+		if !v.unicode() {
+			arrow = ">"
+		}
+		suffix := ""
+		if !v.goalSince.IsZero() && !v.now.IsZero() {
+			suffix = "  ·  " + goalElapsed(v.now.Sub(v.goalSince))
+		}
+		// Keep the whole line within w cells so the elapsed time stays visible
+		// on narrow terminals instead of being clipped off the right edge.
+		avail := w - len(pad) - 2 - VisibleLen(suffix)
+		headline := workingGoalFallback
+		if v.goalText != "" && avail > len(workingGoalPrefix)+8 {
+			headline = workingGoalPrefix + v.truncWords(v.goalText, avail-len(workingGoalPrefix))
+		} else {
+			headline = v.truncWords(headline, max(1, avail))
+		}
+		line := v.fg("working", arrow) + " " + v.bold(v.fg("white", headline))
+		if suffix != "" {
+			line += v.fg("dim", suffix)
+		}
+		hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(line), kind: hitAction, id: "marshal.chat"})
+		add(pad + line)
 	}
 	if !given {
 		arrow, enter := "▸", "⏎"
@@ -551,6 +587,53 @@ func (v boardVisual) trunc(s string, w int) string {
 		r = r[:len(r)-1]
 	}
 	return string(r) + ellipsis
+}
+
+// truncWords cuts s to at most w cells at a word boundary when one fits,
+// ending with an ellipsis ("." in the ASCII theme).
+func (v boardVisual) truncWords(s string, w int) string {
+	if VisibleLen(s) <= w {
+		return s
+	}
+	if w <= 1 {
+		return v.trunc(s, w)
+	}
+	ellipsis := "…"
+	if !v.unicode() {
+		ellipsis = "."
+	}
+	out := ""
+	for _, word := range strings.Fields(s) {
+		cand := word
+		if out != "" {
+			cand = out + " " + word
+		}
+		if VisibleLen(cand)+1 > w {
+			break
+		}
+		out = cand
+	}
+	if out == "" {
+		return v.trunc(s, w)
+	}
+	return out + ellipsis
+}
+
+// goalElapsed formats how long the Marshal has been working on the active goal
+// in compact plain units ("45s", "12m", "1h20m"), matching host_view.go.
+func goalElapsed(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 0 {
+		s = 0
+	}
+	switch {
+	case s >= 3600:
+		return fmt.Sprintf("%dh%02dm", s/3600, s%3600/60)
+	case s >= 60:
+		return fmt.Sprintf("%dm", s/60)
+	default:
+		return fmt.Sprintf("%ds", s)
+	}
 }
 
 // leadProvider is the provider that leads this project (the Marshal), as a
