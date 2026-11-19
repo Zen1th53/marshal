@@ -126,6 +126,16 @@ page with marshal_project_contract_inventory, propose purpose/components/
 invariants and an explicit classification for every accepted memory through
 marshal_project_contract_submit, and answer its separate bound Decision
 (allow only after the owner's browser acceptance above).
+A submitted contract is refused unless: every component's responsibility says
+what it is responsible for; every dependency has a contract.connections entry
+{"from":"<component id>","to":"<dependency id>","carries":"<what flows>"}
+whose carries is not empty; and every active goal success criterion and
+confirmed requirement appears in the covers list of at least one component.
+Copy the full text: goal criteria, confirmed goal scope/constraints/do-not-do,
+and every filled line of the confirmed requirements card (without its caption).
+There is no minimum number of components: coverage decides. Keep dependencies
+as well.
+If refused, the error names what to fix; fix it and submit again.
 Read marshal_project_contract_receipt; pending is not accepted. Reference pages
 from marshal_project_contract_read are inspection only and cannot prove coverage.
 Plan task boundaries and dependencies against the accepted architecture and Goal.
@@ -140,7 +150,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:4ee2e0e882cd2cf35aef7f02c306b034fae104b088b365bd588ccd0d28b72ed2"
+const ExtremeProtocolDigest = "sha256:4e38d0bcfcb3a9d2f12b89709ebcde5b3bd8a01c410e9d217b894289d7b36f94"
 
 // shippedProtocolStripper rewrites the base protocol's operator-popup and
 // press-A instructions out of the shipped (untagged) edition. This edition's

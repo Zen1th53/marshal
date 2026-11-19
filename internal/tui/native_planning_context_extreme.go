@@ -303,7 +303,7 @@ func (w *Workspace) prepareUnleasedNativePlanningLaunch(ctx context.Context, pro
 
 // marshalArchitectureNextStep tells the Marshal what to do while the
 // architecture waits for the owner's browser Accept.
-const marshalArchitectureNextStep = `The architecture is not accepted yet, so there is no project context to read. Carry on with the intake: submit the architecture with marshal_project_contract_submit if it is not submitted yet. It opens in the browser when the person presses y on the Board, and they accept it there. Call marshal_project_contract_context again after the runtime tells you the architecture was accepted.`
+const marshalArchitectureNextStep = `The architecture is not accepted yet, so there is no project context to read. Carry on with the intake: submit the architecture with marshal_project_contract_submit if it is not submitted yet (every component needs a non-empty responsibility, every dependency needs a contract.connections entry whose carries says what flows over it, and every goal success criterion and confirmed requirement must be covered in at least one component's covers list; copy the full text of goal criteria, confirmed goal scope/constraints/do-not-do, and filled confirmed requirements card lines without their captions). It opens in the browser when the person presses y on the Board, and they accept it there. Call marshal_project_contract_context again after the runtime tells you the architecture was accepted.`
 
 // architectureAwaitsAccept reports whether the only reason the planning
 // context is unavailable is the architecture: the active Goal is confirmed

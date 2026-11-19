@@ -13,9 +13,14 @@ import (
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
-// contractNotGiven is shown where the page needs text the contract does not
-// give. Nothing else on a contract-built page is written by Marshal code.
+// contractNotGiven is shown where a component has no description in an older
+// contract. Display text otherwise comes from the contract itself.
 const contractNotGiven = "not given"
+
+// contractConnectionNotDescribed labels a dependency that has no connection
+// saying what it carries. The submit quality check refuses new ones, so only
+// an older stored contract shows it.
+const contractConnectionNotDescribed = "not described"
 
 // contractReviewSource is the project contract a browser review was built
 // from, stored as the architecture's source_contract.
@@ -27,10 +32,12 @@ type contractReviewSource struct {
 
 // contractReviewSeedFor builds the browser review of a pending project
 // contract from the contract alone: its id and purpose, each component's
-// responsibility, paths and dependencies, its invariants and prohibited
-// changes. Dependencies become connections. A connection has no label in a
-// contract, so its label is shown as "not given". language is the owner's
-// approved language; the page's own labels stay in English because no model
+// responsibility, paths, dependencies and coverage, its labeled connections,
+// its invariants and prohibited changes. Dependencies become connections
+// labeled with what the matching c.Connections entry carries; a dependency
+// with no matching connection (an older stored contract) displays
+// "not described". language is the owner's approved language; the page's own
+// labels stay in English because no model
 // turn may translate them before the contract is accepted.
 func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (*contractReviewSeed, error) {
 	if c.ID == "" || c.Revision < 1 || digest == "" {
@@ -42,6 +49,10 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 	for _, v := range c.Components {
 		known[v.ID] = true
 	}
+	carriesByEdge := map[string]string{}
+	for _, conn := range c.Connections {
+		carriesByEdge[conn.From+"--"+conn.To] = conn.Carries
+	}
 	for _, v := range c.Components {
 		paths := append([]string{}, v.Paths...)
 		deps := append([]string{}, v.Dependencies...)
@@ -49,13 +60,16 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 		if v.Parent != "" {
 			component["parent"] = v.Parent
 		}
+		if len(v.Covers) > 0 {
+			component["covers"] = append([]string{}, v.Covers...)
+		}
 		components = append(components, component)
 		for _, dep := range v.Dependencies {
 			if !known[dep] || dep == v.ID {
 				continue
 			}
 			id := v.ID + "--" + dep
-			connections = append(connections, map[string]any{"id": id, "source": v.ID, "target": dep, "label": "", "protocol": ""})
+			connections = append(connections, map[string]any{"id": id, "source": v.ID, "target": dep, "label": carriesByEdge[id], "protocol": ""})
 		}
 	}
 	source := contractReviewSource{ID: c.ID, Revision: c.Revision, Digest: digest}
@@ -99,7 +113,11 @@ func contractUIFor(architecture json.RawMessage, language string) (json.RawMessa
 		uiComponents = append(uiComponents, map[string]any{"id": c.ID, "name": c.ID, "responsibility": orNotGiven(c.Responsibility)})
 	}
 	for _, c := range graph.Connections {
-		uiConnections = append(uiConnections, map[string]any{"id": c.ID, "label": orNotGiven(c.Label), "caption": orNotGiven(c.Label)})
+		label := c.Label
+		if label == "" {
+			label = contractConnectionNotDescribed
+		}
+		uiConnections = append(uiConnections, map[string]any{"id": c.ID, "label": label, "caption": shortConnectionCaption(label)})
 	}
 	strings := architecturereview.EnglishUIStrings()
 	keys := make([]string, 0, len(strings))
@@ -126,6 +144,16 @@ func orNotGiven(text string) string {
 		return contractNotGiven
 	}
 	return text
+}
+
+// shortConnectionCaption keeps the edge caption within the architecture review
+// UI's 28-rune cap, matching architecturereview.englishOverlay.
+func shortConnectionCaption(label string) string {
+	runes := []rune(label)
+	if len(runes) > 28 {
+		return string(append(runes[:27], '…'))
+	}
+	return label
 }
 
 // replaceSupersededContractReview sets aside a review that was built from an

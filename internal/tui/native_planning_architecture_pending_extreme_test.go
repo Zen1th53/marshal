@@ -46,6 +46,7 @@ func TestNativePlanningContextBeforeArchitectureAcceptedIsNotAFailure(t *testing
 				}
 				e := inventory.Entries[0]
 				draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: 1, Project: w.runtime.ProjectContractBinding(), ID: "ARCH-arch-pending", Revision: 1, Purpose: "Say hello", Components: []projectcontext.Component{{ID: "core", Responsibility: "Print", Paths: []string{"src"}}}, Invariants: []string{"Print exactly once"}, ReviewedInventoryDigest: inventory.CompletenessDigest, Required: []projectcontext.MemoryRef{{ID: e.ID, ProjectID: e.ProjectID, Revision: e.Revision, Scope: e.Scope, ScopeID: e.ScopeID, ContentDigest: e.ContentDigest, StateFingerprint: e.StateFingerprint, Class: projectcontext.Policy, Applies: projectcontext.Applicability{TaskIDs: []string{"future-task"}}, AcceptanceOccurrence: "owner-policy", Reason: "Required"}}}}
+				draft.Contract.Components[0].Covers = append([]string(nil), goal.SuccessCriteria...)
 				child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "arch-pending-contract", "proposal": draft}, true)
 			}
 			w.proposalMCP.mu.Lock()

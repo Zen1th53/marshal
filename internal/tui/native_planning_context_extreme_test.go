@@ -52,6 +52,7 @@ func nativePlanningFixture(t *testing.T, body ...string) (*Workspace, *proposalM
 	}
 	e := inventory.Entries[0]
 	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: 1, Project: w.runtime.ProjectContractBinding(), ID: "ARCH-native-planning", Revision: 1, Purpose: "Keep authoritative planning context complete", Components: []projectcontext.Component{{ID: "core", Responsibility: "Govern work", Paths: []string{"src"}}}, Invariants: []string{"Never omit required policy"}, ReviewedInventoryDigest: inventory.CompletenessDigest, Required: []projectcontext.MemoryRef{{ID: e.ID, ProjectID: e.ProjectID, Revision: e.Revision, Scope: e.Scope, ScopeID: e.ScopeID, ContentDigest: e.ContentDigest, StateFingerprint: e.StateFingerprint, Class: projectcontext.Policy, Applies: projectcontext.Applicability{TaskIDs: []string{"future-task"}}, AcceptanceOccurrence: "owner-policy", Reason: "Required before native planning"}}}}
+	draft.Contract.Components[0].Covers = append([]string(nil), goal.SuccessCriteria...)
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "native-planning-contract", "proposal": draft}, true)
 	ownerAcceptsArchitecture(t, w)
 	authorizeTestMemory(t, w, cfg, true)

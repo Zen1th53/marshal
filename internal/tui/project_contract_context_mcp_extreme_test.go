@@ -34,6 +34,7 @@ func TestProjectContractNativeCompleteContextIncludesFutureTaskMemoryAndRefusesR
 	}
 	e := inventory.Entries[0]
 	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: 1, Project: w.runtime.ProjectContractBinding(), ID: "ARCH-native-context", Revision: 1, Purpose: "Keep project history reliable", Components: []projectcontext.Component{{ID: "core", Responsibility: "Govern project work", Paths: []string{"src"}}}, Invariants: []string{"Preserve accepted history"}, ReviewedInventoryDigest: inventory.CompletenessDigest, Required: []projectcontext.MemoryRef{{ID: e.ID, ProjectID: e.ProjectID, Revision: e.Revision, Scope: e.Scope, ScopeID: e.ScopeID, ContentDigest: e.ContentDigest, StateFingerprint: e.StateFingerprint, Class: projectcontext.Policy, Applies: projectcontext.Applicability{TaskIDs: []string{"TASK-future"}}, AcceptanceOccurrence: "supported-owner-policy", Reason: "Required history policy"}}}}
+	draft.Contract.Components[0].Covers = append([]string(nil), goal.SuccessCriteria...)
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "complete-context", "proposal": draft}, true)
 	ownerAcceptsArchitecture(t, w)
 	authorizeTestMemory(t, w, cfg, true) // Host fixture; no native model approval is claimed.

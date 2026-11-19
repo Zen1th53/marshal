@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
 // A review built from a project contract carries the contract's own data and
-// nothing written by Marshal code, except "not given" where the page needs a
+// nothing written by Marshal code, except "not described" where the page needs a
 // text the contract has none for (connection labels).
 func TestContractReviewContainsOnlyContractData(t *testing.T) {
 	c := projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, ID: "hello-uz", Revision: 2, Purpose: "Print Salom, NAME!",
@@ -56,7 +57,7 @@ func TestContractReviewContainsOnlyContractData(t *testing.T) {
 	if ui.Language != "Uzbek" || len(ui.Components) != 2 || ui.Components[0].Name != "cli" || ui.Components[0].Responsibility != c.Components[0].Responsibility || ui.Components[1].Responsibility != c.Components[1].Responsibility {
 		t.Fatalf("component display is not the contract's text: %+v", ui)
 	}
-	if len(ui.Connections) != 1 || ui.Connections[0].Label != "not given" || ui.Connections[0].Caption != "not given" {
+	if len(ui.Connections) != 1 || ui.Connections[0].Label != "not described" || ui.Connections[0].Caption != "not described" {
 		t.Fatalf("connection display invents a label: %+v", ui.Connections)
 	}
 	if seed.Source != (contractReviewSource{ID: "hello-uz", Revision: 2, Digest: "contract-digest"}) {
@@ -95,5 +96,52 @@ func TestContractReviewContainsOnlyContractData(t *testing.T) {
 	sort.Strings(strayText)
 	if len(strayText) != 0 {
 		t.Fatalf("contract review shows text the contract does not give: %q", strayText)
+	}
+}
+
+func TestContractReviewUsesDeclaredConnectionLabels(t *testing.T) {
+	longLabel := "validates stored review state and generic layout geometry"
+	c := projectcontext.Contract{
+		FormatVersion: projectcontext.FormatVersion,
+		ID:            "review-fixes",
+		Revision:      1,
+		Purpose:       "Render labeled edges",
+		Components: []projectcontext.Component{
+			{ID: "architecturereview", Responsibility: "Serve browser review", Paths: []string{"internal/architecturereview"}, Dependencies: []string{"architecturecodec"}, Covers: []string{"Edge labels appear in review"}},
+			{ID: "architecturecodec", Responsibility: "Encode state and layouts", Paths: []string{"internal/architecturecodec"}},
+		},
+		Connections: []projectcontext.Connection{
+			{From: "architecturereview", To: "architecturecodec", Carries: longLabel},
+		},
+		Invariants: []string{"standard library"},
+	}
+	seed, err := contractReviewSeedFor(c, "contract-digest", "English")
+	if err != nil {
+		t.Fatalf("contractReviewSeedFor failed on long connection label: %v", err)
+	}
+	var graph struct {
+		Connections []struct {
+			ID, Source, Target, Label, Protocol string
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(seed.Architecture, &graph); err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Connections) != 1 || graph.Connections[0].Label != longLabel || graph.Connections[0].Protocol != "" {
+		t.Fatalf("graph connections = %+v", graph.Connections)
+	}
+	var ui struct {
+		Connections []struct {
+			ID, Label, Caption string
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(seed.UI, &ui); err != nil {
+		t.Fatal(err)
+	}
+	if len(ui.Connections) != 1 || ui.Connections[0].Label != longLabel || ui.Connections[0].Label == contractNotGiven {
+		t.Fatalf("UI connection label = %+v", ui.Connections)
+	}
+	if len([]rune(ui.Connections[0].Caption)) != 28 || !strings.HasSuffix(ui.Connections[0].Caption, "…") {
+		t.Fatalf("UI connection caption not truncated to 28 runes: %q", ui.Connections[0].Caption)
 	}
 }
