@@ -66,6 +66,17 @@ type Component struct {
 	// Removed keeps a deliberate deletion visible in the next project revision.
 	// Omitting it preserves the digest of contracts accepted before this field.
 	Removed bool `json:"removed,omitempty"`
+	// Covers lists the goal success criteria or confirmed requirements this
+	// component is responsible for delivering. Omitting it preserves the digest
+	// of contracts accepted before this field.
+	Covers []string `json:"covers,omitempty"`
+}
+
+// Connection describes what flows over a declared component dependency.
+type Connection struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Carries string `json:"carries"`
 }
 type Applicability struct {
 	ProjectWide bool     `json:"project_wide,omitempty"`
@@ -133,6 +144,7 @@ type Contract struct {
 	Revision                int64          `json:"revision"`
 	Purpose                 string         `json:"purpose"`
 	Components              []Component    `json:"components"`
+	Connections             []Connection   `json:"connections,omitempty"`
 	Invariants              []string       `json:"invariants"`
 	ProhibitedChanges       []string       `json:"prohibited_changes,omitempty"`
 	Required                []MemoryRef    `json:"required"`
@@ -326,8 +338,14 @@ func (c Contract) Canonical() (Contract, error) {
 		componentIDs[v.ID] = true
 		v.Paths = canonicalSet(v.Paths)
 		v.Dependencies = canonicalSet(v.Dependencies)
+		v.Covers = canonicalSet(v.Covers)
 		for _, p := range v.Paths {
 			if !validPath(p) {
+				return c, ErrInvalid
+			}
+		}
+		for _, cover := range v.Covers {
+			if !textOK(cover) {
 				return c, ErrInvalid
 			}
 		}
@@ -336,12 +354,28 @@ func (c Contract) Canonical() (Contract, error) {
 		return c, ErrInvalid
 	}
 	sort.Slice(c.Components, func(i, j int) bool { return c.Components[i].ID < c.Components[j].ID })
+	depEdges := map[string]bool{}
 	for _, v := range c.Components {
 		for _, dep := range v.Dependencies {
 			if !componentIDs[dep] || dep == v.ID {
 				return c, ErrInvalid
 			}
+			depEdges[v.ID+"\x00"+dep] = true
 		}
+	}
+	if len(c.Connections) > 0 {
+		c.Connections = append([]Connection(nil), c.Connections...)
+		seenConn := map[string]bool{}
+		for _, conn := range c.Connections {
+			key := conn.From + "\x00" + conn.To
+			if seenConn[key] || !depEdges[key] || !textOK(conn.Carries) {
+				return c, ErrInvalid
+			}
+			seenConn[key] = true
+		}
+		sort.Slice(c.Connections, func(i, j int) bool {
+			return c.Connections[i].From+"\x00"+c.Connections[i].To < c.Connections[j].From+"\x00"+c.Connections[j].To
+		})
 	}
 	c.Invariants = canonicalSet(c.Invariants)
 	c.ProhibitedChanges = canonicalSet(c.ProhibitedChanges)
@@ -520,16 +554,17 @@ func RenderWithPrefix(m Manifest, prefix string, capBytes int) (Packet, error) {
 	}{contractDigest, m.Goal, binding, loaded})
 	binding.ManifestDigest = manifestDigest
 	envelope := struct {
-		Trust      string      `json:"trust"`
-		Binding    Binding     `json:"binding"`
-		Purpose    string      `json:"purpose"`
-		Components []Component `json:"components"`
-		Invariants []string    `json:"invariants"`
-		Prohibited []string    `json:"prohibited,omitempty"`
-		Goal       Goal        `json:"goal"`
-		Memories   []item      `json:"memories"`
-		Bytes      int         `json:"bytes"`
-	}{"accepted_required_project_context", binding, c.Purpose, c.Components, c.Invariants, c.ProhibitedChanges, m.Goal, items, 0}
+		Trust       string       `json:"trust"`
+		Binding     Binding      `json:"binding"`
+		Purpose     string       `json:"purpose"`
+		Components  []Component  `json:"components"`
+		Connections []Connection `json:"connections,omitempty"`
+		Invariants  []string     `json:"invariants"`
+		Prohibited  []string     `json:"prohibited,omitempty"`
+		Goal        Goal         `json:"goal"`
+		Memories    []item       `json:"memories"`
+		Bytes       int          `json:"bytes"`
+	}{"accepted_required_project_context", binding, c.Purpose, c.Components, c.Connections, c.Invariants, c.ProhibitedChanges, m.Goal, items, 0}
 	marshal := func() ([]byte, error) { return json.Marshal(envelope) }
 	if security.RedactsSecrets {
 		// Extreme never refuses a packet because it carries a secret: the
@@ -605,9 +640,10 @@ func ApplicableContractDigest(c Contract, selection Selection) (string, error) {
 		Project                                             ProjectBinding
 		ID, Purpose                                         string
 		Components                                          []Component
+		Connections                                         []Connection `json:"Connections,omitempty"`
 		Invariants, Prohibited, SourceAnchors, DecisionRefs []string
 		Required                                            []MemoryRef
-	}{n.Project, n.ID, n.Purpose, n.Components, n.Invariants, n.ProhibitedChanges, n.SourceAnchors, n.DecisionRefs, refs}), nil
+	}{n.Project, n.ID, n.Purpose, n.Components, n.Connections, n.Invariants, n.ProhibitedChanges, n.SourceAnchors, n.DecisionRefs, refs}), nil
 }
 
 // Changed is ErrChanged naming the check that refused, so an operator or

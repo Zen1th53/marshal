@@ -14,11 +14,25 @@ the accepted revision plus one and supersedes_digest to its exact digest.
 When no architecture is accepted, first describe the whole project's top-level
 code and package layout, using the project knowledge index or repository
 evidence. A baseline covering only the goal's part is refused.
-Describe every connection's carries: what flows from its source to its target,
-such as review comments or layout JSON. Do not invent a flow; inspect the code
-or ask a concrete question. Dependencies alone do not describe what flows.
-Tie each confirmed requirement to a named component in the project contract
-and record that mapping in REQUIREMENTS.md before planning tasks.
+A submitted contract is refused unless it meets these rules:
+- Responsibility: every component's responsibility says what it is responsible
+  for.
+- Describe every connection's carries: every dependency has a
+  contract.connections entry
+  {"from":"<component id>","to":"<dependency id>","carries":"<what flows>"}
+  whose carries is not empty and says what flows from its source to its
+  target, such as review comments or layout JSON. Keep dependencies as well;
+  dependencies alone do not describe what flows. Do not invent a flow; inspect
+  the code or ask a concrete question. A removed component's connections need
+  no carries.
+- Tie each confirmed requirement to a named component: every active goal
+  success criterion and confirmed requirement appears in the covers list of at
+  least one component. Copy the full text: goal criteria, confirmed goal
+  scope/constraints/do-not-do, and every filled line of the confirmed
+  requirements card (without its caption). There is no minimum number of
+  components: coverage decides. Record that mapping in REQUIREMENTS.md before
+  planning tasks.
+If refused, the error names what to fix; fix it and submit again.
 The browser compares the proposal with the accepted revision: existing parts
 remain solid; new parts and their connections are dashed; changed parts show
 before and after; removed parts stay visible as faded removals. All baseline

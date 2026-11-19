@@ -65,7 +65,7 @@ func (w *Workspace) architectureSessionCurrent(ctx context.Context, session *app
 
 // projectSummaryRequest asks the Marshal for the project contract the
 // architecture view is built from. It grants and accepts nothing.
-const projectSummaryRequest = marshalNotePrefix + "The owner asked to see the architecture, but no project summary is waiting. Read every marshal_project_contract_inventory page, then submit a baseline of the whole project's top-level code with marshal_project_contract_submit. Describe every connection's carries and tie each requirement to a component. If it is refused, the error says what to fix."
+const projectSummaryRequest = marshalNotePrefix + "The owner asked to see the architecture, but no project summary is waiting. Read every marshal_project_contract_inventory page, then submit a baseline of the whole project's top-level code with marshal_project_contract_submit: give every component a non-empty responsibility, give every dependency a contract.connections entry whose carries says what flows over it, and cover every goal success criterion and confirmed requirement in at least one component's covers list (copy the full text of goal criteria, confirmed goal scope/constraints/do-not-do, and filled confirmed requirements card lines without their captions). If it is refused, the error says what to fix."
 
 // askMarshalForProjectSummary sends projectSummaryRequest when a Marshal chat
 // is open, and reports whether it did.

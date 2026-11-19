@@ -75,8 +75,18 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
 			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
+		// Whole-project revision rules: the next revision keeps every accepted
+		// component, and a first contract describes the whole project.
 		if err := w.runtime.ValidateProjectContractSubmission(ctx, sub.Contract); err != nil {
 			return nil, err
+		}
+		// Quality rules: responsibilities, described connections, coverage.
+		requirements, err := w.activeContractRequirements(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("cannot check architecture coverage: %w; retry submission", err)
+		}
+		if err := app.ValidateContractQuality(sub.Contract, requirements); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
 		p, _, err := w.store.AdmitMCPProjectContract(ctx, store.MCPProposal{ID: occurrenceMCP(l.id, args.SubmissionID), Launch: l.id, Owner: l.owner, Provider: l.provider, Submission: args.SubmissionID}, sub)
 		if err != nil {
@@ -326,4 +336,46 @@ func boundedArchitectureJSON(v any, narrower string) (json.RawMessage, error) {
 		return nil, fmt.Errorf("%w: the answer is too large; %s", projectcontext.ErrBudget, narrower)
 	}
 	return raw, nil
+}
+
+// activeContractRequirements uses the same requirements as the Marshal handoff:
+// active goal criteria, confirmed goal scope and constraints, and every filled
+// line of the confirmed requirements card. Read failures must not skip coverage.
+func (w *Workspace) activeContractRequirements(ctx context.Context) ([]string, error) {
+	var reqs []string
+	if w.store != nil && w.sessionID != "" {
+		goal, err := w.store.GetActiveGoalContract(ctx, w.sessionID)
+		if err != nil && !errors.Is(err, model.ErrGoalNotFound) {
+			return nil, err
+		}
+		if err == nil && goal.Confirmation != model.ConfirmationCancelled {
+			term, err := w.store.GetGoalTermination(ctx, w.sessionID, goal.ID, goal.Revision)
+			if err != nil && !errors.Is(err, model.ErrNotFound) {
+				return nil, err
+			}
+			if term != nil {
+				if term.State == model.StateSuccess || term.State == model.StateCancelled {
+					return nil, nil
+				}
+			}
+			reqs = append(reqs, goal.SuccessCriteria...)
+			if goal.Confirmation.Settled() {
+				reqs = append(reqs, goal.Scope...)
+				for _, c := range goal.Constraints {
+					reqs = append(reqs, c.Text)
+				}
+				reqs = append(reqs, goal.DoNotDo...)
+			}
+		}
+	}
+	w.req.mu.Lock()
+	if w.req.confirmed != nil {
+		for _, line := range *w.req.confirmed {
+			if s := strings.TrimSpace(line); s != "" {
+				reqs = append(reqs, s)
+			}
+		}
+	}
+	w.req.mu.Unlock()
+	return reqs, nil
 }

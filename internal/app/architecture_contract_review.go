@@ -14,9 +14,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
-// contractNotGiven is shown where the page needs text the contract does not
-// give. The drawing's change metadata is computed against the accepted contract.
+// contractNotGiven is shown where a component has no description in an older
+// contract. Display text otherwise comes from the contract itself; the drawing's
+// change metadata is computed against the accepted contract.
 const contractNotGiven = "not given"
+
+// contractConnectionNotDescribed labels a dependency that has no connection
+// saying what it carries. The submit quality check refuses new ones, so only
+// an older stored contract shows it.
+const contractConnectionNotDescribed = "not described"
 
 // contractReviewSource is the project contract a browser review was built
 // from, stored as the architecture's source_contract.
@@ -27,7 +33,14 @@ type contractReviewSource struct {
 }
 
 // contractReviewSeedFor draws the whole proposed project against its accepted
-// revision. Removed entries stay in the graph so the owner can review deletions.
+// revision (base, absent for a baseline). Removed entries stay in the graph so
+// the owner can review deletions. Each component carries its responsibility,
+// paths, dependencies and coverage; each connection is labeled with what its
+// c.Connections entry carries, and a dependency with no matching connection
+// (an older stored contract) displays "not described". Every component and
+// connection carries its change status. language is the owner's approved
+// language; the page's own labels stay in English because no model turn may
+// translate them before the contract is accepted.
 func contractReviewSeedFor(c projectcontext.Contract, digest, language string, base ...projectcontext.Contract) (*contractReviewSeed, error) {
 	if c.ID == "" || c.Revision < 1 || digest == "" {
 		return nil, errors.New("the project summary is incomplete")
@@ -54,7 +67,7 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string, b
 		}
 		label := edge.Carries
 		if label == "" {
-			label = "not described"
+			label = contractConnectionNotDescribed
 		}
 		connection := map[string]any{"id": edge.ID(), "source": edge.From, "target": edge.To, "label": label, "protocol": "", "change": edge.Change}
 		if edge.Before != nil {
@@ -87,6 +100,9 @@ func contractReviewComponent(v projectcontext.Component) map[string]any {
 	if v.Parent != "" {
 		component["parent"] = v.Parent
 	}
+	if len(v.Covers) > 0 {
+		component["covers"] = append([]string{}, v.Covers...)
+	}
 	return component
 }
 
@@ -112,7 +128,11 @@ func contractUIFor(architecture json.RawMessage, language string) (json.RawMessa
 		uiComponents = append(uiComponents, map[string]any{"id": c.ID, "name": c.ID, "responsibility": orNotGiven(c.Responsibility)})
 	}
 	for _, c := range graph.Connections {
-		uiConnections = append(uiConnections, map[string]any{"id": c.ID, "label": orNotGiven(c.Label), "caption": orNotGiven(c.Label)})
+		label := c.Label
+		if label == "" {
+			label = contractConnectionNotDescribed
+		}
+		uiConnections = append(uiConnections, map[string]any{"id": c.ID, "label": label, "caption": shortConnectionCaption(label)})
 	}
 	strings := architecturereview.EnglishUIStrings()
 	keys := make([]string, 0, len(strings))
@@ -139,6 +159,16 @@ func orNotGiven(text string) string {
 		return contractNotGiven
 	}
 	return text
+}
+
+// shortConnectionCaption keeps the edge caption within the architecture review
+// UI's 28-rune cap, matching architecturereview.englishOverlay.
+func shortConnectionCaption(label string) string {
+	runes := []rune(label)
+	if len(runes) > 28 {
+		return string(append(runes[:27], '…'))
+	}
+	return label
 }
 
 // replaceSupersededContractReview sets aside a review that was built from an

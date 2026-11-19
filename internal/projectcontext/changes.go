@@ -1,7 +1,6 @@
 package projectcontext
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -22,14 +21,11 @@ type ComponentChange struct {
 	Before *Component `json:"before,omitempty"`
 }
 
-// ContractConnection is the drawing's compatibility view of a connection.
-type ContractConnection struct {
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Carries string `json:"carries"`
-}
+// ContractConnection is the drawing's view of a connection: a typed
+// Contract.Connections entry, or a bare dependency with empty Carries.
+type ContractConnection = Connection
 
-func (c ContractConnection) ID() string { return c.From + "--" + c.To }
+func (c Connection) ID() string { return c.From + "--" + c.To }
 
 type ConnectionChange struct {
 	ContractConnection
@@ -43,17 +39,12 @@ type Changes struct {
 	Connections  []ConnectionChange `json:"connections"`
 }
 
-// ContractConnections is the integration hook for Contract.Connections. Read
-// its wire shape so the connections worker can add the typed field separately.
-// Until then dependencies remain visible, with an explicitly undescribed flow.
+// ContractConnections lists every drawn connection: each Contract.Connections
+// entry, plus each dependency that has none, with an empty (undescribed)
+// Carries so legacy contracts stay visible.
 func ContractConnections(c Contract) []ContractConnection {
-	var wire struct {
-		Connections []ContractConnection `json:"connections"`
-	}
-	raw, _ := json.Marshal(c)
-	_ = json.Unmarshal(raw, &wire)
 	byID := map[string]ContractConnection{}
-	for _, edge := range wire.Connections {
+	for _, edge := range c.Connections {
 		byID[edge.ID()] = edge
 	}
 	for _, part := range c.Components {

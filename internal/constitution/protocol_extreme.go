@@ -127,6 +127,7 @@ page with marshal_project_contract_inventory, propose purpose/components/
 invariants and an explicit classification for every accepted memory through
 marshal_project_contract_submit, and answer its separate bound Decision
 (allow only after the owner's browser acceptance above).
+The contract submission rules under ONE LIVING PROJECT ARCHITECTURE apply.
 Read marshal_project_contract_receipt; pending is not accepted. Reference pages
 from marshal_project_contract_read are inspection only and cannot prove coverage.
 Plan task boundaries and dependencies against the accepted architecture and Goal.
@@ -141,7 +142,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:fcc9fdd0fd295189008ffaa83958c481d6fcc639e06d02d3b4ce5000a03124ca"
+const ExtremeProtocolDigest = "sha256:e1afff333927008631c364457ea10645a54229f6e94d7b7e5844589494518358"
 
 // shippedProtocolStripper rewrites the base protocol's operator-popup and
 // press-A instructions out of the shipped (untagged) edition. This edition's
