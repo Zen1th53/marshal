@@ -13781,8 +13781,8 @@
     },
     {
       "path": "internal/tui/main_test.go",
-      "sha256": "f915dfafdb8f5f4e838f4f326ee9bd5bd58d43e319369c3e15fd3d72b75c425c",
-      "bytes": 1862
+      "sha256": "4e16114fdbe7dba6e24c36ea2ce9b24dc77c199a537a0d5ec0b3a86f800eccf6",
+      "bytes": 2074
     },
     {
       "path": "internal/tui/marshal_approve_retry_fixture_default_test.go",
@@ -15746,8 +15746,8 @@
     },
     {
       "path": "internal/usage/agy.go",
-      "sha256": "3c7effc317a67d6c36daba87c4460aa0a6c42d34f9875bec22aa96908a70e11f",
-      "bytes": 4180
+      "sha256": "b8b62284ea7be2d96c0add0df5f899df8598991d3632c7d59878e2374a14e78d",
+      "bytes": 4380
     },
     {
       "path": "internal/usage/claude.go",
@@ -15781,8 +15781,8 @@
     },
     {
       "path": "internal/usage/providers_report_test.go",
-      "sha256": "0eccf3a8e7852d66075aff6bf203e1e1b1eb629c5e4ee369565c08b8d6c63b40",
-      "bytes": 4600
+      "sha256": "79a58598dc73233b94ba7dbdb7b30e5913220f100dbb1e7d899f19520d525b34",
+      "bytes": 4641
     },
     {
       "path": "internal/usage/testdata/claude/fresh.json",
@@ -16761,8 +16761,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "f8585b3731ab022ce413062f6e97102be7a3516b5e18aacbfe0c3aee5944c15e",
-      "bytes": 453508
+      "sha256": "508aa1e008003a907c22bb879346fe241015942b6e5e804e4b5e11b8b94da536",
+      "bytes": 453585
     },
     {
       "path": "tools/extreme/prq/main_default.go",

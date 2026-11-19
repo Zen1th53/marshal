@@ -64,6 +64,7 @@ func agyListing(lines ...string) func(context.Context) ([]byte, error) {
 // Ultra account offered Gemini 4 and the Orchestrators, then only Flash,
 // Claude and GPT-OSS.
 func TestAgyOfferShowsSpentFamilies(t *testing.T) {
+	t.Setenv("MARSHAL_NO_USAGE_PROBES", "")
 	saved := agyModelsLister
 	t.Cleanup(func() { agyModelsLister = saved; resetAgyOffer() })
 	seen := filepath.Join(t.TempDir(), "agy-model-groups.json")
