@@ -12461,8 +12461,8 @@
     },
     {
       "path": "internal/tui/authority_delivery_extreme_test.go",
-      "sha256": "27edf08e22ae6e21d25a8a4650207bf193330f5f33082f1c3c0b5e1cb25a42f7",
-      "bytes": 9067
+      "sha256": "6c8e43ca9abc7557fb9d990c67829b4628a6f98b5b87da3a42ac726b3400c247",
+      "bytes": 10930
     },
     {
       "path": "internal/tui/authority_delivery_readiness_extreme.go",
@@ -12481,8 +12481,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "04bc2e0a38615c5b0bfb0fb109a21d20869a5b76abd9ea3c65d4ecc32c7daaf6",
-      "bytes": 24500
+      "sha256": "1bcda347286c17f8e0411becd0643ca031a10c160a50afc7fb0db4478492aafe",
+      "bytes": 25500
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -13116,13 +13116,13 @@
     },
     {
       "path": "internal/tui/chat_delivery.go",
-      "sha256": "3efea67ef3699fbd6a63d32abd82bf6162c4fe7544602012fb68f702e44d9da6",
-      "bytes": 2818
+      "sha256": "d14215c8cc64f69e22849a1756ff6977f72069e9bf20aac0d3034ad9a0673bea",
+      "bytes": 4437
     },
     {
       "path": "internal/tui/chat_delivery_test.go",
-      "sha256": "73fdb88f141355989e161ff66314c233d9879af997d38d9840fa7138850e9e21",
-      "bytes": 3184
+      "sha256": "cc29fc35c3f0ca762321caac32b3ff7478d18df3d63dc06f0236a63276c880f1",
+      "bytes": 5661
     },
     {
       "path": "internal/tui/chat_mcp_reconnect.go",
@@ -14061,8 +14061,8 @@
     },
     {
       "path": "internal/tui/marshal_provider_extreme_test.go",
-      "sha256": "ffce3a13f74dcfbf7c4fa2cd416b7e36335dcdec671cb8b7fa1ddbaf0561306e",
-      "bytes": 8342
+      "sha256": "8c17877e8c86fa5d12872a17cdce2998419478272eaf70397a3afeaa515a146a",
+      "bytes": 8463
     },
     {
       "path": "internal/tui/marshal_redraft_test.go",
@@ -14651,8 +14651,8 @@
     },
     {
       "path": "internal/tui/process05_review_deadline_extreme_test.go",
-      "sha256": "1cc190320783b3625a664df2df4dc8fbdf540841d5ef27324bf0ec90b32b9fa8",
-      "bytes": 11877
+      "sha256": "cc8fceef73d6ed64104b058585967e52e94629d2cb6d73fff903d16509227d4f",
+      "bytes": 12423
     },
     {
       "path": "internal/tui/project_contract_authority_extreme_test.go",
@@ -15541,8 +15541,8 @@
     },
     {
       "path": "internal/tui/tmux_native_test.go",
-      "sha256": "a92b3865d7da02a06bad450d3fc71e6199cefcea157d5a908f1f537c03b40e7b",
-      "bytes": 39354
+      "sha256": "8abb02fe60ca9609f5869c108119172df83b23eb5dc671bc480e07de58e9c4d5",
+      "bytes": 40155
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",

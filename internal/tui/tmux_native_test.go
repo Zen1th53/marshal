@@ -29,6 +29,7 @@ winFile=%q
 deadFile=%q
 session="${MARSHAL_FAKE_TMUX_SESSION:-test-session}"
 control="${MARSHAL_FAKE_TMUX_CONTROL:-marshal}"
+composer="$winFile.composer"
 case "$1" in
   new-window)
     prev=""
@@ -65,6 +66,13 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{pane_id} #{pane_in_mode} #{pane_dead}"*)
+        target="$4"
+        dead=0
+        if [ -f "$deadFile" ]; then dead=1; fi
+        printf '%%s 0 %%s\n' "$target" "$dead"
+        exit 0
+        ;;
       *"#{pane_height} #{pane_width}"*) printf '40 120\n'; exit 0;;
       *"#{session_id}"*)
         printf '$0\n'
@@ -153,7 +161,28 @@ case "$1" in
     fi
     exit 0
     ;;
+  set-buffer)
+    if [ "$MARSHAL_FAKE_TMUX_COMPOSER" = 1 ]; then
+      for a in "$@"; do text="$a"; done
+      printf '%%s' "$text" > "$composer.buffer"
+    fi
+    exit 0
+    ;;
+  paste-buffer)
+    if [ "$MARSHAL_FAKE_TMUX_COMPOSER" = 1 ]; then cp "$composer.buffer" "$composer"; fi
+    exit 0
+    ;;
+  send-keys)
+    if [ "$MARSHAL_FAKE_TMUX_COMPOSER" = 1 ]; then rm -f "$composer"; fi
+    exit 0
+    ;;
   capture-pane)
+    if [ "$MARSHAL_FAKE_TMUX_COMPOSER" = 1 ]; then
+      printf '> '
+      if [ -f "$composer" ]; then cat "$composer"; fi
+      printf '\n'
+      exit 0
+    fi
     printf 'Recorded agent output evidence line 1\nRecorded agent output evidence line 2\n'
     exit 0
     ;;

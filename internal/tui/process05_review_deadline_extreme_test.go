@@ -115,7 +115,19 @@ func TestProcess05ReviewExhaustedOrAmbiguousBoundsCannotExposeQuestion(t *testin
 		{"unknown-explicit-policy", process05ReviewFixtureOptions{started: time.Now(), ttl: 15 * time.Minute, constraints: []model.Constraint{{ID: "opaque-review-policy", Text: "All transport review must obey the deadline in the signed operator policy", IsHard: true}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// Keep the future clock relative to this subtest, not earlier fixtures.
+			if tc.name == "future-parent-clock" {
+				tc.opt.started = time.Now().Add(time.Minute)
+			}
 			w, reqs := process05QuestionFrontierFixture(t, false, false, tc.opt)
+			if tc.name == "expired-canonical" {
+				// A 1ms TTL alone does not guarantee expiry on a fast fixture.
+				approval, err := w.runtime.Execution().Engine().ApprovalManager().GetApproval(strings.TrimPrefix(reqs[0].Object, "/marshal approve-task "))
+				if err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(max(0, time.Until(*approval.ExpiresAt)) + time.Millisecond)
+			}
 			bindWorkspaceMCP(t, w)
 			ctx := context.WithValue(t.Context(), privateDecisionRegistrationKey{}, true)
 			if !w.routeBuildPermission(ctx, reqs[0]) {

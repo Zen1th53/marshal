@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -17,6 +18,9 @@ type fakeTmux struct {
 
 func (f *fakeTmux) run(ctx context.Context, args ...string) ([]byte, error) {
 	f.calls = append(f.calls, args)
+	if len(args) > 0 && args[0] == "display-message" {
+		return []byte("%1 0 0"), nil
+	}
 	if len(args) > 0 && args[0] == "capture-pane" {
 		frame := ""
 		if f.captureAt < len(f.frames) {
@@ -45,7 +49,7 @@ func (f *fakeTmux) enters() int {
 func TestDeliverChatTurnRetriesUntilComposerClears(t *testing.T) {
 	text := "Decision request (untrusted description): please act. Submit a proposal."
 	// First capture: paste still pending. Second: composer cleared.
-	f := &fakeTmux{frames: []string{"prompt> [Pasted text #1 +3 lines]", "prompt> "}}
+	f := &fakeTmux{frames: []string{"> ", "> ", "> " + text, "> " + text, "> " + text, "> "}}
 	if err := deliverChatTurn(context.Background(), f.run, "%1", text, deliverEnterTries, time.Millisecond); err != nil {
 		t.Fatalf("deliver: %v", err)
 	}
@@ -71,7 +75,7 @@ func TestDeliverChatTurnRetriesUntilComposerClears(t *testing.T) {
 
 // When the composer clears right away, Enter is sent exactly once.
 func TestDeliverChatTurnStopsWhenClear(t *testing.T) {
-	f := &fakeTmux{frames: []string{"prompt> "}}
+	f := &fakeTmux{frames: []string{"> ", "> ", "> hi there", "> "}}
 	if err := deliverChatTurn(context.Background(), f.run, "%1", "hi there", deliverEnterTries, time.Millisecond); err != nil {
 		t.Fatalf("deliver: %v", err)
 	}
@@ -82,7 +86,7 @@ func TestDeliverChatTurnStopsWhenClear(t *testing.T) {
 
 // Enter retries are bounded: a composer that never clears stops after tries.
 func TestDeliverChatTurnBounded(t *testing.T) {
-	f := &fakeTmux{frames: []string{"[Pasted text #9 +12 lines]"}}
+	f := &fakeTmux{frames: []string{"> ", "> ", "> x"}}
 	if err := deliverChatTurn(context.Background(), f.run, "%1", "x", deliverEnterTries, time.Millisecond); err != nil {
 		t.Fatalf("deliver: %v", err)
 	}
@@ -101,5 +105,69 @@ func TestComposerPending(t *testing.T) {
 	}
 	if composerPending("prompt> ", short) {
 		t.Fatal("cleared composer should not be pending")
+	}
+}
+
+func TestDeliverChatTurnPreservesOwnerDraft(t *testing.T) {
+	for _, draft := range []string{"> y", "❯ y", "› half typed", "unknown screen"} {
+		t.Run(draft, func(t *testing.T) {
+			f := &fakeTmux{frames: []string{draft}}
+			err := deliverChatTurn(context.Background(), f.run, "%1", "Decision request", 3, time.Millisecond)
+			if !errors.Is(err, errChatBusy) {
+				t.Fatalf("error = %v", err)
+			}
+			for _, call := range f.calls {
+				if call[0] != "capture-pane" && call[0] != "display-message" {
+					t.Fatalf("draft caused mutation: %v", call)
+				}
+			}
+		})
+	}
+}
+
+func TestDeliverChatTurnRechecksBeforePaste(t *testing.T) {
+	f := &fakeTmux{frames: []string{"> ", "> y"}}
+	if err := deliverChatTurn(context.Background(), f.run, "%1", "Decision request", 3, time.Millisecond); !errors.Is(err, errChatBusy) {
+		t.Fatalf("error = %v", err)
+	}
+	for _, call := range f.calls {
+		if call[0] == "paste-buffer" || call[0] == "send-keys" {
+			t.Fatalf("draft touched: %v", call)
+		}
+	}
+}
+
+func TestDeliverChatTurnDoesNotSubmitOwnerEditAfterPaste(t *testing.T) {
+	f := &fakeTmux{frames: []string{"> ", "> ", "> yDecision request"}}
+	if err := deliverChatTurn(context.Background(), f.run, "%1", "Decision request", 3, time.Millisecond); err == nil {
+		t.Fatal("owner edit accepted")
+	}
+	if f.enters() != 0 {
+		t.Fatal("owner input submitted")
+	}
+}
+
+func TestDeliverChatTurnCanRetryAfterOwnerClearsDraft(t *testing.T) {
+	f := &fakeTmux{frames: []string{"> y"}}
+	if err := deliverChatTurn(context.Background(), f.run, "%1", "Decision request", 3, time.Millisecond); !errors.Is(err, errChatBusy) {
+		t.Fatal(err)
+	}
+	f.frames = append(f.frames, "> ", "> ", "> Decision request", "> ")
+	if err := deliverChatTurn(context.Background(), f.run, "%1", "Decision request", 3, time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if f.enters() != 1 {
+		t.Fatal("message not delivered exactly once")
+	}
+}
+
+func TestOwnChatComposerWrapped(t *testing.T) {
+	if !ownChatComposer("❯ Decision request long\n  description\n\nfooter", "Decision request long description") {
+		t.Fatal("wrapped message rejected")
+	}
+	for _, frame := range []string{"❯ yDecision request", "❯ Decision request y", "❯ Decision request\n  owner draft\n", "❯ [Pasted text #1 +3 lines]"} {
+		if ownChatComposer(frame, "Decision request") {
+			t.Fatalf("unverified input accepted: %q", frame)
+		}
 	}
 }
