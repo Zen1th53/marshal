@@ -34,7 +34,7 @@ type localView struct {
 // readLocal opens the project read side directly. It is only used after the
 // background service did not answer; it starts nothing and changes no work.
 func (c command) readLocal(ctx context.Context) (localView, error) {
-	runtime, err := app.Open(ctx, c.root)
+	runtime, err := app.OpenWithOptions(ctx, c.root, app.Options{KnowledgeReadOnly: true})
 	if err != nil {
 		return localView{}, err
 	}

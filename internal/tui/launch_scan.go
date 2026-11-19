@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -548,6 +549,11 @@ func defaultScanKnowledge(ctx context.Context, w *Workspace, root string) (strin
 		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return "", nil
 		}
+	} else if st := w.runtime.KnowledgeIndexStatus(); st.Pending || st.Indexing {
+		if line := st.ProgressLine(); line != "" {
+			return "", fmt.Errorf("%w (%s)", app.ErrKnowledgeIndexing, line)
+		}
+		return "", app.ErrKnowledgeIndexing
 	}
 	return projectKnowledgeFetch(ctx, w.runtime, root)
 }
