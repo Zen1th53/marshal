@@ -33,7 +33,7 @@ func (w *Workspace) boardHints(v boardVisual) []string {
 		lead, tail = []string{"typing.send", "typing.cancel"}, false
 	case waitingGates(v.gates) > 0: // 5: a gate waits; more urgent than rule 4
 		lead = []string{"gate.reply"}
-	case v.empty && v.planning: // 4: no run yet, the Marshal is planning it
+	case v.empty && (v.planning || v.goalGiven): // 4: no run yet, the Marshal is planning a goal
 		lead = []string{"marshal.say", "firstuse.chat", "marshal.pick"}
 	case v.empty: // 4: no run on screen
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
