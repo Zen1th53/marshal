@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/store"
 	"strings"
@@ -57,10 +58,13 @@ func (r *Runtime) PrepareNativePlanningRead(ctx context.Context, principal authz
 		return zero, nil, err
 	}
 	if !goal.Confirmation.Settled() {
-		return nativePlanningBootstrap(), nil, nil
+		if goal.Confirmation == model.ConfirmationCancelled {
+			return nativePlanningBootstrap(), nil, nil
+		}
+		return nativePlanningBootstrapForGoal(goal, false), nil, nil
 	}
 	if _, err = r.store.ReadAcceptedProjectContract(ctx, r.ProjectContractBinding()); errors.Is(err, projectcontext.ErrReviewPending) {
-		return nativePlanningBootstrap(), nil, nil
+		return nativePlanningBootstrapForGoal(goal, true), nil, nil
 	} else if err != nil {
 		return zero, nil, err
 	}
@@ -120,6 +124,26 @@ func (r *Runtime) PrepareNativePlanningRead(ctx context.Context, principal authz
 
 func nativePlanningBootstrap() NativePlanningInspection {
 	return NativePlanningInspection{ProjectPlanningInspection: ProjectPlanningInspection{Context: "INTAKE ONLY: current settled Goal and reviewed accepted project context are unavailable. Collect intake and propose reviewable data only. Planning, draft admission and execution are blocked until the complete current context is read."}, Bootstrap: true}
+}
+
+// nativePlanningBootstrapForGoal keeps bootstrap mode truthful when a Goal is
+// already active: telling a switched Marshal that no Goal exists causes it to
+// ignore the active Goal and record a second one.
+func nativePlanningBootstrapForGoal(goal model.GoalContract, settled bool) NativePlanningInspection {
+	msg := fmt.Sprintf("INTAKE ONLY: Goal %s (rev %d) is already active (%s), and reviewed accepted project context is not ready yet. Continue this Goal rather than recording a new one. Planning, draft admission and execution are blocked until the complete current context is read.",
+		goal.ID, goal.Revision, strings.ToLower(string(goal.Confirmation)))
+	if settled {
+		msg = fmt.Sprintf("INTAKE ONLY: Goal %s (rev %d) is already active and confirmed; reviewed accepted architecture is still pending. Continue this Goal (do not record a new one) and obtain browser architecture acceptance before planning. Planning, draft admission and execution are blocked until the complete current context is read.",
+			goal.ID, goal.Revision)
+	}
+	return NativePlanningInspection{
+		ProjectPlanningInspection: ProjectPlanningInspection{
+			Context:      msg,
+			GoalID:       goal.ID,
+			GoalRevision: goal.Revision,
+		},
+		Bootstrap: true,
+	}
 }
 
 // WithNativePlanningRead rechecks every required body, state/ACL/freshness,

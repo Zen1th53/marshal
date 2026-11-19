@@ -440,12 +440,17 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if err := scrubMarshalInboxes(root); err != nil {
 			return "", marshalNotStarted(provider, fmt.Errorf("retained briefing cleanup failed: %w", err))
 		}
-		note, err := deliver(w.marshalContinuityBriefing(root, marshalBrief[0]), hiddenChannel(provider))
+		continuity := w.marshalContinuityBriefing(root, marshalBrief[0])
+		note, err := deliver(continuity, hiddenChannel(provider))
 		if err != nil {
 			return "", marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %w", err))
 		}
 		briefingNotes = append(briefingNotes, note)
-		args = append(args, marshalKickoffArgs(provider, root)...)
+		opening := marshalOpening(root)
+		if strings.Contains(continuity, app.MarshalGoalHandoffHeader) {
+			opening = marshalKickoffContinue
+		}
+		args = append(args, marshalCueArgs(provider, opening)...)
 		if args, err = w.confineWorkspaceMarshalChat(ctx, provider, root, args); err != nil {
 			return "", marshalNotStarted(provider, fmt.Errorf("read-only launch settings failed: %w", err))
 		}
