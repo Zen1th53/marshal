@@ -65,8 +65,9 @@ func agyListing(lines ...string) func(context.Context) ([]byte, error) {
 // Claude and GPT-OSS.
 func TestAgyOfferShowsSpentFamilies(t *testing.T) {
 	t.Setenv("MARSHAL_NO_USAGE_PROBES", "")
-	saved := agyModelsLister
-	t.Cleanup(func() { agyModelsLister = saved; resetAgyOffer() })
+	saved, savedUsage := agyModelsLister, agyUsageLister
+	t.Cleanup(func() { agyModelsLister, agyUsageLister = saved, savedUsage; resetAgyOffer() })
+	agyUsageLister = func(context.Context) ([]byte, error) { return nil, errors.New("no usage") }
 	seen := filepath.Join(t.TempDir(), "agy-model-groups.json")
 	now := time.Unix(1795000000, 0)
 
@@ -113,5 +114,39 @@ func TestReadRunsAgyOnlyWhenAsked(t *testing.T) {
 	agyModelsLister = func(context.Context) ([]byte, error) { called = true; return nil, nil }
 	if qs := Read(time.Now(), Sources{}); qs[3].Reason != NotExposed || called {
 		t.Fatalf("agy read without being asked: %+v %v", qs[3], called)
+	}
+}
+
+// `agy -p /usage` as agy 1.5.10 printed it on 19 November.
+const agyUsageOut = "Gemini Models\tWeekly Limit Remaining\t100%\t2026-11-26T03:51:20Z\n" +
+	"Gemini Models\tFive Hour Limit Remaining\t100%\t2026-11-19T08:51:20Z\n" +
+	"Claude and GPT models\tWeekly Limit Remaining\t100%\t2026-11-26T03:51:20Z\n" +
+	"Claude and GPT models\tFive Hour Limit Remaining\t100%\t2026-11-19T08:51:20Z\n" +
+	"Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t96%\t2026-11-24T23:48:16Z\n"
+
+func TestAgyUsageFigures(t *testing.T) {
+	t.Setenv("MARSHAL_NO_USAGE_PROBES", "")
+	saved, savedUsage := agyModelsLister, agyUsageLister
+	t.Cleanup(func() { agyModelsLister, agyUsageLister = saved, savedUsage; resetAgyOffer() })
+	resetAgyOffer()
+	agyModelsLister = agyListing("gemini-4-argon-high", "claude-opus-5-5-high")
+	agyUsageLister = func(context.Context) ([]byte, error) { return []byte(agyUsageOut), nil }
+	now, _ := time.Parse(time.RFC3339, "2026-11-19T04:00:00Z")
+	q := readAgy(now, filepath.Join(t.TempDir(), "seen.json"))
+	if !q.Known || len(q.Windows) != 5 {
+		t.Fatalf("quota = %+v", q)
+	}
+	w, ok := q.Binding()
+	if !ok || w.Label != "Gemini 4 Argon wk" || w.UsedShown() != 4 {
+		t.Fatalf("binding = %+v %v; want the Argon weekly window at 96%% left", w, ok)
+	}
+	labels := map[string]bool{}
+	for _, w := range q.Windows {
+		labels[w.Label] = true
+	}
+	for _, l := range []string{"Gemini wk", "Gemini 5h", "Claude and GPT wk", "Claude and GPT 5h"} {
+		if !labels[l] {
+			t.Errorf("missing window %s: %v", l, labels)
+		}
 	}
 }
