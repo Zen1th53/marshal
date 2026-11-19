@@ -99,15 +99,18 @@ agy is never tied to one model. Give Marshal a selector and it picks the
 exact model from what your signed-in agy offers right now (`agy models`), so a
 new model is used as soon as your plan has it, with no Marshal update:
 
-| Selector | Picks | With Google AI Ultra today |
+| Selector | Picks | Example (Google AI Ultra, 19 November) |
 |---|---|---|
-| `auto` (or nothing) | the Orchestrator (a planner model plans, Hydrogen executes), else `best` | `gemini-pro-orchestrator` (Carbon plans) |
-| `best`, `plan` | newest generation, strongest family, high effort | `gemini-4-carbon-high` |
+| `auto` (or nothing) | the Orchestrator with the strongest planner (a planner model plans, Hydrogen executes), else `best` | `gemini-pro-orchestrator-neon` |
+| `best`, `plan` | newest generation, strongest family, high effort | `gemini-4-neon-high` |
 | `fast` | newest fast family (Hydrogen, then Flash), high effort | `gemini-4-hydrogen-high` |
-| `carbon`, `argon`, `hydrogen`, `flash`, `orchestrator` | that family's newest model | e.g. `gemini-4-argon-high` |
-| `carbon-low`, `hydrogen-xhigh`, … | that family at that effort | `gemini-4-hydrogen-xhigh` |
-| an exact ID | that model, if agy offers it | `claude-opus-4-6-thinking` |
+| a family word (`neon`, `argon`, `hydrogen`, `flash`, `orchestrator`, …) | that family's newest model | e.g. `gemini-4-argon-high` |
+| `<family>-<effort>` (`neon-xhigh`, `argon-low`, …) | that family at that effort | `gemini-4-neon-xhigh` |
+| an exact ID | that model, if agy offers it | `claude-opus-5-5-high` |
 
+A family Marshal does not know yet is taken as the newest, so a model that
+appears under a new name (Neon arrived as Carbon left) is preferred without a
+Marshal update; an Orchestrator's planner is read from its display name.
 On a Pro plan `auto` takes the Argon Orchestrator; with only Flash it takes
 Flash. Verification probes the exact model the selector resolved to, and the
 evidence records that model.
@@ -150,8 +153,8 @@ The top row shows what each provider reports, never a guess:
 - **Codex** — % left and reset time from its last session, marked with its age.
 - **Claude** — % left of the 5-hour and weekly windows and when they reset, from
   the `rate_limit_event` Claude Code prints while Marshal runs it.
-- **agy** — which model families it can run now and which ones your account
-  had are spent, e.g. `ok: Flash, Claude, GPT-OSS · out: Gemini 4,
-  Orchestrator` (agy publishes no figures, but drops a family from
-  `agy models` while its quota is spent). agy is marked out of limit in the
-  planner picker only when no family is offered.
+- **agy** — % left and reset time of each quota group (Gemini, Claude and GPT,
+  Gemini 4 Argon; 5-hour and weekly), from `agy -p /usage`. When agy cannot
+  answer, the row falls back to which model families it offers and which ones
+  your account had are spent (`ok: Flash, Claude · out: Gemini 4`); agy is
+  marked out of limit in the planner picker only when no family is offered.

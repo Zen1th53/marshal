@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "33b25076a2c8ed44db347d02cf3dc3678789d4b83b47a526624adde6257f2652",
-      "bytes": 18840
+      "sha256": "18756b466bf7175b39e4d162c06cbd7533be64de2d7d33bab1b9c28f3d74b0cb",
+      "bytes": 19540
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -596,8 +596,8 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "ba93536ed24823ec255e6563c99ff4236db733d09544647e82da673e5e113127",
-      "bytes": 6955
+      "sha256": "63bd3ad486287f681827c1666c5ee8079ba940d6e6fa2db12a71dadcd5cb4341",
+      "bytes": 7285
     },
     {
       "path": "docs/requirements.txt",
@@ -761,13 +761,13 @@
     },
     {
       "path": "internal/adapter/antigravity/models.go",
-      "sha256": "d5e1aaaa60b65bd7e49d321ec5dbed82499e39453650e0e322795d0e4dce2625",
-      "bytes": 9689
+      "sha256": "f906705de94ae7698fa4ac2780369cb8350d1011135d9c2842a78e456c0e4280",
+      "bytes": 10667
     },
     {
       "path": "internal/adapter/antigravity/models_test.go",
-      "sha256": "9c5d1f7f99bf7e75822e184e1355e27d56e7bce71c5b6dbc87b3cd46f8e31790",
-      "bytes": 6097
+      "sha256": "19f25a4afc78b16a8cf3fef1178374a23e0bc6a70f32fb188a9aac08f709f1eb",
+      "bytes": 7784
     },
     {
       "path": "internal/adapter/antigravity/native_cli_contract_test.go",
@@ -15746,8 +15746,8 @@
     },
     {
       "path": "internal/usage/agy.go",
-      "sha256": "b8b62284ea7be2d96c0add0df5f899df8598991d3632c7d59878e2374a14e78d",
-      "bytes": 4380
+      "sha256": "1987768d9b536bbacc79a6c089be52b4570a8d815d8ae02aa89e6399db03c7a8",
+      "bytes": 6781
     },
     {
       "path": "internal/usage/claude.go",
@@ -15781,8 +15781,8 @@
     },
     {
       "path": "internal/usage/providers_report_test.go",
-      "sha256": "79a58598dc73233b94ba7dbdb7b30e5913220f100dbb1e7d899f19520d525b34",
-      "bytes": 4641
+      "sha256": "fd7d58519e60a03211393f9e18f32cf4af99cc1c9ad41063514d85dff1b052d5",
+      "bytes": 6300
     },
     {
       "path": "internal/usage/testdata/claude/fresh.json",
@@ -16290,6 +16290,11 @@
       "bytes": 3110
     },
     {
+      "path": "release/RELEASE_NOTES_0.2.19.md",
+      "sha256": "32a734c493c500ec1d464cfade8e8a49cb635ef21a0a42348d79d0d8e0c96a8c",
+      "bytes": 3685
+    },
+    {
       "path": "release/RELEASE_NOTES_0.2.2.md",
       "sha256": "e0295d7830ed71f2cd929961413bb9ad3250b4c1b0b1ce49c171f715b98d55d6",
       "bytes": 1479
@@ -16761,8 +16766,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "f266388616f1094d0242d8be1c20fd78e0c784e97df8c18fd3fd3df0d553d1fb",
-      "bytes": 453739
+      "sha256": "218268413e367f1800d668b84e95de9b51e1a7291939b5943b2ac106e719583e",
+      "bytes": 454009
     },
     {
       "path": "tools/extreme/prq/main_default.go",
