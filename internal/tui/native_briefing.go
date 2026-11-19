@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -174,7 +175,14 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string,
 	// would spend a fresh user turn, so resume delivers only the instructions.
 	args = append([]string(nil), args...)
 	if !resume {
-		args = append(args, marshalKickoffArgs(provider, root)...)
+		opening := marshalOpening(root)
+		// An active-goal handoff means this Marshal is continuing existing work
+		// (for example after a provider switch), so open with the neutral resume
+		// cue rather than a fresh-project greeting.
+		if strings.Contains(protocol, app.MarshalGoalHandoffHeader) {
+			opening = marshalKickoffContinue
+		}
+		args = append(args, marshalCueArgs(provider, opening)...)
 	}
 	args, err := confineMarshalChat(provider, root, args, rights)
 	if err != nil {

@@ -55,10 +55,13 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
 type marshalSession struct {
-	mu             sync.Mutex
-	service        *app.MarshalService
-	runID          string
-	provider       string
+	mu       sync.Mutex
+	service  *app.MarshalService
+	runID    string
+	provider string
+	// switchedFrom records the provider replaced by /marshal model so the new
+	// Marshal's first briefing can note the handoff when a goal is active.
+	switchedFrom   string
 	conversationID string
 	cancel         context.CancelFunc
 	nativeCancels  []context.CancelFunc
@@ -583,7 +586,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		return result, sessionErr
 	}
 	m.mu.Lock()
-	m.runID, m.service, m.provider = runID, service, provider
+	m.runID, m.service, m.provider, m.switchedFrom = runID, service, provider, ""
 	m.mu.Unlock()
 	w.tmuxMu.Lock()
 	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
@@ -687,6 +690,7 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 		return "", errors.New("The Marshal is in the middle of a step; try again when it finishes.")
 	}
 	root := w.providerRoot()
+	savedDefault := loadDefaultProvider(root)
 	if err := saveDefaultProvider(root, provider); err != nil {
 		return "", fmt.Errorf("The Marshal stays %s: the choice could not be saved in this project.", cur)
 	}
@@ -694,6 +698,22 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	chat := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])
 	replace := chat != nil && canonicalNeutralProvider(chat.provider) != provider
 	w.tmuxMu.Unlock()
+	w.chat.mu.Lock()
+	nativeActive := w.chat.tr != nil
+	chatProvider := w.chat.provider
+	w.chat.mu.Unlock()
+	prevProvider := ""
+	switch {
+	case chat != nil && chat.provider != "":
+		prevProvider = canonicalNeutralProvider(chat.provider)
+	case nativeActive && chatProvider != "":
+		prevProvider = canonicalNeutralProvider(chatProvider)
+	case before != "":
+		prevProvider = canonicalNeutralProvider(before)
+	case savedDefault != "":
+		prevProvider = canonicalNeutralProvider(savedDefault)
+	}
+	switched := prevProvider != "" && prevProvider != provider
 	if replace {
 		// Only this explicit operator command may stop the planning chat.
 		// Cancel and join its monitor before closing the pane so recovery
@@ -742,11 +762,15 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	}
 	m.mu.Lock()
 	m.provider = provider
+	if switched {
+		m.switchedFrom = prevProvider
+	}
 	if replace {
 		m.conversationID = ""
 	}
 	runID := m.runID
 	m.mu.Unlock()
+	handedOff := false
 	if replace {
 		background := context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)
 		var err error
@@ -763,6 +787,7 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 		if err != nil {
 			return "", fmt.Errorf("The Marshal is now %s, but its chat did not start. Press m and choose it again.", name)
 		}
+		handedOff = true
 	}
 	answer := "The Marshal is now " + name + "."
 	// An open run keeps the service wired with the old Marshal until it is
@@ -783,13 +808,19 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	// In native chat mode the old provider keeps chatting until it is
 	// restarted on the new one, the same restart /view chat native uses.
 	w.chat.mu.Lock()
-	nativeActive := w.chat.tr != nil
-	chatProvider := w.chat.provider
+	nativeActive = w.chat.tr != nil
+	chatProvider = w.chat.provider
 	w.chat.mu.Unlock()
 	if nativeActive && canonicalNeutralProvider(chatProvider) != provider {
 		w.stopNativeChat()
 		if _, err := w.marshalChat(context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)); err != nil {
 			return "", fmt.Errorf("The Marshal is now %s, but its chat did not start. Press m and choose it again.", name)
+		}
+		handedOff = true
+	}
+	if handedOff {
+		if _, hasGoal := w.marshalGoalHandoff(root); hasGoal {
+			w.RecordActivity("Handed off the active goal to " + name + ".")
 		}
 	}
 	return answer, nil

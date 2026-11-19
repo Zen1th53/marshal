@@ -419,6 +419,9 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	w.tmuxMu.Lock()
 	w.tmuxActiveWins["marshal-chat"] = agent
 	w.tmuxMu.Unlock()
+	m.mu.Lock()
+	m.switchedFrom = ""
+	m.mu.Unlock()
 	w.activateProposalMCP(agent)
 	_ = w.bindWorkspaceKeys(ctx, agent.paneID, projectRoot)
 	_ = w.saveChatBindingForAgent(projectRoot, agent)
