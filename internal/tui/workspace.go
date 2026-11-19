@@ -903,6 +903,9 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	// The check is a read of a public feed and installs nothing. It runs off
 	// this path so a slow or unreachable feed cannot delay the workspace.
 	w.checkForUpdateInBackground(ctx)
+	// Build the project knowledge index in the background so the Board paints
+	// its first frame immediately even on large repositories.
+	w.startProjectKnowledgeIndex(ctx)
 
 	// Check if running in a real interactive terminal
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {

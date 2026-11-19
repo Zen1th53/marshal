@@ -37,7 +37,7 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return err
 	}
 	if started.Started {
-		_, committed, err := initializeProject(ctx, c.root)
+		_, committed, err := initializeProjectWithOptions(ctx, c.root, app.BootstrapOptions{DeferKnowledgeIndex: true})
 		c.reportStartedRepository(started, committed)
 		if err != nil {
 			return err
@@ -49,7 +49,7 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		// opening, as `marshal init` would: it only adds what is missing.
 		// The line naming what was committed is printed here and carried
 		// to the TUI's Activity, as a started repository's is.
-		_, committed, setupErr := initializeProject(ctx, c.root)
+		_, committed, setupErr := initializeProjectWithOptions(ctx, c.root, app.BootstrapOptions{DeferKnowledgeIndex: true})
 		if setupErr != nil {
 			return setupErr
 		}
@@ -97,7 +97,7 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return c.launchOrAttachTmux(ctx, canonicalRoot, args)
 	}
 
-	runtime, err := app.Open(ctx, canonicalRoot)
+	runtime, err := app.OpenWithOptions(ctx, canonicalRoot, app.Options{DeferKnowledgeIndex: true})
 	if err != nil {
 		return fmt.Errorf("open MARSHAL project %q: %w; run `marshal doctor` for details", canonicalRoot, err)
 	}

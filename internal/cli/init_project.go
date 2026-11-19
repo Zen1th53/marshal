@@ -28,7 +28,11 @@ const initCommitSubject = "Initialize MARSHAL project"
 // Keeping them under the excluded .marshal/ directory would make the policy
 // per clone and unreviewed.
 func initializeProject(ctx context.Context, root string) (project.Layout, []string, error) {
-	layout, err := app.Bootstrap(ctx, root)
+	return initializeProjectWithOptions(ctx, root, app.BootstrapOptions{})
+}
+
+func initializeProjectWithOptions(ctx context.Context, root string, options app.BootstrapOptions) (project.Layout, []string, error) {
+	layout, err := app.BootstrapWithOptions(ctx, root, options)
 	if err != nil {
 		return project.Layout{}, nil, err
 	}

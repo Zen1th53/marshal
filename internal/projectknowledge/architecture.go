@@ -91,12 +91,19 @@ type Architecture struct {
 
 // Ensure updates only this project's disposable projection. Corruption and
 // binding failures are not repaired silently. Query callers cannot invoke it.
+// If an interrupted prior refresh left a hot SQLite journal (causing
+// SQLITE_READONLY_ROLLBACK / SQLITE_READONLY_RECOVERY on the read-only probe),
+// Ensure rolls the hot journal back via a writable open and refreshes.
 func (i *Index) Ensure(ctx context.Context) error {
 	_, err := i.Query(ctx, Query{Mode: "overview", Limit: 1})
 	if err == nil {
 		return nil
 	}
-	if !errors.Is(err, ErrStale) {
+	if isReadOnlyRecovery(err) {
+		if recErr := i.RecoverHotJournal(ctx); recErr != nil {
+			return fmt.Errorf("recover project knowledge hot journal: %w", recErr)
+		}
+	} else if !errors.Is(err, ErrStale) {
 		if _, statErr := os.Lstat(i.database); !errors.Is(statErr, os.ErrNotExist) {
 			return err
 		}
