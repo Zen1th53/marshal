@@ -724,3 +724,25 @@ func TestExtremeLimitMarkersRecognise429AndFreeMessages(t *testing.T) {
 		t.Fatal("clean output named a limit")
 	}
 }
+
+// A dispatch refused because every provider is cooling down says why and
+// when it can retry, through any wrapping, so the Board's stop card shows
+// that instead of "The run stopped unexpectedly.".
+func TestQuotaWaitErrorHasPlainStopReason(t *testing.T) {
+	until := time.Now().Add(3 * time.Hour)
+	err := fmt.Errorf("dispatch: %w", errors.Join(&quotaWaitError{mode: marshal.Governed, until: until}, errors.New("save")))
+	var known interface{ StopReason() (string, string) }
+	if !errors.As(err, &known) {
+		t.Fatal("quota wait error has no stop reason")
+	}
+	reason, next := known.StopReason()
+	if want := "Every AI provider for governed mode is at its usage limit until " + formatLocalUntil(until, time.Now()) + "."; reason != want {
+		t.Fatalf("reason %q, want %q", reason, want)
+	}
+	if next != "Press Enter after that time to try again." || strings.ContainsAny(reason+next, "\r\n") || strings.Contains(reason+next, "  ") {
+		t.Fatalf("next %q", next)
+	}
+	if !errors.Is(err, errWaitingOnQuota) || !strings.Contains(err.Error(), "waiting_on_quota: every provider for governed mode is cooling down until") {
+		t.Fatalf("machine message changed: %v", err)
+	}
+}

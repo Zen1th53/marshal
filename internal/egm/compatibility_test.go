@@ -145,3 +145,35 @@ func TestInstallRecipeIsPinnedAndPrintOnly(t *testing.T) {
 		t.Fatal("unsupported installer accepted")
 	}
 }
+
+// A missing plugin says what EGM is, why it matters and the exact command
+// that installs it, not just "installed plugin not found locally".
+func TestCheckMissingSaysWhatAndHowToInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	for _, p := range Providers {
+		t.Setenv("MARSHAL_EGM_"+strings.ToUpper(p)+"_ROOT", "")
+	}
+	s := Check("codex")
+	if s.State != Missing {
+		t.Fatalf("status = %+v", s)
+	}
+	for _, want := range []string{"EGM (Elephant Goldfish Model) design-review plugin", "not installed for codex", "design review before task planning", "`marshal egm install --provider codex`", "MARSHAL_EGM_CODEX_ROOT", Fallback} {
+		if !strings.Contains(s.String(), want) {
+			t.Errorf("missing %q in %q", want, s.String())
+		}
+	}
+	if strings.Contains(s.String(), "not found locally") {
+		t.Errorf("old wording: %q", s.String())
+	}
+	if s := Check("ollama"); !strings.Contains(s.Reason, "no installer for ollama") || strings.Contains(s.Reason, "marshal egm install") {
+		t.Errorf("ollama: %q", s.Reason)
+	}
+	absent := filepath.Join(home, "absent")
+	t.Setenv("MARSHAL_EGM_CLAUDE_ROOT", absent)
+	if s := Check("claude"); s.State != Missing || !strings.Contains(s.Reason, "MARSHAL_EGM_CLAUDE_ROOT points at "+absent) {
+		t.Errorf("explicit root: %q", s.Reason)
+	}
+}
