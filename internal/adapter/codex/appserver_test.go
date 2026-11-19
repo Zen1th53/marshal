@@ -434,3 +434,33 @@ func TestEnsureGovernedCodexHomeMirrorsAuthAndGuaranteesConfigFree(t *testing.T)
 		t.Fatalf("RequireAppServerConfigFree must succeed with governed home: %v", err)
 	}
 }
+
+func TestGovernedCodexHomeUsesOwnerCODEXHOME(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	owner := t.TempDir()
+	t.Setenv("CODEX_HOME", owner)
+	if err := os.WriteFile(filepath.Join(owner, "auth.json"), []byte(`{"tokens":{"access_token":"owner-fixture"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(owner, "config.toml"), []byte("untrusted = true"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	target, err := EnsureGovernedCodexHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(target, "auth.json"))
+	if err != nil || !strings.Contains(string(got), "owner-fixture") {
+		t.Fatalf("owner's custom auth home ignored: %q %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "config.toml")); !os.IsNotExist(err) {
+		t.Fatal("host configuration copied into governed home")
+	}
+	t.Setenv("CODEX_HOME", t.TempDir())
+	if _, err := EnsureGovernedCodexHome(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "auth.json")); !os.IsNotExist(err) {
+		t.Fatal("unsigned owner home reused an earlier account")
+	}
+}

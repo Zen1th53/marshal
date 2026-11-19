@@ -378,6 +378,9 @@ func marshalCLIOutput(provider string, data []byte) ([]byte, string, error) {
 	return nil, "", fmt.Errorf("%s produced no structured Marshal output", strings.TrimSpace(provider))
 }
 
+// MarshalTaskDecomposition guides both planners without imposing a task count.
+const MarshalTaskDecomposition = "Create one task per independent requirement or component. Split unrelated fixes and packages into separate tasks, even when one worker can do them all. Declare explicit dependencies only for shared files or a result another task needs; leave independent tasks dependency-free so they can run in parallel and fail separately. If several criteria describe one inseparable change, explain that grouping in the task instructions. "
+
 // Shared by initial planning and amendments: verification cannot observe
 // arbitrary state that existed only while a worker was running.
 // MarshalCheckContract also governs the interactive planner briefing.
@@ -413,7 +416,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		m.AllowNativeException = false
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". "+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". "+MarshalTaskDecomposition+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -449,7 +452,7 @@ func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) 
 	if target >= 0 {
 		preamble = "Return the amended target task and any new tasks needed. The runtime preserves every other existing task unchanged. "
 	}
-	err = m.turn(ctx, preamble+"Use only workers "+strings.Join(workers, ", ")+". Preserve each existing task mode and type unless the operator requests a change. Copy each existing task's criteria, checks and check criteria verbatim unless the operator asks to change them; each check criterion must be the exact text of one of its task's criteria. Declare type change, inspection or verification for new tasks. "+newTaskModes+" "+MarshalCheckContract+"Amendment packet: "+string(input), marshalDraftSchema, &proposal)
+	err = m.turn(ctx, preamble+"Use only workers "+strings.Join(workers, ", ")+". Preserve each existing task mode and type unless the operator requests a change. Copy each existing task's criteria, checks and check criteria verbatim unless the operator asks to change them; each check criterion must be the exact text of one of its task's criteria. Declare type change, inspection or verification for new tasks. "+newTaskModes+" "+MarshalTaskDecomposition+MarshalCheckContract+"Amendment packet: "+string(input), marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}

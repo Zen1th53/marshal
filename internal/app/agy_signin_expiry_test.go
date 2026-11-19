@@ -51,9 +51,9 @@ func TestAgySigninExpiryOrdinaryFailureNotClassified(t *testing.T) {
 	}
 }
 
-func TestAgySigninExpiryFailsOverAsProviderLimit(t *testing.T) {
+func TestAgySigninExpiryIsAuthWithoutProviderLimit(t *testing.T) {
 	limited, reason, cooldown := classifyProviderLimit(errors.Join(errAgySigninExpired, errors.New("exit status 1")), marshal.HandIn{}, nil)
-	if !limited || reason != agySigninExpiryReason || cooldown != agySigninExpiryCooldown {
+	if limited || reason != "" || cooldown != 0 {
 		t.Fatalf("classifyProviderLimit = %v %q %v", limited, reason, cooldown)
 	}
 	if limited, _, _ := classifyProviderLimit(errors.New("exit status 1"), marshal.HandIn{}, nil); limited {

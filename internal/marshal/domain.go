@@ -314,6 +314,7 @@ const (
 	CodeWorkerNotGoverned     = "worker_not_governed"
 	CodeInterruptedWorktree   = "interrupted_worktree"
 	CodeInfraRetry            = "infra_retry"
+	CodeWorkerAuth            = "worker_auth"
 	CodeProviderLimit         = "provider_limit"
 	CodeProviderFailover      = "provider_failover"
 	CodeProviderQuota         = "provider_quota"

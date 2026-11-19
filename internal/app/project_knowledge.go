@@ -75,6 +75,13 @@ func (r *Runtime) ProjectKnowledge(ctx context.Context, principal authz.Principa
 	if _, err := r.authorizeKnowledge(ctx, principal, projectID, taskID, refresh); err != nil {
 		return projectknowledge.Result{}, err
 	}
+	if taskID == "" && r.boundWorkerKnowledgeRoot(ctx) == "" {
+		if _, ok := ctx.Value(knowledgeBindingKey{}).(KnowledgeBinding); !ok {
+			if err := r.WaitKnowledgeIndex(ctx); err != nil {
+				return projectknowledge.Result{}, err
+			}
+		}
+	}
 	index, err := r.knowledgeIndex(ctx, taskID)
 	if err != nil {
 		return projectknowledge.Result{}, err
@@ -121,6 +128,9 @@ func (r *Runtime) projectContextAt(ctx context.Context, principal authz.Principa
 	var index *projectknowledge.Index
 	var err error
 	if root == r.layout.Root {
+		if err := r.WaitKnowledgeIndex(ctx); err != nil {
+			return ProjectContext{}, err
+		}
 		index, err = projectknowledge.Open(root, state)
 	} else {
 		index, err = projectknowledge.OpenWorktree(root, r.layout.Root, r.layout.RuntimeDir)

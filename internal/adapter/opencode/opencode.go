@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
-	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/sessionmcp"
 )
 
@@ -55,7 +55,7 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 		Path: c.binary, Args: []string{"--version"},
 	})
 	if err != nil || versionRes.ExitCode != 0 {
-		return adapter.Probe{}, fmt.Errorf("%w: probe OpenCode version failed: %v", model.ErrUnavailable, err)
+		return adapter.Probe{}, &adapter.ProcessError{Cause: fmt.Errorf("%w: probe OpenCode version failed: %v", model.ErrUnavailable, err), Stderr: versionRes.Stderr}
 	}
 	raw := strings.TrimSpace(string(versionRes.Stdout))
 	c.version = opencodecli.NormalizeVersion(raw)
@@ -113,7 +113,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		args = c.contract.RunArgs(args)
 	}
 
-	args, env, cleanup, err := sessionmcp.Configure(ctx, "opencode", args, nil)
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "opencode", args, os.Environ())
 	if err != nil {
 		return adapter.Result{}, err
 	}
@@ -126,9 +126,6 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		Heartbeat:         request.Heartbeat,
 		HeartbeatInterval: request.HeartbeatInterval,
 	})
-	if err != nil {
-		return adapter.Result{}, fmt.Errorf("run OpenCode process: %w", err)
-	}
 	result := adapter.Result{
 		Adapter: "opencode", AdapterVersion: c.version, ExitCode: process.ExitCode,
 		Stdout: process.Stdout, Stderr: process.Stderr, StartedAt: process.StartedAt,
@@ -136,6 +133,10 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		Cancelled: process.Cancelled, OutputTruncated: process.OutputTruncated,
 		Isolation: process.Isolation,
 		Status:    adapter.StatusSuccess,
+	}
+	if err != nil {
+		result.Status = adapter.StatusFailure
+		return result, fmt.Errorf("run OpenCode process: %w", err)
 	}
 	if process.ExitCode != 0 || process.TimedOut || process.Cancelled {
 		result.Status = adapter.StatusFailure

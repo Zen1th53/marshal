@@ -318,8 +318,12 @@ How to propose:
    deletions), which then carries instructions (purpose, approach, steps,
    what to leave alone) that its worker must follow exactly; "free"
    otherwise, where the worker chooses its own approach within the task's
-   files. Size each task to one worktree; tasks whose files do not overlap
-   can run in parallel.
+   files. Create one task per independent requirement or component. Split
+   unrelated fixes and packages into separate tasks, even when one worker
+   could do them all. Size each task to one worktree. Declare explicit
+   dependencies only for shared files or results another task needs; leave
+   independent tasks dependency-free so they can run in parallel and fail
+   separately. Explain any inseparable grouping in the task instructions.
    The plan must hold all of these:
    - every requirement is covered by at least one task's criteria;
    - no task changes a file the person put out of bounds, or work the
@@ -440,7 +444,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:ed980fb17cc10741374102b40d3b1bcd44e9c700c5e5436678e7975d2058d8d7"
+const MarshalProtocolDigest = "sha256:e50f10c4a9d5ab26370873e0dd0934bdc1090d7eddbaafce17df03daf3a53f01"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

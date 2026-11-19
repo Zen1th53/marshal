@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
@@ -62,6 +63,14 @@ func (e *quotaWaitError) Error() string {
 }
 
 func (e *quotaWaitError) Is(target error) bool { return target == errWaitingOnQuota }
+
+// StopReason is the stop as the Board shows it. A dispatch refused because
+// every provider is cooling down returns this error without pausing the run,
+// so without it the Board said "The run stopped unexpectedly." while the
+// reason and the reset time were known (and only in Activity).
+func (e *quotaWaitError) StopReason() (string, string) {
+	return "Every AI provider for " + string(e.mode) + " mode is at its usage limit until " + formatLocalUntil(e.until, time.Now()) + ".", "Press Enter after that time to try again."
+}
 
 // markKnownEmpty treats a provider the limits reader reports as known-empty
 // (0% left) as cooling: it marks it in providerHealth with its reset time
@@ -237,6 +246,11 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	}
 	t := &run.Tasks[i]
 	currentWorker := t.Worker
+	failureText, _ := workerFailureText(nil, handin, dispatch.Handle)
+	diagnostic := ""
+	if strings.Contains(failureText, "stderr:") {
+		diagnostic = adapter.DiagnosticSummary(failureText, 1000)
+	}
 
 	now := s.clock()
 	until := now.Add(cooldown)
@@ -288,6 +302,12 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 				pause.Until = qerr.until
 				reason = "All AI providers are at their usage limit until " + formatLocalUntil(qerr.until, s.clock()) + "."
 			}
+		}
+		if diagnostic != "" {
+			machine += "; " + diagnostic
+			t.EscalationReason = machine
+			pause.Detail = machine
+			reason += " " + diagnostic
 		}
 		pause.Reason = reason
 		pauseMarshal(&run, pause)
@@ -447,6 +467,9 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 	}
 	next, err := s.selectFailoverWorker(ctx, t.Worker, t.Mode, drivers, GetEffectiveFailoverOrder(run.Settings))
 	if err != nil {
+		if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {
+			err = fmt.Errorf("%w; %s", err, reason)
+		}
 		return rev, err
 	}
 	if next == t.Worker {

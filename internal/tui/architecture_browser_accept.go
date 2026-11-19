@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,8 +92,8 @@ func (w *Workspace) openArchitectureReview() {
 	// returns, and its clear must find this text to remove.
 	w.memoryAnswer(architectureOpening, false)
 	if _, err := w.marshalArchitecture(w.workers.context(), "", ""); err != nil {
-		// The screen stays plain; the exact cause is kept for whoever
-		// has to find out why "try again" keeps coming back.
+		// The footer names the cause in short; the whole error is kept
+		// in the log for whoever has to dig further.
 		w.logTUIError("open architecture", err)
 		w.memoryAnswer("The architecture could not be opened: "+plainArchitectureError(err), true)
 	}
@@ -184,5 +185,31 @@ func plainArchitectureError(err error) string {
 	if errors.Is(err, errArchitectureAwaitsSummary) {
 		return err.Error() + "."
 	}
-	return "try again in a moment"
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "try again in a moment"
+	}
+	// Any other error is a real cause (a summary that cannot be drawn, a
+	// broken file): the footer names it, shortened, so the owner does not
+	// keep retrying something that waiting will never fix.
+	return architectureCause(err)
+}
+
+// maxArchitectureCause bounds the cause the footer shows; the whole error
+// is in Activity and the log.
+const maxArchitectureCause = 160
+
+// architectureCause is err's first line, at most maxArchitectureCause
+// characters, ending in a full stop.
+func architectureCause(err error) string {
+	cause := firstLine(err.Error())
+	if cause == "" {
+		return "try again in a moment"
+	}
+	if r := []rune(cause); len(r) > maxArchitectureCause {
+		return strings.TrimSpace(string(r[:maxArchitectureCause-1])) + "…"
+	}
+	if !strings.HasSuffix(cause, ".") {
+		cause += "."
+	}
+	return cause
 }

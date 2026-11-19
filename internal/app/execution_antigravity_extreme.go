@@ -105,7 +105,7 @@ func (r *Runtime) executeProcess05Antigravity(ctx context.Context, task executio
 	}
 	probe, err := provider.Probe(ctx)
 	if err != nil {
-		return execution.TaskResult{TaskID: task.TaskID}, err
+		return execution.TaskResult{TaskID: task.TaskID}, r.workerProviderError(ctx, err)
 	}
 	trustedHeader, err := r.providerConstraintPrompt(ctx, task, pkg, worktree)
 	if err != nil {
@@ -139,7 +139,7 @@ func (r *Runtime) executeProcess05Antigravity(ctx context.Context, task executio
 	result, runErr := provider.Run(providerCtx, request)
 	// A worker that hits its provider's own quota or rate limit marks the
 	// provider limited, so the next draft or review moves off it.
-	// An expired agy sign-in cools agy down and notifies the owner once instead.
+	// An expired agy sign-in notifies the owner without a quota cooldown.
 	signinExpired, signinErr := false, error(nil)
 	if runErr != nil || result.ExitCode != 0 {
 		if signinExpired, signinErr = r.noteAgySigninExpiry(ctx, task, runErr, result); !signinExpired {
@@ -149,16 +149,18 @@ func (r *Runtime) executeProcess05Antigravity(ctx context.Context, task executio
 	if contextErr := finishContext(); contextErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "required project context changed; provider result quarantined"}, contextErr
 	}
-	if signinExpired {
-		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: agySigninExpiryNotice}, errors.Join(errAgySigninExpired, runErr, signinErr)
-	}
-	if runErr != nil {
-		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: runErr.Error()}, runErr
-	}
 	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
 	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
 	if stdoutErr != nil || stderrErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "provider output rejected by evidence sanitizer"}, fmt.Errorf("sanitize Antigravity Process 05 output: stdout=%v stderr=%v", stdoutErr, stderrErr)
+	}
+	if signinExpired {
+		failure := workerFailureMessage(agySigninExpiryNotice, stderr, stdout)
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: failure}, errors.Join(errAgySigninExpired, errors.New(failure), runErr, signinErr)
+	}
+	if runErr != nil {
+		failure := workerFailureMessage(runErr.Error(), stderr, stdout)
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: failure}, fmt.Errorf("%w: %s", runErr, failure)
 	}
 	digest := sha256.Sum256(append(append([]byte(nil), stdout...), stderr...))
 	evidenceID, err := model.NewID("EVID-P05-AGY-")
@@ -181,7 +183,7 @@ func (r *Runtime) executeProcess05Antigravity(ctx context.Context, task executio
 			Status: execution.EvidenceValid, DurationMs: duration.Milliseconds(), RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC(),
 		}},
 		Duration:     duration,
-		ErrorMessage: antigravityFailureMessage(success, result, stdout, stderr),
+		ErrorMessage: workerFailureMessage(antigravityFailureMessage(success, result, stdout, stderr), stderr, stdout),
 	}, nil
 }
 

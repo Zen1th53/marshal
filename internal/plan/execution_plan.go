@@ -139,6 +139,8 @@ type ExecutionPlan struct {
 	DoNotDo         []string `json:"do_not_do,omitempty"`
 
 	Tasks []Task `json:"tasks"`
+	// MarshalWarnings are planning advice for the Marshal, never owner gates.
+	MarshalWarnings []string `json:"marshal_warnings,omitempty"`
 	// Checks are approved commands for each task. Split children inherit their parent's checks.
 	Checks map[string][]string `json:"checks,omitempty"`
 	// ParentTaskIDs identifies the original task for each split child.
@@ -215,6 +217,7 @@ func Build(request BuildRequest) (ExecutionPlan, error) {
 		ConstitutionVersion: request.Version,
 		Assessment:          request.Assessment,
 		Tasks:               request.Tasks,
+		MarshalWarnings:     DecompositionWarnings(request.Goal, request.Tasks),
 		DoNotDo:             append([]string(nil), request.Goal.DoNotDo...),
 		CreatedAt:           now,
 		UpdatedAt:           now,
