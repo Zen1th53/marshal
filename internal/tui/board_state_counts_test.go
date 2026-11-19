@@ -41,8 +41,11 @@ func TestFirstUseCallToActionHidesOnceAGoalIsGiven(t *testing.T) {
 	if strings.Contains(text, firstUseCTA) {
 		t.Fatalf("the call to action stays after the goal was given:\n%s", text)
 	}
-	if !strings.Contains(text, "The Marshal has your goal") {
-		t.Fatalf("the card does not say the Marshal has the goal:\n%s", text)
+	if !strings.Contains(text, " PLANNING ") || strings.Contains(text, "NO RUN YET") {
+		t.Fatalf("header does not switch from NO RUN YET to PLANNING:\n%s", text)
+	}
+	if !strings.Contains(text, workingGoalFallback) || !strings.Contains(text, "The Marshal has your goal") {
+		t.Fatalf("the card does not say the Marshal is working on the goal:\n%s", text)
 	}
 	if strings.Contains(text, "GOAL-1") {
 		t.Fatalf("the goal id is on the card:\n%s", text)
@@ -50,8 +53,8 @@ func TestFirstUseCallToActionHidesOnceAGoalIsGiven(t *testing.T) {
 	w.mu.Lock()
 	w.state.Goal.Confirmation = model.ConfirmationCancelled
 	w.mu.Unlock()
-	if text := frameText(w, 120, 40); !strings.Contains(text, firstUseCTA) {
-		t.Fatalf("a cancelled goal still hides the call to action:\n%s", text)
+	if text := frameText(w, 120, 40); !strings.Contains(text, firstUseCTA) || !strings.Contains(text, "NO RUN YET") {
+		t.Fatalf("a cancelled goal still hides the call to action or stays PLANNING:\n%s", text)
 	}
 }
 

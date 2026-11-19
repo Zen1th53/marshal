@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
@@ -144,6 +145,19 @@ func TestBoardHintsFollowState(t *testing.T) {
 		ids, row := footerIDs(t, w, 170, 45)
 		if !slices.Equal(ids, []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}) {
 			t.Fatalf("planning hints %v; footer %q", ids, row)
+		}
+	})
+
+	t.Run("4 active goal", func(t *testing.T) {
+		w := emptyBoardWorkspace(t)
+		defer w.Close()
+		w.endOpening()
+		w.mu.Lock()
+		w.state.Goal = model.GoalContract{ID: "GOAL-1", Revision: 1, DesiredOutcome: "Build a widget", Confirmation: model.ConfirmationApproved}
+		w.mu.Unlock()
+		ids, row := footerIDs(t, w, 170, 45)
+		if !slices.Equal(ids, []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}) {
+			t.Fatalf("active goal hints %v; footer %q", ids, row)
 		}
 	})
 
@@ -460,7 +474,7 @@ func goldenHints(v boardVisual) []string {
 	case lead != nil:
 	case waitingGates(v.gates) > 0:
 		lead = []string{"gate.reply"}
-	case v.empty && v.planning:
+	case v.empty && (v.planning || v.goalGiven):
 		lead = []string{"marshal.say", "firstuse.chat", "marshal.pick"}
 	case v.empty:
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
