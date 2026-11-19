@@ -16,6 +16,28 @@ import (
 // by validated model translations, rather than a second hardcoded text table.
 func EnglishUIStrings() map[string]string {
 	return map[string]string{
+		"revision_proposed":   "rev {base} → {rev} · proposed",
+		"revision_current":    "rev {rev} · current",
+		"only_changes":        "Only this goal’s changes",
+		"legend_current":      "solid = current",
+		"legend_new":          "dashed = this goal adds",
+		"legend_removed":      "faded = this goal removes",
+		"legend_changed":      "accent outline = changed",
+		"history":             "History",
+		"history_empty":       "No revisions recorded yet.",
+		"history_live":        "Return to latest architecture",
+		"history_unavailable": "Drawing unavailable for this revision.",
+		"history_readonly":    "Past revision · return to latest to comment or accept.",
+		"before":              "Before",
+		"after":               "After",
+		"before_unavailable":  "Previous fields were not supplied.",
+		"built":               "built",
+		"differs":             "differs from the architecture",
+		"goal":                "Goal",
+		"run":                 "Run",
+		"accepted_by":         "Accepted by",
+		"date":                "Date",
+
 		"architecture": "Architecture", "traffic": "Traffic", "marshal": "Marshal", "diagram": "Diagram",
 		"select_area": "Select area", "approve": "Accept architecture", "approved": "✓ Accepted", "working": "Marshal is working…", "fit": "Fit",
 		"view_hint": "Click a part to open it · Use a pencil to comment", "area_hint": "Drag to select an area", "request_type": "Request type",
@@ -32,7 +54,7 @@ func EnglishUIStrings() map[string]string {
 		"accept_summary": "{parts} parts · {builders} builders chosen · {open} open comments", "accept_summary_plain": "{parts} parts · {open} open comments",
 		"accept_wait_reply": "Wait for the Marshal to answer your request.", "accept_open_request": "Answer or withdraw the open request first.",
 		"accept_unsent": "Send or clear the text you typed first.", "accepted_banner": "Accepted — the run continues in your terminal.",
-		"reopen_prompt": "This architecture is accepted. Sending this request reopens it and pauses the run until you accept again. Send it?",
+		"reopen_prompt":  "This architecture is accepted. Sending this request reopens it and pauses the run until you accept again. Send it?",
 		"revision_first": "rev {rev} · first draft", "revision_changed": "rev {rev} · {n} parts changed since rev {prev}",
 		"revision_changed_one": "rev {rev} · 1 part changed since rev {prev}", "changed_badge": "changed", "design": "Design",
 		"design_brief": "Brief", "design_findings": "Review by {provider}", "design_resolutions": "How each finding was resolved",
@@ -43,7 +65,7 @@ func EnglishUIStrings() map[string]string {
 
 // laterUIStringKeys were added after translations were cached; a translation
 // without them stays valid and the page shows them in English.
-var laterUIStringKeys = map[string]bool{"open_sub": true, "parts_inside": true}
+var laterUIStringKeys = map[string]bool{"revision_proposed": true, "revision_current": true, "only_changes": true, "legend_current": true, "legend_new": true, "legend_removed": true, "legend_changed": true, "history": true, "history_empty": true, "history_live": true, "history_unavailable": true, "history_readonly": true, "before": true, "after": true, "before_unavailable": true, "built": true, "differs": true, "goal": true, "run": true, "accepted_by": true, "date": true, "open_sub": true, "parts_inside": true}
 
 // legacyUIStringKeys is the interface label set that existed before the browser
 // v2 keys were added. A stored translation covering exactly these keys stays

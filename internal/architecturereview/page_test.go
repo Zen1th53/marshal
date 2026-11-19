@@ -1,6 +1,7 @@
 package architecturereview
 
 import (
+	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
@@ -108,5 +109,34 @@ func TestPageRevisionAndDesignContract(t *testing.T) {
 	}
 	if strings.Contains(reviewHTML, "innerHTML") {
 		t.Error("review.html must not use innerHTML")
+	}
+}
+
+// Exercise the real page script with both the new seed and a legacy seed.
+// The browser smoke test remains available for SVG rendering in Chromium.
+func TestPageArchitectureLifecycle(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is needed for page interaction checks")
+	}
+	cmd := exec.Command(node, "testdata/lifecycle.cjs", "review.html", "testdata/lifecycle.json")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("page interactions: %v\n%s", err, out)
+	}
+}
+
+func TestPageArchitectureChangeStyles(t *testing.T) {
+	for _, want := range []string{
+		`.node.new rect,.node.removed rect{stroke-dasharray:7 5}`,
+		`.node.changed .change-outline{fill:none;stroke:#e8ae6c;stroke-dasharray:5 4`,
+		`.node.removed,.edge.removed{opacity:.45}`,
+		`text-decoration:line-through`,
+		`.edge.new .edge-line,.edge.changed .edge-line,.edge.removed .edge-line{stroke-dasharray:7 5}`,
+		`id="history-open" aria-expanded="false" aria-controls="history-panel"`,
+		`id="only-changes" type="checkbox"`,
+	} {
+		if !strings.Contains(reviewHTML, want) {
+			t.Errorf("review.html does not contain %q", want)
+		}
 	}
 }
