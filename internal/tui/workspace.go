@@ -295,6 +295,10 @@ type Workspace struct {
 	// delivered and closed; nil when none. A stored architecture Accept for
 	// that goal is not planning.
 	closedGoal atomic.Pointer[string]
+	// milestone is where the Marshal's planning stands before a run exists,
+	// read on the architecture follower's beat (board_planning.go); nil when
+	// no goal is being planned.
+	milestone atomic.Pointer[planningMark]
 	// hostView is set while the Host view is painted in the Board's body.
 	hostView atomic.Bool
 	// memView is set while the Memory view is painted in the Board's body;

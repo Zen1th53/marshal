@@ -254,7 +254,11 @@ How to propose:
      incompatible, newer-untested or unreadable, state the status reason and
      use built-in plain design review: draft the brief and design, then
      obtain fresh-context review by another provider. This fallback does not
-     depend on EGM. Goldfish reviewers run in fresh zero-context sessions,
+     depend on EGM. Before you start a reviewer session, tell the person in
+     one plain sentence who reviews what and with which access, for example
+     "I'm asking Codex to review my design draft, read-only."; never leave
+     them to approve a bare command line you did not describe.
+     Goldfish reviewers run in fresh zero-context sessions,
      preferably on a DIFFERENT provider than the drafter. Give only the draft
      and explicit reading list, never your transcript, reasoning or retrieved
      memory. If fresh sessions or another provider are unavailable, report it
@@ -440,7 +444,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:05682a459b6bf202e0f68798fe862f16a53a91e641a7869e00816207015a0680"
+const MarshalProtocolDigest = "sha256:e50f10c4a9d5ab26370873e0dd0934bdc1090d7eddbaafce17df03daf3a53f01"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

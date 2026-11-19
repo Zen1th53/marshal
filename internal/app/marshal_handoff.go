@@ -420,6 +420,52 @@ func DeriveMarshalHandoffPhase(h *MarshalGoalHandoff) {
 	}
 }
 
+// PlanningMilestoneSteps are the owner-facing steps the Marshal works through
+// before a run exists, in order. Planning can take many minutes of model
+// thinking with nothing else on screen, so the Board shows these as one short
+// line: the owner sees where the Marshal is instead of a silent spinner.
+var PlanningMilestoneSteps = []string{"goal", "requirements", "design", "architecture", "tasks"}
+
+// PlanningMilestone is where the Marshal's planning stands, in plain words.
+type PlanningMilestone struct {
+	// Step indexes PlanningMilestoneSteps: the step in progress. Steps before
+	// it are done.
+	Step int
+	// Now says what is happening in that step.
+	Now string
+	// OwnerTurn is set when the step waits for the owner, not the Marshal.
+	OwnerTurn bool
+}
+
+// MarshalPlanningMilestone derives the planning milestone from the same
+// recorded signals as the handoff phase (goal recorded, requirements card,
+// design records, architecture review, plan draft), checked in the same order
+// so the Board and a switched Marshal never disagree. It reports ok=false once
+// a run exists: the Board shows the run itself then.
+func MarshalPlanningMilestone(h MarshalGoalHandoff) (PlanningMilestone, bool) {
+	if strings.TrimSpace(h.GoalID) == "" || h.HasActiveRun {
+		return PlanningMilestone{}, false
+	}
+	switch {
+	case h.HasPlanDraft:
+		return PlanningMilestone{Step: 4, Now: "the plan is written · it appears here for your approval"}, true
+	case h.ArchitectureAccepted:
+		return PlanningMilestone{Step: 4, Now: "planning the tasks"}, true
+	case h.ArchitecturePending:
+		return PlanningMilestone{Step: 3, Now: "the architecture is ready for you to accept in the browser", OwnerTurn: true}, true
+	case h.DesignApproved:
+		return PlanningMilestone{Step: 3, Now: "drafting the architecture"}, true
+	case h.DesignInProgress:
+		return PlanningMilestone{Step: 2, Now: "drafting and reviewing the design"}, true
+	case h.RequirementsConfirmed:
+		return PlanningMilestone{Step: 2, Now: "reading the code"}, true
+	case h.RequirementsCardOpen:
+		return PlanningMilestone{Step: 1, Now: "the requirements card is ready for you", OwnerTurn: true}, true
+	default:
+		return PlanningMilestone{Step: 1, Now: "reading your goal and the code"}, true
+	}
+}
+
 // FormatMarshalHandoff renders a short, bounded plain-English handoff block for
 // the Marshal's hidden launch briefing. Quoted record content is labelled as
 // data so it can never be mistaken for operator instructions.
