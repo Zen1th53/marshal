@@ -162,7 +162,9 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	defer finishContext()
+	providerCtx, leaseDone := r.keepWorkerLeaseAlive(providerCtx, task, &request)
 	result, runErr := provider.Run(providerCtx, request)
+	runErr = withWorkerLeaseOutcome(runErr, leaseDone())
 	// A worker that hits its provider's own quota or rate limit marks the
 	// provider limited, so the next draft or review moves off it.
 	if runErr != nil || result.ExitCode != 0 {
