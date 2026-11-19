@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -138,12 +139,19 @@ var launchScanParts = struct {
 // scanGitOutput runs one read-only Git query for the launch scan. Optional
 // locks are off, so git status never refreshes or rewrites the index.
 func scanGitOutput(ctx context.Context, root string, args ...string) ([]byte, error) {
+	return scanGitOutputInput(ctx, root, nil, args...)
+}
+
+func scanGitOutputInput(ctx context.Context, root string, stdin []byte, args ...string) ([]byte, error) {
 	cmd, err := hostgit.Command(ctx, root, args...)
 	if err != nil {
 		return nil, err
 	}
 	cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0")
 	cmd.WaitDelay = 100 * time.Millisecond
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	return cmd.Output()
 }
 
@@ -229,9 +237,166 @@ func defaultScanUnmerged(ctx context.Context, root string) ([]string, error) {
 		if b == "" || isMarshalBranch(b) {
 			continue
 		}
+		// git --no-merged only checks commit ancestry, so squash-merged and
+		// cherry-picked branches still appear. Skip any branch whose changes
+		// are already in HEAD so the Marshal does not ask about finished work.
+		merged, err := branchChangesInHead(ctx, root, b)
+		if err != nil {
+			return nil, err
+		}
+		if merged {
+			continue
+		}
 		unmerged = append(unmerged, b)
 	}
 	return unmerged, nil
+}
+
+// branchChangesInHead reports, strictly read-only, whether branch's changes
+// are already present in HEAD (for example after a squash-merge or
+// cherry-pick). Only context cancellation is returned as an error; other git
+// failures (such as an orphan branch with no merge-base) conservatively report
+// the branch as unmerged.
+func branchChangesInHead(ctx context.Context, root, branch string) (bool, error) {
+	ref := "refs/heads/" + branch
+
+	// 1. Per-commit patch-id equivalence: catches single-commit squash-merges,
+	// cherry-picks, and rebased branches even if HEAD later edited the same files.
+	if out, err := scanGitOutput(ctx, root, "cherry", "HEAD", ref); err == nil {
+		hasUnique := false
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "+") {
+				hasUnique = true
+				break
+			}
+		}
+		if !hasUnique {
+			return true, nil
+		}
+	} else if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	// 2. Paths changed by branch since its merge-base with HEAD. Passing
+	// --no-renames ensures both source and destination paths of a rename are
+	// checked against HEAD.
+	changedOut, err := scanGitOutput(ctx, root, "diff", "--no-renames", "--name-only", "-z", "HEAD..."+ref)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	var paths []string
+	for _, p := range strings.Split(string(changedOut), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	if len(paths) == 0 {
+		return true, nil
+	}
+
+	// 3. Tree diff to HEAD restricted to the branch's paths: catches
+	// multi-commit squash-merges whose files match HEAD as-is.
+	treeMatches := true
+	const pathChunk = 200
+	for i := 0; i < len(paths); i += pathChunk {
+		end := min(i+pathChunk, len(paths))
+		args := make([]string, 0, 4+end-i)
+		args = append(args, "diff", "--name-only", "HEAD", ref, "--")
+		args = append(args, paths[i:end]...)
+		diffOut, err := scanGitOutput(ctx, root, args...)
+		if err != nil {
+			if ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			treeMatches = false
+			break
+		}
+		if len(bytes.TrimSpace(diffOut)) > 0 {
+			treeMatches = false
+			break
+		}
+	}
+	if treeMatches {
+		return true, nil
+	}
+
+	// 4. Squashed patch-id match: catches a multi-commit squash-merge even
+	// when later commits on HEAD modified the same files.
+	branchDiff, err := scanGitOutput(ctx, root, "diff", "--no-renames", "HEAD..."+ref)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	branchPatchOut, err := scanGitOutputInput(ctx, root, branchDiff, "patch-id", "--stable")
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	branchPatchID := firstField(string(branchPatchOut))
+	if branchPatchID == "" {
+		return false, nil
+	}
+	baseOut, err := scanGitOutput(ctx, root, "merge-base", "HEAD", ref)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	base := strings.TrimSpace(string(baseOut))
+	if base == "" {
+		return false, nil
+	}
+	// Any squash commit of branch on HEAD must have touched paths[0].
+	revOut, err := scanGitOutput(ctx, root, "rev-list", "--first-parent", "--no-merges", "-n", "200", base+"..HEAD", "--", paths[0])
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	shas := strings.Fields(string(revOut))
+	if len(shas) == 0 {
+		return false, nil
+	}
+	showArgs := make([]string, 0, 3+len(shas))
+	showArgs = append(showArgs, "show", "--format=commit %H", "-p", "--no-renames")
+	showArgs = append(showArgs, shas...)
+	commitsDiff, err := scanGitOutput(ctx, root, showArgs...)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	headPatches, err := scanGitOutputInput(ctx, root, commitsDiff, "patch-id", "--stable")
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	for _, line := range strings.Split(string(headPatches), "\n") {
+		if firstField(line) == branchPatchID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func firstField(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 func isMarshalBranch(name string) bool {
@@ -404,10 +569,11 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 	// part hands back a function that applies its result; it is applied only
 	// when the part finished in time, so a part still running after its
 	// timeout never touches the scan. A failed or timed-out part is unknown.
-	runPart := func(action func(context.Context) (func(), error), onUnknown func(error)) {
+	runPart := func(step string, action func(context.Context) (func(), error), onUnknown func(error)) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer w.noteLaunchStep(step)
 			partCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			type outcome struct {
@@ -435,42 +601,42 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 		}()
 	}
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.git(c, root)
 		return func() { scan.Branch, scan.Changed = res.Branch, res.Changed }, err
 	}, func(error) { scan.Branch, scan.Changed = "unknown", -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.files(c, root)
 		return func() { scan.Language, scan.Files = res.Language, res.Files }, err
 	}, func(error) { scan.Language, scan.Files = "unknown", -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.worktrees(c, root)
 		return func() { scan.Worktrees = res }, err
 	}, func(error) { scan.Worktrees = -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.unmerged(c, root)
 		return func() { scan.Unmerged = res }, err
 	}, func(error) { scan.Unmerged = []string{"unknown"} })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("state", func(c context.Context) (func(), error) {
 		res, err := parts.run(c, w, root)
 		return func() { scan.ActiveRun = res }, err
 	}, func(error) { scan.ActiveRun = &scanRun{State: "unknown"} })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("state", func(c context.Context) (func(), error) {
 		res, err := parts.runs(c, root)
 		return func() { scan.EarlierRuns = res }, err
 	}, func(error) { scan.EarlierRuns = -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("limits", func(c context.Context) (func(), error) {
 		res, err := parts.limits(c, w)
 		return func() { scan.Limits = res }, err
 	}, func(error) { scan.Limits = nil })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("knowledge", func(c context.Context) (func(), error) {
 		res, err := parts.knowledge(c, w, root)
 		return func() { scan.Knowledge, scan.KnowledgeErr = res, nil }, err
 	}, func(err error) {
@@ -514,21 +680,27 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 	defer cancel()
 	providers := []string{"claude", "codex"}
 	out := make([]scanSessions, 0, len(providers))
-	for _, provider := range providers {
+	for i, provider := range providers {
 		if budget.Err() != nil {
 			break
 		}
+		// Report progress as each provider's earlier-session check finishes,
+		// since scanning history is often the slowest part of startup.
+		deferStep := func(done int) { w.noteLaunchCount("history", done, len(providers)) }
 		folder := w.runtime.EarlierWorkFolder(provider)
 		if folder == "" {
+			deferStep(i + 1)
 			continue
 		}
 		if !w.runtime.HasReadGrant(folder) {
 			if launchEarlierWorkThroughQueue {
 				// Shipped passes undecided reads, so a refusal here is an
 				// explicit operator denial, which wins: never queue past it.
+				deferStep(i + 1)
 				continue
 			}
 			if _, err := os.Stat(folder); err != nil {
+				deferStep(i + 1)
 				continue
 			}
 			sess := scanSessions{Provider: provider, NeedsGrant: true}
@@ -540,6 +712,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 			w.permissions.continuations[filepath.Clean(folder)] = provider
 			w.permissions.mu.Unlock()
 			w.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "Marshal", Reason: "Load earlier " + provider + " work for this project", ContinuationProvider: provider})
+			deferStep(i + 1)
 			continue
 		}
 		listCtx, listCancel := context.WithTimeout(budget, 10*time.Second)
@@ -547,6 +720,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 		listCancel()
 		if err != nil {
 			w.RecordActivity(fmt.Sprintf("Couldn't list earlier %s sessions: %s.", provider, shortLaunchError(err)))
+			deferStep(i + 1)
 			continue
 		}
 		found := 0
@@ -556,6 +730,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 			}
 		}
 		if found == 0 {
+			deferStep(i + 1)
 			continue
 		}
 		sess := scanSessions{Provider: provider, Found: found}
@@ -567,6 +742,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 				out[len(out)-1].Loaded = found
 				w.RecordActivity(loadedEarlierSessionsLine(provider, found))
 			}
+			deferStep(i + 1)
 			continue
 		}
 		wait := make(chan error, 1)
@@ -587,6 +763,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 				}
 				w.RecordActivity(loadedEarlierSessionsLine(provider, found))
 			}
+			deferStep(i + 1)
 		case <-budget.Done():
 			return out
 		}

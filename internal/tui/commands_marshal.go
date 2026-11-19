@@ -86,6 +86,7 @@ type marshalSession struct {
 	architecture            *app.ArchitectureReviewSession
 	architectureStarting    bool
 	architectureOccurrences []string
+	architectureReason      string
 	architectureStart       func(context.Context, string, string) (*app.ArchitectureReviewSession, error)
 	architectureBrowser     func(context.Context, string) error
 	// held is the set of plan task IDs the Marshal's holds cover, keyed by

@@ -104,4 +104,42 @@ printf '%s\n' '{"status":"SUCCESS","conversation_id":"native-message","response"
 	if dot := w.providerDots(time.Now())["agy"]; dot != "●" {
 		t.Fatalf("header dot %q after a successful verify", dot)
 	}
+	// Successful verification via /harness writes an Activity note just like
+	// the Board's verify key does, and never duplicates it when called again
+	// with the same result.
+	notes := w.noteList()
+	if len(notes) != 1 || notes[0].Err || !strings.Contains(notes[0].Text, "agy is ready") {
+		t.Fatalf("notes after agy verify = %+v, want 1 non-error note for agy", notes)
+	}
+}
+
+// Every provider verification — success or failure, agy or codex, whether run
+// directly via /harness or through the Board's verify path — writes the same
+// kind of Activity note.
+func TestHarnessVerifyFailureWritesActivityNote(t *testing.T) {
+	w, _ := realControlWorkspace(t, "SESSION-verify-fail-note", false)
+	dir := t.TempDir()
+	failStub := "#!/bin/sh\necho 'stub verify error' >&2\nexit 1\n"
+	for _, bin := range []string{"agy", "codex"} {
+		if err := os.WriteFile(filepath.Join(dir, bin), []byte(failStub), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if _, err := w.cmd.Handle(t.Context(), "/harness verify-native agy"); err == nil {
+		t.Fatal("expected agy verify with failing stub to fail")
+	}
+	notes := w.noteList()
+	if len(notes) != 1 || !notes[0].Err || !strings.HasPrefix(notes[0].Text, "Verify agy failed: ") {
+		t.Fatalf("notes after failed agy verify = %+v", notes)
+	}
+
+	if _, err := w.cmd.Handle(t.Context(), "/harness verify codex gpt-test"); err == nil {
+		t.Fatal("expected codex verify with failing stub to fail")
+	}
+	notes = w.noteList()
+	if len(notes) != 2 || !notes[0].Err || !strings.HasPrefix(notes[0].Text, "Verify codex failed: ") {
+		t.Fatalf("notes after failed codex verify = %+v", notes)
+	}
 }

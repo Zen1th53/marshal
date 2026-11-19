@@ -200,6 +200,7 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string,
 	if err != nil {
 		return nil, nil, nil, marshalNotStarted(provider, fmt.Errorf("read-only launch settings failed: %w", err))
 	}
+	args = marshalChatEffortArgs(provider, root, args, "")
 	args = marshalChatViewArgs(provider, root, args)
 	if channel != injectMarshalDir {
 		updated, _, err := applyBriefing(provider, root, args, protocol, channel)

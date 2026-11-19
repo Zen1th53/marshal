@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -33,6 +35,17 @@ const (
 	launchBlocked
 )
 
+// launchProgress records which startup checks have completed so the opening
+// screen can show live progress instead of a static "Checking this project…"
+// line while the doctor and project scan run.
+type launchProgress struct {
+	steps  map[string]bool
+	counts map[string][2]int // step -> [done, total]
+	// order preserves the first time each step reported so the line grows
+	// steadily from left to right without shuffling.
+	order []string
+}
+
 // launchState is the shared result of the per-start project check.
 type launchState struct {
 	mu       sync.Mutex
@@ -41,10 +54,107 @@ type launchState struct {
 	warnings []string
 	started  time.Time
 	scan     projectScan
+	progress launchProgress
 	// pending holds afterLaunchCheck callbacks waiting for the check to
 	// finish ready; they run once then, and a later retry that turns ready
 	// runs any registered since.
 	pending []func()
+}
+
+// noteLaunchStep marks one named startup check as completed and repaints the
+// opening screen while the launch check is still running.
+func (w *Workspace) noteLaunchStep(step string) {
+	if w == nil || step == "" {
+		return
+	}
+	w.launch.mu.Lock()
+	if w.launch.progress.steps == nil {
+		w.launch.progress.steps = map[string]bool{}
+	}
+	changed := !w.launch.progress.steps[step]
+	if changed {
+		w.launch.progress.steps[step] = true
+		if !slices.Contains(w.launch.progress.order, step) {
+			w.launch.progress.order = append(w.launch.progress.order, step)
+		}
+	}
+	checking := w.launch.phase == launchChecking
+	w.launch.mu.Unlock()
+	if changed && checking {
+		w.requestRepaint()
+	}
+}
+
+// noteLaunchCount updates a counted startup step (such as "providers" 2/4 or
+// "history" 1/2) and repaints the opening screen while the check runs.
+func (w *Workspace) noteLaunchCount(step string, done, total int) {
+	if w == nil || step == "" || total <= 0 || done <= 0 {
+		return
+	}
+	if done > total {
+		done = total
+	}
+	w.launch.mu.Lock()
+	if w.launch.progress.counts == nil {
+		w.launch.progress.counts = map[string][2]int{}
+	}
+	prev := w.launch.progress.counts[step]
+	// Never regress a count if concurrent work reports out of order.
+	changed := done > prev[0] || total != prev[1]
+	if changed {
+		if done < prev[0] {
+			done = prev[0]
+		}
+		w.launch.progress.counts[step] = [2]int{done, total}
+		if !slices.Contains(w.launch.progress.order, step) {
+			w.launch.progress.order = append(w.launch.progress.order, step)
+		}
+	}
+	checking := w.launch.phase == launchChecking
+	w.launch.mu.Unlock()
+	if changed && checking {
+		w.requestRepaint()
+	}
+}
+
+// noteDoctorProgress maps a completed doctor check name onto the short
+// plain-English step shown on the opening screen.
+func (w *Workspace) noteDoctorProgress(name string) {
+	switch name {
+	case "git", "repository", "worktree":
+		w.noteLaunchStep("git")
+	case "sqlite", "security_subsystems", "permissions", "artifacts", "policy", "pack", "runtime_version", "socket":
+		w.noteLaunchStep("state")
+	case "resources", "bwrap", "mcp_providers":
+		w.noteLaunchStep("host")
+	}
+}
+
+// launchProgressLine formats the completed startup checks for the opening
+// screen (e.g. "providers 2/4 · git · state"), or "" before any step has
+// finished.
+func (w *Workspace) launchProgressLine(useUnicode bool) string {
+	if w == nil {
+		return ""
+	}
+	w.launch.mu.Lock()
+	defer w.launch.mu.Unlock()
+	if len(w.launch.progress.order) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(w.launch.progress.order))
+	for _, step := range w.launch.progress.order {
+		if c, ok := w.launch.progress.counts[step]; ok && c[1] > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d/%d", step, c[0], c[1]))
+		} else if w.launch.progress.steps[step] {
+			parts = append(parts, step)
+		}
+	}
+	sep := " · "
+	if !useUnicode {
+		sep = " - "
+	}
+	return strings.Join(parts, sep)
 }
 
 // runLaunchCheck runs the doctor once (twice when a safe fix applies), decides
@@ -56,6 +166,17 @@ func (w *Workspace) runLaunchCheck(ctx context.Context) {
 	w.launch.phase = launchChecking
 	w.launch.started = time.Now()
 	w.launch.blockers, w.launch.warnings = nil, nil
+	// Keep provider lookup progress if loadFirstUse started concurrently
+	// ahead of runLaunchCheck, while clearing per-check doctor/scan steps.
+	var prevProviders [2]int
+	if c, ok := w.launch.progress.counts["providers"]; ok && c[1] > 0 {
+		prevProviders = c
+	}
+	w.launch.progress = launchProgress{}
+	if prevProviders[1] > 0 {
+		w.launch.progress.counts = map[string][2]int{"providers": prevProviders}
+		w.launch.progress.order = []string{"providers"}
+	}
 	w.launch.mu.Unlock()
 	w.requestRepaint()
 
@@ -80,10 +201,12 @@ func (w *Workspace) runLaunchCheck(ctx context.Context) {
 		w.finishLaunchCheck([]string{blockLine("repository", "", project.Layout{})}, nil)
 		return
 	}
+	w.noteLaunchStep("git")
 
-	report := launchDoctor(checkCtx, root, doctor.Options{})
+	opts := doctor.Options{OnProgress: w.noteDoctorProgress}
+	report := launchDoctor(checkCtx, root, opts)
 	if fixed := launchSafeFix(layout, report); len(fixed) > 0 {
-		report = launchDoctor(checkCtx, root, doctor.Options{})
+		report = launchDoctor(checkCtx, root, opts)
 		w.RecordActivity("Fixed: " + strings.Join(fixed, ", ") + ".")
 	}
 

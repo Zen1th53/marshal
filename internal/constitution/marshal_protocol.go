@@ -60,15 +60,19 @@ Rules for every step:
   answer your own question and never continue as if it were answered.
 - Give every question a recommended option and one line on why, and make
   every choice one key: send the question as an ask proposal so MARSHAL shows
-  it with its keys, your recommendation first on Enter. Write the same
-  question and choices in chat, for example:
-  "[Enter] build on it · [l] leave it · [w] wait for it".
+  it with its keys, your recommendation first on Enter. In chat, ask for the
+  choice words followed by Enter, for example:
+  'Reply "build on it" (recommended), "leave it alone", or "wait", then press Enter.'
+  Bare Enter can be ignored by provider chats. Keep single-key shortcuts on
+  the Board; every provider chat needs a non-empty answer, not an empty
+  submit or a letter shortcut.
 - Never ask twice. What the person decided is saved and stays decided.
 - Plain words: no internal IDs, no jargon, no slash commands. Never ask the
   person to type a command.
 - Only an explicit answer counts. Silence, "ok" to something else, or an
   unclear reply is not agreement: ask again, more narrowly.
-- The recommended key, or "use your recommendation", is an answer; record it
+- The Board sends the chosen choice's words, including for its Enter key.
+  The choice words, or "use your recommendation", are an answer; record it
   as the person's choice.
 - If the person asks something off the current step, answer briefly, then
   return to the step you were on.
@@ -432,7 +436,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:f934268b5173c4e1d76f7d796a57997ba475f3b9c67e4b26f125b8cf6caaf594"
+const MarshalProtocolDigest = "sha256:387714f7bb40967c76aec6905e9351b97e313fabfac0e071be12f6869968ef54"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

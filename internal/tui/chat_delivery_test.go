@@ -3,8 +3,11 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // fakeTmux records the commands run and returns scripted capture-pane frames,
@@ -96,15 +99,69 @@ func TestDeliverChatTurnBounded(t *testing.T) {
 }
 
 func TestComposerPending(t *testing.T) {
-	if !composerPending("foo [Pasted text #2 +5 lines] bar", "whatever") {
+	if !composerPending("❯ [Pasted text #2 +5 lines]\n", "whatever") {
 		t.Fatal("placeholder should be pending")
 	}
 	short := "submit this please"
-	if !composerPending("prompt> "+short, short) {
+	if !composerPending("› "+short, short) {
 		t.Fatal("echoed short text should be pending")
 	}
-	if composerPending("prompt> ", short) {
+	if composerPending("› ", short) {
 		t.Fatal("cleared composer should not be pending")
+	}
+	for _, frame := range []string{"› " + short + "\nAnswer\n\n› ", "❯ [Pasted text #2 +5 lines]\nAnswer\n\n❯ "} {
+		if composerPending(frame, short) {
+			t.Fatalf("transcript mistaken for input: %q", frame)
+		}
+	}
+}
+
+func TestDeliverChatTurnRetriesLongProviderComposers(t *testing.T) {
+	text := strings.Repeat("Plan the café carefully.\n", 12) + "\nThen wait for approval."
+	for name, composer := range map[string]string{
+		"codex wrapped":    "› " + strings.ReplaceAll(text, "\n", "\n  ") + "\n\n  GPT-6 · 100% left\n",
+		"codex collapsed":  fmt.Sprintf("› [Pasted Content %d chars]\n\n  GPT-6 · 100%% left\n", utf8.RuneCountInString(text)),
+		"claude collapsed": "❯ [Pasted text #1 +14 lines]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			// The first Enter is ignored. After the second, the message is
+			// still in the transcript above a fresh, empty input.
+			f := &fakeTmux{frames: []string{"› ", "› ", composer, composer, composer, composer + "Answer\n\n› "}}
+			if err := deliverChatTurn(t.Context(), f.run, "%1", text, deliverEnterTries, time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			if f.enters() != 2 {
+				t.Fatalf("Enter presses = %d, want 2", f.enters())
+			}
+			pastes := 0
+			for _, call := range f.calls {
+				if call[0] == "paste-buffer" {
+					pastes++
+				}
+			}
+			if pastes != 1 {
+				t.Fatalf("pastes = %d, want 1", pastes)
+			}
+		})
+	}
+}
+
+func TestSubmitChatTurnPreservesEditsAndCancellation(t *testing.T) {
+	f := &fakeTmux{frames: []string{"› our message", "› owner edit", "› owner edit"}}
+	if err := submitChatTurn(t.Context(), f.run, "%1", "our message", deliverEnterTries, time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if f.enters() != 1 {
+		t.Fatalf("owner edit submitted: %d Enter presses", f.enters())
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	f = &fakeTmux{frames: []string{"› our message"}}
+	if err := submitChatTurn(ctx, f.run, "%1", "our message", deliverEnterTries, time.Millisecond); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled delivery: %v", err)
+	}
+	if f.enters() != 0 {
+		t.Fatal("cancelled delivery submitted")
 	}
 }
 

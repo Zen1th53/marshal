@@ -513,7 +513,7 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	if _, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "Enter"); err != nil {
+	if err := submitChatTurn(ctx, tmux.RunCommand, pane, text, deliverEnterTries, deliverEnterWait); err != nil {
 		return "", err
 	}
 	return before, nil

@@ -176,3 +176,35 @@ func TestDoctorBeforeInitIsPlain(t *testing.T) {
 		t.Fatalf("doctor created Marshal's state: %v", err)
 	}
 }
+
+func TestDoctorOnProgressReportsCompletedChecks(t *testing.T) {
+	repo := doctorRepo(t)
+	var seen []string
+	Check(context.Background(), repo.Path(), Options{
+		Lookup: availableTools,
+		Run:    successfulProbe,
+		OnProgress: func(name string) {
+			seen = append(seen, name)
+		},
+	})
+	has := func(name string) bool {
+		for _, s := range seen {
+			if s == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []string{"git", "repository", "sqlite", "worktree", "resources", "bwrap", "mcp_providers"} {
+		if !has(want) {
+			t.Errorf("OnProgress missed %q (seen %v)", want, seen)
+		}
+	}
+	// Optional providers are NOT_RUN when ProbeProviders is false and must not
+	// be reported as completed checks.
+	for _, skipped := range []string{"codex", "opencode", "ollama", "agy", "claude"} {
+		if has(skipped) {
+			t.Errorf("OnProgress reported NOT_RUN check %q (seen %v)", skipped, seen)
+		}
+	}
+}

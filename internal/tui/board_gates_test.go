@@ -70,8 +70,51 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	if text := frameText(w, 120, 40); strings.Contains(text, "NEEDS YOU") || strings.Contains(text, "open in browser") || !strings.Contains(text, "NO RUN YET") {
 		t.Fatalf("the gate stayed after the contract left the store:\n%s", text)
 	}
-	if key(KeyEvent{Type: KeyRune, Rune: 'y'}) {
-		t.Fatal("y was taken with no gate waiting")
+	// With no gate waiting, y says why there is nothing to open instead of
+	// falling through to open the composer with "to the Marshal › y".
+	if !key(KeyEvent{Type: KeyRune, Rune: 'y'}) {
+		t.Fatal("y fell through instead of explaining why nothing can open")
+	}
+	if w.composing() || w.composer.Text() != "" {
+		t.Fatalf("y opened the composer: composing=%v text=%q", w.composing(), w.composer.Text())
+	}
+	if !strings.Contains(w.state.LastOutput, "Nothing to open yet") {
+		t.Fatalf("y did not explain why nothing can open: %q", w.state.LastOutput)
+	}
+}
+
+// Pressing y on the Board when nothing waits explains why in the footer and
+// never opens the composer ("to the Marshal › y"), while typing y inside an
+// already-open composer still inserts the letter normally.
+func TestBoardYWithNoArchitectureNeverOpensComposer(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	ctx := t.Context()
+
+	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'y'})
+	if w.composing() || w.composer.Text() != "" {
+		t.Fatalf("y opened composer: composing=%v text=%q", w.composing(), w.composer.Text())
+	}
+	if got := w.state.LastOutput; !strings.Contains(got, "Nothing to open yet") {
+		t.Fatalf("unexpected answer before architecture: %q", got)
+	}
+
+	// Once an architecture is already accepted, y says so instead of saying
+	// the Marshal has not sent one.
+	w.planning.Store(true)
+	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'y'})
+	if w.composing() || w.composer.Text() != "" {
+		t.Fatalf("y opened composer after accept: composing=%v text=%q", w.composing(), w.composer.Text())
+	}
+	if got := w.state.LastOutput; !strings.Contains(got, "already accepted") {
+		t.Fatalf("unexpected answer after architecture accepted: %q", got)
+	}
+
+	// Once the composer is already open (e.g. via s), typing y inserts it.
+	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 's'})
+	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'y'})
+	if !w.composing() || w.composer.Text() != "y" {
+		t.Fatalf("y inside open composer failed: composing=%v text=%q", w.composing(), w.composer.Text())
 	}
 }
 
