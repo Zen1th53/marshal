@@ -138,8 +138,24 @@ func (lm *LeaseManager) AcquireLease(req AcquireLeaseRequest) (*Lease, error) {
 	return l, nil
 }
 
+// WorkerLeaseTTL is how long one mutation lease stays valid without a renewal.
+// A live worker renews it from its own process heartbeats.
+const WorkerLeaseTTL = 5 * time.Minute
+
+// WorkerLeaseMaxLifetime is the hard upper bound of one worker attempt's
+// mutation lease: renewals never extend it past this age, so a worker that is
+// alive but never finishes still ends.
+const WorkerLeaseMaxLifetime = 2 * time.Hour
+
 // RenewLease extends the expiration of an active lease by the authorized owner.
 func (lm *LeaseManager) RenewLease(leaseID, agentID string, ttl time.Duration, now time.Time) error {
+	return lm.RenewLeaseBounded(leaseID, agentID, ttl, 0, now)
+}
+
+// RenewLeaseBounded extends an active lease like RenewLease, but never past
+// maxLifetime after the lease was acquired (zero means unbounded). At that
+// age the renewal is refused with ErrLeaseExpired.
+func (lm *LeaseManager) RenewLeaseBounded(leaseID, agentID string, ttl, maxLifetime time.Duration, now time.Time) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -165,9 +181,45 @@ func (lm *LeaseManager) RenewLease(leaseID, agentID string, ttl time.Duration, n
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	l.ExpiresAt = now.Add(ttl)
+	expires := now.Add(ttl)
+	if maxLifetime > 0 {
+		limit := l.AcquiredAt.Add(maxLifetime)
+		if !now.Before(limit) {
+			return fmt.Errorf("%w: lease %s reached the %v limit of one worker attempt", ErrLeaseExpired, leaseID, maxLifetime)
+		}
+		if expires.After(limit) {
+			expires = limit
+		}
+	}
+	l.ExpiresAt = expires
 	l.HeartbeatAt = now
 	return nil
+}
+
+// workerLeaseOwner is the agent that owns a task's mutation lease, by the
+// engine's lease acquisition rule.
+func workerLeaseOwner(task TaskExecution) string {
+	owner := task.AssignedRole
+	if owner == "" {
+		owner = task.AssignedHarness
+	}
+	if owner == "" {
+		owner = "worker-" + task.TaskID
+	}
+	return owner
+}
+
+// RenewWorkerMutationLease extends the mutation lease of a task whose worker
+// process is still alive, by WorkerLeaseTTL and never past
+// WorkerLeaseMaxLifetime. Nonmutating tasks hold no lease.
+func (e *Engine) RenewWorkerMutationLease(task TaskExecution) error {
+	if !task.Mutates || task.LeaseID == "" {
+		return nil
+	}
+	if e == nil || e.leases == nil {
+		return ErrLeaseExpired
+	}
+	return e.leases.RenewLeaseBounded(task.LeaseID, workerLeaseOwner(task), WorkerLeaseTTL, WorkerLeaseMaxLifetime, nowUTC())
 }
 
 // TakeoverLease transfers ownership of a stale or failed lease to a new agent.

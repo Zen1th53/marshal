@@ -25,12 +25,5 @@ func (e *Engine) VerifyWorkerMutationLease(task TaskExecution) error {
 	if !task.Mutates {
 		return nil
 	}
-	owner := task.AssignedRole
-	if owner == "" {
-		owner = task.AssignedHarness
-	}
-	if owner == "" {
-		owner = "worker-" + task.TaskID
-	}
-	return e.leases.VerifyOwner(task.TaskID, owner, task.LeaseID, nowUTC())
+	return e.leases.VerifyOwner(task.TaskID, workerLeaseOwner(task), task.LeaseID, nowUTC())
 }

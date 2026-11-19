@@ -667,7 +667,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					if err := e.leases.VerifyOwner(t.TaskID, agentID, t.LeaseID, nowUTC()); err != nil {
 						return &run, fmt.Errorf("%w: native provider lease cannot be resumed: %v", ErrLeaseExpired, err)
 					}
-					if err := e.leases.RenewLease(t.LeaseID, agentID, 5*time.Minute, nowUTC()); err != nil {
+					if err := e.leases.RenewLease(t.LeaseID, agentID, WorkerLeaseTTL, nowUTC()); err != nil {
 						return &run, fmt.Errorf("%w: native provider lease renewal failed: %v", ErrLeaseExpired, err)
 					}
 					lease = &Lease{LeaseID: t.LeaseID, AgentID: agentID}
@@ -679,7 +679,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 						Role:            agentID,
 						ScopedResources: t.TargetFiles,
 						MutationScope:   "mutate",
-						TTL:             5 * time.Minute,
+						TTL:             WorkerLeaseTTL,
 						Now:             nowUTC(),
 					})
 					if err != nil {

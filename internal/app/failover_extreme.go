@@ -56,10 +56,22 @@ var errWaitingOnQuota = errors.New("waiting_on_quota")
 type quotaWaitError struct {
 	mode  marshal.WorkerMode
 	until time.Time
+	// reason is why the provider that resets first is cooling down.
+	reason string
 }
 
 func (e *quotaWaitError) Error() string {
-	return fmt.Sprintf("%v: every provider for %s mode is cooling down until %s", errWaitingOnQuota, e.mode, e.until.UTC().Format(time.RFC3339))
+	msg := fmt.Sprintf("%v: every provider for %s mode is cooling down until %s", errWaitingOnQuota, e.mode, e.until.UTC().Format(time.RFC3339))
+	if e.afterFailures() {
+		msg += " (" + e.reason + ")"
+	}
+	return msg
+}
+
+// afterFailures reports a cooldown taken after repeated worker failures, not
+// after a usage limit: the stop must not call it a quota.
+func (e *quotaWaitError) afterFailures() bool {
+	return strings.HasPrefix(e.reason, "infrastructure failure")
 }
 
 func (e *quotaWaitError) Is(target error) bool { return target == errWaitingOnQuota }
@@ -69,6 +81,9 @@ func (e *quotaWaitError) Is(target error) bool { return target == errWaitingOnQu
 // so without it the Board said "The run stopped unexpectedly." while the
 // reason and the reset time were known (and only in Activity).
 func (e *quotaWaitError) StopReason() (string, string) {
+	if e.afterFailures() {
+		return "Every AI provider for " + string(e.mode) + " mode is paused after repeated failures until " + formatLocalUntil(e.until, time.Now()) + " (" + adapter.DiagnosticSummary(e.reason, 300) + ").", "Check the failed attempts on the Board, then press Enter after that time to try again."
+	}
 	return "Every AI provider for " + string(e.mode) + " mode is at its usage limit until " + formatLocalUntil(e.until, time.Now()) + ".", "Press Enter after that time to try again."
 }
 
@@ -120,6 +135,7 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 		}
 		now := s.clock()
 		var earliest time.Time
+		var earliestReason string
 		// Collect every eligible candidate in failover order, then return the
 		// one with the most limit left: the highest known percent first,
 		// unknown candidates after, ties by failover order.
@@ -148,6 +164,7 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 			if limited && now.Before(until) {
 				if earliest.IsZero() || until.Before(earliest) {
 					earliest = until
+					earliestReason, _ = providerHealth.Cooling(cand, now)
 				}
 				continue
 			}
@@ -178,7 +195,7 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 		// quota) pauses the task as waiting_on_quota with its reset time
 		// instead of holding the run silently for hours.
 		if wait := earliest.Sub(now); wait > maxQuotaWait {
-			return "", &quotaWaitError{mode: mode, until: earliest}
+			return "", &quotaWaitError{mode: mode, until: earliest, reason: earliestReason}
 		}
 		timer := time.NewTimer(earliest.Sub(now))
 		select {
