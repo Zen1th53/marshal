@@ -26,6 +26,10 @@ type usageState struct {
 	// tests; nil and zero mean usage.Read and usageRefreshEvery.
 	readFn func(time.Time) []usage.Quota
 	every  time.Duration
+	// warned is each low window already noted in its reset period, and
+	// planNoted each plan whose limit check is in Activity (board_limits.go).
+	warned    map[string]limitWarned
+	planNoted map[string]bool
 }
 
 // startUsage reads the providers' quota every usageRefreshEvery while a TUI
@@ -86,7 +90,8 @@ func (w *Workspace) usageQuotas() (qs []usage.Quota, ok bool) {
 	return slices.Clone(w.usage.quotas), true
 }
 
-// storeUsage caches a reading and repaints the screen when the figure the
+// storeUsage caches a reading, notes any window that ran low and the limit
+// check of a plan about to run, and repaints the screen when the figure the
 // vitals row shows changed.
 func (w *Workspace) storeUsage(qs []usage.Quota) {
 	now := time.Now()
@@ -98,6 +103,8 @@ func (w *Workspace) storeUsage(qs []usage.Quota) {
 	}
 	w.usage.quotas, w.usage.read = qs, true
 	w.usage.mu.Unlock()
+	w.warnLowLimits(qs, now)
+	w.notePlanLimits(w.marshalPanel())
 	if after != before {
 		w.requestRepaint()
 	}
