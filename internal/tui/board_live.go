@@ -764,6 +764,13 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	if w.handleGateKey(event, w.state.Marshal) {
 		return true
 	}
+	// Architecture inspection is available between goals and while the inbox
+	// is waiting. It does not answer a permission or accept a draft.
+	if event.Type == KeyRune && event.Rune == 'a' && !w.anyBodyView() && ui.inspect == "" && !w.inboxView.Inspecting() {
+		response, err := w.marshalArchitecture(context.Background(), "", "")
+		w.recordCommandResult("/marshal architecture", response, err)
+		return true
+	}
 	// r armed a stuck task's retry: Enter runs it, any other key cancels.
 	if w.handleRetryKey(event) {
 		return true

@@ -46,6 +46,11 @@ func conformanceRuntime(t *testing.T, withDeps bool) (*Runtime, string) {
 	if withDeps {
 		next.Components[0].Dependencies = []string{"store"}
 	}
+	// Splitting the original core into named parts is an explicit removal,
+	// so the owner can see the old part disappearing in this revision.
+	removed := first.Components[0]
+	removed.Removed = true
+	next.Components = append(next.Components, removed)
 	acceptWatchContract(t, r, next, "conformance")
 	dir := r.ProjectRoot()
 	writeRepoFile(t, dir, "go.mod", "module example.com/shop\n\ngo 1.26\n")

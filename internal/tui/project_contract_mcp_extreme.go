@@ -75,6 +75,9 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
 			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
+		if err := w.runtime.ValidateProjectContractSubmission(ctx, sub.Contract); err != nil {
+			return nil, err
+		}
 		p, _, err := w.store.AdmitMCPProjectContract(ctx, store.MCPProposal{ID: occurrenceMCP(l.id, args.SubmissionID), Launch: l.id, Owner: l.owner, Provider: l.provider, Submission: args.SubmissionID}, sub)
 		if err != nil {
 			return nil, explainProjectContractSubmission(sub, err)

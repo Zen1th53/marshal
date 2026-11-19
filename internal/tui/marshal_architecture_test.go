@@ -107,6 +107,27 @@ func TestMarshalArchitectureSingletonSurvivesCommandDeadlineAndStopsWithWorkspac
 	}
 }
 
+func TestBoardAOpensProjectArchitectureBetweenGoals(t *testing.T) {
+	w, _ := realControlWorkspace(t, "SESSION-architecture-key", false)
+	w.homeBoard = true
+	w.endOpening()
+	opened := make(chan string, 1)
+	m := w.marshalSession()
+	m.architectureStart = func(context.Context, string, string) (*app.ArchitectureReviewSession, error) {
+		return &app.ArchitectureReviewSession{URL: "http://127.0.0.1/architecture", Done: make(chan struct{})}, nil
+	}
+	m.architectureBrowser = func(_ context.Context, url string) error { opened <- url; return nil }
+	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'a'}) {
+		t.Fatal("the Board did not take a between goals")
+	}
+	select {
+	case <-opened:
+	case <-time.After(3 * time.Second):
+		t.Fatal("a did not open the architecture")
+	}
+	w.Close()
+}
+
 func TestMarshalArchitectureUnboundSourcesCannotOpenBrowser(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-architecture-unbound", false)
 	var calls atomic.Int32

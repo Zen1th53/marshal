@@ -34,6 +34,10 @@ type Config struct {
 	// Design reads the design review of the current goal (nil = none). Its
 	// result is untrusted model-written memory and is normalised strictly.
 	Design func(context.Context) (json.RawMessage, error)
+	// ReadOnly opens the accepted project without manufacturing a new approval.
+	ReadOnly    bool
+	History     func(context.Context, int64) (json.RawMessage, error)
+	Conformance func(context.Context) (json.RawMessage, error)
 }
 
 // BuilderOption is one provider the owner may pick for a part, as the
@@ -262,6 +266,15 @@ func (r *Review) publicState() (json.RawMessage, error) {
 		return nil, err
 	}
 	state["layouts"] = r.layouts
+	if architecture, ok := state["architecture"].(map[string]any); ok {
+		if base, present := architecture["base_revision"]; present {
+			state["base_revision"] = base
+		}
+	}
+	if r.config.ReadOnly {
+		state["read_only"], state["current"] = true, true
+		state["accept_blocked"] = "This project architecture is already accepted."
+	}
 	if r.changes != nil {
 		state["changes"] = r.changes
 	}
@@ -550,6 +563,9 @@ func (r *Review) setBuilder(ctx context.Context, next, q map[string]any) (json.R
 }
 
 func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+	if r.config.ReadOnly {
+		return nil, errors.New("This project architecture is already accepted; submit a new revision to change it.")
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

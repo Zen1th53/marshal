@@ -52,6 +52,9 @@ func (r *Runtime) RegisterMCPProjectContract(ctx context.Context, occurrence str
 	if sub.Action != "project-contract" || c.Project != r.ProjectContractBinding() || sub.ExpectedVersion < 0 || c.Revision != sub.ExpectedVersion+1 {
 		return permission.Request{}, projectcontext.Changed("project_contract_extreme.go:45")
 	}
+	if err := r.ValidateProjectContractSubmission(ctx, c); err != nil {
+		return permission.Request{}, err
+	}
 	digest, err := c.CanonicalDigest()
 	if err != nil {
 		return permission.Request{}, err

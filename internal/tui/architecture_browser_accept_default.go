@@ -17,7 +17,18 @@ func (w *Workspace) browserAcceptBlocked() func() string { return nil }
 
 // startArchitectureReviewSession is always the model-drafted review here.
 func (w *Workspace) startArchitectureReviewSession(ctx context.Context, rt *app.Runtime, provider, goal string) (*app.ArchitectureReviewSession, error) {
+	if provider == "" {
+		var err error
+		_, provider, _, err = w.marshalService(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+	}
 	return rt.StartArchitectureReviewForSession(ctx, provider, goal, w.sessionID, w.architectureReviewHooks())
+}
+
+func (*Workspace) architectureSessionCurrent(context.Context, *app.ArchitectureReviewSession) (bool, error) {
+	return true, nil
 }
 
 // wakeMarshalAfterAccept does nothing here: Community's Marshal is told in its

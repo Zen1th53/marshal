@@ -400,6 +400,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		runAuthority.control+
 		runAuthority.goal+
 		"- "+app.MarshalCheckContract+"\n"+
+		"- Architecture submissions revise the one project contract. Keep every existing component or mark it removed:true, describe every connection's carries, and map each requirement to a component; the first submission covers the whole project.\n"+
 		"- Write the plan pack to "+app.MarshalPackRelativePath+"/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task. A governed worker's worktree has no copy of the pack: the runtime delivers its own tasks/<id>.md text inside a brief of at most 4 KiB and refuses a draft whose governed task note does not fit, so keep each such note under 3.5 KiB and name in it every path the worker must write.\n"+
 		"- Write the task list to "+marshalDraftRelativePath+" as JSON of the form "+
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","control":"free","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}`+

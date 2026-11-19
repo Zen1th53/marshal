@@ -63,6 +63,9 @@ type Component struct {
 	// Parent makes this component part of another one's sub-architecture
 	// ("login" inside "website"). Its paths lie inside the parent's paths.
 	Parent string `json:"parent,omitempty"`
+	// Removed keeps a deliberate deletion visible in the next project revision.
+	// Omitting it preserves the digest of contracts accepted before this field.
+	Removed bool `json:"removed,omitempty"`
 }
 type Applicability struct {
 	ProjectWide bool     `json:"project_wide,omitempty"`

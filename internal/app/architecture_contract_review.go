@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 // contractNotGiven is shown where the page needs text the contract does not
-// give. Nothing else on a contract-built page is written by Marshal code.
+// give. The drawing's change metadata is computed against the accepted contract.
 const contractNotGiven = "not given"
 
 // contractReviewSource is the project contract a browser review was built
@@ -25,41 +26,45 @@ type contractReviewSource struct {
 	Digest   string `json:"digest"`
 }
 
-// contractReviewSeedFor builds the browser review of a pending project
-// contract from the contract alone: its id and purpose, each component's
-// responsibility, paths and dependencies, its invariants and prohibited
-// changes. Dependencies become connections. A connection has no label in a
-// contract, so its label is shown as "not given". language is the owner's
-// approved language; the page's own labels stay in English because no model
-// turn may translate them before the contract is accepted.
-func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (*contractReviewSeed, error) {
+// contractReviewSeedFor draws the whole proposed project against its accepted
+// revision. Removed entries stay in the graph so the owner can review deletions.
+func contractReviewSeedFor(c projectcontext.Contract, digest, language string, base ...projectcontext.Contract) (*contractReviewSeed, error) {
 	if c.ID == "" || c.Revision < 1 || digest == "" {
 		return nil, errors.New("the project summary is incomplete")
 	}
-	components := make([]any, 0, len(c.Components))
-	connections := []any{}
-	known := map[string]bool{}
-	for _, v := range c.Components {
-		known[v.ID] = true
+	var accepted projectcontext.Contract
+	if len(base) > 0 {
+		accepted = base[0]
 	}
-	for _, v := range c.Components {
-		paths := append([]string{}, v.Paths...)
-		deps := append([]string{}, v.Dependencies...)
-		component := map[string]any{"id": v.ID, "name": v.ID, "responsibility": v.Responsibility, "technology": "", "files": paths, "dependencies": deps}
-		if v.Parent != "" {
-			component["parent"] = v.Parent
+	changes := projectcontext.ContractChanges(accepted, c)
+	components, connections := []any{}, []any{}
+	known := map[string]bool{}
+	for _, v := range changes.Components {
+		known[v.ID] = true
+		component := contractReviewComponent(v.Component)
+		component["change"] = v.Change
+		if v.Before != nil {
+			component["before"] = contractReviewComponent(*v.Before)
 		}
 		components = append(components, component)
-		for _, dep := range v.Dependencies {
-			if !known[dep] || dep == v.ID {
-				continue
-			}
-			id := v.ID + "--" + dep
-			connections = append(connections, map[string]any{"id": id, "source": v.ID, "target": dep, "label": "", "protocol": ""})
-		}
 	}
+	for _, edge := range changes.Connections {
+		if !known[edge.From] || !known[edge.To] || edge.From == edge.To {
+			continue
+		}
+		label := edge.Carries
+		if label == "" {
+			label = "not described"
+		}
+		connection := map[string]any{"id": edge.ID(), "source": edge.From, "target": edge.To, "label": label, "protocol": "", "change": edge.Change}
+		if edge.Before != nil {
+			connection["before"] = edge.Before
+		}
+		connections = append(connections, connection)
+	}
+
 	source := contractReviewSource{ID: c.ID, Revision: c.Revision, Digest: digest}
-	graph := map[string]any{"title": c.ID, "purpose": c.Purpose, "components": components, "connections": connections, "constraints": append([]string{}, c.Invariants...), "source_contract": source}
+	graph := map[string]any{"title": c.ID, "purpose": c.Purpose, "components": components, "connections": connections, "constraints": append([]string{}, c.Invariants...), "source_contract": source, "base_revision": changes.BaseRevision}
 	if len(c.ProhibitedChanges) > 0 {
 		graph["prohibited_changes"] = append([]string{}, c.ProhibitedChanges...)
 	}
@@ -75,6 +80,14 @@ func contractReviewSeedFor(c projectcontext.Contract, digest, language string) (
 		return nil, err
 	}
 	return &contractReviewSeed{Architecture: architecture, UI: ui, Source: source}, nil
+}
+
+func contractReviewComponent(v projectcontext.Component) map[string]any {
+	component := map[string]any{"id": v.ID, "name": v.ID, "responsibility": v.Responsibility, "technology": "", "files": append([]string{}, v.Paths...), "dependencies": append([]string{}, v.Dependencies...)}
+	if v.Parent != "" {
+		component["parent"] = v.Parent
+	}
+	return component
 }
 
 // contractUIFor is the display overlay of a contract-built architecture: the
@@ -130,8 +143,8 @@ func orNotGiven(text string) string {
 
 // replaceSupersededContractReview sets aside a review that was built from an
 // older pending contract than seed, so the owner sees and accepts the
-// contract the Marshal submitted last. A model-drafted review (no
-// source_contract) and a review of the same contract are kept.
+// contract the Marshal submitted last. The same contract's view is retained
+// only when its graph already includes the current revision's change metadata.
 func replaceSupersededContractReview(directory string, seed *contractReviewSeed) error {
 	data, err := readArchitecturePrivateFile(directory, "state.json", architectureContextLimit)
 	if os.IsNotExist(err) {
@@ -141,36 +154,20 @@ func replaceSupersededContractReview(directory string, seed *contractReviewSeed)
 		return err
 	}
 	var state struct {
-		Architecture struct {
-			Source *contractReviewSource `json:"source_contract"`
-		} `json:"architecture"`
+		Architecture json.RawMessage `json:"architecture"`
 	}
 	if err := json.Unmarshal(data, &state); err != nil {
 		return err
 	}
-	if state.Architecture.Source == nil || *state.Architecture.Source == seed.Source {
+	var existing, proposed map[string]any
+	if err := json.Unmarshal(state.Architecture, &existing); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(seed.Architecture, &proposed); err != nil {
+		return err
+	}
+	if reflect.DeepEqual(existing, proposed) {
 		return nil
 	}
 	return os.Rename(filepath.Join(directory, "state.json"), filepath.Join(directory, fmt.Sprintf("superseded-%d.json", time.Now().UnixNano())))
-}
-
-// modelDraftedReviewExists reports a stored review that was not built from a
-// project contract; it keeps its model-drafted path.
-func modelDraftedReviewExists(directory string) (bool, error) {
-	data, err := readArchitecturePrivateFile(directory, "state.json", architectureContextLimit)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	var state struct {
-		Architecture struct {
-			Source *contractReviewSource `json:"source_contract"`
-		} `json:"architecture"`
-	}
-	if err := json.Unmarshal(data, &state); err != nil {
-		return false, err
-	}
-	return state.Architecture.Source == nil, nil
 }

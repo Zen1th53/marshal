@@ -29,6 +29,9 @@ type ArchitectureReviewSession struct {
 	URL   string
 	Done  <-chan struct{}
 	close func() error
+	// SourceContractDigest lets the workspace reopen when a new project
+	// revision replaces a view it already has open.
+	SourceContractDigest string
 }
 
 // ArchitectureReviewHooks connect the browser's Accept to the workspace.
@@ -47,7 +50,8 @@ type ArchitectureReviewHooks struct {
 	pendingContract func(context.Context) (*contractReviewSeed, error)
 	// fromContract, set only by StartArchitectureReviewFromContract, opens
 	// the review on the pending project contract itself: no model turn.
-	fromContract *contractReviewSeed
+	fromContract    *contractReviewSeed
+	currentContract bool
 	// design, set by StartArchitectureReviewForSession, reads the session's
 	// design review for the browser; nil when there is no session.
 	design func(context.Context) (json.RawMessage, error)
@@ -88,6 +92,12 @@ func (r *Runtime) StartArchitectureReview(ctx context.Context, provider, goal st
 func (r *Runtime) StartArchitectureReviewForSession(ctx context.Context, provider, goal, sessionID string, hooks ArchitectureReviewHooks) (*ArchitectureReviewSession, error) {
 	if r == nil || r.store == nil {
 		return nil, model.ErrUnavailable
+	}
+	// A contract already contains the drawing. Opening it must not require a
+	// live goal, installed model or a new model turn.
+	if hooks.fromContract != nil {
+		hooks.design = r.architectureDesign(sessionID)
+		return r.startArchitectureReview(ctx, &MarshalCLI{runtime: r}, goal, hooks)
 	}
 	service, err := r.MarshalWired(MarshalWiring{Provider: provider, SessionID: sessionID, Approver: func(context.Context, string, string) (string, error) {
 		return "", errors.New("architecture view cannot authorize execution")
@@ -132,7 +142,19 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	if err != nil {
 		return nil, err
 	}
+	// The lease always advertises its server at the shared URL, even when
+	// read-only inspection keeps its state in a separate subdirectory.
+	urlFile := filepath.Join(directory, "url.txt")
+	if hooks.currentContract {
+		// Inspection must not overwrite an outstanding owner review.
+		directory = filepath.Join(directory, "current")
+		if err := os.MkdirAll(directory, 0700); err != nil {
+			return nil, err
+		}
+	}
 	config := architecturereview.Config{Project: r.ProjectIdentity(), ArchitectureID: "architecture-" + r.ProjectIdentity(), StateDir: directory}
+	config.ReadOnly = hooks.currentContract
+	r.configureArchitectureHistory(&config)
 	config.Builders = r.architectureBuilders()
 	language, err := r.ApprovedMarshalLanguage()
 	if err != nil {
@@ -274,7 +296,9 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	}
 	if seed != nil && (hooks.Forward == nil || hooks.pendingContract == nil) {
 		config.Feedback = func(context.Context, json.RawMessage) (json.RawMessage, error) { return nil, contractRequestsClosed }
-		config.Localize = func(context.Context, string, json.RawMessage) (json.RawMessage, error) { return nil, contractRequestsClosed }
+		config.Localize = func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
+			return nil, contractRequestsClosed
+		}
 	} else if seed != nil {
 		// The owner's selected request goes to the live Marshal chat; a change
 		// comes back as the revised pending contract. No hidden model turn runs.
@@ -314,7 +338,7 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	}
 	token := hex.EncodeToString(secret)
 	url := "http://" + listener.Addr().String() + "/?token=" + token
-	if err = writeArchitectureURL(filepath.Join(directory, "url.txt"), url); err != nil {
+	if err = writeArchitectureURL(urlFile, url); err != nil {
 		cancel()
 		listener.Close()
 		return nil, err
@@ -338,6 +362,9 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		BaseContext: func(net.Listener) context.Context { return serverCtx }}
 	done := make(chan struct{})
 	session := &ArchitectureReviewSession{URL: url, Done: done}
+	if seed != nil {
+		session.SourceContractDigest = seed.Source.Digest
+	}
 	var once sync.Once
 	var closeErr error
 	session.close = func() error {

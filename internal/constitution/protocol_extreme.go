@@ -53,7 +53,8 @@ An inbox entry "architecture request <id>" is the owner's request from that
 page with the exact parts they selected; answer it with
 marshal_architecture_request_answer for that request_id. For a change, first
 submit the revised contract changing only the selected parts, then answer
-proposed_change.
+proposed_change. Keep every unselected component in that project revision;
+never submit only the selected parts.
 Which architecture applied at a commit is recorded, never inferred: read it
 with marshal_architecture_at, and how a part changed with
 marshal_architecture_history. Code must match the accepted architecture:
@@ -140,7 +141,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:4ee2e0e882cd2cf35aef7f02c306b034fae104b088b365bd588ccd0d28b72ed2"
+const ExtremeProtocolDigest = "sha256:fcc9fdd0fd295189008ffaa83958c481d6fcc639e06d02d3b4ce5000a03124ca"
 
 // shippedProtocolStripper rewrites the base protocol's operator-popup and
 // press-A instructions out of the shipped (untagged) edition. This edition's
