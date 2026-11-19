@@ -244,3 +244,50 @@ func TestOpeningShowsCheckingAfterAnimation(t *testing.T) {
 		t.Fatal("the opening stayed active after the check turned ready")
 	}
 }
+
+// TestOpeningShowsLaunchProgress: while the launch check runs, completed steps
+// replace the static "Checking this project…" line and request a repaint as
+// each check completes.
+func TestOpeningShowsLaunchProgress(t *testing.T) {
+	w := openingTestWorkspace(t)
+	w.opening.active, w.opening.done, w.opening.frame = true, true, openingFrames
+	w.launch.phase = launchChecking
+
+	// Before any step finishes the fallback line stays plain.
+	if got := w.launchProgressLine(true); got != "" {
+		t.Fatalf("empty progress = %q, want empty", got)
+	}
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, false)}
+	if lines := openingVisibleLines(v, 80, 12, openingFrames, true); len(lines) != 2 || lines[1] != "Checking this project…" {
+		t.Fatalf("initial checking lines = %v", lines)
+	}
+
+	// Each new step updates the line in completion order and requests a repaint.
+	w.noteLaunchCount("providers", 2, 4)
+	waitOpeningRepaint(t, w)
+	w.noteDoctorProgress("git")
+	waitOpeningRepaint(t, w)
+	w.noteDoctorProgress("sqlite")
+	waitOpeningRepaint(t, w)
+
+	wantUnicode := "providers 2/4 · git · state"
+	if got := w.launchProgressLine(true); got != wantUnicode {
+		t.Fatalf("unicode progress = %q, want %q", got, wantUnicode)
+	}
+	wantASCII := "providers 2/4 - git - state"
+	if got := w.launchProgressLine(false); got != wantASCII {
+		t.Fatalf("ascii progress = %q, want %q", got, wantASCII)
+	}
+
+	v.launchProgress = w.launchProgressLine(true)
+	if lines := openingVisibleLines(v, 80, 12, openingFrames, true); len(lines) != 2 || lines[1] != "Checking this project: "+wantUnicode {
+		t.Fatalf("rendered checking lines = %v", lines)
+	}
+
+	// Updating the provider count advances it in place without duplicating it.
+	w.noteLaunchCount("providers", 4, 4)
+	waitOpeningRepaint(t, w)
+	if got := w.launchProgressLine(true); got != "providers 4/4 · git · state" {
+		t.Fatalf("updated progress = %q", got)
+	}
+}

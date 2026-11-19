@@ -65,6 +65,7 @@ func TestExtremeFallbackAndTimeout(t *testing.T) {
 		t.Fatal("missing audited automatic application")
 	}
 }
+
 // TestShippedShowsNoAuthoritySubtitle: the shipped build's status line,
 // splash and startup output carry no "approval authority" subtitle.
 func TestShippedShowsNoAuthoritySubtitle(t *testing.T) {
@@ -149,6 +150,8 @@ func TestMarshalDecisionActivityIsPlain(t *testing.T) {
 	}{
 		{"/harness verify codex", true, nil, "Codex verified."},
 		{"/harness verify claude sonnet", true, nil, "Claude Code verified."},
+		{"/harness verify-native agy", true, nil, "Antigravity verified."},
+		{"/harness verify-native agy", true, errors.New("not signed in"), "Verifying Antigravity failed: not signed in"},
 		{"/harness verify codex", true, errors.New("no runtime"), "Verifying Codex failed: no runtime"},
 		{"/harness verify agy", false, nil, "The Marshal did not verify Antigravity."},
 		{"square-mathx", true, nil, ""},

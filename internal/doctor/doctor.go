@@ -168,6 +168,10 @@ type Options struct {
 	Lookup         func(string) (string, error)
 	Run            func(context.Context, string, ...string) (string, error)
 	ProbeProviders bool
+	// OnProgress, when set, is called with each check's name as it finishes
+	// (skipped for checks marked NOT_RUN). Used by the Board opening screen to
+	// show live startup progress.
+	OnProgress func(name string)
 }
 
 func Check(ctx context.Context, root string, options Options) Report {
@@ -184,7 +188,13 @@ func Check(ctx context.Context, root string, options Options) Report {
 	for _, status := range egm.All() {
 		report.Results = append(report.Results, egmResult(status))
 	}
-	add := reportAdder(&report)
+	baseAdd := reportAdder(&report)
+	add := func(result Result) {
+		baseAdd(result)
+		if options.OnProgress != nil && result.Verdict != NotRun {
+			options.OnProgress(result.Name)
+		}
+	}
 
 	git, err := lookup("git")
 	if err != nil {

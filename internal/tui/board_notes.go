@@ -57,6 +57,38 @@ func (w *Workspace) noteList() []boardNote {
 	return append([]boardNote(nil), w.notes.list...)
 }
 
+// noteSeq is the monotonic count of recorded background notes.
+func (w *Workspace) noteSeq() int {
+	if w == nil {
+		return 0
+	}
+	w.notes.mu.Lock()
+	defer w.notes.mu.Unlock()
+	return w.notes.next
+}
+
+// verifyActivityNote formats the consistent Activity note for any provider
+// verification outcome, whether run from the Board card, Providers view,
+// composer command, or Marshal proposal.
+func verifyActivityNote(provider, text string, err error) (string, bool) {
+	name := firstNonEmpty(canonicalNeutralProvider(provider), providerWorker(provider), strings.TrimSpace(provider))
+	if err != nil {
+		return "Verify " + name + " failed: " + RedactContent(err.Error(), nil), true
+	}
+	return firstNonEmpty(strings.TrimSpace(text), "Verified "+name+"."), false
+}
+
+// recordVerifyNote writes a provider verification result to Activity and
+// returns the formatted note text and error flag. Because addNote deduplicates
+// identical consecutive notes, callers wrapping handleHarness never double-log.
+func (w *Workspace) recordVerifyNote(provider, text string, err error) (string, bool) {
+	msg, isErr := verifyActivityNote(provider, text, err)
+	if w != nil {
+		w.addNote(msg, isErr)
+	}
+	return msg, isErr
+}
+
 // openNote shows one background message whole in the ANSWER overlay: the
 // operator clicked it, so it is their answer now.
 func (w *Workspace) openNote(id int) bool {

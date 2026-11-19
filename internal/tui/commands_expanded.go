@@ -735,12 +735,14 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		if canonicalNeutralProvider(args[1]) == "agy" && app.AgyVerifiesNatively() {
 			native = true
 		}
+		provider := firstNonEmpty(canonicalNeutralProvider(args[1]), strings.TrimSpace(args[1]))
 		if native {
 			profile, err = h.ws.runtime.VerifyNativeAgyWorker(ctx, modelName)
 		} else {
 			profile, err = h.ws.runtime.VerifyMarshalWorker(ctx, args[1], modelName)
 		}
 		if err != nil {
+			h.ws.recordVerifyNote(provider, "", err)
 			return "", err
 		}
 		// The first line is what the owner needs: the provider is ready and
@@ -759,13 +761,14 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		if recErr != nil {
 			line += " (not recorded: " + recErr.Error() + ")"
 		}
-		// Whoever ran the verify (the owner's key, the Providers view or
-		// the Marshal's command), every surface that shows the provider's
-		// state reads the new profile now rather than when its view next
-		// opens.
+		out := verified + "\n" + line
+		// Whoever ran the verify (the owner's key, the Providers view, a typed
+		// command, or the Marshal), write the same Activity note and refresh
+		// every surface that shows the provider's state now.
+		h.ws.recordVerifyNote(provider, out, nil)
 		h.ws.refreshProviders(ctx)
 		h.ws.requestRepaint()
-		return verified + "\n" + line, nil
+		return out, nil
 	}
 
 	if len(args) == 0 || strings.EqualFold(args[0], "status") || strings.EqualFold(args[0], "probe") {
