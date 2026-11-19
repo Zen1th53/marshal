@@ -132,9 +132,11 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 	if src == nil {
 		return
 	}
-	// The owner gates are read on the same beat: a submitted project
-	// contract is what the browser Accept answers.
+	// The owner gates and active goal are read on the same beat: a submitted
+	// project contract or a goal created while the Marshal plans may land in
+	// the store outside the TUI command loop.
 	w.refreshGates(ctx)
+	w.refreshActiveGoal(ctx)
 	status, err := src.ArchitectureStatus(ctx)
 	if ctx.Err() != nil {
 		return

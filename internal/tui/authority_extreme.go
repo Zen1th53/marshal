@@ -55,6 +55,7 @@ type buildPendingDecision struct {
 	paneID     string
 	text       string
 	delivered  bool
+	blocked    bool
 	launchID   string
 	occurrence string
 	request    permission.Request
@@ -130,6 +131,8 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 				if !deferPrivateDecisionDelivery(ctx) {
 					w.deliverCodexDecision(ctx, id, p)
 				}
+			} else if p.paneID != nativeChatPane {
+				w.deliverQueuedChatDecision(ctx, id, p)
 			}
 			w.queuePendingDecision(id, p)
 			return true
@@ -270,18 +273,12 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		w.queuePendingDecision(id, p)
 		return true
 	}
-	if pane == nativeChatPane {
-		// The native chat takes the same text as one structured user turn.
-		err = w.deliverNativeChatTurn(ctx, p.text)
-	} else {
-		// Bracketed paste keeps the description out of tmux key parsing, and the
-		// bounded Enter retries submit it even when Claude Code accepts the paste
-		// a moment after it lands (otherwise Enter races ahead and the message
-		// sits unsent in the composer). The tmux transport stays a direct call
-		// here so the effect inventory still sees it.
-		run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
-		err = deliverChatTurn(ctx, run, pane, p.text, deliverEnterTries, deliverEnterWait)
+	if pane != nativeChatPane {
+		w.deliverQueuedChatDecision(ctx, id, p)
+		w.queuePendingDecision(id, p)
+		return true
 	}
+	err = w.deliverNativeChatTurn(ctx, p.text)
 	if err != nil {
 		w.permissions.mu.Lock()
 		delete(w.permissions.build.pending, id)
@@ -292,6 +289,47 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		w.permissions.queue.Add(req)
 	}
 	return true
+}
+
+// Retain the original decision while an owner's draft or an unknown screen
+// blocks delivery. Polling retries this same request without changing its ID.
+func (w *Workspace) deliverQueuedChatDecision(ctx context.Context, id string, p *buildPendingDecision) {
+	w.chatTypeMu.Lock()
+	defer w.chatTypeMu.Unlock()
+	w.permissions.mu.Lock()
+	ready := w.permissions.build.pending[id] == p && !p.delivered && p.answer == nil && p.paneID != "" && p.text != ""
+	w.permissions.mu.Unlock()
+	if !ready {
+		return
+	}
+	run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
+	err := deliverChatTurn(ctx, run, p.paneID, p.text, deliverEnterTries, deliverEnterWait)
+	w.permissions.mu.Lock()
+	if w.permissions.build.pending[id] != p {
+		w.permissions.mu.Unlock()
+		return
+	}
+	if errors.Is(err, errChatBusy) {
+		tell := !p.blocked
+		p.blocked = true
+		w.permissions.mu.Unlock()
+		if tell {
+			w.RecordActivity("Marshal decision queued: chat input is not empty or ready. Send or clear your unsent text in the chat pane to unblock delivery.")
+		}
+		return
+	}
+	if err == nil {
+		p.delivered = true
+	}
+	if err != nil {
+		delete(w.permissions.build.pending, id)
+	}
+	w.permissions.mu.Unlock()
+	if err != nil {
+		w.settleUnansweredDecision(ctx, p.request, id, p, "decision delivery failed")
+		return
+	}
+	w.RecordActivity("Marshal decision requested: " + id + " " + p.request.Kind + " " + p.request.Object)
 }
 
 // Only consume the new action here. All other proposals keep their existing

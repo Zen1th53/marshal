@@ -15,7 +15,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
@@ -463,7 +462,11 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.planning = w.planningNow(empty, state.Goal)
-	v.goalGiven = state.Goal.ID != "" && state.Goal.Confirmation != model.ConfirmationCancelled
+	if goal, ok := w.activeGoalNow(empty, state.Goal); ok {
+		v.goalGiven = true
+		v.goalText = goalSummaryText(goal)
+		v.goalSince = goalStartedAt(goal)
+	}
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
 	v.ask = w.currentAsk()
 	v.req = w.currentReq()
