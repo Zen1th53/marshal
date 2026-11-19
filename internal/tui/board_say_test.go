@@ -94,15 +94,15 @@ func TestChatWaitingFor(t *testing.T) {
 }
 
 func TestChatWaitWords(t *testing.T) {
-	got := chatWaitWords("agy", chatWaitTrust, false, false)
+	got := chatWaitWords("agy", chatWaitTrust, false, false, chatReviewAsk{})
 	if !strings.Contains(got, "Waiting for you: agy asks to trust this folder") || !strings.Contains(got, "F11") || !strings.Contains(got, "Yes") {
 		t.Fatalf("unexpected trust message: %q", got)
 	}
-	gotQueued := chatWaitWords("agy", chatWaitTrust, true, false)
+	gotQueued := chatWaitWords("agy", chatWaitTrust, true, false, chatReviewAsk{})
 	if !strings.Contains(gotQueued, "Your message stays queued") {
 		t.Fatalf("queued trust message missing queue notice: %q", gotQueued)
 	}
-	gotPerm := chatWaitWords("claude", chatWaitPermission, true, false)
+	gotPerm := chatWaitWords("claude", chatWaitPermission, true, false, chatReviewAsk{})
 	if !strings.Contains(gotPerm, "Waiting for you: claude asks permission to continue") || !strings.Contains(gotPerm, "F11") {
 		t.Fatalf("unexpected permission message: %q", gotPerm)
 	}

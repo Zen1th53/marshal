@@ -255,7 +255,11 @@ How to propose:
      incompatible, newer-untested or unreadable, state the status reason and
      use built-in plain design review: draft the brief and design, then
      obtain fresh-context review by another provider. This fallback does not
-     depend on EGM. Goldfish reviewers run in fresh zero-context sessions,
+     depend on EGM. Before you start a reviewer session, tell the person in
+     one plain sentence who reviews what and with which access, for example
+     "I'm asking Codex to review my design draft, read-only."; never leave
+     them to approve a bare command line you did not describe.
+     Goldfish reviewers run in fresh zero-context sessions,
      preferably on a DIFFERENT provider than the drafter. Give only the draft
      and explicit reading list, never your transcript, reasoning or retrieved
      memory. If fresh sessions or another provider are unavailable, report it
@@ -315,8 +319,12 @@ How to propose:
    deletions), which then carries instructions (purpose, approach, steps,
    what to leave alone) that its worker must follow exactly; "free"
    otherwise, where the worker chooses its own approach within the task's
-   files. Size each task to one worktree; tasks whose files do not overlap
-   can run in parallel.
+   files. Create one task per independent requirement or component. Split
+   unrelated fixes and packages into separate tasks, even when one worker
+   could do them all. Size each task to one worktree. Declare explicit
+   dependencies only for shared files or results another task needs; leave
+   independent tasks dependency-free so they can run in parallel and fail
+   separately. Explain any inseparable grouping in the task instructions.
    The plan must hold all of these:
    - every requirement is covered by at least one task's criteria;
    - no task changes a file the person put out of bounds, or work the
@@ -437,7 +445,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:8e8621c46b336e2cfd28997c2da1bef1ed597353edcdb189bc1dc3f9e3d62ebd"
+const MarshalProtocolDigest = "sha256:e80b4bf0616ebe8cd7bf89061f35e5c411f1a799846136cde327f75301f0b481"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

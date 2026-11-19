@@ -30,7 +30,7 @@ func agySigninExpiryNotices(t *testing.T, r *Runtime) int {
 	return n
 }
 
-func TestAgySigninExpiryCooldownAndSingleNotice(t *testing.T) {
+func TestAgySigninExpiryNoCooldownAndSingleNotice(t *testing.T) {
 	ResetProviderCooldowns()
 	t.Cleanup(ResetProviderCooldowns)
 	r := openNetpolRuntime(t)
@@ -44,15 +44,11 @@ func TestAgySigninExpiryCooldownAndSingleNotice(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("noteAgySigninExpiry = %v, %v", ok, err)
 	}
-	until, cooling := getProviderCooldownUntil("agy")
-	if !cooling || !isProviderUnavailable("agy", time.Now()) {
-		t.Fatal("agy is not cooling down after its sign-in expired")
+	if _, cooling := getProviderCooldownUntil("agy"); cooling || isProviderUnavailable("agy", time.Now()) {
+		t.Fatal("auth failure put agy into quota cooldown")
 	}
-	if until.After(time.Now().Add(agySigninExpiryCooldown)) {
-		t.Fatalf("cooldown %v exceeds the agy sign-in bound", until)
-	}
-	if _, limited := r.providerLimited("antigravity"); !limited {
-		t.Fatal("agy is still offered for retry during its cooldown")
+	if _, limited := r.providerLimited("antigravity"); limited {
+		t.Fatal("auth failure reported as a usage limit")
 	}
 	if n := agySigninExpiryNotices(t, r); n != 1 {
 		t.Fatalf("notices = %d, want 1", n)

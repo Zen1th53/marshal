@@ -463,6 +463,14 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(line), kind: hitAction, id: "marshal.chat"})
 		add(pad + line)
 	}
+	// Planning can take many minutes of model thinking: the milestone line
+	// says which step the Marshal is on and for how long, so the owner is
+	// never left with only a spinner.
+	if given {
+		if line := v.milestoneLine(w - len(pad) - 2); line != "" {
+			add(pad + "  " + line)
+		}
+	}
 	if !given {
 		arrow, enter := "▸", "⏎"
 		if !v.unicode() {

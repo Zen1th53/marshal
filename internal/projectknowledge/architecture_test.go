@@ -2,6 +2,7 @@ package projectknowledge
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
@@ -146,5 +147,80 @@ func TestArchitectureWorktreeCacheNeverTouchesTaskSource(t *testing.T) {
 	}
 	if _, err := OpenWorktree(filepath.Join(state, "worktrees", "alias"), root, state); !errors.Is(err, ErrBinding) {
 		t.Fatal("symlink worktree accepted")
+	}
+}
+
+func TestEnsureRecoversHotRollbackJournal(t *testing.T) {
+	ctx := t.Context()
+	_, index := fixture(t)
+	if err := index.Ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate SIGQUIT mid-refresh leaving a hot rollback journal (-journal)
+	// with dirty pages spilled to disk.
+	raw, err := sql.Open("sqlite", index.database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, "PRAGMA cache_size = 1"); err != nil {
+		raw.Close()
+		t.Fatal(err)
+	}
+	tx, err := raw.BeginTx(ctx, nil)
+	if err != nil {
+		raw.Close()
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE metadata SET root = 'interrupted' WHERE id = 1"); err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "CREATE TABLE hot_spill (id INTEGER PRIMARY KEY, body TEXT)"); err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatal(err)
+	}
+	blob := strings.Repeat("x", 4096)
+	for i := 0; i < 16; i++ {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO hot_spill(body) VALUES (?)", blob); err != nil {
+			tx.Rollback()
+			raw.Close()
+			t.Fatal(err)
+		}
+	}
+	dbBytes, err := os.ReadFile(index.database)
+	if err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatal(err)
+	}
+	journalBytes, err := os.ReadFile(index.database + "-journal")
+	if err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatalf("expected rollback journal during open tx: %v", err)
+	}
+	_ = tx.Rollback()
+	_ = raw.Close()
+
+	if err := os.WriteFile(index.database, dbBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(index.database+"-journal", journalBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read-only Query fails with SQLITE_READONLY_ROLLBACK (776).
+	if _, err := index.Query(ctx, Query{Mode: "overview", Limit: 1}); !isReadOnlyRecovery(err) {
+		t.Fatalf("Query with hot journal = %v, want SQLITE_READONLY_ROLLBACK", err)
+	}
+	// Ensure recovers by rolling back the hot journal via a writable open and refreshing.
+	if err := index.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure failed to recover hot journal: %v", err)
+	}
+	if _, err := index.Query(ctx, Query{Mode: "overview", Limit: 1}); err != nil {
+		t.Fatalf("Query after recovery = %v", err)
 	}
 }

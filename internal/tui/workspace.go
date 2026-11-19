@@ -295,6 +295,10 @@ type Workspace struct {
 	// delivered and closed; nil when none. A stored architecture Accept for
 	// that goal is not planning.
 	closedGoal atomic.Pointer[string]
+	// milestone is where the Marshal's planning stands before a run exists,
+	// read on the architecture follower's beat (board_planning.go); nil when
+	// no goal is being planned.
+	milestone atomic.Pointer[planningMark]
 	// hostView is set while the Host view is painted in the Board's body.
 	hostView atomic.Bool
 	// memView is set while the Memory view is painted in the Board's body;
@@ -903,6 +907,9 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	// The check is a read of a public feed and installs nothing. It runs off
 	// this path so a slow or unreachable feed cannot delay the workspace.
 	w.checkForUpdateInBackground(ctx)
+	// Build the project knowledge index in the background so the Board paints
+	// its first frame immediately even on large repositories.
+	w.startProjectKnowledgeIndex(ctx)
 
 	// Check if running in a real interactive terminal
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {

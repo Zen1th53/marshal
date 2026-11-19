@@ -18,6 +18,7 @@ type capturingRunner struct {
 	command         adapter.Command
 	result          adapter.ProcessResult
 	probeCompatible bool
+	runErr          error
 }
 
 func (r *capturingRunner) Run(_ context.Context, command adapter.Command) (adapter.ProcessResult, error) {
@@ -38,7 +39,37 @@ func (r *capturingRunner) Run(_ context.Context, command adapter.Command) (adapt
 	if len(command.Args) == 2 && command.Args[0] == "doctor" && command.Args[1] == "--json" {
 		return adapter.ProcessResult{Stdout: []byte(`{"checks":{"config.load":{"details":{"model":"gpt-5.6-terra"}}}}`)}, nil
 	}
-	return r.result, nil
+	return r.result, r.runErr
+}
+
+func TestWorkerInheritsOwnerHomeAndRetainsFailedStderr(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	failure := errors.New("worker process stopped")
+	runner := &capturingRunner{runErr: failure, result: adapter.ProcessResult{ExitCode: 1, Stderr: []byte("first: connecting\nlast: missing auth.json")}}
+	client := New("codex", runner)
+	result, err := client.Run(t.Context(), adapter.Request{TaskID: "task", Title: "fix", Worktree: t.TempDir()})
+	if !errors.Is(err, failure) || !strings.Contains(string(result.Stderr), "last: missing auth.json") || result.Status != adapter.StatusFailure {
+		t.Fatalf("failed worker diagnostics lost: %+v %v", result, err)
+	}
+	if !slices.Contains(runner.command.Env, "CODEX_HOME="+home) {
+		t.Fatal("worker ignored owner CODEX_HOME")
+	}
+}
+
+func TestProbeRetainsStderrWithoutPublishingRawOutput(t *testing.T) {
+	failure := errors.New("process failed")
+	client := New("codex", probeRunnerFunc(func(context.Context, adapter.Command) (adapter.ProcessResult, error) {
+		return adapter.ProcessResult{ExitCode: 1, Stderr: []byte("first: starting; last: not logged in")}, failure
+	}))
+	_, err := client.Probe(t.Context())
+	var process *adapter.ProcessError
+	if !errors.Is(err, failure) || !errors.As(err, &process) || !strings.Contains(string(process.Stderr), "last: not logged in") {
+		t.Fatalf("probe lost cause or stderr: %v", err)
+	}
+	if strings.Contains(err.Error(), "not logged in") {
+		t.Fatal("probe published unsanitized stderr")
+	}
 }
 
 func TestProbeRequiresCurrentNativeFlags(t *testing.T) {

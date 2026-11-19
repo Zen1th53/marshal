@@ -154,6 +154,36 @@ func TestEnsureGovernedClaudeHomeRemovesStaleSettings(t *testing.T) {
 	}
 }
 
+func TestGovernedClaudeHomeUsesOwnerConfigDirectory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	owner := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", owner)
+	if err := os.WriteFile(owner+"/.credentials.json", []byte(`{"token":"owner-fixture"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(owner+"/settings.json", []byte(`{"hooks":"untrusted"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	target, err := EnsureGovernedClaudeHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(target + "/.credentials.json")
+	if err != nil || string(got) != `{"token":"owner-fixture"}` {
+		t.Fatalf("owner's custom auth home ignored: %q %v", got, err)
+	}
+	if _, err := os.Stat(target + "/settings.json"); !os.IsNotExist(err) {
+		t.Fatal("host settings copied into governed home")
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	if _, err := EnsureGovernedClaudeHome(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(target + "/.credentials.json"); !os.IsNotExist(err) {
+		t.Fatal("unsigned owner home reused an earlier account")
+	}
+}
+
 const realisticDoctorOutput = `Claude Code Doctor
 
 Version: 2.0.14

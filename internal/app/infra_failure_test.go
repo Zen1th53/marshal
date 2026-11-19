@@ -25,7 +25,7 @@ func TestClassifyInfraFailureNamesKind(t *testing.T) {
 			t.Errorf("%q: got %q (%q), want %q", text, got, reason, want)
 		}
 	}
-	if _, reason := classifyInfraFailure(strings.Repeat("x ", 400)); len(reason) > 300 {
+	if _, reason := classifyInfraFailure(strings.Repeat("x ", 400)); len(reason) > 1000 {
 		t.Fatalf("reason not bounded: %d", len(reason))
 	}
 }

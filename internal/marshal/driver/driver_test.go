@@ -441,6 +441,10 @@ func TestCleanWorkerEnvStripsBriefingAndSharedChannelVariables(t *testing.T) {
 	inputEnv := []string{
 		"PATH=/usr/bin:/bin",
 		"HOME=/home/user",
+		"CODEX_HOME=/home/user/.codex-vm",
+		"CLAUDE_CONFIG_DIR=/home/user/.claude-vm",
+		"XDG_CONFIG_HOME=/home/user/config-vm",
+		"XDG_DATA_HOME=/home/user/data-vm",
 		"OPENCODE_CONFIG_CONTENT={\"instructions\":[\"do this\"]}",
 		"MARSHAL_SHARED_CHANNEL=1",
 		"MARSHAL_LIVE_PEERS=codex claude",
@@ -463,7 +467,7 @@ func TestCleanWorkerEnvStripsBriefingAndSharedChannelVariables(t *testing.T) {
 		}
 	}
 
-	for _, kept := range []string{"PATH=/usr/bin:/bin", "HOME=/home/user", "USER=alice"} {
+	for _, kept := range []string{"PATH=/usr/bin:/bin", "HOME=/home/user", "USER=alice", "CODEX_HOME=/home/user/.codex-vm", "CLAUDE_CONFIG_DIR=/home/user/.claude-vm", "XDG_CONFIG_HOME=/home/user/config-vm", "XDG_DATA_HOME=/home/user/data-vm"} {
 		if !strings.Contains(joined, kept) {
 			t.Errorf("cleanWorkerEnv stripped required variable %s:\n%s", kept, joined)
 		}

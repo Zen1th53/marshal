@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -128,6 +130,9 @@ func (w *Workspace) refreshActiveGoal(ctx context.Context) {
 			changed = true
 		}
 	}
+	if w.refreshMilestone(time.Now()) {
+		changed = true
+	}
 	if changed && w.boardVisible() {
 		w.requestRepaint()
 	}
@@ -160,4 +165,111 @@ func (w *Workspace) readClosedGoal(ctx context.Context) bool {
 	goal := record.Value.GoalBinding
 	w.closedGoal.Store(&goal)
 	return prev == nil || *prev != goal
+}
+
+// planningMark is the planning milestone the home card shows and since when
+// the Marshal has been at it.
+type planningMark struct {
+	app.PlanningMilestone
+	// Since is when this follower first saw the milestone. It is not stored,
+	// so after a restart it counts from the first read; the headline's
+	// elapsed time still counts from the goal.
+	Since time.Time
+}
+
+// refreshMilestone reads where the Marshal's planning stands from the same
+// records as the goal handoff, off the paint path, and reports whether the
+// home card's milestone changed. A milestone that holds keeps its first-seen
+// time so the card can say how long the Marshal has been at this step.
+func (w *Workspace) refreshMilestone(now time.Time) bool {
+	w.mu.RLock()
+	running := w.state.Marshal != nil
+	w.mu.RUnlock()
+	var next *planningMark
+	if !running {
+		if h, ok := w.marshalGoalHandoff(""); ok {
+			if m, ok := app.MarshalPlanningMilestone(h); ok {
+				next = &planningMark{PlanningMilestone: m, Since: now}
+			}
+		}
+	}
+	prev := w.milestone.Load()
+	switch {
+	case next == nil && prev == nil:
+		return false
+	case next != nil && prev != nil && next.PlanningMilestone == prev.PlanningMilestone:
+		return false
+	}
+	w.milestone.Store(next)
+	return true
+}
+
+// milestoneLine is the home card's planning milestone in one line at most w
+// cells: the steps done, what the Marshal does now with how long it has been
+// at it, and the steps still to come, e.g.
+//
+//	goal ✓ → requirements ✓ → drafting and reviewing the design · 4m → architecture → tasks
+//
+// A narrow card drops the steps to come, then the steps done, and keeps what
+// happens now. It returns "" when no milestone is known.
+func (v boardVisual) milestoneLine(w int) string {
+	m := v.milestone
+	if m == nil || w <= 0 || m.Step < 0 || m.Step >= len(app.PlanningMilestoneSteps) {
+		return ""
+	}
+	arrow, tick := " → ", " ✓"
+	if !v.unicode() {
+		arrow, tick = " -> ", " v"
+	}
+	now := m.Now
+	if !m.Since.IsZero() && !v.now.IsZero() {
+		now += " · " + goalElapsed(v.now.Sub(m.Since))
+	}
+	nowColor := "working"
+	if m.OwnerTurn {
+		nowColor = "needs"
+	}
+	done := app.PlanningMilestoneSteps[:m.Step]
+	next := app.PlanningMilestoneSteps[m.Step+1:]
+	plain := func(withDone, withNext bool) string {
+		s := ""
+		if withDone {
+			for _, p := range done {
+				s += p + tick + arrow
+			}
+		}
+		s += now
+		if withNext {
+			for _, p := range next {
+				s += arrow + p
+			}
+		}
+		return s
+	}
+	withDone, withNext := true, true
+	if VisibleLen(plain(true, true)) > w {
+		withNext = false
+		if VisibleLen(plain(true, false)) > w {
+			withDone = false
+		}
+	}
+	line := ""
+	if withDone {
+		for _, p := range done {
+			line += v.fg("dim", p+tick) + v.fg("faint", arrow)
+		}
+	} else if m.Step > 0 {
+		// The steps done are left out: say how far along this is instead.
+		now = fmt.Sprintf("step %d of %d: %s", m.Step+1, len(app.PlanningMilestoneSteps), now)
+	}
+	if VisibleLen(now) > w {
+		now = v.truncWords(now, w)
+	}
+	line += v.bold(v.fg(nowColor, now))
+	if withNext {
+		for _, p := range next {
+			line += v.fg("faint", arrow+p)
+		}
+	}
+	return line
 }

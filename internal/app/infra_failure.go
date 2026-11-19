@@ -1,6 +1,9 @@
 package app
 
-import "strings"
+import (
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"strings"
+)
 
 // infraRetryEscalation prefixes the escalation of a task whose attempts kept
 // ending without a hand-in. It is never permanent: the operator may retry.
@@ -18,7 +21,6 @@ var infraFailureKinds = []struct {
 	// passing network fault, and retrying or cooling providers cannot help.
 	{platformUnsupported, []string{"on this platform", "requires linux", "requires private linux", "linux supervision"}},
 	{"provider quota or rate limit", []string{"usage limit", "rate limit", "rate-limit", "quota", "hit your limit", "5-hour limit", "too many requests", "resource_exhausted", "out of credits", "insufficient credits"}},
-	{"provider sign-in or credentials", []string{"sign-in", "signin", "credential", "unauthorized", "authentication", "not logged in", "login required", "access token", "401"}},
 	{"provider cooldown or failover refusal", []string{"provider cooldown", "provider failover", "not limited by its provider", "provider execution failure"}},
 	{"transport or network", []string{"connection refused", "connection reset", "broken pipe", "eof", "timeout", "timed out", "deadline exceeded", "tls", "dns", "network", "socket", "transport", "502", "503", "504", "overloaded", "unavailable"}},
 	{"harness context or tool output", []string{"context budget", "context window", "context length", "skills context", "malformed", "invalid json", "unexpected end of json", "parse", "output invalid", "stream"}},
@@ -29,9 +31,9 @@ var infraFailureKinds = []struct {
 // never a rejection of delivered work, so it is not rework; an unrecognised
 // failure is reported as a worker process failure.
 func classifyInfraFailure(text string) (kind, reason string) {
-	reason = strings.Join(strings.Fields(text), " ")
-	if len(reason) > 300 {
-		reason = reason[:300]
+	reason = adapter.DiagnosticSummary(text, 1000)
+	if isProviderAuthFailure(text) {
+		return providerAuthFailure, reason
 	}
 	lower := strings.ToLower(text)
 	for _, k := range infraFailureKinds {

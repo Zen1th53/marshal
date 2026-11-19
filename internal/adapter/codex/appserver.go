@@ -241,7 +241,7 @@ func GovernedCodexHomeDir() string {
 
 // EnsureGovernedCodexHome initializes and returns an isolated, config-free CODEX_HOME
 // for MARSHAL execution. It automatically mirrors host credentials (auth.json), version info,
-// and cached models from ~/.codex so the operator does not need to re-login or modify
+// and cached models from CODEX_HOME (or ~/.codex) so the operator does not need to re-login or modify
 // their personal ~/.codex/config.toml. It guarantees no config.toml exists in the
 // returned directory.
 func EnsureGovernedCodexHome() (string, error) {
@@ -251,9 +251,11 @@ func EnsureGovernedCodexHome() (string, error) {
 	}
 	_ = os.Remove(filepath.Join(target, "config.toml"))
 
-	var hostCodex string
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		hostCodex = filepath.Join(home, ".codex")
+	hostCodex := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	if hostCodex == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			hostCodex = filepath.Join(home, ".codex")
+		}
 	}
 	if hostCodex != "" {
 		filesToMirror := []string{"auth.json", "version.json", "models_cache.json"}
@@ -264,6 +266,9 @@ func EnsureGovernedCodexHome() (string, error) {
 				if data, err := os.ReadFile(hostPath); err == nil {
 					_ = os.WriteFile(targetPath, data, 0o600)
 				}
+			} else if fname == "auth.json" && os.IsNotExist(err) {
+				// A different owner home must not reuse an earlier account.
+				_ = os.Remove(targetPath)
 			}
 		}
 	}

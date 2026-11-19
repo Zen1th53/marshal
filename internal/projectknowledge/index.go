@@ -28,7 +28,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/statepath"
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 const Version = 3
@@ -44,6 +45,47 @@ var policyDigest = func() string {
 var ErrStale = errors.New("project knowledge stale: refresh required")
 var ErrBinding = errors.New("project knowledge root binding mismatch")
 var locks sync.Map
+
+// Progress reports file-level progress while scanning or indexing a project.
+type Progress struct {
+	Phase string // "scan" or "index"
+	Done  int
+	Total int
+}
+
+type progressCallbackKey struct{}
+
+// WithProgress returns a context that receives throttled progress updates
+// during Ensure and Refresh. Callers must keep fn fast and non-blocking.
+func WithProgress(ctx context.Context, fn func(Progress)) context.Context {
+	if fn == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, progressCallbackKey{}, fn)
+}
+
+func progressCallback(ctx context.Context) func(Progress) {
+	if ctx == nil {
+		return nil
+	}
+	fn, _ := ctx.Value(progressCallbackKey{}).(func(Progress))
+	return fn
+}
+
+func isReadOnlyRecovery(err error) bool {
+	if err == nil {
+		return false
+	}
+	var sqErr *sqlite.Error
+	if errors.As(err, &sqErr) {
+		switch sqErr.Code() {
+		case sqlite3.SQLITE_READONLY_ROLLBACK, sqlite3.SQLITE_READONLY_RECOVERY:
+			return true
+		}
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "readonly database (776)") || strings.Contains(msg, "readonly database (264)")
+}
 
 // This cache contains only verdicts for exact bytes under this process's fixed
 // firewall/protocol policy. It is never persisted or used as project/task ACL.
@@ -279,6 +321,20 @@ func (i *Index) connection(ctx context.Context, write bool) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// RecoverHotJournal opens an existing index database writable so SQLite rolls
+// back any hot rollback journal left behind by an interrupted refresh.
+func (i *Index) RecoverHotJournal(ctx context.Context) error {
+	unlock := i.lock()
+	defer unlock()
+	db, err := i.connection(ctx, true)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var version int
+	return db.QueryRowContext(ctx, "PRAGMA schema_version").Scan(&version)
 }
 
 func gitHead(ctx context.Context, root string) (string, error) {
@@ -543,7 +599,25 @@ func (i *Index) scan(ctx context.Context, classify bool) (Snapshot, map[string]F
 	}
 	files := map[string]File{}
 	digest := sha256.New()
-	for _, path := range paths {
+	var onProgress func(Progress)
+	if classify {
+		onProgress = progressCallback(ctx)
+		if onProgress != nil {
+			onProgress(Progress{Phase: "scan", Done: 0, Total: len(paths)})
+		}
+	}
+	var lastProgress time.Time
+	emitScan := func(done int) {
+		if onProgress == nil {
+			return
+		}
+		now := time.Now()
+		if done == len(paths) || done%25 == 0 || now.Sub(lastProgress) >= 100*time.Millisecond {
+			lastProgress = now
+			onProgress(Progress{Phase: "scan", Done: done, Total: len(paths)})
+		}
+	}
+	for idx, path := range paths {
 		if err := ctx.Err(); err != nil {
 			return Snapshot{}, nil, err
 		}
@@ -551,6 +625,7 @@ func (i *Index) scan(ctx context.Context, classify bool) (Snapshot, map[string]F
 		if ignored[path] || deniedPath(path) || !safeContent([]byte(path)) {
 			s.Stats.Skipped++
 			io.WriteString(digest, "excluded\x00")
+			emitScan(idx + 1)
 			continue
 		}
 		data, ok, err := i.readFile(path)
@@ -560,6 +635,7 @@ func (i *Index) scan(ctx context.Context, classify bool) (Snapshot, map[string]F
 		if !ok {
 			s.Stats.Skipped++
 			io.WriteString(digest, "unavailable\x00")
+			emitScan(idx + 1)
 			continue
 		}
 		sum := sha256.Sum256(data)
@@ -575,6 +651,7 @@ func (i *Index) scan(ctx context.Context, classify bool) (Snapshot, map[string]F
 			}
 			if !safe {
 				s.Stats.Skipped++
+				emitScan(idx + 1)
 				continue
 			}
 		} else if !utf8.Valid(data) || strings.ContainsRune(string(data), '\x00') {
@@ -585,6 +662,7 @@ func (i *Index) scan(ctx context.Context, classify bool) (Snapshot, map[string]F
 			file.Role = "test"
 		}
 		files[path] = file
+		emitScan(idx + 1)
 	}
 	s.Digest = hex.EncodeToString(digest.Sum(nil))
 	s.Stats.Files = len(files)
@@ -824,7 +902,12 @@ CREATE INDEX IF NOT EXISTS entry_target ON entries(target,kind,file_id);`); err 
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	for _, path := range paths {
+	onProgress := progressCallback(ctx)
+	if onProgress != nil {
+		onProgress(Progress{Phase: "index", Done: 0, Total: len(paths)})
+	}
+	var lastProgress time.Time
+	for idx, path := range paths {
 		if err = ctx.Err(); err != nil {
 			return Snapshot{}, err
 		}
@@ -857,6 +940,14 @@ CREATE INDEX IF NOT EXISTS entry_target ON entries(target,kind,file_id);`); err 
 			s.Stats.ParseErrors++
 		}
 		delete(old, path)
+		if onProgress != nil {
+			done := idx + 1
+			now := time.Now()
+			if done == len(paths) || done%25 == 0 || now.Sub(lastProgress) >= 100*time.Millisecond {
+				lastProgress = now
+				onProgress(Progress{Phase: "index", Done: done, Total: len(paths)})
+			}
+		}
 	}
 	for path := range old {
 		s.Stats.Deleted++

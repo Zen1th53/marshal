@@ -134,7 +134,7 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 	}
 	probe, err := provider.Probe(ctx)
 	if err != nil {
-		return execution.TaskResult{TaskID: task.TaskID}, err
+		return execution.TaskResult{TaskID: task.TaskID}, r.workerProviderError(ctx, err)
 	}
 	trustedHeader, err := r.providerConstraintPrompt(ctx, task, pkg, worktree)
 	if err != nil {
@@ -171,13 +171,14 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 	if contextErr := finishContext(); contextErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "required project context changed; provider result quarantined"}, contextErr
 	}
-	if runErr != nil {
-		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: runErr.Error()}, runErr
-	}
 	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
 	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
 	if stdoutErr != nil || stderrErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "provider output rejected by evidence sanitizer"}, fmt.Errorf("sanitize Claude Process 05 output: stdout=%v stderr=%v", stdoutErr, stderrErr)
+	}
+	if runErr != nil {
+		failure := workerFailureMessage(runErr.Error(), stderr, stdout)
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: failure}, fmt.Errorf("%w: %s", runErr, failure)
 	}
 	digest := sha256.Sum256(append(append([]byte(nil), stdout...), stderr...))
 	evidenceID, err := model.NewID("EVID-P05-CLAUDE-")
@@ -205,15 +206,15 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 				return ""
 			}
 			if result.Cancelled {
-				return "Claude execution cancelled"
+				return workerFailureMessage("Claude execution cancelled", stderr, stdout)
 			}
 			if result.TimedOut {
-				return "Claude execution timed out"
+				return workerFailureMessage("Claude execution timed out", stderr, stdout)
 			}
 			if result.OutputTruncated {
-				return "Claude output was truncated"
+				return workerFailureMessage("Claude output was truncated", stderr, stdout)
 			}
-			return "Claude execution did not complete successfully"
+			return workerFailureMessage("Claude execution did not complete successfully", stderr, stdout)
 		}(),
 	}, nil
 }

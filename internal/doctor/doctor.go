@@ -232,21 +232,41 @@ func Check(ctx context.Context, root string, options Options) Report {
 		add(success("runtime_version", "parse RUNTIME-VERSION.yaml", "runtime specification "+value))
 	}
 
-	database, err := store.Open(ctx, layout.Database)
-	if err != nil {
-		add(failure("sqlite", "PRAGMA integrity_check", "canonical state cannot be opened"))
+	if stateErr == nil && store.IsReadOnlyRecovery(store.ProbeHotJournal(ctx, layout.Database)) {
+		add(failure("sqlite", "PRAGMA integrity_check", sqliteHotJournalDetail(layout.Database, layout.RuntimeDir)))
 	} else {
-		defer database.Close()
-		version, versionErr := database.SchemaVersion(ctx)
-		integrityErr := database.Integrity(ctx)
-		if versionErr != nil || integrityErr != nil || version < 1 || !store.SchemaVersionSupported(version) {
-			add(failure("sqlite", "PRAGMA integrity_check", "canonical state is invalid"))
+		database, err := store.Open(ctx, layout.Database)
+		if err != nil {
+			detail := "canonical state cannot be opened"
+			if stateErr == nil {
+				if store.IsReadOnlyRecovery(err) {
+					detail = sqliteHotJournalDetail(layout.Database, layout.RuntimeDir)
+				} else if store.IsReadOnly(err) {
+					detail = fmt.Sprintf("canonical state is read-only (SQLITE_READONLY): ensure %s and %s are writable (chmod 700 %s && chmod 600 %s)", layout.Database, layout.RuntimeDir, layout.RuntimeDir, layout.Database)
+				}
+			}
+			add(failure("sqlite", "PRAGMA integrity_check", detail))
 		} else {
-			add(success("sqlite", "PRAGMA integrity_check", fmt.Sprintf("schema version %d is healthy", version)))
-			if _, err := database.ListCapabilityGrants(ctx); err != nil {
-				add(failure("security_subsystems", "probe capability grants", "capability repository failed: "+err.Error()))
+			defer database.Close()
+			version, versionErr := database.SchemaVersion(ctx)
+			integrityErr := database.Integrity(ctx)
+			if versionErr != nil || integrityErr != nil || version < 1 || !store.SchemaVersionSupported(version) {
+				add(failure("sqlite", "PRAGMA integrity_check", "canonical state is invalid"))
 			} else {
-				add(success("security_subsystems", "probe security engines", "capability, cell, gate, and secret engines are operational"))
+				add(success("sqlite", "PRAGMA integrity_check", fmt.Sprintf("schema version %d is healthy", version)))
+				if _, err := database.ListCapabilityGrants(ctx); err != nil {
+					add(failure("security_subsystems", "probe capability grants", "capability repository failed: "+err.Error()))
+				} else {
+					add(success("security_subsystems", "probe security engines", "capability, cell, gate, and secret engines are operational"))
+				}
+			}
+		}
+	}
+	if stateErr == nil {
+		knowledgeDB := filepath.Join(layout.RuntimeDir, "knowledge", "index-v1.db")
+		if _, kErr := os.Lstat(knowledgeDB); kErr == nil {
+			if kProbe := store.ProbeHotJournal(ctx, knowledgeDB); store.IsReadOnlyRecovery(kProbe) {
+				add(failure("knowledge_index", "read-only SQLite probe", fmt.Sprintf("project knowledge index has an unrecovered SQLite hot journal (SQLITE_READONLY_ROLLBACK) from an interrupted index build; reopen Marshal to roll it back and rebuild, or remove %s", filepath.Dir(knowledgeDB))))
 			}
 		}
 	}
@@ -463,6 +483,10 @@ func success(name, method, detail string) Result {
 
 func failure(name, method, detail string) Result {
 	return Result{Name: name, Verdict: Fail, Method: method, Detail: detail}
+}
+
+func sqliteHotJournalDetail(dbPath, runtimeDir string) string {
+	return fmt.Sprintf("canonical state has an unrecovered SQLite hot journal (SQLITE_READONLY_ROLLBACK) from an interrupted open; ensure %s and %s are writable (chmod 700 %s && chmod 600 %s) and run `marshal status` or `marshal` to roll it back", dbPath, runtimeDir, runtimeDir, dbPath)
 }
 
 func finalizeMissing(report Report) Report {

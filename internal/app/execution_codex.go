@@ -142,7 +142,7 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	}
 	probe, err := provider.Probe(ctx)
 	if err != nil {
-		return execution.TaskResult{TaskID: task.TaskID}, err
+		return execution.TaskResult{TaskID: task.TaskID}, r.workerProviderError(ctx, err)
 	}
 	trustedHeader, err := r.providerConstraintPrompt(ctx, task, pkg, worktree)
 	if err != nil {
@@ -180,13 +180,14 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	if contextErr := finishContext(); contextErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "required project context changed; provider result quarantined"}, contextErr
 	}
-	if runErr != nil {
-		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: runErr.Error()}, runErr
-	}
 	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
 	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
 	if stdoutErr != nil || stderrErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "provider output rejected by evidence sanitizer"}, fmt.Errorf("sanitize Codex Process 05 output: stdout=%v stderr=%v", stdoutErr, stderrErr)
+	}
+	if runErr != nil {
+		failure := workerFailureMessage(runErr.Error(), stderr, stdout)
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: failure}, fmt.Errorf("%w: %s", runErr, failure)
 	}
 	digest := sha256.Sum256(append(append([]byte(nil), stdout...), stderr...))
 	evidenceID, err := model.NewID("EVID-P05-CODEX-")
@@ -214,15 +215,15 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 				return ""
 			}
 			if result.Cancelled {
-				return "Codex execution cancelled"
+				return workerFailureMessage("Codex execution cancelled", stderr, stdout)
 			}
 			if result.TimedOut {
-				return "Codex execution timed out"
+				return workerFailureMessage("Codex execution timed out", stderr, stdout)
 			}
 			if result.OutputTruncated {
-				return "Codex output was truncated"
+				return workerFailureMessage("Codex output was truncated", stderr, stdout)
 			}
-			return "Codex execution did not complete successfully"
+			return workerFailureMessage("Codex execution did not complete successfully", stderr, stdout)
 		}(),
 	}, nil
 }
