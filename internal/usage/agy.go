@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,51 @@ var agyOffer struct {
 	at     time.Time
 	groups []string
 	err    bool
+}
+
+// agyUsageLister runs `agy -p /usage`, which prints one tab-separated record
+// per quota window: group, window, percent left, reset time (UTC when not
+// printed to a terminal). Tests replace it.
+var agyUsageLister = func(ctx context.Context) ([]byte, error) {
+	path, err := exec.LookPath("agy")
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, path, "-p", "/usage")
+	cmd.Env = append(os.Environ(), "NO_COLOR=1", "TERM=dumb", "CI=1")
+	return cmd.Output()
+}
+
+// parseAgyUsage reads agy's /usage records into windows labelled by group
+// and window ("Gemini 5h", "Claude and GPT wk", "Gemini 4 Argon wk").
+func parseAgyUsage(out []byte, now time.Time) []Window {
+	var windows []Window
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Split(strings.TrimSpace(line), "\t")
+		if len(f) != 4 {
+			continue
+		}
+		pct, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(f[2]), "%"), 64)
+		if err != nil || pct < 0 || pct > 100 {
+			continue
+		}
+		resets, err := time.Parse(time.RFC3339, strings.TrimSpace(f[3]))
+		if err != nil {
+			continue
+		}
+		group := strings.TrimSuffix(strings.TrimSpace(f[0]), " Models")
+		group = strings.TrimSuffix(group, " models")
+		kind := "wk"
+		if strings.Contains(strings.ToLower(f[1]), "five hour") {
+			kind = "5h"
+		}
+		w := Window{Label: group + " " + kind, LeftPercent: pct}
+		if resets.After(now) {
+			w.ResetsAt = resets
+		}
+		windows = append(windows, w)
+	}
+	return windows
 }
 
 // agyModelsLister runs `agy models`; tests replace it.
@@ -139,7 +185,41 @@ func readAgy(now time.Time, seenFile string) Quota {
 		q.Offer = append(q.Offer, ModelGroup{Name: g, Offered: slices.Contains(offered, g)})
 	}
 	q.AsOf = now
+	// The figures agy itself reports, when it answers: every family's
+	// 5-hour and weekly percent left and reset time.
+	if windows := agyUsageWindows(now); len(windows) > 0 {
+		q.Windows = windows
+		for _, w := range windows {
+			if w.Known() {
+				q.Known = true
+			}
+		}
+	}
 	return q
+}
+
+var agyUsage struct {
+	sync.Mutex
+	at      time.Time
+	windows []Window
+}
+
+func agyUsageWindows(now time.Time) []Window {
+	agyUsage.Lock()
+	defer agyUsage.Unlock()
+	if !agyUsage.at.IsZero() && now.Sub(agyUsage.at) < agyOfferEvery {
+		return slices.Clone(agyUsage.windows)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	agyUsage.at = now
+	out, err := agyUsageLister(ctx)
+	if err != nil {
+		agyUsage.windows = nil
+		return nil
+	}
+	agyUsage.windows = parseAgyUsage(out, now)
+	return slices.Clone(agyUsage.windows)
 }
 
 // OfferedNone reports whether a provider with a model offer can run nothing.
@@ -160,4 +240,7 @@ func resetAgyOffer() {
 	agyOffer.Lock()
 	agyOffer.at, agyOffer.groups, agyOffer.err = time.Time{}, nil, false
 	agyOffer.Unlock()
+	agyUsage.Lock()
+	agyUsage.at, agyUsage.windows = time.Time{}, nil
+	agyUsage.Unlock()
 }
