@@ -152,6 +152,10 @@ type boardVisual struct {
 	// echo is what the operator said to the Marshal from the composer,
 	// newest first, with where each message is.
 	echo []sayEcho
+	// launchProgress is the completed startup checks line shown under the
+	// opening wordmark while the launch check still runs (empty before any
+	// check finishes).
+	launchProgress string
 }
 
 func (v boardVisual) code(name string, background bool) string {

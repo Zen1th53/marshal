@@ -9,6 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/sessionmcp"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,8 +173,8 @@ func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, 
 		if ours {
 			dir.workspaceMCPAttached = true
 			note = antigravityWorkspaceMCPNote
-			args = allowMarshalToolsForAntigravity(root, args)
 		}
+		args = configureAntigravitySessionSettings(root, dir.path, ours, args)
 	}
 	if _, err := dir.add(note); err != nil {
 		return nil, nil, err
@@ -528,20 +529,112 @@ func gitCommonDir(root string) string {
 	return filepath.Clean(dir)
 }
 
-// antigravityMarshalToolSettings lets this agy session call MARSHAL's own
-// tools without asking the owner for each one (agy asked separately for
-// every marshal tool, with a six-option prompt). It is passed with
-// --settings, which agy applies to this session only and never saves; the
-// governed worker configuration allows the same tools.
-const antigravityMarshalToolSettings = `{"permissions":{"allow":["mcp(marshal/*)"]}}`
+// antigravityMarshalReadableDirs are the subdirectories under .marshal/ that
+// an agy session reads for Marshal's inbox, briefing, plans and proposals.
+// agy can treat gitignored or dot-prefixed paths as outside the workspace and
+// ask a separate File access prompt for each file; allow-listing these paths
+// for the session avoids those prompts without opening the rest of the disk.
+var antigravityMarshalReadableDirs = []string{"inbox", "briefing", "marshal", "proposals"}
 
-// allowMarshalToolsForAntigravity adds the session-only setting unless the
-// launch already carries the person's own --settings.
-func allowMarshalToolsForAntigravity(root string, args []string) []string {
+// antigravityMarshalAskCommands keep commands that reach other machines or use
+// sudo behind the owner's approval even when agy runs in auto mode. agy
+// evaluates permissions as deny > ask > allow, so placing these in ask leaves
+// Marshal's own MCP tools and read_file rules allowed while requiring approval
+// before ssh, scp, sftp, rsync or sudo runs. Using literal command(rsync)
+// covers every remote form (host:path, rsync://, -e/--rsh, compound commands)
+// without depending on regex edge cases.
+var antigravityMarshalAskCommands = []string{
+	"command(ssh)",
+	"command(scp)",
+	"command(sftp)",
+	"command(rsync)",
+	"command(sudo)",
+}
+
+// antigravitySessionSettings builds the session-only --settings JSON for an
+// agy Marshal launch (never saved by agy). It allows Marshal's own MCP tools
+// when Marshal's workspace MCP config is attached, allows reading Marshal's
+// own state/briefing paths so agy does not ask per-file access prompts, and
+// keeps remote-machine and sudo commands behind the owner's approval.
+func antigravitySessionSettings(root, briefingPath string, allowMCP bool) string {
+	allow := make([]string, 0, 1+len(antigravityMarshalReadableDirs)*3)
+	seen := map[string]bool{}
+	addAllow := func(rule string) {
+		if rule == "" || seen[rule] {
+			return
+		}
+		seen[rule] = true
+		allow = append(allow, rule)
+	}
+	if allowMCP {
+		addAllow("mcp(marshal/*)")
+	}
+	for _, sub := range antigravityMarshalReadableDirs {
+		addAllow("read_file(" + statepath.DirName + "/" + sub + "/)")
+	}
+	roots := antigravityRootPaths(root)
+	for _, base := range roots {
+		for _, sub := range antigravityMarshalReadableDirs {
+			p := filepath.ToSlash(filepath.Join(base, statepath.DirName, sub))
+			addAllow("read_file(" + strings.TrimRight(p, "/") + "/)")
+		}
+	}
+	if strings.TrimSpace(briefingPath) != "" {
+		for _, bp := range antigravityRootPaths(briefingPath) {
+			p := strings.TrimRight(filepath.ToSlash(bp), "/") + "/"
+			covered := false
+			for _, base := range roots {
+				parent := strings.TrimRight(filepath.ToSlash(filepath.Join(base, statepath.DirName, "briefing")), "/") + "/"
+				if strings.HasPrefix(p, parent) {
+					covered = true
+					break
+				}
+			}
+			if !covered {
+				addAllow("read_file(" + p + ")")
+			}
+		}
+	}
+	data, _ := json.Marshal(map[string]any{
+		"permissions": map[string]any{
+			"allow": allow,
+			"ask":   antigravityMarshalAskCommands,
+		},
+	})
+	return string(data)
+}
+
+func antigravityRootPaths(root string) []string {
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil
+	}
+	clean := filepath.Clean(abs)
+	out := []string{clean}
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		if rc := filepath.Clean(resolved); rc != clean {
+			out = append(out, rc)
+		}
+	}
+	return out
+}
+
+// configureAntigravitySessionSettings adds the session-only --settings JSON
+// unless the launch already carries the person's own --settings.
+func configureAntigravitySessionSettings(root, briefingPath string, allowMCP bool, args []string) []string {
 	for _, arg := range args {
 		if arg == "--settings" || strings.HasPrefix(arg, "--settings=") {
 			return args
 		}
 	}
-	return insertBeforeKickoff("antigravity", root, args, []string{"--settings", antigravityMarshalToolSettings})
+	return insertBeforeKickoff("antigravity", root, args, []string{"--settings", antigravitySessionSettings(root, briefingPath, allowMCP)})
+}
+
+// allowMarshalToolsForAntigravity adds the session-only setting unless the
+// launch already carries the person's own --settings.
+func allowMarshalToolsForAntigravity(root string, args []string) []string {
+	return configureAntigravitySessionSettings(root, "", true, args)
 }

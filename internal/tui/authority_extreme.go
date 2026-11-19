@@ -382,6 +382,7 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 	} else {
 		ctx = app.WithExtremeRuntimeDecision(ctx, id, reason, req.Reason, provider, req.ApprovalBinding, decidedBy)
 	}
+	beforeNotes := w.noteSeq()
 	err := w.decidePermission(ctx, req, allow, "marshal")
 	if errors.Is(err, errProposalSettled) {
 		// A duplicate delivery of a proposal already being applied or
@@ -395,11 +396,15 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 	if err == nil && allow && req.Kind == "marshal-command" && strings.HasPrefix(req.Object, "/marshal approve-task ") {
 		w.queuePrivateProcess05Resume()
 	}
+	// If handleHarness already wrote the detailed verification Activity note,
+	// avoid writing a second summary line for the same verification.
+	_, isVerify := cutHarnessVerifyProvider(strings.TrimSpace(req.Object))
+	verifyNoted := isVerify && allow && w.noteSeq() != beforeNotes
 	if text := marshalDecisionActivity(req.Object, allow, err); err != nil && allow && req.Kind == "read" && req.ContinuationProvider != "" {
 		// Loading earlier work is the runtime's own reading of the
 		// provider's history, not a Marshal decision the person made.
 		w.RecordActivity(earlierWorkFailedLine(req.ContinuationProvider, err))
-	} else if text != "" {
+	} else if text != "" && !verifyNoted {
 		w.RecordActivity(text)
 	}
 
@@ -430,11 +435,24 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 // permission audit and the decision record keep it); a verified harness says
 // so as an outcome. A denial or a failed application is shown, since the run
 // may now wait on it. The model's reason is never shown: it is protocol text.
+// cutHarnessVerifyProvider extracts the provider from a "/harness verify ..."
+// or "/harness verify-native ..." command object.
+func cutHarnessVerifyProvider(object string) (string, bool) {
+	for _, prefix := range []string{"/harness verify ", "/harness verify-native "} {
+		if rest, ok := strings.CutPrefix(object, prefix); ok {
+			provider, _, _ := strings.Cut(strings.TrimSpace(rest), " ")
+			if provider != "" {
+				return provider, true
+			}
+		}
+	}
+	return "", false
+}
+
 func marshalDecisionActivity(object string, allow bool, err error) string {
 	object = strings.TrimSpace(object)
-	verify, isVerify := strings.CutPrefix(object, "/harness verify ")
+	verify, isVerify := cutHarnessVerifyProvider(object)
 	if isVerify {
-		verify, _, _ = strings.Cut(strings.TrimSpace(verify), " ")
 		verify = marshalDisplayName(verify)
 	}
 	switch {

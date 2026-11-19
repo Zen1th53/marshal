@@ -368,15 +368,8 @@ func (w *Workspace) verifyProvider() {
 		// The result is the provider's new state, one Activity line with
 		// the whole text a click away, and its first line in the footer:
 		// never an overlay over the view.
-		if err != nil {
-			msg := "Harness verify failed: " + err.Error()
-			w.addNote(msg, true)
-			w.memoryAnswer(noteSummary(msg), true)
-		} else {
-			msg := firstNonEmpty(strings.TrimSpace(text), "Verified "+sel.Provider+".")
-			w.addNote(msg, false)
-			w.memoryAnswer(noteSummary(msg), false)
-		}
+		msg, isErr := w.recordVerifyNote(sel.Provider, text, err)
+		w.memoryAnswer(noteSummary(msg), isErr)
 		w.wakeProviders()
 	})
 	if !started {

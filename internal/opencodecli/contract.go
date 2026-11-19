@@ -119,7 +119,9 @@ func orUnknown(v string) string {
 // would otherwise join a shared background server, and no --dir where the
 // CLI rejects it (the process working directory already is the worktree).
 func (c Contract) RunArgs(args []string) []string {
-	out := make([]string, 0, len(args)+1)
+	// The capacity is a hint; len(args) is bounded by the argv, so no +1
+	// (CodeQL go/allocation-size-overflow).
+	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--dir" && !c.Dir {
 			i++

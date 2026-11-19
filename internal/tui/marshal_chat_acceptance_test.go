@@ -126,9 +126,17 @@ func TestMarshalNativeLaunchDeliversIntakeCueAllProviders(t *testing.T) {
 				if a == nil || len(a.args) == 0 {
 					t.Fatal("no Marshal launch")
 				}
-				visible := a.args[len(a.args)-1]
-				if visible != want || containsMarshalProtocol(visible) || strings.ContainsAny(visible, "{}") {
-					t.Fatalf("visible turn: %q", visible)
+				if provider == "antigravity" {
+					for _, arg := range a.args {
+						if arg == "--prompt-interactive" || arg == marshalKickoff || arg == marshalKickoffContinue || containsMarshalProtocol(arg) {
+							t.Fatalf("antigravity carried an automatic turn or leaked protocol: %q", a.args)
+						}
+					}
+				} else {
+					visible := a.args[len(a.args)-1]
+					if visible != want || containsMarshalProtocol(visible) || strings.ContainsAny(visible, "{}") {
+						t.Fatalf("visible turn: %q", visible)
+					}
 				}
 				hidden := strings.Join(a.args[:len(a.args)-1], "\n")
 				if provider == "opencode" || provider == "antigravity" {

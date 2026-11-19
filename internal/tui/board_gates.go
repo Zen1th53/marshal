@@ -322,8 +322,9 @@ func (w *Workspace) sendGate(ctx context.Context, g ownerGate) {
 }
 
 // handleGateKey is the owner gates' keys on the Board: with a reply armed,
-// Enter sends it and any other key cancels; otherwise y arms the first
-// gate still waiting. It takes nothing while no gate waits.
+// Enter sends it and any other key cancels; otherwise y opens a waiting
+// architecture or arms the first waiting reply. When nothing waits, y explains
+// why instead of falling through to open the composer.
 func (w *Workspace) handleGateKey(event KeyEvent, p *MarshalPanel) bool {
 	gates := w.ownerGates(p)
 	if armed := w.gateArmed(); armed != "" {
@@ -337,7 +338,7 @@ func (w *Workspace) handleGateKey(event KeyEvent, p *MarshalPanel) bool {
 		w.memoryAnswer("Reply not sent.", false)
 		return true
 	}
-	if event.Type != KeyRune || event.Rune != 'y' || w.anyBodyView() || w.boardUI.inspect != "" {
+	if event.Type != KeyRune || event.Rune != 'y' || w.anyBodyView() || w.boardUI.inspect != "" || w.inboxView.Inspecting() {
 		return false
 	}
 	for _, g := range gates {
@@ -357,7 +358,14 @@ func (w *Workspace) handleGateKey(event KeyEvent, p *MarshalPanel) bool {
 		w.armGate(gates[0])
 		return true
 	}
-	return false
+	// y is the Board's architecture/gate key: with nothing waiting it says why
+	// rather than falling through to open the composer with "to the Marshal › y".
+	if w.planning.Load() || w.archSnapshotNow().Status.Accepted {
+		w.memoryAnswer("Nothing to open: the architecture is already accepted (8 shows it).", false)
+	} else {
+		w.memoryAnswer("Nothing to open yet: the Marshal has not sent an architecture.", false)
+	}
+	return true
 }
 
 // clickGate is a click on a gate's button: the reply button arms the

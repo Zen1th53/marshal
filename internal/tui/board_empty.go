@@ -46,9 +46,10 @@ var (
 // which are installed and the store's verification overview.
 func (w *Workspace) loadFirstUse(ctx context.Context) {
 	installed := map[string]bool{}
-	for _, p := range firstUseProviders {
+	for i, p := range firstUseProviders {
 		_, err := lookPath(p.binary)
 		installed[p.name] = err == nil
+		w.noteLaunchCount("providers", i+1, len(firstUseProviders))
 	}
 	w.firstUse.mu.Lock()
 	w.firstUse.installed = installed
@@ -217,11 +218,7 @@ func (w *Workspace) runFirstUseVerify() {
 	if !w.startBackground(context.Background(), func(ctx context.Context) {
 		text, err := src.VerifyHarness(ctx, provider, model)
 		done()
-		if err != nil {
-			w.addNote("Verify "+provider+" failed: "+err.Error(), true)
-		} else {
-			w.addNote(firstNonEmpty(strings.TrimSpace(text), "Verified "+provider+"."), false)
-		}
+		w.recordVerifyNote(provider, text, err)
 		w.refreshProviders(ctx)
 		w.requestRepaint()
 	}) {
