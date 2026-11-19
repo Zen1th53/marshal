@@ -20,6 +20,12 @@ var infraFailureKinds = []struct {
 	// Checked first: a platform that cannot host the worker is not a
 	// passing network fault, and retrying or cooling providers cannot help.
 	{platformUnsupported, []string{"on this platform", "requires linux", "requires private linux", "linux supervision"}},
+	// A mutation lease that ran out is Marshal's own time bound on the
+	// attempt, not the provider failing: checked before every provider kind.
+	{workerLeaseExpired, []string{"execution lease expired"}},
+	// The worker's stdio connection to Marshal's own MCP server broke. Like
+	// a lease expiry it is not the provider's fault.
+	{marshalToolsLost, []string{marshalToolsLostMarker}},
 	{"provider quota or rate limit", []string{"usage limit", "rate limit", "rate-limit", "quota", "hit your limit", "5-hour limit", "too many requests", "resource_exhausted", "out of credits", "insufficient credits"}},
 	{"provider cooldown or failover refusal", []string{"provider cooldown", "provider failover", "not limited by its provider", "provider execution failure"}},
 	{"transport or network", []string{"connection refused", "connection reset", "broken pipe", "eof", "timeout", "timed out", "deadline exceeded", "tls", "dns", "network", "socket", "transport", "502", "503", "504", "overloaded", "unavailable"}},
@@ -46,6 +52,38 @@ func classifyInfraFailure(text string) (kind, reason string) {
 	return "worker process failure", reason
 }
 
+// workerLeaseExpired is the failure kind of an attempt whose mutation lease
+// ran out before it handed in.
+const workerLeaseExpired = "task time ran out"
+
+// marshalToolsLost is the failure kind of a worker whose connection to
+// Marshal's MCP tools broke.
+const marshalToolsLost = "connection to Marshal's tools lost"
+
+// infraKindCoolsProvider reports whether a failure streak of this kind says
+// something about the provider, so cooling it down for failover can help.
+// A crash, an expired lease or a broken connection to Marshal's own tools
+// never puts a provider into a cooldown: every provider would wait on a
+// "quota" it still has.
+func infraKindCoolsProvider(kind string) bool {
+	switch kind {
+	case workerLeaseExpired, marshalToolsLost, "worker process failure", platformUnsupported, providerAuthFailure:
+		return false
+	}
+	return true
+}
+
+// infraFailurePhrase is what happened to provider, as the Board says it.
+func infraFailurePhrase(provider, kind string) string {
+	switch kind {
+	case workerLeaseExpired:
+		return "the task's time ran out on " + provider
+	case marshalToolsLost:
+		return provider + " lost its connection to Marshal's tools"
+	}
+	return provider + " hit a " + plainInfraKind(kind)
+}
+
 // platformUnsupported is the failure kind of a worker this computer cannot
 // run at all (governed workers need Linux amd64 confinement).
 const platformUnsupported = "platform cannot run this worker"
@@ -66,6 +104,10 @@ func plainInfraKind(kind string) string {
 		return "tool output problem"
 	case "worker process failure":
 		return "crash"
+	case workerLeaseExpired:
+		return "the task's time ran out"
+	case marshalToolsLost:
+		return "lost connection to Marshal's tools"
 	default:
 		return "problem"
 	}

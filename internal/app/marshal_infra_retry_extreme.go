@@ -70,10 +70,13 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	kind, reason := classifyInfraFailure(cause)
 	attempt := 1 + t.EvidenceAttemptBase + taskReturns(*t)
 	t.InfraRetries++
-	if t.InfraStreakWorker == t.Worker {
-		t.InfraStreak++
-	} else {
-		t.InfraStreakWorker, t.InfraStreak = t.Worker, 1
+	// The failover streak counts only failures that can be the provider's.
+	if infraKindCoolsProvider(kind) {
+		if t.InfraStreakWorker == t.Worker {
+			t.InfraStreak++
+		} else {
+			t.InfraStreakWorker, t.InfraStreak = t.Worker, 1
+		}
 	}
 	note := fmt.Sprintf("infrastructure failure (%s), not counted as rework: %s", kind, reason)
 	review := marshal.Review{Reviewer: "marshal-runtime", Verdict: marshal.VerdictReturn, Reasons: []string{note}}
@@ -86,7 +89,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	}
 	data := map[string]any{
 		"reason":                note,
-		"summary":               fmt.Sprintf("%s: %s hit a %s. Retrying (%d of %d); this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), ProviderDisplayName(t.Worker), plainInfraKind(kind), t.InfraRetries, infraRetryLimit) + " " + reason,
+		"summary":               fmt.Sprintf("%s: %s. Retrying (%d of %d); this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), infraFailurePhrase(ProviderDisplayName(t.Worker), kind), t.InfraRetries, infraRetryLimit) + " " + reason,
 		"return_attempt":        fmt.Sprint(attempt),
 		"return_reasons":        []string{note},
 		"counted":               false,
@@ -133,7 +136,10 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		kindEvent = events.EventTypeMarshalEscalated
 	} else {
 		t.State = marshal.Returned
-		if t.InfraStreak >= infraFailoverStreak && s.otherWorker(t.Worker, t.Mode) != "" {
+		// Only a failure that says something about the provider cools it;
+		// a crash, an expired lease or a lost connection to Marshal's tools
+		// would otherwise park the run as waiting on a quota it still has.
+		if t.InfraStreak >= infraFailoverStreak && infraKindCoolsProvider(kind) && s.otherWorker(t.Worker, t.Mode) != "" {
 			until := s.clock().Add(infraFailureCooldown)
 			providerHealth.Mark(t.Worker, "infrastructure failure ("+kind+"): "+reason, until)
 			data["provider_cooldown_until"] = until.UTC().Format(time.RFC3339)
