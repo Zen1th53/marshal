@@ -53,13 +53,111 @@ type ownerGate struct {
 	sent bool
 }
 
+// deferredArchitecture is an "open architecture" request from the Marshal that
+// arrived before the requirements were confirmed (or before a goal contract
+// existed). The Board keeps it instead of dropping it and offers it in the
+// inbox once the requirements are confirmed.
+type deferredArchitecture struct {
+	occurrences []string
+	reason      string
+	offered     bool
+}
+
 // gateState is the Board's owner gates: the contract last read from the
 // store, the gate whose reply waits for Enter and the replies sent.
 type gateState struct {
-	mu       sync.Mutex
-	contract *gateContract
-	armed    string
-	sent     map[string]time.Time
+	mu           sync.Mutex
+	contract     *gateContract
+	deferredArch *deferredArchitecture
+	armed        string
+	sent         map[string]time.Time
+}
+
+// holdArchitectureRequest keeps a bound Marshal "open architecture" request
+// that arrived before the requirements were confirmed. If the requirements are
+// already confirmed, it stays offered immediately; otherwise it waits silently
+// until offerDeferredArchitecture runs.
+func (w *Workspace) holdArchitectureRequest(occurrences []string, reason string) {
+	w.req.mu.Lock()
+	confirmed := w.req.confirmed != nil && w.req.card == nil
+	w.req.mu.Unlock()
+
+	w.gates.mu.Lock()
+	newlyHeld := w.gates.deferredArch == nil
+	if w.gates.deferredArch == nil {
+		w.gates.deferredArch = &deferredArchitecture{
+			reason:  strings.TrimSpace(reason),
+			offered: confirmed,
+		}
+	} else {
+		if strings.TrimSpace(reason) != "" && w.gates.deferredArch.reason == "" {
+			w.gates.deferredArch.reason = strings.TrimSpace(reason)
+		}
+		if confirmed {
+			w.gates.deferredArch.offered = true
+		}
+	}
+	for _, id := range occurrences {
+		if id == "" {
+			continue
+		}
+		dup := false
+		for _, existing := range w.gates.deferredArch.occurrences {
+			if existing == id {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			w.gates.deferredArch.occurrences = append(w.gates.deferredArch.occurrences, id)
+		}
+	}
+	offered := w.gates.deferredArch.offered
+	w.gates.mu.Unlock()
+
+	if newlyHeld {
+		if offered {
+			w.RecordActivity("Architecture is ready to open: press y on the Board to open it in your browser.")
+		} else {
+			w.RecordActivity("Marshal wants to open the architecture; the Board will offer it once you confirm the requirements.")
+		}
+	}
+	w.requestRepaint()
+}
+
+// offerDeferredArchitecture makes any held "open architecture" request visible
+// in the Board inbox once the owner confirms the requirements (or a Goal is
+// confirmed).
+func (w *Workspace) offerDeferredArchitecture() {
+	w.gates.mu.Lock()
+	if w.gates.deferredArch == nil || w.gates.deferredArch.offered {
+		w.gates.mu.Unlock()
+		return
+	}
+	w.gates.deferredArch.offered = true
+	w.gates.mu.Unlock()
+	w.RecordActivity("Requirements confirmed; press y on the Board to open the architecture in your browser.")
+	w.requestRepaint()
+}
+
+func (w *Workspace) hasDeferredArchitecture() bool {
+	w.gates.mu.Lock()
+	defer w.gates.mu.Unlock()
+	return w.gates.deferredArch != nil
+}
+
+// clearDeferredArchitecture clears any held/offered architecture request and
+// returns its proposal occurrence IDs so the caller can resolve them.
+func (w *Workspace) clearDeferredArchitecture() []string {
+	w.gates.mu.Lock()
+	d := w.gates.deferredArch
+	w.gates.deferredArch = nil
+	w.gates.mu.Unlock()
+	if d == nil {
+		return nil
+	}
+	w.requestRepaint()
+	return d.occurrences
 }
 
 // gateResend is how long a sent reply holds its gate's button back: when
@@ -107,6 +205,11 @@ func (w *Workspace) refreshGatesSoon() {
 func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 	w.gates.mu.Lock()
 	contract := w.gates.contract
+	var deferred *deferredArchitecture
+	if w.gates.deferredArch != nil && w.gates.deferredArch.offered {
+		cp := *w.gates.deferredArch
+		deferred = &cp
+	}
 	sent := w.gates.sent
 	w.gates.mu.Unlock()
 	var out []ownerGate
@@ -116,6 +219,16 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 			kind:    "architecture",
 			title:   "waits for you in the browser",
 			summary: firstLine(c.Purpose),
+			reply:   "",
+			details: 'y',
+		}
+		out = append(out, g)
+	} else if deferred != nil {
+		g := ownerGate{
+			key:     "architecture:deferred",
+			kind:    "architecture",
+			title:   "ready to open in the browser",
+			summary: firstLine(deferred.reason),
 			reply:   "",
 			details: 'y',
 		}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func TestMarshalArchitectureProposalGrammarIsStrict(t *testing.T) {
@@ -178,4 +179,139 @@ func TestMarshalArchitectureBoundNativeFileOpensOnceAndPersistsResolution(t *tes
 	if !w.permissions.queue.Empty() || mustCount(t, rt.Store(), "tasks") != 0 {
 		t.Fatal("architecture native proposal conferred task/permission authority")
 	}
+}
+
+// TestMarshalArchitectureHeldUntilRequirementsConfirmed covers both ways an
+// "open architecture" proposal can arrive before the requirements are confirmed:
+//  1. While an unconfirmed requirements card is open on the Board.
+//  2. When starting the review fails with model.ErrGoalNotFound.
+//
+// In both cases the Board keeps the request instead of dropping it, offers it
+// once the owner confirms the requirements, and opens/resolves it when y is
+// pressed.
+func TestMarshalArchitectureHeldUntilRequirementsConfirmed(t *testing.T) {
+	t.Run("while requirements card is open", func(t *testing.T) {
+		w, rt := realControlWorkspace(t, "SESSION-arch-held-card", false)
+		w.attachNativeChat(newFakeChatTransport(), rt.ProjectRoot(), nil, nil, nil, nil, "", false)
+		opened := make(chan string, 2)
+		var starts atomic.Int32
+		m := w.marshalSession()
+		m.architectureStart = func(ctx context.Context, provider, goal string) (*app.ArchitectureReviewSession, error) {
+			starts.Add(1)
+			return &app.ArchitectureReviewSession{URL: "http://127.0.0.1:12345/?token=fixture-only", Done: make(chan struct{})}, nil
+		}
+		m.architectureBrowser = func(ctx context.Context, url string) error { opened <- url; return nil }
+		w.tmuxMu.Lock()
+		w.tmuxActiveWins["marshal-chat"] = &activeTmuxAgent{role: "marshal-chat", state: "working", sessionID: "fixture-bound-session"}
+		w.tmuxMu.Unlock()
+
+		rp, err := parseMarshalProposal(reqProposalLine(fullReqCard))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.openRequirements(rp)
+
+		dir := filepath.Join(rt.ProjectRoot(), statepath.DirName, "proposals")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "arch-early.json"), []byte(`{"action":"architecture","reason":"Review the architecture"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		w.observeMarshalProposalFiles(rt.ProjectRoot())
+
+		if starts.Load() != 0 {
+			t.Fatalf("architecture started before requirements confirmation: starts=%d", starts.Load())
+		}
+		if gates := w.ownerGates(nil); len(gates) != 0 {
+			t.Fatalf("architecture gate shown before requirements confirmation: %+v", gates)
+		}
+
+		// Owner confirms the requirements card: the held request is now offered.
+		w.confirmRequirements()
+		gates := w.ownerGates(nil)
+		if len(gates) != 1 || gates[0].kind != "architecture" || gates[0].summary != "Review the architecture" {
+			t.Fatalf("held architecture was not offered after confirmation: %+v", gates)
+		}
+
+		// Pressing y opens the architecture in the browser and resolves it.
+		if !w.handleGateKey(KeyEvent{Type: KeyRune, Rune: 'y'}, nil) {
+			t.Fatal("y did not open the offered architecture")
+		}
+		select {
+		case <-opened:
+		case <-time.After(3 * time.Second):
+			t.Fatal("offered architecture did not open in browser")
+		}
+		for until := time.Now().Add(3 * time.Second); time.Now().Before(until); {
+			pending, err := rt.Store().PendingMarshalProposals(t.Context(), w.projectID)
+			if err == nil && len(pending) == 0 && len(w.ownerGates(nil)) == 0 {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Fatalf("architecture offer did not clear/resolve after opening: gates=%+v", w.ownerGates(nil))
+	})
+
+	t.Run("on ErrGoalNotFound before confirmation", func(t *testing.T) {
+		w, rt := realControlWorkspace(t, "SESSION-arch-held-goal", false)
+		w.attachNativeChat(newFakeChatTransport(), rt.ProjectRoot(), nil, nil, nil, nil, "", false)
+		opened := make(chan string, 2)
+		var goalReady atomic.Bool
+		m := w.marshalSession()
+		m.architectureStart = func(ctx context.Context, provider, goal string) (*app.ArchitectureReviewSession, error) {
+			if !goalReady.Load() {
+				return nil, model.ErrGoalNotFound
+			}
+			return &app.ArchitectureReviewSession{URL: "http://127.0.0.1:12345/?token=fixture-only", Done: make(chan struct{})}, nil
+		}
+		m.architectureBrowser = func(ctx context.Context, url string) error { opened <- url; return nil }
+		w.tmuxMu.Lock()
+		w.tmuxActiveWins["marshal-chat"] = &activeTmuxAgent{role: "marshal-chat", state: "working", sessionID: "fixture-bound-session"}
+		w.tmuxMu.Unlock()
+
+		dir := filepath.Join(rt.ProjectRoot(), statepath.DirName, "proposals")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "arch-early.json"), []byte(`{"action":"architecture","reason":"Inspect layered layout"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		w.observeMarshalProposalFiles(rt.ProjectRoot())
+
+		for until := time.Now().Add(3 * time.Second); time.Now().Before(until); {
+			if w.hasDeferredArchitecture() {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+		if !w.hasDeferredArchitecture() {
+			t.Fatal("architecture proposal that hit ErrGoalNotFound was dropped instead of held")
+		}
+		if gates := w.ownerGates(nil); len(gates) != 0 {
+			t.Fatalf("architecture offered before requirements confirmation: %+v", gates)
+		}
+
+		// Requirements card opens and is confirmed -> Board offers the held request.
+		rp, err := parseMarshalProposal(reqProposalLine(fullReqCard))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.openRequirements(rp)
+		goalReady.Store(true)
+		w.confirmRequirements()
+
+		gates := w.ownerGates(nil)
+		if len(gates) != 1 || gates[0].kind != "architecture" {
+			t.Fatalf("held architecture was not offered after confirmation: %+v", gates)
+		}
+		if !w.handleGateKey(KeyEvent{Type: KeyRune, Rune: 'y'}, nil) {
+			t.Fatal("y did not open the offered architecture")
+		}
+		select {
+		case <-opened:
+		case <-time.After(3 * time.Second):
+			t.Fatal("offered architecture did not open in browser")
+		}
+	})
 }

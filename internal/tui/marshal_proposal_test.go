@@ -1234,3 +1234,89 @@ func TestMarshalProposalAmendDenyRouting(t *testing.T) {
 		t.Fatalf("amendment was not cleared: amended=%v, pending=%+v", amended, pending)
 	}
 }
+
+// TestRestartDoesNotReplaySupersededOrAnsweredProposalFiles verifies that:
+//  1. Multiple proposal files picked up after a restart are processed in
+//     chronological order (not filename order), so an edited requirements card
+//     is never overwritten by an older pre-edit file, and older ask/requirements
+//     files in the batch are suppressed.
+//  2. Questions already answered and requirements already confirmed before a
+//     restart do not reappear from leftover proposal files or pending rows.
+func TestRestartDoesNotReplaySupersededOrAnsweredProposalFiles(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-proposal-replay", false)
+	root := rt.ProjectRoot()
+	dir := filepath.Join(root, statepath.DirName, "proposals")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	writeProposal := func(name, body string, at time.Time) {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	reqPreEdit := strings.TrimPrefix(reqProposalLine(exampleReqCard), marshalProposalPrefix)
+	editedCard := strings.Replace(fullReqCard, "Add login with email; out: OAuth", "Add login with email and passkeys", 1)
+	reqEdited := strings.TrimPrefix(reqProposalLine(editedCard), marshalProposalPrefix)
+	askOld := strings.TrimPrefix(askProposalLine(exampleAskQuestion, exampleAskChoices), marshalProposalPrefix)
+
+	base := time.Now().Add(-10 * time.Minute)
+	// Filenames deliberately reverse chronological order:
+	//   a-req-edited.json (newest) sorts before b-req-initial.json (older),
+	//   and z-ask-old.json (oldest) sorts last.
+	writeProposal("z-ask-old.json", askOld, base)
+	writeProposal("b-req-initial.json", reqPreEdit, base.Add(time.Minute))
+	writeProposal("a-req-edited.json", reqEdited, base.Add(2*time.Minute))
+
+	w.observeMarshalProposalFiles(root)
+
+	if w.currentAsk() != nil {
+		t.Fatalf("superseded ask reappeared in inbox: %+v", w.currentAsk())
+	}
+	card := w.currentReq()
+	if card == nil || card.Lines[0].Text != "Add login with email and passkeys" {
+		t.Fatalf("requirements card showed wrong version: %+v", card)
+	}
+	if pending, err := rt.Store().PendingMarshalProposals(t.Context(), rt.ProjectID()); err != nil || len(pending) != 0 {
+		t.Fatalf("superseded files left pending rows: %+v %v", pending, err)
+	}
+
+	// Owner answers a live ask and confirms the edited requirements card.
+	ask2Line := askProposalLine("Deploy on Friday?", `[{"key":"enter","label":"wait for Monday"},{"key":"f","label":"deploy Friday"}]`)
+	ask2, err := parseMarshalProposal(ask2Line)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.attachNativeChat(newFakeChatTransport(), root, nil, nil, nil, nil, "", false)
+	w.openAsk(ask2)
+	w.answerAsk(0)
+	w.confirmRequirements()
+
+	// Restart the control centre with leftover old proposal files on disk:
+	// the answered ask, the pre-edit requirements card (older than the applied
+	// card), and a copy of the confirmed requirements card.
+	restarted := NewWorkspace(rt.Store(), rt.ProjectID(), "SESSION-proposal-replay-2")
+	restarted.runtime = rt
+	writeProposal("leftover-answered-ask.json", strings.TrimPrefix(ask2Line, marshalProposalPrefix), base.Add(3*time.Minute))
+	preEditVariant := strings.Replace(exampleReqCard, "Add login with email; out: OAuth", "Pre-edit draft variant", 1)
+	writeProposal("leftover-pre-edit.json", strings.TrimPrefix(reqProposalLine(preEditVariant), marshalProposalPrefix), base.Add(4*time.Minute))
+	writeProposal("leftover-confirmed-req.json", reqEdited, time.Now().Add(time.Second))
+
+	restarted.observeMarshalProposalFiles(root)
+
+	if restarted.currentAsk() != nil {
+		t.Fatalf("already-answered question reappeared after restart: %+v", restarted.currentAsk())
+	}
+	if restarted.currentReq() != nil {
+		t.Fatalf("already-confirmed or pre-edit requirements card reappeared after restart: %+v", restarted.currentReq())
+	}
+	if pending, err := rt.Store().PendingMarshalProposals(t.Context(), rt.ProjectID()); err != nil || len(pending) != 0 {
+		t.Fatalf("leftover files left pending rows after restart: %+v %v", pending, err)
+	}
+}

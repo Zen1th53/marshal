@@ -433,6 +433,10 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if len(marshalBrief) > 0 {
+		args, err = w.marshalChatEffortArgs(ctx, provider, root, args)
+		if err != nil {
+			return "", marshalNotStarted(provider, err)
+		}
 		// The protocol is mandatory and must never become a conversation turn.
 		if hiddenChannel(provider) == injectOff || strings.TrimSpace(marshalBrief[0]) == "" {
 			return "", marshalNotStarted(provider, fmt.Errorf("%s has no hidden instruction channel", label))
@@ -803,6 +807,34 @@ func nativeUsesModelPreference(args []string) bool {
 		return true
 	}
 	return len(args) == 0 || oneOf(args[0], "--", "resume", "fork", "--search")
+}
+
+// The Marshal plans, so Codex gets high effort unless the owner selected an
+// effort through /effort, launch arguments or a named Codex profile. This is
+// per launch: ordinary Codex sessions and the owner's config stay as they are.
+func marshalChatEffortArgs(provider, root string, args []string, effort string) []string {
+	if canonicalNeutralProvider(provider) != "codex" || codexConfigOverrides(args, "model_reasoning_effort") || codexArgsHave(args, "-p", "--profile") {
+		return args
+	}
+	if effort == "" {
+		effort = "high"
+	}
+	return insertBeforeKickoff("codex", root, args, []string{"-c", fmt.Sprintf("model_reasoning_effort=%q", effort)})
+}
+
+func (w *Workspace) marshalChatEffortArgs(ctx context.Context, provider, root string, args []string) ([]string, error) {
+	if canonicalNeutralProvider(provider) != "codex" || codexConfigOverrides(args, "model_reasoning_effort") || codexArgsHave(args, "-p", "--profile") {
+		return args, nil
+	}
+	var effort string
+	if w.runtime != nil {
+		preference, err := w.runtime.CodexModelPreference(ctx)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
+			return nil, err
+		}
+		effort = preference.Effort
+	}
+	return marshalChatEffortArgs(provider, root, args, effort), nil
 }
 
 type nativeHistoryWatch struct {
