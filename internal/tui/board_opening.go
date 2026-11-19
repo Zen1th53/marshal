@@ -220,6 +220,9 @@ func (w *Workspace) paintOpening(l layout.Layout, th *Theme, v boardVisual, fram
 	if body.H <= 0 {
 		return out
 	}
+	if checking {
+		v.launchProgress = w.launchProgressLine(v.unicode())
+	}
 	rows := v.openingBody(body.W, body.H, frame, checking)
 	for i := 0; i < body.H; i++ {
 		s := ""
@@ -246,11 +249,16 @@ func (v boardVisual) openingBody(w, h, frame int, checking bool) []string {
 	sub := ""
 	switch {
 	case checking:
-		ell := "…"
-		if !v.unicode() {
-			ell = "..."
+		if v.launchProgress != "" {
+			// Show completed startup checks so a slow launch never looks frozen.
+			sub = v.fg("dim", v.trunc("Checking this project: "+v.launchProgress, max(12, w-2)))
+		} else {
+			ell := "…"
+			if !v.unicode() {
+				ell = "..."
+			}
+			sub = v.fg("dim", "Checking this project"+ell)
 		}
-		sub = v.fg("dim", "Checking this project"+ell)
 	case frame >= 8:
 		tagline := "plans · builds · reviews · verifies"
 		if !v.unicode() {

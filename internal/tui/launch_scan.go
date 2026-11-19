@@ -569,10 +569,11 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 	// part hands back a function that applies its result; it is applied only
 	// when the part finished in time, so a part still running after its
 	// timeout never touches the scan. A failed or timed-out part is unknown.
-	runPart := func(action func(context.Context) (func(), error), onUnknown func(error)) {
+	runPart := func(step string, action func(context.Context) (func(), error), onUnknown func(error)) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer w.noteLaunchStep(step)
 			partCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			type outcome struct {
@@ -600,42 +601,42 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 		}()
 	}
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.git(c, root)
 		return func() { scan.Branch, scan.Changed = res.Branch, res.Changed }, err
 	}, func(error) { scan.Branch, scan.Changed = "unknown", -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.files(c, root)
 		return func() { scan.Language, scan.Files = res.Language, res.Files }, err
 	}, func(error) { scan.Language, scan.Files = "unknown", -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.worktrees(c, root)
 		return func() { scan.Worktrees = res }, err
 	}, func(error) { scan.Worktrees = -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("git", func(c context.Context) (func(), error) {
 		res, err := parts.unmerged(c, root)
 		return func() { scan.Unmerged = res }, err
 	}, func(error) { scan.Unmerged = []string{"unknown"} })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("state", func(c context.Context) (func(), error) {
 		res, err := parts.run(c, w, root)
 		return func() { scan.ActiveRun = res }, err
 	}, func(error) { scan.ActiveRun = &scanRun{State: "unknown"} })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("state", func(c context.Context) (func(), error) {
 		res, err := parts.runs(c, root)
 		return func() { scan.EarlierRuns = res }, err
 	}, func(error) { scan.EarlierRuns = -1 })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("limits", func(c context.Context) (func(), error) {
 		res, err := parts.limits(c, w)
 		return func() { scan.Limits = res }, err
 	}, func(error) { scan.Limits = nil })
 
-	runPart(func(c context.Context) (func(), error) {
+	runPart("knowledge", func(c context.Context) (func(), error) {
 		res, err := parts.knowledge(c, w, root)
 		return func() { scan.Knowledge, scan.KnowledgeErr = res, nil }, err
 	}, func(err error) {
@@ -679,21 +680,27 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 	defer cancel()
 	providers := []string{"claude", "codex"}
 	out := make([]scanSessions, 0, len(providers))
-	for _, provider := range providers {
+	for i, provider := range providers {
 		if budget.Err() != nil {
 			break
 		}
+		// Report progress as each provider's earlier-session check finishes,
+		// since scanning history is often the slowest part of startup.
+		deferStep := func(done int) { w.noteLaunchCount("history", done, len(providers)) }
 		folder := w.runtime.EarlierWorkFolder(provider)
 		if folder == "" {
+			deferStep(i + 1)
 			continue
 		}
 		if !w.runtime.HasReadGrant(folder) {
 			if launchEarlierWorkThroughQueue {
 				// Shipped passes undecided reads, so a refusal here is an
 				// explicit operator denial, which wins: never queue past it.
+				deferStep(i + 1)
 				continue
 			}
 			if _, err := os.Stat(folder); err != nil {
+				deferStep(i + 1)
 				continue
 			}
 			sess := scanSessions{Provider: provider, NeedsGrant: true}
@@ -705,6 +712,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 			w.permissions.continuations[filepath.Clean(folder)] = provider
 			w.permissions.mu.Unlock()
 			w.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "Marshal", Reason: "Load earlier " + provider + " work for this project", ContinuationProvider: provider})
+			deferStep(i + 1)
 			continue
 		}
 		listCtx, listCancel := context.WithTimeout(budget, 10*time.Second)
@@ -712,6 +720,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 		listCancel()
 		if err != nil {
 			w.RecordActivity(fmt.Sprintf("Couldn't list earlier %s sessions: %s.", provider, shortLaunchError(err)))
+			deferStep(i + 1)
 			continue
 		}
 		found := 0
@@ -721,6 +730,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 			}
 		}
 		if found == 0 {
+			deferStep(i + 1)
 			continue
 		}
 		sess := scanSessions{Provider: provider, Found: found}
@@ -732,6 +742,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 				out[len(out)-1].Loaded = found
 				w.RecordActivity(loadedEarlierSessionsLine(provider, found))
 			}
+			deferStep(i + 1)
 			continue
 		}
 		wait := make(chan error, 1)
@@ -752,6 +763,7 @@ func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scan
 				}
 				w.RecordActivity(loadedEarlierSessionsLine(provider, found))
 			}
+			deferStep(i + 1)
 		case <-budget.Done():
 			return out
 		}
