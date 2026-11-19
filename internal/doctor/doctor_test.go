@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"database/sql"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -175,4 +176,120 @@ func TestDoctorBeforeInitIsPlain(t *testing.T) {
 	if _, err := os.Stat(statepath.Path(repo.Path())); !os.IsNotExist(err) {
 		t.Fatalf("doctor created Marshal's state: %v", err)
 	}
+}
+
+func injectHotJournal(t *testing.T, dbPath, updateSQL string) {
+	t.Helper()
+	ctx := t.Context()
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, "PRAGMA journal_mode = DELETE"); err != nil {
+		raw.Close()
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, "PRAGMA cache_size = 1"); err != nil {
+		raw.Close()
+		t.Fatal(err)
+	}
+	tx, err := raw.BeginTx(ctx, nil)
+	if err != nil {
+		raw.Close()
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, updateSQL); err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "CREATE TABLE hot_spill (id INTEGER PRIMARY KEY, body TEXT)"); err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatal(err)
+	}
+	blob := strings.Repeat("x", 4096)
+	for i := 0; i < 16; i++ {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO hot_spill(body) VALUES (?)", blob); err != nil {
+			tx.Rollback()
+			raw.Close()
+			t.Fatal(err)
+		}
+	}
+	dbBytes, err := os.ReadFile(dbPath)
+	if err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatal(err)
+	}
+	journalBytes, err := os.ReadFile(dbPath + "-journal")
+	if err != nil {
+		tx.Rollback()
+		raw.Close()
+		t.Fatalf("expected hot journal during open tx: %v", err)
+	}
+	_ = tx.Rollback()
+	_ = raw.Close()
+
+	// Remove any WAL sidecars so the database is strictly in rollback-journal mode.
+	_ = os.Remove(dbPath + "-wal")
+	_ = os.Remove(dbPath + "-shm")
+	if err := os.WriteFile(dbPath, dbBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dbPath+"-journal", journalBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDoctorNamesHotJournalConditionAndFix(t *testing.T) {
+	t.Run("state_db", func(t *testing.T) {
+		repo := doctorRepo(t)
+		layout, err := app.Bootstrap(context.Background(), repo.Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		injectHotJournal(t, layout.Database, "UPDATE projects SET default_branch = 'uncommitted'")
+
+		report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+		if report.Verdict != Fail {
+			t.Fatalf("verdict = %s, want FAIL", report.Verdict)
+		}
+		check := report.Check("sqlite")
+		if check == nil || check.Verdict != Fail {
+			t.Fatalf("sqlite check = %+v", check)
+		}
+		for _, want := range []string{"SQLITE_READONLY_ROLLBACK", "hot journal", "chmod"} {
+			if !strings.Contains(check.Detail, want) {
+				t.Fatalf("sqlite detail %q missing %q", check.Detail, want)
+			}
+		}
+		if _, err := os.Stat(layout.Database + "-journal"); err != nil {
+			t.Fatalf("doctor silently mutated hot journal instead of staying read-only: %v", err)
+		}
+	})
+
+	t.Run("knowledge_index", func(t *testing.T) {
+		repo := doctorRepo(t)
+		layout, err := app.Bootstrap(context.Background(), repo.Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		knowledgeDB := filepath.Join(layout.RuntimeDir, "knowledge", "index-v1.db")
+		injectHotJournal(t, knowledgeDB, "UPDATE metadata SET root = 'interrupted' WHERE id = 1")
+
+		report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+		if report.Verdict != Fail {
+			t.Fatalf("verdict = %s, want FAIL", report.Verdict)
+		}
+		check := report.Check("knowledge_index")
+		if check == nil || check.Verdict != Fail {
+			t.Fatalf("knowledge_index check = %+v", check)
+		}
+		for _, want := range []string{"SQLITE_READONLY_ROLLBACK", "hot journal", "remove"} {
+			if !strings.Contains(check.Detail, want) {
+				t.Fatalf("knowledge_index detail %q missing %q", check.Detail, want)
+			}
+		}
+	})
 }

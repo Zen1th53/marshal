@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,5 +90,132 @@ func validateWriterLoop(ctx context.Context, path string) {
 		}
 		writer.Migrate(ctx)
 		writer.Close()
+	}
+}
+
+// snapshotHotRollbackJournal builds a real SQLite database with an uncommitted
+// hot rollback journal (-journal) and no active locks, simulating a process
+// killed with SIGQUIT/SIGKILL mid-transaction.
+func snapshotHotRollbackJournal(t *testing.T) string {
+	t.Helper()
+	ctx := t.Context()
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.db")
+	st, err := Open(ctx, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InitProject(ctx, model.Project{ID: "proj-hot", Repository: "/repo/hot", DefaultBranch: "main", PackVersion: "6.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, "PRAGMA journal_mode = DELETE"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := sql.Open("sqlite", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.ExecContext(ctx, "PRAGMA cache_size = 1"); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := raw.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "UPDATE projects SET default_branch = 'uncommitted-branch'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "CREATE TABLE hot_spill (id INTEGER PRIMARY KEY, body TEXT)"); err != nil {
+		t.Fatal(err)
+	}
+	blob := make([]byte, 4096)
+	for i := range blob {
+		blob[i] = 'x'
+	}
+	for i := 0; i < 16; i++ {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO hot_spill(body) VALUES (?)", string(blob)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dbBytes, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journalBytes, err := os.ReadFile(src + "-journal")
+	if err != nil {
+		t.Fatalf("expected rollback journal to exist while tx is open: %v", err)
+	}
+	if len(journalBytes) == 0 {
+		t.Fatal("expected non-empty rollback journal")
+	}
+
+	dst := filepath.Join(t.TempDir(), "state.db")
+	if err := os.WriteFile(dst, dbBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst+"-journal", journalBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
+func TestValidateInitializedRecoversHotRollbackJournal(t *testing.T) {
+	ctx := t.Context()
+	path := snapshotHotRollbackJournal(t)
+
+	// A pure read-only probe must observe SQLITE_READONLY_ROLLBACK (776).
+	if err := ProbeHotJournal(ctx, path); !IsReadOnlyRecovery(err) {
+		t.Fatalf("ProbeHotJournal = %v, want SQLITE_READONLY_ROLLBACK", err)
+	}
+
+	// ValidateInitialized rolls back the hot journal via a non-creating writable
+	// open and then succeeds on the read-only validation.
+	if err := ValidateInitialized(ctx, path); err != nil {
+		t.Fatalf("ValidateInitialized failed to recover hot journal: %v", err)
+	}
+	if err := ProbeHotJournal(ctx, path); err != nil {
+		t.Fatalf("ProbeHotJournal after recovery = %v", err)
+	}
+	st, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	proj, err := st.Project(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proj.DefaultBranch != "main" {
+		t.Fatalf("uncommitted branch survived hot-journal rollback: got %q, want %q", proj.DefaultBranch, "main")
+	}
+}
+
+func TestValidateInitializedHotJournalUnwritableFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file permissions")
+	}
+	ctx := t.Context()
+	path := snapshotHotRollbackJournal(t)
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	err := ValidateInitialized(ctx, path)
+	if err == nil {
+		t.Fatal("expected error when hot journal cannot be rolled back on read-only file")
+	}
+	if !IsReadOnly(err) && !IsReadOnlyRecovery(err) {
+		t.Fatalf("expected SQLITE_READONLY error, got: %v", err)
 	}
 }
