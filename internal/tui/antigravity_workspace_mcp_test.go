@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -108,8 +109,35 @@ func TestExcludeFromGitInALinkedWorktree(t *testing.T) {
 	}
 }
 
-// The agy Marshal may call MARSHAL's tools without a prompt per tool; the
-// person's own --settings are never replaced.
+func parseAntigravitySettingsArg(t *testing.T, args []string) (allow, ask, deny []string) {
+	t.Helper()
+	var raw string
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--settings" {
+			raw = args[i+1]
+			break
+		}
+	}
+	if raw == "" {
+		t.Fatalf("missing --settings argument in %q", args)
+	}
+	var parsed struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+			Ask   []string `json:"ask"`
+			Deny  []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("invalid --settings JSON %q: %v", raw, err)
+	}
+	return parsed.Permissions.Allow, parsed.Permissions.Ask, parsed.Permissions.Deny
+}
+
+// The agy Marshal may call MARSHAL's tools and read MARSHAL's own state and
+// briefing paths without per-tool or per-file prompts, keeps remote-machine
+// and sudo commands behind owner approval, and never replaces the person's
+// own --settings.
 func TestAntigravityMarshalToolsAreAllowedForTheSession(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("MARSHAL_MCP_BINARY", "/usr/bin/true")
@@ -122,12 +150,105 @@ func TestAntigravityMarshalToolsAreAllowedForTheSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(args, "\x00")
-	if !strings.Contains(joined, "--settings\x00"+antigravityMarshalToolSettings) {
-		t.Fatalf("no session permission for marshal tools: %q", args)
+	allow, ask, _ := parseAntigravitySettingsArg(t, args)
+	if !slices.Contains(allow, "mcp(marshal/*)") {
+		t.Fatalf("no session permission for marshal tools: %q", allow)
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"read_file(.marshal/inbox/)",
+		"read_file(.marshal/briefing/)",
+		"read_file(.marshal/marshal/)",
+		"read_file(.marshal/proposals/)",
+		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "inbox")) + "/)",
+		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "briefing")) + "/)",
+		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "marshal")) + "/)",
+		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "proposals")) + "/)",
+	} {
+		if !slices.Contains(allow, want) {
+			t.Fatalf("missing read_file allow rule %q in %q", want, allow)
+		}
+	}
+	for _, want := range []string{"command(ssh)", "command(scp)", "command(sftp)", "command(rsync)", "command(sudo)"} {
+		if !slices.Contains(ask, want) {
+			t.Fatalf("missing ask rule %q in %q", want, ask)
+		}
 	}
 	own := []string{"--settings", `{"theme":"dark"}`, "--print", "x"}
 	if got := allowMarshalToolsForAntigravity(root, own); strings.Count(strings.Join(got, " "), "--settings") != 1 {
 		t.Fatalf("the person's --settings were replaced or doubled: %q", got)
+	}
+}
+
+// Even when the project already has its own .agents/mcp_config.json (so
+// Marshal does not attach or pre-allow mcp(marshal/*)), agy still gets
+// read_file access to Marshal's own state/briefing paths and ask rules for
+// remote-machine and sudo commands.
+func TestAntigravitySessionSettingsWithUserOwnedWorkspaceMCP(t *testing.T) {
+	root := t.TempDir()
+	ownMCP := filepath.Join(root, ".agents", "mcp_config.json")
+	if err := os.MkdirAll(filepath.Dir(ownMCP), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ownMCP, []byte(`{"mcpServers":{"mine":{"command":"x"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := newBriefingDir(root, "antigravity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.remove()
+	args, _, err := configureAntigravityMCP(dir, root, []string{"--print", "x"}, nil, "marshal", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	allow, ask, _ := parseAntigravitySettingsArg(t, args)
+	if slices.Contains(allow, "mcp(marshal/*)") {
+		t.Fatalf("pre-allowed mcp(marshal/*) despite user-owned mcp_config.json: %q", allow)
+	}
+	if !slices.Contains(allow, "read_file(.marshal/inbox/)") || !slices.Contains(allow, "read_file(.marshal/briefing/)") {
+		t.Fatalf("missing Marshal state/briefing read_file rules: %q", allow)
+	}
+	for _, want := range []string{"command(ssh)", "command(scp)", "command(rsync)", "command(sudo)"} {
+		if !slices.Contains(ask, want) {
+			t.Fatalf("missing ask rule %q in %q", want, ask)
+		}
+	}
+}
+
+// A fresh agy Marshal launch opens with the hidden briefing (--add-dir) and
+// session permissions (--settings), and no automatic "Hello." turn.
+func TestAntigravityMarshalLaunchHasNoAutomaticHelloTurn(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MARSHAL_MCP_BINARY", "/usr/bin/true")
+	args, _, dir, err := prepareMarshalLaunch("antigravity", root, nil, "MARSHAL PROTOCOL\nrules", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.remove()
+	for _, forbidden := range []string{"--prompt-interactive", "-i", marshalKickoff, marshalKickoffContinue} {
+		if slices.Contains(args, forbidden) {
+			t.Fatalf("fresh agy launch carried automatic opening argument %q: %q", forbidden, args)
+		}
+	}
+	foundAddDir := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--add-dir" && args[i+1] == dir.path {
+			foundAddDir = true
+			break
+		}
+	}
+	if !foundAddDir {
+		t.Fatalf("fresh agy launch missing briefing --add-dir %q: %q", dir.path, args)
+	}
+	allow, ask, _ := parseAntigravitySettingsArg(t, args)
+	if !slices.Contains(allow, "mcp(marshal/*)") || !slices.Contains(allow, "read_file(.marshal/inbox/)") {
+		t.Fatalf("fresh agy launch missing allow rules: %q", allow)
+	}
+	if !slices.Contains(ask, "command(ssh)") || !slices.Contains(ask, "command(sudo)") {
+		t.Fatalf("fresh agy launch missing ask rules: %q", ask)
 	}
 }

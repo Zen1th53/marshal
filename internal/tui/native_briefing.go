@@ -101,12 +101,16 @@ func marshalKickoffArgs(provider string, roots ...string) []string {
 }
 
 // marshalCueArgs is the argv form of one opening cue for provider.
+// Antigravity loads the hidden briefing from --add-dir before any turn and has
+// no hidden-turn flag; passing --prompt-interactive "Hello." would run an
+// automatic turn (reading files and prompting the owner) before the owner has
+// said anything, so Antigravity opens with no automatic turn.
 func marshalCueArgs(provider, opening string) []string {
-	switch provider {
+	switch marshalMCPProvider(provider) {
 	case "opencode":
 		return []string{"--prompt", opening}
 	case "antigravity":
-		return []string{"--prompt-interactive", opening}
+		return nil
 	default:
 		return []string{opening}
 	}
@@ -118,9 +122,17 @@ func marshalCueArgs(provider, opening string) []string {
 // scan finished mid-launch can never make them disagree with what was sent.
 func trailingMarshalCue(provider string, args []string) []string {
 	for _, opening := range append([]string{marshalKickoff, marshalKickoffContinue}, legacyMarshalCues...) {
-		k := marshalCueArgs(provider, opening)
-		if len(args) >= len(k) && slices.Equal(args[len(args)-len(k):], k) {
+		if k := marshalCueArgs(provider, opening); len(k) > 0 && len(args) >= len(k) && slices.Equal(args[len(args)-len(k):], k) {
 			return k
+		}
+		// Earlier Marshal versions launched agy with --prompt-interactive <cue>;
+		// keep recognising that shape so resume still strips it from a saved
+		// argv instead of sending a fresh turn.
+		if marshalMCPProvider(provider) == "antigravity" {
+			legacy := []string{"--prompt-interactive", opening}
+			if len(args) >= len(legacy) && slices.Equal(args[len(args)-len(legacy):], legacy) {
+				return legacy
+			}
 		}
 	}
 	return nil

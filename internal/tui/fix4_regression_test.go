@@ -23,6 +23,12 @@ func TestNativeMarshalOpeningKeepsProtocolHidden(t *testing.T) {
 	}
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		args := marshalKickoffArgs(provider)
+		if provider == "antigravity" {
+			if len(args) != 0 {
+				t.Fatalf("antigravity expected no automatic opening turn, got %q", args)
+			}
+			continue
+		}
 		prompt := args[len(args)-1]
 		if containsMarshalProtocol(prompt) || strings.Contains(prompt, brief) {
 			t.Fatalf("%s exposed compiled protocol", provider)

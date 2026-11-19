@@ -700,9 +700,15 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 	}
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		args := marshalKickoffArgs(provider, rt.ProjectRoot())
-		opening := args[len(args)-1]
-		if opening != marshalKickoffContinue || strings.Contains(opening, `"language":"English"`) || strings.Contains(opening, "Do not repeat") {
-			t.Fatalf("%s reopened/switched opening leaked file intake into chat: %s", provider, opening)
+		if provider == "antigravity" {
+			if len(args) != 0 {
+				t.Fatalf("%s marshalKickoffArgs = %q, want no automatic turn", provider, args)
+			}
+		} else {
+			opening := args[len(args)-1]
+			if opening != marshalKickoffContinue || strings.Contains(opening, `"language":"English"`) || strings.Contains(opening, "Do not repeat") {
+				t.Fatalf("%s reopened/switched opening leaked file intake into chat: %s", provider, opening)
+			}
 		}
 		pArgs, _, dir, err := prepareMarshalLaunch(provider, rt.ProjectRoot(), nil, "protocol", false, "")
 		if dir != nil {
@@ -711,7 +717,13 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s prepareMarshalLaunch failed: %v", provider, err)
 		}
-		if pArgs[len(pArgs)-1] != marshalKickoffContinue {
+		if provider == "antigravity" {
+			for _, a := range pArgs {
+				if a == "--prompt-interactive" || a == marshalKickoff || a == marshalKickoffContinue {
+					t.Fatalf("%s prepareMarshalLaunch carried an automatic turn: %q", provider, pArgs)
+				}
+			}
+		} else if pArgs[len(pArgs)-1] != marshalKickoffContinue {
 			t.Fatalf("%s prepareMarshalLaunch opening = %q, want %q", provider, pArgs[len(pArgs)-1], marshalKickoffContinue)
 		}
 	}
