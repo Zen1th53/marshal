@@ -30,6 +30,17 @@ func (w *Workspace) bindWorkspaceKeys(ctx context.Context, pane, root string) er
 	return w.bindKeyTable(ctx, pane, workspaceKeyTable(root), target, "select-window", "-t", target, ";", "send-keys", "-t", target, "F11")
 }
 
+// bindWorkspaceKeysBestEffort binds the pane's keys but never fails the
+// pane's worker over them: the keys only make the pane easier to drive, and
+// on a slow host a tmux query (list-keys) can run past its deadline. A
+// worker attempt failed that way was retried as a provider crash. The
+// failure shows on the Board instead and the next reconcile binds again.
+func (w *Workspace) bindWorkspaceKeysBestEffort(ctx context.Context, pane, root string) {
+	if err := w.bindWorkspaceKeys(ctx, pane, root); err != nil && ctx.Err() == nil {
+		w.RecordActivity("Marshal dock: keys for pane " + pane + " not bound yet: " + err.Error())
+	}
+}
+
 // workspaceKeyTable is the key table of the project's agent panes.
 func workspaceKeyTable(root string) string {
 	return statepath.Name + "-keys-" + tmux.ProjectHash(root)
