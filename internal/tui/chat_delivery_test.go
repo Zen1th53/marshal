@@ -89,9 +89,10 @@ func TestDeliverChatTurnStopsWhenClear(t *testing.T) {
 
 // Enter retries are bounded: a composer that never clears stops after tries.
 func TestDeliverChatTurnBounded(t *testing.T) {
+	t.Cleanup(func() { forgetOwnPaste("%1") })
 	f := &fakeTmux{frames: []string{"> ", "> ", "> x"}}
-	if err := deliverChatTurn(context.Background(), f.run, "%1", "x", deliverEnterTries, time.Millisecond); err != nil {
-		t.Fatalf("deliver: %v", err)
+	if err := deliverChatTurn(context.Background(), f.run, "%1", "x", deliverEnterTries, time.Millisecond); !errors.Is(err, errChatUnsubmitted) {
+		t.Fatalf("deliver: %v, want errChatUnsubmitted", err)
 	}
 	if got := f.enters(); got != deliverEnterTries {
 		t.Fatalf("Enter presses = %d, want %d", got, deliverEnterTries)

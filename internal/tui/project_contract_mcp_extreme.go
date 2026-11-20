@@ -97,7 +97,7 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := w.runtime.ValidateProjectContractSubmission(ctx, sub.Contract); err != nil {
 			return nil, err
 		}
-		p, _, err := w.store.AdmitMCPProjectContract(ctx, store.MCPProposal{ID: occurrenceMCP(l.id, args.SubmissionID), Launch: l.id, Owner: l.owner, Provider: l.provider, Submission: args.SubmissionID}, sub)
+		p, _, err := w.store.AdmitMCPProjectContract(ctx, store.MCPProposal{ID: w.liveOccurrenceMCP(ctx, l, args.SubmissionID), Launch: l.id, Owner: l.owner, Provider: l.provider, Submission: args.SubmissionID}, sub)
 		if err != nil {
 			return nil, explainProjectContractSubmission(sub, err)
 		}
@@ -112,7 +112,7 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if !validProposalID(args.SubmissionID) {
 			return nil, model.ErrInvalid
 		}
-		p, err := w.store.MCPProposal(ctx, w.projectID, occurrenceMCP(l.id, args.SubmissionID))
+		p, err := w.store.MCPProposal(ctx, w.projectID, w.liveOccurrenceMCP(ctx, l, args.SubmissionID))
 		if err != nil {
 			return nil, err
 		}
