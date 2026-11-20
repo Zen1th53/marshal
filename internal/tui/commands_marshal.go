@@ -186,6 +186,7 @@ func (w *Workspace) setMarshalPanel(p *MarshalPanel) {
 	// reached the state.
 	w.animate(p)
 	w.mu.Unlock()
+	w.notePlanLimits(p)
 	w.wakeBoard()
 	w.requestRepaint()
 	w.kickDock()

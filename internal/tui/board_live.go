@@ -295,6 +295,7 @@ func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p 
 	}
 	w.mu.Unlock()
 	if current {
+		w.notePlanLimits(&next)
 		w.requestRepaint()
 	}
 	return current

@@ -132,6 +132,13 @@ func (v boardVisual) vitalsLine(w int) (string, []headerSpan) {
 				}
 			}
 			full := mk + v.fg("dim", p) + " " + v.fg(barColor, bar) + " " + v.fg(figColor, fig) + suffix
+			if win, _ := q.Binding(); pct < lowLimitPercent {
+				// A low window says which one it is and when it resets, as
+				// its Activity note does: "Claude and GPT 5h: 12% left ·
+				// resets 14:32" (board_limits.go).
+				low := strings.TrimPrefix(lowWindowText(q, win, v.now), p+" ")
+				full = mk + v.fg("dim", p) + " " + v.fg(barColor, bar) + " " + v.fg(figColor, low) + suffix
+			}
 			// The narrower forms keep the "left" label: the reset goes
 			// first, then the name and the bar, so a narrow row still says
 			// which quantity it shows.

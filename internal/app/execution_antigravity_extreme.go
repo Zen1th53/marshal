@@ -136,7 +136,9 @@ func (r *Runtime) executeProcess05Antigravity(ctx context.Context, task executio
 	// Refresh a stale agy sign-in immediately before dispatch so a live worker
 	// does not spend a whole attempt on an expiring token.
 	r.refreshAgySigninBeforeDispatch(providerCtx)
+	providerCtx, leaseDone := r.keepWorkerLeaseAlive(providerCtx, task, &request)
 	result, runErr := provider.Run(providerCtx, request)
+	runErr = withWorkerLeaseOutcome(runErr, leaseDone())
 	// A worker that hits its provider's own quota or rate limit marks the
 	// provider limited, so the next draft or review moves off it.
 	// An expired agy sign-in notifies the owner without a quota cooldown.

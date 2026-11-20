@@ -1237,7 +1237,8 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 			break
 		}
 		lines := v.gateEntry(g, p.Rect.X, p.Rect.Y+len(out), w)
-		if len(out)+len(lines) > h {
+		// Only the first two rows carry buttons; a cut limit line takes none.
+		if len(out)+min(len(lines), 2) > h {
 			v.unhit(p.Rect.Y + len(out) + 1)
 		}
 		out = append(out, lines...)
