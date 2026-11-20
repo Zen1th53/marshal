@@ -16,3 +16,9 @@ func emptyBoardWorkspace(t *testing.T) *Workspace {
 	w.homeBoard = true
 	return w
 }
+
+// lines0 is the first line of a frame's text: Board v2's top bar.
+func lines0(text string) string {
+	first, _, _ := strings.Cut(text, "\n")
+	return first
+}

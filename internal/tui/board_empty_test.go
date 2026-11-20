@@ -101,13 +101,17 @@ func TestFirstUseBoardGolden(t *testing.T) {
 // classic still reaches the classic screen and /view board comes back.
 func TestFirstUseBoardIsTheDefaultScreen(t *testing.T) {
 	w := emptyBoardWorkspace(t)
+	// Closing waits for the background readiness probe the paint starts.
+	defer w.Close()
 	if !w.boardVisible() {
 		t.Fatal("the Board is not the screen with no run")
 	}
+	// Board v2's first screen: READY in the top bar, the readiness
+	// checklist, and say-what-to-build leading the key bar.
 	lines, _, _ := w.frameLinesFull(120, 40)
 	text := StripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(text, "Tell the Marshal what to build") || !strings.Contains(text, "NO RUN YET") {
-		t.Fatalf("no first-use card:\n%s", text)
+	if !strings.Contains(lines0(text), " READY ") || !strings.Contains(text, "READINESS") || !strings.Contains(text, "s  say what to build") {
+		t.Fatalf("no Board v2 ready screen:\n%s", text)
 	}
 	for _, old := range []string{"Talk to the Marshal: /marshal chat", "Native sessions", "ULTRA ACTIVE"} {
 		if strings.Contains(text, old) {
@@ -118,7 +122,7 @@ func TestFirstUseBoardIsTheDefaultScreen(t *testing.T) {
 		t.Fatal(got)
 	}
 	lines, _, _ = w.frameLinesFull(120, 40)
-	if strings.Contains(StripANSI(strings.Join(lines, "\n")), "Tell the Marshal what to build") || w.boardVisible() {
+	if strings.Contains(StripANSI(strings.Join(lines, "\n")), "READINESS") || w.boardVisible() {
 		t.Fatal("/view classic still shows the Board")
 	}
 	if got := w.setBoardView(false); got != "View: Board." {
@@ -151,6 +155,7 @@ func (f *fakeVerifySource) RouteTask(context.Context, string, string) (string, e
 // verify is never one key: the probe calls the model.
 func TestFirstUseVerifyKeysAndClick(t *testing.T) {
 	w := emptyBoardWorkspace(t)
+	defer w.Close()
 	now := time.Now()
 	src := &fakeVerifySource{verified: make(chan string, 4), providers: []store.ProviderStatus{{Provider: "codex", VerifiedAt: now, ExpiresAt: now.Add(time.Hour)}}}
 	w.provSource = src
@@ -191,9 +196,13 @@ func TestFirstUseVerifyKeysAndClick(t *testing.T) {
 		t.Fatal("verify did not run")
 	}
 
-	// A click on agy's chip arms agy.
+	// A click on agy's readiness row arms agy. The checklist lists each
+	// installed provider once the off-paint probe has run.
+	w.refreshV2Marshal(context.Background(), w.v2ProbeInput(w.v2LiveChat()))
 	lines, _, _ = w.frameLinesFull(120, 40)
-	_ = lines
+	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "READINESS") || !strings.Contains(text, "agy") {
+		t.Fatalf("the readiness checklist does not list agy:\n%s", text)
+	}
 	var at boardHit
 	for _, h := range w.boardHits.hits {
 		if h.kind == hitVerify && h.id == "agy" {
@@ -242,18 +251,20 @@ func TestFirstUseFooterShowsSwitchHint(t *testing.T) {
 
 // TestPTYFreshProjectOpensOnTheBoard launches the real binary in a fresh
 // project, as `marshal init` then `marshal` leave it: the first screen is
-// the Board's first-use card, never the classic screen, and s then typing
+// Board v2's ready screen, never the classic screen, and s then typing
 // writes a message to the Marshal, not Board keys.
 func TestPTYFreshProjectOpensOnTheBoard(t *testing.T) {
 	// One coding CLI is installed: the launch picker has a single candidate,
-	// saves it and stays closed, so the first-use card owns the keys.
+	// saves it and stays closed, so the ready screen owns the keys.
 	fakeProviderCLIs(t, "codex")
 	bin := buildMarshalBinary(t)
 	project := initProject(t, bin)
 	s := startBoardTUIInProject(t, 40, 140, bin, project, "tui")
-	s.mustSee("NO RUN YET")
-	s.mustSee("Tell the Marshal what to build")
-	s.mustSee("PROVIDERS")
+	// Board v2's ready screen: the readiness checklist with the Marshal's
+	// row, and say-what-to-build on the key bar.
+	s.mustSee("READINESS")
+	s.mustSee("Marshal")
+	s.mustSee("say what to build")
 	s.mustNotSee("Native sessions")
 	s.send("s")
 	s.mustSee("to the Marshal ›")

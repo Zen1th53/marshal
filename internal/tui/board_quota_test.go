@@ -32,6 +32,8 @@ func quotaPanel(until time.Time) *MarshalPanel {
 // TestQuotaCardShown: the all-providers-at-limit pause shows the owner card
 // first in the inbox, with its exact line and keys.
 func TestQuotaCardShown(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.setMarshalPanel(quotaPanel(time.Now().Add(90 * time.Minute)))
 	got := plainFrame(w, 170, 45)
@@ -106,6 +108,8 @@ func TestQuotaCardResumeArmsAndFiresOnce(t *testing.T) {
 // TestQuotaCardStopDisarms: s disarms auto-resume, records the plain line,
 // and leaves the card on its resume key.
 func TestQuotaCardStopDisarms(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	until := time.Now().Add(time.Hour)
 	w.setMarshalPanel(quotaPanel(until))

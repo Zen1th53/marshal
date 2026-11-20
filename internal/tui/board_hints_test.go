@@ -14,7 +14,9 @@ import (
 )
 
 // footerIDs paints the workspace at cols x rows and returns the hint bar's
-// buttons on the last row, left to right, and the row's text.
+// buttons, left to right, and the hint bar's text. The classic Board draws
+// the hint bar on the last row; Board v2 draws it as its key bar, above the
+// status row. Either way it is the lowest row that holds action buttons.
 func footerIDs(t *testing.T, w *Workspace, cols, rows int) ([]string, string) {
 	t.Helper()
 	lines, _, _ := w.frameLines(cols, rows)
@@ -22,25 +24,54 @@ func footerIDs(t *testing.T, w *Workspace, cols, rows int) ([]string, string) {
 	hits := slices.Clone(w.boardHits.hits)
 	w.boardHits.mu.Unlock()
 	slices.SortFunc(hits, func(a, b boardHit) int { return a.x0 - b.x0 })
+	row := -1
+	for _, h := range hits {
+		if h.kind == hitAction && h.row > row && h.row >= rows-2 {
+			row = h.row
+		}
+	}
 	var ids []string
 	for _, h := range hits {
-		if h.row == rows-1 && h.kind == hitAction {
+		if h.row == row && h.kind == hitAction {
 			ids = append(ids, h.id)
 		}
 	}
-	return ids, StripANSI(lines[rows-1])
+	if row < 0 {
+		row = rows - 1
+	}
+	return ids, StripANSI(lines[row])
 }
 
-// footerCell is the cell of label on the footer row, 1-based for click.
+// v2CardButtons paints the workspace and returns the keys of the Board v2
+// card buttons on screen, left to right, with the frame's text.
+func v2CardButtons(t *testing.T, w *Workspace, cols, rows int) ([]string, string) {
+	t.Helper()
+	lines, _, _ := w.frameLines(cols, rows)
+	w.boardHits.mu.Lock()
+	hits := slices.Clone(w.boardHits.hits)
+	w.boardHits.mu.Unlock()
+	slices.SortFunc(hits, func(a, b boardHit) int { return a.x0 - b.x0 })
+	var keys []string
+	for _, h := range hits {
+		if h.kind == hitV2Key && h.row < rows-2 {
+			keys = append(keys, h.id)
+		}
+	}
+	return keys, StripANSI(strings.Join(lines, "\n"))
+}
+
+// footerCell is the cell of label on the hint bar, 1-based for click.
 func footerCell(t *testing.T, w *Workspace, cols, rows int, label string) (int, int) {
 	t.Helper()
 	lines, _, _ := w.frameLines(cols, rows)
-	plain := StripANSI(lines[rows-1])
-	i := strings.Index(plain, label)
-	if i < 0 {
-		t.Fatalf("footer lacks %q: %q", label, plain)
+	for row := rows - 1; row >= max(0, rows-2); row-- {
+		plain := StripANSI(lines[row])
+		if i := strings.Index(plain, label); i >= 0 {
+			return row + 1, VisibleLen(plain[:i]) + 1
+		}
 	}
-	return rows, VisibleLen(plain[:i]) + 1
+	t.Fatalf("hint bar lacks %q: %q", label, StripANSI(lines[rows-1]))
+	return 0, 0
 }
 
 // runHintWorkspace is boardWorkspace with the inbox emptied and the Tasks
@@ -62,51 +93,61 @@ func TestBoardHintsFollowState(t *testing.T) {
 		setup func(t *testing.T) *Workspace
 		lead  []string
 		tail  bool
+		// card is the buttons of the Board v2 card the state puts on
+		// screen; a card keeps its own keys, so the hint bar's lead is
+		// not on the Board then.
+		card []string
 	}{
 		{"1 retry armed", func(t *testing.T) *Workspace {
 			w := runHintWorkspace(t, "T-023")
 			w.boardUI.retryArmed = "T-023"
 			return w
-		}, []string{"confirm.enter", "confirm.cancel"}, false},
+		}, []string{"confirm.enter", "confirm.cancel"}, false, nil},
 		{"1 inbox confirmation", func(t *testing.T) *Workspace {
 			w, _ := boardWorkspace(t)
 			w.boardUI.focus = layout.Inbox
 			w.inboxView.Update(w.boardInbox())
 			w.inboxView.Begin('a')
 			return w
-		}, []string{"confirm.enter", "confirm.cancel"}, false},
+		}, []string{"confirm.enter", "confirm.cancel"}, false, nil},
 		{"2 picker", func(t *testing.T) *Workspace {
 			w := runHintWorkspace(t, "T-017")
 			w.openPickerFor(pickerFor{title: " WHO PLANS? ", cands: twoCands, current: "codex"})
 			return w
-		}, []string{"picker.use", "picker.choose", "picker.keep"}, false},
+		}, []string{"picker.use", "picker.choose", "picker.keep"}, false, nil},
 		{"3 typing", func(t *testing.T) *Workspace {
 			w := runHintWorkspace(t, "T-017")
 			w.composer.SetText("add a README")
 			return w
-		}, []string{"typing.send", "typing.cancel"}, false},
+		}, []string{"typing.send", "typing.cancel"}, false, nil},
 		{"5 gate", func(t *testing.T) *Workspace {
 			w := runHintWorkspace(t, "T-017")
 			w.gates.contract = &gateContract{ID: "c", Revision: 1, Digest: "sha256:1", Purpose: "p", Submitted: time.Now()}
 			return w
-		}, []string{"gate.reply"}, true},
+		}, []string{"gate.reply"}, true, []string{"a", "k"}},
 		{"6 guard", func(t *testing.T) *Workspace {
 			w := runHintWorkspace(t, "T-017")
 			w.guard.alert = &guardAlert{at: time.Now(), paths: []string{"x.py"}, wasDirty: map[string]bool{}}
 			return w
-		}, []string{"guard.undo", "guard.keep"}, true},
-		{"7 stuck", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-023") }, []string{"task.retry", "task.model", "task.inspect"}, true},
-		{"8 queued", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-033") }, []string{"task.model", "task.inspect"}, true},
+		}, []string{"guard.undo", "guard.keep"}, true, nil},
+		{"7 stuck", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-023") }, []string{"task.retry", "task.model", "task.inspect"}, true, nil},
+		{"8 queued", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-033") }, []string{"task.model", "task.inspect"}, true, nil},
 		{"9 inbox", func(t *testing.T) *Workspace {
 			w, _ := boardWorkspace(t)
 			w.boardUI.focus = layout.Inbox
 			return w
-		}, []string{"inbox.allow", "inbox.deny", "inbox.show"}, true},
-		{"11 otherwise", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-017") }, []string{"board.move", "task.inspect", "marshal.say", "task.model"}, true},
+		}, []string{"inbox.allow", "inbox.deny", "inbox.show"}, true, []string{"a", "d", "⏎"}},
+		{"11 otherwise", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-017") }, []string{"board.move", "task.inspect", "marshal.say", "task.model"}, true, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := tc.setup(t)
 			defer w.Close()
+			if tc.card != nil {
+				if got, frame := v2CardButtons(t, w, 170, 45); !slices.Equal(got, tc.card) {
+					t.Fatalf("card buttons %v, want %v:\n%s", got, tc.card, frame)
+				}
+				return
+			}
 			ids, row := footerIDs(t, w, 170, 45)
 			if len(ids) < len(tc.lead) || !slices.Equal(ids[:len(tc.lead)], tc.lead) {
 				t.Fatalf("hints %v, want lead %v; footer %q", ids, tc.lead, row)
@@ -134,7 +175,7 @@ func TestBoardHintsFollowState(t *testing.T) {
 		if !slices.Equal(ids, append(lead, "palette", "help")) {
 			t.Fatalf("hints %v, want %v then palette, help; footer %q", ids, lead, row)
 		}
-		if !strings.HasPrefix(row, " s say what to build") {
+		if !strings.HasPrefix(strings.TrimSpace(row), "s  say what to build") {
 			t.Fatalf("no-run footer %q", row)
 		}
 	})
@@ -168,9 +209,10 @@ func TestBoardHintsFollowState(t *testing.T) {
 		defer w.Close()
 		w.endOpening()
 		w.gates.contract = &gateContract{ID: "c", Revision: 1, Digest: "sha256:1", Purpose: "p", Submitted: time.Now()}
-		ids, row := footerIDs(t, w, 170, 45)
-		if len(ids) == 0 || ids[0] != "gate.reply" || !strings.HasPrefix(row, " y reply") {
-			t.Fatalf("hints %v, want gate.reply first; footer %q", ids, row)
+		// The architecture's decision card comes before the first-use
+		// screen; a opens the review, k comments.
+		if got, frame := v2CardButtons(t, w, 170, 45); !slices.Equal(got, []string{"a", "k"}) || !strings.Contains(frame, "ACCEPT ARCHITECTURE") {
+			t.Fatalf("card buttons %v, want [a k]:\n%s", got, frame)
 		}
 	})
 
@@ -202,6 +244,8 @@ func TestBoardHintsFollowState(t *testing.T) {
 // Typing keeps the status on the left and puts "⏎ send  esc cancel" at the
 // right while it fits; when it does not, the status wins.
 func TestBoardHintsBesideStatus(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := runHintWorkspace(t, "T-017")
 	defer w.Close()
 	w.composer.SetText("add a README")
@@ -226,6 +270,8 @@ func TestBoardHintsBesideStatus(t *testing.T) {
 // TestBoardHintsAreButtons: every footer item is a button for its registry
 // action, and a click does what the key does.
 func TestBoardHintsAreButtons(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	boardMarshalCandidates = func(*Workspace, context.Context) []pickerCand {
 		return []pickerCand{{provider: "codex"}, {provider: "claude"}}
 	}
@@ -367,6 +413,8 @@ func TestBoardHintsAreButtons(t *testing.T) {
 // "space actions" and "? help": the tail's optional items go first, the
 // labels shorten next, and only then the lead's later items.
 func TestBoardHintsDropTailFirst(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	for _, task := range []string{"T-017", "T-023", "T-033"} {
 		w := runHintWorkspace(t, task)
 		wide, _ := footerIDs(t, w, 170, 45)

@@ -16,6 +16,8 @@ import (
 // the launch picker, the vitals row, the chat title and the Providers view:
 // as "35% left", never as the 65% used, and the bar shows what is left.
 func TestLimitsSameQuantityEverywhere(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	now := vitalsNow
 	codex := usage.Quota{Provider: "codex", Known: true, AsOf: now.Add(-time.Minute),
 		Windows: []usage.Window{{Label: "wk", LeftPercent: 35, ResetsAt: now.Add(2*24*time.Hour + time.Hour)}}}
@@ -63,6 +65,8 @@ func TestLimitsSameQuantityEverywhere(t *testing.T) {
 // wherever it is shown (never "unavailable", which reads as "cannot be
 // used"), and each provider has one glyph, the picker's included.
 func TestLimitsUnknownWordAndGlyphs(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	th := NewTheme(ThemeNoColor, true, false)
 	pv := boardVisual{theme: th, now: vitalsNow}
 	pv.pick = pickerView{cands: []pickerCand{{provider: "claude"}, {provider: "opencode"}}, sel: 0}
