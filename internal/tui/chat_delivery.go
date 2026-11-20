@@ -78,7 +78,10 @@ func chatComposer(frame string) (string, bool) {
 					continue
 				}
 				codexFooter := marker == "›" && strings.HasPrefix(strings.ToLower(trimmed), "gpt-") && strings.Contains(trimmed, " · ")
-				if trimmed == "" || codexFooter || strings.HasPrefix(trimmed, "╰") || strings.HasPrefix(trimmed, "└") {
+				// Claude Code draws its input between two rules with
+				// hints below; the rule ends the input as a box does.
+				rule := strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "━") || strings.HasPrefix(trimmed, "═")
+				if trimmed == "" || codexFooter || rule || strings.HasPrefix(trimmed, "╰") || strings.HasPrefix(trimmed, "└") {
 					break
 				}
 				content += strings.Trim(line, " │┃║|")
@@ -89,35 +92,77 @@ func chatComposer(frame string) (string, bool) {
 	return "", false
 }
 
-// deliverChatTurn only pastes at an observed empty prompt, and only submits
-// while the visible composer contains exactly our text. It never clears input.
+// errChatUnsubmitted is our own paste still sitting in the input after every
+// bounded Enter: nothing the owner typed, and nothing the provider has taken.
+// The caller keeps the request and the next attempt submits that paste
+// instead of pasting again or reporting the owner's input as not empty.
+var errChatUnsubmitted = errors.New("the Marshal chat has not taken the message yet")
+
+// deliverChatTurn delivers with the union dialect; deliverChatTurnAs names
+// the provider.
 func deliverChatTurn(ctx context.Context, run chatRunner, pane, text string, tries int, wait time.Duration) error {
+	return deliverChatTurnAs(ctx, run, composerDialectFor(""), pane, text, tries, wait)
+}
+
+// deliverChatTurnAs only pastes at an observed empty prompt, and only submits
+// while the visible composer holds our own text or the placeholder the
+// provider drew for our paste. It never clears input. A paste of ours left
+// unsent by an earlier attempt is submitted, not pasted again.
+func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pane, text string, tries int, wait time.Duration) error {
 	const buffer = "marshal-decision"
-	checkEmpty := func() error {
+	// checkEmpty reports errChatBusy for anything but an input holding
+	// nothing the owner typed; leftover reports our own unsent paste.
+	checkEmpty := func() (leftover bool, err error) {
 		status, err := run(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{pane_in_mode} #{pane_dead}")
 		if err != nil {
-			return err
+			return false, err
 		}
 		if strings.TrimSpace(string(status)) != pane+" 0 0" {
-			return errChatBusy
+			return false, errChatBusy
 		}
 		frame, err := run(ctx, "capture-pane", "-p", "-e", "-t", pane)
 		if err != nil {
-			return err
+			return false, err
 		}
-		if !chatPromptIdle(string(frame)) {
-			return errChatBusy
+		if composerClear(d, string(frame)) {
+			noteChatInput(pane, true)
+			return false, nil
 		}
+		if _, ok := ownLeftover(d, pane, string(frame)); ok && !chatBusyNearPrompt(string(frame)) {
+			return true, nil
+		}
+		noteChatInput(pane, false)
+		return false, errChatBusy
+	}
+	leftover, err := checkEmpty()
+	if err != nil {
+		return err
+	}
+	if own, ok := ownPasteFor(pane); ok && !leftover && own.text == text {
+		// The paste an earlier attempt left unsent has left the input: the
+		// provider took it late. Pasting it again would ask twice.
+		forgetOwnPaste(pane)
 		return nil
 	}
-	if err := checkEmpty(); err != nil {
-		return err
+	if leftover {
+		own, _ := ownPasteFor(pane)
+		if err := submitChatTurnAs(ctx, run, d, pane, own.text, tries, wait, false); err != nil {
+			return err
+		}
+		if own.text == text {
+			return nil
+		}
+		// An earlier message of ours is now sent; this one goes next time.
+		return errChatBusy
 	}
 	if _, err := run(ctx, "set-buffer", "-b", buffer, "--", text); err != nil {
 		return err
 	}
 	defer func() { _, _ = run(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer) }()
-	if err := checkEmpty(); err != nil {
+	if leftover, err := checkEmpty(); err != nil || leftover {
+		if err == nil {
+			err = errChatBusy
+		}
 		return err
 	}
 	if _, err := run(ctx, "paste-buffer", "-d", "-p", "-b", buffer, "-t", pane); err != nil {
@@ -129,13 +174,28 @@ func deliverChatTurn(ctx context.Context, run chatRunner, pane, text string, tri
 		return ctx.Err()
 	case <-time.After(wait):
 	}
-	return submitChatTurn(ctx, run, pane, text, tries, wait)
+	return submitChatTurnAs(ctx, run, d, pane, text, tries, wait, true)
 }
 
-// submitChatTurn gives Enter a bounded chance to clear the composer. Codex can
-// consume the first Enter while settling a long paste, just as Claude can;
-// retry only while the input still matches our message, without pasting again.
+// submitChatTurn submits with the union dialect.
 func submitChatTurn(ctx context.Context, run chatRunner, pane, text string, tries int, wait time.Duration) error {
+	return submitChatTurnAs(ctx, run, composerDialectFor(""), pane, text, tries, wait, true)
+}
+
+// submitChatTurnAs gives Enter a bounded chance to clear the composer. Codex
+// can consume the first Enter while settling a long paste, and Claude Code
+// collapses a long paste into "[Pasted text #N]" and waits for another Enter;
+// retry only while the input still holds our message or the placeholder for
+// it, without pasting again. fresh means we pasted into an empty input just
+// now, so a bare collapsed placeholder seen first is ours and is recorded.
+func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pane, text string, tries int, wait time.Duration, fresh bool) error {
+	own := func(frame string) bool {
+		if ownChatComposer(frame, text) {
+			return true
+		}
+		_, ok := ownLeftover(d, pane, frame)
+		return ok
+	}
 	for try := 0; try < tries; try++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -144,8 +204,18 @@ func submitChatTurn(ctx context.Context, run chatRunner, pane, text string, trie
 		if err != nil {
 			return err
 		}
-		if !ownChatComposer(string(frame), text) {
+		if content, ok := chatComposer(string(frame)); ok && try == 0 && fresh {
+			switch {
+			case ownChatComposer(string(frame), text):
+				rememberOwnPaste(pane, text, content)
+			case d.collapsedPaste(content):
+				rememberOwnPaste(pane, text, content)
+			}
+		}
+		if !own(string(frame)) {
 			if try > 0 {
+				forgetOwnPaste(pane)
+				noteChatInput(pane, true)
 				return nil
 			}
 			return errors.New("chat input changed or could not be verified; nothing submitted")
@@ -166,7 +236,9 @@ func submitChatTurn(ctx context.Context, run chatRunner, pane, text string, trie
 		if err != nil {
 			return err
 		}
-		if !ownChatComposer(string(frame), text) {
+		if !own(string(frame)) {
+			forgetOwnPaste(pane)
+			noteChatInput(pane, true)
 			return nil
 		}
 		if try+1 < tries {
@@ -177,7 +249,8 @@ func submitChatTurn(ctx context.Context, run chatRunner, pane, text string, trie
 			}
 		}
 	}
-	// Preserve the transport's bounded, best-effort submission contract:
-	// accepted Enter presses do not prove when the provider has processed them.
-	return nil
+	// Still ours after every Enter: the record stays, so the next attempt
+	// submits this paste rather than taking it for the owner's draft.
+	noteChatInput(pane, false)
+	return errChatUnsubmitted
 }

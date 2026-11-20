@@ -26,7 +26,7 @@ func (s *Server) chatPermissionTools() []Tool {
 	}
 	return []Tool{{
 		Name:        ChatPermissionToolName,
-		Description: "Internal: answers Claude Code's permission prompts from the MARSHAL Board inbox. Called by the CLI's --permission-prompt-tool; do not call it yourself.",
+		Description: "Internal CLI permission prompt callback",
 		InputSchema: objectSchema(map[string]any{"tool_name": stringSchema(), "input": map[string]any{"type": "object"}, "tool_use_id": stringSchema()}, "tool_name", "input"),
 	}}
 }
