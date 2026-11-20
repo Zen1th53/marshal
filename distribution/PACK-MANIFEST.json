@@ -16631,8 +16631,8 @@
     },
     {
       "path": "internal/tui/tmux_return_key_pty_test.go",
-      "sha256": "cb6aa913b7b63766a12ce8eea5b195774f3374b4efbb64ecbc6ed3492bb972d2",
-      "bytes": 4274
+      "sha256": "af93658870023ce797ce8c96ee01e4f27f0b913788980898d107f85431156529",
+      "bytes": 4276
     },
     {
       "path": "internal/tui/tmux_return_key_test.go",
@@ -16803,11 +16803,6 @@
       "path": "internal/tui/workspace_shutdown_test.go",
       "sha256": "326d7612ae230924518f4a26e3c29edf6cb518a87698c082a5879087ae01584b",
       "bytes": 1923
-    },
-    {
-      "path": "internal/tui/zz_debug_test.go",
-      "sha256": "62000fe81532d486211c0058bd8e30f9c9aeae4a9bbe521b8cbfb3fb1441ff01",
-      "bytes": 777
     },
     {
       "path": "internal/update/edition_default.go",
