@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const paletteGoldenName = "palette"
+
 // shippedPaletteAllowList is the reviewed list of what the shipped palette
 // (Space / Ctrl+K) offers, in order: the Board's keys, then the user
 // commands no key runs. A new row is a product decision: add it here only
