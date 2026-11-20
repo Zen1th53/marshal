@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"path/filepath"
 	"strings"
 
@@ -13,19 +14,10 @@ import (
 )
 
 func normalizeProvider(p string) string {
-	p = strings.ToLower(strings.TrimSpace(p))
-	switch p {
-	case "antigravity", "agy":
-		return "agy"
-	case "claude-code", "claude":
-		return "claude"
-	case "codex":
-		return "codex"
-	case "opencode":
-		return "opencode"
-	default:
-		return p
+	if spec, ok := providerspec.ByHarness(p); ok {
+		return spec.ID
 	}
+	return strings.ToLower(strings.TrimSpace(p))
 }
 
 func extremeProviderLimits(s marshal.Settings) (map[string]int, int) {

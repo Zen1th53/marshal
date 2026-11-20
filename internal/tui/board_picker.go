@@ -63,7 +63,7 @@ type pickerView struct {
 
 // providerLeft is the one reader of a P3-01 quota the picker and P2-14 share:
 // the smallest-window percent left as an integer, whether it is known, and when
-// it resets. It parses no provider file itself; usage.Read did that.
+// it resets. It parses no provider file itself; the provider quota readers did that.
 func providerLeft(q usage.Quota) (left int, known bool, reset time.Time) {
 	win, ok := q.Binding()
 	if !ok {

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
@@ -251,12 +252,7 @@ func EnsureGovernedCodexHome() (string, error) {
 	}
 	_ = os.Remove(filepath.Join(target, "config.toml"))
 
-	hostCodex := strings.TrimSpace(os.Getenv("CODEX_HOME"))
-	if hostCodex == "" {
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			hostCodex = filepath.Join(home, ".codex")
-		}
-	}
+	hostCodex, _, _ := providerspec.Must("codex").StateDir(nil)
 	if hostCodex != "" {
 		filesToMirror := []string{"auth.json", "version.json", "models_cache.json"}
 		for _, fname := range filesToMirror {
@@ -292,12 +288,12 @@ func RequireAppServerConfigFree() error {
 		return nil
 	}
 	var root string
-	if home := strings.TrimSpace(os.Getenv("CODEX_HOME")); home != "" {
+	if home, overridden, _ := providerspec.Must("codex").StateDir(nil); overridden {
 		root = home
 	} else if governed, err := EnsureGovernedCodexHome(); err == nil && governed != "" {
 		root = governed
-	} else if userHome, err := os.UserHomeDir(); err == nil && userHome != "" {
-		root = filepath.Join(userHome, ".codex")
+	} else {
+		root = home
 	}
 	if root != "" {
 		config := filepath.Join(root, "config.toml")

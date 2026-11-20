@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"math/big"
 	"net"
 	"os"
@@ -74,21 +75,12 @@ func LoadCredentialBroker(provider, model string) (*CredentialBroker, error) {
 	key, _, _ := brokerProfile(provider, model)
 	secret := os.Getenv(key)
 	if (provider == "codex" || provider == "claude") && secret == "" {
-		home, err := os.UserHomeDir()
+		spec := providerspec.Must(provider)
+		dir, _, err := spec.StateDir(nil)
 		if err != nil {
 			return nil, ErrCredentialBroker
 		}
-		dir, file := os.Getenv("CODEX_HOME"), "auth.json"
-		if dir == "" {
-			dir = filepath.Join(home, ".codex")
-		}
-		if provider == "claude" {
-			dir = os.Getenv("CLAUDE_CONFIG_DIR")
-			file = ".credentials.json"
-			if dir == "" {
-				dir = filepath.Join(home, ".claude")
-			}
-		}
+		file := spec.CredentialsFile
 		raw, err := os.ReadFile(filepath.Join(dir, file))
 		if err == nil {
 			var auth map[string]json.RawMessage

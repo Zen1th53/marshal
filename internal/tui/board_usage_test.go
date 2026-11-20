@@ -18,7 +18,7 @@ func usageWin(label string, left float64) usage.Window {
 }
 
 // usageFresh is a fresh Codex report and the three providers that expose
-// nothing, as usage.Read gives them.
+// nothing, as the provider readers give them.
 func usageFresh() []usage.Quota {
 	return []usage.Quota{
 		{Provider: "codex", Known: true, Windows: []usage.Window{usageWin("5h", 82), usageWin("wk", 49)}},
@@ -34,7 +34,7 @@ func usageWorkspace(qs []usage.Quota) *Workspace {
 	return w
 }
 
-// TestUsageFromCodexFile reads a real rollout file through usage.Read and
+// TestUsageFromCodexFile reads a real rollout file through usage.ReadCodex and
 // caches it, so the vitals row and the reader agree on what is known.
 func TestUsageFromCodexFile(t *testing.T) {
 	dir := t.TempDir()
@@ -51,7 +51,7 @@ func TestUsageFromCodexFile(t *testing.T) {
 	if err := os.Chtimes(path, mod, mod); err != nil {
 		t.Fatal(err)
 	}
-	qs, ok := usageWorkspace(usage.Read(usageNow, usage.Sources{CodexDir: dir})).usageQuotas()
+	qs, ok := usageWorkspace([]usage.Quota{usage.ReadCodex(usageNow, dir)}).usageQuotas()
 	if !ok || len(qs) == 0 || qs[0].Provider != "codex" || !qs[0].Known {
 		t.Fatalf("fresh file: %+v ok=%v", qs, ok)
 	}
@@ -59,7 +59,7 @@ func TestUsageFromCodexFile(t *testing.T) {
 		t.Fatalf("fresh codex figure: %q pct=%d ok=%v", fig, pct, ok)
 	}
 	// A day later the same file is stale: unknown, not the old percent.
-	stale := usage.Read(usageNow.Add(24*time.Hour), usage.Sources{CodexDir: dir})
+	stale := []usage.Quota{usage.ReadCodex(usageNow.Add(24*time.Hour), dir)}
 	if _, ok := stale[0].Binding(); ok {
 		t.Fatalf("stale file still known: %+v", stale[0])
 	}

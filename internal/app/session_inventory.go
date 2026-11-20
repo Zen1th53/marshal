@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"io/fs"
 	"net/url"
 	"os"
@@ -270,22 +271,14 @@ func readNativeHistory(ctx context.Context, provider, root string, add func(stri
 		}
 		return readAntigravityInventory(ctx, root, add)
 	}
-	env, base, dir := "CODEX_HOME", ".codex", "sessions"
-	if provider == "claude" {
-		env, base, dir = "CLAUDE_CONFIG_DIR", ".claude", "projects"
+	spec, ok := providerspec.Lookup(provider)
+	if !ok {
+		return fmt.Errorf("provider %q is not registered", provider)
 	}
-	home := os.Getenv(env)
-	if home == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		home = filepath.Join(userHome, base)
+	historyRoot, err := spec.HistoryDir(nil, root)
+	if err != nil {
+		return err
 	}
-	if !filepath.IsAbs(home) {
-		home = filepath.Join(root, home)
-	}
-	historyRoot := filepath.Join(home, dir)
 	if provider == "claude" {
 		historyRoot = nativeInventoryFolder(provider, root)
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"os"
 	"os/exec"
 	"strings"
@@ -210,39 +211,19 @@ func (r *Runtime) RecordProviderCooldown(provider string, obs ProviderCooldownOb
 
 // CanonicalProviderName standardizes aliases to canonical provider IDs.
 func CanonicalProviderName(provider string) string {
-	lower := strings.ToLower(strings.TrimSpace(provider))
-	switch lower {
-	case "antigravity", "agy":
-		return "agy"
-	case "codex":
-		return "codex"
-	case "claude":
-		return "claude"
-	case "opencode":
-		return "opencode"
-	default:
-		return lower
-	}
+	return providerspec.Canonical(provider)
 }
 
 // ProviderDisplayName maps canonical IDs to operator display labels.
 func ProviderDisplayName(provider string) string {
-	switch CanonicalProviderName(provider) {
-	case "codex":
-		return "Codex"
-	case "claude":
-		return "Claude"
-	case "opencode":
-		return "OpenCode"
-	case "agy":
-		return "Antigravity"
-	default:
-		name := strings.TrimSpace(provider)
-		if len(name) > 0 {
-			return strings.ToUpper(name[:1]) + name[1:]
-		}
-		return "Provider"
+	if spec, ok := providerspec.Lookup(provider); ok {
+		return spec.Name
 	}
+	name := strings.TrimSpace(provider)
+	if len(name) > 0 {
+		return strings.ToUpper(name[:1]) + name[1:]
+	}
+	return "Provider"
 }
 
 // ProviderStatusDetails returns canonical provider telemetry and observation evidence.

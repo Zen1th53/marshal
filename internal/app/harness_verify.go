@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"os"
 	"slices"
 	"strings"
@@ -11,8 +12,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/antigravity"
-	"github.com/Zen1th53/marshal/internal/adapter/claude"
-	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/project"
@@ -314,19 +313,19 @@ func (r *Runtime) harnessProbeModel(ctx context.Context, provider, modelName str
 		if profile != nil && profile.ProbeEvidenceID != "" && slices.Contains(profile.SupportedModels, profile.DefaultModel) && profile.InstalledVersion == installedCLIVersion(ctx, provider) {
 			modelName = strings.TrimSpace(profile.DefaultModel)
 		}
-		if modelName == "" && (provider == "codex" || provider == "claude") {
-			binary, err := project.FindBinary(provider)
-			if err != nil {
-				return "", err
-			}
-			runner := worker.New(60*time.Second, 2*time.Second, 8<<20)
-			if provider == "codex" {
-				_, modelName, err = codex.DiscoverModels(ctx, binary, runner)
-			} else {
-				_, modelName, err = claude.DiscoverModels(ctx, binary, runner)
-			}
-			if err != nil {
-				return "", err
+		if p, ok := providers.Get(provider); ok && modelName == "" {
+			if _, reports := p.(providers.CurrentModelReporter); reports {
+				// The installed CLI says which model it would use now.
+				binary, err := project.FindBinary(p.Spec().Binary)
+				if err != nil {
+					return "", err
+				}
+				runner := worker.New(60*time.Second, 2*time.Second, 8<<20)
+				current, _, err := providers.CurrentModel(ctx, provider, binary, runner)
+				if err != nil {
+					return "", err
+				}
+				modelName = current
 			}
 		}
 	}

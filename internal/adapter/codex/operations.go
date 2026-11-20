@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"io"
 	"os"
 	"path/filepath"
@@ -762,16 +763,11 @@ func CheckProjectSkillInstallDestination(codexHome, name string) error {
 
 func resolvedCodexHome(codexHome string) (string, error) {
 	if codexHome == "" {
-		if configured := strings.TrimSpace(os.Getenv("CODEX_HOME")); configured != "" {
-			codexHome = configured
-		}
-	}
-	if codexHome == "" {
-		home, err := os.UserHomeDir()
+		home, _, err := providerspec.Must("codex").StateDir(nil)
 		if err != nil {
 			return "", err
 		}
-		codexHome = filepath.Join(home, ".codex")
+		codexHome = home
 	}
 	return filepath.Clean(codexHome), nil
 }

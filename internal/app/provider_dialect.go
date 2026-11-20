@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"os"
 	"os/exec"
 	"regexp"
@@ -38,8 +39,8 @@ type ProviderDialect struct {
 }
 
 func providerKey(provider string) string {
-	if provider == "antigravity" {
-		return "agy"
+	if spec, ok := providerspec.Lookup(provider); ok {
+		return spec.ID
 	}
 	return provider
 }
