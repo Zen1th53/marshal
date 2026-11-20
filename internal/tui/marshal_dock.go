@@ -193,8 +193,13 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 		// Runs last, still under dock.mu and within ctx: the pane title is
 		// the strip (or the classic title), never what the CLI printed.
 		defer func() {
+			title, _ := w.dockTitleWith(chat, strip, 0, false)
+			run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
 			// Best effort: a pane gone meanwhile is the next reconcile's.
-			_ = w.holdMarshalChatTitle(ctx, chat, strip)
+			// The chat's monitor holds the same title (titleMu).
+			w.dock.titleMu.Lock()
+			defer w.dock.titleMu.Unlock()
+			_ = holdChatPaneTitle(ctx, run, &w.dock.paneTitle, chat.paneID, title)
 		}()
 	}
 	root := w.providerRoot()
