@@ -46,7 +46,7 @@ func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			checked = strings.ReplaceAll(brief, strings.ReplaceAll(protocol, ".marshal/", statepath.DirName+"/"), "")
+			checked = strings.ReplaceAll(brief, strings.TrimSuffix(strings.ReplaceAll(protocol, ".marshal/", statepath.DirName+"/"), buildRoleAuthority), "")
 			checked = strings.ReplaceAll(checked, strings.ReplaceAll(buildRoleAuthority, ".marshal/", statepath.DirName+"/"), "")
 		}
 		if strings.Contains(checked, phrase) {

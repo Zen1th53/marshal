@@ -67,24 +67,43 @@ func (c *Client) probe(ctx context.Context, metadataBudget, catalogBudget time.D
 	if err != nil {
 		return adapter.Probe{}, err
 	}
-	helpResult, err := c.probeCommand(probeCtx, metadataBudget, "exec", []string{"exec", "--help"})
-	if err != nil {
-		return adapter.Probe{}, err
+	version := strings.TrimSpace(string(versionResult.Stdout))
+	key, cacheable := probeCacheKey(c.binary, version)
+	var cached probeCacheEntry
+	if cacheable {
+		cached = cachedProbe(key)
 	}
-	version := string(versionResult.Stdout)
-	help := string(helpResult.Stdout)
-	for _, required := range []string{"--json", "--sandbox", "--ephemeral", "--ignore-user-config", "--cd"} {
-		if !strings.Contains(help, required) {
-			return adapter.Probe{}, fmt.Errorf("%w: Codex exec lacks required flag %s", model.ErrUnavailable, required)
+	if !cached.helpVerified {
+		helpResult, err := c.probeCommand(probeCtx, metadataBudget, "exec", []string{"exec", "--help"})
+		if err != nil {
+			return adapter.Probe{}, err
+		}
+		help := string(helpResult.Stdout)
+		for _, required := range []string{"--json", "--sandbox", "--ephemeral", "--ignore-user-config", "--cd"} {
+			if !strings.Contains(help, required) {
+				return adapter.Probe{}, fmt.Errorf("%w: Codex exec lacks required flag %s", model.ErrUnavailable, required)
+			}
+		}
+		if cacheable {
+			rememberProbe(key, func(e *probeCacheEntry) { e.helpVerified = true })
 		}
 	}
-	c.version = strings.TrimSpace(version)
+	c.version = version
+	if len(c.models) == 0 && cacheable && len(cached.models) > 0 && time.Since(cached.catalogAt) < probeCatalogTTL {
+		c.models = append([]ModelInfo(nil), cached.models...)
+		c.defaultModel = cached.defaultModel
+	}
 	if len(c.models) == 0 {
 		catalogCtx, catalogCancel := context.WithTimeout(probeCtx, catalogBudget)
 		defer catalogCancel()
 		if models, def, mErr := DiscoverModels(catalogCtx, c.binary, c.runner); mErr == nil && len(models) > 0 {
 			c.models = models
 			c.defaultModel = def
+			if cacheable {
+				rememberProbe(key, func(e *probeCacheEntry) {
+					e.models, e.defaultModel, e.catalogAt = append([]ModelInfo(nil), models...), def, time.Now()
+				})
+			}
 		}
 	}
 	return adapter.Probe{

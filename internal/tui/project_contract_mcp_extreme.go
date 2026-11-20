@@ -33,8 +33,15 @@ type projectContractMCPReceipt struct {
 func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, error) {
 	switch method {
 	case "project_contract_context":
-		if err := proposalmcp.DecodeStrict(raw, &struct{}{}); err != nil {
+		var args struct {
+			ReadID string `json:"read_id,omitempty"`
+			Page   int    `json:"page,omitempty"`
+		}
+		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 			return nil, err
+		}
+		if args.ReadID != "" || args.Page != 0 {
+			return w.nativePlanningContinue(l, args.ReadID, args.Page)
 		}
 		return w.readNativePlanningMCP(ctx, l)
 	case "project_contract_context_abort":

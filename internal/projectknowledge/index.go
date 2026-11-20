@@ -150,7 +150,12 @@ func contentVerdict(root, hash string, data []byte, paths ...string) (bool, bool
 	return verdict, false
 }
 
-type Index struct{ root, database, state string }
+type Index struct {
+	root, database, state string
+	// seedRoot is the owner's knowledge directory for a task worktree index.
+	// A fresh worktree index starts from a sibling's rows (see seed.go).
+	seedRoot string
+}
 type Entry struct {
 	Path     string `json:"path"`
 	Line     int    `json:"line"`
@@ -826,6 +831,16 @@ func sqliteBusy(err error) bool {
 	return strings.Contains(message, "database is locked") || strings.Contains(message, "sqlite_busy")
 }
 
+const indexTables = `CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY,path TEXT NOT NULL UNIQUE,hash TEXT NOT NULL,package TEXT NOT NULL,metadata TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS entries(file_id INTEGER NOT NULL,line INTEGER NOT NULL,name TEXT NOT NULL,kind TEXT NOT NULL,receiver TEXT NOT NULL,target TEXT NOT NULL);`
+
+// The entry indexes are built after a seed copy, which is faster than
+// maintaining them row by row.
+const indexSchema = indexTables + `
+CREATE INDEX IF NOT EXISTS entry_name ON entries(name,kind,file_id,line);
+CREATE INDEX IF NOT EXISTS entry_path ON entries(file_id,kind,line);
+CREATE INDEX IF NOT EXISTS entry_target ON entries(target,kind,file_id);`
+
 func (i *Index) refresh(ctx context.Context) (Snapshot, error) {
 	unlock := i.lock()
 	defer unlock()
@@ -842,6 +857,7 @@ func (i *Index) refresh(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	seeded := i.seedFromSibling(ctx, db, s.Head)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return Snapshot{}, err
@@ -862,15 +878,15 @@ func (i *Index) refresh(ctx context.Context) (Snapshot, error) {
 			return Snapshot{}, err
 		}
 		compact = retained != 0
-		if _, err = tx.ExecContext(ctx, "DROP TABLE IF EXISTS entries; DROP TABLE IF EXISTS files"); err != nil {
-			return Snapshot{}, err
+		// Rows just seeded from a sibling index are kept: every one is
+		// reused below only when its path and content hash still match.
+		if !seeded || compact {
+			if _, err = tx.ExecContext(ctx, "DROP TABLE IF EXISTS entries; DROP TABLE IF EXISTS files"); err != nil {
+				return Snapshot{}, err
+			}
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY,path TEXT NOT NULL UNIQUE,hash TEXT NOT NULL,package TEXT NOT NULL,metadata TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS entries(file_id INTEGER NOT NULL,line INTEGER NOT NULL,name TEXT NOT NULL,kind TEXT NOT NULL,receiver TEXT NOT NULL,target TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS entry_name ON entries(name,kind,file_id,line);
-CREATE INDEX IF NOT EXISTS entry_path ON entries(file_id,kind,line);
-CREATE INDEX IF NOT EXISTS entry_target ON entries(target,kind,file_id);`); err != nil {
+	if _, err = tx.ExecContext(ctx, indexSchema); err != nil {
 		return Snapshot{}, err
 	}
 	rows, err := tx.QueryContext(ctx, "SELECT path,hash,metadata FROM files")

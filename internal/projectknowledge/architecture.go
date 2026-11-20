@@ -64,7 +64,7 @@ func OpenWorktree(root, ownerRoot, ownerState string) (*Index, error) {
 		return nil, ErrBinding
 	}
 	sum := sha256.Sum256([]byte(abs))
-	index := &Index{root: abs, state: owner.state, database: filepath.Join(ownerState, "knowledge", "worktrees", hex.EncodeToString(sum[:]), "index-v1.db")}
+	index := &Index{root: abs, state: owner.state, database: filepath.Join(ownerState, "knowledge", "worktrees", hex.EncodeToString(sum[:]), "index-v1.db"), seedRoot: filepath.Dir(owner.database)}
 	if err := index.safeState(); err != nil {
 		return nil, err
 	}
