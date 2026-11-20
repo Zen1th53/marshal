@@ -33,15 +33,33 @@ type Snapshot struct {
 	Driving bool
 	// UserPaused is the TUI's live pause hold; it affects only the display.
 	UserPaused bool
+	// Now is when the snapshot was taken: a heartbeat worker whose last
+	// beat is older than WorkerBeatGrace at Now is lost. Zero judges no
+	// worker lost.
+	Now time.Time
+	// WorkerSeen is the last time the caller knew a worker of the run to be
+	// alive, zero when unknown.
+	WorkerSeen time.Time
 }
 
-// Worker is one live worker invocation as the tmux monitor knows it.
+// WorkerBeatGrace is how long a heartbeat worker may go without a beat
+// before the Board stops calling it running. Workers beat every 30s, so
+// this is four missed beats.
+const WorkerBeatGrace = 2 * time.Minute
+
+// Worker is one live worker invocation as the tmux monitor knows it, or a
+// governed worker process as its heartbeats report it.
 // Status is the state the worker itself last reported over OSC 7501
 // (working, idle, blocked, done, error), empty when it reported none; Last
 // is then the message it reported with it, already redacted.
 type Worker struct {
 	ID, Provider, TaskID, Pane, Last string
 	Status                           string
+	// Heartbeat marks a governed worker followed by its process's
+	// heartbeats rather than by a tmux window: Started is when its attempt
+	// began and Beat its last sign of life.
+	Heartbeat     bool
+	Started, Beat time.Time
 }
 
 // Board is the read model. Fields that come from the snapshot change only
@@ -96,6 +114,9 @@ type RunHead struct {
 	Driving bool
 	// UserPaused is the TUI's live pause hold; it affects only the display.
 	UserPaused bool
+	// WorkerSeen is the snapshot's: the last time a worker of the run was
+	// known to be alive, zero when unknown.
+	WorkerSeen time.Time
 }
 
 // TaskState is the operator's word for where a task is. It folds the
@@ -221,6 +242,9 @@ const (
 	LaneRework  LaneState = "rework"
 	LaneParked  LaneState = "parked"
 	LaneIdle    LaneState = "idle"
+	// LaneLost is a heartbeat worker that stopped beating: its attempt is
+	// still open, but no worker process is known to run its task.
+	LaneLost LaneState = "lost"
 )
 
 var laneStates = map[TaskState]LaneState{
@@ -243,12 +267,30 @@ type Lane struct {
 	// Status is what the worker reported over OSC 7501, empty for none.
 	// It colours the row; State, from the task, stays the lane's state.
 	Status string
+	// Heartbeat marks a lane followed by its worker process's heartbeats;
+	// Beat is the last one.
+	Heartbeat bool
+	Beat      time.Time
 }
 
 // NewLane projects one worker invocation. A worker whose task the run does
 // not know, or whose task is not in a working state, is idle.
 func NewLane(w Worker, tasks []TaskRow) Lane {
+	return newLane(w, tasks, time.Time{})
+}
+
+// newLane is NewLane judged at now. A heartbeat worker's own beats say what
+// it does, whatever its task's snapshot says: it is working while it beats
+// and lost once it has not beaten for WorkerBeatGrace.
+func newLane(w Worker, tasks []TaskRow, now time.Time) Lane {
 	l := Lane{Worker: w.ID, Provider: w.Provider, TaskID: w.TaskID, Pane: w.Pane, Last: w.Last, Status: w.Status, State: LaneIdle}
+	if w.Heartbeat {
+		l.Heartbeat, l.Beat, l.Started, l.State = true, w.Beat, w.Started, LaneWorking
+		if !now.IsZero() && now.Sub(w.Beat) > WorkerBeatGrace {
+			l.State = LaneLost
+		}
+		return l
+	}
 	for _, t := range tasks {
 		if t.ID == w.TaskID {
 			if s, ok := laneStates[t.State]; ok {
@@ -264,7 +306,7 @@ func NewLane(w Worker, tasks []TaskRow) Lane {
 // names it and is not idle.
 func (b Board) Live(taskID string) bool {
 	for _, l := range b.Lanes {
-		if l.TaskID == taskID && l.State != LaneIdle {
+		if l.TaskID == taskID && l.State != LaneIdle && l.State != LaneLost {
 			return true
 		}
 	}
@@ -524,7 +566,7 @@ func runClosedDetail(data map[string]any) string {
 // Project builds the Board from a snapshot and the run's events in sequence
 // order. Project(s, a+b) equals Project(s, a).Tail(b) for any split.
 func Project(s Snapshot, evs []events.Event) Board {
-	b := Board{Run: RunHead{ID: s.RunID, State: s.Run.State, Total: len(s.Run.Tasks), TokenLimit: s.Run.Budget.Tokens.Plan, LaneCap: laneCap(s.Run.Settings), Driving: s.Driving, UserPaused: s.UserPaused}, PlanID: s.Run.PlanID, Budget: s.Run.Budget}
+	b := Board{Run: RunHead{ID: s.RunID, State: s.Run.State, Total: len(s.Run.Tasks), TokenLimit: s.Run.Budget.Tokens.Plan, LaneCap: laneCap(s.Run.Settings), Driving: s.Driving, UserPaused: s.UserPaused, WorkerSeen: s.WorkerSeen}, PlanID: s.Run.PlanID, Budget: s.Run.Budget}
 	if s.Run.State == marshal.AwaitingUser && s.Run.Pause != nil {
 		b.Run.Paused, b.Run.Next = s.Run.Pause.Reason, slices.Clone(s.Run.Pause.Resolutions)
 		if s.Run.Pause.Code == marshal.CodeVerificationStopped {
@@ -541,25 +583,37 @@ func Project(s Snapshot, evs []events.Event) Board {
 		b.Run.PauseKind, b.Run.PauseUntil = s.Run.Pause.Kind, s.Run.Pause.Until
 	}
 	for _, t := range s.Run.Tasks {
-		row := NewTaskRow(t, s.Run.Settings)
+		b.Tasks = append(b.Tasks, NewTaskRow(t, s.Run.Settings))
+	}
+	for _, w := range s.Workers {
+		lane := newLane(w, b.Tasks, s.Now)
+		b.Lanes = append(b.Lanes, lane)
+		if lane.State != LaneIdle && lane.State != LaneParked && lane.State != LaneLost {
+			b.Run.ActiveLanes++
+		}
+		if !lane.Heartbeat || lane.State != LaneWorking {
+			continue
+		}
+		// A worker process that beats is working on its task, whatever an
+		// older snapshot of the task says (a rework the worker already took
+		// up, say); a finished task stays finished.
+		for i := range b.Tasks {
+			if t := &b.Tasks[i]; t.ID == lane.TaskID && !t.Finished() && t.State != TaskWorking {
+				t.State, t.Since = TaskWorking, lane.Started
+			}
+		}
+	}
+	for _, row := range b.Tasks {
 		if row.State == TaskWorking || row.State == TaskReview || row.State == TaskAccepted {
 			b.Run.Running++
 		}
 		if row.State == TaskMerged {
 			b.Run.Done++
 		}
-		b.Tasks = append(b.Tasks, row)
 	}
 	slices.SortStableFunc(b.Tasks, func(x, y TaskRow) int {
 		return cmp.Or(cmp.Compare(stateClass[x.State], stateClass[y.State]), strings.Compare(x.ID, y.ID))
 	})
-	for _, w := range s.Workers {
-		lane := NewLane(w, b.Tasks)
-		b.Lanes = append(b.Lanes, lane)
-		if lane.State != LaneIdle && lane.State != LaneParked {
-			b.Run.ActiveLanes++
-		}
-	}
 	for _, r := range s.Requests {
 		b.Inbox = append(b.Inbox, NewInboxItem(r))
 	}

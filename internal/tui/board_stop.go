@@ -344,6 +344,11 @@ func (v boardVisual) runWord() (string, string) {
 	case "":
 		return "starting", "dim"
 	}
+	if quiet, ok := v.noWorkerFor(); ok {
+		// The run says it is running, but no worker has run for a while:
+		// say so rather than "running" (board_liveness.go).
+		return "not running: no worker for " + quietFor(quiet), "needs"
+	}
 	return "running", "accent"
 }
 

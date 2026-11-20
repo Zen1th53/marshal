@@ -15,6 +15,11 @@ import (
 // count more. A review has no worker lane, the Marshal reviews it, and it is
 // running all the same.
 func (v boardVisual) running() int {
+	if _, quiet := v.noWorkerFor(); quiet {
+		// The tasks claim to move, but no worker has run them for a while:
+		// nothing is running (board_liveness.go).
+		return 0
+	}
 	run, _, _ := v.counts()
 	if v.board.Run.Running > 0 {
 		run = v.board.Run.Running
@@ -38,7 +43,7 @@ func (v boardVisual) liveLanes() int {
 	}
 	n := 0
 	for _, l := range v.board.Lanes {
-		if l.State != model.LaneIdle && l.State != model.LaneParked {
+		if l.State != model.LaneIdle && l.State != model.LaneParked && l.State != model.LaneLost {
 			n++
 		}
 	}
