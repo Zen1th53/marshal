@@ -1,3 +1,5 @@
+//go:build linux
+
 package tui
 
 import (
@@ -237,6 +239,8 @@ func echoState(w *Workspace, text string) string {
 // message; a message typed while the chat is busy waits, says so in
 // Activity, and goes in once the chat is back at its prompt.
 func TestBoardComposerReachesTheChat(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
@@ -348,6 +352,8 @@ func lastBoardOutput(w *Workspace) string {
 // owner, the Board says what is waiting for whom (instead of "Marshal chat
 // busy") and keeps the queued message until the owner answers in the chat.
 func TestBoardSayShowsProviderTrustAndPermissionPrompts(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}

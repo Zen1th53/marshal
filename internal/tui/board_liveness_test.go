@@ -1,3 +1,5 @@
+//go:build linux
+
 package tui
 
 import (
@@ -42,6 +44,8 @@ func governedWorkspace(t *testing.T, state marshal.TaskState, beats func() []app
 // "LANES idle · 0 running" and its task as rework. Its heartbeats now make
 // it a running lane, with its elapsed time and the age of its last beat.
 func TestBoardLaneFollowsGovernedWorkerHeartbeat(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	started := time.Now().Add(-18 * time.Minute)
 	beat := time.Now().Add(-12 * time.Second)
 	w, _, p := governedWorkspace(t, marshal.Returned, func() []app.WorkerBeat {
@@ -71,6 +75,8 @@ func TestBoardLaneFollowsGovernedWorkerHeartbeat(t *testing.T) {
 // running: the lane says no worker is running its task, the run header stops
 // saying running, and the poll notices it without any new decision.
 func TestBoardLaneLostWhenHeartbeatsStop(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	started := time.Now().Add(-20 * time.Minute)
 	beat := time.Now()
 	w, src, p := governedWorkspace(t, marshal.Dispatched, func() []app.WorkerBeat {

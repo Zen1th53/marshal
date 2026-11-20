@@ -1,4 +1,4 @@
-//go:build !governed
+//go:build linux && !governed
 
 package tui
 
@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 )
+
+const paletteGoldenName = "palette"
 
 // shippedPaletteAllowList is the reviewed list of what the shipped palette
 // (Space / Ctrl+K) offers, in order: the Board's keys, then the user

@@ -218,6 +218,8 @@ type Workspace struct {
 	homeBoard bool
 	// firstUse is the empty Board's own state.
 	firstUse firstUseState
+	// v2m is the Board v2 Marshal collector's cache of off-paint probes.
+	v2m v2MarshalState
 	// say carries what the operator types to the Marshal from the Board's
 	// composer into the chat.
 	say sayState
@@ -285,6 +287,12 @@ type Workspace struct {
 	// chatTypeMu is held while anything types into the tmux chat pane, so
 	// two writers never interleave in its composer.
 	chatTypeMu sync.Mutex
+	// leftoverRunning is set while the chat monitor submits a leftover
+	// paste of ours, so ticks never stack up behind one.
+	leftoverRunning atomic.Bool
+	// chatBinding is the Marshal chat's restarts, rebinds and the requests
+	// the Board sent it (chat_binding.go).
+	chatBinding chatBindingState
 	// dock keeps the Marshal chat joined beside the Board.
 	dock marshalDock
 	// status is Marshal's tmux status line: the vitals row on every screen
@@ -307,6 +315,9 @@ type Workspace struct {
 	// read on the architecture follower's beat (board_planning.go); nil when
 	// no goal is being planned.
 	milestone atomic.Pointer[planningMark]
+	// marshalSteps are the Marshal's recent tool calls through the proposal
+	// broker, for the Board v2 steps pane (boardv2_steps.go).
+	marshalSteps marshalSteps
 	// hostView is set while the Host view is painted in the Board's body.
 	hostView atomic.Bool
 	// memView is set while the Memory view is painted in the Board's body;

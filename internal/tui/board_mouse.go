@@ -238,6 +238,9 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		w.handleBoardKey(KeyEvent{Type: KeyEnter})
 	case hitVerify:
 		w.armFirstUseVerify(h.id)
+	case hitV2Key:
+		// A v2 card's button presses the key it names (boardv2_mouse.go).
+		w.clickV2Key(ctx, h.id)
 	case hitNote:
 		if id, err := strconv.Atoi(h.id); err == nil {
 			w.openNote(id)

@@ -286,6 +286,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		pane := w.sayPane()
 		frame, idle := "", false
 		if pane != "" {
+			w.submitOwnLeftover(ctx, pane, queued)
 			frame, idle = w.chatIdleFrame(ctx, pane)
 		} else {
 			// No chat, no turn to watch.
@@ -504,6 +505,7 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 		_, _ = tmux.RunCommand(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer)
 		return "", err
 	}
+	markPanePaste(ctx, tmux.RunCommand, pane, "")
 	// The paste must have landed in the prompt before Enter submits it.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -523,10 +525,67 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	if err := submitChatTurn(ctx, tmux.RunCommand, pane, text, deliverEnterTries, deliverEnterWait); err != nil {
+	// A paste the provider holds unsent ("[Pasted text #1]") is ours and
+	// stays recorded as ours: the next look submits it (submitOwnLeftover),
+	// so it counts as typed, not as a failure.
+	if err := submitChatTurnAs(ctx, tmux.RunCommand, w.chatComposerDialect(), pane, text, deliverEnterTries, deliverEnterWait, true); err != nil && !errors.Is(err, errChatUnsubmitted) {
 		return "", err
 	}
 	return before, nil
+}
+
+// chatComposerDialect is the input-box dialect of the tmux chat's provider.
+func (w *Workspace) chatComposerDialect() composerDialect {
+	w.tmuxMu.Lock()
+	provider := ""
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
+		provider = a.provider
+	}
+	w.tmuxMu.Unlock()
+	return composerDialectFor(provider)
+}
+
+// submitOwnLeftover presses Enter for a paste of ours the provider still
+// holds unsent, so it neither waits for the owner nor reads as their draft.
+// open says the Board holds a message for the chat it has not delivered yet:
+// then a bare placeholder no record names (an earlier Board process pasted
+// it before a restart or rebind) is ours too.
+func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open bool) {
+	// mark is the Board's own note on the pane that a paste of its own is
+	// there unsent; it outlives this process, so the placeholder a Board
+	// left before it restarted is still known as the Board's.
+	mark, marked := "", false
+	if _, ok := ownPasteFor(pane); !ok && !open {
+		if mark, marked = panePasteMark(ctx, tmux.RunCommand, pane); !marked {
+			return
+		}
+	}
+	w.chatTypeMu.Lock()
+	defer w.chatTypeMu.Unlock()
+	frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+	if err != nil {
+		return
+	}
+	d := w.chatComposerDialect()
+	own, ok := ownLeftover(d, pane, string(frame))
+	if !ok && open {
+		own, ok = adoptOrphanPaste(d, pane, string(frame))
+	}
+	if !ok && marked {
+		own, ok = adoptMarkedPaste(d, pane, string(frame), mark)
+	}
+	if !ok {
+		if composerClear(d, string(frame)) {
+			forgetOwnPaste(pane)
+			if marked {
+				clearPanePaste(ctx, tmux.RunCommand, pane)
+			}
+		}
+		return
+	}
+	if !chatBusyNearPrompt(string(frame)) {
+		_ = submitChatTurnAs(ctx, tmux.RunCommand, d, pane, own.text, deliverEnterTries, deliverEnterWait, false)
+	}
 }
 
 // chatIdleFrame reports whether the chat pane sits idle at an empty prompt,
@@ -553,7 +612,9 @@ func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, boo
 	if err != nil {
 		return "", false
 	}
-	if string(first) != string(second) || !chatPromptIdle(string(second)) {
+	clear := composerClear(w.chatComposerDialect(), string(second))
+	noteChatInput(pane, clear)
+	if string(first) != string(second) || !clear {
 		return StripANSI(string(second)), false
 	}
 	plain, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)

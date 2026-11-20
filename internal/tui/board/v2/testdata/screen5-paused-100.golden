@@ -1,0 +1,19 @@
+  MARSHAL v0.3.5   project marshal-work   2 PAUSED           ✳ claude · opus-5.5 · high  m   20:05  |
+ NOW  marshal waiting on your choice   │ work 6 running · 2 paused   from you press ⏎ to move 2 task|
+                                                                                                    |
+╭─ PAUSED · agy Gemini 5h limit ──────────────────────────────────────────────────── resets 21:10 ─╮|
+│ agy-2 and agy-4 hit the agy Gemini 5-hour limit. Their work is kept.                             │|
+│                                                                                                  │|
+│   TASK                         PROGRESS                    KEPT                                  │|
+│   T06 history paging          edits done · tests not run  branch + 3 commits                     │|
+│   T09 dashed-change styles    half edited                 branch + 1 commit                      │|
+│                                                                                                  │|
+│ Enter will: move T06 and T09 to claude sonnet in fresh sessions, keep commits.                   │|
+│             review for these two moves to codex.                                                 │|
+│                                                                                                  │|
+│  ⏎  move to claude    w  wait until 21:10    d  raw error    x  stop the run                     │|
+│                                                                                                  │|
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+                                                                                                    |
+  ⏎  move to claude   w  wait   d  details   x  stop run   space  actions                           |
+                                                                                                    |

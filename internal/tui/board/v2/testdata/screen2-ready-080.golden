@@ -1,0 +1,22 @@
+  MARSHAL v0.3.5   project marshal-work   READY                          18:22  |
+ NOW  marshal claude Opus · ready │ work no run yet         from you sign in to |
+                                                                                |
+╭─ READINESS · 5 of 7 ready ──────────────────────────────── re-checked 18:22 ─╮|
+│                                                                              │|
+│  ✓  Marshal    claude · Opus 5.5 · signed in                        in use   │|
+│  ✓  Workers    claude Sonnet 5.5 · up to 4 at once                   ready   │|
+│  !  Workers    agy is installed but not signed in                   action   │|
+│                run  agy  once in any terminal and sign in · g opens it here  │|
+│  !  Fallback   codex signed in · weekly 11% · resets 21 Nov            low   │|
+│  ✓  Platform   Linux amd64 · workers can run here                    ready   │|
+│  ✓  Repo       clean · main @ abb617e · 2 earlier Codex sessions     ready   │|
+│  ✓  Browser    no display: links are shown on the Board              ready   │|
+│                                                                              │|
+│                                                                              │|
+│   g  sign in to agy    ⏎  say what to build    v  check again                │|
+│                                                                              │|
+│                                                                              │|
+╰──────────────────────────────────────────────────────────────────────────────╯|
+                                                                                |
+  ⏎  say what to build   g  sign in to agy   v  check again   m  Marshal model  |
+                                                                                |

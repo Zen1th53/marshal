@@ -1,0 +1,30 @@
+  MARSHAL v0.3.5   project marshal-work   RUNNING                        19:31  |
+ MARSHAL CHAT  ✳ opus-5.5 · medium  ● li  NOW  8 running · 5/12 merged  from you|
+╭─ CLAUDE CODE ────────────────────────╮ ╭─ PLAN ──────────────────────────────╮|
+│                                      │ │ ✓ arch → ✓ tasks →  build 5/12  → re│|
+│ ▐▛███▜▌    Claude Code v2.1.329      │ │ █████████████░░░░░░  eta 45m        │|
+│ ▝▜█████▛▘  Opus 5.5 with medium effor│ ╰─────────────────────────────────────╯|
+│   ▘▘ ▝▝    ~/marshal-work            │ ╭─ LANES · heartbeats ────────────────╮|
+│                                      │ │ ⣾ claude-1  T03 sub-view l…      8s │|
+│ ● Goal recorded (rev 3). Architectur │ │ ⣾ claude-2  T05 request pa…      4s │|
+│   reading it through the contract to │ │ ⣾ claude-3  T07 legend foc…     12s │|
+│ ● marshal - marshal_project_contract │ │ ◎ claude-4  review T02           3s │|
+│     ⎿ 14 parts · 37 links · 5 change │ │ ⣾ agy-1     T04 codec test       6s │|
+│ ● Splitting 18 fixes into 12 tasks f │ │ ⣾ agy-2     T06 history pa…      9s │|
+│   and 4 agy gemini-3.8 workers; revi │ │ ◎ agy-3     review T01           2s │|
+│                                      │ │ ⣾ agy-4     T09 dashed sty…   1m40s │|
+│ ✻ Planning… (2m 10s · ↓ 4.1k tokens) │ │                                     │|
+│                                      │ ╰─────────────────────────────────────╯|
+│                                      │ ╭─ WORKERS · providers ───────────────╮|
+│                                      │ │ ✳ claude  ██████░░░░  4 lanes · sonn│|
+│                                      │ │ ◆ agy     ███████░░░  4 lanes · gemi│|
+│                                      │ │ ⬡ codex   █░░░░░░░░░  spare · wk 11%│|
+│                                      │ ╰─────────────────────────────────────╯|
+│ ──────────────────────────────────── │ ╭─ ACTIVITY ──────────────────────────╮|
+│ ❯ │                                  │ │ 19:30  merge   T08 merged after agy │|
+│ ──────────────────────────────────── │ │ 19:28  review  T02 review on claude-│|
+│ ⏵⏵ don't ask on (shift+tab to cycle) │ │ 19:22  signal  agy-4 slow heartbeat │|
+╰──────────────────────────────────────╯ ╰─────────────────────────────────────╯|
+                                                                                |
+  Alt+←  chat   Alt+→  Board   F11  full chat   m  Marshal model   space  action|
+                                                                                |

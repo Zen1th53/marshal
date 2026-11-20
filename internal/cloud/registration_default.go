@@ -9,10 +9,17 @@ import (
 
 // ensureRegistered enrolls only when this identity is not known at this endpoint.
 func (c *Client) ensureRegistered(ctx context.Context, st State, force bool) (bool, error) {
+	return c.ensureRegisteredFor(ctx, st, force, c.telemetryOnly)
+}
+
+func (c *Client) ensureRegisteredFor(ctx context.Context, st State, force, telemetryOnly bool) (bool, error) {
 	c.registrationMu.Lock()
 	defer c.registrationMu.Unlock()
 	if c.store == nil {
 		return false, nil
+	}
+	if IsProductionEndpoint(c.endpoint) && !productionAllowed() {
+		return false, ErrDevelopmentBuild
 	}
 	// Serialize enrollment separately from preferences, so a background network
 	// attempt never holds up the interactive notice or preference commands.
@@ -30,11 +37,14 @@ func (c *Client) ensureRegistered(ctx context.Context, st State, force bool) (bo
 		if err != nil {
 			return err
 		}
-		if current.InstallationID != st.InstallationID || (c.telemetryOnly && current.TelemetryDisabled) {
+		if current.InstallationID != st.InstallationID || (telemetryOnly && current.TelemetryDisabled) {
 			return ErrState
 		}
 		if !force && current.RegisteredInstallationID == st.InstallationID && current.RegisteredEndpoint == c.endpoint {
 			return nil
+		}
+		if !force && telemetryOnly && telemetryReregisterOnCooldown(c.endpoint, st.InstallationID) {
+			return ErrRateLimited
 		}
 		if force {
 			if err := c.store.withState(ctx, func() error {
@@ -42,7 +52,7 @@ func (c *Client) ensureRegistered(ctx context.Context, st State, force bool) (bo
 				if err != nil {
 					return err
 				}
-				if latest.InstallationID != st.InstallationID {
+				if latest.InstallationID != st.InstallationID || (telemetryOnly && latest.TelemetryDisabled) {
 					return ErrState
 				}
 				latest.RegisteredInstallationID, latest.RegisteredEndpoint = "", ""

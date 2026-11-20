@@ -1,4 +1,4 @@
-//go:build !governed
+//go:build linux && !governed
 
 package tui
 
@@ -297,18 +297,44 @@ func TestQueuedNonCodexDecisionPreservesOwnerDraft(t *testing.T) {
 	if err := os.WriteFile(mode, []byte("ready"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { forgetOwnPaste("%42") })
 	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
-	if !p.delivered || w.permissions.build.pending["same-id"] != p {
-		t.Fatal("same decision was not delivered after draft cleared")
+	// The fake never clears its input: our paste stays unsent, so the same
+	// decision stays pending (not failed, not marked delivered).
+	if p.delivered || w.permissions.build.pending["same-id"] != p {
+		t.Fatal("unsent paste reported delivered, or the decision was dropped")
 	}
+	enters := func() (n int) {
+		for _, call := range decisionCalls(t, log) {
+			if call.Args[0] == "send-keys" {
+				n++
+			}
+		}
+		return n
+	}
+	if enters() != deliverEnterTries {
+		t.Fatalf("Enter count %d; fake leaves own text pending, expected %d", enters(), deliverEnterTries)
+	}
+	// The next attempt presses Enter for our own paste; it never pastes again.
 	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
-	enters := 0
+	pastes := 0
 	for _, call := range decisionCalls(t, log) {
-		if call.Args[0] == "send-keys" {
-			enters++
+		if call.Args[0] == "paste-buffer" {
+			pastes++
 		}
 	}
-	if enters != deliverEnterTries {
-		t.Fatalf("Enter count %d; fake leaves own text pending, expected %d", enters, deliverEnterTries)
+	if pastes != 1 || enters() != 2*deliverEnterTries {
+		t.Fatalf("pastes %d, Enter %d", pastes, enters())
+	}
+	// Once the provider takes it, the same decision counts as delivered.
+	if err := os.WriteFile(mode, []byte("ready"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.deliverQueuedChatDecision(t.Context(), "same-id", p)
+	if !p.delivered || w.permissions.build.pending["same-id"] != p {
+		t.Fatal("same decision was not delivered after the chat took it")
+	}
+	if activityCount(w, chatQueuedUnsent) != 1 {
+		t.Fatal("missing or repeated unsent-paste notice")
 	}
 }

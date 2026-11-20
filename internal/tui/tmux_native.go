@@ -541,7 +541,10 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	cmd = append(cmd, env...)
 	cmd = append(cmd, bin)
 	cmd = append(cmd, resumeArgs...)
-	w.revokeProposalMCP(original)
+	// The restarted chat keeps its role: its lease retires so the launch
+	// minted above takes over its open requests and submissions.
+	w.retireProposalMCPForResume(original)
+	w.chatRestarted()
 	err = tmux.RespawnPaneIn(ctx, agent.paneID, root, cmd)
 	if err != nil && allowNewWindow {
 		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, marshalChatCommand(bin, resumeArgs))
@@ -1037,6 +1040,7 @@ func (w *Workspace) monitorAgent(
 		// The title heuristic is read every few ticks: it runs a tmux
 		// command, and a monitor runs per agent window.
 		laneTicks := 0
+		var titleHeld time.Time
 		for {
 			select {
 			case <-agentCtx.Done():
@@ -1047,6 +1051,21 @@ func (w *Workspace) monitorAgent(
 				w.tmuxMu.Unlock()
 				// Poll syncs
 				if snapshot.role == "marshal-chat" {
+					// The chat's title is Marshal's whether or not the dock
+					// ever runs for it: the provider's OSC or APC strings
+					// (Claude Code's kitty graphics query) never name it.
+					if time.Since(titleHeld) >= chatTitleEvery {
+						titleHeld = time.Now()
+						_ = w.holdMarshalChatTitle(agentCtx, snapshot, w.dockStripNow())
+					}
+					// An unsent paste of ours (or of the Board before a
+					// restart) is submitted even when nothing is queued.
+					if snapshot.paneID != "" && w.leftoverRunning.CompareAndSwap(false, true) {
+						go func(pane string) {
+							defer w.leftoverRunning.Store(false)
+							w.submitOwnLeftover(agentCtx, pane, false)
+						}(snapshot.paneID)
+					}
 					w.observeMarshalProposalFiles(root)
 					// A published draft must never wait for a relaunch: if no
 					// watcher is importing it, start one (a no-op while running).
@@ -1069,7 +1088,9 @@ func (w *Workspace) monitorAgent(
 					if st, ok := w.paneStatusOf(snapshot.paneID); ok && snapshot.paneID != "" {
 						// The worker's own report wins over the title.
 						status.State, status.LastAction = st.State, st.laneLast()
-					} else if snapshot.paneID != "" && laneTicks%5 == 1 {
+					} else if snapshot.paneID != "" && snapshot.role != "marshal-chat" && laneTicks%5 == 1 {
+						// The Marshal chat's title is Marshal's own strip
+						// (holdChatPaneTitle), not the provider's state.
 						if status.State == "" {
 							if title, err := tmux.GetPaneTitle(agentCtx, snapshot.paneID); err == nil && title != "" {
 								status.LastAction = title

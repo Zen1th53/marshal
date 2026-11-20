@@ -365,11 +365,12 @@ func (w *Workspace) deliverCodexDecision(ctx context.Context, id string, p *buil
 	w.permissions.mu.Lock()
 	for _, item := range items {
 		if w.permissions.build.pending[item.id] == item.p {
-			item.p.delivered = true
+			item.p.markDelivered(time.Now())
 		}
 	}
 	w.permissions.mu.Unlock()
 	for _, item := range items {
+		w.chatRequestSent(item.id, item.p.request, time.Now())
 		w.RecordActivity("Marshal decision requested: " + item.id + " " + item.p.request.Kind + " " + item.p.request.Object)
 	}
 }

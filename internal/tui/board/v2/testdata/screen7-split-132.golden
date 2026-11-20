@@ -1,0 +1,30 @@
+  MARSHAL v0.3.5   project marshal-work / run review-fixes   RUNNING              ✳ claude · opus-5.5 · medium  m   inbox 0  19:31  |
+ MARSHAL CHAT  ✳ opus-5.5 · medium  ● live  input clear             NOW  8 running · 5/12 merged  from you nothing                  |
+╭─ CLAUDE CODE ──────────────────────────────────────────────────╮ ╭─ PLAN ────────────────────────────────────────────────────────╮|
+│                                                                │ │ ✓ arch → ✓ tasks →  build 5/12  → review → merge              │|
+│ ▐▛███▜▌    Claude Code v2.1.329                                │ │ ██████████████████████░░░░░░░░░░  eta 45m                     │|
+│ ▝▜█████▛▘  Opus 5.5 with medium effort · Claude Max            │ ╰───────────────────────────────────────────────────────────────╯|
+│   ▘▘ ▝▝    ~/marshal-work                                      │ ╭─ LANES · heartbeats ──────────────────────────────────────────╮|
+│                                                                │ │ ⣾ claude-1  T03 sub-view links                             8s │|
+│ ● Goal recorded (rev 3). Architecture rev 1 is accepted;       │ │ ⣾ claude-2  T05 request panel                              4s │|
+│   reading it through the contract tool, page 1 of 2.           │ │ ⣾ claude-3  T07 legend focus                              12s │|
+│ ● marshal - marshal_project_contract_context (MCP)             │ │ ◎ claude-4  review T02                                     3s │|
+│     ⎿ 14 parts · 37 links · 5 changed by this goal             │ │ ⣾ agy-1     T04 codec test                                 6s │|
+│ ● Splitting 18 fixes into 12 tasks for 4 claude sonnet         │ │ ⣾ agy-2     T06 history paging                             9s │|
+│   and 4 agy gemini-3.8 workers; review.html in 3 waves.        │ │ ◎ agy-3     review T01                                     2s │|
+│                                                                │ │ ⣾ agy-4     T09 dashed styles                           1m40s │|
+│ ✻ Planning… (2m 10s · ↓ 4.1k tokens)                           │ │                                                               │|
+│                                                                │ ╰───────────────────────────────────────────────────────────────╯|
+│                                                                │ ╭─ WORKERS · providers ─────────────────────────────────────────╮|
+│                                                                │ │ ✳ claude  ██████░░░░  4 lanes · sonnet                        │|
+│                                                                │ │ ◆ agy     ███████░░░  4 lanes · gemini-3.8                    │|
+│                                                                │ │ ⬡ codex   █░░░░░░░░░  spare · wk 11%                          │|
+│                                                                │ ╰───────────────────────────────────────────────────────────────╯|
+│ ────────────────────────────────────────────────────────────── │ ╭─ ACTIVITY ────────────────────────────────────────────────────╮|
+│ ❯ │                                                            │ │ 19:30  merge   T08 merged after agy review                    │|
+│ ────────────────────────────────────────────────────────────── │ │ 19:28  review  T02 review on claude-4                         │|
+│ ⏵⏵ don't ask on (shift+tab to cycle)                           │ │ 19:22  signal  agy-4 slow heartbeat ×3                        │|
+╰────────────────────────────────────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯|
+                                                                                                                                    |
+  Alt+←  chat   Alt+→  Board   F11  full chat   m  Marshal model   space  actions                                                   |
+                                                                                                                                    |

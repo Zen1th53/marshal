@@ -1,3 +1,5 @@
+//go:build linux
+
 package tui
 
 import (
@@ -505,7 +507,9 @@ func TestBoardEndToEnd(t *testing.T) {
 	}
 	w.permissions.mu.Unlock()
 	w.boardUI.focus = ""
-	waitFrame(t, w, 120, 40, "INBOX", "registry.npmjs.org:443")
+	// Board v2 puts the first decision on a card over the Board; the top
+	// bar counts both.
+	waitFrame(t, w, 120, 40, "DECIDE ·", "inbox 2")
 	for range 2 {
 		w.inboxView.Update(w.boardInbox())
 		item, ok := w.inboxView.Current()
@@ -600,7 +604,8 @@ func TestBoardEndToEnd(t *testing.T) {
 	}
 	s.decide(t, events.EventTypeMarshalEscalated, "T-105", time.Now(), map[string]any{"reason": "candidate write outside scope e2e-live"})
 	s.decide(t, events.EventTypeMarshalUsageCharged, "T-105", time.Now(), map[string]any{"charge_phase": "worker", "usage_known": true, "usage_units": float64(3000)})
-	waitFrame(t, w, 120, 40, "T-105 parked · candidate write")
+	// Board v2's Activity says the task is stuck and why.
+	waitFrame(t, w, 120, 40, "T-105 stuck · candidate writ")
 	// The two decisions may reach the Board on different polls, so the
 	// escalation can show before the charge is counted.
 	for deadline := time.Now().Add(10 * time.Second); ; {

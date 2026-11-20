@@ -25,6 +25,9 @@ type boardNotes struct {
 	mu   sync.Mutex
 	list []boardNote
 	next int
+	// folded is the same messages with repeats folded, for Board v2
+	// Activity (boardv2_notefold.go).
+	folded []foldedNote
 }
 
 // boardNoteLimit is how many background messages Activity remembers.
@@ -39,6 +42,7 @@ func (w *Workspace) addNote(text string, isError bool) {
 	}
 	n := &w.notes
 	n.mu.Lock()
+	n.fold(text, isError, time.Now())
 	if len(n.list) > 0 && n.list[0].Text == text && n.list[0].Err == isError {
 		n.mu.Unlock()
 		return
@@ -73,6 +77,12 @@ func (w *Workspace) noteSeq() int {
 func verifyActivityNote(provider, text string, err error) (string, bool) {
 	name := firstNonEmpty(canonicalNeutralProvider(provider), providerWorker(provider), strings.TrimSpace(provider))
 	if err != nil {
+		if name == "agy" && verifySignedOut(name, err) {
+			// Not a broken harness: agy, which has no sign-in check of its
+			// own, is not signed in (board v2 U4). Other providers' errors
+			// already name a missing sign-in themselves.
+			return notSignedInReason(name), true
+		}
 		return "Verify " + name + " failed: " + RedactContent(err.Error(), nil), true
 	}
 	return firstNonEmpty(strings.TrimSpace(text), "Verified "+name+"."), false
@@ -84,6 +94,7 @@ func verifyActivityNote(provider, text string, err error) (string, bool) {
 func (w *Workspace) recordVerifyNote(provider, text string, err error) (string, bool) {
 	msg, isErr := verifyActivityNote(provider, text, err)
 	if w != nil {
+		w.noteV2Verify(provider, err)
 		w.addNote(msg, isErr)
 	}
 	return msg, isErr

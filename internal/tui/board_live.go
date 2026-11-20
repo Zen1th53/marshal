@@ -677,6 +677,12 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	_, docked := l.Pane(layout.Inspector)
 	// The opening animation (P2-03) owns the body on the first paints of a
 	// fresh Board, before the first-use card or the Blocked screen.
+	// Only a v2 paint puts a v2 card on screen; every other paint takes it
+	// off, so its keys stop acting (boardv2_paint.go).
+	w.setV2CardShown("")
+	// v2KeyRow is the Board v2 key bar's row, -1 when v2 did not paint;
+	// like the classic hint bar it stays clickable under an overlay.
+	v2KeyRow := -1
 	var openingShow, openingChecking bool
 	var openingFrame int
 	if empty {
@@ -713,6 +719,12 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	case docked && ui.task != "":
 		// A docked inspector shows the selected task without being opened.
 		lines = paintBoardInspector(l, th, ui.inspector(b, ui.task), v.render, v.hit)
+	case w.v2Fits(cols, rows) && !v2Defers(v):
+		// The Board v2 screens draw the home and run views
+		// (boardv2_paint.go); MARSHAL_BOARD=classic keeps the classic ones.
+		ui.insp, ui.inspFor = nil, ""
+		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
+		v2KeyRow = len(lines) - 2
 	case empty:
 		ui.insp, ui.inspFor = nil, ""
 		lines = paintFirstUse(l, th, v)
@@ -737,13 +749,13 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		}
 	}
 	// The palette (space / Ctrl+K) is rendered by the caller and arrives as
-	// popup; its visible rows are clickable. Layout gives the same box width
-	// and row range Render drew, so each row's region lands under its line.
+	// popup; its visible entries are clickable. Cells gives the same
+	// box-relative regions Render drew, for both the two-column core grid and
+	// the search list.
 	if w.palette.IsOpen() {
 		r := l.Overlay(0)
-		boxWidth, start, end := w.palette.Layout(cols, rows)
-		for i := start; i < end; i++ {
-			overlayHits = append(overlayHits, boardHit{row: r.Y + 3 + (i - start), x0: r.X, x1: r.X + boxWidth, kind: hitPaletteRow, id: strconv.Itoa(i)})
+		for _, c := range w.palette.Cells(cols, rows) {
+			overlayHits = append(overlayHits, boardHit{row: r.Y + c.Row, x0: r.X + c.X0, x1: r.X + c.X1, kind: hitPaletteRow, id: strconv.Itoa(c.Index)})
 		}
 	}
 	// The mid-run Marshal picker (m) is an overlay like help; its rows record
@@ -772,7 +784,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		// hint bar's row is never covered.
 		footer, _ := l.Pane(layout.Footer)
 		hits = slices.DeleteFunc(hits, func(h boardHit) bool {
-			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && h.row == footer.Rect.Y {
+			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && (h.row == footer.Rect.Y || h.row == v2KeyRow) {
 				return false
 			}
 			return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0)
@@ -817,6 +829,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	p := w.state.Marshal
 	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
 	w.mu.RUnlock()
+	// A Board v2 decision or paused card on screen takes its keys first
+	// (boardv2_cards_keys.go); MARSHAL_BOARD=classic never shows one.
+	if w.v2CardKey(event) {
+		return true
+	}
 	if w.inboxView.Confirming() || w.composing() {
 		return false
 	}

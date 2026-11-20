@@ -1,3 +1,5 @@
+//go:build linux
+
 package tui
 
 import (
@@ -38,6 +40,8 @@ func TestMarshalPickerWordsMatchLaunchPicker(t *testing.T) {
 // the empty Board says the Marshal is planning, not NO RUN YET; once a run
 // is on screen the state ends.
 func TestBoardPlanningAfterAccept(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.endOpening()
@@ -101,6 +105,8 @@ func TestProvidersViewListsInstalledProviders(t *testing.T) {
 // shows PLANNING; a cancelled goal, or a goal a closed run already delivered,
 // shows NO RUN YET.
 func TestBoardPlanningFromStoredAccept(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	frame := func(w *Workspace) string {
 		lines, _, _ := w.frameLines(160, 40)
 		return StripANSI(strings.Join(lines, "\n"))

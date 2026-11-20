@@ -17,7 +17,7 @@ import (
 // core at 100% on an otherwise idle Board. A sync after an append must decode
 // only the appended records, however long the history already is.
 func TestLiveClaudeChatSyncDecodesOnlyAppendedRecords(t *testing.T) {
-	dir, root := t.TempDir(), t.TempDir()
+	dir, root := t.TempDir(), realTempDir(t)
 	path := filepath.Join(dir, "chat.jsonl")
 	record := func(n int) []byte {
 		line, err := json.Marshal(map[string]any{"type": "assistant", "sessionId": "chat", "cwd": root, "timestamp": "2026-09-14T00:00:00Z",

@@ -81,7 +81,7 @@ func (w *Workspace) installedProviders() map[string]bool {
 // providerChip is one provider as the card shows it.
 type providerChip struct {
 	name  string
-	state string // verified, unverified, limited, not installed, checking, verifying
+	state string // verified, in use, unverified, limited, not installed, checking, verifying
 	model string
 	until time.Time
 }
@@ -108,6 +108,9 @@ func (w *Workspace) firstUseChips(now time.Time) []providerChip {
 	}
 	names = append(names, extra...)
 	chips := make([]providerChip, 0, len(names))
+	// A live Marshal session proves its provider works: it is in use, never
+	// "unverified" (board v2 U5).
+	chat := w.v2LiveChat()
 	for _, name := range names {
 		c := providerChip{name: name}
 		p, ok := known[name]
@@ -120,6 +123,8 @@ func (w *Workspace) firstUseChips(now time.Time) []providerChip {
 			c.state = "verified"
 		case installed != nil && !installed[name] && !ok:
 			c.state = "not installed"
+		case chat.Live && chat.Provider == name:
+			c.state = "in use"
 		case !m.Snap.Loaded && m.Snap.Err == "":
 			c.state = "checking"
 		default:
@@ -269,14 +274,14 @@ func (w *Workspace) focusChatFromBoard(ctx context.Context) {
 }
 
 // firstUseStateColor is the theme colour of a provider's readiness.
-var firstUseStateColor = map[string]string{"verified": "merged", "unverified": "waiting", "limited": "failed", "not installed": "dim", "checking": "dim", "verifying": "working"}
+var firstUseStateColor = map[string]string{"verified": "merged", "in use": "merged", "unverified": "waiting", "limited": "failed", "not installed": "dim", "checking": "dim", "verifying": "working"}
 
 func (v boardVisual) firstUseGlyph(state string) string {
 	if !v.unicode() {
-		return map[string]string{"verified": "*", "limited": "x", "not installed": "o", "checking": "o", "verifying": "~"}[state] + map[bool]string{true: "~"}[firstUseStateColor[state] == "waiting"]
+		return map[string]string{"verified": "*", "in use": "*", "limited": "x", "not installed": "o", "checking": "o", "verifying": "~"}[state] + map[bool]string{true: "~"}[firstUseStateColor[state] == "waiting"]
 	}
 	switch state {
-	case "verified":
+	case "verified", "in use":
 		return "●"
 	case "limited":
 		return "×"

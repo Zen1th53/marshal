@@ -670,20 +670,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	// while they fit.
 	// A stopped run's notice takes the note's place: why it stopped and
 	// the exact command that moves it on.
-	var s string
-	if stop, ok := v.stopNotice(); ok {
-		s = v.stopLine(stop) + "   "
-	} else if note := strings.TrimSpace(cleanBoard(v.note)); note != "" {
-		s = v.fg("waiting", "› ") + v.quietNote(note) + "   "
-	} else if indexing := strings.TrimSpace(cleanBoard(v.indexing)); indexing != "" {
-		s = v.fg("working", v.frame.Spinner(true)+" ") + v.fg("dim", indexing) + "   "
-	}
-	// A host notice follows the run's note, and only when it fits whole.
-	if v.host != nil && v.host.Notice != "" {
-		if part := v.fg("waiting", "▲ ") + cleanBoard(v.host.Notice) + "   "; VisibleLen(" "+s+part) <= w {
-			s += part
-		}
-	}
+	s := v.footerLead(w)
 	items = fitHints(items, VisibleLen(" "+s), w)
 	var spans []footerSpan
 	for _, it := range items {
@@ -696,6 +683,28 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	}
 	return PadCell(" "+s, w), spans
 }
+
+// footerLead is what leads the footer before its hints when there is no
+// status: a stopped run's notice (why it stopped and the command that moves
+// it on), else the run's note, else the knowledge index's progress, then a
+// host notice when it fits whole in w. "" when there is none.
+func (v boardVisual) footerLead(w int) string {
+	var s string
+	if stop, ok := v.stopNotice(); ok {
+		s = v.stopLine(stop) + "   "
+	} else if note := strings.TrimSpace(cleanBoard(v.note)); note != "" {
+		s = v.fg("waiting", "› ") + v.quietNote(note) + "   "
+	} else if indexing := strings.TrimSpace(cleanBoard(v.indexing)); indexing != "" {
+		s = v.fg("working", v.frame.Spinner(true)+" ") + v.fg("dim", indexing) + "   "
+	}
+	if v.host != nil && v.host.Notice != "" {
+		if part := v.fg("waiting", "▲ ") + cleanBoard(v.host.Notice) + "   "; VisibleLen(" "+s+part) <= w {
+			s += part
+		}
+	}
+	return s
+}
+
 func (v boardVisual) counts() (running, parked, merged int) {
 	for _, t := range v.board.Tasks {
 		switch t.State {

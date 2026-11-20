@@ -1,4 +1,4 @@
-//go:build !governed
+//go:build linux && !governed
 
 package tui
 
@@ -50,6 +50,8 @@ func TestMarshalSelfDecisionKinds(t *testing.T) {
 // The refused attempt shows in the inbox under the architecture gate while
 // that revision waits, and in Activity once; a new revision has no warning.
 func TestRefusedSelfAcceptanceShowsInTheInbox(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	c := walkContract()

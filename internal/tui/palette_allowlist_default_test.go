@@ -4,6 +4,8 @@ package tui
 
 import "testing"
 
+const paletteGoldenName = "palette-governed"
+
 // The governed edition's palette keeps the capability registry after the
 // Board's keys, without the rows the Board already lists by their key, and
 // can quit.

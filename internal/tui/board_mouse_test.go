@@ -1,3 +1,5 @@
+//go:build linux
+
 package tui
 
 import (
@@ -53,6 +55,8 @@ func TestBoardMouseActionHit(t *testing.T) {
 }
 
 func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
 	if !click(w, row, col) {
@@ -82,6 +86,8 @@ func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
 }
 
 func TestBoardMouseFocusesLanes(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	oldIn := boardInTmux
 	defer func() { boardInTmux = oldIn }()
@@ -101,6 +107,8 @@ func TestBoardMouseFocusesLanes(t *testing.T) {
 }
 
 func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	for _, c := range []struct {
 		chip string
@@ -149,6 +157,8 @@ func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 }
 
 func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	pending := func() int { w.permissions.mu.Lock(); defer w.permissions.mu.Unlock(); return len(w.permissions.inbox) }
 	row, col := cellOf(t, w, 120, 40, "[d] deny", 0)
@@ -189,6 +199,8 @@ func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
 }
 
 func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.permissions.mu.Lock()
 	w.permissions.inbox = []permission.Request{{Kind: "unheard-of", TaskID: "T-023", Object: "release push", Scope: "one run", Reason: "push to main", Who: "Marshal"}}
@@ -204,6 +216,8 @@ func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
 }
 
 func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
 	for _, ev := range []KeyEvent{
@@ -227,6 +241,8 @@ func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T
 // The bytes a terminal sends for a click reach the Board through the same
 // parser and key loop the workspace runs.
 func TestBoardMouseThroughTheKeyLoop(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-018  ⣾", 0)
 	ev := ParseKey([]byte(fmt.Sprintf("\x1b[<0;%d;%dM", col, row)))
@@ -292,13 +308,44 @@ func TestPaletteMouseSelectsThenRuns(t *testing.T) {
 	defer w.Close()
 	hw, _, _ := testWatcher(t, nil)
 	w.hostWatch.Store(hw)
-	// No inbox request, so the palette's first page is its view rows: the
-	// host row shows and is not the row selected on open.
 	w.permissions.inbox = nil
+	// Empty query: click a right-column core entry ("help") to select, then
+	// click again to run it.
 	w.palette.Open()
+	helpIdx := slices.IndexFunc(w.palette.filtered, func(a PaletteAction) bool { return a.ID == "help" })
+	if helpIdx < 0 {
+		t.Fatal("the core palette has no help entry")
+	}
+	hRow, hCol := cellOf(t, w, 120, 40, "help", 0)
+	if !click(w, hRow, hCol) {
+		t.Fatal("a click on a core palette cell was not taken")
+	}
+	if w.palette.Selected() != helpIdx {
+		t.Fatalf("the first click selected %d, want help %d", w.palette.Selected(), helpIdx)
+	}
+	if !w.palette.IsOpen() || w.boardHelp.Load() {
+		t.Fatal("the first click ran the entry instead of only selecting it")
+	}
+	if !click(w, hRow, hCol) {
+		t.Fatal("the second click on help was not taken")
+	}
+	if w.palette.IsOpen() || !w.boardHelp.Load() {
+		t.Fatal("the second click did not close the palette and open help")
+	}
+	w.boardHelp.Store(false)
+
+	// Search query: filter for "view" so multiple rows show and Open Host view
+	// is not the selected row; first click selects it, second click opens it.
+	w.palette.Open()
+	for _, r := range "view" {
+		w.palette.HandleKey(KeyEvent{Type: KeyRune, Rune: r})
+	}
 	want := slices.IndexFunc(w.palette.filtered, func(a PaletteAction) bool { return a.ID == "view.host" })
 	if want < 0 {
 		t.Fatal("the palette has no host view row")
+	}
+	if w.palette.Selected() == want {
+		w.palette.Select((want + 1) % len(w.palette.filtered))
 	}
 	row, col := cellOf(t, w, 120, 40, "Open Host view", 0)
 	if !click(w, row, col) {
@@ -335,7 +382,7 @@ func TestPaletteMouseWheelAndOutside(t *testing.T) {
 	if w.palette.Selected() != before+1 {
 		t.Fatalf("the wheel moved the selection to %d, want %d", w.palette.Selected(), before+1)
 	}
-	row, col := cellOf(t, w, 120, 40, "Actions", 0)
+	row, col := cellOf(t, w, 120, 40, "ACTIONS", 0)
 	if !click(w, row, col) {
 		t.Fatal("the header click was not taken")
 	}

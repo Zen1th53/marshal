@@ -66,6 +66,28 @@ type buildPendingDecision struct {
 	reason     string
 	// bound marks a private review deadline that must hold as set.
 	bound bool
+	// window is how long the Marshal has to answer once the request is in
+	// its chat; zero keeps the deadline as set. A request whose delivery
+	// waits (an unsent paste, a busy chat, a restart) is not dead on arrival.
+	window time.Duration
+}
+
+// extendForDelivery gives an unbound request its whole answer window from
+// now: on delivery, and while delivery is still pending.
+func (p *buildPendingDecision) extendForDelivery(now time.Time) {
+	if p.bound || p.window <= 0 {
+		return
+	}
+	if d := now.Add(p.window); d.After(p.deadline) {
+		p.deadline = d
+	}
+}
+
+// markDelivered records that the request reached the Marshal chat.
+func (p *buildPendingDecision) markDelivered(now time.Time) {
+	p.delivered = true
+	p.blocked = false
+	p.extendForDelivery(now)
 }
 
 // Queue processing remains asynchronous: stop and proposal polling never wait
@@ -126,6 +148,12 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		if p.answer == nil && !p.bound && !relaunched && working && !time.Now().Before(p.deadline) {
 			p.deadline = time.Now().Add(marshalBusyDecisionGrace)
 		}
+		// A request the chat has not been given yet cannot have been
+		// answered late: its clock starts on delivery.
+		// (Codex questions keep their own audited expiry and re-delivery.)
+		if p.answer == nil && !relaunched && !p.delivered && p.provider != "codex" && !time.Now().Before(p.deadline) {
+			p.extendForDelivery(time.Now())
+		}
 		if p.answer == nil && time.Now().Before(p.deadline) && !relaunched {
 			w.permissions.mu.Unlock()
 			if p.provider == "codex" {
@@ -142,6 +170,7 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		if p.answer == nil {
 			// This edition never denies work because the Marshal was slow.
 			w.permissions.mu.Unlock()
+			w.chatRequestExpired(id)
 			w.settleUnansweredDecision(ctx, req, id, p, "decision timeout")
 			return true
 		}
@@ -254,6 +283,9 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		deadline = registered.Add(extremeAwaitForever)
 	}
 	p := &buildPendingDecision{request: req, provider: provider, paneID: pane, deadline: deadline, launchID: w.proposalLaunchID(), bound: boundReview}
+	if !boundReview && deadline.Sub(registered) < extremeAwaitForever {
+		p.window = deadline.Sub(registered)
+	}
 	description := map[string]string{"id": id, "kind": req.Kind, "object": req.Object, "scope": req.Scope, "scope_detail": req.Detail, "reason": req.Reason}
 	if boundReview {
 		description["deadline_utc"] = deadline.UTC().Format(time.RFC3339Nano)
@@ -286,6 +318,10 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		w.permissions.mu.Unlock()
 		w.settleUnansweredDecision(ctx, req, id, p, "decision delivery failed")
 	} else {
+		w.permissions.mu.Lock()
+		p.markDelivered(time.Now())
+		w.permissions.mu.Unlock()
+		w.chatRequestSent(id, req, time.Now())
 		w.RecordActivity("Marshal decision requested: " + id + " " + req.Kind + " " + req.Object)
 		w.permissions.queue.Add(req)
 	}
@@ -304,23 +340,35 @@ func (w *Workspace) deliverQueuedChatDecision(ctx context.Context, id string, p 
 		return
 	}
 	run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
-	err := deliverChatTurn(ctx, run, p.paneID, p.text, deliverEnterTries, deliverEnterWait)
+	err := deliverChatTurnAs(ctx, run, composerDialectFor(p.provider), p.paneID, p.text, deliverEnterTries, deliverEnterWait)
 	w.permissions.mu.Lock()
 	if w.permissions.build.pending[id] != p {
 		w.permissions.mu.Unlock()
 		return
 	}
-	if errors.Is(err, errChatBusy) {
-		tell := !p.blocked
-		p.blocked = true
+	if errors.Is(err, errChatNotReady) {
+		// The chat is mid-turn over an empty input, or has not drawn its
+		// input yet: nothing for the owner to send or clear. The request
+		// waits for the chat to be ready.
+		p.blocked = false
+		p.extendForDelivery(time.Now())
 		w.permissions.mu.Unlock()
-		if tell {
-			w.RecordActivity("Marshal decision queued: chat input is not empty or ready. Send or clear your unsent text in the chat pane to unblock delivery.")
+		return
+	}
+	if errors.Is(err, errChatBusy) || errors.Is(err, errChatUnsubmitted) {
+		// Waiting on the chat is not the Marshal being slow.
+		p.blocked = true
+		p.extendForDelivery(time.Now())
+		w.permissions.mu.Unlock()
+		if errors.Is(err, errChatBusy) {
+			w.noteChatOnce(chatQueuedOwnerInput)
+		} else {
+			w.noteChatOnce(chatQueuedUnsent)
 		}
 		return
 	}
 	if err == nil {
-		p.delivered = true
+		p.markDelivered(time.Now())
 	}
 	if err != nil {
 		delete(w.permissions.build.pending, id)
@@ -330,6 +378,8 @@ func (w *Workspace) deliverQueuedChatDecision(ctx context.Context, id string, p 
 		w.settleUnansweredDecision(ctx, p.request, id, p, "decision delivery failed")
 		return
 	}
+	w.chatDeliveryUnblocked()
+	w.chatRequestSent(id, p.request, time.Now())
 	w.RecordActivity("Marshal decision requested: " + id + " " + p.request.Kind + " " + p.request.Object)
 }
 
