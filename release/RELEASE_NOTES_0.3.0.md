@@ -1,4 +1,4 @@
-# Marshal v0.2.20
+# Marshal v0.3.0
 
 This release comes from running Marshal on itself for a long stretch, as a real
 owner would, and fixing what got in the way. The project now has one living

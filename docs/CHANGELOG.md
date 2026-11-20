@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.20
+## 0.3.0
 
 ### Added
 - One living project architecture: each goal is drawn as dashed changes (new, changed, removed) on the current architecture, with labelled connections, requirement coverage, "Only this goal's changes", a History panel and built / differs marks. Press `a` on the Board to open it any time.
