@@ -307,6 +307,9 @@ type Workspace struct {
 	// read on the architecture follower's beat (board_planning.go); nil when
 	// no goal is being planned.
 	milestone atomic.Pointer[planningMark]
+	// marshalSteps are the Marshal's recent tool calls through the proposal
+	// broker, for the Board v2 steps pane (boardv2_steps.go).
+	marshalSteps marshalSteps
 	// hostView is set while the Host view is painted in the Board's body.
 	hostView atomic.Bool
 	// memView is set while the Memory view is painted in the Board's body;

@@ -25,6 +25,9 @@ type boardNotes struct {
 	mu   sync.Mutex
 	list []boardNote
 	next int
+	// folded is the same messages with repeats folded, for Board v2
+	// Activity (boardv2_notefold.go).
+	folded []foldedNote
 }
 
 // boardNoteLimit is how many background messages Activity remembers.
@@ -39,6 +42,7 @@ func (w *Workspace) addNote(text string, isError bool) {
 	}
 	n := &w.notes
 	n.mu.Lock()
+	n.fold(text, isError, time.Now())
 	if len(n.list) > 0 && n.list[0].Text == text && n.list[0].Err == isError {
 		n.mu.Unlock()
 		return
