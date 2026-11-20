@@ -683,6 +683,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	}
 	return PadCell(" "+s, w), spans
 }
+
 // footerLead is what leads the footer before its hints when there is no
 // status: a stopped run's notice (why it stopped and the command that moves
 // it on), else the run's note, else the knowledge index's progress, then a
