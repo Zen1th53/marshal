@@ -7951,8 +7951,8 @@
     },
     {
       "path": "internal/mcp/chat_permission.go",
-      "sha256": "eb443859bdf50237267be94b93ad61089280910f39f9e503ed43d532726f2f86",
-      "bytes": 2666
+      "sha256": "822798300731515d81b6be200b3f99fa68bd68a3a09cb10c3ed136fe94681ec2",
+      "bytes": 2554
     },
     {
       "path": "internal/mcp/chat_permission_test.go",
@@ -7971,8 +7971,8 @@
     },
     {
       "path": "internal/mcp/code_evidence_extreme.go",
-      "sha256": "da5f7cd8ca041d0aba4ae4b95514b6f1be565f5297f04b37029f312f3e3d1007",
-      "bytes": 6920
+      "sha256": "08ead062f089efdfca125ee7230e8960e98f4ca5f68bc7de315e3df18f60bae6",
+      "bytes": 6435
     },
     {
       "path": "internal/mcp/code_evidence_extreme_test.go",
@@ -7986,8 +7986,8 @@
     },
     {
       "path": "internal/mcp/design_memory.go",
-      "sha256": "c5067dec7fb16b0e82e8407a587e52bc754383bfa8b502bc874647d9133788b6",
-      "bytes": 1534
+      "sha256": "d1130acca86a0531bb1bcb9d5b7119ad03442f6132711faa1c952ca1f3390d46",
+      "bytes": 1451
     },
     {
       "path": "internal/mcp/effect_boundary_test.go",
@@ -8006,8 +8006,8 @@
     },
     {
       "path": "internal/mcp/knowledge.go",
-      "sha256": "2aae9a56bf45102f196d4002940fb266751197252606cb3f0b5b75fe98542bda",
-      "bytes": 10033
+      "sha256": "dca3b12a8c4ad0a6a3e126af5692319143729d1c8594f9a355b35d7a289d3459",
+      "bytes": 9096
     },
     {
       "path": "internal/mcp/knowledge_args.go",
@@ -8051,8 +8051,8 @@
     },
     {
       "path": "internal/mcp/memory_recall_default.go",
-      "sha256": "c73df793f2fb2a075ac1158cc5e3003c7e35adddd2e14cca69bf1779c01e5c8c",
-      "bytes": 1074
+      "sha256": "624605f194496c8fff74f21056f66c853adb744b06ca2c5fcb1644ac896d43a9",
+      "bytes": 1039
     },
     {
       "path": "internal/mcp/memory_recall_default_test.go",
@@ -8061,8 +8061,8 @@
     },
     {
       "path": "internal/mcp/memory_recall_extreme.go",
-      "sha256": "ead94f23b0c7b238e0c38477438a08bcc08968d06268f25685d9a77859ea7c91",
-      "bytes": 16196
+      "sha256": "b60df627817fe151c1bf50cdf9f4cbc79f0c2ead472d6c45ca6422d9b6a7a581",
+      "bytes": 15505
     },
     {
       "path": "internal/mcp/memory_recall_extreme_test.go",
@@ -8146,13 +8146,13 @@
     },
     {
       "path": "internal/mcp/proposal_default.go",
-      "sha256": "26e6bca7a9e8289a2a66ff0373ba33893989767be8a8406eb2e5a86b2b082fa6",
-      "bytes": 880
+      "sha256": "d96e91d0b4e925b358a2e2ee970a022bb075f7654d1b423152d259eb825f1ebe",
+      "bytes": 869
     },
     {
       "path": "internal/mcp/proposal_extreme.go",
-      "sha256": "869c0093744445b768347050711590dc5ebd3ac97bbb5fae51818c1b38ca5922",
-      "bytes": 12451
+      "sha256": "ab2d2f6f0afb5836828cfd68a0d7d3bc705d6ec46104f2682e125337edee60ac",
+      "bytes": 7666
     },
     {
       "path": "internal/mcp/proposal_extreme_test.go",
@@ -8191,8 +8191,8 @@
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "7cc5d83afa96646a4a5d2af1e6efd0b837092467c730ead318ca7bb9647db1ca",
-      "bytes": 42619
+      "sha256": "5cc24722a5e48c45e83b66cf43570dbff028a718bdbf8b17152ecddf73486f27",
+      "bytes": 41316
     },
     {
       "path": "internal/mcp/server_default_test.go",
@@ -8250,9 +8250,24 @@
       "bytes": 5607
     },
     {
+      "path": "internal/mcp/tools_list_size_default_test.go",
+      "sha256": "d9a22bb0ae8bcdc37d0b63a9517c2367bf259d3b404923356f1ffe6b6cf980e2",
+      "bytes": 318
+    },
+    {
+      "path": "internal/mcp/tools_list_size_extreme_test.go",
+      "sha256": "efd6fa0c717e1af451de127b8c96a097588b53827e6a986c1bc095762e5548f6",
+      "bytes": 595
+    },
+    {
+      "path": "internal/mcp/tools_list_size_test.go",
+      "sha256": "3680c0e9767f30db3dae6808bfb5a57a05336157cc74af0207b83cbec74cd5fb",
+      "bytes": 933
+    },
+    {
       "path": "internal/mcp/worker_candidates_default.go",
-      "sha256": "1648af5a1f3efea270bb9e1600851a7d700d3ea6ef02063a2cbc4dcab9413205",
-      "bytes": 675
+      "sha256": "622d63997dc892bbe6608ee9817acd108fd9182ef67206082bf452368ca6f042",
+      "bytes": 664
     },
     {
       "path": "internal/mcp/worker_candidates_extreme.go",
