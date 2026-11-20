@@ -866,13 +866,13 @@
     },
     {
       "path": "internal/adapter/codex/codex.go",
-      "sha256": "4eb5300966b9ecf50ce3792a2a6306b3807d1336b256d9309113705fd1352b08",
-      "bytes": 13285
+      "sha256": "5b32f7ef26e9dab2e669a43abd7f47171426037ab66a0e252d3c591fcc943ec9",
+      "bytes": 14715
     },
     {
       "path": "internal/adapter/codex/codex_test.go",
-      "sha256": "e6c058159bd5ffb1e8f96a3594e362e2b86483676c7837a1b8acc27ec12bfd72",
-      "bytes": 14078
+      "sha256": "2fde84883ad7783058b0d8270ab484f3ade12e68e8b683a214a4a0fe635d5905",
+      "bytes": 17095
     },
     {
       "path": "internal/adapter/codex/effort_test.go",
@@ -3981,8 +3981,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "9bccc02525165b3446a679aee231c1cb6d95e0f22f174b4333a6fd8b79a3e0ef",
-      "bytes": 95158
+      "sha256": "a7c9ea77c17c49099f478f9f47d7e5eeb166251d2f2a869aec8beda12f929a30",
+      "bytes": 95456
     },
     {
       "path": "internal/app/runtime_base_test.go",
@@ -17106,8 +17106,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "65ce8b049c25282893ea627b37de1f0e7853d31dca45af62e9d3aa7a8c36934b",
-      "bytes": 469401
+      "sha256": "6ec750b1d669f543018e3b0df52195a4e24cb5b063c176fe4ac6744482483efa",
+      "bytes": 469849
     },
     {
       "path": "tools/extreme/prq/main_default.go",

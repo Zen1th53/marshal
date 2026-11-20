@@ -371,3 +371,74 @@ func TestProbeRejectsEachMissingNativeFlag(t *testing.T) {
 		})
 	}
 }
+
+// catalogRunner serves a fixed `codex debug models` answer and captures the
+// exec command, as the installed Codex would.
+type catalogRunner struct {
+	capturingRunner
+	catalog string
+	fail    bool
+}
+
+func (r *catalogRunner) Run(ctx context.Context, command adapter.Command) (adapter.ProcessResult, error) {
+	if len(command.Args) == 2 && command.Args[0] == "debug" && command.Args[1] == "models" {
+		if r.fail {
+			return adapter.ProcessResult{ExitCode: 1}, nil
+		}
+		return adapter.ProcessResult{Stdout: []byte(r.catalog)}, nil
+	}
+	return r.capturingRunner.Run(ctx, command)
+}
+
+func modelArg(args []string) string {
+	for i, a := range args {
+		if a == "--model" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+// A model the installed Codex newly offers works with no MARSHAL change:
+// nothing but the live catalog decides.
+func TestRunUsesAnyModelTheInstalledCodexOffers(t *testing.T) {
+	runner := &catalogRunner{catalog: `{"models":[{"slug":"gpt-6.2-sol","priority":1},{"slug":"gpt-6.2-astra","priority":2}]}`}
+	client := New("/usr/bin/codex", runner)
+	if _, err := client.Run(context.Background(), adapter.Request{TaskID: "TASK-1", Title: "t", Worktree: "/w", Model: "gpt-6.2-astra"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := modelArg(runner.command.Args); got != "gpt-6.2-astra" {
+		t.Fatalf("--model = %q", got)
+	}
+}
+
+// A plan naming a model this Codex does not offer runs on the owner's
+// default instead of failing the worker attempt.
+func TestRunFallsBackToOwnerDefaultForUnofferedModel(t *testing.T) {
+	runner := &catalogRunner{catalog: `{"models":[{"slug":"gpt-6.2-sol","priority":1,"supported_reasoning_levels":[{"effort":"high"}]}]}`}
+	client := New("/usr/bin/codex", runner)
+	result, err := client.Run(context.Background(), adapter.Request{TaskID: "TASK-1", Title: "t", Worktree: "/w", Model: "gpt-retired", Effort: "xhigh"})
+	if err != nil {
+		t.Fatalf("unoffered model failed the worker: %v", err)
+	}
+	if got := modelArg(runner.command.Args); got != "gpt-6.2-sol" || result.Model != "gpt-6.2-sol" {
+		t.Fatalf("--model = %q, result model %q; want the owner default", got, result.Model)
+	}
+	if strings.Contains(strings.Join(runner.command.Args, " "), "model_reasoning_effort") {
+		t.Fatalf("an effort for the unoffered model was carried onto the default: %v", runner.command.Args)
+	}
+}
+
+// When the catalog cannot be read the named model passes through and the
+// installed Codex itself accepts or rejects it.
+func TestRunPassesModelThroughWhenCatalogUnavailable(t *testing.T) {
+	runner := &catalogRunner{fail: true}
+	client := New("/usr/bin/codex", runner)
+	if _, err := client.Run(context.Background(), adapter.Request{TaskID: "TASK-1", Title: "t", Worktree: "/w", Model: "gpt-6.2-sol", Effort: "high"}); err != nil {
+		t.Fatalf("catalog outage failed the worker: %v", err)
+	}
+	joined := strings.Join(runner.command.Args, " ")
+	if modelArg(runner.command.Args) != "gpt-6.2-sol" || !strings.Contains(joined, `model_reasoning_effort="high"`) {
+		t.Fatalf("args = %s", joined)
+	}
+}
