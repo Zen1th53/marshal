@@ -1072,7 +1072,9 @@ func (w *Workspace) monitorAgent(
 					if st, ok := w.paneStatusOf(snapshot.paneID); ok && snapshot.paneID != "" {
 						// The worker's own report wins over the title.
 						status.State, status.LastAction = st.State, st.laneLast()
-					} else if snapshot.paneID != "" && laneTicks%5 == 1 {
+					} else if snapshot.paneID != "" && snapshot.role != "marshal-chat" && laneTicks%5 == 1 {
+						// The Marshal chat's title is Marshal's own strip
+						// (holdChatPaneTitle), not the provider's state.
 						if status.State == "" {
 							if title, err := tmux.GetPaneTitle(agentCtx, snapshot.paneID); err == nil && title != "" {
 								status.LastAction = title
