@@ -1,0 +1,22 @@
+  MARSHAL v0.3.5   project marshal-work   YOUR TURN                                 ✳ claude · opus-5.5 · high  m   inbox 1  18:42  |
+ NOW  marshal waiting on you                    │ work none yet                       from you accept architecture rev 1 · a        |
+                                                                                                                                    |
+╭─ PLAN ──────╭─ ACCEPT ARCHITECTURE · rev 1 ──────────────────────────────────────────────────────────── esc later ─╮─────────────╮|
+│ ✓ goal → ✓ r│ 14 parts · 37 links · covers R1–R18 · 5 parts changed by this goal (dashed)                          │   ANSWER    │|
+╰─────────────│                                                                                                      │ allow 3s    │|
+╭─ MARSHAL STE│  ╭────────────────────╮   ╭────────────────────╮   ╭────────────────────╮   ╭┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╮   │ allow 5s    │|
+│ 18:47  draft│  │ Board              │──▶│ Runtime            │──▶│ Workers            │┄┄▶┆ architecture-review┆   │ decline 4s  │|
+│ 18:46  assig│  │ owner UI           │   │ runs · leases      │   │ claude · agy       │   ┆ 18 fixes           ┆   │             │|
+│ 18:45  check│  ╰────────────────────╯   ╰────────────────────╯   ╰────────────────────╯   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯   │─────────────╯|
+│ 18:43  read │                                                                                       ┆              │─────────────╮|
+│ 18:41  read │  ╭────────────────────╮   ╭────────────────────╮   ╭┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╮   ╭┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╮   │             │|
+│ 18:41  start│  │ Marshal chat       │◀─▶│ SQLite state       │◀─▶┆ architecturecodec  ┆┄┄▶┆ review tests       ┆   │             │|
+│             │  │ MCP tools          │   │ revisions          │   ┆ digests            ┆   ┆ 18 regressions     ┆   │             │|
+│             │  ╰────────────────────╯   ╰────────────────────╯   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯   │             │|
+│             │ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │             │|
+│ after 10 qui│ ⚠ The Marshal tried to accept this for you at 18:40. Refused: only you can accept.                   │             │|
+│             │                                                                                                      │             │|
+╰─────────────│  a  open in browser    c  copy link    ⏎  accept here    k  comment                                  │─────────────╯|
+              ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯              |
+  F11  Marshal chat   s  say   a  architecture   f  faster model   space  actions   ?  help                                         |
+                                                                                                                                    |

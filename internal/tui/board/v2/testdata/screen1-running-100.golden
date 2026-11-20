@@ -1,0 +1,31 @@
+  MARSHAL v0.3.5   project marshal-work   RUNNING            ✳ claude · opus-5.5 · high  m   19:31  |
+ NOW  marshal claude Opus · watching r…│ work 8 running · 4 queued   from you nothing · next ask: fi|
+                                                                                                    |
+╭─ PLAN · 12 tasks · 18 requirements ───────────────────────────────────── accepted rev 1 · 18:52 ─╮|
+│ ✓ goal → ✓ reqs → ✓ design → ✓ arch → ✓ tasks →  build 5/12  → review → merge                    │|
+│ throughput ▁▂▃▅▆▇▇█▇▆▇█  5 merged/h · 0 reworked · tokens 1.9M                                   │|
+│ ███████████████████████████████░░░░░░░░░░░░░░   done 5 · active 6 · eta 45m                      │|
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+╭─ LANES · from worker heartbeats ───────────────────────────── limit claude 4 · agy 4 · total 12 ─╮|
+│    LANE        MODEL        TASK                                         STEP        TIME SIGNAL │|
+│  ⣾ claude-1    sonnet-5.5   T03 sub-view external links                  tests        14m     8s │|
+│  ⣾ claude-2    sonnet-5.5   T05 request panel overlap                    editing      11m     4s │|
+│  ⣾ claude-3    sonnet-5.5   T07 legend keyboard focus                    editing       6m    12s │|
+│  ◎ claude-4    sonnet-5.5   review T02 (by agy-1)                        reviewing     2m     3s │|
+│  ⣾ agy-1       gemini-3.8   T04 codec round-trip test                    tests         9m     6s │|
+│  ⣾ agy-2       gemini-3.8   T06 history paging                           editing       8m     9s │|
+│  ◎ agy-3       gemini-3.8   review T01 (by claude-2)                     reviewing     3m     2s │|
+│  ⣾ agy-4       gemini-3.8   T09 dashed-change styles                     editing       7m  1m40s │|
+│                                                                                                  │|
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+╭─ TASKS · 5 of 12 merged ──────────────────────────────────────────────────── ⏎ open · r restart ─╮|
+│   ID   TITLE                         FILES         WRITER  REVIEW  STATE                         │|
+│   T01  stale target refusal message  review.go     claude  agy     ✓ merged                      │|
+│   T02  digest-bound review requests  codec.go      agy     claude  ◎ in review                   │|
+│   T03  sub-view external links       review.html   claude  agy     › building                    │|
+│   T05  request panel overlap         review.html   claude  agy     › building                    │|
+│   T12  regression matrix sign-off    matrix.md     claude  agy     · waits T03                   │|
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+                                                                                                    |
+  s  say   ⏎  open   a  architecture   r  restart task   m  model   l  limits   p  pause all   F11  |
+                                                                                                    |

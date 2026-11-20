@@ -1,0 +1,19 @@
+  MARSHAL v0.3.5   project marshal-work   2 PAUSED                                  ✳ claude · opus-5.5 · high  m   inbox 1  20:05  |
+ NOW  marshal waiting on your choice            │ work 6 running · 2 paused           from you press ⏎ to move 2 tasks to claude    |
+                                                                                                                                    |
+╭─ PAUSED · agy Gemini 5h limit ───────────────────────────────────── resets 21:10 ─╮ ╭─ PROVIDERS ────────────────────────────────╮|
+│ agy-2 and agy-4 hit the agy Gemini 5-hour limit. Their work is kept.              │ │ ✳ claude    █████░░░░░   ready    52%      │|
+│                                                                                   │ │ ◆ agy       ░░░░░░░░░░   out      21:10    │|
+│   TASK                         PROGRESS                    KEPT                   │ │ ⬡ codex     █░░░░░░░░░   low      10%      │|
+│   T06 history paging          edits done · tests not run  branch + 3 commits      │ │                                            │|
+│   T09 dashed-change styles    half edited                 branch + 1 commit       │ │ claude has room for both (≈ 6% each).      │|
+│                                                                                   │ │                                            │|
+│ Enter will: move T06 and T09 to claude sonnet in fresh sessions, keep commits.    │ ╰────────────────────────────────────────────╯|
+│             review for these two moves to codex.                                  │ ╭─ RUN ──────────────────────────────────────╮|
+│                                                                                   │ │ ████████████████░░░░░░░░  7 of 12 merged   │|
+│  ⏎  move to claude    w  wait until 21:10    d  raw error    x  stop the run      │ │ 6 lanes running · no other stops           │|
+│                                                                                   │ │                                            │|
+╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯|
+                                                                                                                                    |
+  ⏎  move to claude   w  wait   d  details   x  stop run   space  actions                                                           |
+                                                                                                                                    |

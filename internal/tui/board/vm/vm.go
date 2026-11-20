@@ -219,6 +219,8 @@ type Readiness struct {
 	TelemetryOn  bool
 	TelemetryAsk bool
 	Defaults     [][2]string
+	Checked      time.Time // when the checks last ran; zero: not yet
+	Actions      []Key     // buttons under the checks: fixes before ⏎, ⏎ the main one, then the rest
 }
 
 // Node is one part on the decision card's architecture sketch.
@@ -237,6 +239,15 @@ type Decision struct {
 	NoDisplay    bool
 	SelfApproval string // non-empty: the Marshal tried to approve for the owner
 	Actions      []Key
+	Links        []Link // arrows between Nodes on the sketch (4 per row)
+}
+
+// Link is one arrow between two Nodes of the decision sketch, by index.
+// Only neighbours in a row or a column are drawn.
+type Link struct {
+	From, To int
+	Both     bool // ◀─▶ rather than ──▶
+	Changed  bool // dashed: the goal changes this link
 }
 
 // PausedTask is one task a stop paused.
@@ -248,8 +259,10 @@ type Paused struct {
 	Resets  string
 	Cause   string
 	Tasks   []PausedTask
-	Will    string // what Enter does
+	Will    string // what Enter does; a second line after "\n" is drawn dim
 	Actions []Key
+	Room    string // under Providers: whether the fallback has room for the moved work
+	Run     string // under the Run bar: "6 lanes running · no other stops"
 }
 
 // Key is one key hint.

@@ -1,0 +1,22 @@
+  MARSHAL v0.3.5   project marshal-work   YOUR TURN                      18:42  |
+ NOW  marshal waiting on you      │ work none yet           from you accept arch|
+                                                                                |
+╭─╭─ ACCEPT ARCHITECTURE · rev 1 ──────────────────────────────── esc later ─╮─╮|
+│ │ 14 parts · 37 links · covers R1–R18 · 5 parts changed by this goal (dashe│m│|
+╰─│                                                                          │─╯|
+╭─│  ╭────────────────────╮   ╭────────────────────╮   ╭────────────────────╮│─╮|
+│ │  │ Board              │──▶│ Runtime            │──▶│ Workers            ││ │|
+│ │  │ owner UI           │   │ runs · leases      │   │ claude · agy       ││ │|
+│ │  ╰────────────────────╯   ╰────────────────────╯   ╰────────────────────╯│ │|
+│ │                                                                          │ │|
+│ │  ╭────────────────────╮   ╭────────────────────╮   ╭┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╮│ │|
+│ │  │ Marshal chat       │◀─▶│ SQLite state       │◀─▶┆ architecturecodec  ┆│ │|
+│ │  │ MCP tools          │   │ revisions          │   ┆ digests            ┆│ │|
+│ │  ╰────────────────────╯   ╰────────────────────╯   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯│ │|
+│ │ No display here, so open this on the machine:  http://127.0.0.1:37667/?to│ │|
+│ │ ⚠ The Marshal tried to accept this for you at 18:40. Refused: only you ca│ │|
+│ │                                                                          │ │|
+╰─│  a  open in browser    c  copy link    ⏎  accept here    k  comment      │─╯|
+  ╰──────────────────────────────────────────────────────────────────────────╯  |
+  F11  Marshal chat   s  say   a  architecture   f  faster model   space  action|
+                                                                                |
