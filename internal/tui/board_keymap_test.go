@@ -68,7 +68,7 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 	for _, r := range "architecture" {
 		w.palette.HandleKey(KeyEvent{Type: KeyRune, Rune: r})
 	}
-	if len(w.palette.filtered) == 0 || w.palette.filtered[0].Title != "Open Architecture view" {
+	if len(w.palette.filtered) < 2 || w.palette.filtered[0].ID != "architecture.browse" || w.palette.filtered[1].Title != "Open Architecture view" {
 		t.Fatalf("palette search for architecture: %+v", w.palette.filtered)
 	}
 	w.palette.Close()

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // PaletteAction represents a discoverable action in the Command Palette.
@@ -128,18 +129,56 @@ func (cp *CommandPalette) Select(i int) {
 	}
 }
 
+// PaletteCell is the box-relative position of one clickable entry in
+// cp.filtered: Row from the box top (0 is the top border) and columns
+// [X0, X1) from the box left edge.
+type PaletteCell struct {
+	Index       int
+	Row, X0, X1 int
+}
+
+func (cp *CommandPalette) coreCount() int {
+	n := 0
+	for _, a := range cp.actions {
+		if a.Core {
+			n++
+		}
+	}
+	return n
+}
+
+func (cp *CommandPalette) coreMode() bool {
+	return strings.TrimSpace(string(cp.query)) == "" && cp.coreCount() > 0
+}
+
+func (cp *CommandPalette) totalCount() int {
+	return len(cp.actions) + len(cp.ctx.Selection) + len(cp.ctx.Others)
+}
+
+func (cp *CommandPalette) boxWidth(width int) int {
+	bw := width - 8
+	if bw > 76 {
+		bw = 76
+	}
+	if bw < 40 {
+		bw = width
+	}
+	return bw
+}
+
+func (cp *CommandPalette) coreColumns(width, boxWidth int) int {
+	if width > 80 && boxWidth >= 74 {
+		return 2
+	}
+	return 1
+}
+
 // Layout is the palette box's geometry for a width-by-height overlay: the
 // box's width in cells and the half-open range [start, end) of cp.filtered
 // the box shows. Render and the mouse hit code both read it, so a row's
 // screen position is computed one way.
 func (cp *CommandPalette) Layout(width, height int) (boxWidth, start, end int) {
-	boxWidth = width - 8
-	if boxWidth > 76 {
-		boxWidth = 76
-	}
-	if boxWidth < 40 {
-		boxWidth = width
-	}
+	boxWidth = cp.boxWidth(width)
 	maxItems := 10
 	if height > 0 && maxItems > height-6 {
 		maxItems = height - 6
@@ -155,6 +194,45 @@ func (cp *CommandPalette) Layout(width, height int) (boxWidth, start, end int) {
 		end = len(cp.filtered)
 	}
 	return boxWidth, start, end
+}
+
+// Cells returns the box-relative clickable regions Render draws for
+// cp.filtered, covering both the two-column core grid and the search list.
+func (cp *CommandPalette) Cells(width, height int) []PaletteCell {
+	boxWidth, start, end := cp.Layout(width, height)
+	if cp.coreMode() && cp.coreColumns(width, boxWidth) == 2 {
+		n := len(cp.filtered)
+		if n == 0 {
+			return nil
+		}
+		numRows := (n + 1) / 2
+		maxRows := numRows
+		if height > 0 && maxRows > height-5 {
+			maxRows = max(1, height-5)
+		}
+		selRow := cp.selected % numRows
+		rowStart := 0
+		if selRow >= maxRows {
+			rowStart = selRow - maxRows + 1
+		}
+		rowEnd := min(numRows, rowStart+maxRows)
+		contentWidth := boxWidth - 4
+		colW := (contentWidth - 2) / 2
+		var cells []PaletteCell
+		for r := rowStart; r < rowEnd; r++ {
+			row := 3 + (r - rowStart)
+			cells = append(cells, PaletteCell{Index: r, Row: row, X0: 2, X1: 2 + colW})
+			if right := r + numRows; right < n {
+				cells = append(cells, PaletteCell{Index: right, Row: row, X0: 2 + colW + 2, X1: 2 + colW + 2 + colW})
+			}
+		}
+		return cells
+	}
+	cells := make([]PaletteCell, 0, end-start)
+	for i := start; i < end; i++ {
+		cells = append(cells, PaletteCell{Index: i, Row: 3 + (i - start), X0: 0, X1: boxWidth})
+	}
+	return cells
 }
 
 // Open activates the command palette and resets query.
@@ -244,17 +322,35 @@ func (cp *CommandPalette) HandleKey(k KeyEvent) (*PaletteAction, bool) {
 	return nil, false
 }
 
-// filter orders the entries the query matches. With no query that is the
-// context's order: the selection's actions, then the focused pane's
-// entries, then the context's other actions, then the rest as listed.
-// A query ranks how well an entry matches first: a key typed as it is
-// (a, A, d) picks the entries it is the key of, then a word of a title
-// the query starts, then the query anywhere; ties keep the context order
-// and, typed, put the entries that can run before those that cannot.
-// The sort is stable, so one state always gives one order.
+// filter orders the entries the query matches. When the query is empty and
+// core actions are marked, cp.filtered holds only the core actions in their
+// CoreOrder so the empty-query palette opens directly to them. Otherwise
+// (typing a query, or when no actions are marked Core), all entries are
+// searched and ranked by match quality, then context (selection, focused pane,
+// other inbox actions), then core actions first on ties, then enabled before
+// disabled. The sort is stable, so one state always gives one order.
 func (cp *CommandPalette) filter() {
 	raw := strings.TrimSpace(string(cp.query))
 	query := strings.ToLower(raw)
+	if query == "" && cp.coreCount() > 0 {
+		cp.filtered = cp.filtered[:0]
+		for _, a := range cp.actions {
+			if a.Core {
+				cp.filtered = append(cp.filtered, a)
+			}
+		}
+		slices.SortStableFunc(cp.filtered, func(x, y PaletteAction) int {
+			return x.CoreOrder - y.CoreOrder
+		})
+		if cp.selected >= len(cp.filtered) {
+			if len(cp.filtered) > 0 {
+				cp.selected = len(cp.filtered) - 1
+			} else {
+				cp.selected = 0
+			}
+		}
+		return
+	}
 	type ranked struct {
 		a           PaletteAction
 		match, rank int
@@ -287,6 +383,15 @@ func (cp *CommandPalette) filter() {
 		if x.rank != y.rank {
 			return y.rank - x.rank
 		}
+		if x.a.Core != y.a.Core {
+			if x.a.Core {
+				return -1
+			}
+			return 1
+		}
+		if x.a.Core && y.a.Core && x.a.CoreOrder != y.a.CoreOrder {
+			return x.a.CoreOrder - y.a.CoreOrder
+		}
 		if query != "" && x.a.Disabled != y.a.Disabled {
 			if x.a.Disabled {
 				return 1
@@ -315,21 +420,95 @@ func paletteMatch(a PaletteAction, raw, query string) int {
 	if query == "" {
 		return 0
 	}
-	if slices.Contains(strings.Fields(a.Shortcut), raw) {
+	if slices.Contains(strings.Fields(a.Shortcut), raw) || (a.CoreKey != "" && a.CoreKey == raw) {
 		return 3
 	}
-	for _, f := range strings.FieldsFunc(strings.ToLower(a.Title), func(r rune) bool {
+	isSep := func(r rune) bool {
 		return r == ' ' || r == ':' || r == '·' || r == '(' || r == ')' || r == ','
-	}) {
-		if strings.HasPrefix(f, query) {
-			return 2
+	}
+	for _, s := range []string{a.Title, a.CoreLabel} {
+		for _, f := range strings.FieldsFunc(strings.ToLower(s), isSep) {
+			if strings.HasPrefix(f, query) {
+				return 2
+			}
 		}
 	}
-	target := strings.ToLower(fmt.Sprintf("%s %s %s %s %s", a.Category, a.Title, a.Description, a.Command, a.Shortcut))
+	target := strings.ToLower(fmt.Sprintf("%s %s %s %s %s %s %s", a.Category, a.Title, a.CoreLabel, a.Description, a.Command, a.Shortcut, a.CoreKey))
 	if strings.Contains(target, query) {
 		return 1
 	}
 	return 0
+}
+
+var paletteASCIIReplacer = strings.NewReplacer(
+	"…", ".",
+	"·", ".",
+	"─", "-",
+	"│", "|",
+	"╭", "+", "╮", "+", "╰", "+", "╯", "+", "├", "+", "┤", "+",
+	"▶", ">", "►", ">", "▸", ">",
+	"↑", "Up", "↓", "Dn",
+	"←", "<-", "→", "->", "⇄", "<->",
+	"⌫", "Bksp",
+)
+
+func (cp *CommandPalette) cleanText(s string) string {
+	if cp.theme.Unicode {
+		return s
+	}
+	s = paletteASCIIReplacer.Replace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' {
+			if n := csiLen(s[i:]); n > 0 {
+				b.WriteString(s[i : i+n])
+				i += n
+				continue
+			}
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r > 127 {
+			b.WriteByte('?')
+		} else {
+			b.WriteRune(r)
+		}
+		i += size
+	}
+	return b.String()
+}
+
+func (cp *CommandPalette) padCell(s string, w int) string {
+	if !cp.theme.Unicode {
+		s = cp.cleanText(s)
+	}
+	out := PadCell(s, w)
+	if !cp.theme.Unicode {
+		out = strings.ReplaceAll(out, "…", ".")
+	}
+	return out
+}
+
+func (cp *CommandPalette) selMarker() string {
+	if cp.theme.Unicode {
+		return "▶ "
+	}
+	return "> "
+}
+
+func (cp *CommandPalette) formatCoreCell(act PaletteAction, isSel bool, colW int) string {
+	const keyW = 6
+	labelW := max(1, colW-2-keyW-2)
+	key := cp.padCell(act.coreKey(), keyW)
+	label := cp.padCell(act.coreLabel(), labelW)
+	body := key + "  " + label
+	if isSel {
+		return cp.theme.Colorize(cp.theme.Reverse, cp.selMarker()+body)
+	}
+	if act.Disabled {
+		return "  " + cp.theme.Colorize(cp.theme.Muted, body)
+	}
+	return "  " + cp.theme.Colorize(cp.theme.Marshal, key) + "  " + label
 }
 
 // Render renders the Command Palette box for display in the terminal.
@@ -342,16 +521,28 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	boxWidth, start, end := cp.Layout(width, height)
 
 	var lines []string
-	// Header: ╭─ Actions ─────────────────────────────────────────╮
-	title := " Actions "
-	remainingWidth := boxWidth - VisibleLen(title) - 3
+	// Header: ╭─ ACTIONS  type to search all N ───────────────────╮
+	var titlePlain, titleStyled string
+	if total := cp.totalCount(); total > 0 {
+		candidate := fmt.Sprintf(" ACTIONS  type to search all %d ", total)
+		if VisibleLen(candidate)+3 <= boxWidth {
+			titlePlain = candidate
+			titleStyled = " " + cp.theme.Colorize(cp.theme.Marshal, "ACTIONS") +
+				cp.theme.Colorize(cp.theme.Muted, fmt.Sprintf("  type to search all %d", total)) + " "
+		}
+	}
+	if titlePlain == "" {
+		titlePlain = " ACTIONS "
+		titleStyled = " " + cp.theme.Colorize(cp.theme.Marshal, "ACTIONS") + " "
+	}
+	remainingWidth := boxWidth - VisibleLen(titlePlain) - 3
 	if remainingWidth < 0 {
 		remainingWidth = 0
 	}
 	header := fmt.Sprintf("%s%s%s%s%s",
 		cp.theme.BoxTopLeft,
 		cp.theme.BoxHoriz,
-		cp.theme.Colorize(cp.theme.Marshal, title),
+		titleStyled,
 		strings.Repeat(cp.theme.BoxHoriz, remainingWidth),
 		cp.theme.BoxTopRight,
 	)
@@ -361,7 +552,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	searchPrompt := fmt.Sprintf("> %s_", string(cp.query))
 	searchLine := fmt.Sprintf("%s %s%s",
 		cp.theme.BoxVert,
-		PadCell(searchPrompt, boxWidth-3),
+		cp.padCell(searchPrompt, boxWidth-3),
 		cp.theme.BoxVert,
 	)
 	lines = append(lines, searchLine)
@@ -374,13 +565,70 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	)
 	lines = append(lines, sep)
 
-	// Action items: Layout gives the half-open [start, end) range the box
-	// shows, the same range the mouse hit code records regions for.
-	if len(cp.filtered) == 0 {
+	// Action items: empty query shows the 8 core actions (two columns when
+	// wider than 80 columns, one column at 80 columns) plus one faint "more"
+	// line. Typing searches all commands in a single-column list.
+	if cp.coreMode() {
+		contentWidth := boxWidth - 4
+		if cp.coreColumns(width, boxWidth) == 2 {
+			n := len(cp.filtered)
+			numRows := (n + 1) / 2
+			maxRows := numRows
+			if height > 0 && maxRows > height-5 {
+				maxRows = max(1, height-5)
+			}
+			selRow := 0
+			if numRows > 0 {
+				selRow = cp.selected % numRows
+			}
+			rowStart := 0
+			if selRow >= maxRows {
+				rowStart = selRow - maxRows + 1
+			}
+			rowEnd := min(numRows, rowStart+maxRows)
+			colW := (contentWidth - 2) / 2
+			for r := rowStart; r < rowEnd; r++ {
+				left := cp.formatCoreCell(cp.filtered[r], r == cp.selected, colW)
+				right := strings.Repeat(" ", colW)
+				if ri := r + numRows; ri < n {
+					right = cp.formatCoreCell(cp.filtered[ri], ri == cp.selected, colW)
+				}
+				lineContent := left + "  " + right
+				lines = append(lines, fmt.Sprintf("%s %s%s",
+					cp.theme.BoxVert,
+					cp.padCell(lineContent, boxWidth-3),
+					cp.theme.BoxVert,
+				))
+			}
+		} else {
+			for i := start; i < end; i++ {
+				lineContent := cp.formatCoreCell(cp.filtered[i], i == cp.selected, contentWidth)
+				lines = append(lines, fmt.Sprintf("%s %s%s",
+					cp.theme.BoxVert,
+					cp.padCell(lineContent, boxWidth-3),
+					cp.theme.BoxVert,
+				))
+			}
+		}
+		if more := cp.totalCount() - len(cp.filtered); more > 0 {
+			dash := cp.theme.BoxHoriz + cp.theme.BoxHoriz
+			dot := "·"
+			if !cp.theme.Unicode {
+				dot = "."
+			}
+			moreText := fmt.Sprintf("%s %d more %s type a word, e.g. \"retry\", \"budget\", \"telemetry\"", dash, more, dot)
+			moreLine := "  " + cp.theme.Colorize(cp.theme.Muted, cp.padCell(moreText, max(1, boxWidth-5)))
+			lines = append(lines, fmt.Sprintf("%s %s%s",
+				cp.theme.BoxVert,
+				cp.padCell(moreLine, boxWidth-3),
+				cp.theme.BoxVert,
+			))
+		}
+	} else if len(cp.filtered) == 0 {
 		emptyMsg := "  (No matching actions)"
 		lines = append(lines, fmt.Sprintf("%s %s%s",
 			cp.theme.BoxVert,
-			PadCell(emptyMsg, boxWidth-3),
+			cp.padCell(emptyMsg, boxWidth-3),
 			cp.theme.BoxVert,
 		))
 	} else {
@@ -389,12 +637,12 @@ func (cp *CommandPalette) Render(width, height int) []string {
 			isSel := i == cp.selected
 
 			catBadge := fmt.Sprintf("[%s]", act.Category)
-			title := act.Title
+			title := cp.cleanText(act.Title)
 			// The right column shows the row's key; a row with none shows
 			// nothing. It never shows the row's /command text: the palette
 			// lists actions, and typing still filters on the command
 			// (paletteMatch), so it stays findable.
-			cmd := act.Shortcut
+			cmd := cp.cleanText(act.Shortcut)
 
 			// Every row is the same visible width: a two-column marker followed
 			// by rowText. Padding rowText to a width that already excludes the
@@ -403,17 +651,17 @@ func (cp *CommandPalette) Render(width, height int) []string {
 			contentWidth := boxWidth - 4
 			rowWidth := contentWidth - 2
 
-			leftPart := PadCell(catBadge, 10) + " " + title
+			leftPart := cp.padCell(catBadge, 10) + " " + title
 			cmdWidth := VisibleLen(cmd)
 			if VisibleLen(leftPart)+cmdWidth+2 > rowWidth {
-				leftPart = PadCell(leftPart, rowWidth-cmdWidth-2)
+				leftPart = cp.padCell(leftPart, rowWidth-cmdWidth-2)
 			}
-			rowText := PadCell(leftPart, rowWidth-cmdWidth-2) + "  " + cmd
-			rowText = PadCell(rowText, rowWidth)
+			rowText := cp.padCell(leftPart, rowWidth-cmdWidth-2) + "  " + cmd
+			rowText = cp.padCell(rowText, rowWidth)
 
 			var lineContent string
 			if isSel {
-				lineContent = cp.theme.Colorize(cp.theme.Reverse, "▶ "+rowText)
+				lineContent = cp.theme.Colorize(cp.theme.Reverse, cp.selMarker()+rowText)
 			} else if act.Disabled {
 				lineContent = "  " + cp.theme.Colorize(cp.theme.Muted, rowText)
 			} else {
@@ -422,7 +670,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 
 			lines = append(lines, fmt.Sprintf("%s %s%s",
 				cp.theme.BoxVert,
-				PadCell(lineContent, boxWidth-3),
+				cp.padCell(lineContent, boxWidth-3),
 				cp.theme.BoxVert,
 			))
 		}
@@ -430,9 +678,17 @@ func (cp *CommandPalette) Render(width, height int) []string {
 
 	// Footer: the keys when the selected row can run, or that row's reason
 	// when it cannot.
-	footerText := " Enter run · ↑↓ choose · type to filter · Esc close "
-	if cp.selected >= 0 && cp.selected < len(cp.filtered) && cp.filtered[cp.selected].Disabled {
-		footerText = " " + cp.filtered[cp.selected].Reason + " "
+	var footerText string
+	if cp.theme.Unicode {
+		footerText = " Enter run · ↑↓ choose · type to filter · Esc close "
+	} else {
+		footerText = " Enter run . Up/Dn choose . type to filter . Esc close "
+	}
+	if cp.selected >= 0 && cp.selected < len(cp.filtered) && cp.filtered[cp.selected].Disabled && cp.filtered[cp.selected].Reason != "" {
+		footerText = " " + cp.cleanText(cp.filtered[cp.selected].Reason) + " "
+	}
+	if maxFooter := boxWidth - 3; maxFooter > 0 && VisibleLen(footerText) > maxFooter {
+		footerText = cp.padCell(footerText, maxFooter)
 	}
 	footerPad := boxWidth - VisibleLen(footerText) - 3
 	if footerPad < 0 {

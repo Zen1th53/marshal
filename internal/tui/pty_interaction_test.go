@@ -438,7 +438,7 @@ func TestPTYF11LeavesDiffOverlayWithPalette(t *testing.T) {
 	if strings.Contains(screen, "Git Diff") {
 		t.Fatalf("F11 did not close diff overlay with palette open: %s", screen)
 	}
-	if strings.Contains(screen, " Actions ") {
+	if strings.Contains(screen, " ACTIONS ") {
 		t.Fatalf("F11 left command palette open: %s", screen)
 	}
 }
@@ -447,10 +447,10 @@ func TestPTYF11LeavesPalette(t *testing.T) {
 	fakeProviderCLIs(t, "codex", "claude", "opencode", "agy")
 	s := startCommandTUI(t, 24, 80)
 	s.send("\x0b")
-	s.mustSee(" Actions ")
+	s.mustSee(" ACTIONS ")
 	s.send("\x1b[23~")
 	time.Sleep(300 * time.Millisecond)
-	if screen := s.screenText(24, 80); strings.Contains(screen, " Actions ") {
+	if screen := s.screenText(24, 80); strings.Contains(screen, " ACTIONS ") {
 		t.Fatalf("F11 left command palette open: %s", screen)
 	}
 }

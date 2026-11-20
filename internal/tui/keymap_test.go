@@ -310,9 +310,11 @@ func paletteCost(cp *CommandPalette, id string) int {
 	}
 	var a PaletteAction
 	cp.Open()
-	for _, x := range cp.filtered {
-		if x.ID == id {
-			a = x
+	for _, list := range [][]PaletteAction{cp.ctx.Selection, cp.ctx.Others, cp.actions} {
+		for _, x := range list {
+			if x.ID == id {
+				a = x
+			}
 		}
 	}
 	cp.Close()
@@ -324,7 +326,8 @@ func paletteCost(cp *CommandPalette, id string) int {
 	return 0
 }
 
-// The palette ranks by the focused pane and the selection: a selected
+// On an empty query the palette shows the 8 owner core actions first. Once
+// typing starts, it ranks by the focused pane and the selection: a selected
 // parked task puts its inbox actions first, the inbox puts its selected
 // item's, a view its own keys; and every Board action, the inbox's for the
 // selected task included, is at most three keystrokes away.
@@ -336,9 +339,19 @@ func TestPaletteRanksByContext(t *testing.T) {
 		{Kind: "network", TaskID: "T-023", Object: "registry.npmjs.org:443", Scope: "one run", Reason: "outside manifest", Who: "Marshal"},
 		{Kind: "network", TaskID: "T-017", Object: "proxy.golang.org:443", Scope: "one run", Reason: "module fetch", Who: "Marshal"},
 	}
-	top := func() PaletteAction {
+	// Empty query shows the 8 core actions in order, starting with marshal.say.
+	w.palette.Open()
+	if len(w.palette.filtered) != 8 || w.palette.filtered[0].ID != "marshal.say" {
+		t.Fatalf("empty query filtered = %d entries, first %+v; want 8 core actions starting with marshal.say", len(w.palette.filtered), w.palette.filtered)
+	}
+	w.palette.Close()
+
+	top := func(query string) PaletteAction {
 		w.palette.Open()
 		defer w.palette.Close()
+		for _, r := range query {
+			w.palette.HandleKey(KeyEvent{Type: KeyRune, Rune: r})
+		}
 		if len(w.palette.filtered) == 0 {
 			t.Fatal("empty palette")
 		}
@@ -347,23 +360,24 @@ func TestPaletteRanksByContext(t *testing.T) {
 	for _, c := range []struct {
 		name      string
 		setup     func()
+		query     string
 		wantTop   string // title prefix
 		wantInbox string // TaskID the top entry decides, "" for none
 	}{
-		{"selected parked task", func() { w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-023" }, "Allow once · T-023 network registry.npmjs.org:443", "T-023"},
-		{"other parked task", func() { w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-017" }, "Allow once · T-017 network proxy.golang.org:443", "T-017"},
-		{"inspected task", func() { w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = layout.Tasks, "T-017", "T-023" }, "Allow once · T-023", "T-023"},
-		{"task without a request", func() { w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-018" }, "Allow once · ", "?"},
-		{"inbox focus", func() { w.boardUI.focus = layout.Inbox; w.inboxView.Update(w.boardInbox()); w.inboxView.Move(1) }, "Allow once · ", "selected"},
-		{"lanes", func() { w.boardUI.focus = layout.Lanes }, "Allow once · ", "?"},
-		{"memory view", func() { w.boardUI.focus = layout.Tasks; w.openMemoryView() }, "memory: keep, reject, evidence", ""},
+		{"selected parked task", func() { w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-023" }, "a", "Allow once · T-023 network registry.npmjs.org:443", "T-023"},
+		{"other parked task", func() { w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-017" }, "a", "Allow once · T-017 network proxy.golang.org:443", "T-017"},
+		{"inspected task", func() { w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = layout.Tasks, "T-017", "T-023" }, "a", "Allow once · T-023", "T-023"},
+		{"task without a request", func() { w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-018" }, "a", "Allow once · ", "?"},
+		{"inbox focus", func() { w.boardUI.focus = layout.Inbox; w.inboxView.Update(w.boardInbox()); w.inboxView.Move(1) }, "a", "Allow once · ", "selected"},
+		{"lanes", func() { w.boardUI.focus = layout.Lanes }, "a", "Allow once · ", "?"},
+		{"memory view", func() { w.boardUI.focus = layout.Tasks; w.openMemoryView() }, "a", "memory: keep, reject, evidence", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w.closeBodyViews()
 			w.boardUI.inspect = ""
 			w.inboxView.Cancel()
 			c.setup()
-			got := top()
+			got := top(c.query)
 			if !strings.HasPrefix(got.Title, c.wantTop) {
 				t.Fatalf("top entry %q, want %q", got.Title, c.wantTop)
 			}
@@ -386,7 +400,7 @@ func TestPaletteRanksByContext(t *testing.T) {
 				}
 			}
 			// The order is the same for the same state.
-			again := top()
+			again := top(c.query)
 			if again.ID != got.ID {
 				t.Fatalf("second open ranks %q first, first %q", again.ID, got.ID)
 			}
@@ -412,9 +426,10 @@ func TestPaletteRanksByContext(t *testing.T) {
 		}
 	}
 
-	// Enter on the top entry opens the inbox's confirmation for T-023's
+	// Typing "a" then Enter opens the inbox's confirmation for T-023's
 	// request and decides nothing; Enter in it decides.
 	w.palette.Open()
+	w.palette.HandleKey(KeyEvent{Type: KeyRune, Rune: 'a'})
 	action, run := w.palette.HandleKey(KeyEvent{Type: KeyEnter})
 	if !run || action == nil {
 		t.Fatal("Enter did not run the top entry")
