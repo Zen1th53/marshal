@@ -274,7 +274,9 @@ func nowStrip(c *canvas, y int, n vm.NowLine) {
 	}
 	x := c.put(0, y, " NOW ", st{fg: cAcc, bg: cNow, b: true})
 	x = c.put(x, y, " marshal ", sFaint)
-	x = c.put(x, y, fit(or(n.Marshal, dash), mw), sInk)
+	// One cell always stays blank before the rule: a long line is cut
+	// with "…" one cell short of the column, not run up against "│".
+	x = c.put(x, y, fit(or(n.Marshal, dash), max(mw-1, 1))+" ", sInk)
 	x = c.put(x, y, "│", st{fg: cRule})
 	x = c.put(x, y, " work ", sFaint)
 	x = c.put(x, y, fit(or(n.Work, dash), ww), sInk)
