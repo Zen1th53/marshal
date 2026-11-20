@@ -69,6 +69,16 @@ workers use your own provider sign-ins and say why they failed.
 
 ## Fixed
 
+- **A stalled run can be continued from the Board.** When a run waits with a
+  returned task and nothing working on it, the inbox offers retry and resume,
+  and `r` on a stuck task retries it; `r` never types into the composer.
+- **The Codex Marshal reaches its own tools.** Codex's sandbox refuses Unix
+  sockets; Marshal now also takes its requests through a private folder the
+  sandbox may write, without widening the sandbox.
+- **An older control centre is found.** Starting Marshal while an older control
+  centre runs on another tmux socket offers to replace it instead of opening a
+  bare chat.
+
 - **A Board message never joins your half-typed input** in the Marshal chat
   (a stray key used to arrive glued to a decision request). It waits, with a
   notice, and your text is never cleared.
