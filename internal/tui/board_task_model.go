@@ -28,7 +28,7 @@ func taskUnderKeyboard(w *Workspace) (string, bool) {
 	if p == nil {
 		return "", false
 	}
-	_, stopped := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice()
+	_, stopped := w.stopVisual(p).stopNotice()
 	var id string
 	switch {
 	case ui.inspect != "":

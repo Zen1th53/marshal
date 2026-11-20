@@ -12,41 +12,100 @@ import (
 
 // stuckTaskUnderKeyboard is the stuck task r would retry: the task in the
 // inspector, or the selected task while the Tasks pane has the focus, when
-// it is parked and no inbox item is waiting for it. ok is false otherwise.
-// It reads only in-memory state, so the registry's When may call it on the
-// paint path.
+// it is parked or sent back and no inbox item is waiting for it.
+// ok is false otherwise. It reads only in-memory state, so the registry's
+// When may call it on the paint path.
 func stuckTaskUnderKeyboard(w *Workspace) (string, bool) {
+	id, why := retryTarget(w)
+	return id, why == ""
+}
+
+// retryNoTaskWhy is r's answer when no task is under the keyboard, and
+// retryNotInTasksWhy while another pane (the inbox, the run's stop entry)
+// has it.
+const (
+	retryNoTaskWhy     = "r retries a stuck task: highlight one first."
+	retryNotInTasksWhy = "r retries a stuck task: press t for the tasks and highlight one first."
+)
+
+// retryTarget is the task r would retry, with "" for why; when r cannot
+// retry anything it is "" and one plain sentence saying why, which the
+// Board shows instead of typing the r into the composer.
+func retryTarget(w *Workspace) (string, string) {
 	ui := &w.boardUI
 	if !w.boardVisible() || w.anyBodyView() {
-		return "", false
+		return "", retryNoTaskWhy
 	}
 	p := w.marshalPanel()
 	if p == nil {
-		return "", false
+		return "", "r retries a stuck task: there is no run on the Board."
 	}
+	inbox := w.boardInbox()
 	// The focus handleBoardKey uses: an empty focus is the inbox while it
 	// holds a request or the run's stop entry, the tasks otherwise.
-	_, stopped := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice()
+	_, stopped := w.stopVisual(p).stopNotice()
 	var id string
 	switch {
 	case ui.inspect != "":
 		id = ui.inspect
-	case ui.pane(len(w.boardInbox()) > 0 || stopped) == layout.Tasks:
+	case ui.pane(len(inbox) > 0 || stopped) == layout.Tasks:
 		id = ui.task
 	default:
-		return "", false
+		return "", retryNotInTasksWhy
 	}
 	if id == "" {
-		return "", false
+		return "", retryNoTaskWhy
 	}
 	row, ok := taskRow(p.Board, id)
-	if !ok || row.State != boardmodel.TaskParked {
-		return "", false
+	if !ok {
+		return "", retryNoTaskWhy
 	}
-	if slices.ContainsFunc(w.boardInbox(), func(it boardmodel.InboxItem) bool { return it.Request.TaskID == id }) {
-		return "", false
+	cid := cleanBoard(id)
+	if slices.ContainsFunc(inbox, func(it boardmodel.InboxItem) bool { return it.Request.TaskID == id }) {
+		return "", cid + " has a decision waiting in the inbox: answer it there."
 	}
-	return id, true
+	if row.State != boardmodel.TaskParked && row.State != boardmodel.TaskRework {
+		return "", "This task is not stuck: " + cid + " " + taskStateWords(row.State) + ". r retries a stuck or returned task."
+	}
+	if canonicalTaskState(p, id) == marshal.Reassigned {
+		return "", cid + " already moved to another model; resume the run to start it."
+	}
+	return id, ""
+}
+
+// taskStateWords says where a task that is not stuck is, after its id.
+func taskStateWords(st boardmodel.TaskState) string {
+	switch st {
+	case boardmodel.TaskWorking:
+		return "is being worked on"
+	case boardmodel.TaskQueued:
+		return "has not started yet"
+	case boardmodel.TaskReview:
+		return "is waiting for review"
+	case boardmodel.TaskAccepted:
+		return "was accepted"
+	case boardmodel.TaskMerged:
+		return "is merged"
+	case boardmodel.TaskCancelled:
+		return "was cancelled"
+	}
+	return "is " + string(st)
+}
+
+// canonicalTaskState is id's state in the panel's run snapshot, "" when the
+// snapshot has no such task.
+func canonicalTaskState(p *MarshalPanel, id string) marshal.TaskState {
+	for _, t := range p.Tasks {
+		if t.ID == id {
+			return t.State
+		}
+	}
+	return ""
+}
+
+// taskHasDecision reports whether the inbox holds a request for id.
+func (w *Workspace) taskHasDecision(id string) bool {
+	return slices.ContainsFunc(w.boardInbox(), func(it boardmodel.InboxItem) bool { return it.Request.TaskID == id })
 }
 
 // taskRow is the task row id names on the board; ok is false when the board
@@ -153,6 +212,8 @@ func (w *Workspace) plainRetryError(id string, err error) string {
 	case strings.Contains(msg, "cannot retry task with escalation reason:"):
 		_, reason, _ := strings.Cut(msg, "cannot retry task with escalation reason:")
 		return id + " cannot be retried: " + cleanBoard(strings.TrimSpace(reason)) + "."
+	case strings.Contains(msg, "/marshal retry applies to returned or escalated tasks"):
+		return id + " is not waiting for a retry; resume the run to continue it."
 	case strings.Contains(msg, "unfinished lifecycle operation"):
 		return "The run is finishing an earlier step; try again in a moment."
 	default:

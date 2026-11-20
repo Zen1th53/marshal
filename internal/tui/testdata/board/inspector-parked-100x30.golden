@@ -22,9 +22,9 @@ ACTIVIT│                                                                      
        │                                                                                    │       |
        │ ACTIONS                                                                            │       |
        │   no pending decision                                                              │       |
+       │   [r] retry this task                                                              │       |
        │                                                                                    │       |
        │ e all events · Esc close                                                           │       |
        │                                                                                    │       |
        ╰────────────────────────────────────────────────────────────────────────────────────╯       |
-                                                                                                    |
 FOOTER compact 100x1                                                                                |

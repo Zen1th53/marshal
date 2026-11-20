@@ -77,6 +77,84 @@ func (v boardVisual) stopNotice() (runStop, bool) {
 		}
 		return s, true
 	}
+	if v.stall != nil && run.State != marshal.Closed {
+		return *v.stall, true
+	}
+	return runStop{}, false
+}
+
+// stopVisual is the part of the Board stopNotice reads for p: its board,
+// note and stop, and the run's stall while nothing drives it.
+func (w *Workspace) stopVisual(p *MarshalPanel) boardVisual {
+	v := boardVisual{}
+	if p == nil {
+		return v
+	}
+	v.board, v.note, v.stopped = p.Board, p.Note, p.Stopped
+	if s, ok := w.runStall(p); ok {
+		v.stall = &s
+	}
+	return v
+}
+
+// runStall is the next step of a run that waits on a returned or stuck task
+// while nothing drives it: no Marshal step runs in this window and no task
+// is being worked on (a run another window drives has a dispatched task). A restart
+// leaves a run like that ("reviewing · 0/1" with the inbox empty): Enter
+// then retries the task in a fresh session and resumes the run, through the
+// same /marshal retry and /marshal resume an owner would type.
+func (w *Workspace) runStall(p *MarshalPanel) (runStop, bool) {
+	if p == nil || p.Stopped {
+		return runStop{}, false
+	}
+	switch p.State {
+	case "", marshal.Drafting, marshal.AwaitingUser, marshal.Closed:
+		return runStop{}, false
+	}
+	// Only lock-free reads here: stopNotice runs on the paint path, and the
+	// runtime's owner lock is held for the whole of a run-control call.
+	if w.marshalStepRunning() {
+		return runStop{}, false
+	}
+	board := map[string]model.TaskState{}
+	for _, t := range p.Board.Tasks {
+		if t.State == model.TaskWorking {
+			return runStop{}, false
+		}
+		board[t.ID] = t.State
+	}
+	var stuck, moved string
+	for _, t := range p.Tasks {
+		if t.State == marshal.Dispatched {
+			return runStop{}, false
+		}
+		if st, ok := board[t.ID]; ok && st != model.TaskParked && st != model.TaskRework {
+			// The Board has seen the task move on since the snapshot.
+			continue
+		}
+		switch t.State {
+		case marshal.Returned, marshal.Escalated:
+			if stuck == "" {
+				stuck = t.ID
+			}
+		case marshal.Reassigned:
+			if moved == "" {
+				moved = t.ID
+			}
+		}
+	}
+	switch {
+	case stuck != "":
+		cid := cleanBoard(stuck)
+		reason := cid + " was returned and nothing is working on it."
+		if canonicalTaskState(p, stuck) == marshal.Escalated {
+			reason = cid + " is stuck and nothing is working on it."
+		}
+		return runStop{reason: reason, next: "Press Enter to retry " + cid + " in a fresh session and resume the run.", commands: []string{"/marshal retry " + stuck + " fresh-session", "/marshal resume"}, verb: "retry " + cid}, true
+	case moved != "":
+		cid := cleanBoard(moved)
+		return runStop{reason: cid + " moved to another model and nothing is working on it.", next: "Press Enter to resume the run.", commands: []string{"/marshal resume"}, verb: "resume the run"}, true
+	}
 	return runStop{}, false
 }
 

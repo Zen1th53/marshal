@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -69,6 +70,9 @@ type marshalSession struct {
 	draftCancel    context.CancelFunc
 	draftDone      chan struct{}
 	busy           bool
+	// running mirrors busy for readers on the paint path, which must not
+	// take mu (marshalBusy).
+	running atomic.Bool
 	// nextProvider is a Marshal switch chosen while a step was running; it is
 	// applied when the step finishes (onIdle → applyQueuedMarshal).
 	nextProvider string
@@ -158,6 +162,7 @@ func (w *Workspace) marshalSession() *marshalSession {
 	defer w.mu.Unlock()
 	if w.marshal == nil {
 		w.marshal = &marshalSession{}
+		w.marshalLive.Store(w.marshal)
 		w.restoreOwnerHolds(w.marshal)
 		// A task move or Marshal switch chosen mid-step drains once the step
 		// releases its reservation, on the UI goroutine so each runs like a
@@ -185,6 +190,13 @@ func (w *Workspace) setMarshalPanel(p *MarshalPanel) {
 	w.wakeBoard()
 	w.requestRepaint()
 	w.kickDock()
+}
+
+// marshalStepRunning reports whether a Marshal step runs in this window. It takes
+// no lock, so the paint path may call it.
+func (w *Workspace) marshalStepRunning() bool {
+	m := w.marshalLive.Load()
+	return m != nil && m.running.Load()
 }
 
 func (w *Workspace) marshalPanel() *MarshalPanel {
@@ -938,6 +950,7 @@ func (m *marshalSession) reserveContext(parent context.Context) (context.Context
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	m.busy, m.cancel = true, cancel
+	m.running.Store(true)
 	return ctx, cancel, nil
 }
 
@@ -958,6 +971,7 @@ func (m *marshalSession) finish(cancel context.CancelFunc) {
 func (m *marshalSession) finishWithNativeTurn(cancel context.CancelFunc, nativeTurnWaiting bool) {
 	m.mu.Lock()
 	m.busy, m.cancel = false, nil
+	m.running.Store(false)
 	if nativeTurnWaiting {
 		// A paused native turn still owns this context after the orchestration
 		// operation releases its reservation. Preserve its owner stop handle
