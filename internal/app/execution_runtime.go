@@ -69,6 +69,8 @@ func (r *Runtime) Execution() *ExecutionService {
 		ProjectRoot: r.layout.Root,
 		MaxWorkers:  runtimeMaxWorkers,
 		DefaultTTL:  30 * time.Minute,
+		// Zero keeps execution.WorkerLeaseTTL; tests shorten it.
+		WorkerLeaseTTL: r.workerLeaseTTL,
 	}
 
 	ownedHarnesses := runtimeProcess05Harnesses(r)

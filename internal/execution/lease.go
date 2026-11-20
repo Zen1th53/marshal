@@ -147,6 +147,18 @@ const WorkerLeaseTTL = 5 * time.Minute
 // alive but never finishes still ends.
 const WorkerLeaseMaxLifetime = 2 * time.Hour
 
+// workerLeaseTTL is this engine's worker mutation lease TTL.
+func (e *Engine) workerLeaseTTL() time.Duration {
+	if e != nil && e.cfg.WorkerLeaseTTL > 0 {
+		return e.cfg.WorkerLeaseTTL
+	}
+	return WorkerLeaseTTL
+}
+
+// WorkerLeaseTTL reports how long this engine's worker mutation lease stays
+// valid without a renewal.
+func (e *Engine) WorkerLeaseTTL() time.Duration { return e.workerLeaseTTL() }
+
 // RenewLease extends the expiration of an active lease by the authorized owner.
 func (lm *LeaseManager) RenewLease(leaseID, agentID string, ttl time.Duration, now time.Time) error {
 	return lm.RenewLeaseBounded(leaseID, agentID, ttl, 0, now)
@@ -219,7 +231,7 @@ func (e *Engine) RenewWorkerMutationLease(task TaskExecution) error {
 	if e == nil || e.leases == nil {
 		return ErrLeaseExpired
 	}
-	return e.leases.RenewLeaseBounded(task.LeaseID, workerLeaseOwner(task), WorkerLeaseTTL, WorkerLeaseMaxLifetime, nowUTC())
+	return e.leases.RenewLeaseBounded(task.LeaseID, workerLeaseOwner(task), e.workerLeaseTTL(), WorkerLeaseMaxLifetime, nowUTC())
 }
 
 // TakeoverLease transfers ownership of a stale or failed lease to a new agent.
