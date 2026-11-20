@@ -19,7 +19,7 @@ func TestTUIProviderTestMainIsolatesPreexistingProviderPath(t *testing.T) {
 	if os.Getenv("MARSHAL_TUI_TESTMAIN_CHILD") == "1" {
 		return
 	}
-	root := t.TempDir()
+	root := realTempDir(t)
 	first := filepath.Join(root, "first")
 	second := filepath.Join(root, "second")
 	for _, dir := range []string{first, second} {
