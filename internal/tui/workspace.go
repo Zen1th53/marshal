@@ -194,6 +194,12 @@ type Workspace struct {
 	boardUI boardUI
 	// boardFeed caches the run's decisions so the Board reads only new ones.
 	boardFeed boardFeed
+	// beatSource, when set, lists a run's governed workers in place of the
+	// runtime's heartbeats (tests).
+	beatSource func(runID string) []app.WorkerBeat
+	// beatRuntime is runtime, kept for the Board's worker heartbeats, which
+	// are read from paths that may already hold mu.
+	beatRuntime atomic.Pointer[app.Runtime]
 	// boardWake tells the Board follower that the panel or the view changed.
 	boardWake chan struct{}
 	// laneNudge tells the Board follower a worker pane reported a new
@@ -1983,6 +1989,7 @@ func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.runtime = runtime
+	w.beatRuntime.Store(runtime)
 	w.projectIdentity = identity
 	if runtime != nil {
 		runtime.SetEgressAlertSink(w.deliverEgressAlert)
@@ -2300,6 +2307,7 @@ func (w *Workspace) controlSource() *ControlSource {
 				defer w.mu.Unlock()
 				closeLocalServers(w.runtime)
 				w.runtime = reopened
+				w.beatRuntime.Store(reopened)
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)
 				reopened.SetPermissionSink(w.queuePermission)
 				w.store = reopened.Store()

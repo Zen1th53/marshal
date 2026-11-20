@@ -114,6 +114,9 @@ type Runtime struct {
 	tokenManager               *auth.Manager
 	workerMCPFactory           sessionmcp.WorkerServerFactory
 
+	// workerBeats are the governed worker attempts in flight (worker_liveness.go).
+	workerBeats workerBeatRegistry
+
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
 	// without one evaluates every ULTRA envelope as unentitled.
@@ -1642,6 +1645,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	heartbeat := func() {
 		heartbeatMu.Lock()
 		defer heartbeatMu.Unlock()
+		noteWorkerBeat(ctx)
 		if err := r.store.Heartbeat(context.Background(), claim.Session.ID, time.Now().UTC(), heartbeatRevision); err == nil {
 			heartbeatRevision++
 		}

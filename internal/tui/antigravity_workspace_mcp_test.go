@@ -159,10 +159,6 @@ func TestAntigravityMarshalToolsAreAllowedForTheSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"read_file(.marshal/inbox/)",
-		"read_file(.marshal/briefing/)",
-		"read_file(.marshal/marshal/)",
-		"read_file(.marshal/proposals/)",
 		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "inbox")) + "/)",
 		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "briefing")) + "/)",
 		"read_file(" + filepath.ToSlash(filepath.Join(absRoot, ".marshal", "marshal")) + "/)",
@@ -209,7 +205,8 @@ func TestAntigravitySessionSettingsWithUserOwnedWorkspaceMCP(t *testing.T) {
 	if slices.Contains(allow, "mcp(marshal/*)") {
 		t.Fatalf("pre-allowed mcp(marshal/*) despite user-owned mcp_config.json: %q", allow)
 	}
-	if !slices.Contains(allow, "read_file(.marshal/inbox/)") || !slices.Contains(allow, "read_file(.marshal/briefing/)") {
+	state := filepath.ToSlash(filepath.Join(antigravityRootPaths(root)[0], ".marshal"))
+	if !slices.Contains(allow, "read_file("+state+"/inbox/)") || !slices.Contains(allow, "read_file("+state+"/briefing/)") {
 		t.Fatalf("missing Marshal state/briefing read_file rules: %q", allow)
 	}
 	for _, want := range []string{"command(ssh)", "command(scp)", "command(rsync)", "command(sudo)"} {
@@ -244,9 +241,13 @@ func TestAntigravityMarshalLaunchHasNoAutomaticHelloTurn(t *testing.T) {
 	if !foundAddDir {
 		t.Fatalf("fresh agy launch missing briefing --add-dir %q: %q", dir.path, args)
 	}
-	allow, ask, _ := parseAntigravitySettingsArg(t, args)
-	if !slices.Contains(allow, "mcp(marshal/*)") || !slices.Contains(allow, "read_file(.marshal/inbox/)") {
+	allow, ask, deny := parseAntigravitySettingsArg(t, args)
+	inbox := "read_file(" + filepath.ToSlash(filepath.Join(antigravityRootPaths(root)[0], ".marshal", "inbox")) + "/)"
+	if !slices.Contains(allow, "mcp(marshal/*)") || !slices.Contains(allow, inbox) {
 		t.Fatalf("fresh agy launch missing allow rules: %q", allow)
+	}
+	if !slices.Contains(deny, "command(sqlite3)") {
+		t.Fatalf("fresh agy launch missing private-state deny rules: %q", deny)
 	}
 	if !slices.Contains(ask, "command(ssh)") || !slices.Contains(ask, "command(sudo)") {
 		t.Fatalf("fresh agy launch missing ask rules: %q", ask)

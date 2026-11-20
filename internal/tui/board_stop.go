@@ -277,6 +277,12 @@ func (v boardVisual) layoutCounts() layout.Counts {
 	// still shows) and the open cards; the tall requirements card takes
 	// two more entries' rows.
 	inbox := len(b.Inbox) + len(v.gates) + v.cardCount() + 2*v.reqCount()
+	for _, g := range v.gates {
+		// A gate's warning line is one more row under its buttons.
+		if g.warning != "" {
+			inbox++
+		}
+	}
 	if _, stopped := v.stopNotice(); stopped {
 		inbox++
 	}
@@ -337,6 +343,11 @@ func (v boardVisual) runWord() (string, string) {
 		return "planning", "accent"
 	case "":
 		return "starting", "dim"
+	}
+	if quiet, ok := v.noWorkerFor(); ok {
+		// The run says it is running, but no worker has run for a while:
+		// say so rather than "running" (board_liveness.go).
+		return "not running: no worker for " + quietFor(quiet), "needs"
 	}
 	return "running", "accent"
 }
