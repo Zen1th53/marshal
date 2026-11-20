@@ -27,7 +27,22 @@ type proposalMCPState struct {
 	leases map[*briefingDir]*proposalMCPLease
 	active *proposalMCPLease
 	closed bool
+	// predecessor is the lease of a Marshal chat the Board is restarting:
+	// revoked (it answers nothing), its open submissions kept for the
+	// launch that replaces it. Nil when no restart is in flight.
+	predecessor *proposalMCPPredecessor
 }
+
+// proposalMCPPredecessor is the identity of a retired Marshal chat lease.
+type proposalMCPPredecessor struct {
+	id, owner, provider string
+	at                  time.Time
+}
+
+// proposalMCPRebindWindow bounds how long a restarted chat's submissions
+// wait for the launch that replaces it.
+const proposalMCPRebindWindow = 10 * time.Minute
+
 type proposalMCPLease struct {
 	planning                     *nativePlanningLeaseRead
 	id, owner, provider, session string
@@ -171,10 +186,14 @@ func proposalMCPListenOptions(provider, root string) proposalmcp.Options {
 func (w *Workspace) activateProposalMCP(a *activeTmuxAgent) {
 	w.proposalMCP.mu.Lock()
 	var superseded *proposalMCPLease
+	var rebound *proposalMCPRebind
 	defer func() {
 		w.proposalMCP.mu.Unlock()
 		if superseded != nil {
 			superseded.cleanupOnce.Do(superseded.cleanup)
+		}
+		if rebound != nil {
+			w.rebindMarshalChatRequests(*rebound)
 		}
 	}()
 	l := w.proposalMCP.leases[a.briefingDir]
@@ -191,14 +210,7 @@ func (w *Workspace) activateProposalMCP(a *activeTmuxAgent) {
 	if !bound {
 		return
 	}
-	if old := w.proposalMCP.active; old != nil && old != l {
-		old.planning = nil
-		old.active = false
-		old.revoked = true
-		superseded = old
-		delete(w.proposalMCP.leases, old.dir)
-		_ = w.store.ExpireMCPLaunch(context.Background(), w.projectID, old.id)
-	}
+	superseded, rebound = w.takeRebindSourceLocked(l)
 	l.active = true
 	l.session = session
 	w.proposalMCP.active = l
@@ -245,6 +257,10 @@ func (w *Workspace) revokeProposalMCP(a *activeTmuxAgent) {
 func (w *Workspace) closeProposalMCP() {
 	w.proposalMCP.mu.Lock()
 	w.proposalMCP.closed = true
+	if pred := w.proposalMCP.predecessor; pred != nil && w.store != nil {
+		_ = w.store.ExpireMCPLaunch(context.Background(), w.projectID, pred.id)
+	}
+	w.proposalMCP.predecessor = nil
 	var leases []*proposalMCPLease
 	for _, l := range w.proposalMCP.leases {
 		leases = append(leases, l)
@@ -317,7 +333,7 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 		if !validProposalID(args.SubmissionID) {
 			return nil, errors.New("invalid submission id")
 		}
-		p, err := w.store.MCPProposal(ctx, w.projectID, occurrenceMCP(l.id, args.SubmissionID))
+		p, err := w.store.MCPProposal(ctx, w.projectID, w.liveOccurrenceMCP(ctx, l, args.SubmissionID))
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +349,7 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 	if !validProposalID(args.SubmissionID) || len(args.Proposal) > 4096 {
 		return nil, errors.New("invalid proposal submission")
 	}
-	id := occurrenceMCP(l.id, args.SubmissionID)
+	id := w.liveOccurrenceMCP(ctx, l, args.SubmissionID)
 	if existing, err := w.store.MCPProposal(ctx, w.projectID, id); err == nil {
 		sum := sha256.Sum256(args.Proposal)
 		if existing.Digest != hex.EncodeToString(sum[:]) {
@@ -429,6 +445,7 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 			pending.reason = decision.Reason
 			pending.occurrence = id
 			w.permissions.mu.Unlock()
+			w.chatRequestAnswered(decision.ID, decision.Allow, time.Now())
 		} else {
 			parsed.occurrence = id
 			parsed.who = "Marshal"
@@ -568,10 +585,14 @@ func (w *Workspace) proposalLaunchID() string {
 func (w *Workspace) activateNativeProposalMCP(dir *briefingDir) {
 	w.proposalMCP.mu.Lock()
 	var superseded *proposalMCPLease
+	var rebound *proposalMCPRebind
 	defer func() {
 		w.proposalMCP.mu.Unlock()
 		if superseded != nil {
 			superseded.cleanupOnce.Do(superseded.cleanup)
+		}
+		if rebound != nil {
+			w.rebindMarshalChatRequests(*rebound)
 		}
 	}()
 	l := w.proposalMCP.leases[dir]
@@ -581,14 +602,7 @@ func (w *Workspace) activateNativeProposalMCP(dir *briefingDir) {
 	if _, ok := w.nativeChatBound(dir, l.provider); !ok {
 		return
 	}
-	if old := w.proposalMCP.active; old != nil && old != l {
-		old.planning = nil
-		old.active = false
-		old.revoked = true
-		superseded = old
-		delete(w.proposalMCP.leases, old.dir)
-		_ = w.store.ExpireMCPLaunch(context.Background(), w.projectID, old.id)
-	}
+	superseded, rebound = w.takeRebindSourceLocked(l)
 	l.native = true
 	l.active = true
 	w.proposalMCP.active = l

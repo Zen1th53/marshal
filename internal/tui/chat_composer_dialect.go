@@ -1,0 +1,231 @@
+package tui
+
+import (
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+)
+
+// composerDialect is how one provider CLI draws its input box. Delivery uses
+// it to tell three things apart that all show as text after the prompt: the
+// owner's own typing (never touched), the provider's placeholder or hint
+// text (an empty input), and the placeholder the provider shows for a paste
+// it collapsed (ours, when we pasted it, and still unsent).
+type composerDialect struct {
+	provider string
+	// collapsed matches one collapsed-paste placeholder.
+	collapsed []*regexp.Regexp
+	// hints match the whole of a placeholder or hint a provider draws in an
+	// empty input. Whole-content matches only: a draft that merely starts
+	// like a hint is still the owner's.
+	hints []*regexp.Regexp
+}
+
+var (
+	claudeCollapsedPaste   = regexp.MustCompile(`\[Pasted text #\d+(?: \+\d+ lines?)?\]`)
+	codexCollapsedPaste    = regexp.MustCompile(`\[Pasted Content \d+ chars\]`)
+	opencodeCollapsedPaste = regexp.MustCompile(`(?i)\[pasted ~?\d+ lines?\]`)
+	agyCollapsedPaste      = regexp.MustCompile(`(?i)\[pasted text: \d+ lines?\]`)
+)
+
+// Hints every provider may draw beside a paste or a queued message; matched
+// case-insensitively.
+var commonComposerHints = []string{"paste again to expand", "press up to edit queued messages"}
+
+func hintRE(s string) *regexp.Regexp { return regexp.MustCompile(`(?i)^(?:` + s + `)$`) }
+
+var composerDialects = map[string]composerDialect{
+	"claude": {provider: "claude", collapsed: []*regexp.Regexp{claudeCollapsedPaste},
+		hints: []*regexp.Regexp{hintRE(`try "[^"\n]*"`), hintRE(`\? for shortcuts`)}},
+	"codex": {provider: "codex", collapsed: []*regexp.Regexp{codexCollapsedPaste},
+		hints: []*regexp.Regexp{hintRE(`ask codex to do anything`)}},
+	"opencode": {provider: "opencode", collapsed: []*regexp.Regexp{opencodeCollapsedPaste, claudeCollapsedPaste},
+		hints: []*regexp.Regexp{hintRE(`ask anything[^\n]*`)}},
+	"agy": {provider: "agy", collapsed: []*regexp.Regexp{agyCollapsedPaste, claudeCollapsedPaste},
+		hints: []*regexp.Regexp{hintRE(`type your message[^\n]*`)}},
+}
+
+// composerDialectFor returns the provider's dialect. An unknown or empty
+// provider gets the union of all of them: every pattern is specific enough
+// that no owner types it by accident.
+func composerDialectFor(provider string) composerDialect {
+	provider = canonicalNeutralProvider(provider)
+	if provider == "antigravity" {
+		provider = "agy"
+	}
+	if d, ok := composerDialects[provider]; ok {
+		return d
+	}
+	u := composerDialect{provider: provider}
+	for _, name := range []string{"claude", "codex", "opencode", "agy"} {
+		u.collapsed = append(u.collapsed, composerDialects[name].collapsed...)
+		u.hints = append(u.hints, composerDialects[name].hints...)
+	}
+	return u
+}
+
+// stripHints removes hint text the provider draws after a collapsed paste
+// ("[Pasted text #1] paste again to expand") and returns the rest.
+func (d composerDialect) stripHints(content string) string {
+	low := strings.ToLower(content)
+	for _, h := range commonComposerHints {
+		if i := strings.Index(low, h); i >= 0 {
+			content, low = strings.TrimSpace(content[:i]+content[i+len(h):]), strings.TrimSpace(low[:i]+low[i+len(h):])
+		}
+	}
+	return strings.Trim(strings.TrimSpace(content), "·•-– ")
+}
+
+// collapsedPaste reports whether content is nothing but one or more of the
+// provider's collapsed-paste placeholders.
+func (d composerDialect) collapsedPaste(content string) bool {
+	rest := d.stripHints(content)
+	if rest == "" {
+		return false
+	}
+	for _, re := range d.collapsed {
+		rest = re.ReplaceAllString(rest, "")
+	}
+	return strings.TrimSpace(rest) == ""
+}
+
+// hint reports whether content is only provider hint text: an empty input
+// as far as the owner is concerned. Our own paste is never a hint.
+func (d composerDialect) hint(content string) bool {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return true
+	}
+	low := strings.ToLower(content)
+	for _, h := range commonComposerHints {
+		if low == h {
+			return true
+		}
+	}
+	for _, h := range d.hints {
+		if h.MatchString(content) {
+			return true
+		}
+	}
+	return false
+}
+
+// ownPaste is what the Board last pasted into a pane and has not seen
+// submitted: the message, and the composer content it produced (the text
+// itself or the provider's collapsed placeholder for it).
+type ownPaste struct {
+	text, shown string
+}
+
+var ownPastes = struct {
+	mu    sync.Mutex
+	panes map[string]ownPaste
+}{panes: map[string]ownPaste{}}
+
+func rememberOwnPaste(pane, text, shown string) {
+	ownPastes.mu.Lock()
+	defer ownPastes.mu.Unlock()
+	ownPastes.panes[pane] = ownPaste{text: text, shown: shown}
+}
+
+func forgetOwnPaste(pane string) {
+	ownPastes.mu.Lock()
+	defer ownPastes.mu.Unlock()
+	delete(ownPastes.panes, pane)
+}
+
+func ownPasteFor(pane string) (ownPaste, bool) {
+	ownPastes.mu.Lock()
+	defer ownPastes.mu.Unlock()
+	p, ok := ownPastes.panes[pane]
+	return p, ok
+}
+
+// ownLeftover reports whether the pane's composer still holds a paste the
+// Board made and never saw submitted. Only an exact match of the recorded
+// placeholder or text counts: the owner's own paste gets another number.
+func ownLeftover(d composerDialect, pane, frame string) (ownPaste, bool) {
+	p, ok := ownPasteFor(pane)
+	if !ok {
+		return ownPaste{}, false
+	}
+	content, found := chatComposer(frame)
+	if !found || content == "" {
+		return ownPaste{}, false
+	}
+	// Exact recorded content only: a line-count match ("[Pasted text #5
+	// +2 lines]") could be the owner's own paste of the same length.
+	if d.stripHints(content) == d.stripHints(p.shown) {
+		return p, true
+	}
+	return ownPaste{}, false
+}
+
+// composerClear reports whether the frame shows an input box holding nothing
+// the owner typed: empty, the provider's dimmed placeholder, or plain hint
+// text. Busy and dialog words near the prompt still make it not clear.
+func composerClear(d composerDialect, frame string) bool {
+	if chatPromptIdle(frame) {
+		return true
+	}
+	content, ok := chatComposer(frame)
+	if !ok || !d.hint(content) || chatBusyNearPrompt(frame) {
+		return false
+	}
+	return true
+}
+
+// chatBusyNearPrompt reports busy or dialog words on the last prompt line or
+// the few lines above it, as chatPromptIdle judges them.
+func chatBusyNearPrompt(frame string) bool {
+	raw := strings.Split(strings.TrimRight(StripANSI(frame), "\n"), "\n")
+	at := -1
+	for i := len(raw) - 1; i >= 0 && at < 0; i-- {
+		body := strings.TrimLeft(raw[i], " │┃║|")
+		for _, m := range promptMarkers {
+			if strings.HasPrefix(body, m) {
+				at = i
+				break
+			}
+		}
+	}
+	if at < 0 {
+		return true
+	}
+	for i := max(0, at-4); i < len(raw); i++ {
+		low := strings.ToLower(raw[i])
+		for _, word := range chatBusyWords {
+			if strings.Contains(low, word) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// chatInputs is the last input-box observation per pane: whether it held
+// nothing the owner typed. The Board shows it as "input clear".
+var chatInputs = struct {
+	mu    sync.Mutex
+	panes map[string]chatInputSeen
+}{panes: map[string]chatInputSeen{}}
+
+type chatInputSeen struct {
+	clear bool
+	at    time.Time
+}
+
+func noteChatInput(pane string, clear bool) {
+	chatInputs.mu.Lock()
+	defer chatInputs.mu.Unlock()
+	chatInputs.panes[pane] = chatInputSeen{clear: clear, at: time.Now()}
+}
+
+// chatInputClear reports the last observation of pane's input box.
+func chatInputClear(pane string) (clear, known bool) {
+	chatInputs.mu.Lock()
+	defer chatInputs.mu.Unlock()
+	seen, ok := chatInputs.panes[pane]
+	return seen.clear, ok
+}

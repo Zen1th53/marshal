@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/model"
 	"time"
@@ -189,4 +190,76 @@ func (s *Store) AcceptMCPDecision(ctx context.Context, project, id, request, key
 		return err
 	}
 	return tx.Commit()
+}
+
+// RebindMCPLaunch carries the open submissions of a Marshal chat launch that
+// the Board restarted (same role, same provider, a new session) to the
+// launch that replaced it: admitted rows of from move to to and its owner,
+// with their journalled requests, and the move is audited. Memory
+// submissions stay with their launch (their candidates name it), as do
+// answers (decide) and rows already applying: a changed launch authorizes
+// nothing it did not submit itself. The caller holds the live lease authority for
+// to and must have minted it for the restarted chat itself; nothing a model
+// says can reach this. It returns the moved occurrence IDs.
+func (s *Store) RebindMCPLaunch(ctx context.Context, project, from, to, owner, provider string) ([]string, error) {
+	if from == "" || to == "" || from == to || owner == "" || provider == "" {
+		return nil, fmt.Errorf("rebind needs two distinct launches")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT occurrence_id,payload FROM extreme_mcp_proposals WHERE project_id=? AND launch_id=? AND provider=? AND state='admitted'`, project, from, provider)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id, payload string
+		if err = rows.Scan(&id, &payload); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		var probe struct {
+			Action string `json:"action"`
+		}
+		if json.Unmarshal([]byte(payload), &probe) == nil && (probe.Action == "memory" || probe.Action == "decide") {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	oldJSON, newJSON := `"SourceLaunch":"`+from+`"`, `"SourceLaunch":"`+to+`"`
+	oldKey, newKey := "\x00"+from+"\x00", "\x00"+to+"\x00"
+	for _, id := range ids {
+		if _, err = tx.ExecContext(ctx, `UPDATE extreme_mcp_proposals SET launch_id=?,owner_id=? WHERE project_id=? AND occurrence_id=? AND launch_id=?`, to, owner, project, id, from); err != nil {
+			return nil, err
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE marshal_proposals SET request_json=replace(request_json,?,?),request_key=replace(request_key,?,?) WHERE project_id=? AND occurrence_id=?`, oldJSON, newJSON, oldKey, newKey, project, id); err != nil {
+			return nil, err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO extreme_mcp_proposal_audit(project_id,occurrence_id,launch_id,state,reason,at) VALUES(?,?,?,?,?,?)`, project, id, to, "rebound", "restarted Marshal chat; from launch "+from, utcNow()); err != nil {
+			return nil, err
+		}
+	}
+	if len(ids) > 0 {
+		if err = s.AppendEvent(ctx, tx, model.Event{ID: "mcp-rebind-" + to, Type: "MARSHAL_MCP_LAUNCH_REBOUND", ProjectID: project, Timestamp: time.Now().UTC(), Data: map[string]any{"from_launch_id": from, "to_launch_id": to, "owner_id": owner, "provider": provider, "occurrences": ids}}); err != nil {
+			return nil, err
+		}
+	}
+	return ids, tx.Commit()
+}
+
+// MCPProposalBySubmission finds a launch's submission by its submission ID.
+// A submission carried from a restarted chat keeps the occurrence ID it was
+// admitted under, so the live launch's receipts look it up this way.
+func (s *Store) MCPProposalBySubmission(ctx context.Context, project, launch, submission string) (MCPProposal, error) {
+	var p MCPProposal
+	err := s.db.QueryRowContext(ctx, `SELECT occurrence_id,launch_id,owner_id,provider,submission_id,digest,payload,state,reason FROM extreme_mcp_proposals WHERE project_id=? AND launch_id=? AND submission_id=?`, project, launch, submission).Scan(&p.ID, &p.Launch, &p.Owner, &p.Provider, &p.Submission, &p.Digest, &p.Payload, &p.State, &p.Reason)
+	return p, err
 }

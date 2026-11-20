@@ -286,6 +286,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		pane := w.sayPane()
 		frame, idle := "", false
 		if pane != "" {
+			w.submitOwnLeftover(ctx, pane)
 			frame, idle = w.chatIdleFrame(ctx, pane)
 		} else {
 			// No chat, no turn to watch.
@@ -523,10 +524,49 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
-	if err := submitChatTurn(ctx, tmux.RunCommand, pane, text, deliverEnterTries, deliverEnterWait); err != nil {
+	// A paste the provider holds unsent ("[Pasted text #1]") is ours and
+	// stays recorded as ours: the next look submits it (submitOwnLeftover),
+	// so it counts as typed, not as a failure.
+	if err := submitChatTurnAs(ctx, tmux.RunCommand, w.chatComposerDialect(), pane, text, deliverEnterTries, deliverEnterWait, true); err != nil && !errors.Is(err, errChatUnsubmitted) {
 		return "", err
 	}
 	return before, nil
+}
+
+// chatComposerDialect is the input-box dialect of the tmux chat's provider.
+func (w *Workspace) chatComposerDialect() composerDialect {
+	w.tmuxMu.Lock()
+	provider := ""
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
+		provider = a.provider
+	}
+	w.tmuxMu.Unlock()
+	return composerDialectFor(provider)
+}
+
+// submitOwnLeftover presses Enter for a paste of ours the provider still
+// holds unsent, so it neither waits for the owner nor reads as their draft.
+func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string) {
+	if _, ok := ownPasteFor(pane); !ok {
+		return
+	}
+	w.chatTypeMu.Lock()
+	defer w.chatTypeMu.Unlock()
+	frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+	if err != nil {
+		return
+	}
+	d := w.chatComposerDialect()
+	own, ok := ownLeftover(d, pane, string(frame))
+	if !ok {
+		if composerClear(d, string(frame)) {
+			forgetOwnPaste(pane)
+		}
+		return
+	}
+	if !chatBusyNearPrompt(string(frame)) {
+		_ = submitChatTurnAs(ctx, tmux.RunCommand, d, pane, own.text, deliverEnterTries, deliverEnterWait, false)
+	}
 }
 
 // chatIdleFrame reports whether the chat pane sits idle at an empty prompt,
@@ -553,7 +593,9 @@ func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, boo
 	if err != nil {
 		return "", false
 	}
-	if string(first) != string(second) || !chatPromptIdle(string(second)) {
+	clear := composerClear(w.chatComposerDialect(), string(second))
+	noteChatInput(pane, clear)
+	if string(first) != string(second) || !clear {
 		return StripANSI(string(second)), false
 	}
 	plain, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
