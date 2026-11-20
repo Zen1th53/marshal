@@ -564,6 +564,7 @@ func TestInstallationTelemetryDisabledEnrollmentIsSuppressed(t *testing.T) {
 // Exercise the shipped endpoint through a fake server transport; this test
 // never opens a socket or contacts the public service.
 func TestPublicTelemetryEndpointAndOptOutNoNetwork(t *testing.T) {
+	allowProductionEndpoint(t)
 	t.Setenv(EnvEndpoint, "")
 	cfg := LoadConfig()
 	if cfg.Endpoint != "https://marshal.blackhat.uz" {

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -101,6 +102,25 @@ class BuildReleaseTests(unittest.TestCase):
             ).stdout
             self.assertIn("Marshal v0.2.0", version)
             self.assertIn("commit: 0123456789abcdef", version)
+            # Only a release build talks to the production Community Cloud.
+            # `telemetry status` only reads and creates a local identity; it
+            # sends nothing, so this never reaches the network.
+            with tempfile.TemporaryDirectory() as home:
+                env = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if key != "MARSHAL_CLOUD_ENDPOINT"
+                }
+                env.update(HOME=home, XDG_CONFIG_HOME=home)
+                status = subprocess.run(
+                    [str(executable), "telemetry", "status"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    cwd=home,
+                ).stdout
+            self.assertIn("enabled (marshal.blackhat.uz)", status)
             executable.unlink()
 
             checksums = {}

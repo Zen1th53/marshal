@@ -68,7 +68,9 @@ func TestTelemetryStatus(t *testing.T) {
 		{"user disabled", "https://cloud.example.test/private", true, "Anonymous telemetry: disabled.\n", false},
 		{"user disabled and endpoint off", "off", true, "Anonymous telemetry: disabled.\n", false},
 		{"enabled", "https://user:secret@cloud.example.test:8443/private?token=secret#fragment", false, "Anonymous telemetry: enabled (cloud.example.test:8443).\n", true},
-		{"default endpoint", "", false, "Anonymous telemetry: enabled (marshal.blackhat.uz).\n", true},
+		// A test binary is a development build: the production default is off.
+		{"default endpoint", "", false, "Anonymous telemetry: off (development build; nothing is sent).\n", false},
+		{"production endpoint", "https://marshal.blackhat.uz", false, "Anonymous telemetry: off (development build; nothing is sent).\n", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config := t.TempDir()
@@ -201,6 +203,8 @@ func TestTelemetryRegisterCountsTheInstall(t *testing.T) {
 		{"unreachable", "http://127.0.0.1:1", false, "Anonymous telemetry: enabled; registration will be retried when Marshal starts.\n", 0},
 		{"disabled", server.URL, true, "Anonymous telemetry: disabled.\n", 0},
 		{"endpoint off", "off", false, "Anonymous telemetry: off (MARSHAL_CLOUD_ENDPOINT=off; nothing is sent).\n", 0},
+		// What install.sh runs from a development binary: never the production Cloud.
+		{"development build default", "", false, "Anonymous telemetry: off (development build; nothing is sent).\n", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			registrations.Store(0)

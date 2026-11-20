@@ -339,7 +339,7 @@ func TelemetryActive() bool {
 	if !LoadConfig().Enabled() {
 		return false
 	}
-	base, err := os.UserConfigDir()
+	base, err := userConfigDir()
 	if err != nil {
 		return false
 	}
