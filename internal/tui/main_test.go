@@ -28,6 +28,13 @@ func TestMain(m *testing.M) {
 	if os.Getenv("MARSHAL_REDUCED_MOTION") == "" {
 		_ = os.Setenv("MARSHAL_REDUCED_MOTION", "1")
 	}
+	// The tests of the classic Board's cards, hints, clicks and first-use
+	// card read frames the classic Board draws; Board v2 draws the home and
+	// run views by default and its own tests clear this with t.Setenv
+	// (boardv2_paint_test.go). The PTY tests' binary inherits it.
+	if os.Getenv("MARSHAL_BOARD") == "" {
+		_ = os.Setenv("MARSHAL_BOARD", "classic")
+	}
 	// Never reach a person's tmux server. The PTY and tmux tests start real
 	// sessions; a worker or developer running this suite inside Marshal (or
 	// any tmux) would otherwise create and respawn panes in that live server.
