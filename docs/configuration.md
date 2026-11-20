@@ -35,6 +35,30 @@ Changes apply to the **next** drafted plan.
 | `rework-limit` | Positive integer | `2` | Maximum retry attempts for a returned task before reassigning to a different provider or escalating to the operator. |
 | `ultra-concurrency` | Positive integer | `4` | Maximum number of worker tasks allowed to run simultaneously. |
 
+### Provider Limits
+
+How many workers each provider may run at once, and how many may run in total. The Board shows them in **DEFAULTS · this project** on the readiness screen and in the LANES pane title (`limit claude 4 · agy 4 · total 12`).
+
+```text
+/marshal settings claude-limit 4
+/marshal settings agy-limit 4
+/marshal settings codex-limit 2
+/marshal settings opencode-limit 4
+/marshal settings global-cap 8
+/marshal settings failover-order codex,claude,agy,opencode
+```
+
+| Setting | Choices | Default | Description |
+|---|---|---|---|
+| `claude-limit` | Non-negative integer | `2` | Claude Code workers at once. |
+| `codex-limit` | Non-negative integer | `4` | Codex workers at once. |
+| `agy-limit` | Non-negative integer | `4` | Antigravity workers at once (`antigravity-limit` is the same setting). |
+| `opencode-limit` | Non-negative integer | `4` | OpenCode workers at once. |
+| `global-cap` | Non-negative integer | `12` | Workers at once across all providers. |
+| `failover-order` | Provider names, comma-separated | `codex,claude,agy,opencode` | The order in which work moves to another provider when one is out of limit. |
+
+`0` returns a limit to its default. Each of these applies to the next Marshal run. `/marshal settings` lists the current values.
+
 ---
 
 ## Project Files
@@ -83,3 +107,4 @@ marshal --json memory list
 | `MARSHAL_NO_MODIFY_PATH` | `1` stops `install.sh` from adding the install folder to a shell startup file. |
 | `MARSHAL_INSTALL_DEPS` | `0` stops `install.sh` from installing a missing Git or tmux; it only reports them. |
 | `MARSHAL_INSTALL_YES` | `1` answers yes to `install.sh`'s questions (sudo still needs a terminal). |
+| `MARSHAL_BOARD` | `classic` draws the classic Board instead of Board v2, for one release. Unset (the default) is Board v2. Set it before you start `marshal`; if the control centre is already running, `/quit` it first. |

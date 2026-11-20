@@ -63,7 +63,7 @@ Marshal requires an initialized, valid Git project before launching the runtime 
    - For Claude Code: run `claude` or `claude login`
    - For Codex: run `codex`
    - For OpenCode: verify API keys in your environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.)
-   - For Antigravity: run `agy login` or `agy`
+   - For Antigravity: run `agy` once and sign in
 2. **Probe providers**:
    ```bash
    marshal doctor --probe-providers
@@ -80,6 +80,7 @@ Marshal requires an initialized, valid Git project before launching the runtime 
    ```text
    /marshal settings ultra-concurrency 1
    ```
+   or lower the limit of the provider that is rate-limited, for example `/marshal settings claude-limit 1` ([provider limits](configuration.md#provider-limits)).
 
 ---
 
@@ -102,7 +103,7 @@ To resume where you left off:
    marshal
    ```
 2. Marshal automatically detects the latest unfinished run in `.marshal/state.db` and reloads the Board.
-3. If the run was waiting for you, the **`NEEDS YOU`** prompt reappears. Reply as requested; for the architecture, press **`y`** to open it in your browser and accept it there.
+3. If the run was waiting for you, its card opens again (`YOUR TURN` in the top bar, and *from you* names it). Reply as requested; for the architecture, press **`a`** (or **`y`**) to open it in your browser and accept it there.
 4. If workers were stopped while dispatching, Marshal releases stale leases, reschedules incomplete tasks, and resumes execution.
 
 ---
@@ -149,3 +150,65 @@ The control centre keeps running in its own tmux session after you close the ter
 ## The Architecture Was Refused When the Marshal Sent It
 
 `marshal_project_contract_submit` now refuses an architecture the browser could not draw, with the rule. The most common cause is a package path used as a component ID: IDs are short identifiers (letters, digits, `.`, `_`, `-`; no `/`); put the package path in the component's `paths` instead.
+
+## A Decision Is Stuck as `[Pasted text #N]` in the Marshal Chat
+
+### Symptom
+
+The Board sent the Marshal a decision or request, but the Claude Code chat shows it collapsed as `[Pasted text #1]` in its input box and never acts on it. The request later expires and the run waits.
+
+### Why
+
+Claude Code draws its prompt with a no-break space, so earlier Boards did not recognise their own collapsed paste and never pressed `Enter`. This is fixed in **0.3.5**: the Board submits its paste within a second, and a restarted Board also submits the paste its predecessor left. Text you typed yourself in the chat is never submitted for you.
+
+### How to Fix It
+
+- **0.3.5 or newer**: nothing to do. If *from you* on the NOW line says `send or clear your unsent text in the Marshal chat`, the input holds text you typed: send it or clear it, and the Board delivers its next request.
+- **Older versions**: press `F11` to go to the chat and press `Enter` to submit the pasted text. If the request already expired, clear the input and press `s` on the Board to ask the Marshal to read its inbox again. Then update Marshal (`F10`, or the installer) to get the fix.
+
+## The Marshal Chat Restarted and Its Answers Are Refused
+
+### Symptom
+
+After the Marshal chat restarted (for example after it crashed or its session was resumed), the Marshal's answers or tool calls are refused with messages such as `proposal launch is inactive`, `proposal launch replaced or session differs` or `that question is no longer open: … it belongs to an earlier chat`. The CHAT pane or MARSHAL CHAT strip says `not bound` or `restarting`.
+
+### Why
+
+Every Marshal chat is bound to the run it was started for. A restarted chat is a new launch, and an answer from a launch that is no longer bound authorizes nothing.
+
+### How to Fix It
+
+- **0.3.5 or newer**: a restarted or resumed Marshal chat is rebound to the run by itself, and open requests carry over. Activity says `Marshal chat restarted and rebound to this project: N open requests re-sent, …`, and the CHAT pane shows `restarts` and `rebound`. An answer the old chat gave but the Board had not applied yet is asked again under the same request.
+- **If it stays `not bound`**, or on an older version: type `/quit` in the control centre and run `marshal` again in the project. The Board starts a new chat bound to the run; open decisions come back in the inbox.
+
+## The Architecture Opened but No Browser Appeared
+
+### Symptom
+
+You pressed `a` (or `y`) on the Accept architecture card and nothing opened, for example over SSH or on a server without a display. The readiness list says `Browser · no display: links are shown on the Board`.
+
+### How to Fix It
+
+The card shows the review's private link:
+
+```text
+│ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │
+```
+
+1. Press `c` on the card to copy the link (it uses your terminal's clipboard, which works over SSH where the terminal supports it). The link is also saved in `.marshal/architecture/review/url.txt` in the project.
+2. The address is local to the machine Marshal runs on. Over SSH, forward its port first, for example `ssh -L 37667:127.0.0.1:37667 you@server` with the port from the link, then open the link in your local browser.
+3. Accept the architecture in the browser. The Board moves on by itself.
+
+## Antigravity (`agy`) Is Not Signed In
+
+### Symptom
+
+The readiness list shows `Workers · agy is installed but not signed in` with the hint `run agy once in a terminal and sign in`, or a run pauses with **Paused · agy not signed in**.
+
+### How to Fix It
+
+1. In any terminal, run `agy` once and sign in.
+2. Back on the Board, press `v` and then `Enter` to check it again (one model call). The row turns to `ready`.
+3. If a run paused for it, press `Enter` on the paused card to retry, or let the card move the tasks to another provider.
+
+The same applies to the other providers: run `claude` and sign in, run `codex login`, or run `opencode auth login`.

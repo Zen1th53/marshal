@@ -16,7 +16,7 @@ Marshal coordinates multiple AI coding agents to complete software engineering g
 A run begins when you provide a goal—either by pressing `s` on the Board or typing into the docked chat pane. The Marshal fills a requirements card; press `Enter` to confirm all, or `e` to edit an answer.
 
 1. **Clarification**: The model acting as the **Marshal** analyzes your repository structure, asks clarifying questions if requirements are ambiguous, and aligns on technical constraints.
-2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract. A `NEEDS YOU` gate appears on the Board; press `y` to open the architecture in your browser and accept it there. This is the owner gate.
+2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract. The **Accept architecture** card opens on the Board (`YOUR TURN`); press `a` (or `y`) to open the architecture in your browser and accept it there. Without a browser, the card shows the review's link. This is the owner gate.
 3. **Task Decomposition**: The Marshal breaks the architecture down into small, discrete tasks. Each task specifies:
    - Target files or directories.
    - Assigned worker provider.

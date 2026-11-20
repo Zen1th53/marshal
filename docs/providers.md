@@ -44,7 +44,7 @@ You can verify providers through several interfaces:
 
 ### 1. On the Board (TUI)
 
-- **First-Use Card**: When opening a fresh project, press **`v`** to arm verification for the next unverified provider shown in the vitals row. Press **`Enter`** to run the probe.
+- **First-Use Card**: When opening a fresh project, press **`v`** to arm verification for the next unverified provider on the readiness list. Press **`Enter`** to run the probe.
 - **Providers View**: Press **`4`** to switch to the Providers view, select a provider with `j` / `k`, and press **`v`** then **`Enter`** to verify it.
 
 ### 2. From the TUI Command Line
@@ -133,7 +133,7 @@ If an AI provider encounters rate limits, billing caps, or network errors during
 1. Marshal records the failure reason in `.marshal/state.db`.
 2. The affected provider lane is marked as limited.
 3. If an alternate verified provider is available, Marshal reassigns pending tasks according to the approved plan.
-4. If no eligible provider remains, the run pauses with an orange **`NEEDS YOU`** alert on the Board, allowing you to re-verify, select a different model, or resolve the quota before resuming.
+4. If no eligible provider remains, the run pauses and the Board shows the **paused** card: `Enter` moves the tasks to a provider with room or waits for one, `w` waits for the reset, `d` shows the raw error and `x` stops the run.
 
 ## Antigravity as the Marshal
 

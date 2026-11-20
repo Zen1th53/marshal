@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "12cd2efc985afb9000494ad8d0d3596379f6d4624a943269ebfa5569b90c8d6a",
-      "bytes": 14393
+      "sha256": "88a0e794805e20e4d03552ae0add89db2afb98edff1b29505be3e1c1995ea6b2",
+      "bytes": 18584
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -516,13 +516,13 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "2f47fb44ccce98366ead27bbb60e08b21ed688ec320564e3b47f5fc33bcdf9a5",
-      "bytes": 4054
+      "sha256": "58b378a553bfa120f92a1c4874da6614c65f262f73a20caf290568286a72e7e4",
+      "bytes": 25991
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "65535b6875629104636f315f3e4bc3bf75e2d540df02f9d98ab628f4fe768eab",
-      "bytes": 4091
+      "sha256": "89a161c2c4090bd677fb2a3d04f58bf0f37d88bf92fa9ca289b7fea03f5671b8",
+      "bytes": 5585
     },
     {
       "path": "docs/design/board-v2/screen1.ans",
@@ -571,18 +571,18 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "93b4d311c47e21c14dad05bad21b76f269109464919b9fc66ac77f47e3aeb9cf",
-      "bytes": 5818
+      "sha256": "ea994ece89b1d5699cf7ad232518c44aee6f0e21bf9ca9f2e997948d5e2b8d2b",
+      "bytes": 11714
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "2d79da9257efdd1a24abd1112f546e30082acb3e74f0480dc0b3b9644f83b4d8",
-      "bytes": 5943
+      "sha256": "5d5f03f3772d9d91fb760dd1f9f4d4ca2e096ca7f24e139bd0c41afdc9fd523d",
+      "bytes": 6031
     },
     {
       "path": "docs/index.md",
-      "sha256": "1bc2e33d8325db29c1812d7a4ede1af2551763749353ab904507b1ba35929e4e",
-      "bytes": 3986
+      "sha256": "26d328a6d442a6267a5f69a83ca21edc9283e45ee99d0d5a3f959184210185b2",
+      "bytes": 4009
     },
     {
       "path": "docs/installation.md",
@@ -636,8 +636,8 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "63bd3ad486287f681827c1666c5ee8079ba940d6e6fa2db12a71dadcd5cb4341",
-      "bytes": 7285
+      "sha256": "54aca0a5e26e987a37c0a51c6050d8f0f3295b5616b39baf48651fc0dde11540",
+      "bytes": 7320
     },
     {
       "path": "docs/requirements.txt",
@@ -656,8 +656,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "593ecca495f8701a8e6a5d02c9acde8bda522c7d4e8f9854b115bfb908f3dd61",
-      "bytes": 5729
+      "sha256": "992b1a58af02258c28a49557c6cda4941f647a8231fa9c3def32cc83e29219db",
+      "bytes": 9953
     },
     {
       "path": "docs/upgrading.md",
