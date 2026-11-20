@@ -445,14 +445,16 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	b.Inbox = items
 	ui := &w.boardUI
 	ui.clamp(b)
-	_, stopped := (boardVisual{board: b, note: p.Note, stopped: p.Stopped}).stopNotice()
+	sv := w.stopVisual(p)
+	sv.board = b
+	_, stopped := sv.stopNotice()
 	focus := ui.pane(len(items) > 0 || stopped)
 	var frame anim.Frame
 	if a := w.animator.Load(); a != nil {
 		frame = a.Frame()
 	}
 	var hits []boardHit
-	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stopArmed: ui.stopArmed, hits: &hits}
+	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
 	// The shipped header shows "Marshal leads" when the Marshal leads
 	// acceptance. A fresh project has no run yet, so it reads the default.
 	accMode := p.run.Settings.AcceptanceMode
@@ -723,7 +725,7 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	if ui.stopArmed {
 		ui.stopArmed = false
 		if event.Type == KeyEnter && len(w.boardInbox()) == 0 {
-			if stop, ok := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice(); ok {
+			if stop, ok := w.stopVisual(p).stopNotice(); ok {
 				w.actOnStop(context.Background(), stop)
 			}
 		}
@@ -857,7 +859,7 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	}
 	ui.clamp(p.Board)
 	inbox := len(w.boardInbox()) > 0
-	_, stopped := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice()
+	_, stopped := w.stopVisual(p).stopNotice()
 	focus := ui.pane(inbox || stopped)
 	move := 0
 	switch {
@@ -892,12 +894,15 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 			ui.task = step(p.Board.Tasks, taskID, ui.task, move)
 			ui.inspect = ui.task
 		case event.Type == KeyRune && event.Rune == 'r':
-			// A parked task with no waiting decision: r arms its retry; any
-			// other parked or working task keeps r's today meaning below.
-			if id, ok := stuckTaskUnderKeyboard(w); ok {
+			// A stuck or returned task with no waiting decision: r arms its
+			// retry. A waiting decision keeps r as its "return"; any other
+			// task says why r does nothing, never typing the r.
+			if id, why := retryTarget(w); why == "" {
 				w.armRetry(id)
-			} else {
+			} else if w.taskHasDecision(ui.inspect) {
 				w.inspectorDecision(ui.inspect, event.Rune)
+			} else {
+				w.setOutput(why, false)
 			}
 		case event.Type == KeyRune && strings.ContainsRune("aAdrxi", event.Rune):
 			// The decision keys act on the task's waiting decision: they
@@ -955,6 +960,18 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 			}
 		}
 	}
+	// r retries the stuck task under the keyboard. While the inbox holds a
+	// request r stays its "return"; otherwise r always answers, and never
+	// reaches the composer as a message to the Marshal.
+	if event.Type == KeyRune && event.Rune == 'r' && !empty {
+		if id, why := retryTarget(w); why == "" {
+			w.armRetry(id)
+			return true
+		} else if !inbox {
+			w.setOutput(why, false)
+			return true
+		}
+	}
 	switch focus {
 	case layout.Tasks:
 		switch {
@@ -964,13 +981,6 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		case event.Type == KeyEnter && ui.task != "":
 			ui.inspect = ui.task
 			return true
-		case event.Type == KeyRune && event.Rune == 'r':
-			// A parked task with no waiting decision: r arms its retry.
-			// Otherwise r falls through to the inbox, as it did before.
-			if id, ok := stuckTaskUnderKeyboard(w); ok {
-				w.armRetry(id)
-				return true
-			}
 		}
 	case layout.Lanes:
 		if move != 0 {
@@ -987,7 +997,7 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 			return true
 		}
 		if event.Type == KeyEnter && !inbox {
-			if _, ok := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice(); ok {
+			if _, ok := w.stopVisual(p).stopNotice(); ok {
 				ui.stopArmed = true
 				return true
 			}

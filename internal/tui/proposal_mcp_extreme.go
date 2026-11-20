@@ -113,9 +113,9 @@ func (w *Workspace) prepareProposalMCP(provider, root string, args, env []string
 	if err != nil {
 		return nil, nil, dir, err
 	}
-	cfg, closeServer, err := proposalmcp.Listen(func(ctx context.Context, method string, raw json.RawMessage) (json.RawMessage, error) {
+	cfg, closeServer, err := proposalmcp.ListenWith(func(ctx context.Context, method string, raw json.RawMessage) (json.RawMessage, error) {
 		return w.handleProposalMCP(ctx, lease, method, raw)
-	})
+	}, proposalMCPListenOptions(provider, expected))
 	if err != nil {
 		return nil, nil, dir, err
 	}
@@ -154,6 +154,20 @@ func (w *Workspace) prepareProposalMCP(provider, root string, args, env []string
 	}
 	return args, env, dir, nil
 }
+// proposalMCPListenOptions is how the broker for provider's Marshal chat
+// listens. Codex starts Marshal's stdio MCP child inside the chat's own
+// sandbox, which refuses connect(2) on every Unix socket ("proposalmcp:
+// dial: ... operation not permitted"), so the broker also serves a spool in
+// .marshal/proposals: a directory the Marshal chat's Codex sandbox already
+// lets it write (marshalWritableDirs, and the project under workspace-write).
+// The sandbox itself is not widened.
+func proposalMCPListenOptions(provider, root string) proposalmcp.Options {
+	if canonicalNeutralProvider(provider) != "codex" {
+		return proposalmcp.Options{}
+	}
+	return proposalmcp.Options{SpoolParent: statepath.Path(root, "proposals")}
+}
+
 func (w *Workspace) activateProposalMCP(a *activeTmuxAgent) {
 	w.proposalMCP.mu.Lock()
 	var superseded *proposalMCPLease

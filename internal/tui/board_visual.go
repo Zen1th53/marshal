@@ -40,6 +40,10 @@ type boardVisual struct {
 	note      string
 	stopped   bool
 	stopArmed bool
+	// stall is the run's next step while nothing drives it: a returned or
+	// stuck task the run waits on with no Marshal step running (after a
+	// restart, say). nil when the run is moving or stopped otherwise.
+	stall *runStop
 	// status leads the footer instead of the run's note: the composer while
 	// typing, an armed retry, or the last command's answer until the next
 	// key.
