@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -106,17 +107,24 @@ func NewClient(endpoint, clientVersion string) (*Client, error) {
 	if parsed.Scheme != "https" && !isLoopbackHost(parsed.Hostname()) {
 		return nil, fmt.Errorf("%w: got %q", ErrInsecureEndpoint, parsed.Scheme)
 	}
+	var transport http.RoundTripper = &http.Transport{
+		// TLS 1.2 is the floor. An impersonating endpoint that can only
+		// negotiate something older is refused rather than trusted.
+		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		MaxIdleConnsPerHost: 2,
+	}
+	// A test binary or development build never reaches the production
+	// Community Cloud, even when handed its address directly. Tests that
+	// exercise the shipped endpoint replace the transport with a fake.
+	if IsProductionEndpoint(endpoint) && (testing.Testing() || !productionAllowed()) {
+		transport = refuseTransport{}
+	}
 	return &Client{
 		endpoint: strings.TrimRight(parsed.String(), "/"),
 		version:  clientVersion,
 		http: &http.Client{
-			Timeout: requestTimeout,
-			Transport: &http.Transport{
-				// TLS 1.2 is the floor. An impersonating endpoint that can only
-				// negotiate something older is refused rather than trusted.
-				TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
-				MaxIdleConnsPerHost: 2,
-			},
+			Timeout:   requestTimeout,
+			Transport: transport,
 		},
 	}, nil
 }

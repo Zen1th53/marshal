@@ -2,7 +2,6 @@ package cloud
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -17,12 +16,13 @@ func TestTelemetryActiveFollowsEndpointAndPreference(t *testing.T) {
 		t.Fatalf("TelemetryActive() = true with endpoint off, want false")
 	}
 
+	allowProductionEndpoint(t)
 	t.Setenv(EnvEndpoint, "")
 	if !TelemetryActive() {
 		t.Fatalf("TelemetryActive() = false with default endpoint and no state file, want true")
 	}
 
-	dir, err := os.UserConfigDir()
+	dir, err := userConfigDir()
 	if err != nil {
 		t.Fatalf("UserConfigDir failed: %v", err)
 	}

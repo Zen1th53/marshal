@@ -81,6 +81,8 @@ func (c *command) telemetry(ctx context.Context, args []string) error {
 	switch {
 	case st.TelemetryDisabled:
 		status = "disabled"
+	case cfg.DevelopmentBuild:
+		status = "off (development build; nothing is sent)"
 	case !cfg.Enabled():
 		status = "off (MARSHAL_CLOUD_ENDPOINT=off; nothing is sent)"
 	default:
@@ -111,6 +113,8 @@ func (c *command) registerTelemetry(ctx context.Context, dir string) error {
 	}
 	detail := "Anonymous telemetry: enabled; this installation is registered."
 	switch {
+	case cfg.DevelopmentBuild:
+		detail = "Anonymous telemetry: off (development build; nothing is sent)."
 	case !cfg.Enabled():
 		detail = "Anonymous telemetry: off (MARSHAL_CLOUD_ENDPOINT=off; nothing is sent)."
 	case prefErr == nil && st.TelemetryDisabled:

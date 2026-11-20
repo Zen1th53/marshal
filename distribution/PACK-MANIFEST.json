@@ -5406,8 +5406,8 @@
     },
     {
       "path": "internal/cli/telemetry.go",
-      "sha256": "a075ddf4f12387a25aba15e9d051e6e33c0ed4e76ea6ac9323fbedb86e021f25",
-      "bytes": 4801
+      "sha256": "41cdb4a231b7e0f5ec99ccef1f43c302c90dc4c8ddda4ceab148f679ab55ce45",
+      "bytes": 4987
     },
     {
       "path": "internal/cli/telemetry_extreme.go",
@@ -5421,8 +5421,8 @@
     },
     {
       "path": "internal/cli/telemetry_test.go",
-      "sha256": "aa6873c70525457a840f255fd587a1f486069094d3a03c1dd7a0da1f48973f8c",
-      "bytes": 7746
+      "sha256": "d07d885a2cde70aa4240bde69a47578355db6998409370fc0abb4c28ef9ec2d0",
+      "bytes": 8168
     },
     {
       "path": "internal/cli/tmux_cli_test.go",
@@ -5511,13 +5511,13 @@
     },
     {
       "path": "internal/cloud/config.go",
-      "sha256": "661ed20a48264eed1a8398628b945c9022b0cce132b553a645cc3d7c29cc3fc4",
-      "bytes": 4703
+      "sha256": "7dba582558897161647a4fe2923bad4ac0446031d5cf91476cf5df41603fcf2c",
+      "bytes": 5318
     },
     {
       "path": "internal/cloud/config_endpoint_test.go",
-      "sha256": "aba95a391f4d459deeeb5a26315746010b52884bdd660b0b5657cd422a4d88df",
-      "bytes": 2229
+      "sha256": "193cf6404e92d91696cfb855bb5b49d5f5b73639cee7ebd4b1342ea4a46fee4a",
+      "bytes": 2285
     },
     {
       "path": "internal/cloud/entrypaths_test.go",
@@ -5556,13 +5556,13 @@
     },
     {
       "path": "internal/cloud/installation_telemetry.go",
-      "sha256": "ffa40cf6a743fee4e3b36ab7cb9012f2356f9b8601828a61980c2b0c49d5fbc5",
-      "bytes": 11937
+      "sha256": "f4c1880e9ddf7fa7e80897fe5b9620e57b3a70dfdca3e0a0e6c161ea54886b12",
+      "bytes": 11934
     },
     {
       "path": "internal/cloud/installation_telemetry_test.go",
-      "sha256": "3fbd03378711a52a627c421a697d5dd92aacd671e4d5a2abd11226b309f9cf96",
-      "bytes": 19502
+      "sha256": "042a885b3658c6cf6c555a217206320e002daa6750f3bff9b497f1344db3a2af",
+      "bytes": 19530
     },
     {
       "path": "internal/cloud/lease.go",
@@ -5590,6 +5590,16 @@
       "bytes": 4177
     },
     {
+      "path": "internal/cloud/release_build.go",
+      "sha256": "7029cae1a5897d94fa170e36d4977bee88a89f41959d24d7e2f3d780ef66efa9",
+      "bytes": 2883
+    },
+    {
+      "path": "internal/cloud/release_build_test.go",
+      "sha256": "c03c654d1349c7b191bf8fdde8247b9b1d9960ca54e0a74d25e3db6ca7f96c29",
+      "bytes": 4243
+    },
+    {
       "path": "internal/cloud/request_state.go",
       "sha256": "ed390d4b16f4cf557455f7aec0b63101f418ec5cbd3ba1dc10c9a2320006e621",
       "bytes": 10749
@@ -5606,8 +5616,8 @@
     },
     {
       "path": "internal/cloud/session.go",
-      "sha256": "f9c2c36c5845d07a712e6fce866757270988ec59c38c8b909fc44496511785be",
-      "bytes": 17718
+      "sha256": "e81e4bc9007535da8e3556cd8fa3a029ba0a27231a61981fc342d97dde0d598b",
+      "bytes": 18093
     },
     {
       "path": "internal/cloud/session_test.go",
@@ -5616,8 +5626,8 @@
     },
     {
       "path": "internal/cloud/state.go",
-      "sha256": "64de71d27a00a341c69e037a166bd24959bcfbb8558dc441a5c2097e3fb6992d",
-      "bytes": 7637
+      "sha256": "fd1cc269043cff0c85d23aa86108503d403cfbea8817c06db6a2b54c7b0bbbf8",
+      "bytes": 7634
     },
     {
       "path": "internal/cloud/state_default.go",
@@ -5646,8 +5656,8 @@
     },
     {
       "path": "internal/cloud/telemetry_active_test.go",
-      "sha256": "d5eb1d160fb5bb91c80cfd153b2d68654cc4644734e99fe71e038c6904727676",
-      "bytes": 885
+      "sha256": "36b883db51b389da59309e0678d9188b9d61f32b528ee9aa3455be166551177c",
+      "bytes": 904
     },
     {
       "path": "internal/cloud/telemetry_test.go",
@@ -17021,8 +17031,8 @@
     },
     {
       "path": "tools/build_release.sh",
-      "sha256": "44c09981887bed17dc9553311649d59edee87832576a0a6a0fc67caffe34db65",
-      "bytes": 4496
+      "sha256": "b67a9e3886bb0f29dad9d98a9a9589d42752e7e42230e59fdba467dce06de07f",
+      "bytes": 4793
     },
     {
       "path": "tools/ci/test-shard.sh",
@@ -17186,8 +17196,8 @@
     },
     {
       "path": "tools/tests/test_build_release.py",
-      "sha256": "07797f0b2bc78b45c7d6a3850d93772a8b36111df11313e10caa3fc73d4b828c",
-      "bytes": 7573
+      "sha256": "493d8688cc8c68f5c069ce0d18afb05b0c502e62abb860088e601465ee3189e9",
+      "bytes": 8459
     },
     {
       "path": "tools/tests/test_clean_install.py",

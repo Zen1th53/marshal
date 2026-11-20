@@ -23,14 +23,26 @@ type Config struct {
 	Endpoint string
 	// TelemetryManaged means the process-wide reporter owns telemetry.
 	TelemetryManaged bool
+	// DevelopmentBuild means the production endpoint was resolved but dropped
+	// because this binary is not a published release (or is a test binary).
+	DevelopmentBuild bool
 }
 
 // LoadConfig resolves configuration from the environment.
 //
 // Standard remains usable offline. Telemetry runs separately in the background;
 // failure to contact the authority never grants ULTRA.
+//
+// Only a release binary talks to the production Community Cloud. A
+// development build (or a test binary) that would resolve to it is switched
+// off instead, so it never registers, heartbeats or is counted as an
+// installation. Pointing MARSHAL_CLOUD_ENDPOINT at another server still works.
 func LoadConfig() Config {
-	return Config{Endpoint: resolveEndpoint(os.Getenv(EnvEndpoint))}
+	endpoint := resolveEndpoint(os.Getenv(EnvEndpoint))
+	if endpoint != "" && IsProductionEndpoint(endpoint) && !productionAllowed() {
+		return Config{DevelopmentBuild: true}
+	}
+	return Config{Endpoint: endpoint}
 }
 
 // resolveEndpoint decides which Cloud authority to ask, if any.

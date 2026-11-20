@@ -202,7 +202,7 @@ func (s *Store) LoadOrCreate() (State, error) {
 // found is adopted so an installation that already holds an entitlement keeps
 // it; later ones are left alone rather than replacing the adopted identity.
 func MachineStateDir(projectStateDir string) (string, error) {
-	base, err := os.UserConfigDir()
+	base, err := userConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrState, err)
 	}
