@@ -132,6 +132,13 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 	cmd := tuiChildArgv(exe, c.startedRepository, args)
 
 	if !tmux.HasSession(ctx, sessionName) {
+		// An older control centre for this project may still run on another
+		// tmux server (another TMUX_TMPDIR or temporary directory). A new
+		// session beside it could not own the project, and opened only a
+		// bare chat with no Board: replace it, or attach to it.
+		if attached, err := c.olderControlCentreElsewhere(ctx, root, sessionName); attached {
+			return err
+		}
 		cmd, err = prepareTUIChild(root, cmd)
 		if err != nil {
 			return err

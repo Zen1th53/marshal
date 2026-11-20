@@ -36,11 +36,8 @@ type attentionState struct {
 func (w *Workspace) attentionNow() attnSnapshot {
 	w.mu.RLock()
 	p := w.state.Marshal
-	v := boardVisual{}
-	if p != nil {
-		v.board, v.note, v.stopped = p.Board, p.Note, p.Stopped
-	}
 	w.mu.RUnlock()
+	v := w.stopVisual(p)
 	v.gates = w.ownerGates(p)
 	v.guard, _, _, _ = w.guardPaint()
 	s, stopped := v.stopNotice()

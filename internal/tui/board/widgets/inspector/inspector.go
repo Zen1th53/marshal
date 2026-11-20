@@ -240,6 +240,16 @@ func (v *View) decision() (model.InboxItem, bool) {
 	return model.InboxItem{}, false
 }
 
+// stuck reports whether the shown task is parked or waits for rework.
+func (v *View) stuck() bool {
+	for _, t := range v.board.Tasks {
+		if t.ID == v.taskID {
+			return t.State == model.TaskParked || t.State == model.TaskRework
+		}
+	}
+	return false
+}
+
 // Actions is the action row for the shown task (mockup 03), only what
 // applies: the decision keys while a decision waits for the task in the
 // inbox (a hard gate has no allow-for-run, as the inbox offers none), and
@@ -254,6 +264,10 @@ func (v *View) Actions() []Action {
 			out = append(out, Action{'A', "approve-all"}, Action{'a', "approve"})
 		}
 		out = append(out, Action{'d', "deny"}, Action{'r', "rework"}, Action{'x', "cancel"})
+	} else if v.stuck() {
+		// A parked or sent-back task with nothing to decide: r retries it
+		// in a fresh session and continues the run, after an Enter.
+		out = append(out, Action{'r', "retry this task"})
 	}
 	for _, l := range v.board.Lanes {
 		if l.TaskID == v.taskID && l.Pane != "" {
