@@ -80,7 +80,7 @@ func socketCommand(ctx context.Context, socket string, args ...string) (*exec.Cm
 // session: the server must name it, an exit status alone is not taken as
 // an answer.
 func SessionOnServer(ctx context.Context, socket, session string) bool {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	if requireTarget(session) != nil {
 		return false
@@ -115,7 +115,7 @@ func SessionElsewhere(ctx context.Context, session string, sockets []string) str
 // KillSessionOnServer ends session on the tmux server at socket, and every
 // process its windows run.
 func KillSessionOnServer(ctx context.Context, socket, session string) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	if err := requireTarget(session); err != nil {
 		return err

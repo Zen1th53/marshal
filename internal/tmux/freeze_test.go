@@ -34,6 +34,7 @@ func TestCommandsHaveDefaultDeadline(t *testing.T) {
 	}
 	SetBinaryPath(path)
 	t.Cleanup(ResetBinaryPath)
+	shrinkDeadlines(t, 300*time.Millisecond)
 	for _, call := range []struct {
 		name string
 		run  func()
@@ -45,6 +46,7 @@ func TestCommandsHaveDefaultDeadline(t *testing.T) {
 		t.Run(call.name, func(t *testing.T) {
 			start := time.Now()
 			call.run()
+			// One retry of a retry-safe query is allowed.
 			if time.Since(start) > 3*time.Second {
 				t.Fatal("no default deadline")
 			}
@@ -115,5 +117,67 @@ func TestInteractivePopupPreservesExplicitReviewDeadline(t *testing.T) {
 	defer cancel()
 	if _, err := RunCommand(ctx, "display-popup", "-E", "review"); err != nil {
 		t.Fatalf("popup was cut short before its explicit review deadline: %v", err)
+	}
+}
+
+func shrinkDeadlines(t *testing.T, d time.Duration) {
+	t.Helper()
+	query, spawn := queryTimeout, spawnTimeout
+	queryTimeout, spawnTimeout = d, d
+	t.Cleanup(func() { queryTimeout, spawnTimeout = query, spawn })
+}
+
+// The deadlines must leave a slow (emulated, loaded) host room to answer:
+// the 2s query deadline killed list-keys there and failed the worker.
+func TestCommandDeadlinesTolerateSlowHosts(t *testing.T) {
+	if queryTimeout < 10*time.Second || spawnTimeout < 30*time.Second {
+		t.Fatalf("query %s / spawn %s too short for a slow host", queryTimeout, spawnTimeout)
+	}
+	if queryTimeout > time.Minute || spawnTimeout > 2*time.Minute {
+		t.Fatalf("query %s / spawn %s no longer bounded", queryTimeout, spawnTimeout)
+	}
+}
+
+// A read-only query that runs out of its own deadline once is tried again;
+// a command that types or creates is never repeated.
+func TestSlowQueryIsRetriedOnceAndMutationsAreNot(t *testing.T) {
+	dir := t.TempDir()
+	count := filepath.Join(dir, "count")
+	path := filepath.Join(dir, "tmux")
+	// The first call hangs past the deadline, later calls answer at once.
+	script := "#!/bin/sh\necho x >> \"" + count + "\"\nif [ $(wc -l < \"" + count + "\") -eq 1 ]; then exec sleep 5; fi\necho ok\n"
+	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	SetBinaryPath(path)
+	t.Cleanup(ResetBinaryPath)
+	shrinkDeadlines(t, time.Second)
+	out, err := RunCommand(context.Background(), "list-keys", "-T", "root")
+	if err != nil || string(out) != "ok\n" {
+		t.Fatalf("slow list-keys not retried: %q %v", out, err)
+	}
+	calls := func() int {
+		data, _ := os.ReadFile(count)
+		return len(data) / 2
+	}
+	if calls() != 2 {
+		t.Fatalf("list-keys ran %d times, want 2", calls())
+	}
+	os.Remove(count)
+	if _, err := RunCommand(context.Background(), "send-keys", "-t", "%1", "Enter"); err == nil {
+		t.Fatal("a hung send-keys succeeded")
+	}
+	if calls() != 1 {
+		t.Fatalf("send-keys ran %d times; typing must never be repeated", calls())
+	}
+	// The caller's own deadline is final: no retry past it.
+	os.Remove(count)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	if _, err := RunCommand(ctx, "list-panes"); err == nil {
+		t.Fatal("hung query succeeded")
+	}
+	if calls() != 1 {
+		t.Fatalf("query retried past the caller's deadline (%d runs)", calls())
 	}
 }

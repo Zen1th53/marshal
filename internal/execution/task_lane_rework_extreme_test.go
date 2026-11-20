@@ -347,3 +347,49 @@ func TestExtremeOrphanTaskLaneClosedAfterRestartAdmitsNextAttempt(t *testing.T) 
 		t.Fatalf("the interrupted attempt's record changed: %s", kept.State)
 	}
 }
+
+// Infrastructure retries, refused dispatches and orphan closes each advance a
+// task's lane attempt number without being rework. A real run reached
+// attempt 17 that way and every later attempt was refused as "task lane
+// rework out of range". Attempt numbers well past the old bound open, close
+// as orphans and run; only a number past the identity bound is refused.
+func TestExtremeTaskLaneAttemptsPastOldReworkBoundStillOpen(t *testing.T) {
+	e, parent, base := laneFixture(t)
+	registerWritingHarness(e)
+	first, err := e.OpenTaskLane(t.Context(), parent.RunID, "task-1", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executeLane(t, e, first, base)
+	interrupted, err := e.OpenTaskLaneRework(t.Context(), parent.RunID, "task-1", base, 17)
+	if err != nil {
+		t.Fatalf("attempt 17 after infrastructure retries was refused: %v", err)
+	}
+	orphan := mustRun(t, e, interrupted.RunID)
+	task := orphan.Tasks["task-1"]
+	now := time.Now().UTC()
+	task.State, task.Attempts, task.StartedAt = TaskRunning, 1, &now
+	orphan.Tasks["task-1"] = task
+	orphan.State, orphan.CurrentPhase = RunRunning, PhaseExecuting
+	if err = e.store.UpdateRun(t.Context(), orphan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.ReconcileOrphanTaskLane(t.Context(), parent.RunID, "task-1", 17); err != nil {
+		t.Fatalf("interrupted attempt 17 was not closed: %v", err)
+	}
+	next, err := e.OpenTaskLaneRework(t.Context(), parent.RunID, "task-1", base, 40)
+	if err != nil {
+		t.Fatalf("attempt 40 was refused: %v", err)
+	}
+	executeLane(t, e, next, base)
+	if n, ok := TaskLaneAttempt(parent.RunID, "task-1", next.RunID); !ok || n != 40 {
+		t.Fatalf("attempt 40 not recognised: %d %v", n, ok)
+	}
+	attempts, err := e.taskLaneAttempts(t.Context(), parent.RunID, "task-1", mustRun(t, e, next.RunID))
+	if err != nil || len(attempts) != 3 {
+		t.Fatalf("parent budget lost earlier attempts: %v %d", err, len(attempts))
+	}
+	if _, err = e.OpenTaskLaneRework(t.Context(), parent.RunID, "task-1", base, maxTaskLaneAttempts+1); !errors.Is(err, ErrRunInvalid) {
+		t.Fatalf("an attempt past the identity bound opened: %v", err)
+	}
+}

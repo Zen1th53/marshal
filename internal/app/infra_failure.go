@@ -26,6 +26,9 @@ var infraFailureKinds = []struct {
 	// The worker's stdio connection to Marshal's own MCP server broke. Like
 	// a lease expiry it is not the provider's fault.
 	{marshalToolsLost, []string{marshalToolsLostMarker}},
+	// Marshal's own terminal (a tmux command that ran past its deadline on
+	// a slow host) is not the provider crashing or its network failing.
+	{terminalHostSlow, []string{"tmux ["}},
 	{"provider quota or rate limit", []string{"usage limit", "rate limit", "rate-limit", "quota", "hit your limit", "5-hour limit", "too many requests", "resource_exhausted", "out of credits", "insufficient credits"}},
 	{"provider cooldown or failover refusal", []string{"provider cooldown", "provider failover", "not limited by its provider", "provider execution failure"}},
 	{"transport or network", []string{"connection refused", "connection reset", "broken pipe", "eof", "timeout", "timed out", "deadline exceeded", "tls", "dns", "network", "socket", "transport", "502", "503", "504", "overloaded", "unavailable"}},
@@ -60,6 +63,10 @@ const workerLeaseExpired = "task time ran out"
 // Marshal's MCP tools broke.
 const marshalToolsLost = "connection to Marshal's tools lost"
 
+// terminalHostSlow is the failure kind of an attempt cut short by Marshal's
+// own terminal host (tmux) rather than by the provider.
+const terminalHostSlow = "Marshal's terminal was slow"
+
 // infraKindCoolsProvider reports whether a failure streak of this kind says
 // something about the provider, so cooling it down for failover can help.
 // A crash, an expired lease or a broken connection to Marshal's own tools
@@ -67,7 +74,7 @@ const marshalToolsLost = "connection to Marshal's tools lost"
 // "quota" it still has.
 func infraKindCoolsProvider(kind string) bool {
 	switch kind {
-	case workerLeaseExpired, marshalToolsLost, "worker process failure", platformUnsupported, providerAuthFailure:
+	case workerLeaseExpired, marshalToolsLost, terminalHostSlow, "worker process failure", platformUnsupported, providerAuthFailure:
 		return false
 	}
 	return true
@@ -80,6 +87,8 @@ func infraFailurePhrase(provider, kind string) string {
 		return "the task's time ran out on " + provider
 	case marshalToolsLost:
 		return provider + " lost its connection to Marshal's tools"
+	case terminalHostSlow:
+		return "Marshal's terminal was too slow to start " + provider
 	}
 	return provider + " hit a " + plainInfraKind(kind)
 }
@@ -108,6 +117,8 @@ func plainInfraKind(kind string) string {
 		return "the task's time ran out"
 	case marshalToolsLost:
 		return "lost connection to Marshal's tools"
+	case terminalHostSlow:
+		return "slow terminal"
 	default:
 		return "problem"
 	}

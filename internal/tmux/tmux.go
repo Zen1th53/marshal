@@ -96,7 +96,7 @@ func FindBinary() (string, error) {
 
 // checkVersion checks both executables and attached servers before using them.
 func checkVersion(binary string, args ...string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.WaitDelay = 100 * time.Millisecond
@@ -393,13 +393,38 @@ func EscapeTmuxArgs(args []string) []string {
 	return escaped
 }
 
+// Command deadlines are bounded but sized for slow hosts: an emulated or
+// heavily loaded machine can take seconds to answer even a read-only query,
+// and a query cut short there used to fail the worker it served. They are
+// variables only so tests can shrink them.
+var (
+	// queryTimeout bounds one ordinary tmux command.
+	queryTimeout = 10 * time.Second
+	// spawnTimeout bounds a command that starts a real worker process.
+	spawnTimeout = 30 * time.Second
+)
+
+// retrySafe names the tmux commands that read state or set it to a fixed
+// value, so running one a second time after its own deadline cut it short
+// cannot do anything twice. Commands that type, paste, create or kill are
+// never repeated.
+var retrySafe = map[string]bool{
+	"list-keys": true, "list-panes": true, "list-windows": true, "list-sessions": true,
+	"list-clients": true, "list-buffers": true, "display-message": true, "show-options": true,
+	"show-window-options": true, "capture-pane": true, "has-session": true,
+	"set-option": true, "set-window-option": true, "bind-key": true, "unbind-key": true,
+	"source-file": true,
+}
+
 // RunCommand executes a tmux command using the resolved binary path and argv list.
+// A retry-safe command that runs out of its own deadline (not the caller's)
+// is tried once more, so one slow answer on a busy host is not a failure.
 func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
-	timeout := 2 * time.Second
+	timeout := queryTimeout
 	if len(args) > 0 && (args[0] == "new-window" || args[0] == "respawn-window" || args[0] == "respawn-pane") {
 		// Creating a pane starts a real worker process. Busy hosts may need
 		// longer than a read-only tmux query to complete that handshake.
-		timeout = 5 * time.Second
+		timeout = spawnTimeout
 	}
 	if len(args) > 0 && args[0] == "display-popup" {
 		// This client owns an operator review surface until it closes. Honor
@@ -408,12 +433,28 @@ func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
 		if deadline, ok := ctx.Deadline(); ok {
 			timeout = time.Until(deadline)
 		}
+		return runCommandOnce(ctx, timeout, args)
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	out, ownDeadline, err := runCommandAttempt(ctx, timeout, args)
+	if err != nil && ownDeadline && ctx.Err() == nil && len(args) > 0 && retrySafe[args[0]] {
+		out, _, err = runCommandAttempt(ctx, timeout, args)
+	}
+	return out, err
+}
+
+func runCommandOnce(ctx context.Context, timeout time.Duration, args []string) ([]byte, error) {
+	out, _, err := runCommandAttempt(ctx, timeout, args)
+	return out, err
+}
+
+// runCommandAttempt runs tmux once; ownDeadline reports that this attempt's
+// own timeout, not the caller's context, ended it.
+func runCommandAttempt(parent context.Context, timeout time.Duration, args []string) ([]byte, bool, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	bin, err := FindBinary()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.WaitDelay = 100 * time.Millisecond
@@ -426,13 +467,14 @@ func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		ownDeadline := ctx.Err() != nil && parent.Err() == nil
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg != "" {
-			return nil, fmt.Errorf("tmux %v: %s (%w)", args, errMsg, err)
+			return nil, ownDeadline, fmt.Errorf("tmux %v: %s (%w)", args, errMsg, err)
 		}
-		return nil, fmt.Errorf("tmux %v: %w", args, err)
+		return nil, ownDeadline, fmt.Errorf("tmux %v: %w", args, err)
 	}
-	return stdout.Bytes(), nil
+	return stdout.Bytes(), false, nil
 }
 
 // requireTarget rejects implicit-current targeting at explicit-target boundaries.
@@ -464,7 +506,7 @@ func resolvePane(ctx context.Context, target string) (string, error) {
 
 // HasSession reports whether a tmux session exists.
 func HasSession(ctx context.Context, session string) bool {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	if err := requireTarget(session); err != nil {
 		return false
@@ -485,7 +527,7 @@ func HasSession(ctx context.Context, session string) bool {
 
 // NewSession creates a new detached tmux session.
 func NewSession(ctx context.Context, session, workDir, windowName string, command []string) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, spawnTimeout)
 	defer cancel()
 	bin, err := FindBinary()
 	if err != nil {

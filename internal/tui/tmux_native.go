@@ -927,9 +927,7 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 
-	if err := w.bindWorkspaceKeys(ctx, paneID, root); err != nil {
-		return failHost(err)
-	}
+	w.bindWorkspaceKeysBestEffort(ctx, paneID, root)
 
 	// Bind provider's F-key and F11 in tmux (for workers only, not chat)
 	if !isChat {
@@ -2009,7 +2007,8 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 				if err := tmux.SetPaneReadOnly(ctx, pane, true); err != nil {
 					return err
 				}
-				return t.w.bindWorkspaceKeys(ctx, pane, root)
+				t.w.bindWorkspaceKeysBestEffort(ctx, pane, root)
+				return nil
 			}
 			// The window was closed by hand: open it again below.
 		}
@@ -2044,7 +2043,8 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		if err := tmux.SetPaneReadOnly(ctx, agent.paneID, true); err != nil {
 			return err
 		}
-		return t.w.bindWorkspaceKeys(ctx, agent.paneID, root)
+		t.w.bindWorkspaceKeysBestEffort(ctx, agent.paneID, root)
+		return nil
 	}
 	observer := func(ref processgroup.Reference) error {
 		t.w.tmuxMu.Lock()

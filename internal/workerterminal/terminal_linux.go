@@ -31,6 +31,9 @@ func WithHost(ctx context.Context, host Host) context.Context {
 	return context.WithValue(ctx, contextKey{}, host)
 }
 
+// acceptTimeout bounds how long the hosted relay may take to connect.
+var acceptTimeout = 60 * time.Second
+
 // Attach preserves the command envelope and output observers. The host receives
 // only a private terminal socket, never a worker command or process authority.
 func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
@@ -66,7 +69,10 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 		os.RemoveAll(dir)
 		return fail(err)
 	}
-	listener.SetDeadline(time.Now().Add(5 * time.Second))
+	// The host opens the pane (tmux) before the relay in it connects; on a
+	// slow host that alone can take many seconds, and a relay that missed
+	// the accept left the worker's terminal undrained. Bounded, not short.
+	listener.SetDeadline(time.Now().Add(acceptTimeout))
 	var mu sync.Mutex
 	var connection net.Conn
 	observer := cmd.Stdout

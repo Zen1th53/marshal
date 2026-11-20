@@ -145,6 +145,38 @@ func (c *Client) ValidateModel(ctx context.Context, modelName string) error {
 	return fmt.Errorf("%w: model %q is not an eligible Codex model", model.ErrInvalid, modelName)
 }
 
+// ResolveModel picks the model a worker runs on from what the installed
+// Codex reports, never from a list held by MARSHAL, so a new or renamed
+// model works without a MARSHAL release. A requested model the catalog
+// offers is kept. A requested model the catalog does not offer gives way to
+// the owner's configured/default model. When there is no default either,
+// the run carries no --model and Codex uses its own default. When the
+// catalog cannot be read at all, the requested model passes through and the
+// installed Codex itself accepts or rejects it. listed reports whether the
+// returned model is one the catalog offers.
+func (c *Client) ResolveModel(ctx context.Context, requested string) (resolved string, listed bool) {
+	requested = strings.TrimSpace(requested)
+	models, def, err := c.Models(ctx)
+	if err != nil || len(models) == 0 {
+		return requested, false
+	}
+	offered := func(name string) bool {
+		for _, m := range models {
+			if m.Slug == name {
+				return true
+			}
+		}
+		return false
+	}
+	if requested != "" && offered(requested) {
+		return requested, true
+	}
+	if def != "" && isNativeIdentifier(def) {
+		return def, offered(def)
+	}
+	return "", false
+}
+
 // ValidateEffort checks that the catalog advertises effort for the model, or
 // for the catalog default when modelName is empty.
 func (c *Client) ValidateEffort(ctx context.Context, modelName, effort string) error {
@@ -185,18 +217,20 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		return adapter.Result{}, err
 	}
 
-	effectiveModel := request.Model
-	if effectiveModel != "" {
-		if err := c.ValidateModel(ctx, effectiveModel); err != nil {
+	effectiveModel, listed := c.ResolveModel(ctx, request.Model)
+	if request.Model != "" && effectiveModel != request.Model {
+		// The named model is not one this Codex offers: run on the owner's
+		// default instead. An effort chosen for the named model may not
+		// exist on the default, so the default's own effort applies.
+		request.Effort = ""
+	}
+	request.Model = effectiveModel
+	if listed {
+		if err := c.ValidateEffort(ctx, effectiveModel, request.Effort); err != nil {
 			return adapter.Result{}, err
 		}
-	} else if c.defaultModel != "" {
-		effectiveModel = c.defaultModel
-	} else if _, def, err := c.Models(ctx); err == nil && def != "" {
-		effectiveModel = def
-	}
-	if err := c.ValidateEffort(ctx, effectiveModel, request.Effort); err != nil {
-		return adapter.Result{}, err
+	} else if request.Effort != "" && !isNativeIdentifier(request.Effort) {
+		return adapter.Result{}, fmt.Errorf("%w: malformed Codex reasoning effort", model.ErrInvalid)
 	}
 
 	prompt, err := buildPrompt(request)

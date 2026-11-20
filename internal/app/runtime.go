@@ -1521,13 +1521,16 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		if flagErr != nil {
 			return RunResult{}, flagErr
 		}
+		// Codex resolves the model itself from what the installed CLI
+		// offers (falling back to the owner's default), so a model missing
+		// from one catalog snapshot never fails the worker here. Claude is
+		// still checked: it would read an unknown value as a prompt.
 		if candidate, ok := r.adapters[request.Adapter].(interface {
 			ValidateModel(context.Context, string) error
-		}); ok {
+		}); ok && request.Adapter != "codex" {
 			if err := candidate.ValidateModel(ctx, request.Model); err != nil {
 				return RunResult{}, err
 			}
-
 		}
 	}
 	claim, err := r.claimForRun(ctx, task, request)
