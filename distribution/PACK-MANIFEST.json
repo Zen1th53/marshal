@@ -6736,8 +6736,8 @@
     },
     {
       "path": "internal/execution/task_lane_extreme.go",
-      "sha256": "6d93ed964aaa584b9e654a47b879722f7755d3ef924eb6d7b2fb62321ba0734b",
-      "bytes": 28301
+      "sha256": "7ee0242e61d1e7c11a26ccfbc45480b09b886f1c0bdd19280a127a590c0fd29c",
+      "bytes": 28868
     },
     {
       "path": "internal/execution/task_lane_extreme_test.go",
@@ -6746,8 +6746,8 @@
     },
     {
       "path": "internal/execution/task_lane_rework_extreme_test.go",
-      "sha256": "70815b8821e98a34d05d9f631438400b3bfd7c5ec0c42d14093328294c51d3fc",
-      "bytes": 14780
+      "sha256": "4b5041ad2fae24bc5861c3ebe317e94701767c3f494726cc7706b59cd522b182",
+      "bytes": 16860
     },
     {
       "path": "internal/execution/task_state.go",

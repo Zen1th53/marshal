@@ -76,7 +76,7 @@ func TaskLaneID(parentID, taskID string, rework int) string {
 // TaskLaneAttempt reports the attempt number of lane for taskID under
 // parentID, and whether lane is such an attempt at all.
 func TaskLaneAttempt(parentID, taskID, lane string) (int, bool) {
-	for n := 0; n <= maxTaskLaneReworks; n++ {
+	for n := 0; n <= maxTaskLaneAttempts; n++ {
 		if lane == taskLaneID(parentID, taskID, n) {
 			return n, true
 		}
@@ -91,8 +91,8 @@ func TaskLaneAttempt(parentID, taskID, lane string) (int, bool) {
 // The previous lane and its evidence are retained; the parent points at the
 // newest attempt, so a stale lane cannot reserve calls or transport again.
 func (e *Engine) OpenTaskLaneRework(ctx context.Context, parentID, taskID, base string, rework int) (*ExecutionRun, error) {
-	if rework < 0 || rework > maxTaskLaneReworks {
-		return nil, fmt.Errorf("%w: task lane rework out of range", ErrRunInvalid)
+	if rework < 0 || rework > maxTaskLaneAttempts {
+		return nil, fmt.Errorf("%w: task lane attempt %d out of range (0..%d)", ErrRunInvalid, rework, maxTaskLaneAttempts)
 	}
 	e.operationMu.Lock()
 	defer e.operationMu.Unlock()
@@ -386,8 +386,8 @@ func (e *Engine) ReconcileTaskLane(ctx context.Context, id string, version int64
 // so no other live runtime can be executing the lane. The next attempt
 // (rework+1) may then open.
 func (e *Engine) ReconcileOrphanTaskLane(ctx context.Context, parentID, taskID string, rework int) (*ExecutionRun, error) {
-	if rework < 0 || rework > maxTaskLaneReworks {
-		return nil, fmt.Errorf("%w: task lane rework out of range", ErrRunInvalid)
+	if rework < 0 || rework > maxTaskLaneAttempts {
+		return nil, fmt.Errorf("%w: task lane attempt %d out of range (0..%d)", ErrRunInvalid, rework, maxTaskLaneAttempts)
 	}
 	e.operationMu.Lock()
 	defer e.operationMu.Unlock()
@@ -601,14 +601,20 @@ func (e *Engine) persistTaskLaneRun(ctx context.Context, run *ExecutionRun) (boo
 	return true, e.store.UpdateRun(ctx, parent)
 }
 
-// maxTaskLaneReworks bounds the rework identities searched for one task; the
-// Marshal rework limit is far lower.
-const maxTaskLaneReworks = 16
+// maxTaskLaneAttempts bounds the attempt identities of one task's lanes. It
+// is not a rework budget: every attempt opens its own lane, and attempts that
+// are never rework (an infrastructure retry, an attempt whose dispatch was
+// refused, an interrupted lane closed after a restart) advance the number
+// too. The Marshal rework limit is counted separately and is far lower; this
+// bound only keeps identity searches finite. It was 16, and a task that met
+// a run of infrastructure failures exhausted it with no rework at all, after
+// which every later attempt of the task was refused.
+const maxTaskLaneAttempts = 1024
 
 // taskLaneAttempts returns every attempt lane of a task up to and including
 // current, so the parent's budget keeps the calls of returned attempts.
 func (e *Engine) taskLaneAttempts(ctx context.Context, parentID, taskID string, current ExecutionRun) ([]ExecutionRun, error) {
-	for n := 0; n <= maxTaskLaneReworks; n++ {
+	for n := 0; n <= maxTaskLaneAttempts; n++ {
 		if taskLaneID(parentID, taskID, n) != current.RunID {
 			continue
 		}
