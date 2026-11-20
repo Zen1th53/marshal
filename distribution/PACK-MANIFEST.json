@@ -13651,8 +13651,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "ef29be6fd1af37bab09180bf84c236f708898ab9b78b20d9ed6b033b3fa7e716",
-      "bytes": 78283
+      "sha256": "a6175fd14716a4b7010e7bc2427df2b6afa3f6256301e57c4a50d0deadec3cc4",
+      "bytes": 78568
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -14156,8 +14156,8 @@
     },
     {
       "path": "internal/tui/marshal_chat_test.go",
-      "sha256": "6b85beea31afa2d58a3a0ac8c5b6a1c16c2a62b79472752c3fd9e830491e1e33",
-      "bytes": 12843
+      "sha256": "e7f3965ef98c40234e7b5cd695972e38e3cbcbd07aad379e5b59957be0f1e3c9",
+      "bytes": 12883
     },
     {
       "path": "internal/tui/marshal_confine.go",
@@ -14431,8 +14431,8 @@
     },
     {
       "path": "internal/tui/marshal_run_authority_extreme_test.go",
-      "sha256": "3bfed45c0422e9c7bdbdcf52ef8a0208dda11472f91242c807a715db9855051c",
-      "bytes": 981
+      "sha256": "bfc54124853f1a1bfa0a8421b737a2d447e5a6a570c5dc8c6040a74617bb3867",
+      "bytes": 1903
     },
     {
       "path": "internal/tui/marshal_splash.go",

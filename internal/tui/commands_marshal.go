@@ -392,6 +392,10 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 	if err != nil {
 		return "", err
 	}
+	// The shipped protocol already ends with the authority protocol, and the
+	// briefing repeats it last so it follows the run-specific instructions.
+	// Delivering it once, at the end, keeps that order and saves its ~9 KiB.
+	protocol = strings.TrimSuffix(protocol, buildRoleAuthority)
 	runAuthority := marshalRunAuthorityInstructions(settings)
 	instructions := "Each task may add \"instructions\" (purpose, approach, steps, what to leave alone), \"expected_output\" and \"control\" (\"strict\" or \"free\"). A strict task must carry instructions and its worker is held to them exactly; a free task's worker chooses its own approach within the task's files."
 	if settings.EffectiveControl() == marshal.ControlStrict {
