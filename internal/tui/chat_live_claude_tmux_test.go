@@ -138,8 +138,13 @@ func TestRealTmuxUndockedChatTitleBeatsAPC(t *testing.T) {
 	if got := title(); got != want {
 		t.Fatalf("provider retitled the chat: %q", got)
 	}
-	out, _ := tmux.RunCommand(ctx, "show-options", "-p", "-v", "-t", pane, "allow-set-title")
+	// tmux before 3.4 has no allow-set-title; there the hold above (checked
+	// title, set back) is the whole guard.
+	out, err := tmux.RunCommand(ctx, "show-options", "-p", "-v", "-t", pane, "allow-set-title")
+	if err != nil {
+		return // this tmux has no allow-set-title
+	}
 	if strings.TrimSpace(string(out)) != "off" {
-		t.Fatalf("allow-set-title on the chat pane = %q", out)
+		t.Fatalf("allow-set-title on the chat pane = %q (err %v)", out, err)
 	}
 }
