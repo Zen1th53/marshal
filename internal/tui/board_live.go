@@ -677,6 +677,12 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	_, docked := l.Pane(layout.Inspector)
 	// The opening animation (P2-03) owns the body on the first paints of a
 	// fresh Board, before the first-use card or the Blocked screen.
+	// Only a v2 paint puts a v2 card on screen; every other paint takes it
+	// off, so its keys stop acting (boardv2_paint.go).
+	w.setV2CardShown("")
+	// v2KeyRow is the Board v2 key bar's row, -1 when v2 did not paint;
+	// like the classic hint bar it stays clickable under an overlay.
+	v2KeyRow := -1
 	var openingShow, openingChecking bool
 	var openingFrame int
 	if empty {
@@ -718,6 +724,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		// (boardv2_paint.go); MARSHAL_BOARD=classic keeps the classic ones.
 		ui.insp, ui.inspFor = nil, ""
 		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
+		v2KeyRow = len(lines) - 2
 	case empty:
 		ui.insp, ui.inspFor = nil, ""
 		lines = paintFirstUse(l, th, v)
@@ -777,7 +784,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		// hint bar's row is never covered.
 		footer, _ := l.Pane(layout.Footer)
 		hits = slices.DeleteFunc(hits, func(h boardHit) bool {
-			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && h.row == footer.Rect.Y {
+			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && (h.row == footer.Rect.Y || h.row == v2KeyRow) {
 				return false
 			}
 			return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0)
@@ -822,6 +829,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	p := w.state.Marshal
 	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
 	w.mu.RUnlock()
+	// A Board v2 decision or paused card on screen takes its keys first
+	// (boardv2_cards_keys.go); MARSHAL_BOARD=classic never shows one.
+	if w.v2CardKey(event) {
+		return true
+	}
 	if w.inboxView.Confirming() || w.composing() {
 		return false
 	}
