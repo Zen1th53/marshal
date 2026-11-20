@@ -125,8 +125,8 @@ func TestResolveInstalledAsksAgyOnceAndFallsBack(t *testing.T) {
 
 	resetModelCache()
 	broken := &listingRunner{fail: true}
-	if got, err := ResolveInstalled(t.Context(), "/fake/agy", broken, ""); err != nil || got != DefaultModel {
-		t.Fatalf("auto without a listing = %q, %v; want the default model", got, err)
+	if got, err := ResolveInstalled(t.Context(), "/fake/agy", broken, ""); err != nil || got != "" {
+		t.Fatalf("auto without a listing = %q, %v; want agy's own default (no model)", got, err)
 	}
 	if _, err := ResolveInstalled(t.Context(), "/fake/agy", broken, "carbon"); err == nil {
 		t.Fatal("an explicit family without a listing resolved silently")

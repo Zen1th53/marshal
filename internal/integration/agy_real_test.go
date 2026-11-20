@@ -20,7 +20,7 @@ func realAgyModel() string {
 	if name := os.Getenv("MARSHAL_AGY_MODEL"); name != "" {
 		return name
 	}
-	return antigravity.DefaultModel
+	return "" // agy's own default
 }
 
 func TestRealAgyAdapter(t *testing.T) {

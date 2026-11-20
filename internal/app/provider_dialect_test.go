@@ -10,77 +10,77 @@ import (
 	"time"
 )
 
-func TestProviderDialectQualification(t *testing.T) {
-	for _, tc := range []struct{ provider, version, supported, unsupported string }{
-		{"codex", "codex-cli 0.159.2", "exec fork", "mcp enable"},
-		{"claude", "2.1.286 (Claude Code)", "plugin install", "plugin get"},
-		{"opencode", "1.18.16", "mcp list", "mcp remove"},
-		{"agy", "1.2.7", "plugin install", "fork"},
-	} {
-		t.Run(tc.provider, func(t *testing.T) {
-			d := QualifiedProviderDialect(tc.provider, tc.version)
-			if d.Operation(tc.supported).Status != ProviderSupported {
-				t.Fatal("supported operation not qualified")
-			}
-			if d.Operation(tc.unsupported).Status != ProviderUnsupported {
-				t.Fatal("unsupported operation not refused")
-			}
-			if d.Operation("future-operation").Status != ProviderUnknown {
-				t.Fatal("unknown became qualified")
-			}
-			if QualifiedProviderDialect(tc.provider, "999.0.0").Operation(tc.supported).Status != ProviderUnknown {
-				t.Fatal("unobserved version became qualified")
-			}
-			if err := d.Check(tc.unsupported, true); err == nil {
-				t.Fatal("unsupported operation admitted")
-			}
-			if err := d.Check("future-operation", true); err != nil {
-				t.Fatal("unknown pass-through removed", err)
-			}
-		})
+func fixtureDialect(t *testing.T, provider string) ProviderDialect {
+	t.Helper()
+	return ProbeProviderDialect(provider, NormalizeProviderVersion(helpFixtureVersions[provider]), fixtureHelp(t, provider, nil))
+}
+
+// writeHelpDouble installs a provider double that prints version for
+// --version and the fixture help for `<path> --help`, logging each probe.
+func writeHelpDouble(t *testing.T, path, fixtures, version, log string) {
+	t.Helper()
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + log + "'\n" +
+		"if [ \"$#\" = 1 ] && [ \"$1\" = --version ]; then printf '%s\\n' '" + version + "'; exit 0; fi\n" +
+		"last=; for a do last=$a; done; [ \"$last\" = --help ] || exit 9\n" +
+		"name=top; [ \"$#\" -gt 1 ] && name=$(printf '%s-' \"$@\" | /usr/bin/sed 's/--help-$//; s/-$//')\n" +
+		"/bin/cat '" + fixtures + "'/\"$name\".txt 2>/dev/null; exit 0\n"
+	// Replace by rename: rewriting the file in place can race a fork in
+	// another test that inherited the write descriptor, and exec then fails
+	// with ETXTBSY.
+	if err := os.WriteFile(path+".new", []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".new", path); err != nil {
+		t.Fatal(err)
 	}
 }
 
+// The grammar is read once per binary and version; a new version is read
+// afresh, and an unchanged binary does not start a process again.
 func TestProviderDialectObservationAndReplacement(t *testing.T) {
+	fixtures, err := filepath.Abs(filepath.Join("testdata", "providerhelp"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	t.Chdir(t.TempDir())
 	t.Setenv("PATH", dir)
 	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
-	for _, tc := range []struct{ provider, version string }{{"codex", "codex-cli 0.159.2"}, {"claude", "2.1.286 (Claude Code)"}, {"opencode", "1.18.16"}, {"agy", "1.2.7"}} {
-		path := filepath.Join(dir, tc.provider)
+	for provider, version := range helpFixtureVersions {
+		path := filepath.Join(dir, provider)
 		log := filepath.Join(t.TempDir(), "probes")
-		t.Setenv("PROBE_LOG", log)
-		write := func(version string) {
-			script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] || exit 9\nprintf '%s\\n' \"$1\" >> \"$PROBE_LOG\"\nprintf '%s\\n' '" + version + "'\n"
-			// Replace by rename: rewriting the file in place can race a fork in
-			// another test that inherited the write descriptor, and exec then
-			// fails with ETXTBSY.
-			if err := os.WriteFile(path+".new", []byte(script), 0700); err != nil {
-				t.Fatal(err)
+		count := func(arg string) int {
+			data, _ := os.ReadFile(log)
+			n := 0
+			for _, line := range strings.Split(string(data), "\n") {
+				if line == arg {
+					n++
+				}
 			}
-			if err := os.Rename(path+".new", path); err != nil {
-				t.Fatal(err)
-			}
+			return n
 		}
-		write(tc.version)
+		writeHelpDouble(t, path, filepath.Join(fixtures, provider), version, log)
 		for i := 0; i < 2; i++ {
-			d := ObserveProviderDialect(context.Background(), tc.provider)
-			if d.QualifiedVersion == "" || d.Binary != path {
-				t.Fatalf("observation: %+v", d)
+			d := ObserveProviderDialect(context.Background(), provider)
+			if !d.Probed || d.Binary != path || d.Version != NormalizeProviderVersion(version) || len(d.Missing()) != 0 {
+				t.Fatalf("%s observation: %+v", provider, d)
 			}
 		}
-		data, _ := os.ReadFile(log)
-		if string(data) != "--version\n" {
-			t.Fatalf("cache repeated process: %q", data)
+		if count("--version") != 1 || count("--help") != 1 {
+			data, _ := os.ReadFile(log)
+			t.Fatalf("%s cache repeated a process: %q", provider, data)
 		}
-		write("999.0.0")
-		d := ObserveProviderDialect(context.Background(), tc.provider)
-		if d.QualifiedVersion != "" || d.Operation("resume").Status != ProviderUnknown {
-			t.Fatal("replacement retained stale qualification")
+		writeHelpDouble(t, path, filepath.Join(fixtures, provider), "999.0.0", log)
+		d := ObserveProviderDialect(context.Background(), provider)
+		if !d.Probed || d.Version != "999.0.0" || count("--help") != 2 {
+			t.Fatalf("%s new version was not read afresh: %+v", provider, d)
 		}
-		write(tc.version)
-		if ObserveProviderDialect(context.Background(), tc.provider).QualifiedVersion == "" {
-			t.Fatal("qualification did not recover")
+		if d.Operation("resume").Status != ProviderSupported {
+			t.Fatalf("%s at an unseen version lost its grammar: %+v", provider, d.Operation("resume"))
+		}
+		writeHelpDouble(t, path, filepath.Join(fixtures, provider), version, log)
+		if d := ObserveProviderDialect(context.Background(), provider); !d.Probed || count("--help") != 2 {
+			t.Fatalf("%s grammar of a version already read was read again", provider)
 		}
 	}
 }
@@ -97,7 +97,7 @@ func TestProviderDialectProbeBoundedAndCancelled(t *testing.T) {
 	d := ObserveProviderDialect(context.Background(), "codex")
 	// The bound allows a cold node-based CLI (Claude Code takes over 3 s) to
 	// answer, and still stops a CLI that hangs.
-	if d.Version != "UNKNOWN" || d.QualifiedVersion != "" || time.Since(start) > 7*time.Second {
+	if d.Version != "UNKNOWN" || d.Probed || time.Since(start) > 7*time.Second {
 		t.Fatalf("unbounded/qualified failed probe: %+v %v", d, time.Since(start))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,7 +116,7 @@ func TestProviderDialectProbeBoundedAndCancelled(t *testing.T) {
 }
 
 func TestProviderDialectLatestForkMode(t *testing.T) {
-	d := QualifiedProviderDialect("codex", "codex-cli 0.159.2")
+	d := fixtureDialect(t, "codex")
 	if d.WrapperOperation("fork", false).Status != ProviderSupported {
 		t.Fatal("named headless fork lost support")
 	}
@@ -129,18 +129,18 @@ func TestProviderDialectLatestForkMode(t *testing.T) {
 	if err := d.Check(ProviderArgOperation("codex", []string{"exec", "fork", "--last"}), false); err == nil || !strings.Contains(err.Error(), "terminal-only") {
 		t.Fatal("unsupported headless flag admitted", err)
 	}
-	if QualifiedProviderDialect("codex", "codex-cli 999.0.0").Operation("exec fork --last").Status != ProviderUnknown {
-		t.Fatal("unknown release was assigned a negative capability")
+	if UnprobedProviderDialect("codex", "999.0.0").Operation("exec fork --last").Status != ProviderUnknown {
+		t.Fatal("a CLI whose help was not read was assigned a negative capability")
 	}
 }
 
 func TestProviderDialectPositionalValuesAreNotCommands(t *testing.T) {
-	for _, tc := range []struct{ provider, version, value string }{
-		{"claude", "2.1.286 (Claude Code)", "review"},
-		{"opencode", "1.18.16", "review"},
-		{"agy", "1.2.7", "fork"},
+	for _, tc := range []struct{ provider, value string }{
+		{"claude", "review"},
+		{"opencode", "review"},
+		{"agy", "fork"},
 	} {
-		d := QualifiedProviderDialect(tc.provider, tc.version)
+		d := fixtureDialect(t, tc.provider)
 		for _, args := range [][]string{{tc.value}, {"--model", "ModelCase", tc.value}} {
 			op := ProviderArgOperation(tc.provider, args)
 			if err := d.Check(op, true); err != nil {

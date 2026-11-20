@@ -1,23 +1,22 @@
 package app
 
 import (
-	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"sort"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/harness"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/router"
 )
 
-// ModelInventory combines static profiles with model names from existing caches.
-// A nil cache means discovery data is unavailable.
-func ModelInventory(codexCachedModels, ollamaCachedTags []string) marshal.Inventory {
-	inventory := marshal.Inventory{Profiles: router.DefaultProfiles()}
+// ModelInventory lists the models each provider's installed CLI reported
+// through providers.Provider.Models (catalogs, keyed by provider ID) and the
+// Ollama tags from its cache. Nothing is listed that a CLI did not report: a
+// provider without a catalog is a missing source, never a fixed list.
+func ModelInventory(catalogs map[string]providers.Catalog, ollamaCachedTags []string) marshal.Inventory {
+	var inventory marshal.Inventory
 	seen := make(map[string]bool)
-	for _, p := range inventory.Profiles {
-		seen[p.Provider+"/"+p.Model] = true
-	}
 	add := func(provider, name string) {
 		name = strings.TrimSpace(name)
 		if name == "" || seen[provider+"/"+name] {
@@ -26,25 +25,14 @@ func ModelInventory(codexCachedModels, ollamaCachedTags []string) marshal.Invent
 		seen[provider+"/"+name] = true
 		inventory.Profiles = append(inventory.Profiles, router.ModelProfile{Provider: provider, Model: name, Capabilities: []string{"code", "reasoning"}, CostClass: "MEDIUM", LatencyClass: "MEDIUM", Available: true})
 	}
-	profiles := harness.NewIntelligence().DefaultProfiles()
 	for _, spec := range providerspec.All() {
-		p, ok := profiles[spec.Harness]
+		catalog, ok := catalogs[spec.ID]
 		if !ok {
-			inventory.MissingSources = append(inventory.MissingSources, "harness:"+spec.Harness)
+			inventory.MissingSources = append(inventory.MissingSources, spec.ID+" models")
 			continue
 		}
-		for _, name := range p.SupportedModels {
-			add(spec.ID, name)
-		}
-	}
-	for _, alias := range []string{"opus", "sonnet", "haiku"} {
-		add("claude", alias)
-	}
-	if codexCachedModels == nil {
-		inventory.MissingSources = append(inventory.MissingSources, "codex debug models cache")
-	} else {
-		for _, name := range codexCachedModels {
-			add("codex", name)
+		for _, m := range catalog.Models {
+			add(spec.ID, m.ID)
 		}
 	}
 	if ollamaCachedTags == nil {

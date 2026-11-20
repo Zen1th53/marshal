@@ -109,9 +109,7 @@ type ClaudeNativeHarness struct {
 }
 
 func NewClaudeNativeHarness(modelName string) *ClaudeNativeHarness {
-	if modelName == "" {
-		modelName = "sonnet"
-	}
+	// An empty model is the CLI's own default; no model name is fixed here.
 	return &ClaudeNativeHarness{modelName: modelName}
 }
 
@@ -150,9 +148,7 @@ type CodexNativeHarness struct {
 }
 
 func NewCodexNativeHarness(modelName string) *CodexNativeHarness {
-	if modelName == "" {
-		modelName = "gpt-4o"
-	}
+	// An empty model is the CLI's own default; no model name is fixed here.
 	return &CodexNativeHarness{modelName: modelName}
 }
 
@@ -188,9 +184,7 @@ type OpenCodeNativeHarness struct {
 }
 
 func NewOpenCodeNativeHarness(modelName string) *OpenCodeNativeHarness {
-	if modelName == "" {
-		modelName = "llama-3.1-70b"
-	}
+	// An empty model is the CLI's own default; no model name is fixed here.
 	return &OpenCodeNativeHarness{modelName: modelName}
 }
 
@@ -221,7 +215,7 @@ func (o *OpenCodeNativeHarness) Execute(ctx context.Context, task TaskExecution,
 		TaskID:        task.TaskID,
 		ToolName:      "opencode_runner",
 		ExitCode:      0,
-		StdoutSummary: fmt.Sprintf("OpenCode [%s] executed task %s", o.modelName, task.TaskID),
+		StdoutSummary: fmt.Sprintf("OpenCode [%s] executed task %s", modelLabel(o.modelName), task.TaskID),
 		Status:        EvidenceValid,
 		DurationMs:    30,
 		RelevantFiles: task.TargetFiles,
@@ -246,9 +240,7 @@ type AntigravityNativeHarness struct {
 }
 
 func NewAntigravityNativeHarness(modelName string) *AntigravityNativeHarness {
-	if modelName == "" {
-		modelName = "gemini-1.5-pro"
-	}
+	// An empty model is the CLI's own default; no model name is fixed here.
 	return &AntigravityNativeHarness{modelName: modelName}
 }
 
@@ -279,7 +271,7 @@ func (a *AntigravityNativeHarness) Execute(ctx context.Context, task TaskExecuti
 		TaskID:        task.TaskID,
 		ToolName:      "antigravity_runner",
 		ExitCode:      0,
-		StdoutSummary: fmt.Sprintf("Antigravity [%s] executed task %s", a.modelName, task.TaskID),
+		StdoutSummary: fmt.Sprintf("Antigravity [%s] executed task %s", modelLabel(a.modelName), task.TaskID),
 		Status:        EvidenceValid,
 		DurationMs:    35,
 		RelevantFiles: task.TargetFiles,
@@ -308,3 +300,12 @@ func (*ClaudeNativeHarness) DefersWorkerLaunch() bool { return true }
 // connection across that preparation.
 func (o *OpenCodeNativeHarness) DefersWorkerLaunch() bool    { return o != nil && o.executor != nil }
 func (a *AntigravityNativeHarness) DefersWorkerLaunch() bool { return a != nil && a.executor != nil }
+
+// modelLabel names a harness's model in a summary; empty is the CLI's own
+// default model.
+func modelLabel(name string) string {
+	if name == "" {
+		return "provider default"
+	}
+	return name
+}

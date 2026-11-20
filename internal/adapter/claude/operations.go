@@ -59,6 +59,8 @@ type ModelInfo struct {
 	Description string `json:"description"`
 	Visibility  string `json:"visibility"`
 	IsDefault   bool   `json:"is_default"`
+	// ReasoningEfforts are the --effort levels the installed CLI lists.
+	ReasoningEfforts []string `json:"reasoning_efforts,omitempty"`
 }
 
 // DoctorReport is a bounded summary of `claude doctor`. It reports how many
@@ -151,18 +153,92 @@ func Doctor(ctx context.Context, binary string, runner adapter.ProcessRunner) (D
 	return DoctorReport{OverallStatus: status, CheckCount: checks}, nil
 }
 
-// eligibleModelAliases are the selectors MARSHAL will pass to --model.
-//
 // Claude Code exposes no machine-readable catalog subcommand: `claude models`
 // is not a command, and an unrecognized argument is treated as a prompt, which
-// would start a billed session instead of answering a query. Discovery is
-// therefore a fixed alias set validated against the binary, not scraped prose.
-// Aliases rather than dated model IDs keep a governed run on the current model
-// for each tier without this table having to be edited on every release.
-var eligibleModelAliases = []string{"opus", "sonnet", "haiku"}
+// would start a billed session instead of answering a query. What the
+// installed CLI does say about models is in its own --help: the --model
+// option names the aliases it resolves to the latest model of a tier ("Use
+// an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet')") and
+// --effort lists its effort levels. Those are read from the installed binary,
+// so a new tier or a retired one needs no Marshal release.
 
-// DiscoverModels returns the eligible selectors and the model the binary
-// actually resolves for a governed run.
+var (
+	helpQuotedWord  = regexp.MustCompile(`'([A-Za-z0-9][A-Za-z0-9._:-]{0,63})'`)
+	helpParenthesis = regexp.MustCompile(`\(([^)]*)\)`)
+)
+
+// ParseHelpModels reads the model aliases the --model option names and the
+// levels the --effort option lists from `claude --help` output.
+func ParseHelpModels(help string) (aliases, efforts []string) {
+	aliases = helpOptionWords(help, "--model", func(text string) []string {
+		var out []string
+		for _, m := range helpQuotedWord.FindAllStringSubmatch(text, -1) {
+			out = append(out, m[1])
+		}
+		return out
+	})
+	efforts = helpOptionWords(help, "--effort", func(text string) []string {
+		var out []string
+		for _, m := range helpParenthesis.FindAllStringSubmatch(text, -1) {
+			for _, word := range strings.FieldsFunc(m[1], func(r rune) bool { return r == ',' || r == '|' || r == ' ' }) {
+				out = append(out, word)
+			}
+		}
+		return out
+	})
+	return aliases, efforts
+}
+
+// helpOptionWords applies pick to the description of one option: its own
+// line and the continuation lines indented below it.
+func helpOptionWords(help, option string, pick func(string) []string) []string {
+	var text []string
+	in := false
+	for _, line := range strings.Split(strings.ReplaceAll(help, "\r", ""), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "-") {
+			fields := strings.FieldsFunc(trimmed, func(r rune) bool { return r == ' ' || r == ',' })
+			in = len(fields) > 0 && (fields[0] == option || (len(fields) > 1 && fields[1] == option))
+			if in {
+				text = append(text, trimmed)
+			}
+			continue
+		}
+		if in && trimmed != "" && line != trimmed {
+			text = append(text, trimmed)
+			continue
+		}
+		in = false
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, word := range pick(strings.Join(text, " ")) {
+		if isNativeIdentifier(word) && !seen[word] {
+			seen[word] = true
+			out = append(out, word)
+		}
+	}
+	return out
+}
+
+// HelpModels asks the installed Claude Code which model aliases and effort
+// levels it names in its own --help. It starts no session.
+func HelpModels(ctx context.Context, binary string, runner adapter.ProcessRunner) (aliases, efforts []string, err error) {
+	if binary == "" || runner == nil {
+		return nil, nil, fmt.Errorf("%w: binary and runner required", model.ErrInvalid)
+	}
+	helpCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	result, err := runner.Run(helpCtx, adapter.Command{Path: binary, Args: []string{"--help"}, Env: append(os.Environ(), "NO_COLOR=1", "TERM=dumb", "CI=1")})
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: claude --help: %v", model.ErrUnavailable, err)
+	}
+	aliases, efforts = ParseHelpModels(string(result.Stdout) + "\n" + string(result.Stderr))
+	return aliases, efforts, nil
+}
+
+// DiscoverModels returns the selectors the installed CLI names in its help
+// and the model the binary actually resolves for a governed run.
 //
 // The default is read from the native session's own `init` event rather than
 // from the operator's settings: EnsureGovernedClaudeHome strips host settings
@@ -220,23 +296,26 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 		return nil, "", fmt.Errorf("%w: claude session reported no resolved model", model.ErrUnavailable)
 	}
 
-	models := make([]ModelInfo, 0, len(eligibleModelAliases)+1)
-	for _, alias := range eligibleModelAliases {
+	// The aliases are what the installed CLI names; an unreadable help
+	// leaves only the resolved model, which is itself a valid --model value.
+	aliases, efforts, _ := HelpModels(ctx, binary, runner)
+	models := make([]ModelInfo, 0, len(aliases)+1)
+	for _, alias := range aliases {
+		if alias == activeModel {
+			continue
+		}
 		models = append(models, ModelInfo{
 			Slug: alias,
 			// The native selector is the validated identity; no provider prose
 			// is rendered alongside it.
-			DisplayName: alias,
-			Description: "",
-			Visibility:  "eligible",
-			IsDefault:   false,
+			DisplayName:      alias,
+			Visibility:       "eligible",
+			ReasoningEfforts: efforts,
 		})
 	}
-	// The resolved model is itself a valid --model argument, so it is offered
-	// as an exact selector alongside the aliases.
 	models = append(models, ModelInfo{
 		Slug: activeModel, DisplayName: activeModel,
-		Description: "", Visibility: "eligible", IsDefault: true,
+		Description: "", Visibility: "eligible", IsDefault: true, ReasoningEfforts: efforts,
 	})
 	return models, activeModel, nil
 }
@@ -255,10 +334,11 @@ func (c *Client) Models(ctx context.Context) ([]ModelInfo, string, error) {
 	return models, def, nil
 }
 
-// ValidateModel checks that a requested selector is one MARSHAL will pass to
-// the CLI. An unknown value is refused rather than forwarded, because Claude
-// Code treats an unrecognized argument as a prompt and would start a billed
-// session instead of failing.
+// ValidateModel checks that a requested selector is safe to pass as the
+// value of --model: a native identifier, never a flag. Claude Code lists no
+// catalog, so which models exist is the installed CLI's decision: an alias
+// or full model name it does not know is refused by the CLI when the run
+// starts, and no session is started here to find out.
 func (c *Client) ValidateModel(ctx context.Context, modelName string) error {
 	if modelName == "" {
 		return nil
@@ -269,14 +349,5 @@ func (c *Client) ValidateModel(ctx context.Context, modelName string) error {
 	if !isNativeIdentifier(modelName) {
 		return fmt.Errorf("%w: model %q is not a native Claude identifier", model.ErrInvalid, modelName)
 	}
-	models, _, err := c.Models(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: cannot query eligible claude models: %v", model.ErrUnavailable, err)
-	}
-	for _, candidate := range models {
-		if candidate.Slug == modelName {
-			return nil
-		}
-	}
-	return fmt.Errorf("%w: model %q is not an eligible Claude model", model.ErrInvalid, modelName)
+	return nil
 }

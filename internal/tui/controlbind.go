@@ -20,6 +20,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
@@ -228,10 +229,13 @@ type ControlAuthority interface {
 	RequestWorkspaceExit(ctx context.Context) error
 	WorkspaceExitRequested() bool
 
+	// ProviderModels is what the provider's installed CLI offers now, as
+	// providers.Provider.Models reports it.
+	ProviderModels(ctx context.Context, provider string) (providers.Catalog, error)
+
 	// --- Codex Governance ---
 	CodexHealth(ctx context.Context) (CodexHealthReport, error)
 	CodexDoctor(ctx context.Context) (codex.DoctorReport, error)
-	CodexModels(ctx context.Context) ([]codex.ModelInfo, string, error)
 	CodexSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error)
 	CodexModelPreference(ctx context.Context) (model.ExecutionModelPreference, error)
 	SelectedCodexModel(ctx context.Context) (string, error)
@@ -245,7 +249,6 @@ type ControlAuthority interface {
 	// --- Claude Governance ---
 	ClaudeHealth(ctx context.Context) (ClaudeHealthReport, error)
 	ClaudeDoctor(ctx context.Context) (claude.DoctorReport, error)
-	ClaudeModels(ctx context.Context) ([]claude.ModelInfo, string, error)
 	ClaudeSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error)
 	ClaudeModelPreference(ctx context.Context) (model.ExecutionModelPreference, error)
 	SelectedClaudeModel(ctx context.Context) (string, error)
