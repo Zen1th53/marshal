@@ -13,6 +13,6 @@ const workerCandidateWrites = true
 func workerCandidateTools() []Tool {
 	return []Tool{
 		designRecordTool(),
-		{Name: "memory_remember", Description: "Propose unverified candidate memory", InputSchema: objectSchema(map[string]any{"title": stringSchema(), "body": stringSchema()}, "title", "body")},
+		{Name: "memory_remember", Description: "Propose candidate memory", InputSchema: objectSchema(map[string]any{"title": stringSchema(), "body": stringSchema()}, "title", "body")},
 	}
 }

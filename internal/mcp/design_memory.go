@@ -9,7 +9,7 @@ import (
 )
 
 func designRecordTool() Tool {
-	return Tool{Name: "design_record", Description: "Record design artifact bytes as unverified candidates; path is provenance, never a filesystem read or approval.", InputSchema: objectSchema(map[string]any{
+	return Tool{Name: "design_record", Description: "Record design stage artifact", InputSchema: objectSchema(map[string]any{
 		"stage": stringSchema(), "provider": stringSchema(), "egm_version": stringSchema(), "path": stringSchema(), "content": map[string]any{"type": "string", "maxLength": app.MaxDesignArtifactBytes}, "digest": stringSchema(),
 	}, "stage", "provider", "egm_version", "path", "content")}
 }

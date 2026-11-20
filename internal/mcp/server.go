@@ -267,12 +267,12 @@ func (s *Server) listTools() []Tool {
 		return append(append(workerCandidateTools(), []Tool{
 			{
 				Name:        "marshal_status",
-				Description: "Get MARSHAL local runtime status and object counts",
+				Description: "Runtime status and counts",
 				InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			},
 			{
 				Name:        "task_get",
-				Description: "Get specific MARSHAL task by ID",
+				Description: "Get task by ID",
 				InputSchema: map[string]any{
 					"type":       "object",
 					"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -285,17 +285,17 @@ func (s *Server) listTools() []Tool {
 	tools := []Tool{
 		{
 			Name:        "marshal_status",
-			Description: "Get MARSHAL local runtime status and object counts",
+			Description: "Runtime status and counts",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "tasks_list",
-			Description: "List canonical MARSHAL tasks",
+			Description: "List tasks",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "task_get",
-			Description: "Get a MARSHAL task by its ID, or by the short task name the Board and run_digest show (it resolves within the current or last run)",
+			Description: "Get task by ID or short name",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -304,7 +304,7 @@ func (s *Server) listTools() []Tool {
 		},
 		{
 			Name:        "task_claim",
-			Description: "Claim a task lease for an agent session",
+			Description: "Claim task lease",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}, "agent_id": map[string]any{"type": "string"}},
@@ -313,7 +313,7 @@ func (s *Server) listTools() []Tool {
 		},
 		{
 			Name:        "task_release",
-			Description: "Release an active task lease",
+			Description: "Release task lease",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -322,7 +322,7 @@ func (s *Server) listTools() []Tool {
 		},
 		{
 			Name:        "task_run",
-			Description: "Execute a claimed task using a worker adapter",
+			Description: "Run claimed task",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}, "adapter": map[string]any{"type": "string"}, "agent_id": map[string]any{"type": "string"}},
@@ -331,38 +331,38 @@ func (s *Server) listTools() []Tool {
 		},
 		{
 			Name:        "agents_list",
-			Description: "List registered agents",
+			Description: "List agents",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "run_digest",
-			Description: "Read the current Marshal run once: state, pause, close authorization, each task's worker and state, and the events_cursor to continue events_list from",
+			Description: "Current run state, tasks, pause, events_cursor",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "events_list",
-			Description: "List audit events. With no arguments it returns the full history as before; with since_cursor, types, task_id or limit it returns {events, next_cursor, has_more} holding only matching events after the cursor",
+			Description: "List or page audit events",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{"since_cursor": stringSchema(), "types": stringSchema(), "task_id": stringSchema(), "limit": map[string]any{"type": "integer"}}},
 		},
 		{
 			Name:        "artifacts_list",
-			Description: "List stored artifacts",
+			Description: "List artifacts",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "verification_status",
-			Description: "Run pack and repository verification",
+			Description: "Run verification",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
-		{Name: "process06_status", Description: "Read a canonical Process 06 verification session", InputSchema: objectSchema(map[string]any{"verification_id": stringSchema()}, "verification_id")},
-		{Name: "process07_memory_commit", Description: "Read a canonical Process 07 memory commit", InputSchema: objectSchema(map[string]any{"memory_commit_id": stringSchema()}, "memory_commit_id")},
-		{Name: "process07_memory_search", Description: "Search Process 07 memory with claim state, scope, freshness and contradiction signals attached", InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "terms": stringSchema(), "include_general": map[string]any{"type": "boolean"}, "include_stale": map[string]any{"type": "boolean"}}, "project_id")},
-		{Name: "process07_memory_history", Description: "Read the full version history of one Process 07 memory item", InputSchema: objectSchema(map[string]any{"item_id": stringSchema()}, "item_id")},
-		{Name: "process07_routing_trust", Description: "Read evidence-backed routing trust, including failures, blocked runs and the selection-bias flag", InputSchema: objectSchema(map[string]any{"task_class": stringSchema()})},
-		{Name: "process07_playbooks", Description: "List Process 07 playbook candidates awaiting review; candidates are never active", InputSchema: objectSchema(map[string]any{"project_id": stringSchema()}, "project_id")},
+		{Name: "process06_status", Description: "Process 06 verification session", InputSchema: objectSchema(map[string]any{"verification_id": stringSchema()}, "verification_id")},
+		{Name: "process07_memory_commit", Description: "Process 07 memory commit", InputSchema: objectSchema(map[string]any{"memory_commit_id": stringSchema()}, "memory_commit_id")},
+		{Name: "process07_memory_search", Description: "Search Process 07 memory", InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "terms": stringSchema(), "include_general": map[string]any{"type": "boolean"}, "include_stale": map[string]any{"type": "boolean"}}, "project_id")},
+		{Name: "process07_memory_history", Description: "Process 07 memory item history", InputSchema: objectSchema(map[string]any{"item_id": stringSchema()}, "item_id")},
+		{Name: "process07_routing_trust", Description: "Process 07 routing trust", InputSchema: objectSchema(map[string]any{"task_class": stringSchema()})},
+		{Name: "process07_playbooks", Description: "Process 07 playbook candidates", InputSchema: objectSchema(map[string]any{"project_id": stringSchema()}, "project_id")},
 		{
 			Name:        "memory_status",
-			Description: "Get memory subsystem health, version, and record counts",
+			Description: "Memory health and count",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"project_id": map[string]any{"type": "string"}},
@@ -372,42 +372,42 @@ func (s *Server) listTools() []Tool {
 		memoryRememberTool(),
 		{
 			Name:        "task_memory_list",
-			Description: "List governed shared working-memory slots for an authorized task",
+			Description: "List task memory slots",
 			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema()}, "task_id"),
 		},
 		{
 			Name:        "task_memory_set",
-			Description: "Create a governed task working-memory slot; existing slots require CAS",
+			Description: "Create task memory slot",
 			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "slot_type": stringSchema(), "value": stringSchema(), "pinned": map[string]any{"type": "boolean"}}, "task_id", "slot_type", "value"),
 		},
 		{
 			Name:        "task_memory_cas",
-			Description: "Update a task working-memory slot using its expected revision",
+			Description: "CAS-update task memory slot",
 			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "slot_type": stringSchema(), "expected_revision": map[string]any{"type": "integer", "minimum": 1}, "value": stringSchema()}, "task_id", "slot_type", "expected_revision", "value"),
 		},
 		{
 			Name:        "task_memory_promote",
-			Description: "Propose a task slot as a governed candidate memory",
+			Description: "Promote task slot to candidate",
 			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "slot_type": stringSchema(), "kind": stringSchema(), "title": stringSchema()}, "task_id", "slot_type", "kind", "title"),
 		},
 		{
 			Name:        "task_memory_grant",
-			Description: "Policy-admin-only grant of task memory access to an existing agent",
+			Description: "Grant task memory access",
 			InputSchema: objectSchema(map[string]any{"task_id": stringSchema(), "principal_id": stringSchema(), "role": stringSchema(), "policy_digest": stringSchema()}, "task_id", "principal_id", "policy_digest"),
 		},
 		{
 			Name:        "task_memory_revoke",
-			Description: "Policy-admin-only revocation of a task memory grant",
+			Description: "Revoke task memory grant",
 			InputSchema: objectSchema(map[string]any{"binding_id": stringSchema()}, "binding_id"),
 		},
 		{
 			Name:        "memory_handoff_create",
-			Description: "Compile and persist a bounded provider-neutral handoff from governed task memory",
+			Description: "Create task memory handoff",
 			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "target_role": stringSchema(), "current_head": stringSchema(), "current_branch": stringSchema(), "changed_files": map[string]any{"type": "array", "items": stringSchema()}, "diff_hash": stringSchema(), "max_bytes": map[string]any{"type": "integer", "minimum": 1}}, "task_id", "target_role"),
 		},
 		{
 			Name:        "memory_handoff_consume",
-			Description: "Consume an authorized durable provider-neutral handoff",
+			Description: "Consume task memory handoff",
 			InputSchema: objectSchema(map[string]any{"handoff_id": stringSchema()}, "handoff_id"),
 		},
 	}
@@ -415,10 +415,10 @@ func (s *Server) listTools() []Tool {
 	// promotion, rollback, and policy mutation: those remain governed app
 	// actions with lifecycle and approval requirements.
 	tools = append(tools,
-		Tool{Name: "process08_cycle", Description: "Get a digest-verified Process 08 optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
-		Tool{Name: "process08_counterfactuals", Description: "List safe counterfactual evidence for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
-		Tool{Name: "process08_manifests", Description: "List reproducible benchmark manifests for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
-		Tool{Name: "process08_canaries", Description: "List bounded canary records for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_cycle", Description: "Process 08 optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_counterfactuals", Description: "Process 08 counterfactuals", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_manifests", Description: "Process 08 benchmark manifests", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_canaries", Description: "Process 08 canary records", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
 	)
 	tools = append(tools, s.knowledgeTools()...)
 	tools = append(tools, designRecordTool())
@@ -1036,7 +1036,7 @@ func (s *Server) projectID(ctx context.Context, args map[string]any) string {
 func stringSchema() map[string]any { return map[string]any{"type": "string"} }
 
 func objectSchema(properties map[string]any, required ...string) map[string]any {
-	schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+	schema := map[string]any{"type": "object", "properties": properties}
 	if len(required) > 0 {
 		schema["required"] = required
 	}
