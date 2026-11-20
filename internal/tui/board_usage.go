@@ -3,12 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/nativehistory"
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 
@@ -23,7 +23,7 @@ type usageState struct {
 	read   bool
 	quotas []usage.Quota
 	// readFn and every replace the reader and the refresh interval in
-	// tests; nil and zero mean usage.Read and usageRefreshEvery.
+	// tests; nil and zero mean readUsage and usageRefreshEvery.
 	readFn func(time.Time) []usage.Quota
 	every  time.Duration
 	// warned is each low window already noted in its reset period, and
@@ -65,19 +65,15 @@ func (w *Workspace) startUsage(ctx context.Context) {
 	}()
 }
 
-// readUsage is usage.Read with Codex's sessions directory; an unresolved
-// directory leaves Codex unknown.
+// readUsage is every registered provider's quota, including what MARSHAL
+// recorded or lists on a schedule; an unresolved state directory leaves that
+// provider unknown.
 func (w *Workspace) readUsage(now time.Time) []usage.Quota {
 	root := ""
 	if w.runtime != nil {
 		root = w.runtime.ProjectRoot()
 	}
-	dir, err := nativehistory.HistoryDir(nativehistory.Codex, root)
-	if err != nil {
-		dir = ""
-	}
-	src := usage.Sources{CodexDir: dir, ClaudeFile: usage.ClaudeConfigFile(), ClaudeEvents: usage.ClaudeRateLimitCache(), AgySeenGroups: usage.AgySeenGroupsFile()}
-	return usage.Read(now, src)
+	return providers.ReadQuotas(now, providers.QuotaInput{Root: root, MarshalRecords: true})
 }
 
 // usageQuotas is the last reading, copied; ok is false before the first.

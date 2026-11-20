@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -15,11 +16,15 @@ import (
 // in the order they are named to the operator. The order carries no
 // preference: no provider is chosen unless the operator chose it or it is the
 // only one installed.
-var neutralProviders = []string{"codex", "claude", "opencode", "agy"}
+var neutralProviders = providerspec.IDs()
 
-var neutralProviderNames = map[string]string{
-	"codex": "Codex", "claude": "Claude", "opencode": "OpenCode", "agy": "Antigravity",
-}
+var neutralProviderNames = func() map[string]string {
+	names := map[string]string{}
+	for _, spec := range providerspec.All() {
+		names[spec.ID] = spec.Name
+	}
+	return names
+}()
 
 // neutralOps maps each provider-neutral command onto the provider subcommand
 // that performs it. A provider missing from an entry has no such command in
@@ -42,12 +47,8 @@ var neutralOps = map[string]map[string]string{
 }
 
 func canonicalNeutralProvider(name string) string {
-	name = strings.ToLower(strings.TrimSpace(name))
-	if name == "antigravity" {
-		return "agy"
-	}
-	if _, ok := neutralProviderNames[name]; ok {
-		return name
+	if spec, ok := providerspec.Lookup(name); ok {
+		return spec.ID
 	}
 	return ""
 }

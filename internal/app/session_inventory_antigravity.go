@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,11 +13,10 @@ import (
 )
 
 func readAntigravityInventory(ctx context.Context, root string, add func(string, string, string, time.Time, bool)) error {
-	home, err := os.UserHomeDir()
+	base, _, err := providerspec.Must("agy").StateDir(nil)
 	if err != nil {
 		return err
 	}
-	base := filepath.Join(home, ".gemini", "antigravity-cli")
 	path := filepath.Join(base, "conversation_summaries.db")
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil

@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/usage"
 	"os"
@@ -91,12 +92,7 @@ func EnsureGovernedClaudeHome() (string, error) {
 	// hooks on the next run, so remove it rather than trusting it is absent.
 	_ = os.Remove(filepath.Join(target, "settings.json"))
 
-	hostClaude := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR"))
-	if hostClaude == "" {
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			hostClaude = filepath.Join(home, ".claude")
-		}
-	}
+	hostClaude, _, _ := providerspec.Must("claude").StateDir(nil)
 	if hostClaude != "" {
 		for _, name := range []string{".credentials.json"} {
 			hostPath := filepath.Join(hostClaude, name)

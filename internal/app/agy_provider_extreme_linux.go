@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/antigravity"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -62,7 +63,8 @@ func privateAGYAuthBinds(name, home string) ([]model.Bind, error) {
 	if name != "agy" {
 		return nil, nil
 	}
-	source := filepath.Join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token")
+	spec := providerspec.Must("agy")
+	source := filepath.Join(home, spec.StateDefault, spec.CredentialsFile)
 	info, err := os.Lstat(source)
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, model.ErrUnavailable

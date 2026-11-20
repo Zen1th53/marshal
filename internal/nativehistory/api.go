@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -238,29 +239,22 @@ func HistoryDir(provider Provider, root string) (string, error) {
 		}
 		return filepath.Join(home, "conversations"), nil
 	}
-	homeEnv, homeDir, historyDir := "CODEX_HOME", ".codex", "sessions"
-	if provider == Claude {
-		homeEnv, homeDir, historyDir = "CLAUDE_CONFIG_DIR", ".claude", "projects"
-	}
-	if provider != Codex && provider != Claude {
+	spec, ok := providerspec.Lookup(string(provider))
+	if !ok {
 		return "", fmt.Errorf("provider %q has no JSONL history directory", provider)
 	}
-	home := os.Getenv(homeEnv)
-	if home == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		home = filepath.Join(userHome, homeDir)
+	dir, err := spec.HistoryDir(nil, root)
+	if errors.Is(err, providerspec.ErrNoHistoryDir) {
+		return "", fmt.Errorf("provider %q has no JSONL history directory", provider)
 	}
-	if !filepath.IsAbs(home) {
-		home = filepath.Join(root, home)
+	if err != nil {
+		return "", err
 	}
 	if provider == Claude {
 		slug := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(filepath.Clean(root), "-")
-		return filepath.Join(home, historyDir, slug), nil
+		return filepath.Join(dir, slug), nil
 	}
-	return filepath.Join(home, historyDir), nil
+	return dir, nil
 }
 
 func FindBinary(provider Provider) (string, error) {

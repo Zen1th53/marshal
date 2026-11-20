@@ -9,8 +9,6 @@ import (
 // only logs the derived strings. It never fails on content and never logs any
 // bytes read from the file.
 func TestLiveUsageRead(t *testing.T) {
-	qs := Read(time.Now(), Sources{ClaudeFile: ClaudeConfigFile()})
-	for _, q := range qs {
-		t.Logf("%s | AsOf=%s | Stale=%v", q.String(), q.AsOf.UTC(), q.Stale)
-	}
+	q := ReadClaude(time.Now(), ClaudeConfigFile(), "")
+	t.Logf("%s | AsOf=%s | Stale=%v", q.String(), q.AsOf.UTC(), q.Stale)
 }

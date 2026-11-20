@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os/exec"
 	"path/filepath"
@@ -216,14 +217,7 @@ func (s *MarshalService) workerTaskGovernance(ctx context.Context, task marshal.
 
 // marshalHarnessName maps a worker to its harness profile name.
 func marshalHarnessName(worker string) string {
-	switch worker {
-	case "claude":
-		return "claude-code"
-	case "agy":
-		return "antigravity"
-	default:
-		return worker
-	}
+	return providerspec.HarnessName(worker)
 }
 
 // installedCLIVersion asks a worker's CLI for its version. `--version` is

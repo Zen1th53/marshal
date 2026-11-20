@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -153,19 +154,11 @@ func firstError(errs ...error) error {
 }
 
 func codexHome(env []string) string {
-	for i := len(env) - 1; i >= 0; i-- {
-		if v, ok := strings.CutPrefix(env[i], "CODEX_HOME="); ok && strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	if v := strings.TrimSpace(os.Getenv("CODEX_HOME")); v != "" {
-		return v
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	dir, _, err := providerspec.Must("codex").StateDir(providerspec.EnvSlice(env))
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".codex")
+	return dir
 }
 
 // codexTrustRoots lists the project root as given and its resolved path.

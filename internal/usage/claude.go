@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"io"
 	"math"
 	"os"
@@ -20,7 +21,7 @@ const claudeMaxBytes = 16 << 20
 // unusable (""), and the home file is never used as a fallback for a set
 // CLAUDE_CONFIG_DIR, which may be another account.
 func ClaudeConfigFile() string {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+	if dir, overridden, _ := providerspec.Must("claude").StateDir(nil); overridden {
 		if !filepath.IsAbs(dir) {
 			return ""
 		}
