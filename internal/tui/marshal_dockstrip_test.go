@@ -114,6 +114,14 @@ func TestDockStripOf(t *testing.T) {
 	if s := dockStripOf(b); !s.bound || !s.clear || s.answered != 7 || s.stage != "review · 2m" {
 		t.Fatalf("chat: %+v", s)
 	}
+	// The chat collector's "live" and "not bound" stages are the binding
+	// mark's to say; the title does not repeat them.
+	for _, stage := range []string{"live", "not bound"} {
+		b.Chat.Stage = stage
+		if s := dockStripOf(b); s.stage != "" {
+			t.Fatalf("stage %q repeated: %+v", stage, s)
+		}
+	}
 }
 
 // TestDockTitleEdition: Board v2 titles the chat with the strip, filled from

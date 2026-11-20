@@ -35,6 +35,10 @@ func dockStripOf(b vm.Board) dockStrip {
 		stage:    dockStripText(b.Chat.Stage),
 		answered: b.Chat.Answered,
 	}
+	if s.stage == "live" || s.stage == "not bound" {
+		// The binding mark already says it.
+		s.stage = ""
+	}
 	s.known = b.Chat != (vm.Chat{}) || b.Marshal.ChatBound || b.Marshal.InputClear || len(b.Requests) > 0
 	s.bound = b.Chat.Bound || b.Marshal.ChatBound
 	s.clear = b.Chat.InputClear || b.Marshal.InputClear

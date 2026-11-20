@@ -40,7 +40,7 @@ type marshalDock struct {
 	// strip is what the v2 MARSHAL CHAT strip said at the last paint; a
 	// change kicks the dock so the chat's title follows.
 	strip atomic.Pointer[dockStrip]
-	kick   chan struct{}
+	kick  chan struct{}
 }
 
 // dockWait bounds the tmux work of one reconcile, so a wedged server cannot
