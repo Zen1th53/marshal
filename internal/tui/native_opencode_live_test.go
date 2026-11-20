@@ -56,7 +56,7 @@ func writeOpenCodeStore(t *testing.T, dir, directory string) string {
 // same adapter the CLI export goes through.
 func TestOpenCodeLiveReadsTheStore(t *testing.T) {
 	dir := t.TempDir()
-	root := t.TempDir()
+	root := realTempDir(t)
 	path := writeOpenCodeStore(t, dir, root)
 
 	sessions, err := readOpenCodeLive(path, root)
@@ -87,7 +87,7 @@ func TestOpenCodeLiveReadsTheStore(t *testing.T) {
 // it reaches memory.
 func TestOpenCodeLiveExcludesReasoning(t *testing.T) {
 	dir := t.TempDir()
-	root := t.TempDir()
+	root := realTempDir(t)
 	path := writeOpenCodeStore(t, dir, root)
 
 	sessions, err := readOpenCodeLive(path, root)
@@ -113,7 +113,7 @@ func TestOpenCodeLiveExcludesReasoning(t *testing.T) {
 // Only this project's sessions are read.
 func TestOpenCodeLiveIgnoresOtherProjects(t *testing.T) {
 	dir := t.TempDir()
-	root := t.TempDir()
+	root := realTempDir(t)
 	path := writeOpenCodeStore(t, dir, "/somewhere/else")
 
 	sessions, err := readOpenCodeLive(path, root)
@@ -157,7 +157,7 @@ func TestOpenCodeLiveToleratesNoStore(t *testing.T) {
 // One malformed row must not stop every other agent hearing about the rest.
 func TestOpenCodeLiveSkipsAMalformedRow(t *testing.T) {
 	dir := t.TempDir()
-	root := t.TempDir()
+	root := realTempDir(t)
 	path := writeOpenCodeStore(t, dir, root)
 
 	db, err := sql.Open("sqlite", path)
@@ -189,7 +189,7 @@ func TestOpenCodeLiveSkipsAMalformedRow(t *testing.T) {
 // stamp, and the values were verified equal against a real store.
 func TestOpenCodeLiveSharesTheSeenIndexWithTheExport(t *testing.T) {
 	dir := t.TempDir()
-	root := t.TempDir()
+	root := realTempDir(t)
 	path := writeOpenCodeStore(t, dir, root)
 
 	w := newNativeHistoryWatch(dir, root)
@@ -230,4 +230,16 @@ func TestOpenCodeDBPathHonoursOverrides(t *testing.T) {
 		t.Errorf("XDG_DATA_HOME ignored: %s", got)
 	}
 	_ = os.Unsetenv("XDG_DATA_HOME")
+}
+
+// realTempDir is t.TempDir with its symlinks resolved: on macOS the temp
+// directory lives under /var, a link to /private/var, and a project root
+// is always compared in its resolved form.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

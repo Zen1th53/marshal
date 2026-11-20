@@ -29,6 +29,7 @@ type flowIn struct {
 	v                   boardVisual
 	planning, goalGiven bool
 	goalSince           time.Time
+	goalText            string // the goal the Marshal works on, before a run
 	milestone           *planningMark
 	archRev             int64
 	archAccepted        bool
@@ -254,7 +255,14 @@ func flowWork(in flowIn) string {
 type ownerAsk struct {
 	line  string
 	inbox bool
+	ref   string // what a click on its inbox line reaches: v2RefInbox or v2RefGate and the id
 }
+
+// The refs of the inbox lines a click reaches (boardv2_mouse.go).
+const (
+	v2RefInbox = "inbox:"
+	v2RefGate  = "gate:"
+)
 
 // ownerAsks is everything that waits for the owner now, in the order the
 // owner should answer it: decisions in the inbox, the gates and cards, then
@@ -262,16 +270,20 @@ type ownerAsk struct {
 func ownerAsks(in flowIn) []ownerAsk {
 	v := in.v
 	var out []ownerAsk
+	ref := ""
 	add := func(inbox bool, line string) {
 		if line = strings.TrimSpace(cleanBoard(line)); line != "" {
-			out = append(out, ownerAsk{line: Truncate(line, 72), inbox: inbox})
+			out = append(out, ownerAsk{line: Truncate(line, 72), inbox: inbox, ref: ref})
 		}
+		ref = ""
 	}
 	for _, it := range v.board.Inbox {
+		ref = v2RefInbox + it.Request.Key()
 		add(true, inboxAskLine(it))
 	}
 	for _, g := range v.gates {
 		if !g.sent {
+			ref = v2RefGate + g.key
 			add(true, g.kind+" "+g.title)
 		}
 	}
@@ -393,6 +405,7 @@ func flowInbox(in flowIn) vm.Inbox {
 	for _, a := range ownerAsks(in) {
 		if a.inbox {
 			ib.Lines = append(ib.Lines, a.line)
+			ib.Refs = append(ib.Refs, a.ref)
 		}
 	}
 	return ib
@@ -408,6 +421,10 @@ func flowPlan(in flowIn) vm.Plan {
 	c := countTasks(b.Tasks)
 	p.Stages = flowStages(in, c)
 	if !in.hasRun {
+		// Before a run the Plan pane names the goal being planned.
+		if p.Title = in.goalText; p.Title == "" && in.goalGiven {
+			p.Title = "your goal"
+		}
 		return p
 	}
 	p.Done, p.Active, p.Waiting, p.Total = c.merged, c.working+c.review, c.queued+c.parked, c.total

@@ -55,6 +55,8 @@ func TestBoardMouseActionHit(t *testing.T) {
 }
 
 func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
 	if !click(w, row, col) {
@@ -84,6 +86,8 @@ func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
 }
 
 func TestBoardMouseFocusesLanes(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	oldIn := boardInTmux
 	defer func() { boardInTmux = oldIn }()
@@ -103,6 +107,8 @@ func TestBoardMouseFocusesLanes(t *testing.T) {
 }
 
 func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	for _, c := range []struct {
 		chip string
@@ -151,6 +157,8 @@ func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 }
 
 func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	pending := func() int { w.permissions.mu.Lock(); defer w.permissions.mu.Unlock(); return len(w.permissions.inbox) }
 	row, col := cellOf(t, w, 120, 40, "[d] deny", 0)
@@ -191,6 +199,8 @@ func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
 }
 
 func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.permissions.mu.Lock()
 	w.permissions.inbox = []permission.Request{{Kind: "unheard-of", TaskID: "T-023", Object: "release push", Scope: "one run", Reason: "push to main", Who: "Marshal"}}
@@ -206,6 +216,8 @@ func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
 }
 
 func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
 	for _, ev := range []KeyEvent{
@@ -229,6 +241,8 @@ func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T
 // The bytes a terminal sends for a click reach the Board through the same
 // parser and key loop the workspace runs.
 func TestBoardMouseThroughTheKeyLoop(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-018  ⣾", 0)
 	ev := ParseKey([]byte(fmt.Sprintf("\x1b[<0;%d;%dM", col, row)))

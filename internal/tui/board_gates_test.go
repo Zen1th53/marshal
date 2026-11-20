@@ -22,33 +22,34 @@ func walkContract() *gateContract {
 }
 
 // A project contract the Marshal submitted waits for the owner on the
-// Board itself, before any run: an inbox entry with the contract's purpose,
-// one button that opens the architecture in the browser and NEEDS YOU in the
-// header. y and a click open the browser: nothing is armed and nothing is
-// ever typed into the chat, because acceptance happens only in the browser.
+// Board itself, before any run: Board v2's decision card with the contract's
+// purpose, a button that opens the architecture in the browser and YOUR TURN
+// in the top bar. y and a click open the browser: nothing is armed and
+// nothing is ever typed into the chat, because acceptance happens only in
+// the browser.
 func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.gateContractSource = func(context.Context) (*gateContract, error) { return walkContract(), nil }
 	w.refreshGates(t.Context())
 
+	// Board v2 shows the gate as the decision card over the ready screen:
+	// YOUR TURN and the count in the top bar, the contract's purpose, and
+	// the review's buttons; nothing on it accepts the architecture.
 	text := frameText(w, 120, 40)
-	head := strings.Split(text, "\n")[1]
-	if !strings.Contains(head, "NEEDS YOU") || strings.Contains(head, "NO RUN YET") || !strings.Contains(head, "inbox 1") {
-		t.Fatalf("header does not say the Marshal needs the owner: %q", head)
+	head := lines0(text)
+	if !strings.Contains(head, "YOUR TURN") || strings.Contains(head, " READY ") || !strings.Contains(head, "inbox 1") {
+		t.Fatalf("the top bar does not say the owner's turn: %q", head)
 	}
-	for _, want := range []string{"the Marshal waits for your reply", "architecture · waits for you in the browser", "Build hello-uz", "[y] open in browser", "Tell the Marshal what to build"} {
+	for _, want := range []string{"ACCEPT ARCHITECTURE · rev 1", "Build hello-uz", "a  open in browser", "k  comment", "esc later"} {
 		if !strings.Contains(text, want) {
-			t.Errorf("first-use Board misses %q:\n%s", want, text)
+			t.Errorf("the decision card misses %q:\n%s", want, text)
 		}
 	}
-	for _, gone := range []string{"accept architecture", "[b] open details", "architecture · architecture"} {
+	for _, gone := range []string{"accept here", "[b] open details", "architecture · architecture"} {
 		if strings.Contains(text, gone) {
-			t.Errorf("first-use Board still shows %q:\n%s", gone, text)
+			t.Errorf("the decision card still shows %q:\n%s", gone, text)
 		}
-	}
-	if !strings.Contains(strings.Split(text, "\n")[39], "y reply") {
-		t.Errorf("footer does not offer y: %q", strings.Split(text, "\n")[39])
 	}
 
 	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
@@ -58,7 +59,7 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	if !strings.Contains(w.state.LastOutput, "architecture") {
 		t.Fatalf("y did not try to open the architecture: %q", w.state.LastOutput)
 	}
-	clickText(t, w, 120, 40, "[y] open in browser")
+	clickText(t, w, 120, 40, "a  open in browser")
 	if w.gateArmed() != "" {
 		t.Fatal("a click armed a reply instead of opening the browser")
 	}
@@ -69,7 +70,7 @@ func TestOwnerGateShowsPendingContractOnTheFirstUseBoard(t *testing.T) {
 	// Accepted (or taken back): the gate goes with the canonical state.
 	w.gateContractSource = func(context.Context) (*gateContract, error) { return nil, nil }
 	w.refreshGates(t.Context())
-	if text := frameText(w, 120, 40); strings.Contains(text, "NEEDS YOU") || strings.Contains(text, "open in browser") || !strings.Contains(text, "NO RUN YET") {
+	if text := frameText(w, 120, 40); strings.Contains(text, "YOUR TURN") || strings.Contains(text, "open in browser") || !strings.Contains(lines0(text), " READY ") {
 		t.Fatalf("the gate stayed after the contract left the store:\n%s", text)
 	}
 	// With no gate waiting, y says why there is nothing to open instead of
@@ -147,6 +148,8 @@ func (fakePlanSource) PlanOverview(context.Context, string) (store.PlanOverview,
 // through the Board's say path, only after the arm and the confirm (a click
 // then a second click); the architecture gate never sends anything.
 func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}

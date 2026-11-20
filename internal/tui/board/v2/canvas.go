@@ -72,6 +72,45 @@ type canvas struct {
 	w, h    int
 	cells   [][]cell
 	unicode bool
+	hits    []Hit
+}
+
+// Hit is one clickable region of a painted screen: frame row Row and the
+// cells [X0, X1), both from zero. Kind says what it stands for and Index
+// which item of that part of the view model:
+//
+//	HitKey     b.Keys (or the screen's default keys) on the key bar
+//	HitAction  a button of the card shown: Decision.Actions, Paused.Actions
+//	HitReady   a button under the readiness checks: Ready.Actions
+//	HitCheck   a readiness row: Ready.Checks
+//	HitLane    a lane row: Lanes.Items
+//	HitTask    a task row: Tasks
+//	HitInbox   an inbox line: Inbox.Lines
+type Hit struct {
+	Row, X0, X1 int
+	Kind        string
+	Index       int
+	Key         string // HitKey, HitAction, HitReady: the key the button names
+}
+
+// Hit kinds.
+const (
+	HitKey    = "key"
+	HitAction = "action"
+	HitReady  = "ready"
+	HitCheck  = "check"
+	HitLane   = "lane"
+	HitTask   = "task"
+	HitInbox  = "inbox"
+)
+
+// hit records a region, clipped to the canvas.
+func (c *canvas) hit(y, x0, x1 int, kind string, index int, key string) {
+	x0, x1 = max(0, x0), min(c.w, x1)
+	if y < 0 || y >= c.h || x1 <= x0 {
+		return
+	}
+	c.hits = append(c.hits, Hit{Row: y, X0: x0, X1: x1, Kind: kind, Index: index, Key: key})
 }
 
 func newCanvas(w, h int, unicode bool) *canvas {
@@ -144,8 +183,10 @@ func (c *canvas) fill(x, y, w, h int, bg string) {
 	}
 }
 
-// dim greys the whole canvas, as under an overlay card.
+// dim greys the whole canvas, as under an overlay card. Nothing under the
+// card stays clickable.
 func (c *canvas) dim() {
+	c.hits = nil
 	for y := range c.cells {
 		for x := range c.cells[y] {
 			cl := &c.cells[y][x]
@@ -227,6 +268,15 @@ func (p pane) fillRow(dx, dy, w int, bg string) {
 	}
 	end := min(p.x+dx+w, p.x+p.w-1)
 	p.c.fill(p.x+dx, p.y+dy, end-(p.x+dx), 1, bg)
+}
+
+// hit records a region of the box's inside from dx to endX (box-relative,
+// exclusive) on row dy; a row outside the box's inside records nothing.
+func (p pane) hit(dx, dy, endX int, kind string, index int, key string) {
+	if dy <= 0 || dy >= p.h-1 {
+		return
+	}
+	p.c.hit(p.y+dy, p.x+max(1, dx), p.x+min(endX, p.w-1), kind, index, key)
 }
 
 // rows is the number of rows inside the box.

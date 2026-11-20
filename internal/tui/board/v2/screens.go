@@ -154,7 +154,7 @@ func planPane(b vm.Board, full bool) slot {
 	return slot{want: want, min: 3, prio: 1, draw: func(c *canvas, x, y, w, h int) {
 		pl := b.Plan
 		title := "Plan"
-		if full && pl.Title != "" {
+		if pl.Title != "" {
 			title += " · " + pl.Title
 		}
 		right := ""
@@ -237,6 +237,7 @@ func lanesPane(b vm.Board) slot {
 			}
 			sig.bg = bg
 			p.put(sigX, dy, rjust(dur(l.LastSignal), 6), sig)
+			p.hit(1, dy, w-1, HitLane, i, "")
 		}
 	}}
 }
@@ -279,6 +280,7 @@ func tasksPane(b vm.Board) slot {
 			p.put(61, dy, cut(or(t.Reviewer, dash), 7), sInk)
 			s, sty := taskState(t)
 			p.put(69, dy, s, sty)
+			p.hit(1, dy, w-1, HitTask, i, "")
 		}
 	}}
 }
@@ -373,8 +375,9 @@ func inboxPane(b vm.Board) slot {
 			p.put(2, dy, "Nothing waits for you.", st{fg: cOK, b: true})
 			dy++
 		}
-		for _, l := range b.Inbox.Lines {
+		for i, l := range b.Inbox.Lines {
 			p.put(2, dy, l, sInk)
+			p.hit(1, dy, w-1, HitInbox, i, "")
 			dy++
 		}
 		if b.Inbox.Next != "" {
@@ -467,7 +470,8 @@ func readinessPane(b vm.Board) slot {
 			p.put(3, 2, "Checking "+dash, sFaint)
 		}
 		dy := 2
-		for _, ch := range r.Checks {
+		for i, ch := range r.Checks {
+			p.hit(1, dy, w-1, HitCheck, i, "")
 			g, gs := markGlyph(ch.Mark)
 			gs.b = true
 			p.put(3, dy, g, gs)
@@ -490,6 +494,7 @@ func readinessPane(b vm.Board) slot {
 				x2 += 2
 			}
 			label := a.Key + "  " + a.Label
+			bx := x2
 			switch {
 			case a.Key == "⏎":
 				primary = true
@@ -499,6 +504,7 @@ func readinessPane(b vm.Board) slot {
 			default:
 				x2 = p.segs(x2, h-4, []seg{{" " + label + " ", st{fg: cDim, bg: cButton}}})
 			}
+			p.hit(bx, h-4, x2, HitReady, i, a.Key)
 		}
 	}}
 }
@@ -726,11 +732,16 @@ func screenDecision(c *canvas, b vm.Board) {
 	x := 2
 	for i, a := range d.Actions {
 		label := a.Key + "  " + a.Label
+		if i > 0 {
+			x += 2
+		}
+		bx := x
 		if i == 0 {
 			x = p.segs(x, ly+3, []seg{chip(label, cAcc, "")})
 		} else {
-			x = p.segs(x+2, ly+3, []seg{button(label)})
+			x = p.segs(x, ly+3, []seg{button(label)})
 		}
+		p.hit(bx, ly+3, x, HitAction, i, a.Key)
 	}
 }
 
@@ -758,11 +769,16 @@ func pausedPane(b vm.Board) slot {
 		x2 := 2
 		for i, a := range pa.Actions {
 			label := a.Key + "  " + a.Label
+			if i > 0 {
+				x2 += 2
+			}
+			bx := x2
 			if i == 0 {
 				x2 = p.segs(x2, actY, []seg{chip(label, cAcc, "")})
 			} else {
-				x2 = p.segs(x2+2, actY, []seg{button(label)})
+				x2 = p.segs(x2, actY, []seg{button(label)})
 			}
+			p.hit(bx, actY, x2, HitAction, i, a.Key)
 		}
 	}}
 }
@@ -929,6 +945,7 @@ func compactLanes(b vm.Board) slot {
 				ss = sWarn
 			}
 			p.put(w-2-width(sig), 1+i, sig, ss)
+			p.hit(1, 1+i, w-1, HitLane, i, "")
 		}
 	}}
 }

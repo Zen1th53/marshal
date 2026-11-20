@@ -17,6 +17,8 @@ import (
 
 // A run waiting for the operator says what happened and how Enter resolves it.
 func TestBoardRunStopNotice(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	run := fakeRun()
 	run.State = marshal.AwaitingUser
@@ -55,6 +57,8 @@ func TestBoardRunStopNotice(t *testing.T) {
 // not shown. Both the runtime's plain pause and one an older build recorded
 // with the raw error read the same.
 func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	for name, pause := range map[string]marshal.Pause{
 		"plain":       {Reason: "Marshal could not finish checking the run (part of it was left paused).", Resolutions: []string{"Press Enter to let the Marshal retry."}, Detail: "verification stopped: execution run conflict: required completion child identity/state", Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
 		"bare code":   {Reason: "REQUIRED_CONTEXT_REVIEW_PENDING", Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
@@ -88,6 +92,8 @@ func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
 
 // A stopped execution (the panel's "stopped: …" note) is a stop too.
 func TestBoardRunStoppedNotice(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), "stopped: worker codex exited 2")
 	p.Stopped = true
@@ -183,6 +189,8 @@ func TestStopEnterOtherKeyDisarms(t *testing.T) {
 }
 
 func TestStopFocusesInbox(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	run := fakeRun()
 	run.State = marshal.AwaitingUser

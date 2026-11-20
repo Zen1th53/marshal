@@ -167,8 +167,10 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 	w := activeGoalBoardWorkspace(t, st, "session-active-goal")
 	defer w.Close()
 
+	// Board v2: READY with no goal, PLANNING with the goal named on the
+	// Plan pane while one is active.
 	before := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(before, "NO RUN YET") || !strings.Contains(before, firstUseCTA) {
+	if !strings.Contains(lines0(before), " READY ") || !strings.Contains(before, "say what to build") {
 		t.Fatalf("before goal exists:\n%s", before)
 	}
 
@@ -191,30 +193,26 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 
 	w.refreshArch(ctx)
 	during := activeGoalFrameText(w, 120, 40)
-	head := strings.Split(during, "\n")[1]
-	if !strings.Contains(head, " PLANNING ") || strings.Contains(head, "NO RUN YET") {
-		t.Fatalf("header after goal saved to store: %q", head)
+	head := lines0(during)
+	if !strings.Contains(head, " PLANNING ") || strings.Contains(head, " READY ") {
+		t.Fatalf("top bar after goal saved to store: %q", head)
 	}
-	if strings.Contains(during, firstUseCTA) {
-		t.Fatalf("home still asks what to build after goal saved:\n%s", during)
+	if !strings.Contains(during, "PLAN · Build a terminal RSS reader with keyboard navigation") {
+		t.Fatalf("the Plan pane does not name the goal:\n%s", during)
 	}
-	if !strings.Contains(during, "▸ The Marshal is working on: Build a terminal RSS reader with keyboard navigation") {
-		t.Fatalf("home misses working-on-goal line:\n%s", during)
+	if !strings.Contains(during, "✓ goal →  reqs") {
+		t.Fatalf("the Plan pane does not show the goal given and the requirements next:\n%s", during)
 	}
-	if !strings.Contains(during, "25m") {
-		t.Fatalf("home misses elapsed duration:\n%s", during)
-	}
-	// Footer hints also switch from "say what to build" to "say".
-	foot := strings.Split(during, "\n")[39]
-	if strings.Contains(foot, "say what to build") {
-		t.Fatalf("footer still asks what to build while goal is active: %q", foot)
+	// The key bar also switches from "say what to build" to "say".
+	if strings.Contains(during, "say what to build") || !strings.Contains(during, "s  say ") {
+		t.Fatalf("the key bar still asks what to build while a goal is active:\n%s", during)
 	}
 
 	// A goal already delivered by a closed run returns to NO RUN YET.
 	done := goal.OriginalRequest
 	w.closedGoal.Store(&done)
 	delivered := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(delivered, "NO RUN YET") || !strings.Contains(delivered, firstUseCTA) {
+	if !strings.Contains(lines0(delivered), " READY ") || !strings.Contains(delivered, "say what to build") {
 		t.Fatalf("delivered goal did not return to idle home:\n%s", delivered)
 	}
 	w.closedGoal.Store(nil)
@@ -225,7 +223,7 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 	}
 	w.refreshArch(ctx)
 	cancelled := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(cancelled, "NO RUN YET") || !strings.Contains(cancelled, firstUseCTA) || strings.Contains(cancelled, " PLANNING ") {
+	if !strings.Contains(lines0(cancelled), " READY ") || !strings.Contains(cancelled, "say what to build") || strings.Contains(cancelled, " PLANNING ") {
 		t.Fatalf("cancelled goal did not return to NO RUN YET:\n%s", cancelled)
 	}
 }
@@ -235,6 +233,8 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 // precedence over PLANNING in the header while the body still shows the goal
 // being worked on rather than the first-use call to action.
 func TestActiveGoalWithOwnerGateShowsNeedsYou(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := activeGoalBoardWorkspace(t, nil, "session-gate")
 	defer w.Close()
 	w.mu.Lock()
@@ -301,10 +301,10 @@ func TestActiveGoalFallbacksAndHints(t *testing.T) {
 	}
 	w.mu.Unlock()
 	text := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(text, "▸ The Marshal is working on: Add dark mode support") {
+	if !strings.Contains(text, "PLAN · Add dark mode support") || strings.Contains(text, "with user toggle") {
 		t.Fatalf("did not fall back to first line of OriginalRequest:\n%s", text)
 	}
-	if strings.Contains(text, "GOAL-secret-id") || strings.Contains(text, "NO RUN YET") {
+	if strings.Contains(text, "GOAL-secret-id") || strings.Contains(lines0(text), " READY ") {
 		t.Fatalf("leaked goal ID or kept NO RUN YET:\n%s", text)
 	}
 
@@ -317,10 +317,10 @@ func TestActiveGoalFallbacksAndHints(t *testing.T) {
 	}
 	w.mu.Unlock()
 	text = activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(text, " PLANNING ") || !strings.Contains(text, "▸ "+workingGoalFallback) || !strings.Contains(text, "The Marshal has your goal") {
+	if !strings.Contains(lines0(text), " PLANNING ") || !strings.Contains(text, "PLAN · your goal") || !strings.Contains(text, "working on your goal") {
 		t.Fatalf("minimal goal did not render fallback cleanly:\n%s", text)
 	}
-	if strings.Contains(text, "GOAL-minimal") || strings.Contains(text, firstUseCTA) {
+	if strings.Contains(text, "GOAL-minimal") || strings.Contains(text, "say what to build") {
 		t.Fatalf("minimal goal leaked ID or kept CTA:\n%s", text)
 	}
 

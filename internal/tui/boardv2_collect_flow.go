@@ -52,7 +52,7 @@ func (w *Workspace) flowInputs() flowIn {
 	in.v = v
 	in.planning = w.planningNow(!in.hasRun, state.Goal)
 	if goal, ok := w.activeGoalNow(!in.hasRun, state.Goal); ok {
-		in.goalGiven, in.goalSince = true, goalStartedAt(goal)
+		in.goalGiven, in.goalSince, in.goalText = true, goalStartedAt(goal), goalSummaryText(goal)
 	}
 	if in.planning || in.goalGiven {
 		in.milestone = w.milestone.Load()

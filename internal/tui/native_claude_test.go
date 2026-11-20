@@ -27,7 +27,7 @@ func nativeClaudeHistory(t *testing.T, root, id string) []byte {
 }
 
 func TestNativeClaudeHistoryIsolationRecoveryAndFiltering(t *testing.T) {
-	dir, root := t.TempDir(), t.TempDir()
+	dir, root := t.TempDir(), realTempDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), append(nativeClaudeHistory(t, root, "claude-session"), []byte(`{"type":`)...), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestNativeClaudeModelPreference(t *testing.T) {
 // large sessions lost every message. A subdirectory is in scope; only a path
 // outside the root is not.
 func TestNativeClaudeCapturesEntriesFromProjectSubdirectories(t *testing.T) {
-	dir, root := t.TempDir(), t.TempDir()
+	dir, root := t.TempDir(), realTempDir(t)
 	sub := filepath.Join(root, "internal", "web")
 	if err := os.MkdirAll(sub, 0o700); err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestNativeClaudeCapturesEntriesFromProjectSubdirectories(t *testing.T) {
 // An entry genuinely outside the project root is still refused, so the relaxed
 // check above cannot pull another project's conversation into this memory.
 func TestNativeClaudeRefusesEntriesOutsideProjectRoot(t *testing.T) {
-	dir, root, foreign := t.TempDir(), t.TempDir(), t.TempDir()
+	dir, root, foreign := t.TempDir(), realTempDir(t), t.TempDir()
 
 	entry := func(cwd string) []byte {
 		payload := map[string]any{
@@ -170,7 +170,7 @@ func TestNativeClaudeRefusesEntriesOutsideProjectRoot(t *testing.T) {
 // The watcher is the seam where tool capture is actually switched on, so the
 // default-off path above and this opt-in path are both pinned.
 func TestNativeClaudeWatchCapturesToolCalls(t *testing.T) {
-	dir, root := t.TempDir(), t.TempDir()
+	dir, root := t.TempDir(), realTempDir(t)
 	entry := map[string]any{
 		"type": "assistant", "sessionId": "tool-session", "cwd": root,
 		"timestamp": "2026-09-14T00:00:00Z",

@@ -31,6 +31,8 @@ func TestRequirementsCardIsCountedAndHidesTheCallToAction(t *testing.T) {
 // Once a goal is given the first-use card stops asking for one; with none
 // (or a cancelled one) it asks.
 func TestFirstUseCallToActionHidesOnceAGoalIsGiven(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	if text := frameText(w, 120, 40); !strings.Contains(text, firstUseCTA) {

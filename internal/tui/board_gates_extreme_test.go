@@ -33,6 +33,8 @@ func writeGateANS(t *testing.T, w *Workspace, name string, cols, rows int) {
 // revision, purpose, NEEDS YOU); the owner's Accept architecture in the
 // browser closes it. A drafted plan saved in the store is the plan's gate.
 func TestOwnerGatesFromTheSeededStore(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _, cfg := liveMCPFixture(t)
 	w.screen = NewScreen(nil)
 	w.homeBoard = true

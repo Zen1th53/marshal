@@ -19,8 +19,14 @@ func Render(b vm.Board, cols, rows int, th Theme) []string {
 // RenderChat is Render with the provider CLI's own lines for the chat
 // screens' provider area, drawn as they are.
 func RenderChat(b vm.Board, cols, rows int, th Theme, pane []string) []string {
+	lines, _ := RenderChatHits(b, cols, rows, th, pane)
+	return lines
+}
+
+// RenderChatHits is RenderChat with the clickable regions it drew.
+func RenderChatHits(b vm.Board, cols, rows int, th Theme, pane []string) ([]string, []Hit) {
 	if cols <= 0 || rows <= 0 {
-		return nil
+		return nil, nil
 	}
 	c := newCanvas(cols, rows, th.Unicode)
 	switch b.Screen {
@@ -39,15 +45,21 @@ func RenderChat(b vm.Board, cols, rows int, th Theme, pane []string) []string {
 	default:
 		screenRunning(c, b)
 	}
-	return c.lines(th)
+	return c.lines(th), c.hits
 }
 
 // RenderSide paints the compact Board alone, for a Board pane that has the
 // Marshal chat beside it in another pane: the top bar, the NOW line, the
 // compact panes and the key bar.
 func RenderSide(b vm.Board, cols, rows int, th Theme) []string {
+	lines, _ := RenderSideHits(b, cols, rows, th)
+	return lines
+}
+
+// RenderSideHits is RenderSide with the clickable regions it drew.
+func RenderSideHits(b vm.Board, cols, rows int, th Theme) ([]string, []Hit) {
 	if cols <= 0 || rows <= 0 {
-		return nil
+		return nil, nil
 	}
 	c := newCanvas(cols, rows, th.Unicode)
 	topBar(c, 0, b)
@@ -55,5 +67,5 @@ func RenderSide(b vm.Board, cols, rows int, th Theme) []string {
 		keyBar(c, rows-2, keysOr(b, splitKeys))
 	}
 	side(c, b, 0, cols, 1, max(0, rows-4))
-	return c.lines(th)
+	return c.lines(th), c.hits
 }

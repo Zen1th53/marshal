@@ -11,7 +11,7 @@ import (
 )
 
 func TestNativeOpenCodeHistoryImportsVisibleExportFields(t *testing.T) {
-	root := t.TempDir()
+	root := realTempDir(t)
 	watch := newNativeHistoryWatch("", root)
 	watch.captureTools = true
 	watch.indexPath = filepath.Join(root, statepath.DirName, "opencode", "history-index.json")
@@ -47,7 +47,7 @@ func TestNativeOpenCodeHistoryImportsVisibleExportFields(t *testing.T) {
 }
 
 func TestNativeOpenCodePrimeBaselinesExistingSessionsWithoutExport(t *testing.T) {
-	root := t.TempDir()
+	root := realTempDir(t)
 	watch := newNativeHistoryWatch("", root)
 	watch.indexPath = filepath.Join(root, statepath.DirName, "opencode", "history-index.json")
 	var commands []string
