@@ -308,6 +308,7 @@ func codexWindow(now time.Time) usage.Window {
 }
 
 func TestMarshalDockTitleShowsLimit(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	f := newDockFake(t, 120)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 120)
@@ -371,6 +372,7 @@ func TestMarshalDockTitleV2Strip(t *testing.T) {
 }
 
 func TestDockTitleFits(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	w := &Workspace{}
 	chat := &activeTmuxAgent{provider: "codex"}
 	now := time.Now()
@@ -453,6 +455,7 @@ func TestModelDisplayName(t *testing.T) {
 }
 
 func TestDockTitleCases(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	now := time.Now()
 	codexKnown := func(stale bool) usage.Quota {
 		return usage.Quota{Provider: "codex", Known: true, Stale: stale, AsOf: now,
@@ -490,6 +493,7 @@ func TestDockTitleCases(t *testing.T) {
 }
 
 func TestUsageReadKicksDock(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	f := newDockFake(t, 120)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 120)
