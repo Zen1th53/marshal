@@ -13326,13 +13326,13 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "4625273db6fe8a58af9e5cd5853daf574867e3327de7fd2b72f951414ddd1cbd",
-      "bytes": 34301
+      "sha256": "d0fc4d85f712dcff5263e0f90ce1f7d16017834c9b6070ea8b1f290e320b918f",
+      "bytes": 35279
     },
     {
       "path": "internal/tui/board_keymap_test.go",
-      "sha256": "143dc44d0a706a2aae8d44abd00c4ed3bd9e7f816bcd0e001338a5969ba6d5a8",
-      "bytes": 14170
+      "sha256": "ca388f951fbb59adff37af691d351452975de850d8be3bd2d7c53641f4af5395",
+      "bytes": 14222
     },
     {
       "path": "internal/tui/board_lane_chips.go",
@@ -13371,8 +13371,8 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "65c2bdb5a77ea56ad88d8ac2eba60f0fa253218c6eb93aed1daea88187d5bd5a",
-      "bytes": 47618
+      "sha256": "82d7f6edce6465aed877607b698198722a892ac8d5bf7146fdab07a0de818b01",
+      "bytes": 47594
     },
     {
       "path": "internal/tui/board_live_test.go",
@@ -13411,8 +13411,8 @@
     },
     {
       "path": "internal/tui/board_mouse_test.go",
-      "sha256": "58bac7d4a6e5cbedeb02f9a37e5eb86375be738cc5e63b4e5ff9ee9beb0b1b82",
-      "bytes": 13841
+      "sha256": "2fc0bd7e3a55c901deef670dea5b8e07744aec8f850693c477eb87b4451c13b6",
+      "bytes": 14958
     },
     {
       "path": "internal/tui/board_next.go",
@@ -14271,8 +14271,8 @@
     },
     {
       "path": "internal/tui/keymap_test.go",
-      "sha256": "ac7d34d7abc1620265546ae1c0ee5aa4d083e0c320ea7e5c58f6aea371d19921",
-      "bytes": 18316
+      "sha256": "8be79e2e79c2a3d1a1aa1fa84918d9935cbe476916a5e4aef7dbd64951501fe9",
+      "bytes": 19061
     },
     {
       "path": "internal/tui/keysfix_test.go",
@@ -15041,23 +15041,28 @@
     },
     {
       "path": "internal/tui/palette.go",
-      "sha256": "4929d0acf028d0f0d1024590d9785f476050416ae4f3937b2c8ecba6f3665732",
-      "bytes": 11921
+      "sha256": "5429aeeebf4bef6007d04aa54d1183b8bbbb87fad91b68f29ec52c312b848adf",
+      "bytes": 19475
     },
     {
       "path": "internal/tui/palette_allowlist_default_test.go",
-      "sha256": "cefe0ccdceff3e6c32a042e577a4eb06852619814a9c4a01aad9a8645200f0c3",
-      "bytes": 902
+      "sha256": "7890f8b7773c423bb7a861dc52864bd0f64649c5df098daaab80e11429ff409b",
+      "bytes": 948
     },
     {
       "path": "internal/tui/palette_allowlist_extreme_test.go",
-      "sha256": "cf582ac3140a81f1c8035aa2c27b45d1f93acdaa4170e8533e4b41e04656b8da",
-      "bytes": 3475
+      "sha256": "7680dc1e7e23177c6b2b7bb4f3fcb2755ffb28af20ff194fdee2aaf9fcf68d6a",
+      "bytes": 3512
+    },
+    {
+      "path": "internal/tui/palette_golden_test.go",
+      "sha256": "5099c0bcb82abc9cc7f36e240ca9456e751c1771813c994ebdd49f78107c5880",
+      "bytes": 3733
     },
     {
       "path": "internal/tui/palette_keys_test.go",
-      "sha256": "71dd7e006cf196f12a8e99edfb4b088952217de63d6d9c34f59012ebcc595eb0",
-      "bytes": 3185
+      "sha256": "a17afa8b7b8ef213836946f32fc81e819958e897f94d07b0912a5c2f5f22a720",
+      "bytes": 4399
     },
     {
       "path": "internal/tui/palette_test.go",
@@ -15471,7 +15476,7 @@
     },
     {
       "path": "internal/tui/pty_interaction_test.go",
-      "sha256": "dbcff2cefe203f2cc148fbf759977dd8895ec634b41fe5b3b0ee05da53291ad6",
+      "sha256": "6ac62e7e1b724cf4433c79b485309d21e7a76854362d4e925838463f19aa3e50",
       "bytes": 14057
     },
     {
@@ -15506,8 +15511,8 @@
     },
     {
       "path": "internal/tui/registry.go",
-      "sha256": "a5058d04b4a468b70bf311f8ff2b0cd0b9b3f3424419dea004de7ae0949bf31c",
-      "bytes": 43857
+      "sha256": "68e67be963d4c2b494867b2455785ecad48f2344a5f7fa7a6874a14facf50bf9",
+      "bytes": 44418
     },
     {
       "path": "internal/tui/registry_parity_test.go",
@@ -16035,6 +16040,56 @@
       "bytes": 4884
     },
     {
+      "path": "internal/tui/testdata/board/palette-empty-132x40.golden",
+      "sha256": "b06feb262ec541dce4887425994fdcfd683ee4afaa1067b7756573d54b7b4f7e",
+      "bytes": 1028
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-empty-80x24.golden",
+      "sha256": "5faab25f4d1049b8a4d5dbb406388069d939d875f8658bd9892ee4173c0934f2",
+      "bytes": 1280
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-empty-ascii-132x40.golden",
+      "sha256": "21009fefc162dc001a59089625d7af236a96325debb6d10d1e4e0330fe363fd1",
+      "bytes": 702
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-empty-ascii-80x24.golden",
+      "sha256": "bae686c9730f255641b00c837a97e29eda54cd987ad368abea1bdbdd9d366993",
+      "bytes": 962
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-governed-empty-132x40.golden",
+      "sha256": "ece24372b6a2e1ac5e3d1db3bdaede6b6194a431dfd8495fe769ab55430b011f",
+      "bytes": 1026
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-governed-empty-80x24.golden",
+      "sha256": "f0a4a70f8b07b887c227f4c480eeccdfcf44744b49e8b15df77d1608c5c2a7e7",
+      "bytes": 1278
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-governed-empty-ascii-132x40.golden",
+      "sha256": "26ce2e0fd49031ac873b6a797b3ebac267b174e2c30c5ff55589ef185ee166b0",
+      "bytes": 702
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-governed-empty-ascii-80x24.golden",
+      "sha256": "ffec056f386e5ba29962543ef7f8d6176803df350f2bcf2b3c981a7a5937fc9b",
+      "bytes": 962
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-governed-search-retry-132x40.golden",
+      "sha256": "53928b2c8ce5f3fa5113132823a6be30158803d5f91bae58e85d797f68cffccb",
+      "bytes": 693
+    },
+    {
+      "path": "internal/tui/testdata/board/palette-search-retry-132x40.golden",
+      "sha256": "061c4928a42b5239776ef51f2e066783c7542cd9f9d6e6f41ffa4fc9cfbdea63",
+      "bytes": 695
+    },
+    {
       "path": "internal/tui/testdata/board/plan-split-120x40.golden",
       "sha256": "c071651473ad575b0643debe51e7fdd0459f1ff4316ef0dee1621d9329466212",
       "bytes": 6577
@@ -16166,7 +16221,7 @@
     },
     {
       "path": "internal/tui/tmux_return_key_pty_test.go",
-      "sha256": "cb272abd4d6d789f69b84df153ca7ba10e824cf2ea2a278b3804469aa6f20b54",
+      "sha256": "cb6aa913b7b63766a12ce8eea5b195774f3374b4efbb64ecbc6ed3492bb972d2",
       "bytes": 4274
     },
     {
