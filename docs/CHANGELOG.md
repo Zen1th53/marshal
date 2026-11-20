@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.4
+
+### Changed
+- The project architecture is never put into the Marshal's briefing; the Marshal reads it from Marshal's store through MCP, page by page when it is large. The briefing is about 10 KiB smaller (the authority rules were sent twice).
+- No provider is pinned to a CLI version and no model list is built in: Marshal reads each operation from the installed CLI's own help and each model list from the CLI itself, and re-reads them when the CLI is updated.
+- One provider registry for names, home directories, limits and models.
+
+### Fixed
+- Contexts larger than ~12 KiB can be read through MCP (they were refused).
+- A new lane's knowledge index starts from an existing one (about 2.5× faster); Codex probes are cached per installed binary.
+
 ## 0.3.3
 
 First published release of the 0.3.2 changes (v0.3.2 was tagged but not published: a governed-edition test failed), plus:
