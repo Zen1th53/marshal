@@ -12751,8 +12751,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "472e6b2b8a855011364ee98d6c67b66884117b45dc69bd61bc049c84c8403f2a",
-      "bytes": 26225
+      "sha256": "caa3b1f4b938640de0f27d95182f7199cf6669e5bad4e2857e29844689977898",
+      "bytes": 27476
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -13046,8 +13046,8 @@
     },
     {
       "path": "internal/tui/board_gates.go",
-      "sha256": "64be35b236eb61151c1fe98a084c40e021f7b7b85cc63d0d3e01d634395fb398",
-      "bytes": 14830
+      "sha256": "bfddf36fce4e463bf25493c034d6704b2d1a644ba8a5d496741d74b45f9e9f44",
+      "bytes": 17408
     },
     {
       "path": "internal/tui/board_gates_default.go",
@@ -13336,8 +13336,8 @@
     },
     {
       "path": "internal/tui/board_stop.go",
-      "sha256": "2f5fb98c61b05bff6a23e7a9630de99d2853c3a2aa8ada1934e66bf84bf792b5",
-      "bytes": 14569
+      "sha256": "a8010bd7c8079cbff2bd5431aa4260ada8dda9d811b48896bb310e4bc4556f2f",
+      "bytes": 14701
     },
     {
       "path": "internal/tui/board_stop_test.go",
@@ -14746,8 +14746,8 @@
     },
     {
       "path": "internal/tui/native_planning_context_extreme_test.go",
-      "sha256": "252c1e76a0d5b4554136a9c17b80dc08a7181a9621d2ae736b79064e24383733",
-      "bytes": 33554
+      "sha256": "556c139fa26b95b9a92fc9a5d71092509162d9bfabe2f694d9c61f82662ccdb0",
+      "bytes": 36324
     },
     {
       "path": "internal/tui/native_safety.go",
@@ -14788,6 +14788,11 @@
       "path": "internal/tui/opencode_dispatch_test.go",
       "sha256": "cf0aad63619750012f3687264bf80e4e17c14563f1462d0861c25bcd6e9cf580",
       "bytes": 635
+    },
+    {
+      "path": "internal/tui/owner_sees_self_approval_extreme_test.go",
+      "sha256": "b43e7cdafc9de3e8cbe4c066064c73bb4f10a41c46b4a56361e8aa236f7c7e8a",
+      "bytes": 3726
     },
     {
       "path": "internal/tui/palette.go",
@@ -15031,8 +15036,8 @@
     },
     {
       "path": "internal/tui/project_contract_owner_instruction_extreme_test.go",
-      "sha256": "891353eda4fae6609e4ff1ed03956790ad4bcba00252409cae9a887c7e481a3f",
-      "bytes": 7715
+      "sha256": "9ae7ba5fe395e1b25c36758054a74301524a6c8afae05eb9b0d6abe32d4d2362",
+      "bytes": 8537
     },
     {
       "path": "internal/tui/project_contract_quality_extreme_test.go",

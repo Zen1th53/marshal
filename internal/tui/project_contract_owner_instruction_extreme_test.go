@@ -138,6 +138,30 @@ func TestExtremeMarshalCannotAcceptContractWithoutOwnerInstruction(t *testing.T)
 	if _, err := w.store.ReadAcceptedProjectContract(t.Context(), draft.Contract.Project); !errors.Is(err, projectcontext.ErrReviewPending) {
 		t.Fatalf("contract became current: %v", err)
 	}
+	// The owner sees the attempt: one plain Activity line, not the policy
+	// text, and the architecture gate in the inbox says it too.
+	refusedNotes := 0
+	for _, n := range w.noteList() {
+		if n.Text == selfAcceptRefusedNote {
+			refusedNotes++
+		}
+		if strings.Contains(n.Text, "owner's recorded") || strings.Contains(n.Text, "policy denied") {
+			t.Errorf("Activity shows the policy text: %q", n.Text)
+		}
+	}
+	if refusedNotes != 1 {
+		t.Fatalf("refused self-acceptance noted %d times: %+v", refusedNotes, w.noteList())
+	}
+	w.refreshGates(t.Context())
+	var archGate *ownerGate
+	for _, g := range w.ownerGates(nil) {
+		if g.kind == "architecture" {
+			archGate = &g
+		}
+	}
+	if archGate == nil || archGate.warning != selfAcceptRefusedNote {
+		t.Fatalf("the inbox does not say the Marshal tried to accept: %+v", archGate)
+	}
 	// The refused allow left the draft pending. After the owner's instruction
 	// the Marshal re-submits the same draft and its new allow succeeds.
 	ownerAcceptsArchitecture(t, w)
