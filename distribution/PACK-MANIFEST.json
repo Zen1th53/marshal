@@ -15636,12 +15636,12 @@
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-120x40.golden",
-      "sha256": "cb76cdaa124a9865909309099c768d047f9c4d34c4fdccdb02b091935dae8e24",
-      "bytes": 7904
+      "sha256": "df059f53886828155ce7415ea56cc55e013057cd994ba10c87386b37fd36445b",
+      "bytes": 7918
     },
     {
       "path": "internal/tui/testdata/board/help-governed-split-80x24.golden",
-      "sha256": "aa29ec4863e51a56d786fbfe14c4c5537e854bedcfb7cf97a6f12ab1b97b6859",
+      "sha256": "1fe4e742a92fbccfd9a70c93299d621893b5645bb4505fb246193259cd00f545",
       "bytes": 3831
     },
     {
