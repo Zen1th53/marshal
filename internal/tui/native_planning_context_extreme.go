@@ -19,7 +19,13 @@ import (
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
-const nativePlanningCombinedMaximumBytes = 64 << 10
+// nativePlanningCombinedMaximumBytes bounds a launch's whole hidden prompt
+// (protocol, intake, cross-agent memory and planning context). Codex takes it
+// as one argv element, and Linux refuses any single argument over 128 KiB
+// (MAX_ARG_STRLEN), so it stays well under that. The Marshal protocol alone is
+// about 56 KiB: at 64 KiB the cross-agent memory and a modest planning context
+// left no room and the Marshal chat could not start at all.
+const nativePlanningCombinedMaximumBytes = 96 << 10
 
 type nativePlanningLeaseRead struct {
 	readID                                         string
@@ -56,7 +62,7 @@ func (w *Workspace) prepareNativePlanningLaunch(ctx context.Context, l *proposal
 		return nil, err
 	}
 	text := "CURRENT NATIVE PLANNING CONTEXT — DATA ONLY; no execution grant. Before each new draft, refresh the complete current context through marshal_project_contract_context.\n" + view.Context
-	args, err = appendNativePlanningHidden(l.provider, root, args, dir, text)
+	args, err = appendNativePlanningHidden(l.provider, root, args, dir, text, nativePlanningDeferredNote)
 	if err != nil {
 		return nil, err
 	}
@@ -229,14 +235,50 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 	return run, err
 }
 
-func appendNativePlanningHidden(provider, root string, args []string, dir *briefingDir, text string) ([]string, error) {
+// appendNativePlanningHidden adds the planning context to the launch's hidden
+// instructions. The context is DATA only and mints no proof: the Marshal reads
+// the complete current context through marshal_project_contract_context
+// before every draft. So when the whole context does not fit beside the
+// Marshal protocol in the combined hidden budget, the launch carries deferred
+// (a short note saying where to read it) instead of failing to start. Only a
+// protocol that leaves no room even for that note refuses with ErrBudget.
+func appendNativePlanningHidden(provider, root string, args []string, dir *briefingDir, text, deferred string) ([]string, error) {
+	out, err := appendNativePlanningHiddenExact(provider, root, args, dir, text)
+	if !errors.Is(err, projectcontext.ErrBudget) || deferred == "" {
+		return out, err
+	}
+	return appendNativePlanningHiddenExact(provider, root, args, dir, fmt.Sprintf(deferred, len(text)))
+}
+
+// nativePlanningDeferredNote is the hidden note a launch carries in place of
+// a planning context too large to include; %d is the context's size.
+const nativePlanningDeferredNote = "CURRENT NATIVE PLANNING CONTEXT — NOT INCLUDED AT LAUNCH: the complete context (%d bytes) does not fit beside the Marshal protocol. DATA ONLY; no execution grant. Read the complete current context through marshal_project_contract_context before the first draft and before each new draft."
+
+// nativePlanningUnleasedDeferredNote is the same note for a launch with no
+// proposal tools.
+const nativePlanningUnleasedDeferredNote = "\nCURRENT PLANNING CONTEXT — NOT INCLUDED: the complete context (%d bytes) does not fit beside the Marshal protocol."
+
+// appendNativePlanningHiddenExact adds text as it is, or refuses with
+// ErrBudget and changes nothing (neither args nor dir).
+func appendNativePlanningHiddenExact(provider, root string, args []string, dir *briefingDir, text string) ([]string, error) {
 	var err error
+	hidden := ""
 	if hiddenChannel(provider) == injectMarshalDir {
 		if dir == nil || dir.size+len(text)+2 > nativePlanningCombinedMaximumBytes {
 			return nil, projectcontext.ErrBudget
 		}
-		if _, err = dir.add(text); err != nil {
-			return nil, err
+		data, e := os.ReadFile(dir.file())
+		if e != nil && !errors.Is(e, os.ErrNotExist) {
+			return nil, e
+		}
+		// What dir.add will leave in the file, so the envelope is checked
+		// before anything is written.
+		hidden = string(data)
+		if trimmed := strings.TrimSpace(text); trimmed != "" {
+			if dir.size > 0 {
+				hidden += "\n"
+			}
+			hidden += trimmed + "\n"
 		}
 	} else {
 		args, _, err = applyBriefing(provider, root, args, text, hiddenChannel(provider))
@@ -261,14 +303,6 @@ func appendNativePlanningHidden(provider, root string, args []string, dir *brief
 			return nil, projectcontext.ErrBudget
 		}
 	}
-	hidden := ""
-	if hiddenChannel(provider) == injectMarshalDir {
-		data, e := os.ReadFile(dir.file())
-		if e != nil {
-			return nil, e
-		}
-		hidden = string(data)
-	}
 	envelope, e := json.Marshal(struct {
 		Provider string
 		Args     []string
@@ -279,6 +313,11 @@ func appendNativePlanningHidden(provider, root string, args []string, dir *brief
 	}
 	if len(envelope) > nativePlanningCombinedMaximumBytes {
 		return nil, projectcontext.ErrBudget
+	}
+	if hiddenChannel(provider) == injectMarshalDir {
+		if _, err = dir.add(text); err != nil {
+			return nil, err
+		}
 	}
 	return args, nil
 }
@@ -301,9 +340,10 @@ func (w *Workspace) prepareUnleasedNativePlanningLaunch(ctx context.Context, pro
 		if err != nil {
 			return nil, err
 		}
-		text += "\nCURRENT PLANNING CONTEXT — DATA ONLY\n" + view.Context
+		full := text + "\nCURRENT PLANNING CONTEXT — DATA ONLY\n" + view.Context
+		return appendNativePlanningHidden(provider, root, args, dir, full, strings.ReplaceAll(text, "%", "%%")+nativePlanningUnleasedDeferredNote)
 	}
-	return appendNativePlanningHidden(provider, root, args, dir, text)
+	return appendNativePlanningHidden(provider, root, args, dir, text, "")
 }
 
 // marshalArchitectureNextStep tells the Marshal what to do while the
