@@ -866,8 +866,8 @@
     },
     {
       "path": "internal/adapter/codex/codex.go",
-      "sha256": "5b32f7ef26e9dab2e669a43abd7f47171426037ab66a0e252d3c591fcc943ec9",
-      "bytes": 14715
+      "sha256": "c2fae8be6f44cbe4dc70b5f8f01601a11ac0a488ad52ce8523e8a821db069a9c",
+      "bytes": 15367
     },
     {
       "path": "internal/adapter/codex/codex_test.go",
@@ -888,6 +888,16 @@
       "path": "internal/adapter/codex/operations_test.go",
       "sha256": "e2b52de2ddf826c3e9fb848a4665f0af6ddda64637373d45b1ced34e02a98c89",
       "bytes": 22266
+    },
+    {
+      "path": "internal/adapter/codex/probe_cache.go",
+      "sha256": "0926b13412cc1eaf589d627a063163538662a5a6ada4d778dd3825389bfefd99",
+      "bytes": 2210
+    },
+    {
+      "path": "internal/adapter/codex/probe_cache_test.go",
+      "sha256": "31047f77c0b8d78b4abccc7f841d0d340aefaadddea2311b0017010766853f9a",
+      "bytes": 2094
     },
     {
       "path": "internal/adapter/compiler_check.go",
