@@ -14,6 +14,7 @@
 - The Board's first frame no longer waits for the project index; squash-merged branches are recognised.
 
 ### Fixed
+- A task interrupted by a Marshal restart is closed by Marshal and runs again, instead of the run stopping with "its workspace didn't match the approved plan".
 - A run left waiting with a returned task gets a "retry and resume" entry on the Board; `r` retries a stuck task and never types into the composer; the Codex Marshal reaches its own tools through its sandbox; an older control centre on another tmux socket is found and can be replaced.
 - A Board message never joins the owner's half-typed chat input; a network drop resends once; long messages are sent; choices work in every chat; answered proposals are not replayed.
 - A first open killed halfway recovers on the next start.

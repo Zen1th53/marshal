@@ -69,6 +69,10 @@ workers use your own provider sign-ins and say why they failed.
 
 ## Fixed
 
+- **A restart no longer strands a run.** If Marshal stops while a worker runs,
+  the interrupted attempt is closed on the next start and the task runs again;
+  the run used to stop with "its workspace didn't match the approved plan".
+
 - **A stalled run can be continued from the Board.** When a run waits with a
   returned task and nothing working on it, the inbox offers retry and resume,
   and `r` on a stuck task retries it; `r` never types into the composer.
