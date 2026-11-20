@@ -154,12 +154,44 @@ func ownLeftover(d composerDialect, pane, frame string) (ownPaste, bool) {
 	if !found || content == "" {
 		return ownPaste{}, false
 	}
+	if p.shown == "" {
+		// Pasted, but not drawn when last looked at: the first thing the
+		// provider draws for it (our text, or its placeholder) is ours, and
+		// is pinned so a later paste of the owner's is not.
+		if ownChatComposer(frame, p.text) || d.collapsedPaste(content) {
+			p.shown = content
+			rememberOwnPaste(pane, p.text, content)
+			return p, true
+		}
+		return ownPaste{}, false
+	}
 	// Exact recorded content only: a line-count match ("[Pasted text #5
 	// +2 lines]") could be the owner's own paste of the same length.
 	if d.stripHints(content) == d.stripHints(p.shown) {
 		return p, true
 	}
 	return ownPaste{}, false
+}
+
+// adoptOrphanPaste takes a collapsed-paste placeholder that no record in this
+// process names as ours: the paste an earlier Board process (before a
+// restart or rebind) made and never saw submitted. Callers use it only while
+// the Board holds an undelivered or open request for the chat, and only for
+// an input that is nothing but the provider's placeholder: text the owner
+// typed is never a placeholder, so it is never adopted. The message behind
+// it is unknown here (text is empty), so the caller delivers its own
+// request again after submitting this one.
+func adoptOrphanPaste(d composerDialect, pane, frame string) (ownPaste, bool) {
+	if _, ok := ownPasteFor(pane); ok {
+		return ownPaste{}, false
+	}
+	content, found := chatComposer(frame)
+	if !found || !d.collapsedPaste(content) {
+		return ownPaste{}, false
+	}
+	p := ownPaste{shown: content}
+	rememberOwnPaste(pane, "", content)
+	return p, true
 }
 
 // composerClear reports whether the frame shows an input box holding nothing

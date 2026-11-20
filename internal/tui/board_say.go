@@ -286,7 +286,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		pane := w.sayPane()
 		frame, idle := "", false
 		if pane != "" {
-			w.submitOwnLeftover(ctx, pane)
+			w.submitOwnLeftover(ctx, pane, queued)
 			frame, idle = w.chatIdleFrame(ctx, pane)
 		} else {
 			// No chat, no turn to watch.
@@ -546,8 +546,11 @@ func (w *Workspace) chatComposerDialect() composerDialect {
 
 // submitOwnLeftover presses Enter for a paste of ours the provider still
 // holds unsent, so it neither waits for the owner nor reads as their draft.
-func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string) {
-	if _, ok := ownPasteFor(pane); !ok {
+// open says the Board holds a message for the chat it has not delivered yet:
+// then a bare placeholder no record names (an earlier Board process pasted
+// it before a restart or rebind) is ours too.
+func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open bool) {
+	if _, ok := ownPasteFor(pane); !ok && !open {
 		return
 	}
 	w.chatTypeMu.Lock()
@@ -558,6 +561,9 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string) {
 	}
 	d := w.chatComposerDialect()
 	own, ok := ownLeftover(d, pane, string(frame))
+	if !ok && open {
+		own, ok = adoptOrphanPaste(d, pane, string(frame))
+	}
 	if !ok {
 		if composerClear(d, string(frame)) {
 			forgetOwnPaste(pane)

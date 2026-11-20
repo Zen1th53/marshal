@@ -131,6 +131,11 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 		if _, ok := ownLeftover(d, pane, string(frame)); ok && !chatBusyNearPrompt(string(frame)) {
 			return true, nil
 		}
+		// This delivery is an open request, so a bare placeholder nobody
+		// recorded (left by an earlier Board process) is ours to submit.
+		if _, ok := adoptOrphanPaste(d, pane, string(frame)); ok && !chatBusyNearPrompt(string(frame)) {
+			return true, nil
+		}
 		noteChatInput(pane, false)
 		return false, errChatBusy
 	}
@@ -138,11 +143,15 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 	if err != nil {
 		return err
 	}
-	if own, ok := ownPasteFor(pane); ok && !leftover && own.text == text {
-		// The paste an earlier attempt left unsent has left the input: the
-		// provider took it late. Pasting it again would ask twice.
+	if own, ok := ownPasteFor(pane); ok && !leftover {
 		forgetOwnPaste(pane)
-		return nil
+		// The paste an earlier attempt left unsent has left the input: the
+		// provider took it late. Pasting it again would ask twice. A paste
+		// the provider never drew (shown is empty) was never submitted, as
+		// no Enter went with it: it was lost, so it is pasted again.
+		if own.text == text && own.shown != "" {
+			return nil
+		}
 	}
 	if leftover {
 		own, _ := ownPasteFor(pane)
@@ -177,6 +186,55 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 	return submitChatTurnAs(ctx, run, d, pane, text, tries, wait, true)
 }
 
+// awaitOwnPaste polls the input box after a paste of text until it shows
+// that text or one collapsed-paste placeholder of the dialect, and records
+// it as ours. While the input is still empty, a hint, or a prefix of our text
+// (a paste still being drawn) it keeps looking, for about twice the Enter
+// retry budget. Anything else is not ours and is never submitted.
+func awaitOwnPaste(ctx context.Context, run chatRunner, d composerDialect, pane, text string, tries int, wait time.Duration) (bool, string, error) {
+	compact := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, s)
+	}
+	settle := 2 * time.Duration(max(tries, 1)) * wait
+	poll := max(min(wait, 50*time.Millisecond), time.Millisecond)
+	deadline := time.Now().Add(settle)
+	for {
+		if err := ctx.Err(); err != nil {
+			return false, "", err
+		}
+		frame, err := run(ctx, "capture-pane", "-p", "-t", pane)
+		if err != nil {
+			return false, "", err
+		}
+		content, ok := chatComposer(string(frame))
+		switch {
+		case ok && ownChatComposer(string(frame), text):
+			rememberOwnPaste(pane, text, content)
+			return true, string(frame), nil
+		case ok && d.collapsedPaste(content):
+			rememberOwnPaste(pane, text, content)
+			return true, string(frame), nil
+		case !ok, d.hint(content), strings.HasPrefix(compact(text), compact(content)):
+			// Not drawn yet, or drawn only in part.
+		default:
+			return false, "", errors.New("chat input changed or could not be verified; nothing submitted")
+		}
+		if !time.Now().Before(deadline) {
+			return false, "", nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, "", ctx.Err()
+		case <-time.After(poll):
+		}
+	}
+}
+
 // submitChatTurn submits with the union dialect.
 func submitChatTurn(ctx context.Context, run chatRunner, pane, text string, tries int, wait time.Duration) error {
 	return submitChatTurnAs(ctx, run, composerDialectFor(""), pane, text, tries, wait, true)
@@ -196,20 +254,38 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 		_, ok := ownLeftover(d, pane, frame)
 		return ok
 	}
+	// first is the frame the paste was verified on; the first Enter goes
+	// on that observation rather than on a later look.
+	first := ""
+	if fresh {
+		// The provider can take a while to draw a paste (a resumed Claude
+		// Code session with a long history redraws slowly), so one look
+		// right after pasting is not enough: wait until the input shows our
+		// text or the placeholder the provider drew for it.
+		var err error
+		var seen bool
+		seen, first, err = awaitOwnPaste(ctx, run, d, pane, text, tries, wait)
+		if err != nil {
+			return err
+		}
+		if !seen {
+			// Still not drawn. It stays recorded as ours, so whatever
+			// placeholder appears for it later is submitted, not left
+			// waiting as if the owner had typed it.
+			rememberOwnPaste(pane, text, "")
+			noteChatInput(pane, false)
+			return errChatUnsubmitted
+		}
+	}
 	for try := 0; try < tries; try++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		frame, err := run(ctx, "capture-pane", "-p", "-t", pane)
-		if err != nil {
-			return err
-		}
-		if content, ok := chatComposer(string(frame)); ok && try == 0 && fresh {
-			switch {
-			case ownChatComposer(string(frame), text):
-				rememberOwnPaste(pane, text, content)
-			case d.collapsedPaste(content):
-				rememberOwnPaste(pane, text, content)
+		frame := []byte(first)
+		if try > 0 || !fresh {
+			var err error
+			if frame, err = run(ctx, "capture-pane", "-p", "-t", pane); err != nil {
+				return err
 			}
 		}
 		if !own(string(frame)) {
@@ -232,7 +308,7 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 			return ctx.Err()
 		case <-time.After(checkWait):
 		}
-		frame, err = run(ctx, "capture-pane", "-p", "-t", pane)
+		frame, err := run(ctx, "capture-pane", "-p", "-t", pane)
 		if err != nil {
 			return err
 		}
