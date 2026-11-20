@@ -421,7 +421,9 @@ func flowPlan(in flowIn) vm.Plan {
 	p.Stages = flowStages(in, c)
 	if !in.hasRun {
 		// Before a run the Plan pane names the goal being planned.
-		p.Title = in.goalText
+		if p.Title = in.goalText; p.Title == "" && in.goalGiven {
+			p.Title = "your goal"
+		}
 		return p
 	}
 	p.Done, p.Active, p.Waiting, p.Total = c.merged, c.working+c.review, c.queued+c.parked, c.total

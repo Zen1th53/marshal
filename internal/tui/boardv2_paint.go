@@ -115,6 +115,12 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 		for _, sp := range spans {
 			v.hit(boardHit{row: last, x0: sp.x0, x1: min(sp.x1, cols), kind: hitAction, id: sp.id})
 		}
+	} else if last >= 0 {
+		// With no status the row says what the classic footer leads with:
+		// a stop's notice, the run's note, the index's progress.
+		if lead := strings.TrimSpace(v.footerLead(cols)); lead != "" {
+			lines[last] = PadCell(" "+lead, cols)
+		}
 	}
 	return lines
 }
