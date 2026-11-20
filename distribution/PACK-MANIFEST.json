@@ -12876,8 +12876,8 @@
     },
     {
       "path": "internal/tui/board/widgets/inspector/inspector_test.go",
-      "sha256": "375be6c6568d983c036eba8d94ff9d23f6b6967c6d2d2a804a6c87c8c0ca2737",
-      "bytes": 6237
+      "sha256": "4e00cfcee452cdea79f74aaa9219b7b3dcffbbd2ceb33631557e53e847abe3ef",
+      "bytes": 6374
     },
     {
       "path": "internal/tui/board/widgets/lanes/lanes.go",

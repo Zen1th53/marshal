@@ -95,8 +95,9 @@ func TestParkedTaskSections(t *testing.T) {
 func TestActionsOnlyWhatApplies(t *testing.T) {
 	r := marshal.Run{Tasks: []marshal.Task{{PlanTaskID: "T-1", Worker: "codex", State: marshal.Escalated}, {PlanTaskID: "T-2", Worker: "agy", State: marshal.Escalated}}}
 	b := model.Project(model.Snapshot{RunID: "R1", Run: r}, nil)
-	if got := New(b, "T-1").Actions(); len(got) != 0 {
-		t.Fatalf("no decision, no pane: %v", got)
+	// A parked task with no decision and no pane offers only the retry.
+	if got := New(b, "T-1").Actions(); len(got) != 1 || got[0] != (Action{'r', "retry this task"}) {
+		t.Fatalf("no decision, no pane: want only retry, got %v", got)
 	}
 	egress := model.InboxItem{Kind: model.InboxEgress, Gate: model.GateSingle}
 	egress.Request.TaskID, egress.Request.Object = "T-1", "example.com:443"
