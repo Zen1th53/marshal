@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -19,12 +20,12 @@ import (
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
-// nativePlanningCombinedMaximumBytes bounds a launch's whole hidden prompt
-// (protocol, intake, cross-agent memory and planning context). Codex takes it
-// as one argv element, and Linux refuses any single argument over 128 KiB
-// (MAX_ARG_STRLEN), so it stays well under that. The Marshal protocol alone is
-// about 56 KiB: at 64 KiB the cross-agent memory and a modest planning context
-// left no room and the Marshal chat could not start at all.
+// nativePlanningCombinedMaximumBytes is a plain guard on a launch's whole
+// hidden prompt (protocol, intake, launch scan, cross-agent memory and the
+// short architecture pointer). Codex takes it as one argv element and Linux
+// refuses any single argument over 128 KiB (MAX_ARG_STRLEN). The project
+// architecture and planning context are never inlined: the Marshal reads them
+// from the store through marshal_project_contract_context.
 const nativePlanningCombinedMaximumBytes = 96 << 10
 
 type nativePlanningLeaseRead struct {
@@ -34,7 +35,22 @@ type nativePlanningLeaseRead struct {
 	launch, owner, provider, nativeSession, goalID string
 	goalRevision                                   int64
 	contract                                       projectcontext.ContractRef
+	// pages holds a context too large for one MCP reply; next is the page
+	// the Marshal reads next. The read admits a draft only once every page
+	// has been delivered (next == len(pages)).
+	pages         []string
+	next          int
+	packetDigest  string
+	requiredCount int
+	qualified     bool
 }
+
+// complete reports whether the Marshal has received the whole context.
+func (p *nativePlanningLeaseRead) complete() bool { return p != nil && p.next >= len(p.pages) }
+
+// nativePlanningPageBytes bounds one page's reply so it fits the proposal
+// transport's 16 KiB frame with room for its envelope.
+const nativePlanningPageBytes = 12 << 10
 
 func (w *Workspace) nativePlanningOwnerContext(ctx context.Context) (context.Context, error) {
 	control := w.controlSource()
@@ -61,16 +77,118 @@ func (w *Workspace) prepareNativePlanningLaunch(ctx context.Context, l *proposal
 	if err != nil {
 		return nil, err
 	}
-	text := "CURRENT NATIVE PLANNING CONTEXT — DATA ONLY; no execution grant. Before each new draft, refresh the complete current context through marshal_project_contract_context.\n" + view.Context
-	args, err = appendNativePlanningHidden(l.provider, root, args, dir, text, nativePlanningDeferredNote)
+	return appendNativePlanningHiddenExact(l.provider, root, args, dir, w.nativePlanningPointer(ownerCtx, view, true))
+}
+
+// nativePlanningPointer is all a launch carries about the project
+// architecture and planning context: what is current and where to read it.
+// The contract body, Goal and mandatory memories stay in the store and are
+// read through marshal_project_contract_context, which also mints the one
+// read that admits a draft.
+func (w *Workspace) nativePlanningPointer(ctx context.Context, view app.NativePlanningInspection, tools bool) string {
+	var b strings.Builder
+	b.WriteString("PROJECT ARCHITECTURE AND PLANNING CONTEXT — NOT INCLUDED HERE (DATA ONLY; no execution grant).\n")
+	if w.store == nil || w.runtime == nil {
+		b.WriteString("- Architecture state unavailable at launch.\n")
+	} else if accepted, err := w.store.ReadAcceptedProjectContract(ctx, w.runtime.ProjectContractBinding()); err == nil {
+		active := 0
+		for _, c := range accepted.Contract.Components {
+			if !c.Removed {
+				active++
+			}
+		}
+		fmt.Fprintf(&b, "- Accepted project contract %s revision %d: %d components (%d active), %d connections.\n", accepted.Contract.ID, accepted.Contract.Revision, len(accepted.Contract.Components), active, len(accepted.Contract.Connections))
+	} else {
+		b.WriteString("- No accepted project architecture yet.\n")
+	}
+	if view.GoalID != "" {
+		fmt.Fprintf(&b, "- Active Goal %s revision %d.\n", view.GoalID, view.GoalRevision)
+	}
+	if view.Bootstrap {
+		b.WriteString("- " + view.Context + "\n")
+	} else if view.RequiredCount > 0 {
+		fmt.Fprintf(&b, "- %d mandatory memories apply.\n", view.RequiredCount)
+	}
+	if tools {
+		b.WriteString("Read the complete current context with marshal_project_contract_context before drafting or planning, and again before each new draft; marshal_project_contract_read, marshal_architecture_history and marshal_architecture_at give the contract pages, its revisions and changes. Never plan from memory of an earlier revision.\n")
+	} else {
+		b.WriteString("This launch has no MARSHAL proposal tools, so the context cannot be read here: do not draft or plan, and do not invent or recall the architecture.\n")
+	}
+	return b.String()
+}
+
+// nativePlanningPage is one page of a context too large for a single reply.
+type nativePlanningPage struct {
+	app.ProjectPlanningInspection
+	ReadID string `json:"read_id"`
+	Page   int    `json:"page"`
+	Pages  int    `json:"pages"`
+	Next   string `json:"next,omitempty"`
+}
+
+func nativePlanningPageJSON(view app.ProjectPlanningInspection, readID string, page int, pages []string) (json.RawMessage, error) {
+	view.Context = pages[page]
+	reply := nativePlanningPage{ProjectPlanningInspection: view, ReadID: readID, Page: page + 1, Pages: len(pages)}
+	if page+1 < len(pages) {
+		reply.Next = fmt.Sprintf("This is page %d of %d. Call marshal_project_contract_context with {\"read_id\":\"%s\",\"page\":%d} for the next page; a draft is admitted only after the last page.", page+1, len(pages), readID, page+2)
+	}
+	raw, err := json.Marshal(reply)
 	if err != nil {
 		return nil, err
 	}
-	return args, nil
+	if len(raw) > nativePlanningPageBytes || !projectcontext.NativePlanningRPCResponseFits(raw) {
+		return nil, projectcontext.ErrBudget
+	}
+	return raw, nil
 }
 
-// The complete native context has its own larger bounds. It cannot be
-// silently paged/truncated into a read proof.
+// splitNativePlanningContext cuts text into pages whose replies all fit,
+// on UTF-8 boundaries, shrinking the page size for heavily escaped text.
+func splitNativePlanningContext(view app.ProjectPlanningInspection, readID string) ([]string, error) {
+	for size := nativePlanningPageBytes - 2048; size >= 512; size /= 2 {
+		var pages []string
+		for rest := view.Context; rest != ""; {
+			cut := min(size, len(rest))
+			for cut < len(rest) && cut > 0 && !utf8.RuneStart(rest[cut]) {
+				cut--
+			}
+			pages = append(pages, rest[:cut])
+			rest = rest[cut:]
+		}
+		fits := true
+		for i := range pages {
+			if _, err := nativePlanningPageJSON(view, readID, i, pages); err != nil {
+				fits = false
+				break
+			}
+		}
+		if fits {
+			return pages, nil
+		}
+	}
+	return nil, projectcontext.ErrBudget
+}
+
+// nativePlanningContinue serves the next page of the read in progress.
+func (w *Workspace) nativePlanningContinue(l *proposalMCPLease, readID string, page int) (json.RawMessage, error) {
+	p := l.planning
+	if p == nil || p.readID != readID || page != p.next+1 || p.complete() {
+		l.planning = nil
+		return nil, fmt.Errorf("%w: page %d is not the next page of a current context read; call marshal_project_contract_context again without arguments", model.ErrInvalid, page)
+	}
+	view := app.ProjectPlanningInspection{Contract: p.contract, GoalID: p.goalID, GoalRevision: p.goalRevision, PacketDigest: p.packetDigest, RequiredCount: p.requiredCount, Qualified: p.qualified}
+	raw, err := nativePlanningPageJSON(view, readID, p.next, p.pages)
+	if err != nil {
+		l.planning = nil
+		return nil, err
+	}
+	p.next++
+	return raw, nil
+}
+
+// readNativePlanningMCP returns the complete current context. One that does
+// not fit a single reply is delivered in pages; it is never truncated, and
+// the read admits a draft only after its last page.
 // Caller already holds proposalMCP.mu and authenticated this native launch.
 func (w *Workspace) readNativePlanningMCP(ctx context.Context, l *proposalMCPLease) (json.RawMessage, error) {
 	l.planning = nil
@@ -125,10 +243,22 @@ func (w *Workspace) readNativePlanningMCP(ctx context.Context, l *proposalMCPLea
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	if !projectcontext.NativePlanningRPCResponseFits(raw) {
-		return nil, projectcontext.ErrBudget
+	read := &nativePlanningLeaseRead{runtime: w.runtime, token: token, launch: l.id, owner: l.owner, provider: l.provider, nativeSession: l.session, readID: readID, goalID: view.GoalID, goalRevision: view.GoalRevision, contract: view.Contract, packetDigest: view.PacketDigest, requiredCount: view.RequiredCount, qualified: view.Qualified}
+	if len(raw) <= nativePlanningPageBytes && projectcontext.NativePlanningRPCResponseFits(raw) {
+		l.planning = read
+		return raw, nil
 	}
-	l.planning = &nativePlanningLeaseRead{runtime: w.runtime, token: token, launch: l.id, owner: l.owner, provider: l.provider, nativeSession: l.session, readID: readID, goalID: view.GoalID, goalRevision: view.GoalRevision, contract: view.Contract}
+	pages, err := splitNativePlanningContext(view.ProjectPlanningInspection, readID)
+	if err != nil {
+		return nil, err
+	}
+	read.pages = pages
+	raw, err = nativePlanningPageJSON(view.ProjectPlanningInspection, readID, 0, pages)
+	if err != nil {
+		return nil, err
+	}
+	read.next = 1
+	l.planning = read
 	return raw, nil
 }
 
@@ -151,7 +281,7 @@ func (w *Workspace) withNativePlanningDraftRead(ctx context.Context, provider, g
 		return err
 	}
 	p := l.planning
-	if p == nil || p.runtime != w.runtime || p.launch != l.id || p.owner != l.owner || p.provider != l.provider || canonicalNeutralProvider(provider) != l.provider || p.nativeSession != l.session {
+	if !p.complete() || p.runtime != w.runtime || p.launch != l.id || p.owner != l.owner || p.provider != l.provider || canonicalNeutralProvider(provider) != l.provider || p.nativeSession != l.session {
 		return projectcontext.Changed("native_planning_context_extreme.go:137")
 	}
 	ownerCtx, err := w.nativePlanningOwnerContext(ctx)
@@ -179,7 +309,7 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 		return marshal.Run{}, err
 	}
 	p := l.planning
-	if p == nil {
+	if !p.complete() {
 		w.proposalMCP.mu.Unlock()
 		return marshal.Run{}, errNoNativePlanningRead
 	}
@@ -234,29 +364,6 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 	}
 	return run, err
 }
-
-// appendNativePlanningHidden adds the planning context to the launch's hidden
-// instructions. The context is DATA only and mints no proof: the Marshal reads
-// the complete current context through marshal_project_contract_context
-// before every draft. So when the whole context does not fit beside the
-// Marshal protocol in the combined hidden budget, the launch carries deferred
-// (a short note saying where to read it) instead of failing to start. Only a
-// protocol that leaves no room even for that note refuses with ErrBudget.
-func appendNativePlanningHidden(provider, root string, args []string, dir *briefingDir, text, deferred string) ([]string, error) {
-	out, err := appendNativePlanningHiddenExact(provider, root, args, dir, text)
-	if !errors.Is(err, projectcontext.ErrBudget) || deferred == "" {
-		return out, err
-	}
-	return appendNativePlanningHiddenExact(provider, root, args, dir, fmt.Sprintf(deferred, len(text)))
-}
-
-// nativePlanningDeferredNote is the hidden note a launch carries in place of
-// a planning context too large to include; %d is the context's size.
-const nativePlanningDeferredNote = "CURRENT NATIVE PLANNING CONTEXT — NOT INCLUDED AT LAUNCH: the complete context (%d bytes) does not fit beside the Marshal protocol. DATA ONLY; no execution grant. Read the complete current context through marshal_project_contract_context before the first draft and before each new draft."
-
-// nativePlanningUnleasedDeferredNote is the same note for a launch with no
-// proposal tools.
-const nativePlanningUnleasedDeferredNote = "\nCURRENT PLANNING CONTEXT — NOT INCLUDED: the complete context (%d bytes) does not fit beside the Marshal protocol."
 
 // appendNativePlanningHiddenExact adds text as it is, or refuses with
 // ErrBudget and changes nothing (neither args nor dir).
@@ -340,10 +447,9 @@ func (w *Workspace) prepareUnleasedNativePlanningLaunch(ctx context.Context, pro
 		if err != nil {
 			return nil, err
 		}
-		full := text + "\nCURRENT PLANNING CONTEXT — DATA ONLY\n" + view.Context
-		return appendNativePlanningHidden(provider, root, args, dir, full, strings.ReplaceAll(text, "%", "%%")+nativePlanningUnleasedDeferredNote)
+		text += "\n" + w.nativePlanningPointer(ownerCtx, view, false)
 	}
-	return appendNativePlanningHidden(provider, root, args, dir, text, "")
+	return appendNativePlanningHiddenExact(provider, root, args, dir, text)
 }
 
 // marshalArchitectureNextStep tells the Marshal what to do while the

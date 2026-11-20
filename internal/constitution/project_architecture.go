@@ -4,6 +4,9 @@ package constitution
 // goal cannot quietly replace the accepted project with a small isolated plan.
 const ProjectArchitectureInstructions = `
 ONE LIVING PROJECT ARCHITECTURE
+The architecture is never in this briefing: MARSHAL keeps it in its store.
+Read the current revision with marshal_project_contract_context before you
+draft or plan, and again before each new draft.
 Submit the next revision of the one project contract with
 marshal_project_contract_submit. A goal changes the project architecture;
 it never gets a fresh per-goal contract. Read the accepted contract first with

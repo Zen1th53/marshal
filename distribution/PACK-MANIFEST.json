@@ -5811,7 +5811,7 @@
     },
     {
       "path": "internal/constitution/marshal_protocol.go",
-      "sha256": "4f77c227a9ea1de9fa58553f4107c0d764e9160678f8c5d3eb5938e8b55fe5cb",
+      "sha256": "0988f15ce4959b3132bab2a43eef32689ce98a4c5c0fb6f7c36190928c961a4d",
       "bytes": 29488
     },
     {
@@ -5821,8 +5821,8 @@
     },
     {
       "path": "internal/constitution/project_architecture.go",
-      "sha256": "15b98abaef48e4ddf1730fe326f123ffb5971ffc14fb2122d962fac892e00a44",
-      "bytes": 2852
+      "sha256": "c255e72871c505a3073695b1f967bee3af2890552b4f7407e5d37b59707842ab",
+      "bytes": 3050
     },
     {
       "path": "internal/constitution/project_architecture_test.go",
@@ -5851,7 +5851,7 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "5ee6f99d356eb7017c78234f53aac8fff983a688aac34382bfa2eeee6e2919d9",
+      "sha256": "b85afc11628e4b8abf57b9f21b0f122e75d52df6a535c873741938d69f72a83b",
       "bytes": 12383
     },
     {
@@ -7966,8 +7966,8 @@
     },
     {
       "path": "internal/mcp/proposal_extreme.go",
-      "sha256": "037322c36a517a262ecd70a16070779d77a8fd42abc7911e796cccaeeb81b64a",
-      "bytes": 12175
+      "sha256": "869c0093744445b768347050711590dc5ebd3ac97bbb5fae51818c1b38ca5922",
+      "bytes": 12451
     },
     {
       "path": "internal/mcp/proposal_extreme_test.go",
@@ -14761,13 +14761,13 @@
     },
     {
       "path": "internal/tui/native_planning_context_extreme.go",
-      "sha256": "a7c69268a865d22811e0156d97645c954f8d53a89e83d850aa03c77153869dc9",
-      "bytes": 16663
+      "sha256": "6826923178dec10cad943d8f988967d4d384b3b2057a8d41da74e716f0c5837e",
+      "bytes": 20483
     },
     {
       "path": "internal/tui/native_planning_context_extreme_test.go",
-      "sha256": "556c139fa26b95b9a92fc9a5d71092509162d9bfabe2f694d9c61f82662ccdb0",
-      "bytes": 36324
+      "sha256": "3419a7f5fa12ea17d061e9bf4870b12b18390399b935ad4159bc5878049d9f70",
+      "bytes": 40948
     },
     {
       "path": "internal/tui/native_safety.go",
@@ -15046,8 +15046,8 @@
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme.go",
-      "sha256": "444a1dc40fcdc2fb7f0016b9c49d4a969db68a5c58b5b28c454b32f93a321f52",
-      "bytes": 14574
+      "sha256": "6df123bb5c36fec6f5b327c18284d232a499535d3e794751407d18f819b52de7",
+      "bytes": 14786
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme_test.go",
