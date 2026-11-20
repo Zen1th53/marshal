@@ -16,6 +16,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -153,18 +154,98 @@ func dropMarshalCue(provider string, args []string) []string {
 }
 
 // marshalStartError is a Marshal launch that did not happen. Its text is for
-// people; the cause is logged.
+// people and always says why in plain words; the raw cause goes to Activity
+// and .marshal/logs/tui-errors.log (reportMarshalStartFailure).
 type marshalStartError struct {
 	provider string
 	cause    error
 }
 
 func (e *marshalStartError) Error() string {
-	return "The Marshal couldn't start with " + providerDisplayName(e.provider) + ". Press m to try again, or check it on the Providers view (press 4)."
+	return "The Marshal couldn't start with " + providerDisplayName(e.provider) + " because " + marshalStartReason(e.cause) + ". Press m to try again, or check it on the Providers view (press 4)."
 }
 func (e *marshalStartError) Unwrap() error { return e.cause }
 func marshalNotStarted(provider string, cause error) error {
 	return &marshalStartError{provider, cause}
+}
+
+// marshalStartReason is the plain reason a Marshal launch failed, for the
+// one line the Board shows. It never carries the raw error text.
+func marshalStartReason(cause error) string {
+	text := ""
+	if cause != nil {
+		text = cause.Error()
+	}
+	switch {
+	case cause == nil:
+		return "of an unknown error"
+	case errors.Is(cause, projectcontext.ErrBudget):
+		return "the project's planning context is too large to hand over"
+	case errors.Is(cause, projectcontext.ErrChanged):
+		return "the project changed while its planning context was being read"
+	case errors.Is(cause, projectcontext.ErrReviewPending):
+		return "the project's context is waiting for your review"
+	case errors.Is(cause, errNoRuntime), errors.Is(cause, model.ErrUnavailable):
+		return "your project data isn't loaded"
+	case errors.Is(cause, context.DeadlineExceeded), errors.Is(cause, context.Canceled):
+		return "it took too long and was stopped"
+	case strings.HasPrefix(text, "MCP delivery failed"):
+		return "its Marshal tools could not be connected"
+	case strings.HasPrefix(text, "hidden instruction delivery failed"), strings.Contains(text, "hidden instruction channel"), strings.HasPrefix(text, "protocol"):
+		return "its instructions could not be handed over"
+	case strings.HasPrefix(text, "read-only launch settings failed"):
+		return "its read-only settings could not be applied"
+	case strings.HasPrefix(text, "retained briefing cleanup failed"):
+		return "an old briefing could not be cleaned up"
+	case strings.HasPrefix(text, "chat permission binding failed"):
+		return "its permission prompts could not be connected"
+	case strings.HasPrefix(text, "tmux window not opened"):
+		return "its tmux window could not be opened"
+	case strings.HasPrefix(text, "the tmux chat could not be closed"):
+		return "the old chat window could not be closed"
+	}
+	return "its program failed to launch"
+}
+
+// redactedCause keeps err reachable for errors.Is while its text is redacted.
+type redactedCause struct{ err error }
+
+func (e redactedCause) Error() string { return RedactContent(e.err.Error(), nil) }
+func (e redactedCause) Unwrap() error { return e.err }
+
+// marshalStartCause is the raw cause of a failed Marshal launch, or nil when
+// err is not one.
+func marshalStartCause(err error) error {
+	var start *marshalStartError
+	if !errors.As(err, &start) {
+		return nil
+	}
+	if start.cause == nil {
+		return errors.New("no cause recorded")
+	}
+	return start.cause
+}
+
+// reportMarshalStartFailure puts the raw cause of a failed Marshal launch in
+// Activity and in .marshal/logs/tui-errors.log, so the plain line on the
+// Board is never the only trace. It reports whether err was one.
+func (w *Workspace) reportMarshalStartFailure(err error) bool {
+	if marshalStartCause(err) == nil {
+		return false
+	}
+	w.logTUIError("marshal start", err)
+	return w.noteMarshalStartCause(err)
+}
+
+// noteMarshalStartCause is the Activity half of reportMarshalStartFailure,
+// for a command whose error the command path already logged in full.
+func (w *Workspace) noteMarshalStartCause(err error) bool {
+	cause := marshalStartCause(err)
+	if cause == nil {
+		return false
+	}
+	w.RecordActivity("Why the Marshal didn't start: " + cause.Error())
+	return true
 }
 
 // prepareMarshalLaunch delivers mandatory instructions separately from the

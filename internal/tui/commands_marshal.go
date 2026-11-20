@@ -802,6 +802,7 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 		w.tmuxMu.Unlock()
 		_ = tmux.SelectWindow(ctx, target)
 		if err != nil {
+			w.reportMarshalStartFailure(err)
 			return "", fmt.Errorf("The Marshal is now %s, but its chat did not start. Press m and choose it again.", name)
 		}
 		handedOff = true
@@ -831,6 +832,7 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	if nativeActive && canonicalNeutralProvider(chatProvider) != provider {
 		w.stopNativeChat()
 		if _, err := w.marshalChat(context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)); err != nil {
+			w.reportMarshalStartFailure(err)
 			return "", fmt.Errorf("The Marshal is now %s, but its chat did not start. Press m and choose it again.", name)
 		}
 		handedOff = true

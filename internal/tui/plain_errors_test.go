@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
@@ -153,11 +154,98 @@ func TestCommandErrorLogIsRedacted(t *testing.T) {
 func TestMarshalStartErrorIsPlain(t *testing.T) {
 	cause := errors.New("hidden instruction delivery failed: x")
 	err := marshalNotStarted("codex", cause)
-	want := "The Marshal couldn't start with Codex. Press m to try again, or check it on the Providers view (press 4)."
+	want := "The Marshal couldn't start with Codex because its instructions could not be handed over. Press m to try again, or check it on the Providers view (press 4)."
 	if err.Error() != want {
 		t.Fatalf("Error() = %q, want %q", err.Error(), want)
 	}
 	if errors.Unwrap(err) != cause {
 		t.Fatalf("Unwrap() = %v, want %v", errors.Unwrap(err), cause)
+	}
+}
+
+// Every failed Marshal launch says why in one plain line, and that line is
+// what a command shows; the raw cause never reaches the line (finding #82).
+func TestMarshalStartErrorSaysWhy(t *testing.T) {
+	cases := []struct {
+		cause error
+		why   string
+	}{
+		{fmt.Errorf("MCP delivery failed: %w", redactedCause{projectcontext.ErrBudget}), "because the project's planning context is too large to hand over."},
+		{fmt.Errorf("MCP delivery failed: %w", redactedCause{projectcontext.Changed("x.go:1")}), "because the project changed while its planning context was being read."},
+		{fmt.Errorf("MCP delivery failed: %w", redactedCause{errors.New("proposal MCP project binding differs")}), "because its Marshal tools could not be connected."},
+		{errors.New("read-only launch settings failed: denied"), "because its read-only settings could not be applied."},
+		{fmt.Errorf("tmux window not opened: %w", redactedCause{errors.New("no server")}), "because its tmux window could not be opened."},
+		{errors.New("something else entirely"), "because its program failed to launch."},
+	}
+	for _, c := range cases {
+		err := marshalNotStarted("codex", c.cause)
+		line := plainCommandError("/marshal chat", err)
+		if !strings.HasPrefix(line, "The Marshal couldn't start with Codex "+c.why) {
+			t.Fatalf("cause %q: line = %q, want reason %q", c.cause, line, c.why)
+		}
+		if strings.Contains(line, c.cause.Error()) || strings.Contains(line, "REQUIRED_CONTEXT") {
+			t.Fatalf("line %q leaks the raw cause", line)
+		}
+		if !errors.Is(err, errors.Unwrap(c.cause)) && errors.Unwrap(c.cause) != nil {
+			t.Fatalf("cause %q is no longer reachable through errors.Is", c.cause)
+		}
+	}
+}
+
+// A failed /marshal chat puts its raw cause in Activity and in
+// tui-errors.log, while the answer on the Board stays the plain line.
+func TestMarshalStartFailureCauseReachesActivityAndLog(t *testing.T) {
+	tmp := t.TempDir()
+	ws := NewWorkspace(nil, "project", "session")
+	ws.workDir = tmp
+	cause := fmt.Errorf("MCP delivery failed: %w", redactedCause{projectcontext.ErrBudget})
+	ws.recordCommandResult("/marshal chat", "", marshalNotStarted("codex", cause))
+
+	ws.mu.Lock()
+	answer := ws.answer
+	ws.mu.Unlock()
+	if !strings.HasPrefix(answer, "The Marshal couldn't start with Codex because the project's planning context is too large") || strings.Contains(answer, "REQUIRED_CONTEXT") {
+		t.Fatalf("Board answer = %q", answer)
+	}
+	found := false
+	for _, n := range ws.noteList() {
+		if strings.Contains(n.Text, "Why the Marshal didn't start: MCP delivery failed: REQUIRED_CONTEXT_BUDGET_EXCEEDED") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Activity lacks the raw cause: %+v", ws.noteList())
+	}
+	data, err := os.ReadFile(statepath.Path(tmp, "logs", "tui-errors.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n"); len(lines) != 1 || !strings.Contains(lines[0], "(cause: MCP delivery failed: REQUIRED_CONTEXT_BUDGET_EXCEEDED)") {
+		t.Fatalf("log = %q", data)
+	}
+}
+
+// A Marshal that fails to start on its own (startup, restart) logs the cause
+// and records it in Activity too.
+func TestMarshalStartFailureReportedOutsideCommands(t *testing.T) {
+	tmp := t.TempDir()
+	ws := NewWorkspace(nil, "project", "session")
+	ws.workDir = tmp
+	if ws.reportMarshalStartFailure(errors.New("not a launch failure")) {
+		t.Fatal("an ordinary error was reported as a Marshal start failure")
+	}
+	if !ws.reportMarshalStartFailure(marshalNotStarted("codex", errors.New("hidden instruction delivery failed: token=abc"))) {
+		t.Fatal("launch failure not reported")
+	}
+	data, err := os.ReadFile(statepath.Path(tmp, "logs", "tui-errors.log"))
+	if err != nil || !strings.Contains(string(data), "marshal start: The Marshal couldn't start with Codex because its instructions could not be handed over.") || !strings.Contains(string(data), "(cause: hidden instruction delivery failed") {
+		t.Fatalf("log = %q, %v", data, err)
+	}
+	found := false
+	for _, n := range ws.noteList() {
+		found = found || strings.HasPrefix(n.Text, "Why the Marshal didn't start: hidden instruction delivery failed")
+	}
+	if !found {
+		t.Fatalf("Activity lacks the cause: %+v", ws.noteList())
 	}
 }
