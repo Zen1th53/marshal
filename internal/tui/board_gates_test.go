@@ -148,6 +148,8 @@ func (fakePlanSource) PlanOverview(context.Context, string) (store.PlanOverview,
 // through the Board's say path, only after the arm and the confirm (a click
 // then a second click); the architecture gate never sends anything.
 func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
+	// This test is about the classic Board itself.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
