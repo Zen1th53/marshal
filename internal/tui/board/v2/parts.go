@@ -290,12 +290,15 @@ func nowStrip(c *canvas, y int, n vm.NowLine) {
 // keyBar is the row of key hints.
 func keyBar(c *canvas, y int, keys []vm.Key) {
 	x := 1
-	for _, k := range keys {
+	for i, k := range keys {
 		if x+width(k.Key)+2 > c.w {
 			break
 		}
+		x0 := x
 		x = c.put(x, y, " "+k.Key+" ", st{fg: cInk, bg: cKey, b: true})
-		x = c.put(x+1, y, k.Label, sFaint) + 2
+		x = c.put(x+1, y, k.Label, sFaint)
+		c.hit(y, x0, x, HitKey, i, k.Key)
+		x += 2
 	}
 }
 

@@ -157,6 +157,7 @@ type Inbox struct {
 	Count int
 	Lines []string // empty: "Nothing waits for you."
 	Next  string
+	Refs  []string // per line, what a click on it reaches ("" for nothing); the collector's own ids
 }
 
 // Event is one Activity row. Equal events within a window fold into one with Count.
