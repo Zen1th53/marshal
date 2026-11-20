@@ -9816,8 +9816,8 @@
     },
     {
       "path": "internal/projectknowledge/architecture.go",
-      "sha256": "9889303d89679eb395d34fb27559d55bf792befb8f5d6de058ef94f8fba5774e",
-      "bytes": 5792
+      "sha256": "3d6b09761b27c93fe0525e5a8daaaa334e2d1d183642dad99c97997e35328d52",
+      "bytes": 5832
     },
     {
       "path": "internal/projectknowledge/architecture_test.go",
@@ -9836,8 +9836,8 @@
     },
     {
       "path": "internal/projectknowledge/index.go",
-      "sha256": "a2cb9290cefcd53ec7ca55cc1ad4de567b138c776a2515677ef69a119e85fd26",
-      "bytes": 39148
+      "sha256": "4071a1f4617f52d86d97d308947f7f27311e1655802a06b45e6641ad1de125fa",
+      "bytes": 39699
     },
     {
       "path": "internal/projectknowledge/index_test.go",
@@ -9863,6 +9863,16 @@
       "path": "internal/projectknowledge/protocol_extreme.go",
       "sha256": "e55701b48dce8c2363f070d2dfa3000aa0039b01bfd78909213c3ff752d1f9a4",
       "bytes": 198
+    },
+    {
+      "path": "internal/projectknowledge/seed.go",
+      "sha256": "7e8dbf2bc5cfd57d44968ba0ec5f2279d58b0da9208f8c0033ed194dab6b233e",
+      "bytes": 5003
+    },
+    {
+      "path": "internal/projectknowledge/seed_test.go",
+      "sha256": "77f2e630464c0b0d83641704084e385ec8d28f5ea907013feee4ef4fea01ed40",
+      "bytes": 3531
     },
     {
       "path": "internal/projectknowledge/source_policy_test.go",
@@ -17166,8 +17176,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d38ace93c556bb9036fb37dccf4b741beb6ddb8fad5544194f67cb7e1dddb44d",
-      "bytes": 473049
+      "sha256": "88c799d54869e67e84b5ea8124d6bfcec3f4c85580555ce0befab41dcdd1d434",
+      "bytes": 473186
     },
     {
       "path": "tools/extreme/prq/main_default.go",
