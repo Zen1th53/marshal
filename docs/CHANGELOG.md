@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.5
+
+### Added
+- Board v2, the new control centre: titled panes on one grid, with readiness, planning, command centre, decision card, paused card, Marshal chat strip and split screens; two columns from 120 columns, stacked below. `MARSHAL_BOARD=classic` keeps the classic Board for one release.
+- Readiness checks name their reason (agy not signed in; the Marshal's provider is marked "in use"); the paused card recovers a run with one key; the Space palette lists the eight core actions first.
+
+### Changed
+- The Marshal chat pane is titled MARSHAL CHAT and keeps the title against the provider's own title sequences.
+- Repeated activity is folded into one line.
+- The MCP tool list sent with every Marshal turn is smaller.
+
+### Fixed
+- Decisions sent to a Claude Code Marshal no longer stay unsent as `[Pasted text #N]` and expire; a restarted Board submits its predecessor's paste, and owner text is never submitted.
+- A resumed or restarted Marshal chat is bound to the run again; open requests carry over.
+- The telemetry client registers again once when the server no longer knows the installation.
+- Tests build and vet on macOS again.
+
 ## 0.3.4
 
 ### Changed
