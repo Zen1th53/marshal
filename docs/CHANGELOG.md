@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.2
+
+### Added
+- Lanes and the run header follow real worker heartbeats: a live worker shows with its elapsed time and last signal; a worker silent for two minutes shows as lost, and a run with no live worker no longer says "running".
+- The owner sees when the Marshal tries to accept the architecture for them (Marshal refuses it) and when it approves a plan itself in ultra mode.
+
+### Changed
+- Workers use any model the installed Codex offers instead of a fixed list, and fall back to the owner's default.
+- tmux calls tolerate slow hosts (longer deadlines, one retry for read-only commands); a slow terminal no longer fails a worker as a provider problem.
+
+### Fixed
+- The Codex Marshal starts after the project architecture grows; a failed Marshal start says why.
+- The Marshal chat cannot read or write Marshal's state database (agy, Codex, Claude); agy's sandboxed shell works with Marshal's own rules again.
+- Infrastructure retries no longer exhaust a task's lane attempts ("task lane rework out of range").
+
 ## 0.3.1
 
 First published release of the 0.3.0 changes below (v0.3.0 was tagged but not published: a help screen test failed in the governed edition).
