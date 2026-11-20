@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3
+
+First published release of the 0.3.2 changes (v0.3.2 was tagged but not published: a governed-edition test failed), plus:
+
+### Fixed
+- A worker keeps its lease while it is being prepared (project index, probes), not only once its process runs; slow hosts no longer lose every attempt after five minutes.
+- A Codex model named explicitly is checked against the installed Codex's live catalog before the task is claimed.
+
 ## 0.3.2
 
 ### Added
