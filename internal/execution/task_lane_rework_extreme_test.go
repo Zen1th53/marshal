@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -247,5 +248,102 @@ func TestExtremeTaskLaneReworkKeepsLiveNativeTurnBlocked(t *testing.T) {
 	}
 	if kept := mustRun(t, e, first.RunID); kept.State != RunRunning {
 		t.Fatalf("a lane with a live native turn changed state: %s", kept.State)
+	}
+}
+
+// Marshal stopped (SIGTERM) while the worker of a task's first attempt ran:
+// the reopened engine finds the lane RUNNING with no executor. The retry of
+// that same attempt is still refused, but the interrupted attempt is closed
+// (paused, its record kept, nothing claimed) and the next attempt then admits
+// and runs. A lane this runtime still executes, one with a live native turn
+// and one that is not the task's current attempt are never closed.
+func TestExtremeOrphanTaskLaneClosedAfterRestartAdmitsNextAttempt(t *testing.T) {
+	e, parent, base := laneFixture(t)
+	first, err := e.OpenTaskLane(t.Context(), parent.RunID, "task-1", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.ReconcileOrphanTaskLane(t.Context(), parent.RunID, "task-1", 0); !errors.Is(err, ErrRunConflict) {
+		t.Fatalf("a lane that never started was closed as interrupted: %v", err)
+	}
+	stored := mustRun(t, e, first.RunID)
+	task := stored.Tasks["task-1"]
+	now := time.Now().UTC()
+	task.State = TaskRunning
+	task.Attempts = 1
+	task.StartedAt = &now
+	stored.Tasks["task-1"] = task
+	stored.State = RunRunning
+	stored.CurrentPhase = PhaseExecuting
+	if err = e.store.UpdateRun(t.Context(), stored); err != nil {
+		t.Fatal(err)
+	}
+	// This runtime still executes it: never closed.
+	e.operationMu.Lock()
+	e.activeRuns[first.RunID] = struct{}{}
+	e.operationMu.Unlock()
+	if _, err = e.ReconcileOrphanTaskLane(t.Context(), parent.RunID, "task-1", 0); !errors.Is(err, ErrRunBlocked) {
+		t.Fatalf("a live lane was closed: %v", err)
+	}
+	e.operationMu.Lock()
+	delete(e.activeRuns, first.RunID)
+	e.operationMu.Unlock()
+
+	// Restart: a fresh engine over the same durable store.
+	store, err := NewFileRunStore(filepath.Join(e.cfg.ProjectRoot, ".marshal", "lane-test-runs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := NewEngineWithReaders(e.cfg, store, nil, e.planReader, e.goalReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerWritingHarness(fresh)
+	if _, err = fresh.OpenTaskLane(t.Context(), parent.RunID, "task-1", base); !errors.Is(err, ErrRunBlocked) || !strings.Contains(err.Error(), "orphan task lane") {
+		t.Fatalf("the interrupted attempt was resumed without being closed: %v", err)
+	}
+	if _, err = fresh.ReconcileOrphanTaskLane(t.Context(), parent.RunID, "task-1", 1); !errors.Is(err, ErrRunConflict) {
+		t.Fatalf("an attempt that is not the current one was closed: %v", err)
+	}
+	// A live native turn may still be running in its provider.
+	native := mustRun(t, fresh, first.RunID)
+	nativeTask := native.Tasks["task-1"]
+	nativeTask.NativeTurn = &NativeTurnBinding{}
+	native.Tasks["task-1"] = nativeTask
+	if err = fresh.store.UpdateRun(t.Context(), native); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fresh.ReconcileOrphanTaskLane(t.Context(), parent.RunID, "task-1", 0); !errors.Is(err, ErrRunConflict) {
+		t.Fatalf("a lane with a live native turn was closed: %v", err)
+	}
+	native = mustRun(t, fresh, first.RunID)
+	nativeTask = native.Tasks["task-1"]
+	nativeTask.NativeTurn = nil
+	native.Tasks["task-1"] = nativeTask
+	if err = fresh.store.UpdateRun(t.Context(), native); err != nil {
+		t.Fatal(err)
+	}
+
+	closed, err := fresh.ReconcileOrphanTaskLane(t.Context(), parent.RunID, "task-1", 0)
+	if err != nil {
+		t.Fatalf("the interrupted attempt was not closed: %v", err)
+	}
+	got := closed.Tasks["task-1"]
+	if closed.State != RunPaused || got.State != TaskFailed || got.ResultCommit != "" || got.StartedAt == nil || got.Attempts != 1 || got.LastFailureReason == "" {
+		t.Fatalf("closing claimed a result or lost the record: %s %+v", closed.State, got)
+	}
+	if latest := mustRun(t, fresh, parent.RunID); latest.TaskLanes["task-1"] != first.RunID {
+		t.Fatalf("closing moved the parent pointer: %v", latest.TaskLanes)
+	}
+	next, err := fresh.OpenTaskLaneRework(t.Context(), parent.RunID, "task-1", base, 1)
+	if err != nil {
+		t.Fatalf("the next attempt was not admitted after closing: %v", err)
+	}
+	executeLane(t, fresh, next, base)
+	if latest := mustRun(t, fresh, parent.RunID); latest.TaskLanes["task-1"] != next.RunID {
+		t.Fatalf("parent does not follow the next attempt: %v", latest.TaskLanes)
+	}
+	if kept := mustRun(t, fresh, first.RunID); kept.State != RunPaused || kept.Tasks["task-1"].StartedAt == nil {
+		t.Fatalf("the interrupted attempt's record changed: %s", kept.State)
 	}
 }

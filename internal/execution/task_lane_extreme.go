@@ -171,7 +171,7 @@ func (e *Engine) OpenTaskLaneRework(ctx context.Context, parentID, taskID, base 
 			// A lane still recorded as running that no executor of this
 			// runtime owns was interrupted by a restart. It is paused with its
 			// worktree and evidence retained, and the next attempt opens.
-			if err := e.pauseOrphanTaskLane(ctx, lane, taskID); err != nil {
+			if err := e.pauseOrphanTaskLane(ctx, lane, taskID, "interrupted task lane superseded by a later attempt"); err != nil {
 				return nil, err
 			}
 		} else if active || (lane.State != RunDonePendingVerification && lane.State != RunFailed && lane.State != RunPaused) {
@@ -375,6 +375,53 @@ func (e *Engine) ReconcileTaskLane(ctx context.Context, id string, version int64
 		return nil, err
 	}
 	return &run, nil
+}
+
+// ReconcileOrphanTaskLane closes attempt rework of taskID when a restart
+// interrupted it: the parent still points at that lane, the lane is recorded
+// as running or cancelling, no executor of this engine owns it and no native
+// provider turn is live. The lane is paused as a later attempt would pause it
+// (pauseOrphanTaskLane): no result is claimed, and its worktree, evidence and
+// reservations are kept. The caller must own the project's runtime lifecycle,
+// so no other live runtime can be executing the lane. The next attempt
+// (rework+1) may then open.
+func (e *Engine) ReconcileOrphanTaskLane(ctx context.Context, parentID, taskID string, rework int) (*ExecutionRun, error) {
+	if rework < 0 || rework > maxTaskLaneReworks {
+		return nil, fmt.Errorf("%w: task lane rework out of range", ErrRunInvalid)
+	}
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
+	e.laneCommitMu.Lock()
+	defer e.laneCommitMu.Unlock()
+	id := taskLaneID(parentID, taskID, rework)
+	if _, active := e.activeRuns[id]; active {
+		return nil, fmt.Errorf("%w: task lane is still executing", ErrRunBlocked)
+	}
+	if _, active := e.activeRuns[parentID]; active {
+		return nil, fmt.Errorf("%w: whole parent is already executing", ErrRunBlocked)
+	}
+	parent, err := e.store.GetRun(ctx, parentID)
+	if err != nil {
+		return nil, err
+	}
+	if parent.ParentRunID != "" || parent.TaskLanes[taskID] != id {
+		return nil, fmt.Errorf("%w: interrupted lane is not the task's current attempt", ErrRunConflict)
+	}
+	lane, err := e.store.GetRun(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if lane.ParentRunID != parentID || lane.LaneTaskID != taskID || !orphanTaskLane(lane, taskID) {
+		return nil, fmt.Errorf("%w: task lane is not an interrupted attempt", ErrRunConflict)
+	}
+	if err = e.pauseOrphanTaskLane(ctx, lane, taskID, "interrupted task lane closed after a restart"); err != nil {
+		return nil, err
+	}
+	closed, err := e.store.GetRun(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &closed, nil
 }
 
 func (e *Engine) validateTaskLaneExecution(run ExecutionRun) error {
@@ -666,14 +713,14 @@ func orphanTaskLane(lane ExecutionRun, taskID string) bool {
 // pauseOrphanTaskLane pauses an interrupted lane as ReconcileTaskLane does; it
 // claims no result and keeps the lane's worktree and evidence. The caller
 // holds laneCommitMu, so the lane is written to the store directly.
-func (e *Engine) pauseOrphanTaskLane(ctx context.Context, lane ExecutionRun, taskID string) error {
+func (e *Engine) pauseOrphanTaskLane(ctx context.Context, lane ExecutionRun, taskID, reason string) error {
 	task := lane.Tasks[taskID]
 	if !task.State.IsTerminal() {
 		// Failed, as an interrupted attempt is recorded elsewhere: the lane
 		// no longer holds its scope against the attempt that supersedes it.
 		task.State = TaskFailed
 	}
-	task.LastFailureReason = "interrupted task lane superseded by a later attempt"
+	task.LastFailureReason = reason
 	task.UpdatedAt = time.Now().UTC()
 	lane.Tasks[taskID] = task
 	lane.State = RunPaused
