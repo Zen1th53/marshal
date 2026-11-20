@@ -29,6 +29,10 @@ type Capability struct {
 	PalettePath   string     // palette searchable phrase
 	IsDestructive bool       // Requires explicit confirmation if true
 	RequiresDep   string     // Optional external dependency e.g. "agy"
+	Core          bool       // Shown first when the palette opens with an empty query
+	CoreOrder     int        // Display order among Core actions (1..N)
+	CoreKey       string     // Single key shown in the palette's core list
+	CoreLabel     string     // Short label shown in the palette's core list
 }
 
 // CapabilityRegistry manages the catalog of user-operable MARSHAL capabilities.
@@ -91,6 +95,10 @@ func (r *CapabilityRegistry) ToPaletteActions() []PaletteAction {
 			Description: cap.Description,
 			Command:     cap.TUISurface,
 			Shortcut:    cap.KeyboardPath,
+			Core:        cap.Core,
+			CoreOrder:   cap.CoreOrder,
+			CoreKey:     cap.CoreKey,
+			CoreLabel:   cap.CoreLabel,
 		})
 	}
 	return actions
@@ -249,6 +257,7 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 		Description: "Pause the active collaborative session",
 		Access:      AccessWrite, CLISurface: "marshal pause",
 		TUISurface: "/pause", PalettePath: "goal pause",
+		Core: true, CoreOrder: 5, CoreKey: "p", CoreLabel: "pause everything",
 	})
 	r.Register(Capability{
 		ID: "goal.resume", Category: "GOAL", Name: "Resume Goal",
@@ -700,6 +709,7 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 		Description: "Retry a failed or blocked task with fresh context",
 		Access:      AccessWrite, CLISurface: "marshal task retry",
 		TUISurface: "/task retry T-<id>", PalettePath: "task retry",
+		Core: true, CoreOrder: 3, CoreKey: "r", CoreLabel: "restart a task",
 	})
 	r.Register(Capability{
 		ID: "task.ownership", Category: "TASKS", Name: "Task Ownership",

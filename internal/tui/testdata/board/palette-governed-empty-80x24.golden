@@ -1,0 +1,13 @@
+╭─ ACTIONS  type to search all 171 ────────────────────────────────────╮|
+│ > _                                                                  │|
+├──────────────────────────────────────────────────────────────────────┤|
+│ ▶ s       say to the Marshal                                         │|
+│   a       open the architecture                                      │|
+│   r       restart a task                                             │|
+│   m       change model or provider                                   │|
+│   p       pause everything                                           │|
+│   Ctrl+X  stop all workers                                           │|
+│   l       limits and workers                                         │|
+│   ?       help                                                       │|
+│   ── 163 more · type a word, e.g. "retry", "budget", "telemetry"     │|
+╰─ Enter run · ↑↓ choose · type to filter · Esc close ─────────────────╯|

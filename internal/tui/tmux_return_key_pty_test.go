@@ -94,7 +94,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 					if _, err := master.Write([]byte("\x0b")); err != nil {
 						t.Fatal(err)
 					}
-					waitForTmuxOutput(t, pane, " Actions ")
+					waitForTmuxOutput(t, pane, " ACTIONS ")
 				}
 			}
 			if tc.worker {
@@ -115,7 +115,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.TrimSpace(string(selected)) == pane && (strings.Contains(out, "MARSHAL") || strings.Contains(out, "Marshal")) && !strings.Contains(out, "Git Diff") && !strings.Contains(out, " Actions ") {
+				if strings.TrimSpace(string(selected)) == pane && (strings.Contains(out, "MARSHAL") || strings.Contains(out, "Marshal")) && !strings.Contains(out, "Git Diff") && !strings.Contains(out, " ACTIONS ") {
 					break
 				}
 				if time.Now().After(deadline) {

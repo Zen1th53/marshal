@@ -91,3 +91,41 @@ func TestRunControlCounts(t *testing.T) {
 		t.Fatalf("no runs: pause %d resume %d", pause, resume)
 	}
 }
+
+// Both editions mark exactly the 8 owner core actions, in order, with their
+// single keys and labels.
+func TestPaletteCoreActionsRegistry(t *testing.T) {
+	var core []PaletteAction
+	for _, a := range append(boardPaletteActions(nil), paletteRegistryActions()...) {
+		if a.Core {
+			core = append(core, a)
+		}
+	}
+	slices.SortStableFunc(core, func(x, y PaletteAction) int {
+		return x.CoreOrder - y.CoreOrder
+	})
+	want := []struct{ key, label string }{
+		{"s", "say to the Marshal"},
+		{"a", "open the architecture"},
+		{"r", "restart a task"},
+		{"m", "change model or provider"},
+		{"p", "pause everything"},
+		{"Ctrl+X", "stop all workers"},
+		{"l", "limits and workers"},
+		{"?", "help"},
+	}
+	if len(core) != len(want) {
+		t.Fatalf("got %d core actions, want %d: %+v", len(core), len(want), core)
+	}
+	for i, w := range want {
+		if core[i].CoreOrder != i+1 {
+			t.Errorf("core[%d] %s has CoreOrder %d, want %d", i, core[i].ID, core[i].CoreOrder, i+1)
+		}
+		if got := core[i].coreKey(); got != w.key {
+			t.Errorf("core[%d] %s key = %q, want %q", i, core[i].ID, got, w.key)
+		}
+		if got := core[i].coreLabel(); got != w.label {
+			t.Errorf("core[%d] %s label = %q, want %q", i, core[i].ID, got, w.label)
+		}
+	}
+}

@@ -63,6 +63,14 @@ type boardKey struct {
 	// handler the key reaches (board_hints.go). It adds no behaviour of its
 	// own.
 	Run func(*Workspace, context.Context)
+	// Core marks one of the owner's primary actions shown first when the
+	// palette opens with an empty query. CoreOrder (1..N) fixes their
+	// display order; CoreKey and CoreLabel are the single key and short
+	// label shown in the core grid.
+	Core      bool
+	CoreOrder int
+	CoreKey   string
+	CoreLabel string
 }
 
 // runViewOff is the Why of a view that needs a run: runViewWhy while there is
@@ -87,7 +95,7 @@ var boardKeymap = []boardKey{
 	{Group: "VIEWS", Keys: "1", What: "back to the Board", View: "Board", Press: pressRune('1'), Class: KeyOpen, ID: "view.board", Hint: "board", When: func(w *Workspace) bool { return w.boardVisible() && w.anyBodyView() }, Why: reason("No view is open to leave.")},
 	{Group: "VIEWS", Keys: "2  h", What: "host: temperature, disk, guards", View: "Host", Press: pressRune('2'), Class: KeyOpen, ID: "view.host", Hint: "host", When: func(w *Workspace) bool { return w.hostWatch.Load() != nil }, Why: reason("Host vitals are not available in this session.")},
 	{Group: "VIEWS", Keys: "3", What: "memory: review queue", View: "Memory", Press: pressRune('3'), Class: KeyOpen, ID: "view.memory", Hint: "memory", When: func(w *Workspace) bool { return w.memorySrc() != nil }, Why: reason("The memory review queue has nothing to show in this session.")},
-	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen, ID: "view.providers", Hint: "providers", When: func(w *Workspace) bool { return w.providerSrc() != nil }, Why: reason("Provider health has nothing to show in this session.")},
+	{Group: "VIEWS", Keys: "4", What: "providers: harness health", View: "Providers", Press: pressRune('4'), Class: KeyOpen, ID: "view.providers", Hint: "providers", Core: true, CoreOrder: 7, CoreKey: "l", CoreLabel: "limits and workers", When: func(w *Workspace) bool { return w.providerSrc() != nil }, Why: reason("Provider health has nothing to show in this session.")},
 	{Group: "VIEWS", Keys: "5", What: "verify: claims and their evidence", View: "Verify", Press: pressRune('5'), Class: KeyOpen, ID: "view.verify", Hint: "verify", When: func(w *Workspace) bool { return w.verifySrc() != nil && w.hasRun() }, Why: runViewOff("Verify", "There are no claims to verify in this session.")},
 	{Group: "VIEWS", Keys: "6", What: securityKeyWhat, View: "Security", Press: pressRune('6'), Class: KeyOpen, ID: "view.security", Hint: "security", When: func(w *Workspace) bool { return w.securitySrc() != nil && w.hasRun() }, Why: runViewOff("Security", "There is no security activity to show in this session.")},
 	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil && w.hasRun() }, Why: runViewOff("Plan", "There is no plan to show in this session.")},
@@ -102,9 +110,9 @@ var boardKeymap = []boardKey{
 	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen, ID: "inspector.walk", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
 	{Group: "BOARD", Keys: "o", What: "inspector: show the worker's pane", Class: KeyOpen, ID: "inspector.pane"},
 	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
-	{Group: "BOARD", Keys: "r", What: "stuck task: retry it, Enter", Hint: "retry", Press: pressRune('r'), Class: KeyConfirm, ID: "task.retry", When: func(w *Workspace) bool { _, ok := stuckTaskUnderKeyboard(w); return ok }, Why: func(w *Workspace) string { _, why := retryTarget(w); return why }},
+	{Group: "BOARD", Keys: "r", What: "stuck task: retry it, Enter", Hint: "retry", Press: pressRune('r'), Class: KeyConfirm, ID: "task.retry", Core: true, CoreOrder: 3, CoreKey: "r", CoreLabel: "restart a task", When: func(w *Workspace) bool { _, ok := stuckTaskUnderKeyboard(w); return ok }, Why: func(w *Workspace) string { _, why := retryTarget(w); return why }},
 	{Group: "BOARD", Keys: "w", What: "task: choose the model that runs it", Hint: "model", Press: pressRune('w'), Class: KeyOpen, ID: "task.model", When: func(w *Workspace) bool { _, ok := taskUnderKeyboard(w); return ok }, Why: reason(taskModelWhy)},
-	{Group: "BOARD", Keys: "a", What: "project architecture in the browser", Command: "/marshal architecture", Class: KeyOpen, ID: "architecture.browse"},
+	{Group: "BOARD", Keys: "a", What: "project architecture in the browser", Command: "/marshal architecture", Class: KeyOpen, ID: "architecture.browse", Core: true, CoreOrder: 2, CoreKey: "a", CoreLabel: "open the architecture"},
 
 	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}, ID: "inbox.reply", Hint: "reply", When: func(w *Workspace) bool { return w.boardReplyWaiting() }, Why: reason("Nothing is waiting for your reply.")},
 	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm, ID: "inbox.decide", When: func(w *Workspace) bool { return len(w.boardInbox()) > 0 }, Why: reason("The inbox has nothing to decide.")},
@@ -122,13 +130,13 @@ var boardKeymap = []boardKey{
 	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen, ID: "plan.inspect", When: func(w *Workspace) bool { return w.planView.Load() }, Why: reason("Open the Plan view first.")},
 	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen, ID: "arch.open", Hint: "open in browser", When: func(w *Workspace) bool { return w.archView.Load() }, Why: reason("Open the Architecture view first.")},
 
-	{Group: "MARSHAL", Keys: "m", What: "change the Marshal", Hint: "Marshal", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.pick"},
+	{Group: "MARSHAL", Keys: "m", What: "change the Marshal", Hint: "Marshal", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.pick", Core: true, CoreOrder: 4, CoreKey: "m", CoreLabel: "change model or provider"},
 	{Group: "MARSHAL", Keys: "F11", What: "chat ⇄ Board (Alt+← / Alt+→ in tmux)", Hint: "chat", Press: &KeyEvent{Type: KeyF11}, Class: KeyOpen, ID: "marshal.chat"},
-	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", When: func(w *Workspace) bool { return w.boardVisible() && w.boardUI.inspect == "" }, Why: reason("Leave the inspector to speak to the Marshal.")},
+	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", Core: true, CoreOrder: 1, CoreKey: "s", CoreLabel: "say to the Marshal", When: func(w *Workspace) bool { return w.boardVisible() && w.boardUI.inspect == "" }, Why: reason("Leave the inspector to speak to the Marshal.")},
 	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen, ID: "command.line", Hint: "command"},
 	{ID: "palette", Group: "MARSHAL", Keys: "space  Ctrl+K", What: "all actions; type to filter", Hint: "actions", Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "?", What: "this help", Press: pressRune('?'), Class: KeyOpen, ID: "help", Hint: "help"},
-	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)", ID: "workers.stop"},
+	{Group: "MARSHAL", Keys: "?", What: "this help", Press: pressRune('?'), Class: KeyOpen, ID: "help", Hint: "help", Core: true, CoreOrder: 8, CoreKey: "?", CoreLabel: "help"},
+	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)", ID: "workers.stop", Core: true, CoreOrder: 6, CoreKey: "Ctrl+X", CoreLabel: "stop all workers"},
 	{Group: "MARSHAL", Keys: "Ctrl+C", What: "interrupt; twice to exit", Class: KeyConfirm, Direct: "spec: ^C unchanged, it interrupts; a second press exits", ID: "interrupt"},
 
 	{Group: "FUNCTION KEYS", Keys: "F1", What: "help overview", Command: "/help", Class: KeyOpen, ID: "fkey.help"},
@@ -189,7 +197,11 @@ func (w *Workspace) boardStopWaiting() bool {
 // the key entry otherwise. runBoardAction and boardPaletteActions both build
 // it, so a click, the palette and the hint bar run the one same thing.
 func (k boardKey) action() PaletteAction {
-	a := PaletteAction{ID: k.ID, Category: "KEY", Title: k.What, Description: k.Group, Shortcut: k.Keys, Command: k.Command, Key: k.Press, Pane: k.pane()}
+	a := PaletteAction{
+		ID: k.ID, Category: "KEY", Title: k.What, Description: k.Group, Shortcut: k.Keys,
+		Command: k.Command, Key: k.Press, Pane: k.pane(),
+		Core: k.Core, CoreOrder: k.CoreOrder, CoreKey: k.CoreKey, CoreLabel: k.CoreLabel,
+	}
 	if k.View != "" {
 		a.Category, a.Title, a.View = "VIEW", "Open "+k.View+" view", true
 		if k.View == "Board" {
@@ -264,7 +276,7 @@ type paletteCommand struct {
 // their commands still type and complete. Stopping every worker is the
 // Board's Ctrl+X row (workers.stop).
 var shippedPaletteCommands = []paletteCommand{
-	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; the Marshal starts no new one until you resume", Command: "/pause all"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
+	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; the Marshal starts no new one until you resume", Command: "/pause all", Core: true, CoreOrder: 5, CoreKey: "p", CoreLabel: "pause everything"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
 	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Resume every paused task and let the Marshal go on", Command: "/resume all"}, When: func(w *Workspace) bool { return w.runResumable.Load() > 0 }, Why: reason("No run is paused.")},
 	{PaletteAction: PaletteAction{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"}},
 	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"}},

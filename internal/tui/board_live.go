@@ -742,13 +742,13 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		}
 	}
 	// The palette (space / Ctrl+K) is rendered by the caller and arrives as
-	// popup; its visible rows are clickable. Layout gives the same box width
-	// and row range Render drew, so each row's region lands under its line.
+	// popup; its visible entries are clickable. Cells gives the same
+	// box-relative regions Render drew, for both the two-column core grid and
+	// the search list.
 	if w.palette.IsOpen() {
 		r := l.Overlay(0)
-		boxWidth, start, end := w.palette.Layout(cols, rows)
-		for i := start; i < end; i++ {
-			overlayHits = append(overlayHits, boardHit{row: r.Y + 3 + (i - start), x0: r.X, x1: r.X + boxWidth, kind: hitPaletteRow, id: strconv.Itoa(i)})
+		for _, c := range w.palette.Cells(cols, rows) {
+			overlayHits = append(overlayHits, boardHit{row: r.Y + c.Row, x0: r.X + c.X0, x1: r.X + c.X1, kind: hitPaletteRow, id: strconv.Itoa(c.Index)})
 		}
 	}
 	// The mid-run Marshal picker (m) is an overlay like help; its rows record
