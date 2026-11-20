@@ -4660,6 +4660,11 @@
       "bytes": 2650
     },
     {
+      "path": "internal/app/worker_signin_public.go",
+      "sha256": "67a588bf9a514eef0eceb2f65b5f4574bfe15cb6eb77a928d241e64226145a40",
+      "bytes": 372
+    },
+    {
       "path": "internal/app/worker_stall_default.go",
       "sha256": "3879f3881a66968ed01b3b477a969c7b70a052aa0920c63598f0044d5450c470",
       "bytes": 328
@@ -13056,8 +13061,8 @@
     },
     {
       "path": "internal/tui/board/vm/vm.go",
-      "sha256": "1fddcfec996bdbf79a84ad69c4e4eb6ab2f7f69414744a69cf993bcefdc9df03",
-      "bytes": 6977
+      "sha256": "74db2a6a543670c578e9c43d4752cef938f719d3722e33eff5e3ea53d3db5262",
+      "bytes": 7143
     },
     {
       "path": "internal/tui/board/widgets/chat/chat.go",
@@ -13620,14 +13625,54 @@
       "bytes": 7894
     },
     {
+      "path": "internal/tui/boardv2_cards_contract_default.go",
+      "sha256": "b0d23049dcb5794d59e7dbd382756a6f1d10fa7d0b3111dfde9649ea30f0ff37",
+      "bytes": 428
+    },
+    {
+      "path": "internal/tui/boardv2_cards_contract_extreme.go",
+      "sha256": "a85c63a77b29bbc0f1c34301ca1cf295ba9c7a05429a6702ec912ffcb8a6ad59",
+      "bytes": 1118
+    },
+    {
+      "path": "internal/tui/boardv2_cards_decision.go",
+      "sha256": "f61029a46323f7e25ba414c2e6a9cbe1510b5dd8d1b1debe83629847086b65a0",
+      "bytes": 9475
+    },
+    {
+      "path": "internal/tui/boardv2_cards_governed_test.go",
+      "sha256": "7ea89eaa4d87a14540c95d513f96c512221d43f3368ff1aad917bd792a8b7dd1",
+      "bytes": 1863
+    },
+    {
+      "path": "internal/tui/boardv2_cards_keys.go",
+      "sha256": "fefaeb315d613bbe0bb7c04220deaadea49b35251a6dfe5966586389a2fbfaaa",
+      "bytes": 6285
+    },
+    {
+      "path": "internal/tui/boardv2_cards_paused.go",
+      "sha256": "18c8a6de87529e6393124807721c921c6e3a5640d763c1db5f9cf9cf30e46f2c",
+      "bytes": 13122
+    },
+    {
+      "path": "internal/tui/boardv2_cards_state.go",
+      "sha256": "f07516a02a17d43e4cabfc40d375e0f13b8ef25cc36e53d029516a3168e2f4dc",
+      "bytes": 8357
+    },
+    {
+      "path": "internal/tui/boardv2_cards_test.go",
+      "sha256": "e011aa895cf3ac82146176d389af5448b00e86c0b9c846efbabaa96eb0723795",
+      "bytes": 18732
+    },
+    {
       "path": "internal/tui/boardv2_collect.go",
       "sha256": "59b7583f84ea75529efd78f588f3dead876b06ce593572f26c4140a736bc5525",
       "bytes": 373
     },
     {
       "path": "internal/tui/boardv2_collect_cards.go",
-      "sha256": "56a165734358010b2098644d16636320fea774d2b2ab70e9452e7f4580681b29",
-      "bytes": 276
+      "sha256": "c05fb808a54684d9d32cef611dcaf92b6b3a579307b46fc14d99b25d3c0a1a50",
+      "bytes": 856
     },
     {
       "path": "internal/tui/boardv2_collect_chat.go",

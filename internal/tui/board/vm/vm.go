@@ -229,6 +229,7 @@ type Node struct {
 
 // Decision is the card over the Board when the owner must act.
 type Decision struct {
+	Kind         string // architecture, plan, inbox: what the card decides
 	Title        string // "Accept architecture · rev 1"
 	Summary      string
 	ChangedNote  string
@@ -244,6 +245,7 @@ type PausedTask struct{ Title, Progress, Kept string }
 
 // Paused is the one-choice recovery card.
 type Paused struct {
+	Kind    string // quota, auth, orphan, timeout, lease, interrupted, stalled, stopped, other
 	Title   string // "Paused · agy Gemini 5h limit"
 	Resets  string
 	Cause   string
