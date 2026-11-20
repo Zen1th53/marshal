@@ -4436,8 +4436,8 @@
     },
     {
       "path": "internal/app/worker_lease_real_path_linux_test.go",
-      "sha256": "ac50f7d88affe835240a37bc1bcf7f80adbf005cc3f59b479dbeaaed1742b97e",
-      "bytes": 4807
+      "sha256": "fa7c09c17eb67579c5ebbede5d875d3251a9fee4afa01661f07e3802aee1add7",
+      "bytes": 4820
     },
     {
       "path": "internal/app/worker_liveness.go",
