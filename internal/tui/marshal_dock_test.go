@@ -340,6 +340,36 @@ func TestMarshalDockTitleShowsLimit(t *testing.T) {
 	mustNotContain(t, f.take(), "@marshal_dock_title")
 }
 
+// TestMarshalDockTitleV2Strip: with Board v2 (MARSHAL_BOARD unset) the
+// reconcile titles the docked chat with the MARSHAL CHAT strip built from
+// the v2 view model, fitted to the chat's width at 132 columns; the classic
+// limit title is not used, and an unchanged strip writes no title again.
+func TestMarshalDockTitleV2Strip(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "")
+	f := newDockFake(t, 132)
+	w, chat := dockWorkspace(t)
+	f.pane(chat.paneID, "@1", 132)
+	chat.provider, chat.args = "codex", []string{"--model", "gpt-6.1-sol"}
+	if err := w.reconcileDock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	want := w.dockTitle(chat, dockWidth(132))
+	log := f.take()
+	mustContain(t, log, "set-option -p -t %7 @marshal_dock_title "+want)
+	for _, part := range []string{" MARSHAL CHAT  ⬡ ", "[m]"} {
+		if !strings.Contains(want, part) {
+			t.Errorf("title %q lacks %q", want, part)
+		}
+	}
+	if VisibleLen(want) > dockWidth(132)-3 || strings.Contains(want, "—") || strings.Contains(want, "MARSHAL · ") {
+		t.Errorf("title %q", want)
+	}
+	if err := w.reconcileDock(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mustNotContain(t, f.take(), "@marshal_dock_title")
+}
+
 func TestDockTitleFits(t *testing.T) {
 	w := &Workspace{}
 	chat := &activeTmuxAgent{provider: "codex"}

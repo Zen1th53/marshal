@@ -37,7 +37,10 @@ type marshalDock struct {
 	windowID string
 
 	docked atomic.Bool // read by paint without taking mu
-	kick   chan struct{}
+	// strip is what the v2 MARSHAL CHAT strip said at the last paint; a
+	// change kicks the dock so the chat's title follows.
+	strip atomic.Pointer[dockStrip]
+	kick  chan struct{}
 }
 
 // dockWait bounds the tmux work of one reconcile, so a wedged server cannot
@@ -128,6 +131,9 @@ func dockWidth(cols int) int {
 // reconcileStartupDock adopts a chat already beside the Board before the
 // terminal dock loop starts. It never moves or resizes a startup layout.
 func (w *Workspace) reconcileStartupDock(ctx context.Context) error {
+	// The v2 frame is built before dock.mu is taken: its collectors read the
+	// whole workspace.
+	strip := w.dockStripNow()
 	w.dock.mu.Lock()
 	defer w.dock.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, dockWait)
@@ -150,12 +156,15 @@ func (w *Workspace) reconcileStartupDock(ctx context.Context) error {
 	if chatGeo.WindowID != boardGeo.WindowID {
 		return nil
 	}
-	return w.adoptDockLocked(ctx, chat, board, w.providerRoot(), chatGeo.PaneWidth, boardGeo.WindowID, boardGeo.WindowWidth)
+	return w.adoptDockLocked(ctx, chat, board, w.providerRoot(), chatGeo.PaneWidth, boardGeo.WindowID, boardGeo.WindowWidth, strip)
 }
 
 // reconcileDock makes tmux match the dock's intent. It is idempotent: a call
 // with nothing to change runs only the two geometry queries.
 func (w *Workspace) reconcileDock(ctx context.Context) error {
+	// The v2 frame is built before dock.mu is taken: its collectors read the
+	// whole workspace.
+	strip := w.dockStripNow()
 	w.dock.mu.Lock()
 	defer w.dock.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, dockWait)
@@ -215,7 +224,7 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 			return err
 		}
 	}
-	return w.adoptDockLocked(ctx, chat, board, root, width, boardGeo.WindowID, boardGeo.WindowWidth)
+	return w.adoptDockLocked(ctx, chat, board, root, width, boardGeo.WindowID, boardGeo.WindowWidth, strip)
 }
 
 // reconcileBoardMouse owns the tmux session's mouse option while the dock is
@@ -238,9 +247,10 @@ func (w *Workspace) reconcileBoardMouse(ctx context.Context, board string) {
 
 // adoptDockLocked installs the same keys and title for every path that puts
 // the chat beside the Board. width is the chat pane's width, for fitting the
-// title; window and windowW are the Board window's id and width. Caller holds
+// title; window and windowW are the Board window's id and width; strip is the
+// v2 strip the title shows (dockStripNow, taken before dock.mu). Caller holds
 // dock.mu.
-func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, board, root string, width int, window string, windowW int) error {
+func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, board, root string, width int, window string, windowW int, strip dockStrip) error {
 	rebound := false
 	if w.dock.pane != chat.paneID || w.dock.board != board {
 		rebound = true
@@ -257,7 +267,7 @@ func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, 
 	if w.statusOwned() {
 		// The status line's second row carries the titles, so [m] can be
 		// clicked; the click binding follows where [m] lands.
-		title, at := w.dockTitleAt(chat, width, true)
+		title, at := w.dockTitleWith(chat, strip, width, true)
 		pick := [2]int{-1, -1}
 		if at >= 0 {
 			pick = [2]int{3 + at, 3 + at + len("[m]")}
@@ -270,7 +280,7 @@ func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, 
 		}
 		w.publishDockStatus(&dockStatus{window: window, chat: chat.paneID, board: board, chatW: width, boardW: max(0, windowW-1-width), chatTitle: title})
 	} else {
-		title := w.dockTitle(chat, width)
+		title, _ := w.dockTitleWith(chat, strip, width, false)
 		if title != w.dock.title {
 			if err := tmux.SetPaneOption(ctx, chat.paneID, "@marshal_dock_title", title); err != nil {
 				return err
@@ -413,13 +423,18 @@ func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 	return err
 }
 
-// dockTitle is the chat pane's title: the Marshal brand, the Marshal model
-// (or the provider when the model is not known) with the provider's glyph,
-// how close it is to its limit, and [m] to switch. It uses only the snapshots
-// already in memory (the last usage reading, the chat's launch arguments and
-// the theme); it never opens a file or consults the store on the rendering
-// path. width is the chat pane's width in columns; the title then fits it
-// less the 3-cell focus marker; width <= 0 skips the fit.
+// dockTitle is the chat pane's title. With Board v2 (the default) it is the
+// v2 MARSHAL CHAT strip (dockStripTitle): the provider's glyph, provider ·
+// model · effort, the chat's binding, the stage, the requests answered and
+// whether its input is clear, then [m] to switch. Under MARSHAL_BOARD=classic
+// it is the classic title: the Marshal brand, the Marshal model (or the
+// provider when the model is not known) with the provider's glyph, how close
+// it is to its limit, and [m] to switch. It uses only snapshots already in
+// memory (the v2 view model, the last usage reading, the chat's launch
+// arguments and the theme); it never opens a file or consults the store on
+// the rendering path. width is the chat pane's width in columns; the title
+// then fits it less the 3-cell focus marker; width <= 0 skips the fit. The
+// caller holds neither w.mu nor dock.mu.
 func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
 	title, _ := w.dockTitleAt(chat, width, false)
 	return title
@@ -429,11 +444,43 @@ func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
 // "[m] switch" flush right (the status line's title row), and it also
 // returns the cell offset of "[m]" in the title, -1 when it is not shown.
 func (w *Workspace) dockTitleAt(chat *activeTmuxAgent, width int, pad bool) (string, int) {
+	return w.dockTitleWith(chat, w.dockStripNow(), width, pad)
+}
+
+// dockTitleWith is dockTitleAt with the v2 strip already taken; a strip that
+// is not on gives the classic title.
+func (w *Workspace) dockTitleWith(chat *activeTmuxAgent, strip dockStrip, width int, pad bool) (string, int) {
 	w.mu.RLock()
 	unicode := w.theme == nil || w.theme.Unicode
 	w.mu.RUnlock()
 	qs, read := w.usageQuotas()
+	if strip.on {
+		return dockStripTitle(dockStripFill(strip, chat.provider, chat.args, qs, read), unicode, width, pad)
+	}
 	return dockTitleFor(chat.provider, chat.args, qs, read, unicode, width, pad, time.Now())
+}
+
+// dockStripFill gives the strip the chat's own provider and model where the
+// Marshal collector left them empty: the provider the chat runs, and the
+// model it was started with (--model) or its provider's last usage reading
+// names, in its short form ("claude-opus-5-5" is "Opus 5.5").
+func dockStripFill(s dockStrip, provider string, args []string, qs []usage.Quota, read bool) dockStrip {
+	if s.provider == "" {
+		s.provider = dockTitleText(provider)
+	}
+	if s.model == "" && s.provider == dockTitleText(provider) {
+		id := chatModelArg(args)
+		if id == "" && read {
+			for _, q := range qs {
+				if q.Provider == s.provider {
+					id = q.Model
+					break
+				}
+			}
+		}
+		_, s.model = modelDisplayName(id)
+	}
+	return s
 }
 
 // dockTitleFor lays the chat's title out. The parts give way in a fixed

@@ -69,6 +69,8 @@ func v2Screen(b vm.Board, empty, planning bool) vm.Screen {
 // through its own locked accessors (GetUIState, marshalPanel).
 func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mode, cols, rows int) []string {
 	b := w.boardV2()
+	// The docked chat's tmux title is the frame's MARSHAL CHAT strip.
+	w.noteDockStrip(b)
 	b.Screen = v2Screen(b, empty, v.planning || v.goalGiven)
 	if b.Now.IsZero() {
 		b.Now = v.now
