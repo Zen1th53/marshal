@@ -258,6 +258,14 @@ func (r *Runtime) VerifyNativeAgyWorker(ctx context.Context, modelName string) (
 		return profile, err
 	}
 	if result.Status != adapter.StatusSuccess || result.ExitCode != 0 || result.TimedOut || result.Cancelled || result.OutputTruncated || result.SessionID == "" || strings.TrimSpace(result.FinalText) != harnessProbeReply {
+		// The CLI's own words are the cause an owner can act on: a sign-in
+		// it asks for reads differently from a crash.
+		if stderr := strings.TrimSpace(string(result.Stderr)); stderr != "" {
+			if len(stderr) > 400 {
+				stderr = strings.ToValidUTF8(stderr[:400], "") + "..."
+			}
+			return profile, fmt.Errorf("native agy probe did not produce the exact successful reply: stderr: %s", stderr)
+		}
 		return profile, errors.New("native agy probe did not produce the exact successful reply")
 	}
 	status, err := gitMarshal(ctx, dir, "status", "--porcelain")

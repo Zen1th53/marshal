@@ -218,6 +218,8 @@ type Workspace struct {
 	homeBoard bool
 	// firstUse is the empty Board's own state.
 	firstUse firstUseState
+	// v2m is the Board v2 Marshal collector's cache of off-paint probes.
+	v2m v2MarshalState
 	// say carries what the operator types to the Marshal from the Board's
 	// composer into the chat.
 	say sayState
