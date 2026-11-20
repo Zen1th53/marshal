@@ -3986,8 +3986,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "37c8c1d305813224613aae4e52897a32e690415b2f8a95ab0495a356f7870372",
-      "bytes": 95592
+      "sha256": "560a90dd8a564d3e7e6dec978dda1a7d398dbf8d32d5e075f3a22f9ff907f8f4",
+      "bytes": 95580
     },
     {
       "path": "internal/app/runtime_base_test.go",
@@ -17161,8 +17161,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "0d143beef44ccb0933ab7e4e9d242e59f9444da319ecfaa210881f611629385d",
-      "bytes": 472978
+      "sha256": "d38ace93c556bb9036fb37dccf4b741beb6ddb8fad5544194f67cb7e1dddb44d",
+      "bytes": 473049
     },
     {
       "path": "tools/extreme/prq/main_default.go",
