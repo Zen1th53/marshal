@@ -13055,9 +13055,179 @@
       "bytes": 1692
     },
     {
+      "path": "internal/tui/board/v2/canvas.go",
+      "sha256": "4c4ca619a36456b3b87c8e02f3adeba6a36dc30ba4f73f7a1550d6f3b4766287",
+      "bytes": 9460
+    },
+    {
+      "path": "internal/tui/board/v2/fixture_test.go",
+      "sha256": "19d4424c6880f0a455685624fab7e1e7d875ff6041584cbf54e9be41ae555726",
+      "bytes": 13390
+    },
+    {
+      "path": "internal/tui/board/v2/parts.go",
+      "sha256": "a144e6f715f3ce8b6639d8860474852b80c80ef05cde3a4270dc0ab5a434960b",
+      "bytes": 8606
+    },
+    {
+      "path": "internal/tui/board/v2/render.go",
+      "sha256": "2fd64f9d9a8bc917870ce0736461fa390a33c632848e70e974974867d9d54f45",
+      "bytes": 1622
+    },
+    {
+      "path": "internal/tui/board/v2/render_test.go",
+      "sha256": "8b20910afe002de682d6709f47e5c482739a1cb8ea8c3beb5fc71e1bbce821ab",
+      "bytes": 5897
+    },
+    {
+      "path": "internal/tui/board/v2/screens.go",
+      "sha256": "002554bc75a8601c270fdf6b8e96731d924d67934add9aacc7b3e89636045280",
+      "bytes": 26502
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen1-running-080.golden",
+      "sha256": "dd8dc295d6b8e01dcb71bcbe20de16a0a4b7a635425b99f8c9e175f99f48e964",
+      "bytes": 3418
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen1-running-100.golden",
+      "sha256": "ad6b88fd157a9da74f60c7c340dc0e31974854ce1710574211ae99d187928635",
+      "bytes": 4288
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen1-running-132-ascii.golden",
+      "sha256": "d0fe1394a2671666cbac365b098c9ad1d18a0cefc4402f56c2c049f79fb2a111",
+      "bytes": 4154
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen1-running-132.golden",
+      "sha256": "a4af18f6ac18ac55f3e4ade26b90bdadfc964df760ccd76e9e258afef833fe90",
+      "bytes": 5844
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen2-ready-080.golden",
+      "sha256": "40abd1d2244ace512a4e040549d148db650a00ddef9f9f76a1b8428b8e1a8ec2",
+      "bytes": 2119
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen2-ready-100.golden",
+      "sha256": "f212b50803fda527be99c91801b4d3c62ee1e6f84c47d2db8bef93c3c430b0eb",
+      "bytes": 2645
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen2-ready-132-ascii.golden",
+      "sha256": "7752ecc7eecf5643db662bee2fce45fee12025d95c173033792b8f93a2b827ce",
+      "bytes": 2948
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen2-ready-132.golden",
+      "sha256": "7c790fc474d6298aedcfb0b7fdb8577d8edeb3f40e458df498ec9794babad8ee",
+      "bytes": 3629
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen3-planning-080.golden",
+      "sha256": "229cbb0437da6bb964e644c6e42952c44cc94ec0e68226b7f56e32506d8aad7c",
+      "bytes": 2425
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen3-planning-100.golden",
+      "sha256": "79350d4277cf5de916ebd1aef802f792a96e7c512cafe401b1386d3487686c8a",
+      "bytes": 3030
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen3-planning-132-ascii.golden",
+      "sha256": "316c02e491e9558414e5cfda18d2efb567bce350de0ae1b7ba992534cb85fd11",
+      "bytes": 2948
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen3-planning-132.golden",
+      "sha256": "1f908db616bc94908af2101ffc6ab886ede7ffd4fba2704b73e9e31e6f59fbf3",
+      "bytes": 3951
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen4-decision-080.golden",
+      "sha256": "9158f1af2d273283fcc0a77d5c2f5618a613175b3cbdcb61a56eb9de56748550",
+      "bytes": 2782
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen4-decision-100.golden",
+      "sha256": "f24da386f165041ae256aece443410212039ecf339b6249ad04e8a0600366d18",
+      "bytes": 3466
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen4-decision-132-ascii.golden",
+      "sha256": "1b8561ae5872837c408ee5456baefde6758d30b4826a615a455863eb3f100572",
+      "bytes": 2948
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen4-decision-132.golden",
+      "sha256": "905756f9f7a73fbfe617185daa83b7eeced4467c806c6ef098a8f091dc32a15d",
+      "bytes": 4413
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen5-paused-080.golden",
+      "sha256": "be42e0892c851986bb1dee72c923d75be283e50e796ba7486663df15f2714331",
+      "bytes": 1849
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen5-paused-100.golden",
+      "sha256": "90548ccf4cd3a1325110b2d79528b0e1d9ef42d59bb979935f9d0e3441d0c089",
+      "bytes": 2309
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen5-paused-132-ascii.golden",
+      "sha256": "d7fa8b697d43ab9c4a6721785ec994cf8b1abcfcac4aff47cd09ab4496900068",
+      "bytes": 2546
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen5-paused-132.golden",
+      "sha256": "e8914ac4ab1d1848e707a4f31df40d206c1f42feb6fbd19ebdcc84a8bc22ce17",
+      "bytes": 3346
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen6-chat-080.golden",
+      "sha256": "f720fcd7c19ef3e73d71442b0cb2af97e703ebcd7a7296785e3110dd97654e99",
+      "bytes": 2777
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen6-chat-100.golden",
+      "sha256": "3da96f4eb03fa0ba50a79a7f2854fe781af9c6fe8d2db2f38ad8b4a490610d2a",
+      "bytes": 3460
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen6-chat-132-ascii.golden",
+      "sha256": "0dcd066a96eca52f7258e870ff6153b7f234b5516b8a2cb81151adad7461b48f",
+      "bytes": 3484
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen6-chat-132.golden",
+      "sha256": "f30594a7de02e2b8209d539a132931cf6543cdf0cae8bd007c577d836d00c018",
+      "bytes": 4551
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen7-split-080.golden",
+      "sha256": "12bb4e436ea901a70fa14f6ce799b1a330e8be260e2e48ac13c0760a3b5f9b34",
+      "bytes": 3628
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen7-split-100.golden",
+      "sha256": "504165c0dbdc781e3e80dd62d00f6134daa1fede5238afefe4cd42e561c35cee",
+      "bytes": 4486
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen7-split-132-ascii.golden",
+      "sha256": "3fe8d5a99e1763594e0b491a47d6ad4f059b5ee64c85dbe354cb87cc77f25eb3",
+      "bytes": 4020
+    },
+    {
+      "path": "internal/tui/board/v2/testdata/screen7-split-132.golden",
+      "sha256": "683127f642391d1900af258e7706768b1becedac31a351a89e73018233cdd5f8",
+      "bytes": 5836
+    },
+    {
       "path": "internal/tui/board/vm/vm.go",
-      "sha256": "1fddcfec996bdbf79a84ad69c4e4eb6ab2f7f69414744a69cf993bcefdc9df03",
-      "bytes": 6977
+      "sha256": "3380e1524fde41e981ad0813297dc1a3bc65e357e00539f48f51f7f47e4ef612",
+      "bytes": 7679
     },
     {
       "path": "internal/tui/board/widgets/chat/chat.go",
@@ -13371,8 +13541,8 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "65c2bdb5a77ea56ad88d8ac2eba60f0fa253218c6eb93aed1daea88187d5bd5a",
-      "bytes": 47618
+      "sha256": "bdaf6f2f76e1873e8d95289ccbc59e4959372a3fec24edbaea2674c616607f71",
+      "bytes": 47888
     },
     {
       "path": "internal/tui/board_live_test.go",
@@ -13643,6 +13813,16 @@
       "path": "internal/tui/boardv2_collect_marshal.go",
       "sha256": "fb1b752a67961c8f269702d98893c80b306002ea90885b087a3488f8cdf12838",
       "bytes": 341
+    },
+    {
+      "path": "internal/tui/boardv2_paint.go",
+      "sha256": "1cab6b2094b4af174da01db2cc399e4e0b5d66f710e148b73d43c70ed922718e",
+      "bytes": 3186
+    },
+    {
+      "path": "internal/tui/boardv2_paint_test.go",
+      "sha256": "13a5ac2adb5123c3ea9522d5d176bd1e1a5ce7faec87f8c4ca1bc2f62bb58142",
+      "bytes": 2903
     },
     {
       "path": "internal/tui/briefing_dir.go",
@@ -14331,8 +14511,8 @@
     },
     {
       "path": "internal/tui/main_test.go",
-      "sha256": "4e16114fdbe7dba6e24c36ea2ce9b24dc77c199a537a0d5ec0b3a86f800eccf6",
-      "bytes": 2074
+      "sha256": "ff18fed4a233d741d05415d0b5b20939663a51f0f6bc67771073566d9e54678c",
+      "bytes": 2438
     },
     {
       "path": "internal/tui/marshal_approve_retry_fixture_default_test.go",
