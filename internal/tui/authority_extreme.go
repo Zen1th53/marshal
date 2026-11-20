@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/statepath"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -396,11 +397,20 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 	if err == nil && allow && req.Kind == "marshal-command" && strings.HasPrefix(req.Object, "/marshal approve-task ") {
 		w.queuePrivateProcess05Resume()
 	}
+	if marshalSelfApprovedPlan(req, allow, err) {
+		// This edition's Marshal approves its own plans (ultra mode): the
+		// owner is told once, plainly, that the plan ran without them.
+		w.noteSelfApprovedPlan(req.RunID + "/" + req.TaskID)
+	}
 	// If handleHarness already wrote the detailed verification Activity note,
 	// avoid writing a second summary line for the same verification.
 	_, isVerify := cutHarnessVerifyProvider(strings.TrimSpace(req.Object))
 	verifyNoted := isVerify && allow && w.noteSeq() != beforeNotes
-	if text := marshalDecisionActivity(req.Object, allow, err); err != nil && allow && req.Kind == "read" && req.ContinuationProvider != "" {
+	if marshalSelfAcceptRefused(req, allow, err) {
+		// The Marshal tried to record the owner's own decision; policy
+		// refused it. The owner reads that plainly, not the policy text.
+		w.noteRefusedArchitecture(req.Object, 0)
+	} else if text := marshalDecisionActivity(req.Object, allow, err); err != nil && allow && req.Kind == "read" && req.ContinuationProvider != "" {
 		// Loading earlier work is the runtime's own reading of the
 		// provider's history, not a Marshal decision the person made.
 		w.RecordActivity(earlierWorkFailedLine(req.ContinuationProvider, err))
@@ -427,6 +437,19 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 		binding:   req.ApprovalBinding,
 	})
 	w.permissions.mu.Unlock()
+}
+
+// marshalSelfAcceptRefused reports whether a decision the Marshal made was
+// its own acceptance of the project architecture that policy refused because
+// the owner never accepted it (only the owner accepts, in the browser).
+func marshalSelfAcceptRefused(req permission.Request, allow bool, err error) bool {
+	return allow && req.Kind == "project-contract" && errors.Is(err, store.ErrProjectContractInstructionMissing)
+}
+
+// marshalSelfApprovedPlan reports whether a decision the Marshal made
+// approved a drafted plan, with no owner in the loop.
+func marshalSelfApprovedPlan(req permission.Request, allow bool, err error) bool {
+	return err == nil && allow && req.Kind == "marshal-command" && req.Object == "/marshal approve"
 }
 
 // marshalDecisionActivity is the Activity line for a decision the Marshal

@@ -279,6 +279,69 @@ func TestNativePlanningChatPopupApprovesExactCanonicalPlan(t *testing.T) {
 	t.Fatalf("canonical popup did not approve and bind a Process 05 run: %+v", w.marshalPanel())
 }
 
+// In ultra mode the Marshal approves its own plan: once it is applied the
+// Board tells the owner so, plainly and once, with the key that shows it.
+func TestMarshalSelfApprovedPlanIsToldToTheOwner(t *testing.T) {
+	w, _, cfg, _, _ := nativePlanningFixture(t)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\necho 'codex-cli 0.159.2'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	nativePlanningVerifiedCodex(t, w)
+	memoryChild(t, w.runtime.ProjectRoot(), &cfg).call(t, "marshal_project_contract_context", map[string]any{}, true)
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.provider = "codex"
+	m.mu.Unlock()
+	service, _, _, err := w.marshalService(t.Context(), "RUN-self-approved-plan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.GovernedDrivers = map[string]driver.Driver{"codex": driver.Governed{Provider: "codex", Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) {
+		return nil, errors.New("fixture blocks worker execution")
+	}}}
+	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"future-task","title":"Preserve policy","criteria":["Every required policy is loaded"],"paths":["src/policy.txt"],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["Every required policy is loaded"]}],"instructions":"Preserve the accepted policy"}]}`), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const runID = "RUN-self-approved-plan"
+	run, err := w.persistNativePlanningDraft(t.Context(), "codex", service, runID, draft, marshal.Budget{})
+	if err != nil || run.State != marshal.Drafting {
+		t.Fatalf("chat draft did not create canonical review state: %v %+v", err, run)
+	}
+	m.mu.Lock()
+	m.runID, m.service, m.provider = runID, service, "codex"
+	m.mu.Unlock()
+	if err := w.queueMarshalRunProposal(marshalProposal{action: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	var request permission.Request
+	for _, candidate := range w.permissions.queue.Take(false) {
+		if candidate.Object == "/marshal approve" {
+			request = candidate
+		}
+	}
+	if request.Object == "" {
+		t.Fatal("no plan approval was queued")
+	}
+	w.finishBuildDecision(t.Context(), request, "decision-self-plan", true, "Apply exact Marshal proposal: plan", "codex")
+	said := 0
+	for _, n := range w.noteList() {
+		if n.Text == selfApprovedPlanNote {
+			said++
+		}
+	}
+	if said != 1 {
+		t.Fatalf("the self-approved plan was said %d times: %+v", said, w.noteList())
+	}
+	// A repeat of the same approval adds nothing.
+	w.noteSelfApprovedPlan(request.RunID + "/" + request.TaskID)
+	if n := w.noteList(); n[0].Text != selfApprovedPlanNote || len(n) > 1 && n[1].Text == selfApprovedPlanNote {
+		t.Fatalf("the self-approved plan was said again: %+v", n)
+	}
+}
+
 func TestNativePlanningLeaseReadRevalidatedOneShotBeforeDraftEffect(t *testing.T) {
 	for _, scenario := range []string{"current", "missing-read", "changed-memory", "foreign-session", "revoked-lease"} {
 		t.Run(scenario, func(t *testing.T) {
