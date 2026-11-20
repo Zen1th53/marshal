@@ -1523,13 +1523,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		if flagErr != nil {
 			return RunResult{}, flagErr
 		}
-		// Codex resolves the model itself from what the installed CLI
-		// offers (falling back to the owner's default), so a model missing
-		// from one catalog snapshot never fails the worker here. Claude is
-		// still checked: it would read an unknown value as a prompt.
+		// A model the caller names explicitly is checked against what the
+		// installed provider offers now (its live catalog, not a fixed list)
+		// and refused before any claim. Governed workers name no model here:
+		// Codex resolves theirs from the live catalog and the owner's default.
 		if candidate, ok := r.adapters[request.Adapter].(interface {
 			ValidateModel(context.Context, string) error
-		}); ok && request.Adapter != "codex" {
+		}); ok {
 			if err := candidate.ValidateModel(ctx, request.Model); err != nil {
 				return RunResult{}, err
 			}
