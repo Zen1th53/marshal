@@ -295,6 +295,7 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 	if err := w.validateProposalLease(l); err != nil {
 		return nil, err
 	}
+	w.marshalSteps.note(l.id, l.provider, method, raw, time.Now())
 	if strings.HasPrefix(method, "project_contract_") {
 		return w.projectContractMCP(ctx, l, method, raw)
 	}
