@@ -14061,8 +14061,8 @@
     },
     {
       "path": "internal/tui/chat_live_claude_tmux_test.go",
-      "sha256": "68e14d1615223025bdba8284e2a2dbe0f813fb58819e54d99ac300008d8cc615",
-      "bytes": 5641
+      "sha256": "19d2244fda8af7dd0dc7841da01395078cbe26a18d51639fb2f788e7b4435c78",
+      "bytes": 5580
     },
     {
       "path": "internal/tui/chat_mcp_reconnect.go",

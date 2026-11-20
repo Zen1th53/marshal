@@ -4,7 +4,9 @@ package tui
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -121,12 +123,12 @@ func TestRealTmuxUndockedChatTitleBeatsAPC(t *testing.T) {
 		t.Fatalf("title %q, want %q", got, want)
 	}
 	// Claude Code redraws and queries again.
-	if out, err := tmux.RunCommand(ctx, "run-shell", "touch "+w.workDir+"/again"); err != nil {
-		t.Fatal(string(out), err)
+	if err := os.WriteFile(filepath.Join(w.workDir, "again"), nil, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		out, _ := tmux.RunCommand(ctx, "run-shell", "test -f "+w.workDir+"/done && echo yes")
-		return strings.TrimSpace(string(out)) == "yes"
+		_, err := os.Stat(filepath.Join(w.workDir, "done"))
+		return err == nil
 	})
 	// tmux 3.8 ignores the APC under the guard; 3.5 still takes it as the
 	// title, and the next hold (the chat's monitor) puts the strip back.
