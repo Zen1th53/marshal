@@ -466,7 +466,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {
 		if len(marshalBrief) > 0 {
-			return "", marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %s", RedactContent(err.Error(), nil)))
+			return "", marshalNotStarted(provider, fmt.Errorf("hidden instruction delivery failed: %w", redactedCause{err}))
 		}
 		return "", fmt.Errorf("Session not started: hidden instruction delivery failed: %s", RedactContent(err.Error(), nil))
 	}
@@ -480,7 +480,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				dir.remove()
 			}
 			w.noteMCPFailure("The Marshal could not start: its MCP connection failed (" + RedactContent(err.Error(), nil) + ").")
-			return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %s", RedactContent(err.Error(), nil)))
+			return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %w", redactedCause{err}))
 		}
 	}
 	if len(marshalBrief) == 0 {
@@ -498,7 +498,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			args, briefingEnv, dir, err = w.prepareProposalMCP(provider, root, args, briefingEnv, dir)
 			if err != nil {
 				w.noteMCPFailure("The Marshal could not start: its MCP connection failed (" + RedactContent(err.Error(), nil) + ").")
-				return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %s", RedactContent(err.Error(), nil)))
+				return "", marshalNotStarted(provider, fmt.Errorf("MCP delivery failed: %w", redactedCause{err}))
 			}
 		}
 		out, err := w.launchNativeChat(ctx, provider, root, binary, args, briefingEnv, dir, watch)
