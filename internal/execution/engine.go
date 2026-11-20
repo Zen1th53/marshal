@@ -26,6 +26,8 @@ type EngineConfig struct {
 	// HarnessAdmission is trusted local composition, fixed at construction.
 	// It cannot be replaced by registration, a task name, or serialized data.
 	HarnessAdmission func(WorkerHarness) error `json:"-"`
+	// WorkerLeaseTTL overrides WorkerLeaseTTL for one engine; zero keeps it.
+	WorkerLeaseTTL time.Duration `json:"-"`
 }
 
 // Engine coordinates governed execution across gate, scheduler, leases, harnesses, and journal.
@@ -667,7 +669,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					if err := e.leases.VerifyOwner(t.TaskID, agentID, t.LeaseID, nowUTC()); err != nil {
 						return &run, fmt.Errorf("%w: native provider lease cannot be resumed: %v", ErrLeaseExpired, err)
 					}
-					if err := e.leases.RenewLease(t.LeaseID, agentID, WorkerLeaseTTL, nowUTC()); err != nil {
+					if err := e.leases.RenewLease(t.LeaseID, agentID, e.workerLeaseTTL(), nowUTC()); err != nil {
 						return &run, fmt.Errorf("%w: native provider lease renewal failed: %v", ErrLeaseExpired, err)
 					}
 					lease = &Lease{LeaseID: t.LeaseID, AgentID: agentID}
@@ -679,7 +681,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 						Role:            agentID,
 						ScopedResources: t.TargetFiles,
 						MutationScope:   "mutate",
-						TTL:             WorkerLeaseTTL,
+						TTL:             e.workerLeaseTTL(),
 						Now:             nowUTC(),
 					})
 					if err != nil {

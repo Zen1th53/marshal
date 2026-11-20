@@ -105,14 +105,16 @@ type Runtime struct {
 	taskMu                     sync.Mutex
 	taskRuns                   map[string]context.CancelFunc
 	execMu                     sync.Mutex
-	codexAppServerMu           sync.Mutex
-	codexAppServerTurns        map[string]*liveCodexAppServerTurn
-	codexAppServerNew          func(string, string) codexAppServerClient
-	claudeStreamMu             sync.Mutex
-	claudeStreamTurns          map[string]*liveClaudeStreamTurn
-	claudeStreamNew            func(string, string) claudeStreamClient
-	tokenManager               *auth.Manager
-	workerMCPFactory           sessionmcp.WorkerServerFactory
+	// workerLeaseTTL overrides the engine's worker lease TTL (tests only).
+	workerLeaseTTL      time.Duration
+	codexAppServerMu    sync.Mutex
+	codexAppServerTurns map[string]*liveCodexAppServerTurn
+	codexAppServerNew   func(string, string) codexAppServerClient
+	claudeStreamMu      sync.Mutex
+	claudeStreamTurns   map[string]*liveClaudeStreamTurn
+	claudeStreamNew     func(string, string) claudeStreamClient
+	tokenManager        *auth.Manager
+	workerMCPFactory    sessionmcp.WorkerServerFactory
 
 	// workerBeats are the governed worker attempts in flight (worker_liveness.go).
 	workerBeats workerBeatRegistry

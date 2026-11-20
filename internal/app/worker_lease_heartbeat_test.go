@@ -101,3 +101,61 @@ func TestLeaseAndToolFailuresAreNamedAndNeverCoolProviders(t *testing.T) {
 		t.Fatal("provider-side failures no longer cool the provider")
 	}
 }
+
+// The attempt keeps its lease while it prepares the worker (no process yet)
+// and while the worker process is alive but prints nothing, both longer than
+// the TTL. Once the worker process has died, nothing renews the lease any
+// more, even while the attempt itself has not returned: a dead worker loses
+// its lease.
+func TestWorkerLeaseFollowsAttemptPreparationAndProcessLiveness(t *testing.T) {
+	const ttl = 300 * time.Millisecond
+	lm := execution.NewLeaseManager()
+	lease, err := lm.AcquireLease(execution.AcquireLeaseRequest{RunID: "r", TaskID: "t", AgentID: "codex", TTL: ttl, Now: time.Now().UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verify := func() error { return lm.VerifyOwner("t", "codex", lease.LeaseID, time.Now().UTC()) }
+	task := execution.TaskExecution{TaskID: "t", Mutates: true, LeaseID: lease.LeaseID}
+	r := &Runtime{}
+
+	ctx, keeper := startWorkerLeaseKeeper(t.Context(), ttl/10, func() error {
+		return lm.RenewLeaseBounded(lease.LeaseID, "codex", ttl, time.Hour, time.Now().UTC())
+	})
+	// Preparation outlasts the TTL with no worker process.
+	time.Sleep(3 * ttl)
+	if err := verify(); err != nil {
+		t.Fatalf("the lease ran out while the worker was prepared: %v", err)
+	}
+
+	// A live but silent worker process.
+	request := adapter.Request{}
+	workerCtx, done := r.keepWorkerLeaseAlive(ctx, task, &request)
+	result, err := worker.New(0, time.Second, 1<<16).Run(workerCtx, adapter.Command{Path: "/bin/sleep", Args: []string{"1"}, Heartbeat: request.Heartbeat, HeartbeatInterval: request.HeartbeatInterval})
+	if err != nil || result.ExitCode != 0 || result.Cancelled || len(result.Stdout) != 0 {
+		t.Fatalf("silent worker stopped: %v %+v", err, result)
+	}
+	if err := done(); err != nil {
+		t.Fatalf("silent worker's lease was refused: %v", err)
+	}
+	if err := verify(); err != nil {
+		t.Fatalf("a live silent worker's lease expired: %v", err)
+	}
+
+	// The worker process dies; the attempt lingers without returning.
+	request = adapter.Request{}
+	workerCtx, done = r.keepWorkerLeaseAlive(ctx, task, &request)
+	if _, err := worker.New(0, time.Second, 1<<16).Run(workerCtx, adapter.Command{Path: "/bin/sh", Args: []string{"-c", "sleep 0.2"}, Heartbeat: request.Heartbeat, HeartbeatInterval: request.HeartbeatInterval}); err != nil {
+		t.Fatal(err)
+	}
+	// The run returned because its process ended, as a harness sees it.
+	if err := done(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(3 * ttl)
+	if err := verify(); !errors.Is(err, execution.ErrLeaseExpired) {
+		t.Fatalf("a dead worker kept its lease: %v", err)
+	}
+	if err := keeper.outcome(nil); err != nil {
+		t.Fatalf("no renewal was refused, yet the outcome is %v", err)
+	}
+}

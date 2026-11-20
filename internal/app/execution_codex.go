@@ -83,6 +83,10 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 			finalErr = err
 		}
 	}()
+	// The engine took the task's lease before this call; keep it while the
+	// worker is prepared, then from the worker process's heartbeats.
+	ctx, workerLease := r.holdWorkerLease(ctx, task)
+	defer func() { finalErr = workerLease.outcome(finalErr) }()
 	canonicalTask, err := r.store.GetTask(ctx, task.CanonicalTaskID)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("get canonical Process 05 task: %w", err)
