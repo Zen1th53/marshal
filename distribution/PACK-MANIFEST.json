@@ -13620,6 +13620,31 @@
       "bytes": 7894
     },
     {
+      "path": "internal/tui/boardv2_collect.go",
+      "sha256": "59b7583f84ea75529efd78f588f3dead876b06ce593572f26c4140a736bc5525",
+      "bytes": 373
+    },
+    {
+      "path": "internal/tui/boardv2_collect_cards.go",
+      "sha256": "56a165734358010b2098644d16636320fea774d2b2ab70e9452e7f4580681b29",
+      "bytes": 276
+    },
+    {
+      "path": "internal/tui/boardv2_collect_chat.go",
+      "sha256": "cebbc05c2288a9de7816067828f7541a4d9d094c7d039018df4e8e499f49d71c",
+      "bytes": 306
+    },
+    {
+      "path": "internal/tui/boardv2_collect_flow.go",
+      "sha256": "5eb2c6d130fcce92c66c6f619af8717a7eb41319f5ba9fc93539d384569a7f03",
+      "bytes": 321
+    },
+    {
+      "path": "internal/tui/boardv2_collect_marshal.go",
+      "sha256": "fb1b752a67961c8f269702d98893c80b306002ea90885b087a3488f8cdf12838",
+      "bytes": 341
+    },
+    {
       "path": "internal/tui/briefing_dir.go",
       "sha256": "7c3d0be6ebb9473e337fc3dca419a0b788ee7a97c37a66664cf25b23721cdb7e",
       "bytes": 4600
