@@ -185,32 +185,18 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			strings.ToUpper(report.OverallStatus), report.CheckCount), nil
 
 	case "models":
-		models, def, err := auth.ClaudeModels(ctx)
+		catalog, err := auth.ProviderModels(ctx, "claude")
 		if err != nil {
 			return fmt.Sprintf("Discover models failed: %v", err), nil
 		}
 		selected, _ := auth.SelectedClaudeModel(ctx)
 		if selected == "" {
-			selected = def
+			selected = catalog.Default
 		}
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("CLAUDE MODELS (%d eligible, resolved default: %s):\n", len(models), def))
-		for _, m := range models {
-			marker := "  "
-			if m.Slug == selected {
-				marker = "▶ "
-			}
-			tag := ""
-			if m.IsDefault {
-				tag += " (default)"
-			}
-			if m.Slug == selected {
-				tag += " [SELECTED]"
-			}
-			b.WriteString(fmt.Sprintf(" %s%-28s %-12s%s\n", marker, m.Slug, m.Visibility, tag))
-		}
-		b.WriteString(fmt.Sprintf("\nActive model: %s. Use `/claude model <slug>` to switch.\n", selected))
-		return b.String(), nil
+		// Claude Code lists no catalog: these are the aliases its help names
+		// and the model it resolves; any other model name is the CLI's to
+		// accept or refuse.
+		return renderProviderCatalog("CLAUDE", "claude", catalog, selected) + fmt.Sprintf("\n\nActive model: %s. Use `/claude model <alias or model name>` to switch.\n", selected), nil
 
 	case "model", "select":
 		if len(args) < 2 {

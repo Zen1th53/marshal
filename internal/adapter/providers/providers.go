@@ -153,16 +153,26 @@ type claudeProvider struct{ spec providerspec.Spec }
 
 func (p claudeProvider) Spec() providerspec.Spec { return p.spec }
 
-// Models is the model Claude Code resolves for a session: its CLI lists no
-// catalog, so the one model it reports is the whole answer.
+// Models is what the installed Claude Code says about models: the aliases
+// and effort levels its --help names, and the model it resolves for a
+// session. Its CLI lists no catalog; when the session cannot be asked, the
+// aliases its help names are the answer, with no default.
 func (p claudeProvider) Models(ctx context.Context, binary string, runner adapter.ProcessRunner) (Catalog, error) {
 	infos, def, err := claude.DiscoverModels(ctx, binary, runner)
 	if err != nil {
-		return Catalog{}, err
+		aliases, efforts, helpErr := claude.HelpModels(ctx, binary, runner)
+		if helpErr != nil || len(aliases) == 0 {
+			return Catalog{}, err
+		}
+		var c Catalog
+		for _, alias := range aliases {
+			c.Models = append(c.Models, Model{ID: alias, Name: alias, Efforts: append([]string(nil), efforts...)})
+		}
+		return c, nil
 	}
 	c := Catalog{Default: def}
 	for _, m := range infos {
-		c.Models = append(c.Models, Model{ID: m.Slug, Name: m.DisplayName, Default: m.IsDefault || (def != "" && m.Slug == def)})
+		c.Models = append(c.Models, Model{ID: m.Slug, Name: m.DisplayName, Efforts: append([]string(nil), m.ReasoningEfforts...), Default: m.IsDefault || (def != "" && m.Slug == def)})
 	}
 	return c, nil
 }

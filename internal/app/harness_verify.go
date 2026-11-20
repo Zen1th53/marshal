@@ -301,7 +301,11 @@ func (r *Runtime) harnessProbeModel(ctx context.Context, provider, modelName str
 		if err != nil {
 			return "", err
 		}
-		return antigravity.ResolveInstalled(ctx, binary, worker.New(60*time.Second, 2*time.Second, 8<<20), modelName)
+		resolved, err := antigravity.ResolveInstalled(ctx, binary, worker.New(60*time.Second, 2*time.Second, 8<<20), modelName)
+		if err == nil && resolved == "" {
+			err = fmt.Errorf("harness verification requires an explicit model; agy listed no models to resolve %q against: run /harness verify agy <model>", modelName)
+		}
+		return resolved, err
 	}
 	if modelName == "" && r != nil && r.store != nil {
 		// A previous exact probe of the installed CLI is useful for re-probing,
@@ -328,11 +332,6 @@ func (r *Runtime) harnessProbeModel(ctx context.Context, provider, modelName str
 				modelName = current
 			}
 		}
-	}
-	if modelName == "" && provider == "agy" {
-		// This is only a candidate for a real probe. It does not qualify a
-		// worker or delegate model selection to the host CLI.
-		modelName = antigravity.DefaultModel
 	}
 	if modelName == "" && provider == "opencode" {
 		// OpenCode reports no current model; MARSHAL_OPENCODE_MODEL is the

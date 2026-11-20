@@ -1,0 +1,4 @@
+anthropic/claude-sonnet-4-5
+anthropic/claude-opus-4-1
+openai/gpt-5
+ollama/qwen2.5-coder:7b

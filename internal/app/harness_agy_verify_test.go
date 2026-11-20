@@ -28,6 +28,7 @@ func TestAgyHarnessVerificationRecordsNativeCapabilities(t *testing.T) {
 case "$1" in
 --version) printf 'native-probe-version\n'; exit 0;;
 --help) printf '%s\n' '--print --output-format --model --mode --conversation --sandbox --new-project --disable-slash-commands'; exit 0;;
+models) printf 'gemini-4-argon-high\tGemini 4 Argon (High)\n'; exit 0;;
 esac
 printf '%s\n' '{"status":"SUCCESS","conversation_id":"real-probe-contract","response":"MARSHAL_PROBE_OK"}'
 `

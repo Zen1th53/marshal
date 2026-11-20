@@ -15,8 +15,6 @@ import (
 )
 
 const (
-	DefaultModel       = "gemini-3.8-flash-high"
-	GovernedCLIVersion = "1.2.14" // Pinned baseline qualification
 	// GovernedCLIVersionRange describes which agy versions governed use
 	// accepts: any whose probe passes.
 	GovernedCLIVersionRange = "any version whose probe passes"
@@ -305,11 +303,11 @@ func buildPrompt(req adapter.Request) ([]byte, error) {
 // the CLI sandbox retain normal tool permission decisions; JSON prompt fields
 // never grant permissions. This is not a registered Marshal governed driver.
 func commandArguments(request adapter.Request, prompt []byte, sessionID string) ([]string, error) {
-	modelName := request.Model
-	if modelName == "" {
-		modelName = DefaultModel
+	args := []string{"--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "json"}
+	// No model names agy's own default: Marshal fixes no model of its own.
+	if modelName := request.Model; modelName != "" {
+		args = append(args, "--model", modelName)
 	}
-	args := []string{"--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "json", "--model", modelName}
 	if request.Effort != "" {
 		switch request.Effort {
 		case "low", "medium", "high", "max":

@@ -233,32 +233,15 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			strings.ToUpper(report.OverallStatus), report.CheckCount), nil
 
 	case "models":
-		models, def, err := auth.CodexModels(ctx)
+		catalog, err := auth.ProviderModels(ctx, "codex")
 		if err != nil {
 			return fmt.Sprintf("Discover models failed: %v. Check Codex installation and authentication, then retry /models.", err), nil
 		}
 		selected, _ := auth.SelectedCodexModel(ctx)
 		if selected == "" {
-			selected = def
+			selected = catalog.Default
 		}
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("CODEX MODELS (%d eligible models discovered, default: %s):\n", len(models), def))
-		for _, m := range models {
-			marker := "  "
-			if m.Slug == selected {
-				marker = "▶ "
-			}
-			tag := ""
-			if m.IsDefault {
-				tag += " (default)"
-			}
-			if m.Slug == selected {
-				tag += " [SELECTED]"
-			}
-			b.WriteString(fmt.Sprintf(" %s%-20s %-25s %s%s\n", marker, m.Slug, m.DisplayName, m.Visibility, tag))
-		}
-		b.WriteString(fmt.Sprintf("\nActive model: %s. Use `/codex model <slug>` to switch.\n", selected))
-		return b.String(), nil
+		return renderProviderCatalog("CODEX", "codex", catalog, selected) + fmt.Sprintf("\n\nActive model: %s. Use `/codex model <slug>` to switch.\n", selected), nil
 
 	case "model", "select":
 		if len(args) < 2 {

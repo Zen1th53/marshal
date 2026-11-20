@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
@@ -763,11 +764,20 @@ func (f *fakeAuthority) RunCodexReview(context.Context) (app.VerifyResult, error
 	return app.VerifyResult{Commit: "0123456789abcdef0123456789abcdef01234567", OutputDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}, nil
 }
 
-func (f *fakeAuthority) CodexModels(_ context.Context) ([]codex.ModelInfo, string, error) {
-	return []codex.ModelInfo{
-		{Slug: "gpt-5.6-terra", DisplayName: "GPT 5.6 Terra", IsDefault: true},
-		{Slug: "gpt-6-astra", DisplayName: "GPT 6 Astra"},
-	}, "gpt-5.6-terra", nil
+func (f *fakeAuthority) ProviderModels(_ context.Context, provider string) (providers.Catalog, error) {
+	switch provider {
+	case "codex":
+		return providers.Catalog{Default: "gpt-5.6-terra", Models: []providers.Model{
+			{ID: "gpt-5.6-terra", Name: "GPT 5.6 Terra", Default: true, Efforts: []string{"low", "high"}},
+			{ID: "gpt-6-astra", Name: "GPT 6 Astra"},
+		}}, nil
+	case "claude":
+		return providers.Catalog{Default: "claude-sonnet-4-6", Models: []providers.Model{
+			{ID: "claude-sonnet-4-6", Name: "Claude Sonnet 4.6", Default: true},
+			{ID: "claude-opus-4-3", Name: "Claude Opus 4.3"},
+		}}, nil
+	}
+	return providers.Catalog{}, providers.ErrUnknownProvider
 }
 
 func (f *fakeAuthority) CodexSelectModel(_ context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
@@ -850,13 +860,6 @@ func (f *fakeAuthority) ClaudeHealth(_ context.Context) (ClaudeHealthReport, err
 
 func (f *fakeAuthority) ClaudeDoctor(context.Context) (claude.DoctorReport, error) {
 	return claude.DoctorReport{OverallStatus: "ok", CheckCount: 2}, nil
-}
-
-func (f *fakeAuthority) ClaudeModels(_ context.Context) ([]claude.ModelInfo, string, error) {
-	return []claude.ModelInfo{
-		{Slug: "claude-sonnet-4-6", DisplayName: "Claude Sonnet 4.6", IsDefault: true},
-		{Slug: "claude-opus-4-3", DisplayName: "Claude Opus 4.3"},
-	}, "claude-sonnet-4-6", nil
 }
 
 func (f *fakeAuthority) ClaudeSelectModel(_ context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {

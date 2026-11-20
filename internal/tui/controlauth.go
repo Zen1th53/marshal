@@ -22,6 +22,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
@@ -1403,22 +1404,39 @@ func (a *runtimeControlAuthority) CodexDoctor(ctx context.Context) (codex.Doctor
 	return codex.Doctor(ctx, client.Binary(), client.Runner())
 }
 
-func (a *runtimeControlAuthority) CodexModels(ctx context.Context) ([]codex.ModelInfo, string, error) {
-	if a == nil || a.runtime == nil {
-		return nil, "", errNoRuntime
+// ProviderModels asks the provider's installed CLI which models it offers,
+// through the provider registry. Codex and Claude use the binary and runner
+// of their governed clients; the others are found on PATH. An answer is
+// reused for a while: the offer changes with an update or the account's
+// plan, not between two commands.
+func (a *runtimeControlAuthority) ProviderModels(ctx context.Context, name string) (providers.Catalog, error) {
+	p, ok := providers.Get(name)
+	if !ok {
+		return providers.Catalog{}, fmt.Errorf("%w: %s", providers.ErrUnknownProvider, name)
 	}
-	if candidate := a.runtime.Adapter("codex"); candidate != nil {
-		if mp, ok := candidate.(interface {
-			Models(context.Context) ([]codex.ModelInfo, string, error)
-		}); ok {
-			return mp.Models(ctx)
+	var binary string
+	var runner adapter.ProcessRunner
+	switch p.Spec().ID {
+	case "codex":
+		client, err := a.getCodexClient(ctx)
+		if err != nil {
+			return providers.Catalog{}, err
 		}
+		binary, runner = client.Binary(), client.Runner()
+	case "claude":
+		client, err := a.getClaudeClient(ctx)
+		if err != nil {
+			return providers.Catalog{}, err
+		}
+		binary, runner = client.Binary(), client.Runner()
+	default:
+		found, err := project.FindBinary(p.Spec().Binary)
+		if err != nil {
+			return providers.Catalog{}, fmt.Errorf("%w: %s binary not found", model.ErrUnavailable, p.Spec().Binary)
+		}
+		binary, runner = found, worker.New(nativeModelListTimeout, 2*time.Second, 8<<20)
 	}
-	client, err := a.getCodexClient(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	return client.Models(ctx)
+	return cachedProviderModels(ctx, p, binary, runner)
 }
 
 func (a *runtimeControlAuthority) CodexSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
@@ -1440,11 +1458,11 @@ func (a *runtimeControlAuthority) SelectedCodexModel(ctx context.Context) (strin
 	} else if !errors.Is(err, model.ErrNotFound) {
 		return "", err
 	}
-	_, def, err := a.CodexModels(ctx)
+	catalog, err := a.ProviderModels(ctx, "codex")
 	if err != nil {
 		return "", err
 	}
-	return def, nil
+	return catalog.Default, nil
 }
 
 func (a *runtimeControlAuthority) CodexModelPreference(ctx context.Context) (model.ExecutionModelPreference, error) {
@@ -1754,14 +1772,6 @@ func (a *runtimeControlAuthority) ClaudeDoctor(ctx context.Context) (claude.Doct
 		return claude.DoctorReport{}, err
 	}
 	return claude.Doctor(ctx, client.Binary(), client.Runner())
-}
-
-func (a *runtimeControlAuthority) ClaudeModels(ctx context.Context) ([]claude.ModelInfo, string, error) {
-	client, err := a.getClaudeClient(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	return client.Models(ctx)
 }
 
 func (a *runtimeControlAuthority) ClaudeSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
