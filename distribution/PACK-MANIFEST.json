@@ -5786,8 +5786,8 @@
     },
     {
       "path": "internal/cloud/registration_default.go",
-      "sha256": "73bb9a48262763c15c2d37df02e9fbc19ac5f1e6dbf59a4691e4217348d3b913",
-      "bytes": 3064
+      "sha256": "fc1308919604f5709f0546042497cae2f8a4b2e98746e13054d5186bbb571928",
+      "bytes": 3512
     },
     {
       "path": "internal/cloud/registration_test.go",
@@ -5821,8 +5821,8 @@
     },
     {
       "path": "internal/cloud/session.go",
-      "sha256": "e81e4bc9007535da8e3556cd8fa3a029ba0a27231a61981fc342d97dde0d598b",
-      "bytes": 18093
+      "sha256": "b9762e4a280444adfb8ef8a48d7c5d98bde9a2feb6589647675f66f186adb5a3",
+      "bytes": 18902
     },
     {
       "path": "internal/cloud/session_test.go",
@@ -5865,14 +5865,19 @@
       "bytes": 904
     },
     {
+      "path": "internal/cloud/telemetry_heal_test.go",
+      "sha256": "c2416f90937bca4688d2a3998fd71d508231fade12ee86c66b933d502799fe47",
+      "bytes": 16127
+    },
+    {
       "path": "internal/cloud/telemetry_test.go",
       "sha256": "a0bb38f491ea9302fdd2ae481abd7792c20c6597a72652afdf60ada650a05a2e",
       "bytes": 10959
     },
     {
       "path": "internal/cloud/telemetry_transport_default.go",
-      "sha256": "2b47d11e03e0ca2fe4301c4b0249e3eb4ff26eede69635db6bd10bbef1d8157e",
-      "bytes": 779
+      "sha256": "1e2691a8004825e88dd2a6d7785a5a14c0a99cf2593c993e95abf9b8d32a07e0",
+      "bytes": 2932
     },
     {
       "path": "internal/codeevidence/codeevidence.go",

@@ -158,7 +158,7 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 
 	switch {
 	case resp.StatusCode == http.StatusOK || (path == "/v1/entitlements/request" && resp.StatusCode == http.StatusAccepted):
-	case resp.StatusCode == http.StatusNotFound && (path == "/v1/ultra/challenge" || path == "/v1/ultra/sessions"):
+	case resp.StatusCode == http.StatusNotFound && (path == "/v1/ultra/challenge" || path == "/v1/ultra/sessions" || path == "/v1/telemetry/events"):
 		return fmt.Errorf("%w: server returned 404", ErrUnknownInstallation)
 	case registrationRateLimited(path, resp.StatusCode):
 		return fmt.Errorf("%w: server returned 429; try again later", ErrRateLimited)
@@ -183,6 +183,27 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 			StatusCode: resp.StatusCode,
 			Err:        ErrRefused,
 		}
+	}
+	if path == "/v1/telemetry/events" && resp.StatusCode == http.StatusOK {
+		// Older or compatibility telemetry endpoints may answer 200 with
+		// {"unknown_installation": true} instead of 404 when the installation
+		// row is missing on the server.
+		raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if readErr == nil && len(raw) > 0 {
+			var ack struct {
+				UnknownInstallation bool `json:"unknown_installation"`
+			}
+			if json.Unmarshal(raw, &ack) == nil && ack.UnknownInstallation {
+				return fmt.Errorf("%w: server reported unknown installation", ErrUnknownInstallation)
+			}
+		}
+		if out == nil {
+			return nil
+		}
+		if err := json.Unmarshal(raw, out); err != nil {
+			return fmt.Errorf("%w: malformed response: %s", ErrRefused, err)
+		}
+		return nil
 	}
 	if out == nil {
 		return nil
