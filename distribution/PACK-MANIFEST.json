@@ -525,6 +525,46 @@
       "bytes": 4091
     },
     {
+      "path": "docs/design/board-v2/screen1.ans",
+      "sha256": "d2a69c099236daf37169656dfb711a12cea8a8a8632e833aa2779d177db0cf7b",
+      "bytes": 21209
+    },
+    {
+      "path": "docs/design/board-v2/screen2.ans",
+      "sha256": "348f1e04a65012a11959cf63b558fbbc52d97ae51f643e20505795db3306e98a",
+      "bytes": 11512
+    },
+    {
+      "path": "docs/design/board-v2/screen3.ans",
+      "sha256": "5a0a2998c5f8fba7773dbaec7fa94e8ba987362ec4141891611f28d3397e7207",
+      "bytes": 11652
+    },
+    {
+      "path": "docs/design/board-v2/screen4.ans",
+      "sha256": "bab5b945e2c5315350a4691a47daeb94f20920f9e7baa3aa3f5547b5d6959df7",
+      "bytes": 13581
+    },
+    {
+      "path": "docs/design/board-v2/screen5.ans",
+      "sha256": "60509b8296f0b77684203d313f7b0d2a6b06d24171e30a6f4a33f7391d4e438f",
+      "bytes": 9677
+    },
+    {
+      "path": "docs/design/board-v2/screen6.ans",
+      "sha256": "e054b94440aa77abd561a6c27e7e1fc5ce77ddee1eff9cc378cecd5c36fc0930",
+      "bytes": 9761
+    },
+    {
+      "path": "docs/design/board-v2/screen7.ans",
+      "sha256": "c40c4d1fd1fbe5ace5ce61cb83284b90e885c69cf947ac9f1620b1a177c87ab1",
+      "bytes": 16690
+    },
+    {
+      "path": "docs/design/board-v2/tuipaint.py",
+      "sha256": "fb2acde747f8d64d4a11f58b18eaf19c92241d1d9ffb79ddaaaa3651af72a83d",
+      "bytes": 28949
+    },
+    {
       "path": "docs/faq.md",
       "sha256": "48e5d5b3e025545fa3fb39025e1b3d16c8c6a87bfbbfcca1275e723db01ad854",
       "bytes": 1976
@@ -13013,6 +13053,11 @@
       "path": "internal/tui/board/model/wired.go",
       "sha256": "e25f5292a52fcd245bc14e3f4a0d79ed084aae73eb33b8e64052ab16b14e8b94",
       "bytes": 1692
+    },
+    {
+      "path": "internal/tui/board/vm/vm.go",
+      "sha256": "1fddcfec996bdbf79a84ad69c4e4eb6ab2f7f69414744a69cf993bcefdc9df03",
+      "bytes": 6977
     },
     {
       "path": "internal/tui/board/widgets/chat/chat.go",
