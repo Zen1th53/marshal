@@ -458,6 +458,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if args, err = w.confineWorkspaceMarshalChat(ctx, provider, root, args); err != nil {
 			return "", marshalNotStarted(provider, fmt.Errorf("read-only launch settings failed: %w", err))
 		}
+		// MARSHAL's private state is read through its tools only
+		// (marshal_state_guard.go), whatever the execution rights.
+		args = denyMarshalStateFiles(provider, args)
 		args = marshalChatViewArgs(provider, root, args)
 	}
 	args, briefingEnv, err := dir.launch(args)

@@ -28,6 +28,10 @@ import (
 //
 // With execution rights small-tasks the owner lets the Marshal do small work
 // itself, and nothing is added.
+//
+// Reading MARSHAL's private state (its state database and the files around
+// it) is a separate limit that holds whatever the rights: see
+// marshal_state_guard.go.
 
 // marshalWritableDirs are the directories under .marshal/ the Marshal chat
 // writes: the plan pack and task list, and its proposal files.
@@ -127,15 +131,21 @@ func marshalChatViewArgs(provider, root string, args []string) []string {
 }
 
 // codexMarshalConfineFlags are the -c overrides of MARSHAL's Codex
-// permission profile: the whole disk readable, the project read-only, and
-// only .marshal/marshal and .marshal/proposals writable. They override the
-// operator's own sandbox_mode and default_permissions for this launch only.
+// permission profile: the whole disk readable, the project read-only, only
+// .marshal/marshal and .marshal/proposals writable, and MARSHAL's private
+// state (marshalPrivateStatePaths) neither readable nor writable. They
+// override the operator's own sandbox_mode and default_permissions for this
+// launch only. Codex 0.169 applies a "none" entry to every shell command of
+// the session (`codex sandbox` with this profile: cat, sqlite3 and python of
+// .marshal/state.db fail with "Operation not permitted"); its MCP servers run
+// outside the sandbox, so MARSHAL's own tools keep their access.
 func codexMarshalConfineFlags() []string {
 	var writable []string
 	for _, d := range marshalWritableDirs {
 		writable = append(writable, fmt.Sprintf("%q=\"write\"", statepath.DirName+"/"+d))
 	}
-	filesystem := `{":root"="read", ":workspace_roots"={"."="read", ` + strings.Join(writable, ", ") + `}}`
+	entries := append(writable, codexMarshalStateFilesystem()...)
+	filesystem := `{":root"="read", ":workspace_roots"={"."="read", ` + strings.Join(entries, ", ") + `}}`
 	return []string{
 		"-c", fmt.Sprintf("default_permissions=%q", codexMarshalProfile),
 		"-c", "permissions." + codexMarshalProfile + ".filesystem=" + filesystem,

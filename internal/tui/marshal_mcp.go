@@ -159,6 +159,12 @@ func configureOpenCodeMCP(dir *briefingDir, root string, env []string, role, tas
 // with the session. A file the person already has is left untouched and the
 // session falls back to the shell-tool knowledge transport.
 func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, role, taskID string) ([]string, []string, error) {
+	return configureAntigravityMCPFor(dir, root, args, env, role, taskID, role == "marshal")
+}
+
+// configureAntigravityMCPFor is configureAntigravityMCP for a launch that is
+// (marshalChat) or is not the Marshal chat, whatever MCP role it runs in.
+func configureAntigravityMCPFor(dir *briefingDir, root string, args, env []string, role, taskID string, marshalChat bool) ([]string, []string, error) {
 	note := antigravityShellMCPNote
 	// Workers keep their own sealed MCP binding; only the person-facing
 	// chats get the workspace file.
@@ -174,7 +180,7 @@ func configureAntigravityMCP(dir *briefingDir, root string, args, env []string, 
 			dir.workspaceMCPAttached = true
 			note = antigravityWorkspaceMCPNote
 		}
-		args = configureAntigravitySessionSettings(root, dir.path, ours, args)
+		args = configureAntigravitySessionSettings(root, dir.path, ours, marshalChat, args)
 	}
 	if _, err := dir.add(note); err != nil {
 		return nil, nil, err
@@ -198,6 +204,8 @@ const (
 )
 
 func configureMarshalMCP(provider, root string, args, env []string, dir *briefingDir, role, taskID string) ([]string, []string, *briefingDir, error) {
+	// The Marshal chat stays the Marshal chat when its MCP role is narrowed.
+	marshalChat := role == "marshal"
 	if !nativeMarshalAuthority && role == "marshal" {
 		role = "session"
 	}
@@ -256,7 +264,7 @@ func configureMarshalMCP(provider, root string, args, env []string, dir *briefin
 				return nil, nil, dir, err
 			}
 		}
-		args, env, err = configureAntigravityMCP(dir, root, args, env, role, taskID)
+		args, env, err = configureAntigravityMCPFor(dir, root, args, env, role, taskID, marshalChat)
 		if err != nil {
 			return nil, nil, dir, err
 		}
@@ -555,9 +563,17 @@ var antigravityMarshalAskCommands = []string{
 // agy Marshal launch (never saved by agy). It allows Marshal's own MCP tools
 // when Marshal's workspace MCP config is attached, allows reading Marshal's
 // own state/briefing paths so agy does not ask per-file access prompts, and
-// keeps remote-machine and sudo commands behind the owner's approval.
-func antigravitySessionSettings(root, briefingPath string, allowMCP bool) string {
-	allow := make([]string, 0, 1+len(antigravityMarshalReadableDirs)*3)
+// keeps remote-machine and sudo commands behind the owner's approval. For the
+// Marshal chat (marshalChat) it also denies the files only MARSHAL's tools
+// read (marshalPrivateStatePaths) and sqlite3.
+//
+// Every path rule is absolute. agy 1.5.10 turns read_file/write_file rules
+// into its terminal sandbox profile and refuses a relative one ("sandbox
+// configuration error: readonly .marshal/inbox/: non-absolute file path"),
+// which fails every shell command of the session; its file tools match the
+// absolute path anyway.
+func antigravitySessionSettings(root, briefingPath string, allowMCP, marshalChat bool) string {
+	allow := make([]string, 0, 1+(len(antigravityMarshalReadableDirs)+len(marshalWritableDirs))*2)
 	seen := map[string]bool{}
 	addAllow := func(rule string) {
 		if rule == "" || seen[rule] {
@@ -569,14 +585,18 @@ func antigravitySessionSettings(root, briefingPath string, allowMCP bool) string
 	if allowMCP {
 		addAllow("mcp(marshal/*)")
 	}
-	for _, sub := range antigravityMarshalReadableDirs {
-		addAllow("read_file(" + statepath.DirName + "/" + sub + "/)")
-	}
 	roots := antigravityRootPaths(root)
 	for _, base := range roots {
 		for _, sub := range antigravityMarshalReadableDirs {
 			p := filepath.ToSlash(filepath.Join(base, statepath.DirName, sub))
 			addAllow("read_file(" + strings.TrimRight(p, "/") + "/)")
+		}
+		// agy's terminal sandbox makes a read_file directory read-only for
+		// shell commands; the Marshal writes its plan pack and proposal files
+		// there (marshalWritableDirs), so those stay writable.
+		for _, sub := range marshalWritableDirs {
+			p := filepath.ToSlash(filepath.Join(base, statepath.DirName, sub))
+			addAllow("write_file(" + strings.TrimRight(p, "/") + "/)")
 		}
 	}
 	if strings.TrimSpace(briefingPath) != "" {
@@ -595,14 +615,49 @@ func antigravitySessionSettings(root, briefingPath string, allowMCP bool) string
 			}
 		}
 	}
-	data, _ := json.Marshal(map[string]any{
-		"permissions": map[string]any{
-			"allow": allow,
-			"ask":   antigravityMarshalAskCommands,
-		},
-	})
+	permissions := map[string]any{
+		"allow": allow,
+		"ask":   antigravityMarshalAskCommands,
+	}
+	if marshalChat {
+		if deny := antigravityMarshalStateDeny(roots); len(deny) > 0 {
+			permissions["deny"] = deny
+		}
+	}
+	data, _ := json.Marshal(map[string]any{"permissions": permissions})
 	return string(data)
 }
+
+// antigravityMarshalStateDeny denies the agy Marshal chat MARSHAL's private
+// state: read_file and write_file on each private path under every form of
+// the project root, and sqlite3. agy evaluates deny first, applies the file
+// rules to its own file tools and, through its terminal sandbox, to every
+// shell command (verified against agy 1.5.10: `cat` and `sqlite3` of a denied
+// file fail with "Operation not permitted"; MCP servers are not sandboxed, so
+// MARSHAL's own tools still open the database). A file rule matches only that
+// exact file, so the database's -wal, -shm and -journal files are listed one
+// by one; a directory rule ends in "/". command(sqlite3) covers an agy with
+// its terminal sandbox switched off, where only the file tools are checked.
+func antigravityMarshalStateDeny(roots []string) []string {
+	var deny []string
+	for _, base := range roots {
+		for _, rel := range marshalPrivateStatePaths() {
+			p := filepath.ToSlash(filepath.Join(base, statepath.DirName, rel))
+			if strings.HasSuffix(rel, "/") {
+				p = strings.TrimRight(p, "/") + "/"
+			}
+			deny = append(deny, "read_file("+p+")", "write_file("+p+")")
+		}
+	}
+	if len(deny) == 0 {
+		return nil
+	}
+	return append(deny, antigravityMarshalDenyCommands...)
+}
+
+// antigravityMarshalDenyCommands are the commands the agy Marshal chat may
+// never run: sqlite3 reads MARSHAL's state database behind its tools.
+var antigravityMarshalDenyCommands = []string{"command(sqlite3)"}
 
 func antigravityRootPaths(root string) []string {
 	if strings.TrimSpace(root) == "" {
@@ -624,17 +679,17 @@ func antigravityRootPaths(root string) []string {
 
 // configureAntigravitySessionSettings adds the session-only --settings JSON
 // unless the launch already carries the person's own --settings.
-func configureAntigravitySessionSettings(root, briefingPath string, allowMCP bool, args []string) []string {
+func configureAntigravitySessionSettings(root, briefingPath string, allowMCP, marshalChat bool, args []string) []string {
 	for _, arg := range args {
 		if arg == "--settings" || strings.HasPrefix(arg, "--settings=") {
 			return args
 		}
 	}
-	return insertBeforeKickoff("antigravity", root, args, []string{"--settings", antigravitySessionSettings(root, briefingPath, allowMCP)})
+	return insertBeforeKickoff("antigravity", root, args, []string{"--settings", antigravitySessionSettings(root, briefingPath, allowMCP, marshalChat)})
 }
 
 // allowMarshalToolsForAntigravity adds the session-only setting unless the
 // launch already carries the person's own --settings.
 func allowMarshalToolsForAntigravity(root string, args []string) []string {
-	return configureAntigravitySessionSettings(root, "", true, args)
+	return configureAntigravitySessionSettings(root, "", true, false, args)
 }
