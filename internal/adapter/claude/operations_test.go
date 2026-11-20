@@ -288,6 +288,9 @@ func newProbeRunner(t *testing.T) *mockOperationsRunner {
 		if err := ValidateDangerousFlags(command.Args); err != nil {
 			t.Errorf("probe args carried a dangerous flag: %v", err)
 		}
+		if len(command.Args) == 1 && command.Args[0] == "--help" {
+			return adapter.ProcessResult{Stdout: installedClaudeHelp(t)}, nil
+		}
 		return adapter.ProcessResult{Stdout: []byte("noise\n" + initEventLine + "\n"), ExitCode: 0}, nil
 	}}
 }
@@ -314,9 +317,18 @@ func TestDiscoverModelsReturnsAliasesAndResolvedDefault(t *testing.T) {
 			t.Errorf("provider prose must not be surfaced, got %q", m.Description)
 		}
 	}
-	for _, alias := range []string{"opus", "sonnet", "haiku", "claude-opus-4-1-20250805"} {
+	// The aliases are the ones the installed CLI's help names, not a list.
+	for _, alias := range []string{"fable", "opus", "sonnet", "claude-opus-4-1-20250805"} {
 		if !slugs[alias] {
 			t.Errorf("expected %q among eligible selectors", alias)
+		}
+	}
+	if slugs["haiku"] {
+		t.Error("an alias the installed CLI does not name was offered")
+	}
+	for _, m := range models {
+		if strings.Join(m.ReasoningEfforts, ",") != "low,medium,high,xhigh,max" {
+			t.Errorf("%s efforts = %v, want the levels --effort lists", m.Slug, m.ReasoningEfforts)
 		}
 	}
 	if defaults != 1 {
@@ -358,8 +370,8 @@ func TestClientModelsCachesDiscovery(t *testing.T) {
 	if _, _, err := client.Models(context.Background()); err != nil {
 		t.Fatalf("second Models: %v", err)
 	}
-	if runner.calls != 1 {
-		t.Fatalf("expected the catalog probe to run once, ran %d times", runner.calls)
+	if runner.calls != 2 {
+		t.Fatalf("expected the help and session probes to run once each, ran %d times", runner.calls)
 	}
 }
 
@@ -389,25 +401,39 @@ func TestValidateModelRejectsNonIdentifier(t *testing.T) {
 	}
 }
 
-func TestValidateModelRejectsUncatalogedIdentifier(t *testing.T) {
+// Claude Code lists no catalog, so a name is the installed CLI's to judge:
+// MARSHAL refuses only values that are not identifiers, and starts no
+// session to check.
+func TestValidateModelLeavesModelNamesToTheCLI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	client := New("claude", newProbeRunner(t))
-	err := client.ValidateModel(context.Background(), "gpt-5-codex")
-	if err == nil {
-		t.Fatal("a model outside the eligible catalog must be refused")
-	}
-	if !errors.Is(err, model.ErrInvalid) {
-		t.Fatalf("expected ErrInvalid, got %v", err)
-	}
-}
-
-func TestValidateModelAcceptsCatalogedAlias(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	client := New("claude", newProbeRunner(t))
-	for _, good := range []string{"opus", "sonnet", "haiku", "claude-opus-4-1-20250805"} {
+	runner := &mockOperationsRunner{handler: func(adapter.Command) (adapter.ProcessResult, error) {
+		t.Error("validating a model name started a process")
+		return adapter.ProcessResult{}, nil
+	}}
+	client := New("claude", runner)
+	for _, good := range []string{"opus", "sonnet", "fable", "claude-opus-4-1-20250805", "some-future-model"} {
 		if err := client.ValidateModel(context.Background(), good); err != nil {
 			t.Fatalf("expected %q to be accepted, got %v", good, err)
 		}
+	}
+}
+
+func installedClaudeHelp(t *testing.T) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "app", "testdata", "providerhelp", "claude", "top.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestParseHelpModelsReadsTheInstalledHelp(t *testing.T) {
+	aliases, efforts := ParseHelpModels(string(installedClaudeHelp(t)))
+	if strings.Join(aliases, ",") != "fable,opus,sonnet" || strings.Join(efforts, ",") != "low,medium,high,xhigh,max" {
+		t.Fatalf("aliases=%v efforts=%v", aliases, efforts)
+	}
+	if a, e := ParseHelpModels("Usage: claude\n  --print   Print\n"); a != nil || e != nil {
+		t.Fatalf("a help naming no models produced %v %v", a, e)
 	}
 }
 

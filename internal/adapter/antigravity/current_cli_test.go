@@ -36,7 +36,7 @@ func TestCurrentAntigravityDialectCwdAndPermissions(t *testing.T) {
 	if _, err := client.Run(t.Context(), req); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "json", "--model", antigravity.DefaultModel, "--effort", "high", "--new-project", "--print"}
+	want := []string{"--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "json", "--effort", "high", "--new-project", "--print"}
 	if !slices.Equal(command.Args[:len(command.Args)-1], want) || command.Dir != req.Worktree || len(command.Env) != 0 {
 		t.Fatal("native dialect, permissions, process cwd or inherited runner contract changed")
 	}
@@ -185,7 +185,7 @@ func TestCurrentAntigravityNativeSmoke(t *testing.T) {
 	req.Title = "Reply MARSHAL_AGY_ADAPTER_OK without tools"
 	req.TrustedContext = "Read-only smoke test. Do not use tools, commands, MCP, files or writes. Return exactly MARSHAL_AGY_ADAPTER_OK as your final response."
 	got, err := client.Run(ctx, req)
-	metadata := map[string]any{"start_utc": got.StartedAt, "end_utc": got.EndedAt, "pid": providerPID, "version": probe.Version, "model_requested": antigravity.DefaultModel, "session_id": got.SessionID, "status": got.Status, "exit_code": got.ExitCode, "timed_out": got.TimedOut, "cancelled": got.Cancelled, "final_text": got.FinalText, "usage": got.Usage, "method": "actual Client.Run with real exec process runner; new project; no resume"}
+	metadata := map[string]any{"start_utc": got.StartedAt, "end_utc": got.EndedAt, "pid": providerPID, "version": probe.Version, "model_requested": "agy default", "session_id": got.SessionID, "status": got.Status, "exit_code": got.ExitCode, "timed_out": got.TimedOut, "cancelled": got.Cancelled, "final_text": got.FinalText, "usage": got.Usage, "method": "actual Client.Run with real exec process runner; new project; no resume"}
 	if source, readErr := os.ReadFile("antigravity.go"); readErr == nil {
 		metadata["adapter_source_sha256"] = fmt.Sprintf("%x", sha256.Sum256(source))
 	}

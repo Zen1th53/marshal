@@ -1,0 +1,12 @@
+opencode providers
+
+manage AI providers and credentials
+
+Commands:
+  opencode providers list    list providers and credentials                    [aliases: ls]
+  opencode providers login   log in to a provider
+  opencode providers logout  log out from a configured provider
+
+Options:
+  -h, --help        show help                                                      [boolean]
+  -v, --version     show version number                                            [boolean]

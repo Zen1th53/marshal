@@ -17,6 +17,7 @@ func TestFreshAGYVerificationPinsProbeAndPersistsExactModel(t *testing.T) {
 case "$1" in
 --version) echo 1.2.14; exit 0;;
 --help) echo '--print --output-format --conversation --mode --sandbox --new-project --disable-slash-commands --model'; exit 0;;
+models) printf 'gemini-4-argon-high\tGemini 4 Argon (High)\n'; exit 0;;
 esac
 while [ "$#" -gt 0 ]; do
  if [ "$1" = --model ]; then shift; printf '%s' "$1" > "$MARSHAL_TEST_MODEL"; break; fi
@@ -31,7 +32,8 @@ printf '%s\n' '{"status":"SUCCESS","conversation_id":"fresh-probe","response":"M
 			}
 			want := selected
 			if want == "" {
-				want = "gemini-3.8-flash-high"
+				// No model chosen: auto resolves against what agy lists.
+				want = "gemini-4-argon-high"
 			}
 			raw, err := os.ReadFile(capture)
 			if err != nil || string(raw) != want {

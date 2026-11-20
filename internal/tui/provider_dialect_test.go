@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -29,10 +30,10 @@ func installProviderDialectDoubles(t *testing.T, logEnv, marker string, logProvi
 	script := `#!/bin/sh
 provider=${0##*/}
 case "$provider" in
- codex) version='codex-cli 0.159.2';;
- claude) version='2.1.286 (Claude Code)';;
+ codex) version='codex-cli 0.169.0';;
+ claude) version='2.1.329 (Claude Code)';;
  opencode) version='1.18.16';;
- agy) version='1.2.7';;
+ agy) version='1.5.10';;
  *) exit 90;;
 esac
 reject() { printf 'DIALECT-REJECTED: %s\nUnknown command. Use --help.\n' "$*" >&2; exit 2; }
@@ -40,6 +41,16 @@ if [ "$1" = '--version' ]; then
  [ "$#" = 1 ] || reject 'version arguments'
  printf '%s\n' "$provider" >> "$MARSHAL_DIALECT_PROBES"
  printf '%s\n' "$version"; exit 0
+fi
+# MARSHAL reads each CLI's grammar from its own help (NO_COLOR, TERM=dumb,
+# CI=1). Those probes are answered with the CLI's real help and are not
+# operations.
+last=; for arg do last=$arg; done
+if [ "$last" = --help ] && [ "$CI" = 1 ] && [ "$TERM" = dumb ] && [ "$NO_COLOR" = 1 ]; then
+ name=top; [ "$#" -gt 1 ] && name=$(printf '%s-' "$@" | /usr/bin/sed 's/--help-$//; s/-$//')
+ printf 'help %s %s\n' "$provider" "$name" >> "$MARSHAL_DIALECT_PROBES"
+ /bin/cat "MARSHAL_HELP_FIXTURES/$provider/$name.txt" 2>/dev/null || { printf 'DIALECT-REJECTED: help %s\n' "$name" >&2; exit 2; }
+ exit 0
 fi
 original=$(printf '%s\n' "$@")
 printf '%s\n' "$provider" "$original" > "$MARSHAL_DIALECT_ARGV"
@@ -106,6 +117,7 @@ if [ "$helpRequested" = 1 ]; then
 fi
 if [ "$provider:$1:$2" = 'opencode:session:list' ]; then printf '[]\n'; else printf 'DIALECT-RAN\n'; fi
 `
+	script = strings.ReplaceAll(script, "MARSHAL_HELP_FIXTURES", providerHelpFixtures(t))
 	script = strings.ReplaceAll(script, "MARSHAL_DIALECT_ARGV", logEnv)
 	script = strings.ReplaceAll(script, "DIALECT-RAN", marker)
 	if !logProvider {
@@ -119,12 +131,23 @@ if [ "$provider:$1:$2" = 'opencode:session:list' ]; then printf '[]\n'; else pri
 	return log
 }
 
+// providerHelpFixtures is the directory of each CLI's real --help output
+// that the application's dialect tests read too.
+func providerHelpFixtures(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("no caller")
+	}
+	return filepath.Join(filepath.Dir(file), "..", "app", "testdata", "providerhelp")
+}
+
 func TestProviderDialectSurface(t *testing.T) {
 	sweepWorkEnvironment(t)
 	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "dialect", "dialect")
 	for _, tc := range []struct{ provider, supported, unknown string }{
-		{"codex", "fork", "mcp auth"}, {"claude", "resume", "plugin add-json"},
+		{"codex", "fork", "mcp future-verb"}, {"claude", "resume", "plugin add-json"},
 		{"opencode", "fork", "plugin install"}, {"agy", "resume", "plugin add-json"},
 	} {
 		t.Run(tc.provider, func(t *testing.T) {

@@ -15,18 +15,19 @@ func NewIntelligence() *Intelligence {
 	return &Intelligence{}
 }
 
-// DefaultProfiles returns the verified baseline profiles for all four first-class harnesses.
+// DefaultProfiles returns the baseline feature profiles of the four
+// first-class harnesses. They name no CLI version and no model: the
+// installed version and the models it offers come only from probing the
+// installed CLI (providers.Provider.Models), so a baseline never stands in
+// for what is installed.
 func (i *Intelligence) DefaultProfiles() map[string]model.HarnessProfile {
 	now := time.Now().UTC()
 	expiry := now.Add(24 * time.Hour)
 
 	return map[string]model.HarnessProfile{
 		"codex": {
-			Harness:          "codex",
-			InstalledVersion: "0.28.0",
-			BinaryPath:       "codex",
-			SupportedModels:  []string{"gpt-4o", "o1", "o3-mini"},
-			DefaultModel:     "gpt-4o",
+			Harness:    "codex",
+			BinaryPath: "codex",
 			FeatureSupport: map[string]model.FeatureStatus{
 				"instructions":      model.StatusNative,
 				"headless":          model.StatusNative,
@@ -43,11 +44,8 @@ func (i *Intelligence) DefaultProfiles() map[string]model.HarnessProfile {
 			ExpiresAt:       expiry,
 		},
 		"claude-code": {
-			Harness:          "claude-code",
-			InstalledVersion: "1.0.12",
-			BinaryPath:       "claude",
-			SupportedModels:  []string{"claude-3-7-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku"},
-			DefaultModel:     "claude-3-7-sonnet",
+			Harness:    "claude-code",
+			BinaryPath: "claude",
 			FeatureSupport: map[string]model.FeatureStatus{
 				"instructions":      model.StatusNative,
 				"headless":          model.StatusNative,
@@ -65,11 +63,8 @@ func (i *Intelligence) DefaultProfiles() map[string]model.HarnessProfile {
 			ExpiresAt:       expiry,
 		},
 		"opencode": {
-			Harness:          "opencode",
-			InstalledVersion: "0.14.2",
-			BinaryPath:       "opencode",
-			SupportedModels:  []string{"deepseek-coder", "claude-3-7-sonnet", "gpt-4o"},
-			DefaultModel:     "deepseek-coder",
+			Harness:    "opencode",
+			BinaryPath: "opencode",
 			FeatureSupport: map[string]model.FeatureStatus{
 				"instructions":      model.StatusNative,
 				"headless":          model.StatusNative,
@@ -86,11 +81,8 @@ func (i *Intelligence) DefaultProfiles() map[string]model.HarnessProfile {
 			ExpiresAt:       expiry,
 		},
 		"antigravity": {
-			Harness:          "antigravity",
-			InstalledVersion: "1.4.2",
-			BinaryPath:       "agy",
-			SupportedModels:  []string{"gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low"},
-			DefaultModel:     "gemini-3.8-flash-high",
+			Harness:    "antigravity",
+			BinaryPath: "agy",
 			FeatureSupport: map[string]model.FeatureStatus{
 				"instructions":      model.StatusNative,
 				"headless":          model.StatusNative,

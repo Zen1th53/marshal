@@ -8,14 +8,18 @@ import (
 )
 
 // neutralProviderPath installs fake provider CLIs that answer only --version
-// and record any other invocation, so a test can prove nothing was launched.
+// (and MARSHAL's --help grammar probe) and record any other invocation, so a test can prove nothing was launched.
 func neutralProviderPath(t *testing.T, providers ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(t.TempDir(), "launches")
 	versions := map[string]string{"codex": "codex-cli 0.159.2", "claude": "2.1.286 (Claude Code)", "opencode": "1.18.16", "agy": "1.2.7"}
 	for _, p := range providers {
-		script := "#!/bin/sh\n[ \"$1\" = --version ] && { echo '" + versions[p] + "'; exit 0; }\necho \"" + p + " $*\" >> '" + log + "'\n"
+		// MARSHAL reads a CLI's grammar from its own --help (with CI=1 and
+		// TERM=dumb); that probe is not a launch.
+		script := "#!/bin/sh\n[ \"$1\" = --version ] && { echo '" + versions[p] + "'; exit 0; }\n" +
+			"case \"$*\" in *--help) [ \"$CI\" = 1 ] && [ \"$TERM\" = dumb ] && exit 0;; esac\n" +
+			"echo \"" + p + " $*\" >> '" + log + "'\n"
 		if err := os.WriteFile(filepath.Join(dir, p+".new"), []byte(script), 0o700); err != nil {
 			t.Fatal(err)
 		}

@@ -23,7 +23,11 @@ func (f *fakeCLI) Run(_ context.Context, c adapter.Command) (adapter.ProcessResu
 	case "/bin/codex":
 		out = `{"models":[{"slug":"fixture-a","display_name":"A","is_default":true,"supported_reasoning_levels":[{"effort":"low"},{"effort":"high"}]},{"slug":"fixture-b"}]}`
 	case "/bin/claude":
-		out = `{"type":"system","subtype":"init","model":"fixture-claude"}` + "\n"
+		if len(c.Args) == 1 && c.Args[0] == "--help" {
+			out = "Options:\n  --effort <level>   Effort level (low, high)\n  --model <model>    Model. Use an alias (e.g.\n                     'fixture-alias') or a full name.\n"
+		} else {
+			out = `{"type":"system","subtype":"init","model":"fixture-claude"}` + "\n"
+		}
 	case "/bin/opencode":
 		out = "Some banner line\nvendor/fixture-x\nvendor/fixture-y\nvendor/fixture-x\n"
 	case "/bin/agy":
@@ -118,7 +122,7 @@ func TestModelsParsePerCLI(t *testing.T) {
 	isolate(t)
 	want := map[string]string{
 		"codex":    "fixture-a[low high]* fixture-b[]",
-		"claude":   "fixture-claude[]*",
+		"claude":   "fixture-alias[low high] fixture-claude[low high]*",
 		"opencode": "vendor/fixture-x[] vendor/fixture-y[]",
 		"agy":      "fixture-g1[] fixture-g2[]",
 	}
@@ -184,4 +188,27 @@ func TestQuotaRunsAgyOnlyWhenAsked(t *testing.T) {
 	if !called {
 		t.Fatal("agy not read when asked")
 	}
+}
+
+// Claude's session probe can fail (signed out, offline); the aliases its
+// installed help names are still its catalog, with no default invented.
+func TestClaudeModelsFallBackToItsHelp(t *testing.T) {
+	isolate(t)
+	runner := runnerFunc(func(c adapter.Command) adapter.ProcessResult {
+		if len(c.Args) == 1 && c.Args[0] == "--help" {
+			return adapter.ProcessResult{Stdout: []byte("  --model <model>  Use an alias (e.g. 'fixture-a' or 'fixture-b')\n")}
+		}
+		return adapter.ProcessResult{ExitCode: 1}
+	})
+	p, _ := Get("claude")
+	catalog, err := p.Models(context.Background(), "/bin/claude", runner)
+	if err != nil || catalog.Default != "" || len(catalog.Models) != 2 || catalog.Models[0].ID != "fixture-a" {
+		t.Fatalf("catalog = %+v, %v", catalog, err)
+	}
+}
+
+type runnerFunc func(adapter.Command) adapter.ProcessResult
+
+func (f runnerFunc) Run(_ context.Context, c adapter.Command) (adapter.ProcessResult, error) {
+	return f(c), nil
 }

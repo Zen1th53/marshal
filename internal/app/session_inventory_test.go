@@ -202,8 +202,18 @@ func TestSessionInventoryBatchUsesNativeHomeAndProject(t *testing.T) {
 	r, _ := openTestMemoryService(t)
 	isolateSessionHistory(t)
 	importInventoryConversation(t, r, "codex", "batch-source", time.Now().UTC())
+	fixtures, err := filepath.Abs(filepath.Join("testdata", "providerhelp", "codex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The double answers MARSHAL's grammar probe with codex's real help.
 	script := `#!/bin/sh
-if [ "$1" = '--version' ]; then printf 'codex-cli 0.159.2\n'; exit 0; fi
+if [ "$1" = '--version' ]; then printf 'codex-cli 0.169.0\n'; exit 0; fi
+last=; for arg do last=$arg; done
+if [ "$last" = --help ]; then
+ name=top; [ "$#" -gt 1 ] && name=$(printf '%s-' "$@" | /usr/bin/sed 's/--help-$//; s/-$//')
+ /bin/cat '` + fixtures + `'/"$name".txt; exit 0
+fi
 printf 'HOME:<%s>\nDIR:<%s>\n' "$CODEX_HOME" "$PWD"
 for arg do printf 'ARG:<%s>\n' "$arg"; done
 `

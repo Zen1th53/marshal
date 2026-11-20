@@ -31,11 +31,13 @@ type ProviderOperation struct {
 }
 
 type ProviderDialect struct {
-	Provider         string
-	Version          string
-	Binary           string
-	QualifiedVersion string
-	operations       map[string]ProviderOperation
+	Provider string
+	Version  string
+	Binary   string
+	// Probed is set when the operations were read from the installed CLI's
+	// own help; an unprobed dialect knows nothing and refuses nothing.
+	Probed     bool
+	operations map[string]ProviderOperation
 }
 
 func providerKey(provider string) string {
@@ -45,47 +47,25 @@ func providerKey(provider string) string {
 	return provider
 }
 
-var providerVersion = regexp.MustCompile(`(?m)^(?:codex-cli )?([0-9]+\.[0-9]+\.[0-9]+)(?: \(Claude Code\))?\s*$`)
+// providerVersion reads the version a CLI prints for --version, whatever the
+// surrounding words ("codex-cli 0.169.0", "2.1.329 (Claude Code)",
+// "opencode v2.1.4", "1.5.10").
+var providerVersion = regexp.MustCompile(`\bv?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]*)?)\b`)
 
-// QualifiedProviderDialect deliberately qualifies singleton ranges [v,v].
-// The qualification was read from each CLI's own --help output at exactly
-// these versions, offline; it justifies these versions only. A new version, missing evidence, or an unlisted operation
-// stays UNKNOWN; absence of an arbitrary word is not negative evidence.
-func QualifiedProviderDialect(provider, version string) ProviderDialect {
-	provider = providerKey(provider)
-	d := ProviderDialect{Provider: provider, Version: version, operations: map[string]ProviderOperation{}}
-	qualified := map[string]string{"codex": "0.159.2", "claude": "2.1.286", "opencode": "1.18.16", "agy": "1.2.7"}[provider]
-	match := providerVersion.FindStringSubmatch(strings.TrimSpace(version))
-	if len(match) == 2 {
-		d.Version = strings.TrimSpace(match[0])
+// NormalizeProviderVersion is the version in a CLI's --version output, or the
+// trimmed output itself when it names none.
+func NormalizeProviderVersion(output string) string {
+	output = strings.TrimSpace(output)
+	if m := providerVersion.FindStringSubmatch(output); m != nil {
+		return m[1]
 	}
-	if qualified == "" || len(match) != 2 || match[1] != qualified {
-		return d
-	}
-	d.QualifiedVersion = qualified
-	evidence := provider + " " + qualified + " --help output"
-	add := func(status ProviderSupport, names string) {
-		for _, op := range strings.Split(names, ",") {
-			d.operations[op] = ProviderOperation{Status: status, Evidence: evidence}
-		}
-	}
-	switch provider {
-	case "codex":
-		add(ProviderSupported, "new,continue,resume,fork,exec,exec resume,exec fork,exec review,review,doctor,mcp,plugin,agents,features,apply,sandbox,approval,search,login,logout,mcp list,mcp get,mcp add,mcp remove,mcp login,mcp logout,plugin list,plugin add,plugin remove,plugin marketplace")
-		add(ProviderUnsupported, "mcp enable,mcp disable,plugin enable,plugin disable,plugin get")
-		add(ProviderSupported, "fork --last")
-		d.operations["exec fork --last"] = ProviderOperation{Status: ProviderUnsupported, TerminalOnly: true, Evidence: "codex 0.159.2 exec fork --help requires SESSION_ID and has no --last flag"}
-	case "claude":
-		add(ProviderSupported, "new,continue,resume,fork,exec,mcp,plugin,auth,agents,doctor,login,logout,mcp list,mcp add,mcp get,mcp remove,mcp login,mcp logout,plugin list,plugin install,plugin uninstall,plugin enable,plugin disable,plugin marketplace")
-		add(ProviderUnsupported, "review,plugin get,mcp enable,mcp disable")
-	case "opencode":
-		add(ProviderSupported, "new,continue,resume,fork,run,mcp,providers,agent,models,stats,session,debug,github,pr,attach,acp,serve,web,mcp list,mcp add,mcp auth,mcp logout,mcp debug")
-		add(ProviderUnsupported, "review,mcp remove,mcp get,mcp enable,mcp disable")
-	case "agy":
-		add(ProviderSupported, "new,continue,resume,prompt,models,agents,agent,mcp,plugin,changelog,mcp list,mcp add,mcp remove,mcp enable,mcp disable,plugin list,plugin install,plugin uninstall,plugin enable,plugin disable,plugin validate,plugin import,plugin link")
-		add(ProviderUnsupported, "fork,review,mcp get,mcp login,mcp logout,mcp auth,mcp debug,plugin get,plugin marketplace")
-	}
-	return d
+	return output
+}
+
+// UnprobedProviderDialect is a dialect nothing has been learned for: every
+// operation is UNKNOWN and is passed through to the CLI, which decides.
+func UnprobedProviderDialect(provider, version string) ProviderDialect {
+	return ProviderDialect{Provider: providerKey(provider), Version: version, operations: map[string]ProviderOperation{}}
 }
 
 func (d ProviderDialect) Operation(op string) ProviderOperation {
@@ -164,8 +144,11 @@ func (c ProviderOperation) Label() string {
 func (d ProviderDialect) Help(operations []string, terminal bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Provider dialect: %s; detected version: %s\n", d.Provider, d.Version)
-	if d.QualifiedVersion != "" {
-		fmt.Fprintf(&b, "Qualified grammar range: [%s, %s] (offline CLI help; no session compatibility claim)\n", d.QualifiedVersion, d.QualifiedVersion)
+	if d.Probed {
+		b.WriteString("Grammar read from the installed CLI's own --help (no session compatibility claim)\n")
+		if missing := d.Missing(); len(missing) > 0 {
+			fmt.Fprintf(&b, "Not usable by MARSHAL: the installed CLI lacks %s\n", strings.Join(missing, ", "))
+		}
 	}
 	for _, op := range operations {
 		c := d.WrapperOperation(op, terminal)
@@ -312,12 +295,13 @@ func ProviderArgOperation(provider string, args []string) string {
 	return "new"
 }
 
-// ObserveProviderDialect uses only the existing non-mutating --version
-// grammar. Time and output are bounded; no stdin, session, help discovery,
-// account state, model discovery, or network request is involved.
+// ObserveProviderDialect asks the installed CLI for its version and, once per
+// installed binary and version, reads which operations it offers from its own
+// --help. Time and output are bounded; no stdin, session, account state,
+// model discovery, or network request is involved.
 func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialect {
 	provider = providerKey(provider)
-	d := QualifiedProviderDialect(provider, "UNKNOWN")
+	d := UnprobedProviderDialect(provider, "UNKNOWN")
 	if ctx.Err() != nil {
 		return d
 	}
@@ -331,7 +315,7 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 	}
 	providerDialectCache.Lock()
 	key := provider + "\x00" + path
-	if cached, ok := providerDialectCache.rows[key]; ok && os.SameFile(info, cached.info) && info.ModTime() == cached.info.ModTime() && info.Size() == cached.info.Size() && info.Mode() == cached.info.Mode() {
+	if cached, ok := providerDialectCache.rows[key]; ok && sameProviderBinary(info, cached.info) && time.Since(cached.checked) < providerVersionRecheck {
 		providerDialectCache.Unlock()
 		return cached.dialect
 	}
@@ -348,34 +332,63 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 		d.Binary = path
 		return d // a CLI that does not answer --version would not answer --help
 	}
-	d = QualifiedProviderDialect(provider, strings.TrimSpace(string(output.data)))
+	version := NormalizeProviderVersion(string(output.data))
+	// The grammar is read once per binary and version: the same version
+	// offers the same commands, and a new version is read afresh.
+	grammarKey := key + "\x00" + version
+	providerDialectCache.Lock()
+	learned, known := providerDialectCache.grammar[grammarKey]
+	providerDialectCache.Unlock()
+	if known {
+		d = learned
+	} else {
+		d = ProbeProviderDialect(provider, version, func(args ...string) string { return providerHelp(ctx, path, args...) })
+		if ctx.Err() != nil {
+			d.Binary = path
+			return d // an interrupted probe is not what this version offers
+		}
+	}
 	d.Binary = path
-	// The grammar comes from the installed CLI's own help, whatever version
-	// that is.
-	learnGrammarFromHelp(ctx, path, &d)
 	// Re-check the executable identity after the probe; never cache a result
 	// across replacement during discovery. The bound avoids process-lifetime
 	// growth when many isolated projects use different provider doubles.
-	if after, err := os.Stat(path); err == nil && os.SameFile(info, after) && info.ModTime() == after.ModTime() && info.Size() == after.Size() {
+	if after, err := os.Stat(path); err == nil && sameProviderBinary(info, after) {
 		providerDialectCache.Lock()
 		defer providerDialectCache.Unlock()
 		if len(providerDialectCache.rows) >= 64 {
 			providerDialectCache.rows = map[string]providerDialectCacheRow{}
 		}
-		providerDialectCache.rows[key] = providerDialectCacheRow{info: info, dialect: d}
+		if len(providerDialectCache.grammar) >= 64 {
+			providerDialectCache.grammar = map[string]ProviderDialect{}
+		}
+		providerDialectCache.rows[key] = providerDialectCacheRow{info: info, checked: time.Now(), dialect: d}
+		providerDialectCache.grammar[grammarKey] = d
 	}
 	return d
 }
 
+// providerVersionRecheck bounds how long an unchanged executable is trusted
+// to report the same version. A launcher script (an npm shim, a version
+// manager) keeps its identity while the CLI it starts is upgraded, so the
+// version is asked again after this long; the grammar is read again only
+// when the answer differs.
+const providerVersionRecheck = 10 * time.Minute
+
+func sameProviderBinary(a, b os.FileInfo) bool {
+	return os.SameFile(a, b) && a.ModTime() == b.ModTime() && a.Size() == b.Size() && a.Mode() == b.Mode()
+}
+
 type providerDialectCacheRow struct {
 	info    os.FileInfo
+	checked time.Time
 	dialect ProviderDialect
 }
 
 var providerDialectCache = struct {
 	sync.Mutex
-	rows map[string]providerDialectCacheRow
-}{rows: map[string]providerDialectCacheRow{}}
+	rows    map[string]providerDialectCacheRow
+	grammar map[string]ProviderDialect
+}{rows: map[string]providerDialectCacheRow{}, grammar: map[string]ProviderDialect{}}
 
 type providerProbeOutput struct {
 	data      []byte

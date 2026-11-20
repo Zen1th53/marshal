@@ -307,8 +307,9 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 }
 
 // ResolveInstalled resolves a selector against the installed agy's offer.
-// When agy cannot be asked, auto falls back to DefaultModel so an offline
-// listing never stops work that would have run before selectors existed.
+// When agy cannot be asked, auto resolves to "": no --model is passed and
+// agy uses its own default, so an offline listing never stops work and no
+// model name is fixed in Marshal.
 func ResolveInstalled(ctx context.Context, binary string, runner adapter.ProcessRunner, selector string) (string, error) {
 	if selector != "" && !IsSelector(selector) {
 		return selector, nil // an exact ID is checked by agy itself
@@ -322,7 +323,7 @@ func ResolveInstalled(ctx context.Context, binary string, runner adapter.Process
 		}
 	}
 	if auto {
-		return DefaultModel, nil
+		return "", nil
 	}
 	return "", err
 }

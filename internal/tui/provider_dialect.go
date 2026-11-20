@@ -169,7 +169,7 @@ func (h *CommandHandler) qualifiedHelp(ctx context.Context, original string) str
 		}
 		for _, provider := range []string{"codex", "claude", "opencode", "agy"} {
 			if words[0] == "/"+provider {
-				lines[i] = "  /" + provider + " help  Provider operations and version qualification (UNKNOWN means unqualified pass-through)"
+				lines[i] = "  /" + provider + " help  Provider operations read from the installed CLI's own --help (UNKNOWN means unqualified pass-through)"
 			}
 		}
 	}
