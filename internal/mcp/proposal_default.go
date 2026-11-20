@@ -11,7 +11,7 @@ func (s *Server) rememberViaProposalMCP(ctx context.Context, args map[string]any
 }
 
 func memoryRememberTool() Tool {
-	return Tool{Name: "memory_remember", Description: "Record unverified candidate memory", InputSchema: map[string]any{"type": "object", "properties": map[string]any{"project_id": stringSchema(), "title": stringSchema(), "body": stringSchema()}, "required": []string{"project_id", "title", "body"}}}
+	return Tool{Name: "memory_remember", Description: "Record candidate memory", InputSchema: map[string]any{"type": "object", "properties": map[string]any{"project_id": stringSchema(), "title": stringSchema(), "body": stringSchema()}, "required": []string{"project_id", "title", "body"}}}
 }
 
 func nativePlanningContextRequest(jsonRPCRequest) bool                        { return false }

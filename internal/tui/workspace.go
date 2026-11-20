@@ -218,6 +218,8 @@ type Workspace struct {
 	homeBoard bool
 	// firstUse is the empty Board's own state.
 	firstUse firstUseState
+	// v2m is the Board v2 Marshal collector's cache of off-paint probes.
+	v2m v2MarshalState
 	// say carries what the operator types to the Marshal from the Board's
 	// composer into the chat.
 	say sayState
@@ -285,6 +287,9 @@ type Workspace struct {
 	// chatTypeMu is held while anything types into the tmux chat pane, so
 	// two writers never interleave in its composer.
 	chatTypeMu sync.Mutex
+	// chatBinding is the Marshal chat's restarts, rebinds and the requests
+	// the Board sent it (chat_binding.go).
+	chatBinding chatBindingState
 	// dock keeps the Marshal chat joined beside the Board.
 	dock marshalDock
 	// status is Marshal's tmux status line: the vitals row on every screen

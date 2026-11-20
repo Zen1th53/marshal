@@ -14,7 +14,10 @@ func (w *Workspace) prepareProposalMCP(provider, root string, args, env []string
 }
 func (w *Workspace) activateProposalMCP(*activeTmuxAgent) {}
 func (w *Workspace) revokeProposalMCP(*activeTmuxAgent)   {}
-func (w *Workspace) closeProposalMCP()                    {}
+
+// retireProposalMCPForResume: this edition has no live proposal lease.
+func (w *Workspace) retireProposalMCPForResume(*activeTmuxAgent) {}
+func (w *Workspace) closeProposalMCP()                           {}
 func (w *Workspace) bindProposalMCPRequest(req permission.Request) (permission.Request, error) {
 	return req, nil
 }
@@ -27,3 +30,7 @@ func (w *Workspace) recoverBoundMCPMemory(store.MarshalProposal) bool { return f
 
 func (w *Workspace) activateNativeProposalMCP(*briefingDir) {}
 func (w *Workspace) revokeNativeProposalMCP(*briefingDir)   {}
+
+// chatAuthorityBound: this edition binds no live lease; a running chat is
+// the binding.
+func (w *Workspace) chatAuthorityBound() bool { return true }

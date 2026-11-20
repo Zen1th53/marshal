@@ -14,7 +14,7 @@ func withMCPResponseID(ctx context.Context, _ any) context.Context { return ctx 
 
 func memoryRecallTool() Tool {
 	return Tool{
-		Name: "memory_recall", Description: "Search memory using progressive hybrid retrieval",
+		Name: "memory_recall", Description: "Search memory",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{"project_id": stringSchema(), "query": stringSchema()}, "required": []string{"project_id", "query"}},
 	}
 }

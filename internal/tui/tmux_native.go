@@ -541,7 +541,10 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	cmd = append(cmd, env...)
 	cmd = append(cmd, bin)
 	cmd = append(cmd, resumeArgs...)
-	w.revokeProposalMCP(original)
+	// The restarted chat keeps its role: its lease retires so the launch
+	// minted above takes over its open requests and submissions.
+	w.retireProposalMCPForResume(original)
+	w.chatRestarted()
 	err = tmux.RespawnPaneIn(ctx, agent.paneID, root, cmd)
 	if err != nil && allowNewWindow {
 		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, marshalChatCommand(bin, resumeArgs))
