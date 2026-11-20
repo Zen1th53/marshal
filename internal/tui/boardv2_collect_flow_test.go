@@ -416,3 +416,21 @@ func TestCollectV2FlowOnGovernedRun(t *testing.T) {
 		t.Fatalf("plan = %+v", b.Plan)
 	}
 }
+
+// The NOW line names the Marshal as the top bar does when it runs in a tmux
+// chat window: "claude Opus 5.5 · ...", never the placeholder "Marshal"
+// (w.chat, the in-process chat, is empty then).
+func TestCollectV2FlowNowNamesTmuxMarshal(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	w.tmuxActiveWins["marshal-chat"] = &activeTmuxAgent{role: "marshal-chat", provider: "claude", state: "working", args: []string{"--model", "claude-opus-5-5", "--permission-mode", "dontAsk"}}
+	b := w.boardV2()
+	if b.Marshal.Provider != "claude" || b.Marshal.Model != "Opus 5.5" {
+		t.Fatalf("top bar Marshal = %+v", b.Marshal)
+	}
+	if !strings.HasPrefix(b.NowLine.Marshal, "claude Opus 5.5") {
+		t.Fatalf("NOW Marshal = %q, want it to start with %q", b.NowLine.Marshal, "claude Opus 5.5")
+	}
+	if strings.Contains(b.NowLine.Marshal, "Marshal") {
+		t.Fatalf("NOW still names the provider %q", b.NowLine.Marshal)
+	}
+}

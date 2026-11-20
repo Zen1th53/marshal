@@ -121,6 +121,50 @@ func (in v2MarshalIn) marshalProvider() string {
 	return in.Probe.Lead
 }
 
+// liveSession is the probed session of the live chat; zero when there is
+// none.
+func (in v2MarshalIn) liveSession() usage.Session {
+	if !in.Probe.HasSession || !in.Chat.Live {
+		return usage.Session{}
+	}
+	return in.Probe.Session
+}
+
+// marshalModel is the model the Marshal runs on, as the top bar names it
+// ("Opus 5.5"): the live session's, the chat's arguments or its own record,
+// before the chat runs the model its harness was verified on, then what the
+// usage reading or the provider CLI said.
+func (in v2MarshalIn) marshalModel(prov string) string {
+	id := firstNonEmpty(in.liveSession().Model, chatModelArg(in.Chat.Args), in.Chat.Model)
+	if id == "" && !in.Chat.Live {
+		id = in.Providers[prov].Model
+	}
+	id = firstNonEmpty(id, in.Quotas[prov].Model, in.Current[prov])
+	return v2ModelName(prov, id)
+}
+
+// v2MarshalModelIn gathers just what marshalProvider and marshalModel read:
+// the live chat, the last probe, the provider statuses and usage readings.
+// The flow collector names the Marshal on the NOW line from it, so the NOW
+// line and the top bar's Marshal segment agree.
+func (w *Workspace) v2MarshalModelIn(now time.Time) v2MarshalIn {
+	in := v2MarshalIn{Now: now, Chat: w.v2LiveChat()}
+	in.Probe, in.Probed, _, in.Current = w.v2MarshalSnapshot(now, in.Chat)
+	if qs, ok := w.usageQuotas(); ok {
+		in.Quotas = map[string]usage.Quota{}
+		for _, q := range qs {
+			in.Quotas[q.Provider] = q
+		}
+	}
+	if snap := w.prov.paint().Snap; snap.Loaded {
+		in.Providers = map[string]store.ProviderStatus{}
+		for _, p := range snap.Providers {
+			in.Providers[providerWorker(p.Provider)] = p
+		}
+	}
+	return in
+}
+
 // v2ModelName is a model id as its provider names it: Claude's tier and
 // version ("Opus 5.5"), any other id as its long display name.
 func v2ModelName(provider, id string) string {
@@ -181,18 +225,9 @@ func buildV2Marshal(in v2MarshalIn) vm.Marshal {
 		m.Doing = "not chosen yet"
 		return m
 	}
-	session := in.Probe.Session
-	if !in.Probe.HasSession || !in.Chat.Live {
-		session = usage.Session{}
-	}
+	session := in.liveSession()
 	q := in.Quotas[prov]
-	id := firstNonEmpty(session.Model, chatModelArg(in.Chat.Args), in.Chat.Model)
-	if id == "" && !in.Chat.Live {
-		// Before the chat runs: the model its harness was last verified on.
-		id = in.Providers[prov].Model
-	}
-	id = firstNonEmpty(id, q.Model, in.Current[prov])
-	m.Model = v2ModelName(prov, id)
+	m.Model = in.marshalModel(prov)
 	m.Effort = firstNonEmpty(session.Effort, chatEffortArg(in.Chat.Args))
 	if session.ContextUsed > 0 {
 		m.ContextUsed = session.ContextUsed

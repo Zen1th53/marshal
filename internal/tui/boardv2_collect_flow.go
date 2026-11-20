@@ -67,6 +67,14 @@ func (w *Workspace) flowInputs() flowIn {
 	w.chat.mu.Unlock()
 	in.stepsModel = marshalModelLabel(firstSet(in.chatProvider, in.stepsProvider), in.chatModel)
 	in.marshalProvider = firstSet(in.chatProvider, p.Provider, in.stepsProvider)
+	// The NOW line names the Marshal as the top bar does. In a tmux chat
+	// w.chat (the in-process chat) is empty, so read the same source as
+	// the top bar's Marshal segment: the live chat window and its probe.
+	mi := w.v2MarshalModelIn(in.now)
+	if prov := mi.marshalProvider(); prov != "" {
+		in.marshalProvider, in.marshalModel = prov, mi.marshalModel(prov)
+		in.stepsModel = marshalModelLabel(prov, in.marshalModel)
+	}
 	in.chatBlocked, in.chatWaiting = w.chatDecisions()
 	in.limits, in.globalCap = laneLimits(in.run.Settings)
 	ui := &w.boardUI

@@ -40,6 +40,7 @@ type flowIn struct {
 	chatProvider        string
 	chatModel           string
 	marshalProvider     string
+	marshalModel        string // as the top bar names it ("Opus 5.5")
 	chatBlocked         int
 	chatWaiting         int
 	limits              map[string]int
@@ -153,7 +154,7 @@ func flowState(in flowIn) (string, vm.Tone) {
 
 // flowNowLine is the NOW row. FromYou is never empty.
 func flowNowLine(in flowIn) vm.NowLine {
-	n := vm.NowLine{Marshal: firstSet(marshalModelLabel(in.marshalProvider, in.chatModel), "Marshal")}
+	n := vm.NowLine{Marshal: firstSet(marshalModelLabel(in.marshalProvider, firstSet(in.marshalModel, in.chatModel)), "Marshal")}
 	if doing := flowDoing(in); doing != "" {
 		n.Marshal += " · " + doing
 	}
