@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+
+First published release of the 0.3.0 changes below (v0.3.0 was tagged but not published: a help screen test failed in the governed edition).
+
+### Fixed
+- Telemetry: only release builds report; development builds and tests never register, and tests on macOS no longer opt the developer's own machine out of telemetry.
+- The governed edition's help lists the `a` and `r` keys.
+
 ## 0.3.0
 
 ### Added
