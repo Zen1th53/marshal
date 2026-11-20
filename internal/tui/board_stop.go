@@ -277,6 +277,12 @@ func (v boardVisual) layoutCounts() layout.Counts {
 	// still shows) and the open cards; the tall requirements card takes
 	// two more entries' rows.
 	inbox := len(b.Inbox) + len(v.gates) + v.cardCount() + 2*v.reqCount()
+	for _, g := range v.gates {
+		// A gate's warning line is one more row under its buttons.
+		if g.warning != "" {
+			inbox++
+		}
+	}
 	if _, stopped := v.stopNotice(); stopped {
 		inbox++
 	}
