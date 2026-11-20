@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"math"
 	"os/exec"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/architecturecodec"
 	"github.com/Zen1th53/marshal/internal/architecturereview"
-	"github.com/Zen1th53/marshal/internal/nativehistory"
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 
@@ -21,11 +21,7 @@ import (
 func (r *Runtime) architectureBuilders() func(context.Context) []architecturereview.BuilderOption {
 	return func(ctx context.Context) []architecturereview.BuilderOption {
 		glyphs := map[string]string{"claude": "✳", "codex": "⬡", "agy": "◆", "opencode": "●"}
-		codexDir, err := nativehistory.HistoryDir(nativehistory.Codex, r.ProjectRoot())
-		if err != nil {
-			codexDir = ""
-		}
-		quotas := usage.Read(time.Now(), usage.Sources{CodexDir: codexDir, ClaudeFile: usage.ClaudeConfigFile()})
+		quotas := providers.ReadQuotas(time.Now(), providers.QuotaInput{Root: r.ProjectRoot()})
 		options := make([]architecturereview.BuilderOption, 0, len(architecturecodec.BuilderProviders))
 		for _, provider := range architecturecodec.BuilderProviders {
 			option := architecturereview.BuilderOption{ID: provider, Glyph: glyphs[provider]}

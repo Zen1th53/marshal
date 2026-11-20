@@ -6,26 +6,18 @@ import (
 	"time"
 )
 
-func TestReadOrderAndNotExposed(t *testing.T) {
+func TestReadersAndNotExposed(t *testing.T) {
 	dir := t.TempDir()
 	place(t, dir, "2026/11/08", "rollout-a.jsonl", fixture(t, "fresh.jsonl"), now.Add(-time.Minute))
-	qs := Read(now, Sources{CodexDir: dir})
-	if len(qs) != 4 {
-		t.Fatalf("Read = %+v", qs)
+	if q := ReadCodex(now, dir); !q.Known || q.Provider != "codex" {
+		t.Fatalf("codex = %+v", q)
 	}
-	for i, p := range []string{"codex", "claude", "opencode", "agy"} {
-		if qs[i].Provider != p {
-			t.Fatalf("Read[%d] = %q, want %q", i, qs[i].Provider, p)
-		}
-	}
-	if !qs[0].Known {
-		t.Fatalf("codex = %+v", qs[0])
-	}
-	// With no ClaudeFile, claude is unknown with ReasonNoFile, not a number.
-	if cl := qs[1]; cl.Known || cl.Reason != ReasonNoFile || len(cl.Windows) != 0 {
+	// With no Claude file, claude is unknown with ReasonNoFile, not a number.
+	if cl := ReadClaude(now, "", ""); cl.Known || cl.Reason != ReasonNoFile || len(cl.Windows) != 0 || cl.Provider != "claude" {
 		t.Fatalf("claude = %+v", cl)
 	}
-	for _, q := range qs[2:] {
+	for _, p := range []string{"opencode", "agy"} {
+		q := Unexposed(p)
 		if q.Known || q.Reason != NotExposed || len(q.Windows) != 0 {
 			t.Fatalf("%s must be unknown, not exposed: %+v", q.Provider, q)
 		}
@@ -33,7 +25,7 @@ func TestReadOrderAndNotExposed(t *testing.T) {
 			t.Fatalf("String = %q", s)
 		}
 	}
-	if q := Read(now, Sources{CodexDir: filepath.Join(dir, "missing")})[0]; q.Known || q.Reason != ReasonNoFile {
+	if q := ReadCodex(now, filepath.Join(dir, "missing")); q.Known || q.Reason != ReasonNoFile {
 		t.Fatalf("missing codex dir = %+v", q)
 	}
 }

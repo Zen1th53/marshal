@@ -75,35 +75,24 @@ func (q Quota) Binding() (Window, bool) {
 // NotExposed is the reason for a provider that writes no quota locally.
 const NotExposed = "not exposed"
 
-// Providers is the order Read reports them in.
-var Providers = []string{"codex", "claude", "opencode", "agy"}
+// ReadCodex is the quota Codex last wrote under its sessions directory dir;
+// an empty dir is unknown.
+func ReadCodex(now time.Time, dir string) Quota { return readCodex(now, dir) }
 
-// Sources is where each provider writes its quota; an empty field is unknown.
-type Sources struct {
-	CodexDir   string // Codex's sessions directory
-	ClaudeFile string // Claude Code's .claude.json
-	// ClaudeEvents is MARSHAL's record of Claude's last rate_limit_event
-	// (ClaudeRateLimitCache), read when .claude.json has no figures.
-	ClaudeEvents string
-	// AgySeenGroups enables reading agy's model offer (it runs `agy models`
-	// at most every two minutes) and keeps the families seen
-	// (AgySeenGroupsFile).
-	AgySeenGroups string
+// ReadClaude is Claude's quota from its .claude.json file, or from the last
+// rate_limit_event MARSHAL recorded in events when that is newer or the file
+// has none. An empty events path reads the file alone.
+func ReadClaude(now time.Time, file, events string) Quota {
+	return readClaudeWithEvents(now, file, events)
 }
 
-// Read returns each provider's quota at now, in the order of Providers.
-func Read(now time.Time, src Sources) []Quota {
-	agy := Quota{Provider: "agy", Reason: NotExposed}
-	if src.AgySeenGroups != "" {
-		agy = readAgy(now, src.AgySeenGroups)
-	}
-	return []Quota{
-		readCodex(now, src.CodexDir),
-		readClaudeWithEvents(now, src.ClaudeFile, src.ClaudeEvents),
-		{Provider: "opencode", Reason: NotExposed},
-		agy,
-	}
-}
+// ReadAgy is agy's model offer and, when agy answers, its figures. It may
+// run `agy models` (at most every two minutes); the families seen are kept
+// in seenFile (AgySeenGroupsFile).
+func ReadAgy(now time.Time, seenFile string) Quota { return readAgy(now, seenFile) }
+
+// Unexposed is the quota of a provider that writes none locally.
+func Unexposed(provider string) Quota { return Quota{Provider: provider, Reason: NotExposed} }
 
 // readClaudeWithEvents is Claude's quota from .claude.json, or from the last
 // rate_limit_event MARSHAL recorded when that is newer or the file has none.

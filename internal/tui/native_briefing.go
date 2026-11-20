@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -667,18 +668,10 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 }
 
 func providerDisplayName(provider string) string {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "codex":
-		return "Codex"
-	case "claude":
-		return "Claude"
-	case "opencode":
-		return "OpenCode"
-	case "antigravity":
-		return "Antigravity"
-	default:
-		return provider
+	if spec, ok := providerspec.Lookup(provider); ok {
+		return spec.Name
 	}
+	return provider
 }
 
 // writeProjectDocBlock replaces MARSHAL's marked block in the project document

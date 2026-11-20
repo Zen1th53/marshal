@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
@@ -717,43 +718,32 @@ func (r *Runtime) ReadContinuation(ctx context.Context, provider, folder string)
 }
 
 func nativeInventoryFolder(provider, root string) string {
-	env, base, dir := "CODEX_HOME", ".codex", "sessions"
-	if provider == "claude" {
-		env, base, dir = "CLAUDE_CONFIG_DIR", ".claude", "projects"
+	spec, ok := providerspec.Lookup(provider)
+	if !ok {
+		return ""
 	}
-	if provider == "opencode" {
+	if spec.ID == "opencode" {
 		if p := os.Getenv("MARSHAL_OPENCODE_DB"); p != "" {
 			return filepath.Dir(p)
 		}
-		base := os.Getenv("XDG_DATA_HOME")
-		if base == "" {
-			h, _ := os.UserHomeDir()
-			base = filepath.Join(h, ".local", "share")
-		}
-		return filepath.Join(base, "opencode")
 	}
-	if provider == "antigravity" {
-		h, _ := os.UserHomeDir()
-		return filepath.Join(h, ".gemini", "antigravity-cli")
-	}
-	if provider != "claude" && provider != "codex" {
-		return ""
-	}
-	home := os.Getenv(env)
-	if home == "" {
-		h, err := os.UserHomeDir()
+	if spec.HistorySubdir == "" {
+		// The state directory itself holds the provider's sessions (a
+		// database, or summaries), not a transcript folder.
+		dir, _, err := spec.StateDir(nil)
 		if err != nil {
 			return ""
 		}
-		home = filepath.Join(h, base)
+		return dir
 	}
-	if !filepath.IsAbs(home) {
-		home = filepath.Join(root, home)
+	dir, err := spec.HistoryDir(nil, root)
+	if err != nil {
+		return ""
 	}
-	if provider == "claude" {
-		return filepath.Join(home, dir, regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(canonicalSessionRoot(root), "-"))
+	if spec.ID == "claude" {
+		return filepath.Join(dir, regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(canonicalSessionRoot(root), "-"))
 	}
-	return filepath.Join(home, dir)
+	return dir
 }
 
 // EarlierWorkFolder returns the provider history folder used for this project.

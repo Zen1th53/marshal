@@ -105,17 +105,6 @@ func TestAgyOfferShowsSpentFamilies(t *testing.T) {
 	}
 }
 
-// Read only runs agy when asked, so tests and callers without it never exec it.
-func TestReadRunsAgyOnlyWhenAsked(t *testing.T) {
-	saved := agyModelsLister
-	t.Cleanup(func() { agyModelsLister = saved; resetAgyOffer() })
-	resetAgyOffer()
-	called := false
-	agyModelsLister = func(context.Context) ([]byte, error) { called = true; return nil, nil }
-	if qs := Read(time.Now(), Sources{}); qs[3].Reason != NotExposed || called {
-		t.Fatalf("agy read without being asked: %+v %v", qs[3], called)
-	}
-}
 
 // `agy -p /usage` as agy 1.5.10 printed it on 19 November.
 const agyUsageOut = "Gemini Models\tWeekly Limit Remaining\t100%\t2026-11-26T03:51:20Z\n" +

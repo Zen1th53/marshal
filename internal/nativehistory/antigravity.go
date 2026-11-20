@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,11 +19,8 @@ import (
 
 // antigravityHome is where agy keeps its CLI state.
 func antigravityHome() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".gemini", "antigravity-cli"), nil
+	dir, _, err := providerspec.Must("agy").StateDir(nil)
+	return dir, err
 }
 
 func newAntigravityHistoryWatch(root string) (*Capture, error) {

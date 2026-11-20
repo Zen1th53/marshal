@@ -1,6 +1,7 @@
 package app
 
 import (
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
 	"sort"
 	"strings"
 
@@ -26,21 +27,14 @@ func ModelInventory(codexCachedModels, ollamaCachedTags []string) marshal.Invent
 		inventory.Profiles = append(inventory.Profiles, router.ModelProfile{Provider: provider, Model: name, Capabilities: []string{"code", "reasoning"}, CostClass: "MEDIUM", LatencyClass: "MEDIUM", Available: true})
 	}
 	profiles := harness.NewIntelligence().DefaultProfiles()
-	for _, key := range []string{"codex", "claude-code", "opencode", "antigravity"} {
-		p, ok := profiles[key]
+	for _, spec := range providerspec.All() {
+		p, ok := profiles[spec.Harness]
 		if !ok {
-			inventory.MissingSources = append(inventory.MissingSources, "harness:"+key)
+			inventory.MissingSources = append(inventory.MissingSources, "harness:"+spec.Harness)
 			continue
 		}
-		provider := key
-		if key == "claude-code" {
-			provider = "claude"
-		}
-		if key == "antigravity" {
-			provider = "agy"
-		}
 		for _, name := range p.SupportedModels {
-			add(provider, name)
+			add(spec.ID, name)
 		}
 	}
 	for _, alias := range []string{"opus", "sonnet", "haiku"} {
