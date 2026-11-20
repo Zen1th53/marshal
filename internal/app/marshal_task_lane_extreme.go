@@ -33,6 +33,36 @@ func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService
 	return r.Execution().Engine().OpenTaskLaneRework(ctx, parent.RunID, req.Task.PlanTaskID, req.Task.BaseCommit, taskLaneRework(req.Task))
 }
 
+// closeOrphanProcess05Lane closes the task's current lane attempt when a
+// restart left it recorded as running with no executor: Marshal was stopped
+// while the worker ran. Only the project's lifecycle owner may close it (the
+// kernel owner lock: no other live runtime can be executing the lane), and
+// the engine refuses a lane this runtime still executes or whose native
+// provider turn is live. The lane keeps its worktree and evidence.
+func (r *Runtime) closeOrphanProcess05Lane(ctx context.Context, run marshal.Run, task marshal.Task) error {
+	if r.runtimeInstanceID != "" {
+		if err := r.requireLifecycleOwner(); err != nil {
+			return err
+		}
+	}
+	if !run.Process05Bound || !run.Process05Parallel || task.Mode != marshal.Governed {
+		return fmt.Errorf("%w: task has no Process05 lane", execution.ErrRunInvalid)
+	}
+	parts, err := r.process05Runs(ctx, run)
+	if err != nil {
+		return err
+	}
+	if len(parts) == 0 {
+		return fmt.Errorf("%w: no execution parent for the run", execution.ErrRunConflict)
+	}
+	_, err = r.Execution().Engine().ReconcileOrphanTaskLane(ctx, parts[0].RunID, task.PlanTaskID, taskLaneRework(task))
+	return err
+}
+
+// retireInterruptedLane moves the task past its closed, interrupted
+// attempt: the next dispatch opens the following lane.
+func retireInterruptedLane(t *marshal.Task) { t.LaneReworkBase++ }
+
 // continuePriorTaskLanes numbers a newly bound run's task attempts after the
 // attempts an earlier run of the same approved plan already made. Process 05
 // keeps one execution parent per approved plan version and goal revision

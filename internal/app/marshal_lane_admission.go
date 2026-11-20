@@ -56,6 +56,16 @@ func laneRefusalRetrySafe(err error) bool {
 	return errors.Is(err, execution.ErrRunBlocked) || strings.Contains(err.Error(), execution.ErrRunBlocked.Error())
 }
 
+// orphanLaneRefusal marks the engine's refusal of an attempt whose lane is
+// still recorded as running with no executor: a restart interrupted it.
+const orphanLaneRefusal = "orphan task lane requires explicit reconciliation"
+
+// isOrphanLaneRefusal reports a lane refusal caused by an interrupted
+// earlier attempt of the task (Marshal was stopped while its worker ran).
+func isOrphanLaneRefusal(err error) bool {
+	return err != nil && strings.Contains(err.Error(), orphanLaneRefusal)
+}
+
 // laneAdmissionRetried holds the tasks whose lane refusal Marshal already
 // retried by itself, keyed by repository, run and plan task, so it retries
 // once and then pauses. An operator retry clears the entry (RetryTask).
@@ -88,7 +98,18 @@ func (s *MarshalService) escalateTaskLaneAdmission(ctx context.Context, runID st
 	machine = laneAdmissionEscalation + ": " + machine
 	t := run.Tasks[i]
 	taskID := t.PlanTaskID
-	if laneRefusalRetrySafe(cause) {
+	orphan := isOrphanLaneRefusal(cause)
+	if orphan && s.process05CloseOrphanLane != nil {
+		// A restart interrupted the task's attempt. Marshal closes that
+		// attempt (it keeps its work and evidence) and starts the task
+		// again in a fresh lane; nothing is counted against the task.
+		closeErr := s.process05CloseOrphanLane(ctx, run, t)
+		if closeErr == nil {
+			return s.restartInterruptedLaneTask(ctx, runID, run, rev, i, machine)
+		}
+		machine += "; closing the interrupted attempt: " + closeErr.Error()
+	}
+	if laneRefusalRetrySafe(cause) && !orphan {
 		if _, retried := laneAdmissionRetried.LoadOrStore(s.laneAdmissionKey(runID, taskID), true); !retried {
 			return s.retryLaneAdmissionOnce(ctx, runID, run, rev, i, machine)
 		}
@@ -102,12 +123,36 @@ func (s *MarshalService) escalateTaskLaneAdmission(ctx context.Context, runID st
 	if capacity {
 		reason = "A task couldn't start because too many tasks were running. Nothing ran."
 		summary = firstNonEmpty(strings.TrimSpace(t.Title), taskID) + " couldn't start yet: too many tasks were running."
+	} else if orphan {
+		reason = "A task's earlier attempt was interrupted, and Marshal couldn't close it. Nothing new ran."
+		summary = firstNonEmpty(strings.TrimSpace(t.Title), taskID) + " couldn't start: its earlier attempt was interrupted and is still recorded as running."
 	}
 	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"Press Enter to try it again."}, Detail: machine, Code: marshal.CodeLaneAdmission, Action: marshal.PauseRetryTask, TaskID: taskID})
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, map[string]any{"reason": machine, "summary": summary, "counted": false})
+}
+
+// restartInterruptedLaneTask sends a task whose interrupted attempt Marshal
+// just closed back to be dispatched in its next lane. No worker of this
+// attempt handed anything in, so nothing is counted against the task; the
+// closed attempt keeps its lane, worktree and evidence.
+func (s *MarshalService) restartInterruptedLaneTask(ctx context.Context, runID string, run marshal.Run, rev int64, i int, machine string) error {
+	t := &run.Tasks[i]
+	run.Operation = nil
+	retireInterruptedLane(t)
+	t.State = marshal.Returned
+	run.State = marshal.Reviewing
+	summary := firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID) + ": its earlier attempt was interrupted; Marshal closed it and will start the task again."
+	if err := s.save(ctx, runID, run, rev); err != nil {
+		return err
+	}
+	s.forgetLaneAdmissionRetry(runID, t.PlanTaskID)
+	if s.RecordActivity != nil {
+		s.RecordActivity(summary)
+	}
+	return s.record(ctx, runID, t.PlanTaskID, events.EventTypeMarshalTaskReturned, map[string]any{"reason": machine, "summary": summary, "counted": false, "retry": true, "interrupted_lane_closed": true})
 }
 
 // retryLaneAdmissionOnce sends a task whose lane was refused back to be

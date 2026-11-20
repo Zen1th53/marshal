@@ -100,3 +100,82 @@ func TestTaskLaneAdmissionRefusalMatchesOnlyLaneRefusals(t *testing.T) {
 		}
 	}
 }
+
+// A lane refused because a restart interrupted the task's earlier attempt is
+// not a workspace mismatch. When Marshal closes that attempt the task starts
+// again in its next lane at once, uncounted, and Activity says why; when it
+// cannot close it the pause says the attempt was interrupted, with the raw
+// refusal kept in the detail.
+func TestExtremeOrphanLaneRefusalSaysTheAttemptWasInterrupted(t *testing.T) {
+	orphanErr := fmt.Errorf("worker failed: %w: orphan task lane requires explicit reconciliation", execution.ErrRunBlocked)
+	for _, closes := range []bool{true, false} {
+		t.Run(fmt.Sprint("closes=", closes), func(t *testing.T) {
+			s, _, _ := parallelWaitFixture(t, 2)
+			var mu sync.Mutex
+			launches := map[string]int{}
+			bases := []int{}
+			var activity []string
+			s.RecordActivity = func(line string) { mu.Lock(); activity = append(activity, line); mu.Unlock() }
+			s.process05CloseOrphanLane = func(_ context.Context, _ marshal.Run, task marshal.Task) error {
+				mu.Lock()
+				defer mu.Unlock()
+				bases = append(bases, task.LaneReworkBase)
+				if !closes {
+					return fmt.Errorf("%w: task lane is still executing", execution.ErrRunBlocked)
+				}
+				return nil
+			}
+			s.Drivers["worker"] = driver.Governed{Provider: "test", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+				id := req.Task.PlanTaskID
+				mu.Lock()
+				launches[id]++
+				first := launches[id] == 1
+				mu.Unlock()
+				if id == "b" && first {
+					return nil, orphanErr
+				}
+				return nil, os.WriteFile(filepath.Join(req.Worktree, id+".txt"), []byte("done\n"), 0600)
+			}}
+			brief := func(marshal.Task, BriefContext) string { return "brief" }
+			var run marshal.Run
+			for i := 0; i < 6; i++ {
+				run, _ = s.Execute(t.Context(), "par", brief, nil)
+				if run.Pause != nil || run.Tasks[taskIndex(run, "b")].State == marshal.Merged {
+					break
+				}
+			}
+			run, _, err := s.load(t.Context(), "par")
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := run.Tasks[taskIndex(run, "b")]
+			mu.Lock()
+			defer mu.Unlock()
+			if len(bases) != 1 || bases[0] != 0 {
+				t.Fatalf("Marshal tried to close the interrupted attempt %v times", bases)
+			}
+			if closes {
+				if run.Pause != nil || b.State != marshal.Merged || launches["b"] != 2 || b.LaneReworkBase != 1 || taskReturns(b)-b.LaneReworkBase != 0 {
+					t.Fatalf("closed attempt did not restart the task: %s %+v launches=%d base=%d", b.State, run.Pause, launches["b"], b.LaneReworkBase)
+				}
+				want := "b: its earlier attempt was interrupted; Marshal closed it and will start the task again."
+				if title := strings.TrimSpace(b.Title); title != "" {
+					want = title + ": its earlier attempt was interrupted; Marshal closed it and will start the task again."
+				}
+				if !strings.Contains(strings.Join(activity, "\n"), want) {
+					t.Fatalf("activity %q lacks %q", activity, want)
+				}
+				return
+			}
+			if b.State != marshal.Escalated || launches["b"] != 1 {
+				t.Fatalf("unclosed attempt: %s launches=%d", b.State, launches["b"])
+			}
+			if run.Pause == nil || run.Pause.Reason != "A task's earlier attempt was interrupted, and Marshal couldn't close it. Nothing new ran." || strings.Contains(run.Pause.Reason, "workspace") {
+				t.Fatalf("pause words: %+v", run.Pause)
+			}
+			if !strings.Contains(run.Pause.Detail, "orphan task lane requires explicit reconciliation") || !strings.Contains(run.Pause.Detail, "task lane is still executing") {
+				t.Fatalf("pause detail lost the raw refusal: %q", run.Pause.Detail)
+			}
+		})
+	}
+}

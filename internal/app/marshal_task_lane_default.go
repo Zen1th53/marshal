@@ -17,6 +17,13 @@ func (r *Runtime) selectProcess05TaskLane(_ context.Context, _ *MarshalService, 
 	return parent, nil
 }
 
+// closeOrphanProcess05Lane has nothing to close: this edition runs no task lanes.
+func (r *Runtime) closeOrphanProcess05Lane(context.Context, marshal.Run, marshal.Task) error {
+	return execution.ErrRunInvalid
+}
+
+func retireInterruptedLane(*marshal.Task) {}
+
 func bindPrivateProcess05Tier(*marshal.Run, plan.ExecutionPlan) {}
 
 // continuePriorTaskLanes has nothing to number: this edition runs no task lanes.

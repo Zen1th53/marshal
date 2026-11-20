@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+- One living project architecture: each goal is drawn as dashed changes (new, changed, removed) on the current architecture, with labelled connections, requirement coverage, "Only this goal's changes", a History panel and built / differs marks. Press `a` on the Board to open it any time.
+- The Board home shows the goal the Marshal works on and its planning step, says what the Marshal chat waits for, and shows startup progress; reviewer commands are described in plain words.
+- Warnings when a provider limit window drops below 20%, and a limit check before a plan runs.
+
+### Changed
+- A switched Marshal continues the active goal.
+- Workers use the owner's `CODEX_HOME` and `CLAUDE_CONFIG_DIR`; plans split per requirement; Codex plans at high effort.
+- agy: Marshal's own files need no prompt, no automatic first turn, and `ssh`/`scp`/remote `rsync`/`sudo` ask.
+- The Board's first frame no longer waits for the project index; squash-merged branches are recognised.
+
+### Fixed
+- A task interrupted by a Marshal restart is closed by Marshal and runs again, instead of the run stopping with "its workspace didn't match the approved plan".
+- A run left waiting with a returned task gets a "retry and resume" entry on the Board; `r` retries a stuck task and never types into the composer; the Codex Marshal reaches its own tools through its sandbox; an older control centre on another tmux socket is found and can be replaced.
+- A Board message never joins the owner's half-typed chat input; a network drop resends once; long messages are sent; choices work in every chat; answered proposals are not replayed.
+- A first open killed halfway recovers on the next start.
+- Sign-in failures are not quota; a live worker keeps its lease; lease and tool-link failures are named; failures show their real cause (architecture footer, EGM, quota stop, worker stderr).
+
 ## 0.2.19
 
 First published release of the 0.2.18 changes below (v0.2.18 was tagged but not published).
