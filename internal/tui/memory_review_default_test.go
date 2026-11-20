@@ -1,4 +1,4 @@
-//go:build governed
+//go:build linux && governed
 
 package tui
 

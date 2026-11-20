@@ -7,21 +7,7 @@ import (
 	"io"
 	"sync/atomic"
 	"testing"
-
-	"github.com/Zen1th53/marshal/internal/model"
 )
-
-// authNontmuxParticipant returns the workspace participant for agentID.
-func authNontmuxParticipant(ws *Workspace, agentID string) (model.Participant, bool) {
-	ws.mu.RLock()
-	defer ws.mu.RUnlock()
-	for _, p := range ws.state.Participants {
-		if p.AgentID == agentID {
-			return p, true
-		}
-	}
-	return model.Participant{}, false
-}
 
 // TestAuthPreflightNonTmuxBlocksLaunch proves the direct TTY takeover path runs
 // the provider-auth preflight before surrendering the terminal and refuses an

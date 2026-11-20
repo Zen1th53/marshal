@@ -1,3 +1,5 @@
+//go:build linux
+
 package tui
 
 import (
@@ -8,8 +10,8 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
-	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
+	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // seedTaskCandidates replaces the task-model candidate seam with a fixed list
