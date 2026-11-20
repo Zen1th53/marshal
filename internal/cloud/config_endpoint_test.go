@@ -6,6 +6,7 @@ import "testing"
 // default authority the entitlement flow is a closed loop: the client tells the
 // user to request ULTRA, and has nowhere to send the request.
 func TestLoadConfigDefaultsToTheCommunityCloud(t *testing.T) {
+	allowProductionEndpoint(t)
 	t.Setenv(EnvEndpoint, "")
 	cfg := LoadConfig()
 	if cfg.Endpoint != DefaultEndpoint {
@@ -44,6 +45,7 @@ func TestEndpointResolution(t *testing.T) {
 // Defaulting the endpoint must not hand anybody ULTRA. Reaching an authority is
 // asking, not being granted.
 func TestDefaultEndpointGrantsNothing(t *testing.T) {
+	allowProductionEndpoint(t)
 	t.Setenv(EnvEndpoint, "")
 	cfg := LoadConfig()
 	if !cfg.Enabled() {

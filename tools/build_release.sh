@@ -39,7 +39,10 @@ trap 'rm -rf "$release_staging"' EXIT
 
 release_plain=${release_version#v}
 release_go_version=$(go env GOVERSION)
-release_ldflags="-s -w -buildid= -X github.com/Zen1th53/marshal/internal/cli.Version=$release_version -X github.com/Zen1th53/marshal/internal/cli.Commit=$release_commit -X github.com/Zen1th53/marshal/internal/cli.BuildDate=$release_date"
+release_ldflags="-s -w -buildid= -X github.com/Zen1th53/marshal/internal/cli.Version=$release_version -X github.com/Zen1th53/marshal/internal/cli.Commit=$release_commit -X github.com/Zen1th53/marshal/internal/cli.BuildDate=$release_date -X github.com/Zen1th53/marshal/internal/cloud.releaseBuild=true"
+# Only this script marks a binary as a release (internal/cloud.releaseBuild).
+# Every other build is a development build and never contacts the production
+# Community Cloud, so test VMs and source builds are not counted as installs.
 # Build matrix. Darwin binaries are cross-compiled from the same pure-Go tree
 # (CGO is off); the Go linker ad-hoc signs darwin/arm64 so it runs on Apple
 # Silicon, and a curl-based install is not Gatekeeper-quarantined, so no Apple
