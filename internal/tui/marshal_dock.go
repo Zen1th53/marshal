@@ -32,7 +32,10 @@ type marshalDock struct {
 	window  string     // chat window name to restore on undock
 	title   string     // last title installed in tmux
 	// paneTitle is the chat pane's own tmux title, held by Marshal whether
-	// the chat is docked or in its own window.
+	// the chat is docked or in its own window. titleMu guards it: the title
+	// is held by reconcile and by the chat's own monitor, which runs whether
+	// or not the chat is ever docked.
+	titleMu   sync.Mutex
 	paneTitle chatPaneTitle
 	// pick is the window columns [m] covers in the status title row, and
 	// windowID the Board window the click binding was made for.
@@ -190,10 +193,8 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 		// Runs last, still under dock.mu and within ctx: the pane title is
 		// the strip (or the classic title), never what the CLI printed.
 		defer func() {
-			title, _ := w.dockTitleWith(chat, strip, 0, false)
-			run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
 			// Best effort: a pane gone meanwhile is the next reconcile's.
-			_ = holdChatPaneTitle(ctx, run, &w.dock.paneTitle, chat.paneID, title)
+			_ = w.holdMarshalChatTitle(ctx, chat, strip)
 		}()
 	}
 	root := w.providerRoot()

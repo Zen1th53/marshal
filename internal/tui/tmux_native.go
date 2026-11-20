@@ -1040,6 +1040,7 @@ func (w *Workspace) monitorAgent(
 		// The title heuristic is read every few ticks: it runs a tmux
 		// command, and a monitor runs per agent window.
 		laneTicks := 0
+		var titleHeld time.Time
 		for {
 			select {
 			case <-agentCtx.Done():
@@ -1050,6 +1051,21 @@ func (w *Workspace) monitorAgent(
 				w.tmuxMu.Unlock()
 				// Poll syncs
 				if snapshot.role == "marshal-chat" {
+					// The chat's title is Marshal's whether or not the dock
+					// ever runs for it: the provider's OSC or APC strings
+					// (Claude Code's kitty graphics query) never name it.
+					if time.Since(titleHeld) >= chatTitleEvery {
+						titleHeld = time.Now()
+						_ = w.holdMarshalChatTitle(agentCtx, snapshot, w.dockStripNow())
+					}
+					// An unsent paste of ours (or of the Board before a
+					// restart) is submitted even when nothing is queued.
+					if snapshot.paneID != "" && w.leftoverRunning.CompareAndSwap(false, true) {
+						go func(pane string) {
+							defer w.leftoverRunning.Store(false)
+							w.submitOwnLeftover(agentCtx, pane, false)
+						}(snapshot.paneID)
+					}
 					w.observeMarshalProposalFiles(root)
 					// A published draft must never wait for a relaunch: if no
 					// watcher is importing it, start one (a no-op while running).

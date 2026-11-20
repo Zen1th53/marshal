@@ -346,6 +346,15 @@ func (w *Workspace) deliverQueuedChatDecision(ctx context.Context, id string, p 
 		w.permissions.mu.Unlock()
 		return
 	}
+	if errors.Is(err, errChatNotReady) {
+		// The chat is mid-turn over an empty input, or has not drawn its
+		// input yet: nothing for the owner to send or clear. The request
+		// waits for the chat to be ready.
+		p.blocked = false
+		p.extendForDelivery(time.Now())
+		w.permissions.mu.Unlock()
+		return
+	}
 	if errors.Is(err, errChatBusy) || errors.Is(err, errChatUnsubmitted) {
 		// Waiting on the chat is not the Marshal being slow.
 		p.blocked = true

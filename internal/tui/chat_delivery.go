@@ -66,7 +66,11 @@ func chatComposer(frame string) (string, bool) {
 	for i := len(lines) - 1; i >= 0; i-- {
 		body := strings.TrimLeft(lines[i], " │┃║|")
 		for _, marker := range promptMarkers {
-			if !strings.HasPrefix(body, marker+" ") {
+			// Claude Code v2.1 draws its prompt as "❯" and a NO-BREAK SPACE
+			// (U+00A0), not an ASCII space; an empty input is the bare marker
+			// once capture-pane trims the line.
+			after, found := strings.CutPrefix(body, marker)
+			if !found || after != "" && after[0] != ' ' && !strings.HasPrefix(after, " ") {
 				continue
 			}
 			content := strings.TrimRight(promptRest(lines[i]), " │┃║|")
@@ -97,6 +101,14 @@ func chatComposer(frame string) (string, bool) {
 // The caller keeps the request and the next attempt submits that paste
 // instead of pasting again or reporting the owner's input as not empty.
 var errChatUnsubmitted = errors.New("the Marshal chat has not taken the message yet")
+
+// errChatNotReady is a chat that holds nothing the owner typed but cannot
+// take a message yet: a turn is running over an empty input ("esc to
+// interrupt", "Press up to edit queued messages"), or the provider has not
+// drawn its input box (a resumed session still loading). Nothing there is
+// for the owner to send or clear. It is errChatBusy to callers that only
+// wait.
+var errChatNotReady = fmt.Errorf("%w: not ready for a message", errChatBusy)
 
 // deliverChatTurn delivers with the union dialect; deliverChatTurnAs names
 // the provider.
@@ -136,6 +148,17 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 		if _, ok := adoptOrphanPaste(d, pane, string(frame)); ok && !chatBusyNearPrompt(string(frame)) {
 			return true, nil
 		}
+		content, drawn := chatComposer(string(frame))
+		if !drawn {
+			// No input box yet (or not one we read): not the owner's text.
+			return false, errChatNotReady
+		}
+		if d.hint(content) {
+			// An empty input under a running turn: the owner has nothing
+			// to send or clear; the request waits for the turn to end.
+			noteChatInput(pane, true)
+			return false, errChatNotReady
+		}
 		noteChatInput(pane, false)
 		return false, errChatBusy
 	}
@@ -145,6 +168,7 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 	}
 	if own, ok := ownPasteFor(pane); ok && !leftover {
 		forgetOwnPaste(pane)
+		clearPanePaste(ctx, run, pane)
 		// The paste an earlier attempt left unsent has left the input: the
 		// provider took it late. Pasting it again would ask twice. A paste
 		// the provider never drew (shown is empty) was never submitted, as
@@ -178,6 +202,9 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 		_, _ = run(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer)
 		return err
 	}
+	// The pane remembers the paste is the Board's until it is taken, for a
+	// Board that restarts before it sees it submitted.
+	markPanePaste(ctx, run, pane, "")
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -215,9 +242,11 @@ func awaitOwnPaste(ctx context.Context, run chatRunner, d composerDialect, pane,
 		switch {
 		case ok && ownChatComposer(string(frame), text):
 			rememberOwnPaste(pane, text, content)
+			markPanePaste(ctx, run, pane, content)
 			return true, string(frame), nil
 		case ok && d.collapsedPaste(content):
 			rememberOwnPaste(pane, text, content)
+			markPanePaste(ctx, run, pane, content)
 			return true, string(frame), nil
 		case !ok, d.hint(content), strings.HasPrefix(compact(text), compact(content)):
 			// Not drawn yet, or drawn only in part.
@@ -291,6 +320,7 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 		if !own(string(frame)) {
 			if try > 0 {
 				forgetOwnPaste(pane)
+				clearPanePaste(ctx, run, pane)
 				noteChatInput(pane, true)
 				return nil
 			}
@@ -314,6 +344,7 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 		}
 		if !own(string(frame)) {
 			forgetOwnPaste(pane)
+			clearPanePaste(ctx, run, pane)
 			noteChatInput(pane, true)
 			return nil
 		}

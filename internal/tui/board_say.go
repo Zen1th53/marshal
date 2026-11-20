@@ -505,6 +505,7 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 		_, _ = tmux.RunCommand(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer)
 		return "", err
 	}
+	markPanePaste(ctx, tmux.RunCommand, pane, "")
 	// The paste must have landed in the prompt before Enter submits it.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -550,8 +551,14 @@ func (w *Workspace) chatComposerDialect() composerDialect {
 // then a bare placeholder no record names (an earlier Board process pasted
 // it before a restart or rebind) is ours too.
 func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open bool) {
+	// mark is the Board's own note on the pane that a paste of its own is
+	// there unsent; it outlives this process, so the placeholder a Board
+	// left before it restarted is still known as the Board's.
+	mark, marked := "", false
 	if _, ok := ownPasteFor(pane); !ok && !open {
-		return
+		if mark, marked = panePasteMark(ctx, tmux.RunCommand, pane); !marked {
+			return
+		}
 	}
 	w.chatTypeMu.Lock()
 	defer w.chatTypeMu.Unlock()
@@ -564,9 +571,15 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 	if !ok && open {
 		own, ok = adoptOrphanPaste(d, pane, string(frame))
 	}
+	if !ok && marked {
+		own, ok = adoptMarkedPaste(d, pane, string(frame), mark)
+	}
 	if !ok {
 		if composerClear(d, string(frame)) {
 			forgetOwnPaste(pane)
+			if marked {
+				clearPanePaste(ctx, tmux.RunCommand, pane)
+			}
 		}
 		return
 	}

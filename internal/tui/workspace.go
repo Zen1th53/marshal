@@ -287,6 +287,9 @@ type Workspace struct {
 	// chatTypeMu is held while anything types into the tmux chat pane, so
 	// two writers never interleave in its composer.
 	chatTypeMu sync.Mutex
+	// leftoverRunning is set while the chat monitor submits a leftover
+	// paste of ours, so ticks never stack up behind one.
+	leftoverRunning atomic.Bool
 	// chatBinding is the Marshal chat's restarts, rebinds and the requests
 	// the Board sent it (chat_binding.go).
 	chatBinding chatBindingState

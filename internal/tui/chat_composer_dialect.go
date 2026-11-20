@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"sync"
@@ -192,6 +193,63 @@ func adoptOrphanPaste(d composerDialect, pane, frame string) (ownPaste, bool) {
 	p := ownPaste{shown: content}
 	rememberOwnPaste(pane, "", content)
 	return p, true
+}
+
+// panePasteOption is the tmux pane option the Board sets on the chat pane
+// while a paste of its own is there unsent: the placeholder the provider drew
+// for it, or "?" while it was not drawn yet. It lives with the pane, so a
+// Board that restarts (the chat pane surviving it) knows the placeholder
+// its predecessor left is the Board's own and not the owner's; a new chat
+// pane never has it. The owner's typing never sets it.
+const panePasteOption = "@marshal_own_paste"
+
+// panePasteUnknown marks a paste the provider had not drawn when looked at.
+const panePasteUnknown = "?"
+
+// markPanePaste records on the pane that it holds a paste of ours showing
+// shown ("" while not drawn).
+func markPanePaste(ctx context.Context, run chatRunner, pane, shown string) {
+	if shown == "" {
+		shown = panePasteUnknown
+	}
+	_, _ = run(ctx, "set-option", "-p", "-t", pane, panePasteOption, shown)
+}
+
+// clearPanePaste removes the mark: the paste was taken, or is not ours.
+func clearPanePaste(ctx context.Context, run chatRunner, pane string) {
+	_, _ = run(context.WithoutCancel(ctx), "set-option", "-p", "-u", "-t", pane, panePasteOption)
+}
+
+// panePasteMark reads the mark an earlier Board (or this one) left.
+func panePasteMark(ctx context.Context, run chatRunner, pane string) (string, bool) {
+	out, err := run(ctx, "show-options", "-p", "-v", "-t", pane, panePasteOption)
+	mark := strings.TrimSpace(string(out))
+	if err != nil || mark == "" {
+		return "", false
+	}
+	return mark, true
+}
+
+// adoptMarkedPaste takes the placeholder in the input as ours when no record
+// of this process names a paste and the pane carries the Board's mark: the
+// Board that pasted it (this process before it lost the record, or its
+// predecessor for this chat pane) was the only one to write there. Only a
+// bare collapsed placeholder is adopted, and with a drawn mark only that
+// same placeholder: text the owner typed, or a paste of theirs with another
+// number, is never taken.
+func adoptMarkedPaste(d composerDialect, pane, frame, mark string) (ownPaste, bool) {
+	if _, ok := ownPasteFor(pane); ok || mark == "" {
+		return ownPaste{}, false
+	}
+	content, found := chatComposer(frame)
+	if !found || !d.collapsedPaste(content) {
+		return ownPaste{}, false
+	}
+	if mark != panePasteUnknown && d.stripHints(content) != d.stripHints(mark) {
+		return ownPaste{}, false
+	}
+	rememberOwnPaste(pane, "", content)
+	return ownPaste{shown: content}, true
 }
 
 // composerClear reports whether the frame shows an input box holding nothing
