@@ -13011,8 +13011,8 @@
     },
     {
       "path": "internal/tui/authority_extreme.go",
-      "sha256": "56580a2699ac72fb5b4f221b43d6e295d494870679fe113d134f2263d5cd1b64",
-      "bytes": 29011
+      "sha256": "5f73158585c7f37b11df63a837b4b12cf277423cc0b38f99acd18d8a3273b9da",
+      "bytes": 29316
     },
     {
       "path": "internal/tui/authority_extreme_test.go",
@@ -13746,8 +13746,8 @@
     },
     {
       "path": "internal/tui/board_say.go",
-      "sha256": "b717df8346475d8711ed397c69bf4e202e191a302cd51fd2404890c3b3b12250",
-      "bytes": 40224
+      "sha256": "78608f4a12c5d73465a4f161d2fb5aad84547aa26f3b98e0ae8cae67e16301bc",
+      "bytes": 40728
     },
     {
       "path": "internal/tui/board_say_review_test.go",
@@ -14031,8 +14031,8 @@
     },
     {
       "path": "internal/tui/chat_composer_dialect.go",
-      "sha256": "fe97a2ff9ed835d3c3c42693aea2572c7782f2adffaeac3276a1cb4f87e52494",
-      "bytes": 8771
+      "sha256": "27450bfcfe9dbda14142685644803c1926a0ef3e5bf6484e1cfe48f292a4a3f1",
+      "bytes": 11214
     },
     {
       "path": "internal/tui/chat_composer_dialect_test.go",
@@ -14041,8 +14041,8 @@
     },
     {
       "path": "internal/tui/chat_delivery.go",
-      "sha256": "e7c9d3d862ac57936b04fdcb8f5f0e1fe266aaca3364ed1e4302fa2e78a4d704",
-      "bytes": 11763
+      "sha256": "3f6890907595204de09e57214ff14e9446c6e40a4141e8f26513ce728510187e",
+      "bytes": 13220
     },
     {
       "path": "internal/tui/chat_delivery_live_test.go",
@@ -14053,6 +14053,16 @@
       "path": "internal/tui/chat_delivery_test.go",
       "sha256": "a2e675a0e665a4c9e3db33b0b31bea22c912fcd8bf0f3354012e452fe4f12e77",
       "bytes": 7915
+    },
+    {
+      "path": "internal/tui/chat_live_claude_test.go",
+      "sha256": "f4cfc861b4eb6b07abbc7db875027de38eb82a84bed75a9b234dcf4c1147609e",
+      "bytes": 8364
+    },
+    {
+      "path": "internal/tui/chat_live_claude_tmux_test.go",
+      "sha256": "68e14d1615223025bdba8284e2a2dbe0f813fb58819e54d99ac300008d8cc615",
+      "bytes": 5641
     },
     {
       "path": "internal/tui/chat_mcp_reconnect.go",
@@ -14776,8 +14786,8 @@
     },
     {
       "path": "internal/tui/marshal_dock.go",
-      "sha256": "0a597d34c2dd8be9e5156b31a010d4ca571c8293d6d51a030dc569d67c15bb57",
-      "bytes": 24067
+      "sha256": "338160e7f97c0dc9649a2fd709a3a180d70013a063eb593b8820f645f18b80e1",
+      "bytes": 24344
     },
     {
       "path": "internal/tui/marshal_dock_cycle_test.go",
@@ -14791,8 +14801,8 @@
     },
     {
       "path": "internal/tui/marshal_dock_pane_title.go",
-      "sha256": "6d26b8197aa5e7ac5f8e474b6d4715a49b701c2e67a772c85bfda5b43532d2cc",
-      "bytes": 1928
+      "sha256": "2c89bfd38b5ddd5462653a13a55eb909a986a597b30fbd917c19fcaf1e87490e",
+      "bytes": 3171
     },
     {
       "path": "internal/tui/marshal_dock_pane_title_test.go",
@@ -16611,8 +16621,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "0c250591dab7e269ade0d52db9b80facd4f3671316b991241d70809e2c84e99e",
-      "bytes": 84477
+      "sha256": "ce6cc36c4c23b4ace78834405af83a4dd00808674b8aa706630a917a1a4b66ed",
+      "bytes": 85195
     },
     {
       "path": "internal/tui/tmux_native_osc_test.go",
@@ -16781,8 +16791,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "8e3285dcc30824426d1cf63a3cade88ed8d1aae27fb7bb9ad018b6dc60ddca41",
-      "bytes": 90274
+      "sha256": "1d25ef34bd96bc8fed4899ea967e6cb9b93f26deedc5b5a246ebdb9ee765502a",
+      "bytes": 90427
     },
     {
       "path": "internal/tui/workspace_keys_test.go",
@@ -17886,8 +17896,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "1956d4ce581e9ad552dba9ed4aeb7412e67656e7fa532f36d741e3c2ec082e05",
-      "bytes": 479787
+      "sha256": "406a3dfa027c7dc37bb1e3a0aa536c32eb76a9bcadbde0d320ce6d779bd9631f",
+      "bytes": 483142
     },
     {
       "path": "tools/extreme/prq/main_default.go",
