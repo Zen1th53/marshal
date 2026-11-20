@@ -447,7 +447,9 @@ func TestPTYF11LeavesPalette(t *testing.T) {
 	fakeProviderCLIs(t, "codex", "claude", "opencode", "agy")
 	s := startCommandTUI(t, 24, 80)
 	s.send("\x0b")
-	s.mustSee(" ACTIONS ")
+	// The palette's title is styled: "ACTIONS" and its search hint are
+	// written apart, so the raw stream holds each on its own.
+	s.mustSee("type to search all")
 	s.send("\x1b[23~")
 	time.Sleep(300 * time.Millisecond)
 	if screen := s.screenText(24, 80); strings.Contains(screen, " ACTIONS ") {
