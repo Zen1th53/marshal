@@ -674,7 +674,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	if stop, ok := v.stopNotice(); ok {
 		s = v.stopLine(stop) + "   "
 	} else if note := strings.TrimSpace(cleanBoard(v.note)); note != "" {
-		s = v.fg("waiting", "› ") + note + "   "
+		s = v.fg("waiting", "› ") + v.quietNote(note) + "   "
 	} else if indexing := strings.TrimSpace(cleanBoard(v.indexing)); indexing != "" {
 		s = v.fg("working", v.frame.Spinner(true)+" ") + v.fg("dim", indexing) + "   "
 	}
@@ -944,7 +944,7 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 			pr = strings.Split(l.Worker, "-")[0]
 		}
 		c := by[pr]
-		if l.State != model.LaneIdle {
+		if l.State != model.LaneIdle && l.State != model.LaneLost {
 			c[0]++
 		}
 		c[1]++
@@ -961,6 +961,8 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 	summary := "idle"
 	if busy > 0 {
 		summary = fmt.Sprintf("%d running", busy)
+	} else if _, quiet := v.noWorkerFor(); quiet {
+		summary = "no worker is running"
 	}
 	if len(parts) > 0 {
 		summary += " · " + strings.Join(parts, " · ")
@@ -1019,6 +1021,9 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 			task = "—"
 		}
 		act := strings.TrimSpace(strings.ReplaceAll(redaction.RedactContent(l.Last, nil), "\n", " "))
+		if l.Heartbeat {
+			act = v.laneBeat(l, act)
+		}
 		act = strings.Map(func(r rune) rune {
 			if unicode.IsControl(r) {
 				return ' '
@@ -1102,6 +1107,9 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 // blocked or failing over OSC 7501 says so in the waiting or failed colour,
 // next to the word, never by colour alone.
 func laneActColor(l model.Lane) string {
+	if l.State == model.LaneLost {
+		return "failed"
+	}
 	switch l.Status {
 	case "blocked":
 		return "waiting"

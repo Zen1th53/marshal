@@ -21,6 +21,8 @@ const workerLeaseRenewInterval = 30 * time.Second
 // the returned context is cancelled with the lease error, so a hung worker
 // still ends. done reports that lease error, if any, after the run.
 func (r *Runtime) keepWorkerLeaseAlive(ctx context.Context, task execution.TaskExecution, request *adapter.Request) (context.Context, func() error) {
+	// The same heartbeats tell the Board the worker is alive (worker_liveness.go).
+	beatWorkerRequest(ctx, request)
 	if !task.Mutates || task.LeaseID == "" {
 		return ctx, func() error { return nil }
 	}

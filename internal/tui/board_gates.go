@@ -55,6 +55,9 @@ type ownerGate struct {
 	// limitsLow is set when a provider it uses is under 20% in a window.
 	limits    string
 	limitsLow bool
+	// warning is one plain line under the buttons, "" for none: the
+	// Marshal tried to decide this gate itself and Marshal refused it.
+	warning string
 }
 
 // deferredArchitecture is an "open architecture" request from the Marshal that
@@ -75,6 +78,60 @@ type gateState struct {
 	deferredArch *deferredArchitecture
 	armed        string
 	sent         map[string]time.Time
+	// refusedArch is the contract (id and revision) the Marshal tried to
+	// accept for the owner and policy refused, "" for none.
+	refusedArch string
+	// selfApproved is the plans the Marshal approved itself and the Board
+	// already said so about, so it says so once.
+	selfApproved map[string]bool
+}
+
+// selfAcceptRefusedNote is what the owner reads when the Marshal tried to
+// record an owner-only architecture acceptance and policy refused it.
+const selfAcceptRefusedNote = "The Marshal tried to accept the architecture for you; Marshal refused it. Only you can accept it in the browser."
+
+// selfApprovedPlanNote is what the owner reads, once per plan, when the
+// Marshal approved a plan without the owner (ultra mode).
+const selfApprovedPlanNote = "The Marshal approved the plan itself (ultra mode). Press 7 to see it."
+
+// noteRefusedArchitecture records that the Marshal's own acceptance of
+// contract id at revision was refused: one Activity line, and the
+// architecture gate in the inbox says so while that revision waits.
+func (w *Workspace) noteRefusedArchitecture(id string, revision int64) {
+	w.gates.mu.Lock()
+	if c := w.gates.contract; revision <= 0 && c != nil && c.ID == id {
+		// The refused decision names the contract, not its revision: it
+		// is the revision now waiting for the owner.
+		revision = c.Revision
+	}
+	w.gates.refusedArch = refusedArchKey(id, revision)
+	w.gates.mu.Unlock()
+	w.RecordActivity(selfAcceptRefusedNote)
+	w.refreshGatesSoon()
+}
+
+// refusedArchKey names one contract revision; a zero revision names every
+// revision of the contract (the refusal did not say which).
+func refusedArchKey(id string, revision int64) string {
+	if revision <= 0 {
+		return id
+	}
+	return fmt.Sprintf("%s:%d", id, revision)
+}
+
+// noteSelfApprovedPlan says once per plan that the Marshal approved it
+// without the owner.
+func (w *Workspace) noteSelfApprovedPlan(plan string) {
+	w.gates.mu.Lock()
+	if w.gates.selfApproved == nil {
+		w.gates.selfApproved = map[string]bool{}
+	}
+	seen := w.gates.selfApproved[plan]
+	w.gates.selfApproved[plan] = true
+	w.gates.mu.Unlock()
+	if !seen {
+		w.RecordActivity(selfApprovedPlanNote)
+	}
 }
 
 // holdArchitectureRequest keeps a bound Marshal "open architecture" request
@@ -215,6 +272,7 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 		deferred = &cp
 	}
 	sent := w.gates.sent
+	refused := w.gates.refusedArch
 	w.gates.mu.Unlock()
 	var out []ownerGate
 	if c := contract; c != nil {
@@ -225,6 +283,9 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 			summary: firstLine(c.Purpose),
 			reply:   "",
 			details: 'y',
+		}
+		if refused != "" && (refused == c.ID || refused == refusedArchKey(c.ID, c.Revision)) {
+			g.warning = selfAcceptRefusedNote
 		}
 		out = append(out, g)
 	} else if deferred != nil {
@@ -462,6 +523,9 @@ func (v boardVisual) gateEntry(g ownerGate, x, row, w int) []string {
 			col = "waiting"
 		}
 		lines = append(lines, PadCell("    "+v.fg(col, v.trunc(g.limits, max(8, w-4))), w))
+	}
+	if g.warning != "" {
+		lines = append(lines, PadCell("    "+v.fg("waiting", v.trunc(g.warning, max(8, w-4))), w))
 	}
 	return lines
 }

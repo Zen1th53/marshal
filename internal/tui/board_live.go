@@ -28,6 +28,10 @@ import (
 // finds nothing new repaints nothing.
 var boardFollowEvery = 2 * time.Second
 
+// boardNow is the Board's clock: worker liveness and elapsed times are
+// judged against it (a test moves it).
+var boardNow = time.Now
+
 // decisionReader is the one store read the Board follows a run with.
 type decisionReader interface {
 	MarshalDecisionsAfter(context.Context, string, events.Sequence) ([]events.Event, error)
@@ -41,6 +45,9 @@ type boardFeed struct {
 	events  []events.Event
 	seq     events.Sequence
 	workers string // fingerprint of the workers last projected
+	// seen is the last time a worker of the run was known to be alive;
+	// zero until the run is first looked at.
+	seen time.Time
 }
 
 // read appends the run's new decisions to the cache. It returns every
@@ -49,7 +56,7 @@ func (f *boardFeed) read(ctx context.Context, src decisionReader, runID string) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.runID != runID {
-		f.runID, f.events, f.seq, f.workers = runID, nil, 0, ""
+		f.runID, f.events, f.seq, f.workers, f.seen = runID, nil, 0, "", time.Time{}
 	}
 	before = f.seq
 	fresh, err = src.MarshalDecisionsAfter(ctx, runID, f.seq)
@@ -63,32 +70,96 @@ func (f *boardFeed) read(ctx context.Context, src decisionReader, runID string) 
 	return slices.Clip(f.events), fresh, before, nil
 }
 
-// noteWorkers records the workers projected for runID and reports whether
-// they differ from the last projection.
-func (f *boardFeed) noteWorkers(runID, fingerprint string) bool {
+// noteWorkers records the workers projected for runID at now and reports
+// whether they differ from the last projection, and the last time a worker
+// of the run was known alive. A heartbeat worker going quiet, and the run
+// going without any live worker for another minute, count as a difference,
+// so the Board says so without waiting for a decision.
+//
+// busy is set while the Marshal itself moves the run with no worker to
+// show for it (reviewing, merging, checking): that time is not quiet.
+func (f *boardFeed) noteWorkers(runID string, ws []boardmodel.Worker, busy bool, now time.Time) (bool, time.Time) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	seen := f.seen
 	if f.runID != runID {
-		return true
+		seen = time.Time{}
 	}
+	// A window or the Marshal's own work is alive now; a heartbeat worker
+	// was last alive at its last beat, however long ago that was.
+	if busy {
+		seen = now
+	}
+	for _, x := range ws {
+		switch {
+		case !x.Heartbeat:
+			if x.TaskID != "" {
+				seen = now
+			}
+		case x.Beat.After(seen):
+			seen = x.Beat
+		}
+	}
+	if seen.IsZero() {
+		// Nothing earlier is known: the quiet time starts at the first look.
+		seen = now
+	}
+	fingerprint := workersFingerprint(ws, now) + workerQuiet(seen, now)
+	if f.runID != runID {
+		return true, seen
+	}
+	f.seen = seen
 	changed := f.workers != fingerprint
 	f.workers = fingerprint
-	return changed
+	return changed, seen
+}
+
+// workerQuiet is how long the run has had no live worker, in whole minutes
+// past WorkerBeatGrace, "" within it.
+func workerQuiet(seen, now time.Time) string {
+	if quiet := now.Sub(seen); quiet > boardmodel.WorkerBeatGrace {
+		return fmt.Sprintf("quiet %dm;", int(quiet/time.Minute))
+	}
+	return ""
+}
+
+// workerBeats lists the governed worker attempts the runtime is running
+// for runID, as their heartbeats report them.
+func (w *Workspace) workerBeats(runID string) []app.WorkerBeat {
+	if w.beatSource != nil {
+		return w.beatSource(runID)
+	}
+	// Not w.mu: a publish may project the Board while holding it.
+	return w.beatRuntime.Load().WorkerBeats(runID)
 }
 
 // boardWorkers lists the live worker invocations of a run from the tmux
 // windows the workspace already tracks. Workers are named by provider and
 // numbered in task order, as the lanes show them.
+//
+// A governed worker has no tmux window: it runs as a headless process and
+// is listed from its heartbeats (app.Runtime.WorkerBeats) instead, unless a
+// window already shows its task.
 func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
-	type agent struct{ provider, task, pane, state string }
+	type agent struct {
+		provider, task, pane, state string
+		beat                        *app.WorkerBeat
+	}
 	var agents []agent
+	windowed := map[string]bool{}
 	w.tmuxMu.Lock()
 	for _, a := range w.tmuxActiveWins {
 		if a.role == "task" && a.runID == runID && a.taskID != "" {
-			agents = append(agents, agent{a.provider, a.taskID, a.paneID, a.state})
+			agents = append(agents, agent{provider: a.provider, task: a.taskID, pane: a.paneID, state: a.state})
+			windowed[a.taskID] = true
 		}
 	}
 	w.tmuxMu.Unlock()
+	for _, b := range w.workerBeats(runID) {
+		if !windowed[b.TaskID] {
+			agents = append(agents, agent{provider: providerName(b.Worker), task: b.TaskID, beat: &b})
+		}
+	}
 	// A worker's own OSC 7501 report wins over the monitor's view of it.
 	reported := func(a agent) (string, string, bool) {
 		if a.pane == "" {
@@ -114,15 +185,36 @@ func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 		if st, msg, ok := reported(a); ok {
 			status, last = st, msg
 		}
-		out = append(out, boardmodel.Worker{ID: fmt.Sprintf("%s-%d", a.provider, seen[a.provider]), Provider: a.provider, TaskID: a.task, Pane: a.pane, Last: last, Status: status})
+		x := boardmodel.Worker{ID: fmt.Sprintf("%s-%d", a.provider, seen[a.provider]), Provider: a.provider, TaskID: a.task, Pane: a.pane, Last: last, Status: status}
+		if a.beat != nil {
+			x.Heartbeat, x.Started, x.Beat = true, a.beat.Started, a.beat.Beat
+		}
+		out = append(out, x)
 	}
 	return out
 }
 
-func workersFingerprint(ws []boardmodel.Worker) string {
+// providerName is the provider a governed worker's name stands for, as
+// the lanes name it; a worker of no known provider keeps its own name.
+func providerName(worker string) string {
+	if p := providerOf(worker); p != "" {
+		return p
+	}
+	if worker = strings.TrimSpace(worker); worker != "" {
+		return worker
+	}
+	return "worker"
+}
+
+// workersFingerprint names what the Board shows of the workers at now: a
+// heartbeat worker's every beat, and whether it is lost.
+func workersFingerprint(ws []boardmodel.Worker, now time.Time) string {
 	var b strings.Builder
 	for _, x := range ws {
 		fmt.Fprintf(&b, "%s|%s|%s|%s|%s;", x.ID, x.TaskID, x.Pane, x.Status, x.Last)
+		if x.Heartbeat {
+			fmt.Fprintf(&b, "beat %d %t;", x.Beat.UnixNano(), now.Sub(x.Beat) > boardmodel.WorkerBeatGrace)
+		}
 	}
 	return b.String()
 }
@@ -138,8 +230,26 @@ func (w *Workspace) projectBoard(p *MarshalPanel, evs []events.Event) boardmodel
 	requests := slices.Clone(w.permissions.inbox)
 	w.permissions.mu.Unlock()
 	workers := w.boardWorkers(p.RunID)
-	w.boardFeed.noteWorkers(p.RunID, workersFingerprint(workers))
-	return boardmodel.Project(boardmodel.Snapshot{RunID: p.RunID, Run: run, Requests: requests, Workers: workers, Driving: boardDriving(p, run.State) && w.marshalDriving(p.RunID), UserPaused: w.marshalSession().pausedFor(p.RunID)}, evs)
+	now := boardNow()
+	_, seen := w.boardFeed.noteWorkers(p.RunID, workers, marshalOwnWork(run), now)
+	return boardmodel.Project(boardmodel.Snapshot{RunID: p.RunID, Run: run, Requests: requests, Workers: workers, Now: now, WorkerSeen: seen, Driving: boardDriving(p, run.State) && w.marshalDriving(p.RunID), UserPaused: w.marshalSession().pausedFor(p.RunID)}, evs)
+}
+
+// marshalOwnWork reports whether the run is in the Marshal's own hands, with
+// no worker expected: anything but dispatching, or a task under review,
+// accepted and being merged.
+func marshalOwnWork(run marshal.Run) bool {
+	switch run.State {
+	case marshal.Approved, marshal.Dispatching:
+	default:
+		return true
+	}
+	for _, t := range run.Tasks {
+		if t.State == marshal.HandedIn || t.State == marshal.Accepted {
+			return true
+		}
+	}
+	return false
 }
 
 // boardDriving reports whether the panel's run can be moving under this
@@ -275,8 +385,7 @@ func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p 
 		// The next publish marks the Board stale; a poll keeps what it has.
 		return false
 	}
-	workers := w.boardWorkers(p.RunID)
-	moved := w.boardFeed.noteWorkers(p.RunID, workersFingerprint(workers))
+	moved, _ := w.boardFeed.noteWorkers(p.RunID, w.boardWorkers(p.RunID), marshalOwnWork(p.run), boardNow())
 	paused := w.marshalSession().pausedFor(p.RunID)
 	if len(fresh) == 0 && !moved && paused == p.Board.Run.UserPaused {
 		return false
@@ -455,7 +564,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		frame = a.Frame()
 	}
 	var hits []boardHit
-	v := boardVisual{board: b, now: time.Now(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
+	v := boardVisual{board: b, now: boardNow(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
 	// The shipped header shows "Marshal leads" when the Marshal leads
 	// acceptance. A fresh project has no run yet, so it reads the default.
 	accMode := p.run.Settings.AcceptanceMode

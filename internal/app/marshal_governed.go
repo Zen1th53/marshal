@@ -40,6 +40,10 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 		// The worker launch below serves this approved task; code evidence
 		// receipts are recorded with it and scoped to its approved paths.
 		ctx = withCodeEvidenceTask(ctx, s, req.RunID, req.Task, req.Brief)
+		// The Board follows this attempt's heartbeats: a governed worker has
+		// no tmux window to show it is alive.
+		ctx, untrack := r.trackWorker(ctx, req.RunID, req.Task.PlanTaskID, req.Task.Worker)
+		defer untrack()
 		if run.Process05Bound {
 			return r.marshalProcess05Run(s)(ctx, req)
 		}
