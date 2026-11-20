@@ -1676,6 +1676,7 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 	w.mu.Unlock()
 	if err != nil {
 		w.logTUIError(cmd, err)
+		w.noteMarshalStartCause(err)
 	}
 }
 
@@ -2491,6 +2492,7 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 		if err != nil {
 			fmt.Fprintln(out, plainCommandError(line, err))
 			w.logTUIError(line, err)
+			w.noteMarshalStartCause(err)
 		}
 
 		if w.commandExitRequested() {
