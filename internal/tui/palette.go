@@ -26,6 +26,28 @@ type PaletteAction struct {
 	Pane string
 	// Inbox is the key of the pending request an inbox entry decides.
 	Inbox string
+	// Core marks one of the owner's primary actions shown first when the
+	// palette opens with an empty query. CoreOrder (1..N) fixes their
+	// display order; CoreKey and CoreLabel are the single key and short
+	// label shown in the core grid (falling back to Shortcut and Title).
+	Core      bool
+	CoreOrder int
+	CoreKey   string
+	CoreLabel string
+}
+
+func (a PaletteAction) coreKey() string {
+	if a.CoreKey != "" {
+		return a.CoreKey
+	}
+	return a.Shortcut
+}
+
+func (a PaletteAction) coreLabel() string {
+	if a.CoreLabel != "" {
+		return a.CoreLabel
+	}
+	return a.Title
 }
 
 // PaletteContext is what the palette ranks by while it is open: the pane
