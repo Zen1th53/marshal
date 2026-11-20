@@ -162,6 +162,7 @@ func (w *Workspace) InitTmux(root ...string) {
 		if w.runtime != nil && tmux.IsInsideTmux() {
 			if _, err := w.marshalChat(context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)); err != nil && !isProviderAuthError(err) {
 				w.RecordActivity("Marshal chat: " + err.Error())
+				w.reportMarshalStartFailure(err)
 			}
 		}
 	})
@@ -282,11 +283,8 @@ func (w *Workspace) ensureMarshalChatAuto(projectRoot string) {
 		}
 	}
 	if err := w.startMarshalChat(ctx, projectRoot); err != nil && !isProviderAuthError(err) {
-		var start *marshalStartError
-		if errors.As(err, &start) {
-			w.logTUIError("marshal start", errors.Unwrap(err))
-		}
 		w.RecordActivity(err.Error())
+		w.reportMarshalStartFailure(err)
 	}
 }
 
@@ -367,7 +365,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	cmd := marshalChatCommand(binary, args)
 
 	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
-		return marshalNotStarted(provider, fmt.Errorf("%s", RedactContent(err.Error(), nil)))
+		return marshalNotStarted(provider, fmt.Errorf("tmux window not opened: %w", redactedCause{err}))
 	}
 	launched = true
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
@@ -452,11 +450,8 @@ func marshalChatCommand(binary string, args []string) []string {
 
 func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAgent, root string) {
 	if err := w.respawnMarshalChat(ctx, agent, root, true); err != nil {
-		var start *marshalStartError
-		if errors.As(err, &start) {
-			w.logTUIError("marshal start", errors.Unwrap(err))
-		}
 		w.RecordActivity(err.Error())
+		w.reportMarshalStartFailure(err)
 	}
 }
 
@@ -553,7 +548,7 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	}
 	if err != nil {
 		dir.remove()
-		return marshalNotStarted(provider, fmt.Errorf("%s", RedactContent(err.Error(), nil)))
+		return marshalNotStarted(provider, fmt.Errorf("tmux window not opened: %w", redactedCause{err}))
 	}
 	agent.briefingDir.remove()
 	agent.briefingDir = dir

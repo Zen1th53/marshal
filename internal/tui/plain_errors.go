@@ -44,6 +44,9 @@ func (w *Workspace) logTUIError(what string, err error) {
 	if errors.As(err, &plain) && plain.cause != nil {
 		text += " (cause: " + plain.cause.Error() + ")"
 	}
+	if cause := marshalStartCause(err); cause != nil {
+		text += " (cause: " + cause.Error() + ")"
+	}
 	detail := strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", " | ")
 	// The log is local and private (0600), but a command line or a raw error
 	// can still carry a secret or Marshal protocol text: redact both, as every
@@ -71,6 +74,11 @@ func plainCommandError(line string, err error) string {
 	c := "That"
 	if fields := strings.Fields(line); len(fields) > 0 {
 		c = fields[0]
+	}
+	// A failed Marshal launch already says why in plain words.
+	var start *marshalStartError
+	if errors.As(err, &start) {
+		return start.Error()
 	}
 	switch {
 	case errors.Is(err, model.ErrNotFound), errors.Is(err, model.ErrGoalNotFound):

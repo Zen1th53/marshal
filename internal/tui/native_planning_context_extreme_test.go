@@ -619,3 +619,115 @@ func TestNativePlanningDraftWithoutReadNamesTheMissingRead(t *testing.T) {
 		t.Fatalf("Marshal inbox still sends the Marshal to verify workers for a missing read:\n%s", text)
 	}
 }
+
+// nativePlanningLaunchWithGoalPadding launches provider's Marshal on a
+// fixture whose Goal request is padding, and returns the hidden text it
+// carries.
+func nativePlanningLaunchWithGoalPadding(t *testing.T, provider, padding string) (*Workspace, *proposalMCPLease, string) {
+	t.Helper()
+	w, lease, _, _, goal := nativePlanningFixture(t)
+	root := w.runtime.ProjectRoot()
+	goal.OriginalRequest = padding
+	if err := w.store.SaveGoalContract(t.Context(), goal, goal.Revision); err != nil {
+		t.Fatal(err)
+	}
+	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, env, dir, err := prepareMarshalLaunch(provider, root, nil, brief, false, "")
+	if err == nil {
+		args, _, dir, err = w.prepareProposalMCP(provider, root, args, env, dir)
+	}
+	if err != nil {
+		t.Fatalf("Marshal launch refused (%d-byte Goal): %v", len(padding), err)
+	}
+	t.Cleanup(dir.remove)
+	delivered := strings.Join(args, "\n")
+	if hiddenChannel(provider) == injectMarshalDir {
+		data, e := os.ReadFile(dir.file())
+		if e != nil {
+			t.Fatal(e)
+		}
+		delivered = string(data)
+	}
+	if !containsMarshalProtocol(delivered) {
+		t.Fatal("launch lost the Marshal protocol")
+	}
+	return w, lease, delivered
+}
+
+// A planning context of about 20 KiB is carried whole beside the ~56 KiB
+// Marshal protocol. Under the old 64 KiB combined budget this launch refused
+// with REQUIRED_CONTEXT_BUDGET_EXCEEDED, and a Codex Marshal on a project
+// whose accepted architecture had grown answered only "The Marshal couldn't
+// start with Codex" and never opened.
+func TestNativePlanningLaunchCarriesGrownArchitectureContext(t *testing.T) {
+	for _, provider := range []string{"codex", "claude", "opencode"} {
+		t.Run(provider, func(t *testing.T) {
+			padding := strings.Repeat("z", 20<<10)
+			w, lease, delivered := nativePlanningLaunchWithGoalPadding(t, provider, padding)
+			if !strings.Contains(delivered, padding) || strings.Contains(delivered, "NOT INCLUDED AT LAUNCH") {
+				t.Fatal("launch did not carry the complete 20 KiB context")
+			}
+			w.proposalMCP.mu.Lock()
+			raw, err := w.readNativePlanningMCP(t.Context(), lease)
+			w.proposalMCP.mu.Unlock()
+			if err != nil || !strings.Contains(string(raw), padding) {
+				t.Fatalf("MCP read lost the complete context: err=%v", err)
+			}
+		})
+	}
+}
+
+// A planning context too large to sit beside the Marshal protocol at all no
+// longer stops the Marshal chat from starting: the launch carries a note
+// saying where the context is read instead.
+func TestNativePlanningLaunchDefersOversizedContext(t *testing.T) {
+	for _, provider := range []string{"codex", "claude", "opencode"} {
+		t.Run(provider, func(t *testing.T) {
+			padding := strings.Repeat("z", 60<<10)
+			_, _, delivered := nativePlanningLaunchWithGoalPadding(t, provider, padding)
+			if !strings.Contains(delivered, "NOT INCLUDED AT LAUNCH") || !strings.Contains(delivered, "marshal_project_contract_context") {
+				t.Fatal("launch does not say where the deferred context is")
+			}
+			if strings.Contains(delivered, padding[:4096]) {
+				t.Fatal("launch carried the oversized context anyway")
+			}
+		})
+	}
+}
+
+// A refused planning context changes nothing: neither the argv nor the
+// briefing directory keeps any of it.
+func TestNativePlanningHiddenRefusalLeavesLaunchUnchanged(t *testing.T) {
+	root := t.TempDir()
+	dir, err := newBriefingDir(root, "opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(dir.remove)
+	if _, err := dir.add("MARSHAL PROTOCOL\nprivate"); err != nil {
+		t.Fatal(err)
+	}
+	size := dir.size
+	big := strings.Repeat("q", nativePlanningCombinedMaximumBytes)
+	if _, err := appendNativePlanningHidden("opencode", root, nil, dir, big, ""); !errors.Is(err, projectcontext.ErrBudget) {
+		t.Fatalf("oversized context without a note = %v, want ErrBudget", err)
+	}
+	if dir.size != size {
+		t.Fatalf("refusal wrote to the briefing directory: %d -> %d", size, dir.size)
+	}
+	if _, err := appendNativePlanningHidden("opencode", root, nil, dir, big, nativePlanningDeferredNote); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(dir.file())
+	if err != nil || strings.Contains(string(data), big[:1024]) || !strings.Contains(string(data), "NOT INCLUDED AT LAUNCH") {
+		t.Fatalf("briefing = %d bytes, %v", len(data), err)
+	}
+	args := []string{"-c", "developer_instructions=MARSHAL PROTOCOL"}
+	out, err := appendNativePlanningHidden("codex", root, args, nil, big, nativePlanningDeferredNote)
+	if err != nil || strings.Contains(strings.Join(out, ""), big[:1024]) || args[1] != "developer_instructions=MARSHAL PROTOCOL" {
+		t.Fatalf("codex deferral: err=%v", err)
+	}
+}
