@@ -31,6 +31,8 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	// marshalLive is marshal once it exists, for lock-free readers.
+	marshalLive        atomic.Pointer[marshalSession]
 	laneTail           laneTailState
 	taskDiff           taskDiffOverlay
 	attn               attentionState

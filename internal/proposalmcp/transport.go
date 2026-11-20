@@ -51,6 +51,21 @@ type Config struct {
 	ProjectRoot string `json:"project_root,omitempty"`
 	Endpoint    string `json:"endpoint"`
 	Capability  string `json:"capability"`
+	// Spool is the private request directory of a broker that also serves
+	// requests as files (ListenWith, Options.SpoolParent), "" otherwise. A
+	// client whose sandbox refuses connect(2) on Unix sockets uses it.
+	Spool string `json:"spool,omitempty"`
+}
+
+// Options tunes ListenWith.
+type Options struct {
+	// SpoolParent, when set, makes the broker also serve requests written as
+	// files to a new private directory under it. Codex runs Marshal's stdio
+	// MCP child inside the chat's sandbox, and that sandbox refuses
+	// connect(2) on every Unix socket unless network access is opened
+	// (seccomp on Linux, Seatbelt on macOS); the directory must be one the
+	// sandbox already lets the child write. Nothing else is opened.
+	SpoolParent string
 }
 
 // Handler receives a verified request: only the method name and the raw,
@@ -89,6 +104,9 @@ type server struct {
 	conns      map[net.Conn]struct{}
 	closeOnce  sync.Once
 	acceptDone chan struct{}
+	// spool is the request directory (spool.go), "" when not served.
+	spool     string
+	spoolDone chan struct{}
 }
 
 // Listen creates a short 0700 temporary directory under /var/tmp/mx, binds a
@@ -97,6 +115,11 @@ type server struct {
 // listener and every active connection, then removes the directory. Cleanup is
 // idempotent.
 func Listen(handler Handler) (Config, func(), error) {
+	return ListenWith(handler, Options{})
+}
+
+// ListenWith is Listen with opts; see Options.
+func ListenWith(handler Handler, opts Options) (Config, func(), error) {
 	if handler == nil {
 		return Config{}, nil, errors.New("proposalmcp: nil handler")
 	}
@@ -142,9 +165,22 @@ func Listen(handler Handler) (Config, func(), error) {
 		conns:      map[net.Conn]struct{}{},
 		acceptDone: make(chan struct{}),
 	}
+	cfg := Config{Namespace: statepath.DirName, Endpoint: socketPath, Capability: capability}
+	if opts.SpoolParent != "" {
+		spool, err := newSpoolDir(opts.SpoolParent)
+		if err != nil {
+			cancel()
+			_ = ln.Close()
+			_ = os.RemoveAll(dir)
+			return Config{}, nil, err
+		}
+		s.spool, s.spoolDone = spool, make(chan struct{})
+		cfg.Spool = spool
+		go s.spoolLoop()
+	}
 	go s.acceptLoop()
 	cleanup := func() { s.close() }
-	return Config{Namespace: statepath.DirName, Endpoint: socketPath, Capability: capability}, cleanup, nil
+	return cfg, cleanup, nil
 }
 
 func (s *server) acceptLoop() {
@@ -176,6 +212,9 @@ func (s *server) close() {
 		s.cancel()
 		_ = s.ln.Close()
 		<-s.acceptDone
+		if s.spoolDone != nil {
+			<-s.spoolDone
+		}
 		s.connMu.Lock()
 		for conn := range s.conns {
 			_ = conn.Close()
@@ -183,6 +222,9 @@ func (s *server) close() {
 		s.connMu.Unlock()
 		s.wg.Wait()
 		_ = os.RemoveAll(s.dir)
+		if s.spool != "" {
+			_ = os.RemoveAll(s.spool)
+		}
 	})
 }
 
@@ -196,42 +238,41 @@ func (s *server) handleConn(conn net.Conn) {
 		s.writeResponse(conn, responseEnvelope{Error: "invalid request: " + err.Error()})
 		return
 	}
+	s.writeResponse(conn, s.serve(ctx, data))
+}
+
+// serve verifies one request frame and runs it: the same checks for a
+// socket connection and a spooled file.
+func (s *server) serve(ctx context.Context, data []byte) responseEnvelope {
 	var env requestEnvelope
 	if err := DecodeStrict(data, &env); err != nil {
-		s.writeResponse(conn, responseEnvelope{Error: "invalid request: " + err.Error()})
-		return
+		return responseEnvelope{Error: "invalid request: " + err.Error()}
 	}
 	if env.Namespace != s.namespace {
-		s.writeResponse(conn, responseEnvelope{Error: "state namespace binding differs"})
-		return
+		return responseEnvelope{Error: "state namespace binding differs"}
 	}
 	if env.Method == "" {
-		s.writeResponse(conn, responseEnvelope{Error: "invalid request: empty method"})
-		return
+		return responseEnvelope{Error: "invalid request: empty method"}
 	}
 	if !constantTimeEqual(env.Capability, s.capability) {
-		s.writeResponse(conn, responseEnvelope{Error: "unauthorized"})
-		return
+		return responseEnvelope{Error: "unauthorized"}
 	}
 	raw := env.Args
 	if env.RawArgs != "" {
 		if len(env.Args) != 0 && string(env.Args) != "null" {
-			s.writeResponse(conn, responseEnvelope{Error: "ambiguous arguments"})
-			return
+			return responseEnvelope{Error: "ambiguous arguments"}
 		}
 		raw = json.RawMessage(env.RawArgs)
 		var checked json.RawMessage
 		if err := DecodeStrict(raw, &checked); err != nil {
-			s.writeResponse(conn, responseEnvelope{Error: "invalid arguments"})
-			return
+			return responseEnvelope{Error: "invalid arguments"}
 		}
 	}
 	result, err := s.handler(ctx, env.Method, raw)
 	if err != nil {
-		s.writeResponse(conn, responseEnvelope{Error: err.Error()})
-		return
+		return responseEnvelope{Error: err.Error()}
 	}
-	s.writeResponse(conn, responseEnvelope{Result: result})
+	return responseEnvelope{Result: result}
 }
 
 func (s *server) writeResponse(conn net.Conn, resp responseEnvelope) {
@@ -256,9 +297,23 @@ func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) 
 	if method == "" {
 		return nil, errors.New("proposalmcp: empty method")
 	}
+	env := requestEnvelope{Namespace: cfg.Namespace, Capability: cfg.Capability, Method: method, RawArgs: string(args)}
+	data, err := json.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("proposalmcp: encode request: %w", err)
+	}
 	var dialer net.Dialer
 	conn, err := dialer.DialContext(ctx, "unix", cfg.Endpoint)
 	if err != nil {
+		if cfg.Spool != "" && sandboxRefusedDial(err) {
+			// The caller's sandbox refuses Unix sockets; the broker
+			// reads the same frame from its spool.
+			resp, spoolErr := callSpool(ctx, cfg.Spool, data)
+			if spoolErr != nil {
+				return nil, spoolErr
+			}
+			return decodeResponse(resp)
+		}
 		return nil, fmt.Errorf("proposalmcp: dial: %w", err)
 	}
 	defer conn.Close()
@@ -273,11 +328,6 @@ func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) 
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 
-	env := requestEnvelope{Namespace: cfg.Namespace, Capability: cfg.Capability, Method: method, RawArgs: string(args)}
-	data, err := json.Marshal(env)
-	if err != nil {
-		return nil, fmt.Errorf("proposalmcp: encode request: %w", err)
-	}
 	data = append(data, '\n')
 	if _, err := conn.Write(data); err != nil {
 		return nil, fmt.Errorf("proposalmcp: write request: %w", err)
@@ -287,6 +337,11 @@ func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("proposalmcp: read response: %w", err)
 	}
+	return decodeResponse(resp)
+}
+
+// decodeResponse is a response frame's result, or its error.
+func decodeResponse(resp []byte) (json.RawMessage, error) {
 	var re responseEnvelope
 	if err := DecodeStrict(resp, &re); err != nil {
 		return nil, fmt.Errorf("proposalmcp: decode response: %w", err)

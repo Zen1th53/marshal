@@ -102,7 +102,7 @@ var boardKeymap = []boardKey{
 	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen, ID: "inspector.walk", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
 	{Group: "BOARD", Keys: "o", What: "inspector: show the worker's pane", Class: KeyOpen, ID: "inspector.pane"},
 	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
-	{Group: "BOARD", Keys: "r", What: "stuck task: retry it, Enter", Hint: "retry", Press: pressRune('r'), Class: KeyConfirm, ID: "task.retry", When: func(w *Workspace) bool { _, ok := stuckTaskUnderKeyboard(w); return ok }, Why: reason("Highlight a stuck task first.")},
+	{Group: "BOARD", Keys: "r", What: "stuck task: retry it, Enter", Hint: "retry", Press: pressRune('r'), Class: KeyConfirm, ID: "task.retry", When: func(w *Workspace) bool { _, ok := stuckTaskUnderKeyboard(w); return ok }, Why: func(w *Workspace) string { _, why := retryTarget(w); return why }},
 	{Group: "BOARD", Keys: "w", What: "task: choose the model that runs it", Hint: "model", Press: pressRune('w'), Class: KeyOpen, ID: "task.model", When: func(w *Workspace) bool { _, ok := taskUnderKeyboard(w); return ok }, Why: reason(taskModelWhy)},
 	{Group: "BOARD", Keys: "a", What: "project architecture in the browser", Command: "/marshal architecture", Class: KeyOpen, ID: "architecture.browse"},
 
@@ -175,18 +175,13 @@ func (w *Workspace) boardStopWaiting() bool {
 	}
 	w.mu.RLock()
 	p := w.state.Marshal
-	var board boardmodel.Board
-	note, stopped := "", false
-	if p != nil {
-		board, note, stopped = p.Board, p.Note, p.Stopped
-	}
 	w.mu.RUnlock()
 	if p == nil {
 		return false
 	}
 	// The same notice the inbox's Enter reads (handleBoardKey), so the row
 	// is on exactly when that Enter would arm the stop.
-	_, ok := (boardVisual{board: board, note: note, stopped: stopped}).stopNotice()
+	_, ok := w.stopVisual(p).stopNotice()
 	return ok
 }
 
