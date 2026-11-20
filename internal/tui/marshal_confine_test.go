@@ -14,7 +14,7 @@ import (
 
 const (
 	wantCodexProfile    = `default_permissions="marshal_planner"`
-	wantCodexFilesystem = `permissions.marshal_planner.filesystem={":root"="read", ":workspace_roots"={"."="read", ".marshal/marshal"="write", ".marshal/proposals"="write"}}`
+	wantCodexFilesystem = `permissions.marshal_planner.filesystem={":root"="read", ":workspace_roots"={"."="read", ".marshal/marshal"="write", ".marshal/proposals"="write", ".marshal/state.db"="none", ".marshal/state.db-wal"="none", ".marshal/state.db-shm"="none", ".marshal/state.db-journal"="none", ".marshal/knowledge"="none", ".marshal/backups"="none"}}`
 	wantClaudeSettings  = `{"permissions":{"allow":["Edit(./.marshal/marshal/**)","Edit(./.marshal/proposals/**)"]}}`
 )
 
@@ -121,11 +121,13 @@ func TestPrepareMarshalLaunchClaudeConfined(t *testing.T) {
 	}
 	defer dir.remove()
 	mode := "manual"
+	want := wantClaudeStateSettings
 	if codexMarshalConfineEnforced {
 		mode = "dontAsk"
-		if !hasPair(args, "--settings", wantClaudeSettings) {
-			t.Fatalf("no writable-paths settings: %q", args)
-		}
+		want = wantClaudeConfinedStateSettings
+	}
+	if !hasPair(args, "--settings", want) || strings.Count(strings.Join(args, " "), "--settings") != 1 {
+		t.Fatalf("settings %q missing or doubled: %q", want, args)
 	}
 	sep := slices.Index(args, "--")
 	at := slices.Index(args, "--permission-mode")
