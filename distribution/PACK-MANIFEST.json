@@ -2030,6 +2030,21 @@
       "bytes": 11999
     },
     {
+      "path": "internal/app/handin_identity.go",
+      "sha256": "bfc61901f4176ad2e57d1b77374f7a9f11449c0ffc9dd1dd79027f321d9cb6b4",
+      "bytes": 4595
+    },
+    {
+      "path": "internal/app/handin_identity_test.go",
+      "sha256": "2faac5d69a785050bd87af1061b5d317e51d1fcc0603c1caa63fd1220624c380",
+      "bytes": 3370
+    },
+    {
+      "path": "internal/app/handin_not_recorded_extreme_test.go",
+      "sha256": "2a3aac229eb17d8b76809c4ba5dd6b4857bbb1ceccab3b4ca187fba812630132",
+      "bytes": 2735
+    },
+    {
       "path": "internal/app/handoff_compiler_test.go",
       "sha256": "0950e260f8b22b1846971208fd4d0613d54f68b495625abf4708231bf1d6c544",
       "bytes": 3955
@@ -2651,8 +2666,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "4f92598b99aa3d19f09e9bce5cc80a1f24b98113a56e439af6195cc5f9690fcc",
-      "bytes": 84619
+      "sha256": "71c516de1d7fd42bd3376564ecd9310bdad1408e3ca22c92e6157f33bc763034",
+      "bytes": 85135
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -6311,8 +6326,8 @@
     },
     {
       "path": "internal/execution/engine.go",
-      "sha256": "e99215090d59407a6e3f8cd63f678d92fc14683a4ab9ed013fd389bc3389c1b7",
-      "bytes": 52016
+      "sha256": "bd9364d2261174f630d5deacc9e0587bd58d8e985a271cc5b27d023d98d595e4",
+      "bytes": 52161
     },
     {
       "path": "internal/execution/engine_test.go",
@@ -6343,6 +6358,16 @@
       "path": "internal/execution/gate.go",
       "sha256": "a073ab76791a4d46dc0efb2d29ae5b208acfd1a7dc5e0e830cfbe8e493d804c2",
       "bytes": 6471
+    },
+    {
+      "path": "internal/execution/handin_error.go",
+      "sha256": "628ff4bd8d89621db0deb34d6232016ee1e27a55a37f40281e7155717dd64963",
+      "bytes": 2926
+    },
+    {
+      "path": "internal/execution/handin_not_recorded_test.go",
+      "sha256": "d63aedb17519523eedc528dce27f64bc6869e00abf088bc4502b3f8b5e606628",
+      "bytes": 2782
     },
     {
       "path": "internal/execution/handoff_restart_test.go",
@@ -7386,8 +7411,8 @@
     },
     {
       "path": "internal/marshal/domain.go",
-      "sha256": "813fd777818fc199392d9a0cef0013e4fa97df4c5e8de450ea2d2e7361329e71",
-      "bytes": 21628
+      "sha256": "d400eb2c6ccc84873f28453897b546647681159e89b1b5e640707d0a9d7556c9",
+      "bytes": 21980
     },
     {
       "path": "internal/marshal/domain_test.go",
@@ -7431,8 +7456,8 @@
     },
     {
       "path": "internal/marshal/driver/driver.go",
-      "sha256": "29f32e876183febae3a032804ef56932cfd0972cc1724e51be0f093e15a89b4c",
-      "bytes": 16378
+      "sha256": "c3e9f05e5b8b201cad23ef6870900062081e53259bda01f5159a3cc4acd186f6",
+      "bytes": 16528
     },
     {
       "path": "internal/marshal/driver/driver_test.go",
@@ -7453,6 +7478,11 @@
       "path": "internal/marshal/driver/hand_in_subject_test.go",
       "sha256": "97d8b8b5d727250ea228c0ff9fd1e6a3cdc7e63aa2f9681065147de7d5e44e19",
       "bytes": 629
+    },
+    {
+      "path": "internal/marshal/driver/hosted_handin_unix_test.go",
+      "sha256": "0680f717e2d6dc08b7c14b2289596c3e92a0c2af7f533a71f3ca31d573fb9522",
+      "bytes": 3621
     },
     {
       "path": "internal/marshal/driver/hosted_terminal_unix_test.go",
@@ -16856,8 +16886,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "7aa372785cfe0046a5d7f5641998913426084124b31a4d6e7fee83c77cc6bf98",
-      "bytes": 446685
+      "sha256": "ba447eef56bc497d91c8a1ca0bd4dce2333e6ad394e1da8c095fdf1c88cc1c21",
+      "bytes": 447638
     },
     {
       "path": "tools/extreme/prq/main_default.go",
