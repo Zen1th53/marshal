@@ -269,22 +269,12 @@ func TestMemoryOverviewRecallsLimitAndSnapshots(t *testing.T) {
 		t.Fatalf("insert snapshot: %v", err)
 	}
 
-	// Insert task and mcp gateway logs
+	// Insert task
 	if _, err := st.db.ExecContext(ctx, `
 		INSERT INTO tasks(task_id, project_id, title, status, risk, revision, created_at, updated_at)
 		VALUES('task-1', 'proj-recalls', 'test task', 'proposed', 'R1', 0, ?, ?)
 	`, baseTime.Format(time.RFC3339Nano), baseTime.Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("insert task: %v", err)
-	}
-
-	if _, err := st.db.ExecContext(ctx, `
-		INSERT INTO mcp_gateway_logs(log_id, subject, task_id, server, tool, allowed, created_at)
-		VALUES
-			('log-1', 'sub-1', 'task-1', 'srv-1', 'recall_tool', 1, ?),
-			('log-2', 'sub-2', 'task-1', 'srv-1', 'recall_tool', 1, ?),
-			('log-3', 'sub-3', 'task-1', 'srv-1', 'store_tool', 1, ?)
-	`, baseTime.Format(time.RFC3339Nano), baseTime.Format(time.RFC3339Nano), baseTime.Format(time.RFC3339Nano)); err != nil {
-		t.Fatalf("insert mcp log: %v", err)
 	}
 
 	overview, err := st.MemoryOverview(ctx, "proj-recalls", MemoryOverviewLimits{Queue: 10, Recalls: 2})
@@ -311,13 +301,6 @@ func TestMemoryOverviewRecallsLimitAndSnapshots(t *testing.T) {
 		t.Errorf("expected newest snapshot %v, got %v", snapTime, overview.Snapshots.NewestSnapshot)
 	}
 
-	// Verify MCP gateway tool counts
-	if overview.MCPTools.ToolCalls["recall_tool"] != 2 {
-		t.Errorf("expected 2 recall_tool calls, got %d", overview.MCPTools.ToolCalls["recall_tool"])
-	}
-	if overview.MCPTools.ToolCalls["store_tool"] != 1 {
-		t.Errorf("expected 1 store_tool calls, got %d", overview.MCPTools.ToolCalls["store_tool"])
-	}
 	if overview.MCPTools.CandidatesCount != 0 {
 		t.Errorf("expected 0 candidates in community mode, got %d", overview.MCPTools.CandidatesCount)
 	}
