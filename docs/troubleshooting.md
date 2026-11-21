@@ -141,15 +141,17 @@ marshal status
 
 ### Symptom
 
-The run stops with **"This computer cannot run governed workers (…). Governed workers need Linux on amd64."**
+The run stops with **"This computer (…) cannot run governed workers (…). They need Linux amd64; run Marshal there to execute this plan."**
 
 ### Why
 
-Governed workers run inside Linux confinement (bubblewrap and a socket supervisor built for amd64). macOS and Linux arm64 have neither, so every worker would fail the same way. Earlier versions reported this as a network problem, retried and cooled the providers down; it is now named at once.
+The pause names Linux amd64 only when the refusal itself requires it: governed workers in the governed edition run inside Linux confinement (bubblewrap and a socket supervisor built for amd64), which macOS and Linux arm64 do not have, so every worker would fail the same way. Earlier versions reported this as a network problem, retried and cooled the providers down; it is now named at once.
+
+Any other platform refusal reads **"This computer (…) cannot run … workers: Marshal could not start them here (…)"** with the actual cause. Earlier the default edition on macOS stopped this way with "worker terminal transport unavailable on this platform", wrongly worded as a Linux amd64 requirement; Marshal now hosts worker terminals on macOS.
 
 ### How to Fix It
 
-Open the project with Marshal on a Linux amd64 machine (a server, a cloud VM, or an x86_64 VM). Planning, requirements and the architecture review work on any platform.
+For a Linux amd64 requirement, open the project with Marshal on a Linux amd64 machine (a server, a cloud VM, or an x86_64 VM). Planning, requirements and the architecture review work on any platform. For any other cause, update Marshal and press Enter to retry.
 
 ## Marshal Was Updated but Still Behaves the Old Way
 

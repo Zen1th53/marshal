@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -120,8 +121,8 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		machine := fmt.Sprintf("%s: %s", infraRetryEscalation, reason)
 		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
-		plain := fmt.Sprintf("This computer cannot run %s workers (%s). Governed workers need Linux on amd64; run Marshal there to execute this plan.", t.Mode, reason)
-		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{"Run this project with Marshal on a Linux amd64 machine, then press Enter to retry."}, Detail: machine, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
+		plain, resolution := platformRefusal(platformName(runtime.GOOS, runtime.GOARCH), string(t.Mode), reason)
+		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{resolution}, Detail: machine, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
 		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
 	} else if t.InfraRetries > infraRetryLimit {
@@ -157,6 +158,27 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	}
 	_, err := s.Charge(ctx, runID, t.PlanTaskID, "infra_retry", zeroMarshalCharge())
 	return err
+}
+
+// platformRefusal words a pause for a worker this computer cannot run. It
+// claims a Linux (or Linux amd64) requirement only when the refusal itself
+// names one, such as governed socket confinement; any other refusal is
+// reported as what it is, a limit of Marshal on this computer.
+func platformRefusal(host, mode, reason string) (plain, resolution string) {
+	lower := strings.ToLower(reason)
+	needs := ""
+	switch {
+	case strings.Contains(lower, "linux amd64"):
+		needs = "Linux amd64"
+	case strings.Contains(lower, "linux"):
+		needs = "Linux"
+	}
+	if needs != "" {
+		return fmt.Sprintf("This computer (%s) cannot run %s workers (%s). They need %s; run Marshal there to execute this plan.", host, mode, reason, needs),
+			fmt.Sprintf("Run this project with Marshal on a %s machine, then press Enter to retry.", needs)
+	}
+	return fmt.Sprintf("This computer (%s) cannot run %s workers: Marshal could not start them here (%s). The plan and the providers are not at fault.", host, mode, reason),
+		"Update Marshal, then press Enter to retry; meanwhile Marshal on Linux can run this plan."
 }
 
 // resetInfraRetries gives a task a fresh infrastructure retry budget when the
