@@ -95,7 +95,6 @@ type Runtime struct {
 	handoffService             *protocol.Service
 	memoryService              *MemoryService
 	quorumEngine               *quorum.Engine
-	allowProcessOnly           bool
 	execService                *ExecutionService
 	honeypotMu                 sync.Mutex
 	honeypots                  map[string]*worker.Honeypot
@@ -211,19 +210,10 @@ type Options struct {
 	EvidenceSanitizer   evidence.Sanitizer
 	Metrics             *evidence.MetricsRecorder
 	RuntimePolicy       *RuntimePolicyConfig
-	CapabilityBroker    capability.Broker
-	CellManager         *cell.Manager
 	SecretBroker        secrets.Broker
 	GateEngine          *gate.Engine
-	RiskEngine          *risk.Engine
 	AuthorityPrincipal  *authz.Principal
 	ProcessAuthority    authz.Authority
-	HandoffAuthorizer   protocol.Authorizer
-	QuorumEngine        *quorum.Engine
-	// AllowProcessOnlyFallback is retained for source compatibility. Process-only
-	// provider execution is no longer permitted because it cannot enforce the
-	// filesystem or network boundary.
-	AllowProcessOnlyFallback bool
 }
 
 type Status struct {
@@ -434,11 +424,8 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		policy:                  engine,
 		adapters:                options.Adapters,
 		evidenceSanitizer:       sanitizer,
-		capabilityBroker:        options.CapabilityBroker,
-		cellManager:             options.CellManager,
 		secretBroker:            options.SecretBroker,
 		gateEngine:              options.GateEngine,
-		riskEngine:              options.RiskEngine,
 		authorityPrincipal:      options.AuthorityPrincipal,
 		processAuthority:        options.ProcessAuthority,
 		runtimeInstanceID:       instanceID,
@@ -446,11 +433,8 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		workerMCPFactory:        sessionmcp.WorkerServerFactoryFrom(ctx),
 		codexAppServerTurns:     make(map[string]*liveCodexAppServerTurn),
 		claudeStreamTurns:       make(map[string]*liveClaudeStreamTurn),
-		allowProcessOnly:        options.AllowProcessOnlyFallback,
 	}
-	if rt.capabilityBroker == nil {
-		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
-	}
+	rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
 	if rt.secretBroker == nil {
 		secEngine, err := secrets.NewEngine(secrets.EngineConfig{
 			Store:      database,
@@ -465,12 +449,8 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 			rt.secretBroker = secEngine
 		}
 	}
-	if rt.cellManager == nil {
-		rt.cellManager = cell.NewAuditedManager(database, nil, nil, rt.eventEngine)
-	}
-	if rt.riskEngine == nil {
-		rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)
-	}
+	rt.cellManager = cell.NewAuditedManager(database, nil, nil, rt.eventEngine)
+	rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
 		rt.policyConfigured = true
@@ -478,16 +458,8 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		rt.runtimePolicy = RuntimePolicyConfig{PolicyID: active.Policy.ID, PolicyVersion: active.Policy.Version}
 		rt.policyConfigured = true
 	}
-	handoffAuthorizer := options.HandoffAuthorizer
-	if handoffAuthorizer == nil {
-		handoffAuthorizer = runtimeHandoffAuthorizer{}
-	}
-	if options.QuorumEngine != nil {
-		rt.quorumEngine = options.QuorumEngine
-	} else {
-		rt.quorumEngine = quorum.NewEngine(nil)
-	}
-	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
+	rt.quorumEngine = quorum.NewEngine(nil)
+	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, runtimeHandoffAuthorizer{})
 	if !options.KnowledgeReadOnly {
 		previousRoot := ""
 		if admission.Rebound {
@@ -2059,7 +2031,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if bwrapPath, lookupErr := trustedBwrapPath(); lookupErr == nil && !unconfined {
 		backend := sandbox.NewBwrap(bwrapPath)
 		capability := backend.Probe(ctx)
-		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, r.allowProcessOnly)
+		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, false)
 		if chooseErr != nil {
 			if !sandbox.UnconfinedFallbackAllowed() {
 				return nil, "", chooseErr
@@ -2192,7 +2164,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				return err
 			}, r.socketObserver(proxySocket))
 		}
-	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil && !unconfined {
+	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, false); err != nil && !unconfined {
 		if !sandbox.UnconfinedFallbackAllowed() {
 			return nil, "", err
 		}
