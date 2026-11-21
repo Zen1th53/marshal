@@ -134,7 +134,7 @@ func TestAskCardDigitsKeepViews(t *testing.T) {
 	w := askBoard(t)
 	defer w.Close()
 	w.memSource = &fakeMemory{overview: demoMemoryOverview(time.Now())}
-	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: '3'}) {
+	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: '3'}) {
 		t.Fatal("3 was not taken")
 	}
 	if !w.memView.Load() {

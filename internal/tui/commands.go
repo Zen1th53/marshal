@@ -796,6 +796,7 @@ func (h *CommandHandler) helpText() string {
   /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
   /view [chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
   /takeover, /take-over    Enable interactive typing in the active worker pane
+  /task-model <task>       Choose the model a task runs on
   /stop all                Stop all worker sessions while keeping MARSHAL active
   <prompt...>              Plain text runs nothing; use provider exec/run/prompt or a quoted prompt
   Unknown provider subcommands run nothing; /<provider> cli passes native arguments

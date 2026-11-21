@@ -267,7 +267,7 @@ func TestRealTmuxDockThroughTheKeyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines, _, _ := w.frameLines(g.PaneWidth, 40)
-	if plain := StripANSI(strings.Join(lines, "\n")); !strings.Contains(plain, "TASKS") || len(lines) != 40 {
+	if plain := StripANSI(strings.Join(lines, "\n")); !strings.Contains(plain, "From you:") || len(lines) != 40 {
 		t.Fatalf("Board frame beside the chat:\n%s", plain)
 	}
 

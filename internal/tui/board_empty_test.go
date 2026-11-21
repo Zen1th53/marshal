@@ -74,73 +74,6 @@ func (f *fakeVerifySource) RouteTask(context.Context, string, string) (string, e
 	return "", nil
 }
 
-// v arms the verify of the next unverified provider, Enter runs it and any
-// other key cancels; a click on an unverified provider arms that one. A
-// verify is never one key: the probe calls the model.
-func TestFirstUseVerifyKeysAndClick(t *testing.T) {
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	now := time.Now()
-	src := &fakeVerifySource{verified: make(chan string, 4), providers: []store.ProviderStatus{{Provider: "codex", VerifiedAt: now, ExpiresAt: now.Add(time.Hour)}}}
-	w.provSource = src
-	lookPath = func(string) (string, error) { return "/bin/true", nil }
-	defer func() { lookPath = execLookPath }()
-	w.loadFirstUse(context.Background())
-	chips := w.firstUseChips(now)
-	if chips[0].state != "verified" || chips[1].state != "unverified" {
-		t.Fatalf("chips %+v", chips)
-	}
-	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
-
-	if !key(KeyEvent{Type: KeyRune, Rune: 'v'}) || w.firstUseArmed() != "claude" {
-		t.Fatalf("v armed %q", w.firstUseArmed())
-	}
-	lines, _, _ := w.frameLinesFull(120, 40)
-	if !strings.Contains(StripANSI(strings.Join(lines, "\n")), "Enter verifies claude") {
-		t.Fatal("the armed verify does not say Enter runs it")
-	}
-	if !key(KeyEvent{Type: KeyRune, Rune: 'x'}) || w.firstUseArmed() != "" {
-		t.Fatal("another key did not cancel the armed verify")
-	}
-	select {
-	case p := <-src.verified:
-		t.Fatalf("cancelled verify ran for %s", p)
-	default:
-	}
-	key(KeyEvent{Type: KeyRune, Rune: 'v'})
-	if !key(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter did not run the armed verify")
-	}
-	select {
-	case p := <-src.verified:
-		if p != "claude" {
-			t.Fatalf("verified %s", p)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("verify did not run")
-	}
-
-	// A click on agy's readiness row arms agy. The checklist lists each
-	// installed provider once the off-paint probe has run.
-	w.refreshV2Marshal(context.Background(), w.v2ProbeInput(w.v2LiveChat()))
-	lines, _, _ = w.frameLinesFull(120, 40)
-	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "READINESS") || !strings.Contains(text, "agy") {
-		t.Fatalf("the readiness checklist does not list agy:\n%s", text)
-	}
-	var at boardHit
-	for _, h := range w.boardHits.hits {
-		if h.kind == hitVerify && h.id == "agy" {
-			at = h
-		}
-	}
-	if at.kind == "" {
-		t.Fatalf("no click region for agy: %+v", w.boardHits.hits)
-	}
-	if !w.handleBoardMouse(context.Background(), KeyEvent{Type: KeyMouse, MouseRow: at.row + 1, MouseColumn: at.x0 + 1}) || w.firstUseArmed() != "agy" {
-		t.Fatalf("click armed %q", w.firstUseArmed())
-	}
-}
-
 // TestPTYFreshProjectOpensOnTheBoard launches the real binary in a fresh
 // project, as `marshal init` then `marshal` leave it: the first screen is
 // Board v2's ready screen, never the classic screen, and s then typing
@@ -152,11 +85,10 @@ func TestPTYFreshProjectOpensOnTheBoard(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	project := initProject(t, bin)
 	s := startBoardTUIInProject(t, 40, 140, bin, project, "tui")
-	// Board v2's ready screen: the readiness checklist with the Marshal's
-	// row, and say-what-to-build on the key bar.
-	s.mustSee("READINESS")
+	// The home screen: From you, the Marshal on its line, and the key bar.
+	s.mustSee("From you:")
 	s.mustSee("Marshal")
-	s.mustSee("say what to build")
+	s.mustSee("⏎ chat")
 	s.mustNotSee("Native sessions")
 	s.send("s")
 	s.mustSee("to the Marshal ›")

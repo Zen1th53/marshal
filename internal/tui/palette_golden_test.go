@@ -77,7 +77,7 @@ func TestPaletteGoldens(t *testing.T) {
 				for _, wantLabel := range []string{
 					"say to the Marshal",
 					"open the architecture",
-					"restart a task",
+					"retry or continue",
 					"change model or provider",
 					"pause everything",
 					"stop all workers",

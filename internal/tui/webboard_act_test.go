@@ -42,7 +42,17 @@ var leasePause = marshal.Pause{Reason: "codex failed 4 times in a row", Detail: 
 // webCard is the card id and frame the page would see now.
 func webCard(t *testing.T, w *Workspace) webboard.Frame {
 	t.Helper()
+	// The card settles once its background reads (the architecture's
+	// sketch) land: the frame is taken when two reads agree.
 	f := webboard.FromBoard(w.webBoardFrame())
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		time.Sleep(150 * time.Millisecond)
+		next := webboard.FromBoard(w.webBoardFrame())
+		if webboard.CardID(next) == webboard.CardID(f) {
+			break
+		}
+		f = next
+	}
 	if f.Paused == nil && f.Decision == nil {
 		t.Fatalf("no card on screen: %q", f.Screen)
 	}
