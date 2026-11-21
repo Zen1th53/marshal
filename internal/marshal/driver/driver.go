@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/worker"
@@ -172,7 +173,8 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 	wt := req.Worktree
 	result, err := recordResult(ctx, wt, req.Task.PlanTaskID, req.Task.Title)
 	if err != nil {
-		return marshal.HandIn{}, err
+		// The worker has finished: running it again cannot record its work.
+		return marshal.HandIn{}, execution.HandInNotRecorded(err)
 	}
 	tree, err := git(ctx, wt, "rev-parse", result+"^{tree}")
 	if err != nil {

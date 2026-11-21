@@ -15,6 +15,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -123,6 +124,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	}
 	if d.Mode() != t.Mode {
 		return MarshalDispatch{}, fmt.Errorf("worker %s has %s driver, task requires %s", t.Worker, d.Mode(), t.Mode)
+	}
+	if err := s.refuseDispatchWithoutGitIdentity(ctx, runID, run, rev, *t); err != nil {
+		return MarshalDispatch{}, err
 	}
 	approvedPlan, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
@@ -364,6 +368,11 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	failureText, failed := workerFailureText(err, handin, dispatch.Handle)
 	if failed && !errors.Is(err, context.Canceled) && isProviderAuthFailure(failureText) {
 		return marshal.HandIn{}, s.pauseWorkerAuth(context.WithoutCancel(ctx), runID, dispatch.TaskID, failureText)
+	}
+	if errors.Is(err, execution.ErrHandInNotRecorded) && !errors.Is(err, context.Canceled) {
+		// The worker finished; another attempt would re-run the model and
+		// fail the same way, so this is never an infrastructure retry.
+		return marshal.HandIn{}, s.pauseHandInNotRecorded(context.WithoutCancel(ctx), runID, dispatch.TaskID, err.Error())
 	}
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && (dispatch.Deadline.IsZero() || time.Now().Before(dispatch.Deadline)) {
 		if isLimit, reason, cooldown := classifyProviderLimitAt(err, handin, dispatch.Handle, s.clock()); isLimit {

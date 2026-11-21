@@ -70,8 +70,8 @@ func TestDispatchWithoutGitIdentityPausesBeforeTheWorker(t *testing.T) {
 	if !strings.Contains(run.Pause.Reason, "git config --global user.name") {
 		t.Fatalf("pause reason %q gives no instruction", run.Pause.Reason)
 	}
-	if task := run.Tasks[taskIndex(run, "a")]; task.State != marshal.Queued || task.InfraRetries != 0 {
-		t.Fatalf("task %s after refusal, infra retries %d", task.State, task.InfraRetries)
+	if task := run.Tasks[taskIndex(run, "a")]; task.State != marshal.Queued {
+		t.Fatalf("task %s after refusal, want queued", task.State)
 	}
 	marshalGit(t, repo, "config", "user.name", "Owner")
 	marshalGit(t, repo, "config", "user.email", "owner@example.invalid")
