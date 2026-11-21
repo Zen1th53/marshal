@@ -31,7 +31,7 @@ func showsHostNotice(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "tui", "init", "setup", "run", "goal":
+	case "tui", "init", "setup", "run":
 		return true
 	}
 	return false

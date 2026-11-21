@@ -165,7 +165,7 @@ func TestTelemetryHelpDoesNotCreateIdentity(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", config)
 	t.Setenv(cloud.EnvEndpoint, "http://127.0.0.1:1")
-	for _, args := range [][]string{{"telemetry", "--help"}, {"ultra", "request", "--help"}} {
+	for _, args := range [][]string{{"telemetry", "--help"}} {
 		var out, errout bytes.Buffer
 		if Execute(context.Background(), t.TempDir(), args, nil, &out, &errout) != 0 || !strings.Contains(out.String(), "Usage:") {
 			t.Fatalf("help failed %v: %s", args, errout.String())

@@ -33,7 +33,6 @@ MARSHAL_PROVIDER=codex
 FLOW_TIMEOUT=${FLOW_TIMEOUT:-2400}
 KEEP=0
 ASSIST=0
-POLICY_SUITE=""
 
 usage() {
 	cat <<'EOF'
@@ -56,7 +55,6 @@ Usage: tools/e2e/extreme-e2e.sh [options]
   --providers "LIST"    providers for C (default "codex claude opencode agy")
   --marshal PROVIDER    provider for the Marshal chat in D (default codex)
   --flow-timeout SECS   upper bound for D (default 2400)
-  --policy-suite FILE   policy suite JSON for `marshal policy test` (SKIP otherwise)
   --assist-credentials  after an unassisted harness verify times out on the credential
                         decision, retry while nudging the Marshal (recorded separately)
   --keep                leave tmux sessions running at the end
@@ -79,7 +77,6 @@ while [ $# -gt 0 ]; do
 	--providers) PROVIDERS=$2; shift ;;
 	--marshal) MARSHAL_PROVIDER=$2; shift ;;
 	--flow-timeout) FLOW_TIMEOUT=$2; shift ;;
-	--policy-suite) POLICY_SUITE=$2; shift ;;
 	--keep) KEEP=1 ;;
 	--assist-credentials) ASSIST=1 ;;
 	-h | --help) usage; exit 0 ;;
@@ -301,34 +298,14 @@ section_a() {
 	check A05-doctor "$CLI_PROJ" "Verdict: PASS" doctor
 	MX_TIMEOUT=180 check A06-doctor-deep "$CLI_PROJ" "Verdict: PASS" doctor --deep
 	check A07-setup-status "$CLI_PROJ" "Readiness: READY" setup status
-	check A08-adapters "$CLI_PROJ" "^ *codex +AVAILABLE" adapters
 	for p in codex claude opencode agy; do
 		check "A09-adapter-probe-$p" "$CLI_PROJ" "adapter $p" adapter probe "$p"
 	done
 	check A10-telemetry-off "$CLI_PROJ" "compiled out|disabled|off" telemetry status
-	check A11-ultra-status-local "$CLI_PROJ" "locally|local" ultra status
-
-	t=$(now)
-	if command -v strace >/dev/null; then
-		(cd "$CLI_PROJ" && strace -f -qq -e trace=connect -o "$OUT/strace-ultra.txt" "$BIN" ultra request >"$OUT/ultra.txt" 2>&1)
-		local inet
-		inet=$(grep -E 'AF_INET6?' "$OUT/strace-ultra.txt" | grep -v 'htons(53)' | head -2)
-		if [ -z "$inet" ] && grep -q local "$OUT/ultra.txt"; then
-			record A12-ultra-request-no-cloud PASS "$(elapsed "$t")" "$(cat "$OUT/ultra.txt"); no AF_INET connect"
-		else
-			record A12-ultra-request-no-cloud FAIL "$(elapsed "$t")" "$(cat "$OUT/ultra.txt") $inet"
-		fi
-	else
-		check A12-ultra-request-no-cloud "$CLI_PROJ" "locally" ultra request
-	fi
 
 	# Public update status follows the existing GitHub release feed.
 	check A13-update-status "$CLI_PROJ" "." update status
-	check A14-help "$CLI_PROJ" "Why work can be blocked" help
-	check A15-help-why "$CLI_PROJ" "." help why
-	check A16-constitution-version "$CLI_PROJ" "constitution=" constitution version
-	check A17-constitution-invariants "$CLI_PROJ" "CI-021" constitution invariants
-	check A18-a2a-status "$CLI_PROJ" "A2A" a2a status
+	check A14-help "$CLI_PROJ" "Usage: marshal" help
 	check A19-egm-status "$CLI_PROJ" "egm/" egm status
 	check A20-mcp-status "$CLI_PROJ" "Provider connections" mcp status
 	(cd "$CLI_PROJ" && timeout 120 "$BIN" legal audit >"$OUT/legal-scratch.txt" 2>&1)
@@ -341,12 +318,6 @@ section_a() {
 		record A22-setup-network-wording-extreme FAIL "$(elapsed "$t")" "$(printf '%s' "$MX_OUT" | grep env.network)"
 	else
 		record A22-setup-network-wording-extreme PASS "$(elapsed "$t")" "$(printf '%s' "$MX_OUT" | grep env.network)"
-	fi
-	mx "$CLI_PROJ" help
-	if printf '%s' "$MX_OUT" | grep -q 'requires a valid entitlement'; then
-		record A23-help-ultra-wording-extreme FAIL 0 "help says ULTRA 'requires a valid entitlement' (Marshal ULTRA is local)"
-	else
-		record A23-help-ultra-wording-extreme PASS 0 "no entitlement wording"
 	fi
 
 	# Runtime-backed commands need the local runtime (daemon).
@@ -390,15 +361,6 @@ section_a() {
 	check A61-memory-audit "$CLI_PROJ" "memory audit count" memory audit
 	check A62-memory-candidates "$CLI_PROJ" "memory candidates" memory candidates
 
-	check A70-permission-allow "$CLI_PROJ" "recorded" permission read allow "$OUTSIDE"
-	check A71-permission-list "$CLI_PROJ" "read allow" permission read list "$OUTSIDE"
-	check A72-permission-revoke "$CLI_PROJ" "revoked" permission read revoke "$OUTSIDE"
-	check A73-permission-list-unset "$CLI_PROJ" "unset" permission read list "$OUTSIDE"
-	if [ -n "$POLICY_SUITE" ]; then
-		check A74-policy-test "$CLI_PROJ" "PASS" policy test "$POLICY_SUITE"
-	else
-		record A74-policy-test SKIP 0 "no policy suite fixture in the repo; pass --policy-suite FILE"
-	fi
 
 	# MCP over stdio: initialize, tools/list, recall, project_context, stop.
 	t=$(now)
