@@ -2721,8 +2721,8 @@
     },
     {
       "path": "internal/app/marshal_lane_admission_extreme_test.go",
-      "sha256": "1b585800b97cd10c878927bd5a1dac7761051121149845ba204ab57970f8fccc",
-      "bytes": 7319
+      "sha256": "6b6da74da711aca217b33938b456c66c306d0f1c382446de158ace6b96b12bfb",
+      "bytes": 10091
     },
     {
       "path": "internal/app/marshal_lane_rework_extreme_test.go",
@@ -6725,6 +6725,11 @@
       "bytes": 2965
     },
     {
+      "path": "internal/execution/reassign_lane_base_extreme_test.go",
+      "sha256": "2a30801f61b3c81b774ce5097dc6cdea2b8333a6036677ef9c072c8f4977cdc6",
+      "bytes": 5520
+    },
+    {
       "path": "internal/execution/reconcile_files.go",
       "sha256": "e23d94f9ac70d522114602608e97f57c8e216f8a0f078aee6d95ee3365ae9d10",
       "bytes": 6423
@@ -6891,8 +6896,8 @@
     },
     {
       "path": "internal/execution/task_lane_extreme.go",
-      "sha256": "7ee0242e61d1e7c11a26ccfbc45480b09b886f1c0bdd19280a127a590c0fd29c",
-      "bytes": 28868
+      "sha256": "7ece745ae8ed33ddea7dc5aaceb61c32445419b8637d68ca793260afe85c7576",
+      "bytes": 29153
     },
     {
       "path": "internal/execution/task_lane_extreme_test.go",

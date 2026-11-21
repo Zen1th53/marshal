@@ -143,9 +143,13 @@ func (e *Engine) OpenTaskLaneRework(ctx context.Context, parentID, taskID, base 
 			return nil, err
 		}
 		// A provider switch supersedes the previous attempt's binding; that
-		// attempt may precede the switched one but is never resumed.
+		// attempt may precede the switched one but is never resumed. Its
+		// binding (which hashes its base) retires with it, so the switched
+		// attempt may start from a newer base: a reassigned task with
+		// dependencies starts from the current integration head. Without a
+		// switch every attempt keeps the original binding and base.
 		switched := current != id && slices.Contains(parent.TaskProviderSwitches[taskID].PriorBindings, lane.ParentBinding)
-		if lane.ParentRunID != parentID || lane.ParentBinding != binding && !switched || lane.LaneTaskID != taskID || lane.BaseCommit != base {
+		if lane.ParentRunID != parentID || lane.ParentBinding != binding && !switched || lane.LaneTaskID != taskID || lane.BaseCommit != base && !switched {
 			return nil, fmt.Errorf("%w: durable task lane binding differs", ErrRunConflict)
 		}
 		_, active := e.activeRuns[current]
