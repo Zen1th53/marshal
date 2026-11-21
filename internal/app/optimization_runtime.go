@@ -155,34 +155,6 @@ func (s *OptimizationService) Candidates(ctx context.Context, cycleID string) ([
 	return s.runtime.store.OptimizationCandidates(ctx, cycleID)
 }
 
-// EvaluateCounterfactual runs the safety and validity checks on one
-// counterfactual comparison and records it against a cycle.
-//
-// The cycle must exist so a counterfactual can never be filed against
-// optimization state that was never opened.
-func (s *OptimizationService) EvaluateCounterfactual(ctx context.Context, cycleID string, c optimization.Counterfactual, g optimization.Governance) (optimization.Counterfactual, error) {
-	if s == nil || s.runtime == nil {
-		return optimization.Counterfactual{}, model.ErrUnavailable
-	}
-	// A replay result must be produced by ExecuteReplay below. Accepting a
-	// caller-populated alternate outcome here would turn the critical Process
-	// 07 carry-forward requirement back into mere substrate.
-	if c.Method == optimization.MethodReplay {
-		return optimization.Counterfactual{}, fmt.Errorf("%w: replay counterfactuals must execute through ExecuteReplay", optimization.ErrInvalid)
-	}
-	if _, err := s.runtime.store.GetOptimizationCycle(ctx, cycleID); err != nil {
-		return optimization.Counterfactual{}, err
-	}
-	built, err := optimization.NewCounterfactual(c, g, s.now())
-	if err != nil {
-		return optimization.Counterfactual{}, err
-	}
-	if err := s.runtime.store.AppendCounterfactual(ctx, cycleID, built); err != nil {
-		return optimization.Counterfactual{}, err
-	}
-	return s.runtime.store.GetCounterfactual(ctx, built.ID)
-}
-
 // ExecuteReplay runs an alternate route through the offline replay boundary
 // and durably records the verifier-backed comparison. It is the application
 // path for closing the Process 07 counterfactual-routing gap: unlike a record
@@ -212,46 +184,12 @@ func (s *OptimizationService) Counterfactuals(ctx context.Context, cycleID strin
 	return s.runtime.store.Counterfactuals(ctx, cycleID)
 }
 
-// RecordExperiment stores one experiment result exactly as reported. Every
-// attempt is preserved, including a failure, a quarantine or an UNKNOWN
-// outcome: the promotion gates decide what counts, not the write path.
-func (s *OptimizationService) RecordExperiment(ctx context.Context, cycleID, candidateID string, r optimization.ExperimentResult) error {
-	if s == nil || s.runtime == nil {
-		return model.ErrUnavailable
-	}
-	if _, err := s.runtime.store.GetOptimizationCycle(ctx, cycleID); err != nil {
-		return err
-	}
-	if r.ObservedAt.IsZero() {
-		r.ObservedAt = s.now()
-	}
-	return s.runtime.store.AppendExperimentResult(ctx, cycleID, candidateID, r)
-}
-
 // ExperimentResults returns every attempt recorded for one candidate.
 func (s *OptimizationService) ExperimentResults(ctx context.Context, cycleID, candidateID string) ([]optimization.ExperimentResult, error) {
 	if s == nil || s.runtime == nil {
 		return nil, model.ErrUnavailable
 	}
 	return s.runtime.store.ExperimentResults(ctx, cycleID, candidateID)
-}
-
-// RecordManifest validates, digests and stores one benchmark manifest.
-func (s *OptimizationService) RecordManifest(ctx context.Context, cycleID string, m optimization.BenchmarkManifest) (optimization.BenchmarkManifest, error) {
-	if s == nil || s.runtime == nil {
-		return optimization.BenchmarkManifest{}, model.ErrUnavailable
-	}
-	if _, err := s.runtime.store.GetOptimizationCycle(ctx, cycleID); err != nil {
-		return optimization.BenchmarkManifest{}, err
-	}
-	built, err := optimization.NewManifest(m)
-	if err != nil {
-		return optimization.BenchmarkManifest{}, err
-	}
-	if err := s.runtime.store.AppendBenchmarkManifest(ctx, cycleID, built); err != nil {
-		return optimization.BenchmarkManifest{}, err
-	}
-	return s.runtime.store.GetBenchmarkManifest(ctx, built.ID)
 }
 
 // Manifests returns every benchmark manifest recorded against one cycle.

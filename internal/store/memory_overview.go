@@ -60,9 +60,8 @@ type MemoryReceiptSummary struct {
 	CreatedAt     time.Time
 }
 
-// MemoryMCPTools contains tool call counts from gateway logs and extreme MCP stats.
+// MemoryMCPTools contains extreme MCP memory stats.
 type MemoryMCPTools struct {
-	ToolCalls       map[string]int
 	CandidatesCount int
 	ProposalsCount  int
 }
@@ -206,27 +205,7 @@ func (s *Store) MemoryOverview(ctx context.Context, projectID string, limits Mem
 		return MemoryOverview{}, fmt.Errorf("iterate memory retrieval receipts: %w", err)
 	}
 
-	// 4. MCPTools: call counts grouped by tool name from mcp_gateway_logs
-	overview.MCPTools.ToolCalls = make(map[string]int)
-	mcpRows, err := s.db.QueryContext(ctx, `
-		SELECT m.tool, COUNT(*)
-		FROM mcp_gateway_logs m
-		INNER JOIN tasks t ON t.task_id = m.task_id
-		WHERE t.project_id = ?
-		GROUP BY m.tool
-	`, projectID)
-	if err == nil {
-		defer mcpRows.Close()
-		for mcpRows.Next() {
-			var tool string
-			var count int
-			if err := mcpRows.Scan(&tool, &count); err == nil {
-				overview.MCPTools.ToolCalls[tool] = count
-			}
-		}
-	}
-
-	// Candidates and proposals counts (edition-dependent: extreme vs community)
+	// 4. MCPTools: candidates and proposals counts (edition-dependent: extreme vs community)
 	candCount, propCount, err := s.extremeMCPOverviewCounts(ctx, projectID)
 	if err != nil {
 		return MemoryOverview{}, err

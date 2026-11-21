@@ -11,8 +11,35 @@ import (
 
 // boardV2On reports whether the Board home and run views are drawn by the
 // Board v2 renderer. MARSHAL_BOARD=classic keeps the classic Board for one
-// release.
-func boardV2On() bool {
+// release. It is read once, when the workspace starts (Run latches it); a
+// workspace that never ran, as in tests, reads the environment each time.
+func (w *Workspace) boardV2On() bool {
+	switch w.boardEdition.Load() {
+	case boardEditionV2:
+		return true
+	case boardEditionClassic:
+		return false
+	}
+	return boardV2Env()
+}
+
+// The latched Board editions; zero is not latched yet.
+const (
+	boardEditionV2      int32 = 1
+	boardEditionClassic int32 = 2
+)
+
+// latchBoardEdition reads MARSHAL_BOARD once, as the workspace starts.
+func (w *Workspace) latchBoardEdition() {
+	e := boardEditionClassic
+	if boardV2Env() {
+		e = boardEditionV2
+	}
+	w.boardEdition.Store(e)
+}
+
+// boardV2Env is MARSHAL_BOARD as boardV2On reads it.
+func boardV2Env() bool {
 	return !strings.EqualFold(strings.TrimSpace(os.Getenv("MARSHAL_BOARD")), "classic")
 }
 
@@ -31,8 +58,7 @@ func v2Theme(th *Theme) boardv2.Theme {
 	case ThemeHighContrast:
 		t.Color = boardv2.Color256
 	default:
-		ct := os.Getenv("COLORTERM")
-		if ct == "truecolor" || ct == "24bit" || os.Getenv("BOARD_TRUECOLOR") == "1" {
+		if truecolorTerm() {
 			t.Color = boardv2.ColorTrue
 		} else {
 			t.Color = boardv2.Color256
@@ -168,9 +194,11 @@ func (v boardVisual) v2HintKeys() ([]vm.Key, []string) {
 
 // v2Fits reports whether the v2 screens draw at this size: 80 columns or
 // more on its own, 60 or more beside the docked chat. Smaller keeps the
-// classic narrow Board.
+// classic Board: beside the chat at layout.MinTasks (56) to 59 columns its
+// compact split panes, below that (or under 80 on its own) the inbox and a
+// notice.
 func (w *Workspace) v2Fits(cols, rows int) bool {
-	if !boardV2On() || rows < boardv2.MinRows {
+	if !w.boardV2On() || rows < boardv2.MinRows {
 		return false
 	}
 	if w.boardLayoutMode() == layout.Split {

@@ -1,6 +1,6 @@
 # Installation
 
-Marshal is published as a standalone binary for Linux on x86_64 (`amd64`) and ARM64 (`arm64`).
+Marshal is published as a standalone binary for Linux and macOS on x86_64 (`amd64`) and ARM64 (`arm64`). On Windows, use WSL2. Governed workers (sandboxed, socket-confined) run on Linux amd64 only; on macOS and Linux arm64 Marshal plans, reviews and shows the architecture, and says plainly that it cannot run the governed workers there.
 
 Prefer to let your coding agent do it? Paste the [setup prompt](SETUP-PROMPT.md) into Claude Code or Codex.
 
@@ -13,7 +13,7 @@ Prefer to let your coding agent do it? Paste the [setup prompt](SETUP-PROMPT.md)
 
 Before installing Marshal, make sure your system has:
 
-- **Linux OS**: amd64 or arm64 architecture.
+- **Linux or macOS**: amd64 or arm64 (Apple Silicon) architecture. Governed workers need Linux amd64.
 - **Git**: Required for project initialization, branch management, and worktree isolation.
 - **tmux 3.3a or newer**: Required by `marshal` and `marshal tui` for window management and the docked chat.
 - **Provider CLIs**: Install and log into the AI agent tools you plan to use:

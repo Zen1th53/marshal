@@ -100,13 +100,3 @@ func (g *ConstraintGuard) ValidateHandoff(activeGoal model.GoalContract, handoff
 	return fmt.Errorf("%w: handoff digest %s != active digest %s",
 		ErrConstraintTampered, handoff.ConstraintsDigest, activeDigest)
 }
-
-// ValidateGoalRevisionTransition ensures an agent cannot delete or weaken operator constraints
-// when proposing a Goal revision.
-func (g *ConstraintGuard) ValidateGoalRevisionTransition(
-	oldGoal, newGoal model.GoalContract,
-	actor model.AuthorProvenance,
-	authoritySource string,
-) error {
-	return model.CanModifyGoal(authoritySource, oldGoal, newGoal)
-}

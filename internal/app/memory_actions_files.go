@@ -6,12 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/store"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
@@ -239,120 +237,4 @@ func (r *Runtime) parseMemoryImport(ctx context.Context, project, format string,
 	default:
 		return importer.ImportResult{}, model.ErrInvalid
 	}
-}
-
-func (r *Runtime) ReviewMemoryExport(ctx context.Context, path, format string) (MemoryFileBinding, error) {
-	_, _, _, err := r.memoryCommand(ctx, CommandEnvelope{ProjectID: r.ProjectIdentity(), SessionID: "review", TargetID: path, IdempotencyKey: "read-review"}, "memory.export", format)
-	if err != nil {
-		return MemoryFileBinding{}, err
-	}
-	data, err := r.memoryExportPayload(ctx, format)
-	if err != nil {
-		return MemoryFileBinding{}, err
-	}
-	root, rel, err := r.memoryFileRoot(path)
-	if err != nil {
-		return MemoryFileBinding{}, err
-	}
-	defer root.Close()
-	if _, err = root.Lstat(rel); err == nil {
-		return MemoryFileBinding{}, fmt.Errorf("%w: destination exists; choose a new path", model.ErrConflict)
-	} else if !os.IsNotExist(err) {
-		return MemoryFileBinding{}, err
-	}
-	sum := sha256.Sum256(data)
-	return MemoryFileBinding{Path: path, Digest: hex.EncodeToString(sum[:]), Size: int64(len(data))}, nil
-}
-func (r *Runtime) memoryExportPayload(ctx context.Context, format string) ([]byte, error) {
-	switch format {
-	case "learning":
-		service := r.Learning()
-		service.now = func() time.Time { return time.Unix(0, 0).UTC() }
-		bundle, err := service.Export(ctx, r.ProjectIdentity(), false)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(bundle)
-	case "portable":
-		records, err := r.store.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: r.ProjectID(), Scope: model.ScopeProject, ScopeID: r.ProjectID(), Limit: 129})
-		if err != nil {
-			return nil, err
-		}
-		if len(records) > 128 {
-			return nil, fmt.Errorf("%w: export exceeds 128-record bound", model.ErrInvalid)
-		}
-		safe := records[:0]
-		for _, rec := range records {
-			if validateMemorySelection(rec, r.ProjectID()) == nil && r.memoryService.revalidateMemoryRecord(ctx, rec, MemoryReconcileRequest{}) == nil {
-				safe = append(safe, rec)
-			}
-		}
-		manifest, err := portable.NewManager().ExportAt(ctx, safe, nil, time.Unix(0, 0).UTC())
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(manifest)
-	default:
-		return nil, model.ErrInvalid
-	}
-}
-
-func (r *Runtime) CommandExportMemory(ctx context.Context, e CommandEnvelope, req MemoryExportRequest) (MemoryFileBinding, error) {
-	var result MemoryFileBinding
-	ctx, _, command, err := r.memoryCommand(ctx, e, "memory.export", req)
-	if err != nil {
-		return result, err
-	}
-	data, err := r.memoryExportPayload(ctx, req.Format)
-	if err != nil {
-		return result, err
-	}
-	sum := sha256.Sum256(data)
-	if hex.EncodeToString(sum[:]) != req.ExpectedDigest || e.TargetID != req.Path {
-		return result, model.ErrConflict
-	}
-	if err = security.NewFirewall(security.FirewallConfig{}).ScanText(string(data)); err != nil {
-		return result, err
-	}
-	if _, found, err := r.store.MemoryCommandResult(ctx, command); err != nil {
-		return result, err
-	} else if found {
-		_, result, err = r.readMemoryActionFile(req.Path)
-		if err == nil && result.Digest != req.ExpectedDigest {
-			err = model.ErrConflict
-		}
-		return result, err
-	}
-	result, err = r.writeMemoryActionFile(req.Path, data)
-	if err != nil {
-		return result, err
-	}
-	if err = r.store.RecordCommandReceipt(ctx, command, e.ExpectedVersion+1); err != nil {
-		return result, fmt.Errorf("export exists but receipt failed: %w", err)
-	}
-	return result, nil
-}
-func (r *Runtime) writeMemoryActionFile(path string, data []byte) (MemoryFileBinding, error) {
-	var result MemoryFileBinding
-	root, rel, err := r.memoryFileRoot(path)
-	if err != nil {
-		return result, err
-	}
-	defer root.Close()
-	f, err := root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return result, err
-	}
-	if _, err = f.Write(data); err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err != nil {
-		return result, err
-	}
-	if closeErr != nil {
-		return result, closeErr
-	}
-	_, result, err = r.readMemoryActionFile(path)
-	return result, err
 }

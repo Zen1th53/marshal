@@ -114,8 +114,8 @@ func TestT79MigrationIdempotent(t *testing.T) {
 	}
 }
 
-// TestT79LegacyTablesPreservedAfterMigration verifies that the four legacy
-// memory tables still exist after v68 migration.
+// TestT79LegacyTablesPreservedAfterMigration verifies that the legacy
+// memory_records table still exists after v68 migration.
 func TestT79LegacyTablesPreservedAfterMigration(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()
@@ -125,9 +125,6 @@ func TestT79LegacyTablesPreservedAfterMigration(t *testing.T) {
 
 	for _, table := range []string{
 		"memory_records",
-		"persistent_agent_memory",
-		"decision_records",
-		"failure_memory_records",
 	} {
 		var n int
 		if err := st.db.QueryRowContext(ctx,

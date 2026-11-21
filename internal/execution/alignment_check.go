@@ -29,27 +29,6 @@ type AlignmentDecision struct {
 	At        time.Time `json:"at"`
 }
 
-// isHardAlignmentViolation reports whether an alignment check violation is hard.
-// Scope and explicit constraints are hard; semantic drift is a warning.
-func isHardAlignmentViolation(v alignment.Violation) bool {
-	if v.Severity == "WARNING" {
-		return false
-	}
-	switch v.Type {
-	case alignment.CheckScopeLock,
-		alignment.CheckBlastRadius,
-		alignment.CheckForbiddenOps,
-		alignment.CheckDeletionAsSatisfaction,
-		alignment.CheckValidationRemoval:
-		return true
-	case alignment.CheckGoalDrift,
-		alignment.CheckOutcomeMismatch:
-		return false
-	default:
-		return false
-	}
-}
-
 // worktreeChanges lists the files a task changed in its worktree, checked
 // against the recorded base commit, and which of them were deleted.
 func worktreeChanges(ctx context.Context, wtPath, baseCommit string) (changed, deleted []string, err error) {

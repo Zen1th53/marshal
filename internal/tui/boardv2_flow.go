@@ -127,27 +127,27 @@ func flowState(in flowIn) (string, vm.Tone) {
 		}
 		return "PAUSED", vm.ToneWarn
 	}
-	word, _ := in.v.runWord()
-	switch {
-	case word == "paused" && b.Run.UserPaused:
+	phase, _, _ := in.v.runWord()
+	switch phase {
+	case phaseUserPaused:
 		return "PAUSED", vm.ToneWarn
-	case word == "paused":
+	case phaseStopped:
 		return "PAUSED", vm.ToneBad
-	case word == "waiting for you":
+	case phaseWaiting:
 		return "YOUR TURN", vm.ToneWarn
-	case word == "reviewing":
+	case phaseReviewing:
 		return "REVIEWING", vm.ToneVio
-	case word == "done":
+	case phaseDone:
 		return "DONE", vm.ToneOK
-	case word == "merging":
+	case phaseMerging:
 		return "MERGING", vm.ToneInfo
-	case strings.HasPrefix(word, "final check"):
+	case phaseFinalCheck:
 		return "FINAL CHECK", vm.ToneInfo
-	case word == "planning":
+	case phasePlanning:
 		return "PLANNING", vm.ToneInfo
-	case word == "starting":
+	case phaseStarting:
 		return "STARTING", vm.ToneMuted
-	case strings.HasPrefix(word, "not running"):
+	case phaseNotRunning:
 		return "NOT RUNNING", vm.ToneWarn
 	}
 	return "RUNNING", vm.ToneOK
@@ -287,20 +287,20 @@ func ownerAsks(in flowIn) []ownerAsk {
 			add(true, g.kind+" "+g.title)
 		}
 	}
-	if v.guard != nil {
-		add(true, "changed files: keep or undo them")
-	}
-	if v.ask != nil {
-		add(true, "the Marshal asks: "+firstLine(v.ask.Question))
-	}
-	if v.req != nil {
-		add(true, "check the requirements")
-	}
-	if v.change != nil {
-		add(true, "confirm the plan change")
-	}
-	if v.next != nil {
-		add(true, "the run is done: choose what is next")
+	// The owner cards, in the decision card's order (ownerCardOrder).
+	for _, kind := range (ownerCardsOpen{guard: v.guard != nil, next: v.next != nil, ask: v.ask != nil, req: v.req != nil, change: v.change != nil}).kinds() {
+		switch kind {
+		case decisionGuard:
+			add(true, "changed files: keep or undo them")
+		case decisionNext:
+			add(true, "the run is done: choose what is next")
+		case decisionAsk:
+			add(true, "the Marshal asks: "+firstLine(v.ask.Question))
+		case decisionRequirements:
+			add(true, "check the requirements")
+		case decisionChange:
+			add(true, "confirm the plan change")
+		}
 	}
 	if v.quotaCardActive() {
 		add(false, "limits reached: choose how to continue")

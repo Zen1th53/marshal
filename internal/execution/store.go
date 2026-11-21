@@ -20,14 +20,6 @@ type RunStore interface {
 	ListRuns(ctx context.Context) ([]ExecutionRun, error)
 }
 
-// IntentStore defines storage and state tracking for two-phase durable intents.
-type IntentStore interface {
-	SaveIntent(ctx context.Context, intent ExecutionIntent) error
-	GetIntent(ctx context.Context, intentID string) (ExecutionIntent, error)
-	GetIntentByIdempotencyKey(ctx context.Context, runID, key string) (ExecutionIntent, error)
-	ListIntents(ctx context.Context, runID string) ([]ExecutionIntent, error)
-}
-
 // MemoryRunStore is an in-memory implementation of RunStore with CAS versioning.
 type MemoryRunStore struct {
 	mu   sync.RWMutex
@@ -231,68 +223,4 @@ func (f *FileRunStore) persistRun(run ExecutionRun) error {
 
 	destPath := filepath.Join(f.baseDir, run.RunID+".json")
 	return writeRunSnapshot(destPath, data)
-}
-
-// MemoryIntentStore implements an in-memory two-phase intent store.
-type MemoryIntentStore struct {
-	mu      sync.RWMutex
-	intents map[string]ExecutionIntent // intentID -> Intent
-}
-
-// NewMemoryIntentStore creates a new memory intent store.
-func NewMemoryIntentStore() *MemoryIntentStore {
-	return &MemoryIntentStore{
-		intents: make(map[string]ExecutionIntent),
-	}
-}
-
-func (s *MemoryIntentStore) SaveIntent(ctx context.Context, intent ExecutionIntent) error {
-	if intent.IntentID == "" {
-		return fmt.Errorf("%w: intent ID is empty", ErrRunInvalid)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	intent.UpdatedAt = time.Now().UTC()
-	if intent.CreatedAt.IsZero() {
-		intent.CreatedAt = intent.UpdatedAt
-	}
-	s.intents[intent.IntentID] = intent
-	return nil
-}
-
-func (s *MemoryIntentStore) GetIntent(ctx context.Context, intentID string) (ExecutionIntent, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	intent, exists := s.intents[intentID]
-	if !exists {
-		return ExecutionIntent{}, fmt.Errorf("intent %s not found", intentID)
-	}
-	return intent, nil
-}
-
-func (s *MemoryIntentStore) GetIntentByIdempotencyKey(ctx context.Context, runID, key string) (ExecutionIntent, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, intent := range s.intents {
-		if intent.RunID == runID && intent.IdempotencyKey == key {
-			return intent, nil
-		}
-	}
-	return ExecutionIntent{}, fmt.Errorf("intent for key %s not found in run %s", key, runID)
-}
-
-func (s *MemoryIntentStore) ListIntents(ctx context.Context, runID string) ([]ExecutionIntent, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var result []ExecutionIntent
-	for _, intent := range s.intents {
-		if intent.RunID == runID {
-			result = append(result, intent)
-		}
-	}
-	return result, nil
 }

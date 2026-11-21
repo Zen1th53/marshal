@@ -49,11 +49,6 @@ func (r *Runtime) preflightRequiredProcess05Context(ctx context.Context, task ex
 
 // The complete typed provider envelope is measured after rendering. Every
 // essential remains whole; optional derived source hints are omitted first.
-func (r *Runtime) prepareRequiredProcess05Request(ctx context.Context, task execution.TaskExecution, agent, provider, modelName string, request *adapter.Request, optional string) error {
-	_, _, err := r.prepareRequiredProcess05Admission(ctx, task, agent, provider, modelName, request, optional)
-	return err
-}
-
 func (r *Runtime) prepareWatchedRequiredProcess05Request(ctx context.Context, task execution.TaskExecution, agent, provider, modelName string, request *adapter.Request, optional string) (context.Context, func() error, error) {
 	receipt, admission, err := r.prepareRequiredProcess05Admission(ctx, task, agent, provider, modelName, request, optional)
 	if err != nil {

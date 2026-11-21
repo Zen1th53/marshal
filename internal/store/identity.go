@@ -177,62 +177,6 @@ func (s *Store) UpdateAgent(ctx context.Context, agent model.Agent, expectedRevi
 	return s.GetAgent(ctx, agent.ID)
 }
 
-func (s *Store) DeleteAgent(ctx context.Context, agentID string, expectedRevision int64) error {
-	if agentID == "" {
-		return fmt.Errorf("%w: agent ID is required", model.ErrInvalid)
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin delete agent: %w", err)
-	}
-	defer tx.Rollback()
-
-	var currentRevision int64
-	var activeSessions int
-	err = tx.QueryRowContext(ctx, `SELECT revision FROM agents WHERE agent_id = ?`, agentID).Scan(&currentRevision)
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w: agent %s", model.ErrNotFound, agentID)
-	}
-	if err != nil {
-		return fmt.Errorf("read agent for deletion: %w", err)
-	}
-	if expectedRevision >= 0 && currentRevision != expectedRevision {
-		return fmt.Errorf("%w: agent revision conflict (current=%d, expected=%d)", model.ErrConflict, currentRevision, expectedRevision)
-	}
-
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE agent_id = ? AND status = 'active'`, agentID).Scan(&activeSessions); err != nil {
-		return fmt.Errorf("check active sessions: %w", err)
-	}
-	if activeSessions > 0 {
-		return fmt.Errorf("%w: cannot delete agent with %d active sessions", model.ErrConflict, activeSessions)
-	}
-
-	var activeTasks int
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM tasks WHERE owner_agent_id = ? AND status IN ('claimed', 'working')`, agentID).Scan(&activeTasks); err != nil {
-		return fmt.Errorf("check active tasks: %w", err)
-	}
-	if activeTasks > 0 {
-		return fmt.Errorf("%w: cannot delete agent assigned to %d active tasks", model.ErrConflict, activeTasks)
-	}
-
-	result, err := tx.ExecContext(ctx, `DELETE FROM agents WHERE agent_id = ? AND revision = ?`, agentID, currentRevision)
-	if err != nil {
-		return fmt.Errorf("delete agent: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check delete rows: %w", err)
-	}
-	if rows != 1 {
-		return fmt.Errorf("%w: agent delete conflict", model.ErrConflict)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete agent: %w", err)
-	}
-	return nil
-}
-
 func (s *Store) StartSession(ctx context.Context, start model.SessionStart) (model.Session, error) {
 	if start.ID == "" || start.AgentID == "" || start.ProjectID == "" {
 		return model.Session{}, fmt.Errorf("%w: incomplete session identity", model.ErrInvalid)

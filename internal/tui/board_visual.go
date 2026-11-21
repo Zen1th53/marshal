@@ -177,11 +177,19 @@ func (v boardVisual) code(name string, background bool) string {
 		}
 		return ""
 	}
-	truecolor := os.Getenv("COLORTERM") == "truecolor" || os.Getenv("COLORTERM") == "24bit" || os.Getenv("BOARD_TRUECOLOR") == "1"
+	truecolor := truecolorTerm()
 	if c, ok := boardCodes[boardCodeKey{name, background, truecolor}]; ok {
 		return c
 	}
 	return boardColorCode(name, background, truecolor)
+}
+
+// truecolorTerm reports whether the terminal takes 24-bit colour:
+// COLORTERM=truecolor or 24bit, or BOARD_TRUECOLOR=1 to force it. Both
+// Boards read it on each paint.
+func truecolorTerm() bool {
+	ct := os.Getenv("COLORTERM")
+	return ct == "truecolor" || ct == "24bit" || os.Getenv("BOARD_TRUECOLOR") == "1"
 }
 
 // boardCodeKey names one escape code of the Board's palette.
@@ -974,7 +982,7 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 		// No worker runs while the merged result is checked again: the
 		// lanes say what the run waits for, where a narrow header has no
 		// room for it.
-		if word, _ := v.runWord(); strings.Contains(word, ": ") {
+		if phase, word, _ := v.runWord(); phase == phaseFinalCheck {
 			summary += " · " + word
 		}
 	}

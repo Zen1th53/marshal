@@ -102,33 +102,3 @@ func (s *Store) FetchUnprocessedMemoryOutbox(ctx context.Context, projectID stri
 	}
 	return events, nil
 }
-
-// AckMemoryOutbox marks outbox events as processed.
-func (s *Store) AckMemoryOutbox(ctx context.Context, eventIDs []string) error {
-	if len(eventIDs) == 0 {
-		return nil
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin ack outbox: %w", err)
-	}
-	defer tx.Rollback()
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	stmt, err := tx.PrepareContext(ctx, `UPDATE memory_outbox SET processed_at = ? WHERE event_id = ?`)
-	if err != nil {
-		return fmt.Errorf("prepare ack outbox: %w", err)
-	}
-	defer stmt.Close()
-
-	for _, id := range eventIDs {
-		if _, err := stmt.ExecContext(ctx, now, id); err != nil {
-			return fmt.Errorf("ack outbox event %s: %w", id, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit ack outbox: %w", err)
-	}
-	return nil
-}

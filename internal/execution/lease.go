@@ -234,55 +234,6 @@ func (e *Engine) RenewWorkerMutationLease(task TaskExecution) error {
 	return e.leases.RenewLeaseBounded(task.LeaseID, workerLeaseOwner(task), e.workerLeaseTTL(), WorkerLeaseMaxLifetime, nowUTC())
 }
 
-// TakeoverLease transfers ownership of a stale or failed lease to a new agent.
-func (lm *LeaseManager) TakeoverLease(taskID, newAgentID, role, reason string, ttl time.Duration, now time.Time) (*Lease, error) {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
-	var previous *Lease
-	for _, l := range lm.leases {
-		if l.TaskID == taskID && (l.Status == LeaseActive || l.Status == LeaseExpired) {
-			previous = l
-			break
-		}
-	}
-
-	if previous == nil {
-		return nil, fmt.Errorf("%w: no lease found for task %s to takeover", ErrRunNotFound, taskID)
-	}
-
-	// Can only takeover if previous is expired or explicitly abandoned
-	if previous.Status == LeaseActive && now.Before(previous.ExpiresAt) {
-		return nil, fmt.Errorf("%w: cannot takeover active unexpired lease %s (held by %s until %v)",
-			ErrLeaseConflict, previous.LeaseID, previous.AgentID, previous.ExpiresAt)
-	}
-
-	previous.Status = LeaseRevoked
-
-	if ttl <= 0 {
-		ttl = 30 * time.Second
-	}
-	newLeaseID := fmt.Sprintf("lease-%s-%s-%d", taskID, newAgentID, now.UnixNano())
-	newLease := &Lease{
-		LeaseID:            newLeaseID,
-		RunID:              previous.RunID,
-		TaskID:             taskID,
-		AgentID:            newAgentID,
-		Role:               role,
-		Status:             LeaseActive,
-		AcquiredAt:         now,
-		ExpiresAt:          now.Add(ttl),
-		HeartbeatAt:        now,
-		ScopedResources:    append([]string(nil), previous.ScopedResources...),
-		MutationScope:      previous.MutationScope,
-		WorktreePath:       previous.WorktreePath,
-		TakeoverProvenance: fmt.Sprintf("Takeover from %s (lease %s) at %v: %s", previous.AgentID, previous.LeaseID, now, reason),
-	}
-
-	lm.leases[newLeaseID] = newLease
-	return newLease, nil
-}
-
 // ReleaseLease voluntarily releases an active lease.
 func (lm *LeaseManager) ReleaseLease(leaseID, agentID string, now time.Time) error {
 	lm.mu.Lock()

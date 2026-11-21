@@ -83,28 +83,3 @@ func (d *EvidenceDiscipline) ValidateEvidenceSuitability(claim model.Claim, ev m
 
 	return nil
 }
-
-// CanVerifyClaim checks whether an evidence set satisfies the requirements to transition
-// a claim into VERIFIED state according to epistemic policy.
-func (d *EvidenceDiscipline) CanVerifyClaim(claim model.Claim, evidenceList []model.EvidenceRef) (bool, error) {
-	if len(evidenceList) == 0 {
-		return false, nil
-	}
-
-	hasDeterministic := false
-	for _, ev := range evidenceList {
-		if err := d.ValidateEvidenceSuitability(claim, ev); err != nil {
-			return false, err
-		}
-		if ev.IsDeterministic {
-			hasDeterministic = true
-		}
-	}
-
-	// For CRITICAL_BLOCKER and CRITICAL_FEATURE, at least one deterministic evidence is required
-	if claim.Criticality.IsCritical() && !hasDeterministic {
-		return false, nil
-	}
-
-	return hasDeterministic, nil
-}
