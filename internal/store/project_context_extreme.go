@@ -472,7 +472,7 @@ func (s *Store) commitMCPProjectContractDecision(ctx context.Context, req permis
 		return projectcontext.Contract{}, err
 	}
 	if ownerInstruction {
-		if _, err = consumeProjectContractInstructionTx(ctx, tx, req.Scope, decision.ID, sub, contractDigest); err != nil {
+		if _, err = consumeProjectContractInstructionTx(ctx, tx, req.Scope, req.SourceLaunch, decision.ID, sub, contractDigest); err != nil {
 			return projectcontext.Contract{}, err
 		}
 	}

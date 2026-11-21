@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -119,6 +120,12 @@ func (r *Runtime) ReconcileOwnerAcceptedProjectContract(ctx context.Context) (bo
 	_, applied, err := r.store.ApplyOwnerAcceptedProjectContract(ctx, r.ProjectContractBinding(), r.projectContractOwnerAudience, time.Now().UTC(), "owner browser acceptance recorded but not applied; applied when the runtime opened")
 	if err == nil && applied {
 		r.recordArchitectureCommit(ctx, r.ProjectRoot(), "", "accepted", "")
+	}
+	if err != nil {
+		// Nothing was applied; the owner cannot act on a refusal nobody
+		// sees, so the reason is kept.
+		now := time.Now().UTC()
+		_ = r.store.AppendEvent(ctx, nil, model.Event{ID: fmt.Sprintf("project-contract-owner-accept-not-applied-%d", now.UnixNano()), Type: "PROJECT_CONTRACT_OWNER_ACCEPTANCE_NOT_APPLIED", ProjectID: r.ProjectID(), Timestamp: now, Data: map[string]any{"error": err.Error()}})
 	}
 	return applied, err
 }

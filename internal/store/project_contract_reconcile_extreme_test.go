@@ -203,3 +203,28 @@ func TestProjectContractReconcileNeedsBrowserAccept(t *testing.T) {
 		t.Fatalf("accepted without a browser Accept: %v", err)
 	}
 }
+
+// Only a browser Accept crosses launches: a chat instruction stays bound to
+// the launch whose draft it was recorded for.
+func TestProjectContractChatInstructionDoesNotCrossLaunches(t *testing.T) {
+	s := projectStore(t)
+	if err := s.InitMCPProposals(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	c, a, now := contextStoreDraft(t, s, nil)
+	admitLaunchContract(t, s, c, "launch-1", "first")
+	if _, _, err := s.RecordProjectContractInstruction(t.Context(), c.Project, "chat", "launch-1", "operator:chat", BrowserAcceptanceInstruction, time.Now().UTC().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ExpireMCPLaunch(t.Context(), c.Project.StorageID, "launch-1"); err != nil {
+		t.Fatal(err)
+	}
+	again := admitLaunchContract(t, s, c, "launch-2", "again")
+	if _, found, err := s.ReadPendingProjectContract(t.Context(), c.Project, "launch-2"); err != nil || !found {
+		t.Fatalf("a chat instruction of another launch hid the owner gate: %v %v", found, err)
+	}
+	req := admitLaunchDecision(t, s, c, again, true, "again")
+	if _, err := s.CommitMCPProjectContractDecisionOnInstruction(t.Context(), req, true, a, now, contextAudit(req, now)); !errors.Is(err, model.ErrPolicyDenied) {
+		t.Fatalf("a chat instruction crossed launches: %v", err)
+	}
+}
