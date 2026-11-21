@@ -20,6 +20,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/api"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/buildversion"
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/legal"
@@ -49,6 +50,7 @@ func init() {
 	// win, and the defaults are kept when no stamp exists.
 	Version, Commit, BuildDate = fillBuildIdentity(Version, Commit, BuildDate, currentVCSStamp())
 	tui.BuildVersion = Version
+	buildversion.Version = Version
 }
 
 const usage = `Usage: marshal [--json] <command> [arguments]
