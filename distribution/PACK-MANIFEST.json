@@ -3776,13 +3776,13 @@
     },
     {
       "path": "internal/app/provider_dialect_live.go",
-      "sha256": "2056de5ad62e240ff806a111ae8ea28ab1a8fdac04c6dd17c4506ad2e31af6b8",
-      "bytes": 11680
+      "sha256": "bf8473cfd889e7754cba360838aab5a734a86c8d06c27598a7ee66fcee98249b",
+      "bytes": 11905
     },
     {
       "path": "internal/app/provider_dialect_live_test.go",
-      "sha256": "28ee6e8561b87121f6be31d1c65f0405956fb96c192a0339de61df0ffa51c6d7",
-      "bytes": 7518
+      "sha256": "866025e716ac3f079211de88152e54e417be09cca14da560f356f81ee92a555f",
+      "bytes": 7642
     },
     {
       "path": "internal/app/provider_dialect_test.go",

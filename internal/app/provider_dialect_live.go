@@ -149,8 +149,11 @@ func readHelpPages(program string, help func(path ...string) string, needs map[s
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	var mu sync.Mutex
 	for depth := 1; depth <= deepest; depth++ {
+		// Pages of this depth are collected apart and merged after the
+		// wait: the loop reads parents from pages while the reads run.
+		var mu sync.Mutex
+		found := map[string]*helpPage{}
 		var wg sync.WaitGroup
 		for _, key := range keys {
 			path := paths[key]
@@ -169,11 +172,14 @@ func readHelpPages(program string, help func(path ...string) string, needs map[s
 					return
 				}
 				mu.Lock()
-				pages[key] = page
+				found[key] = page
 				mu.Unlock()
 			}(key, path)
 		}
 		wg.Wait()
+		for key, page := range found {
+			pages[key] = page
+		}
 	}
 	return pages
 }
