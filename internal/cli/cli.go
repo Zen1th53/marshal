@@ -1322,7 +1322,11 @@ func isLoopbackAddr(addr string) bool {
 		host = addr
 	}
 	host = strings.TrimSpace(strings.ToLower(host))
-	if host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1" {
+	// An empty host (":8080") binds every interface, so it is not loopback.
+	if host == "" {
+		return false
+	}
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true
 	}
 	ip := net.ParseIP(host)

@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
+	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -130,6 +131,57 @@ func TestFlowActivityFromRunEvents(t *testing.T) {
 	got := flowActivity(flowWith(run, evs, nil))
 	if len(got) != 2 || got[0].Kind != "merge" || got[0].Text != "T01 merged" || got[1].Kind != "plan" || !strings.HasPrefix(got[1].Text, "plan approved") {
 		t.Fatalf("activity = %+v", got)
+	}
+}
+
+// Run events come back from the store in UTC and notes are stamped in local
+// time. Activity orders them by instant, not by wall clock, and the rendered
+// rows show local time throughout.
+func TestFlowActivityMixedZonesOrderAndLocalClock(t *testing.T) {
+	plus5 := time.FixedZone("UTC+5", 5*3600)
+	prev := time.Local
+	time.Local = plus5
+	t.Cleanup(func() { time.Local = prev })
+	utc := func(h, m int) time.Time { return time.Date(2026, 11, 21, h, m, 0, 0, time.UTC) }
+	local := func(h, m int) time.Time { return time.Date(2026, 11, 21, h, m, 0, 0, plus5) }
+
+	run := flowRun(marshal.Dispatching, 3, 0, 3)
+	evs := []events.Event{
+		{Sequence: 1, RunID: "R-1", TaskID: "T02", Type: events.EventTypeMarshalEscalated, At: utc(6, 53)},
+		{Sequence: 2, RunID: "R-1", TaskID: "T03", Type: events.EventTypeMarshalTaskDispatched, At: utc(6, 54)},
+		{Sequence: 3, RunID: "R-1", TaskID: "T03", Type: events.EventTypeMarshalTaskAccepted, At: utc(6, 57)},
+	}
+	in := flowWith(run, evs, nil)
+	var n boardNotes
+	n.fold("Task T03 completed", false, local(11, 55))
+	n.fold("Marshal decision requested", false, local(11, 56))
+	n.fold("Owner note", false, local(11, 52))
+	in.notes = n.folded
+	got := flowActivity(in)
+	wantText := []string{"T03 accepted", "Marshal decision requested", "Task T03 completed", "T03 started", "T02 stuck", "Owner note"}
+	if len(got) != len(wantText) {
+		t.Fatalf("activity = %+v, want %d rows", got, len(wantText))
+	}
+	for i, w := range wantText {
+		if !strings.HasPrefix(got[i].Text, w) {
+			t.Fatalf("row %d = %q, want %q; rows %+v", i, got[i].Text, w, got)
+		}
+		if i > 0 && got[i].Last.After(got[i-1].Last) {
+			t.Fatalf("row %d (%v) is newer than row %d (%v)", i, got[i].Last, i-1, got[i-1].Last)
+		}
+	}
+	b := vm.Board{Screen: vm.ScreenRunning, Activity: got}
+	screen := strings.Join(boardv2.Render(b, 132, 40, boardv2.Theme{Color: boardv2.ColorNone, Unicode: true}), "\n")
+	last := -1
+	for _, w := range []string{"11:57  review", "11:56  note", "11:55  note", "11:54  plan", "11:53  error", "11:52  note"} {
+		i := strings.Index(screen, w)
+		if i < 0 || i < last {
+			t.Fatalf("%q missing or out of order:\n%s", w, screen)
+		}
+		last = i
+	}
+	if strings.Contains(screen, "06:5") {
+		t.Fatalf("Activity shows a UTC clock:\n%s", screen)
 	}
 }
 
