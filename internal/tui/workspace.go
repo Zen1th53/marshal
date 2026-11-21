@@ -177,6 +177,8 @@ type Workspace struct {
 	commandWG             sync.WaitGroup
 	commandCancelMu       sync.Mutex
 	commandCancel         context.CancelFunc
+	commandQueueMu        sync.Mutex      // guards commandQueue and the hand-off of commandBusy
+	commandQueue          []queuedCommand // owner commands waiting for the ordinary lane
 	completionProbeBusy   atomic.Bool
 	completionProbeTime   time.Time
 	completionSkillsReady bool
@@ -1150,7 +1152,14 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 	// operator is still working in.
 	if event.Type == KeyCtrlC {
 		if w.commandBusy.Load() {
+			dropped := w.clearCommandQueue()
 			w.cancelCommand()
+			switch {
+			case dropped == 1:
+				w.RecordActivity("Cancelled the running command; 1 queued command was dropped.")
+			case dropped > 1:
+				w.RecordActivity(fmt.Sprintf("Cancelled the running command; %d queued commands were dropped.", dropped))
+			}
 			return false
 		}
 		if w.palette.IsOpen() {
@@ -1625,34 +1634,148 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 // command in flight at a time, binds its cancellation so Ctrl+C stops it,
 // refreshes the state after it and records its result under label. runCommand
 // uses it for a typed command; a Board key that runs a command calls it
-// directly.
+// directly. A command that arrives while another runs waits in a bounded
+// queue and runs, in order, when the lane frees (see queueCommand).
 func (w *Workspace) runCommandFunc(ctx context.Context, label string, do func(context.Context) (string, error)) {
 	if !w.commandBusy.CompareAndSwap(false, true) {
-		w.RecordActivity("A command is still running; Ctrl+C cancels it.")
+		w.queueCommand(ctx, label, do)
 		return
 	}
-	commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	w.startCommand(ctx, label, do)
+}
+
+// startCommand runs do on the lane the caller already holds (commandBusy is
+// true). When it ends, the next queued command takes the lane; only when the
+// queue is empty does the lane free and the Board's own queued work apply.
+func (w *Workspace) startCommand(parent context.Context, label string, do func(context.Context) (string, error)) {
+	commandCtx, cancel := context.WithTimeout(parent, 2*time.Minute)
 	w.commandCancelMu.Lock()
 	w.commandCancel = cancel
 	w.commandCancelMu.Unlock()
-	w.workers.start(commandCtx, &w.commandWG, func(ctx context.Context) {
-		commandCtx = ctx
+	started := w.workers.start(commandCtx, &w.commandWG, func(ctx context.Context) {
 		defer cancel()
-		resp, err := do(commandCtx)
-		_ = w.RefreshState(commandCtx)
+		resp, err := do(ctx)
+		_ = w.RefreshState(ctx)
 		if !w.postUI(ctx, func() {
 			w.recordCommandResult(label, resp, err)
-			w.commandBusy.Store(false)
+			if next, ok := w.nextQueuedCommand(); ok {
+				w.startCommand(next.ctx, next.label, next.do)
+				return
+			}
 			// Work queued while this command ran applies now: the next task
 			// move first (it takes the lane), then the Marshal switch, which
-			// waits again if a move just started.
-			w.drainTaskMoves(ctx)
-			queuedStopDrain(w, ctx)
-			w.applyQueuedMarshal(ctx)
+			// waits again if a move just started. parent, not ctx: the
+			// command's own context ends as soon as its worker returns.
+			w.drainTaskMoves(parent)
+			queuedStopDrain(w, parent)
+			w.applyQueuedMarshal(parent)
 		}) {
-			w.commandBusy.Store(false)
+			// The command's context ended (Ctrl+C, its deadline) before the
+			// loop took its result. Commands queued behind it still run:
+			// Ctrl+C has already cleared the queue it means to clear.
+			w.releaseCommandLane()
 		}
 	})
+	if !started {
+		// The workspace is closing: nothing queued can run either.
+		cancel()
+		w.dropQueueAndFreeLane()
+	}
+}
+
+// commandQueueLimit bounds the owner commands that may wait for the lane.
+const commandQueueLimit = 8
+
+// queuedCommand is one owner command waiting for the ordinary lane, with the
+// context it was issued under.
+type queuedCommand struct {
+	ctx   context.Context
+	label string
+	do    func(context.Context) (string, error)
+}
+
+// queueCommand keeps an owner command that arrived while another runs, so it
+// runs after it instead of being dropped (a /marshal approve-task typed
+// while /marshal use-plan was finishing used to vanish). Never two at once:
+// the lane passes from one command to the next under commandQueueMu.
+func (w *Workspace) queueCommand(ctx context.Context, label string, do func(context.Context) (string, error)) {
+	w.commandQueueMu.Lock()
+	if w.commandBusy.CompareAndSwap(false, true) {
+		// The lane freed between the caller's check and this lock.
+		w.commandQueueMu.Unlock()
+		w.startCommand(ctx, label, do)
+		return
+	}
+	if n := len(w.commandQueue); n > 0 && w.commandQueue[n-1].label == label {
+		// A repeated key or line (Enter pressed again on a retry) is
+		// already waiting; running it twice would only repeat it.
+		w.commandQueueMu.Unlock()
+		w.RecordActivity(fmt.Sprintf("%s is already queued.", w.redactedLabel(label)))
+		return
+	}
+	if len(w.commandQueue) >= commandQueueLimit {
+		w.commandQueueMu.Unlock()
+		w.RecordActivity(fmt.Sprintf("%s was not run: %d commands are already waiting. Wait for them, or press Ctrl+C to cancel the running command and clear the queue.", w.redactedLabel(label), commandQueueLimit))
+		return
+	}
+	w.commandQueue = append(w.commandQueue, queuedCommand{ctx: ctx, label: label, do: do})
+	waiting := len(w.commandQueue)
+	w.commandQueueMu.Unlock()
+	ahead := "the running command finishes"
+	if waiting > 1 {
+		ahead = fmt.Sprintf("the running command and %d queued before it finish", waiting-1)
+	}
+	w.RecordActivity(fmt.Sprintf("Queued %s; it runs when %s. Ctrl+C cancels and clears the queue.", w.redactedLabel(label), ahead))
+}
+
+// nextQueuedCommand takes the next waiting command, keeping the lane busy
+// for it; with none waiting it frees the lane.
+func (w *Workspace) nextQueuedCommand() (queuedCommand, bool) {
+	w.commandQueueMu.Lock()
+	defer w.commandQueueMu.Unlock()
+	for len(w.commandQueue) > 0 {
+		next := w.commandQueue[0]
+		w.commandQueue[0] = queuedCommand{}
+		w.commandQueue = w.commandQueue[1:]
+		if next.ctx.Err() == nil {
+			return next, true
+		}
+	}
+	w.commandQueue = nil
+	w.commandBusy.Store(false)
+	return queuedCommand{}, false
+}
+
+// clearCommandQueue drops every waiting command and reports how many.
+func (w *Workspace) clearCommandQueue() int {
+	w.commandQueueMu.Lock()
+	defer w.commandQueueMu.Unlock()
+	n := len(w.commandQueue)
+	w.commandQueue = nil
+	return n
+}
+
+// dropQueueAndFreeLane drops every waiting command and frees the lane, in
+// one step so no command can queue in between and be stranded.
+func (w *Workspace) dropQueueAndFreeLane() {
+	w.commandQueueMu.Lock()
+	defer w.commandQueueMu.Unlock()
+	w.commandQueue = nil
+	w.commandBusy.Store(false)
+}
+
+// releaseCommandLane ends a command that held the lane outside startCommand
+// (the Board's stop action): a queued command takes the lane, or it frees.
+func (w *Workspace) releaseCommandLane() {
+	if next, ok := w.nextQueuedCommand(); ok {
+		w.startCommand(next.ctx, next.label, next.do)
+	}
+}
+
+func (w *Workspace) redactedLabel(label string) string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return RedactContent(label, w.state.KnownSecrets)
 }
 
 func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
