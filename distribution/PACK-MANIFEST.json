@@ -3175,6 +3175,11 @@
       "bytes": 14969
     },
     {
+      "path": "internal/app/memory_operator_runtime_test.go",
+      "sha256": "58e13f9793b2eec981447a2246f9811f5967365fe83a2b89fce66588302161e4",
+      "bytes": 1538
+    },
+    {
       "path": "internal/app/memory_recall_candidates_default.go",
       "sha256": "1c3371d5586ae3cc7ad9d637d9e745511995f271e585bd108db49a865f75d848",
       "bytes": 294
@@ -3195,19 +3200,9 @@
       "bytes": 5839
     },
     {
-      "path": "internal/app/memory_restore.go",
-      "sha256": "b124eead0ba691e9d755e3f113948b5839eb7de22d9fb03d37d419bd922fd33b",
-      "bytes": 10408
-    },
-    {
       "path": "internal/app/memory_restore_references.go",
       "sha256": "0556840bcb514a57598abd3c9a71c171f73a78f0091fbf8d7fb1b1c91e59f6e2",
       "bytes": 3766
-    },
-    {
-      "path": "internal/app/memory_restore_test.go",
-      "sha256": "0fa4ab311fe64cab9c6d887aa29ddb30ca1235126e8d1e163a7ebc73cb3284dd",
-      "bytes": 7575
     },
     {
       "path": "internal/app/memory_review_default.go",
@@ -3238,16 +3233,6 @@
       "path": "internal/app/memory_scale_100k_test.go",
       "sha256": "c62ac24993da9cc237f48fb41d40c5c03833bf2bac456f0e694b38f1a0273e09",
       "bytes": 3734
-    },
-    {
-      "path": "internal/app/memory_snapshot_extreme.go",
-      "sha256": "7c44aeccbf1963435ee86f72d622ed1033bb83724c2fad8cc5f772959087f44d",
-      "bytes": 8198
-    },
-    {
-      "path": "internal/app/memory_snapshot_extreme_test.go",
-      "sha256": "04cc08ab8342daaa802eee48d6aa985c0738fe61d402c771ec523bafb23379a0",
-      "bytes": 10754
     },
     {
       "path": "internal/app/memory_value_test.go",
@@ -8546,8 +8531,8 @@
     },
     {
       "path": "internal/model/memory_restore.go",
-      "sha256": "e0c23abad1e53c1601c4febf046e628387ef6ae6ab1175df1b5aecb7b9c07257",
-      "bytes": 1998
+      "sha256": "6aebc2f307edf90b23590f5bf7eee1e8af3da1cc2b1005f7a7c3091c87dbed91",
+      "bytes": 222
     },
     {
       "path": "internal/model/memory_t78_test.go",
@@ -10930,16 +10915,6 @@
       "bytes": 3293
     },
     {
-      "path": "internal/store/memory_restore.go",
-      "sha256": "fe4b3d67e412d78683a0507eb56af88f5f90a4daaca880d09b7178c9a16d44ad",
-      "bytes": 9684
-    },
-    {
-      "path": "internal/store/memory_restore_test.go",
-      "sha256": "9227ef5baf4c40fad163d80d5b0627be6fcf4b5d16e164a5c103920de2aa4134",
-      "bytes": 4989
-    },
-    {
       "path": "internal/store/memory_review_extreme.go",
       "sha256": "fea0ad63756a2297298c9ff33fa50b2f2d102422aad52d650231876c25b35455",
       "bytes": 3883
@@ -10980,24 +10955,14 @@
       "bytes": 751
     },
     {
-      "path": "internal/store/memory_snapshot_extreme.go",
-      "sha256": "b87721a7a9d8f383cf6314f694915d559c87d2e0c905d2b460d46891aaad845f",
-      "bytes": 22978
-    },
-    {
-      "path": "internal/store/memory_snapshot_extreme_test.go",
-      "sha256": "8bd5ccddfdb5f29211878f73d331c1271f302713bd4a3d502a67e91adc009e7b",
-      "bytes": 17425
-    },
-    {
       "path": "internal/store/memory_snapshot_guard_upgrade_extreme.go",
       "sha256": "8b05b0a8ea4216b1bbbcb5d8871ea153a02fb636aaa0a86d56ad91c8b0ca6c7b",
       "bytes": 400
     },
     {
       "path": "internal/store/memory_snapshot_guard_upgrade_extreme_test.go",
-      "sha256": "424f4265fcf8718a346122576aece8b3f74aa556f15b91e1747dccc09a5af6a2",
-      "bytes": 2971
+      "sha256": "e407c8acd96c7e17214df6c021d3051bf0c6114edac2d9e26a694261c32d71b6",
+      "bytes": 4729
     },
     {
       "path": "internal/store/memory_snapshot_inventory_extreme_test.go",
@@ -11041,8 +11006,8 @@
     },
     {
       "path": "internal/store/migration_memory_restore.go",
-      "sha256": "c8b329c6456fecf1a59fa23507e44bd9ab8a6f424d6b2f747ab14c28348be082",
-      "bytes": 1731
+      "sha256": "0a9090e272447ef03bf8263bb00feed5dcdba63debc84acdac1eaad2d2028778",
+      "bytes": 1408
     },
     {
       "path": "internal/store/migration_session_recovery.go",
@@ -17291,8 +17256,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "765d5b00fb325616d6f5d1bbc4ef1cb23069375060574b1f3feec9b4921fa3bd",
-      "bytes": 448087
+      "sha256": "ad2e9b3b14600306b5474783e45477872e1a86e7391fa9b6bdfbe8808eabe501",
+      "bytes": 444994
     },
     {
       "path": "tools/extreme/prq/main_default.go",
