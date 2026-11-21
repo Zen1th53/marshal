@@ -117,6 +117,11 @@ func (r *Runtime) ReconcileOwnerAcceptedProjectContract(ctx context.Context) (bo
 	if r == nil || r.store == nil {
 		return false, nil
 	}
+	// Nothing to do on almost every open: decide that from the storage ID
+	// alone, before the project identity is read.
+	if waiting, err := r.store.HasUnconsumedBrowserAcceptance(ctx, r.ProjectID()); err != nil || !waiting {
+		return false, err
+	}
 	_, applied, err := r.store.ApplyOwnerAcceptedProjectContract(ctx, r.ProjectContractBinding(), r.projectContractOwnerAudience, time.Now().UTC(), "owner browser acceptance recorded but not applied; applied when the runtime opened")
 	if err == nil && applied {
 		r.recordArchitectureCommit(ctx, r.ProjectRoot(), "", "accepted", "")
