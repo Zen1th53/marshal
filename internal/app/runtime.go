@@ -2022,7 +2022,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if bwrapPath, lookupErr := trustedBwrapPath(); lookupErr == nil && !unconfined {
 		backend := sandbox.NewBwrap(bwrapPath)
 		capability := backend.Probe(ctx)
-		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, false)
+		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed)
 		if chooseErr != nil {
 			if !sandbox.UnconfinedFallbackAllowed() {
 				return nil, "", chooseErr
@@ -2155,7 +2155,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				return err
 			}, r.socketObserver(proxySocket))
 		}
-	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, false); err != nil && !unconfined {
+	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed); err != nil && !unconfined {
 		if !sandbox.UnconfinedFallbackAllowed() {
 			return nil, "", err
 		}

@@ -266,16 +266,14 @@ func pathWithin(root, candidate string) bool {
 	return err == nil && relative != ".." && relative != "." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, networkAllowed bool, allowProcessOnlyFallback bool) (model.IsolationCapability, error) {
+func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, networkAllowed bool) (model.IsolationCapability, error) {
 	if capability.Available && capability.Level == model.IsolationBwrap {
 		capability.Network = networkAllowed
 		return capability, nil
 	}
-	// Process-only execution cannot enforce filesystem or network policy. The
-	// legacy opt-in is retained in the API for compatibility but deliberately
-	// cannot weaken the isolation invariant.
+	// Process-only execution cannot enforce filesystem or network policy, so
+	// no risk class may fall back to it.
 	_ = risk
-	_ = allowProcessOnlyFallback
 	blocked := model.IsolationCapability{
 		Level: model.IsolationBlocked, Available: false, Network: networkAllowed,
 		Reason: "required isolation cannot be enforced (bubblewrap unavailable and process-only fallback not explicitly permitted)",

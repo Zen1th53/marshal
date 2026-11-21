@@ -35,7 +35,7 @@ func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, co
 	if sandbox.HostExecutionPreferred() {
 		return runUnconfined(ctx, errHostVerification, dir, command, timeout, limit, outputDir...)
 	}
-	if _, err := sandbox.ChooseIsolation(backend.Probe(ctx), model.R2, false, false); err != nil {
+	if _, err := sandbox.ChooseIsolation(backend.Probe(ctx), model.R2, false); err != nil {
 		if !sandbox.UnconfinedFallbackAllowed() {
 			return adapter.ProcessResult{}, err
 		}
