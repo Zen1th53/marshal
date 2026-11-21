@@ -169,6 +169,7 @@ type Tail struct {
 	path string
 	info os.FileInfo // the file last read, nil before the first read
 	off  int64       // bytes of it consumed (whole lines only)
+	head []byte      // its first line: a compaction that reuses the inode changes it
 }
 
 // NewTail tails the log at path.
@@ -207,6 +208,17 @@ func (t *Tail) Read() (lines []Line, reset bool, err error) {
 			reset, t.off = t.info != nil, 0
 		}
 	}
+	// A replaced file can come back on the same inode (tmpfs, overlay):
+	// its first line tells the two apart.
+	// Only a whole first line counts; one still being written is not known yet.
+	head, herr := bufio.NewReader(io.LimitReader(f, maxLine+1)).ReadBytes('\n')
+	if herr != nil {
+		head = nil
+	}
+	if t.info != nil && !reset && t.head != nil && !bytes.Equal(head, t.head) {
+		reset, t.off = true, 0
+	}
+	t.head = head
 	start := t.off
 	if start == 0 && info.Size() > 2*MaxBytes {
 		// Never read more than a bounded log's worth; skip to a line start.

@@ -148,3 +148,32 @@ func TestCompactDropsForeignLongLine(t *testing.T) {
 		t.Fatalf("long line kept or newest lost: %d bytes", len(data))
 	}
 }
+
+// A log replaced on the same inode (as tmpfs or overlay can reuse it) is
+// still seen as replaced: the tail starts over instead of skipping lines.
+func TestTailSeesReplacementOnSameInode(t *testing.T) {
+	path := Path(t.TempDir())
+	at := time.Date(2026, 11, 20, 18, 0, 0, 0, time.UTC)
+	for _, text := range []string{"one", "two", "three"} {
+		if err := Append(path, Line{At: at, Kind: "read", Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tail := NewTail(path)
+	if lines, _, _ := tail.Read(); len(lines) != 3 {
+		t.Fatalf("first read: %+v", lines)
+	}
+	// Rewrite in place, keeping the inode, with a different first line and
+	// a longer body, as a compaction onto a reused inode looks.
+	raw := `{"at":"2026-11-20T18:01:00Z","kind":"read","text":"four"}` + "\n" +
+		`{"at":"2026-11-20T18:02:00Z","kind":"read","text":"five"}` + "\n" +
+		`{"at":"2026-11-20T18:03:00Z","kind":"read","text":"six, a longer line than before"}` + "\n" +
+		`{"at":"2026-11-20T18:04:00Z","kind":"read","text":"seven"}` + "\n"
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lines, reset, err := tail.Read()
+	if err != nil || !reset || len(lines) != 4 || lines[0].Text != "four" {
+		t.Fatalf("after in-place replacement: %+v reset %v %v", lines, reset, err)
+	}
+}
