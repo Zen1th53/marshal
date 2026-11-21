@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "7574c2eff2d7e528b06139116651f9c406bd55d731dd0f0a7cb3121e08daa438",
-      "bytes": 26631
+      "sha256": "3f346cc01203d478ba4ba7456d9d0af54c71f2efcebb50c3d2e4388d44a13704",
+      "bytes": 26888
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -581,8 +581,8 @@
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "5d5f03f3772d9d91fb760dd1f9f4d4ca2e096ca7f24e139bd0c41afdc9fd523d",
-      "bytes": 6031
+      "sha256": "59c37dd2c13ad0987989a2259fb502ee3df83156c1ead42c1213298078309b5d",
+      "bytes": 6821
     },
     {
       "path": "docs/index.md",
@@ -4736,8 +4736,8 @@
     },
     {
       "path": "internal/architecturecodec/language.go",
-      "sha256": "59f7f563646d241c12dc94403ad128ceb76eb3dd9b38f6b0260ae57c0a193f50",
-      "bytes": 14641
+      "sha256": "c6dc4b452c4cfb1ef3cd48f5c5e66b5d06e9c1d56df6ca5e5b9301c0af7ef814",
+      "bytes": 14749
     },
     {
       "path": "internal/architecturecodec/layout.go",
@@ -4811,8 +4811,8 @@
     },
     {
       "path": "internal/architecturereview/language.go",
-      "sha256": "b94635da50c26e4f3c38d7988f7d3b2cc2aa0348d591ae6cc4a77b732e3add31",
-      "bytes": 15743
+      "sha256": "c094cdd67edd26af42d9173e354b6d99cc360e994e269971fef280a75bb745d5",
+      "bytes": 15851
     },
     {
       "path": "internal/architecturereview/language_test.go",
@@ -4841,8 +4841,8 @@
     },
     {
       "path": "internal/architecturereview/review.html",
-      "sha256": "558e369c0cc2f7658de7f455b65158c77c89c584df5af3b768336915e771b2ff",
-      "bytes": 87345
+      "sha256": "b83ade7c59f5d1c2ac5e738490b960dcd720294751e7d8bf2a8e3edeea0d0ad9",
+      "bytes": 88381
     },
     {
       "path": "internal/architecturereview/review_browser_test.go",
@@ -4861,8 +4861,8 @@
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.cjs",
-      "sha256": "2aab4aa81fb33bafed10f41e680609e961b8701fb11aa599041dc70c8ff10c4c",
-      "bytes": 10153
+      "sha256": "a2325c2b7dfceff1169c9c72a52d3338035c5c780a639d0f610d0522fcdd9a8e",
+      "bytes": 12901
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.json",

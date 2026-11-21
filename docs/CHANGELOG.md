@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Architecture review: one click (or tap, or `Enter`) on a part with something inside opens it with the zoom-in, breadcrumb and `#path`, and keeps its panel open inside; a part with nothing inside still focuses; `Space` focuses.
+
 ## 0.3.6
 
 ### Added

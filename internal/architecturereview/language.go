@@ -67,7 +67,8 @@ func EnglishUIStrings() map[string]string {
 		"key_changed":     "amber outline, “changed” tag = changed",
 		"tag_new":         "new",
 		"tag_removed":     "removed",
-		"nav_hint":        "Scroll or pinch to zoom · drag to pan · click a part to focus · Esc clears",
+		"nav_hint":        "Scroll or pinch to zoom · drag to pan · click a part to open what is inside, or to focus it · Space focuses · Esc clears",
+		"click_to_open":   "Click to open",
 		"zoom_in":         "Zoom in",
 		"zoom_out":        "Zoom out",
 		"zoom_fit":        "Fit to screen",
@@ -100,7 +101,7 @@ func EnglishUIStrings() map[string]string {
 
 // laterUIStringKeys were added after translations were cached; a translation
 // without them stays valid and the page shows them in English.
-var laterUIStringKeys = map[string]bool{"revision_proposed": true, "revision_current": true, "only_changes": true, "legend_current": true, "legend_new": true, "legend_removed": true, "legend_changed": true, "history": true, "history_empty": true, "history_live": true, "history_unavailable": true, "history_readonly": true, "before": true, "after": true, "before_unavailable": true, "built": true, "differs": true, "goal": true, "run": true, "accepted_by": true, "date": true, "open_sub": true, "parts_inside": true, "key_current": true, "key_new": true, "key_removed": true, "key_changed": true, "tag_new": true, "tag_removed": true, "nav_hint": true, "zoom_in": true, "zoom_out": true, "zoom_fit": true, "zoom_actual": true, "search": true, "search_none": true, "covers": true, "incoming": true, "outgoing": true, "no_links": true, "layer_first": true, "layer_last": true, "layer_n": true, "bundle_n": true, "overview": true, "role_interfaces": true, "role_services": true, "role_planning": true, "role_domain": true, "role_storage": true, "advanced": true, "open_part": true, "derived_note": true, "derived_short": true, "code_empty": true, "code_loading": true, "code_truncated": true}
+var laterUIStringKeys = map[string]bool{"revision_proposed": true, "revision_current": true, "only_changes": true, "legend_current": true, "legend_new": true, "legend_removed": true, "legend_changed": true, "history": true, "history_empty": true, "history_live": true, "history_unavailable": true, "history_readonly": true, "before": true, "after": true, "before_unavailable": true, "built": true, "differs": true, "goal": true, "run": true, "accepted_by": true, "date": true, "open_sub": true, "parts_inside": true, "key_current": true, "key_new": true, "key_removed": true, "key_changed": true, "tag_new": true, "tag_removed": true, "nav_hint": true, "zoom_in": true, "zoom_out": true, "zoom_fit": true, "zoom_actual": true, "search": true, "search_none": true, "covers": true, "incoming": true, "outgoing": true, "no_links": true, "layer_first": true, "layer_last": true, "layer_n": true, "bundle_n": true, "overview": true, "role_interfaces": true, "role_services": true, "role_planning": true, "role_domain": true, "role_storage": true, "advanced": true, "open_part": true, "derived_note": true, "derived_short": true, "code_empty": true, "code_loading": true, "code_truncated": true, "click_to_open": true}
 
 // legacyUIStringKeys is the interface label set that existed before the browser
 // v2 keys were added. A stored translation covering exactly these keys stays
