@@ -21,8 +21,11 @@ type dockStrip struct {
 	known    bool // the chat collector filled the chat's state
 	bound    bool
 	clear    bool // input clear
-	stage    string
-	answered int
+	// inputKnown is set once the input box was looked at; until then the
+	// strip says nothing about the input.
+	inputKnown bool
+	stage      string
+	answered   int
 }
 
 // dockStripOf reads the strip's fields out of a v2 frame.
@@ -41,7 +44,8 @@ func dockStripOf(b vm.Board) dockStrip {
 	}
 	s.known = b.Chat != (vm.Chat{}) || b.Marshal.ChatBound || b.Marshal.InputClear || len(b.Requests) > 0
 	s.bound = b.Chat.Bound || b.Marshal.ChatBound
-	s.clear = b.Chat.InputClear || b.Marshal.InputClear
+	s.inputKnown = b.Chat.InputKnown || b.Marshal.InputKnown
+	s.clear = s.inputKnown && (b.Chat.InputClear || b.Marshal.InputClear)
 	if s.answered == 0 {
 		for _, r := range b.Requests {
 			if r.Answer == "allow" || r.Answer == "decline" {
@@ -152,7 +156,7 @@ func dockStripTitle(s dockStrip, unicode bool, width int, pad bool) (string, int
 		}
 	}
 	input := ""
-	if s.known {
+	if s.known && s.inputKnown {
 		input = "input waiting"
 		if s.clear {
 			input = "input clear"

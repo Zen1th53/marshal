@@ -19,8 +19,12 @@ const (
 type slot struct {
 	want, min int
 	prio      int  // higher gives way first: shrinks to min, then goes
-	grow      bool // takes spare rows
-	draw      func(c *canvas, x, y, w, h int)
+	grow      bool // takes spare rows, up to most
+	// most is the tallest a growing pane gets: what its content needs and
+	// a little room. 0 is no bound (a provider area fills what is left).
+	// Rows no pane takes stay blank below the panes.
+	most int
+	draw func(c *canvas, x, y, w, h int)
 }
 
 // stack lays slots top to bottom in h rows from y.
@@ -58,17 +62,21 @@ func stack(c *canvas, slots []slot, x, y, w, h int) {
 		total -= hs[i]
 		hs[i] = 0
 	}
-	if total < h {
-		g := -1
-		for i, s := range slots {
-			if s.grow && hs[i] > 0 {
-				g = i
-				break
-			}
+	// Spare rows go to the growing panes in order, each up to its most;
+	// what none of them takes stays below.
+	for i, s := range slots {
+		if total >= h {
+			break
 		}
-		if g >= 0 {
-			hs[g] += h - total
+		if !s.grow || hs[i] <= 0 {
+			continue
 		}
+		add := h - total
+		if s.most > 0 {
+			add = min(add, max(0, s.most-hs[i]))
+		}
+		hs[i] += add
+		total += add
 	}
 	for i, s := range slots {
 		if hs[i] <= 0 {
@@ -202,7 +210,7 @@ func laneGlyph(l vm.Lane) (string, st) {
 
 func lanesPane(b vm.Board) slot {
 	n := len(b.Lanes.Items)
-	return slot{want: max(n, 1) + 3, min: 4, prio: 0, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: max(n, 1) + 3, min: 4, prio: 0, grow: true, most: max(n, 1) + 4, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, "Lanes · from worker heartbeats", b.Lanes.Limits, "", "", "")
 		taskW := max(10, w-55)
 		stepX, timeX, sigX := 30+taskW, w-13, w-8
@@ -330,9 +338,12 @@ func marshalPane(b vm.Board) slot {
 		p.segs(2, 4, lim)
 		chat := seg{"not bound", sWarn}
 		if m.ChatBound {
-			in := " · input clear"
-			if !m.InputClear {
+			in := ""
+			if m.InputKnown {
 				in = " · input waiting"
+				if m.InputClear {
+					in = " · input clear"
+				}
 			}
 			chat = seg{"bound to this run" + in, sOK}
 		}
@@ -388,7 +399,7 @@ func inboxPane(b vm.Board) slot {
 
 func activityPane(b vm.Board, title string, compact bool) slot {
 	n := len(b.Activity)
-	return slot{want: max(n, 1) + 2, min: 3, prio: 5, grow: !compact, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: max(n, 1) + 2, min: 3, prio: 5, grow: !compact, most: max(n, 1) + 3, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, title, "", "", "", "")
 		if n == 0 {
 			p.put(2, 1, "Nothing yet.", sFaint)
@@ -450,7 +461,7 @@ func readinessPane(b vm.Board) slot {
 			rows++
 		}
 	}
-	return slot{want: max(rows, 1) + 7, min: 5, prio: 0, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: max(rows, 1) + 7, min: 5, prio: 0, grow: true, most: max(rows, 1) + 8, draw: func(c *canvas, x, y, w, h int) {
 		col := cOK
 		for _, ch := range r.Checks {
 			if ch.Mark != "ok" {
@@ -529,7 +540,7 @@ func usagePane(b vm.Board) slot {
 
 func defaultsPane(b vm.Board) slot {
 	n := len(b.Ready.Defaults)
-	return slot{want: max(n, 1) + 4, min: 3, prio: 2, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: max(n, 1) + 4, min: 3, prio: 2, grow: true, most: max(n, 1) + 4, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, "Defaults · this project", "", "", "", "")
 		if n == 0 {
 			p.put(2, 1, dash, sFaint)
@@ -555,7 +566,7 @@ var planningKeys = keys("F11", "Marshal chat", "s", "say", "a", "architecture", 
 
 func stepsPane(b vm.Board) slot {
 	n := len(b.Steps.Items)
-	return slot{want: max(n, 1) + 7, min: 4, prio: 0, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: max(n, 1) + 7, min: 4, prio: 0, grow: true, most: max(n, 1) + 7, draw: func(c *canvas, x, y, w, h int) {
 		right := ""
 		if b.Steps.Quiet > 0 || len(b.Steps.Items) > 0 {
 			q := "0m"
@@ -600,7 +611,7 @@ func requestsPane(b vm.Board) slot {
 }
 
 func chatPane(b vm.Board) slot {
-	return slot{want: 9, min: 3, prio: 2, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: 9, min: 3, prio: 2, grow: true, most: 9, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, "Chat · Marshal", "", "", "", "")
 		ch, m := b.Chat, b.Marshal
 		binding := seg{"not bound", sWarn}
@@ -611,9 +622,12 @@ func chatPane(b vm.Board) slot {
 		if !ch.ReboundAt.IsZero() {
 			restarts += " · rebound " + clock(ch.ReboundAt)
 		}
-		input := seg{"clear", sOK}
-		if !ch.InputClear {
+		input := seg{"", sDim} // not looked at yet: nothing
+		if ch.InputKnown {
 			input = seg{"waiting", sWarn}
+			if ch.InputClear {
+				input = seg{"clear", sOK}
+			}
 		}
 		model := dash
 		if m.Provider != "" {
@@ -753,7 +767,7 @@ func pausedPane(b vm.Board) slot {
 	will := strings.Split(pa.Will, "\n")
 	willY := 4 + n + 1
 	actY := willY + max(2, len(will)) + 1
-	return slot{want: actY + 3, min: 5, prio: 0, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: actY + 3, min: 5, prio: 0, grow: true, most: actY + 3, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, or(pa.Title, "Paused"), pa.Resets, cBad, cBad, "")
 		p.put(2, 1, or(pa.Cause, dash), sInk)
 		p.put(2, 3, "  TASK                         PROGRESS                    KEPT", sFaint)
@@ -812,7 +826,7 @@ func providersPane(b vm.Board) slot {
 }
 
 func runPane(b vm.Board) slot {
-	return slot{want: 5, min: 3, prio: 3, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: 5, min: 3, prio: 3, grow: true, most: 5, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, "Run", "", "", "", "")
 		bar := progress(b.Plan, 24)
 		merged := dash
@@ -929,7 +943,7 @@ func compactPlan(b vm.Board) slot {
 
 func compactLanes(b vm.Board) slot {
 	n := len(b.Lanes.Items)
-	return slot{want: max(n, 1) + 3, min: 3, prio: 0, grow: true, draw: func(c *canvas, x, y, w, h int) {
+	return slot{want: max(n, 1) + 3, min: 3, prio: 0, grow: true, most: max(n, 1) + 4, draw: func(c *canvas, x, y, w, h int) {
 		p := c.box(x, y, w, h, "Lanes · heartbeats", "", "", "", "")
 		if n == 0 {
 			p.put(2, 1, "No lanes yet.", sFaint)

@@ -10,7 +10,7 @@ import (
 
 // stripFull is the strip of docs/design/board-v2/screen6.ans.
 var stripFull = dockStrip{on: true, provider: "claude", model: "opus-5.5", effort: "medium",
-	known: true, bound: true, clear: true, stage: "tasks · 6m", answered: 3}
+	known: true, bound: true, clear: true, inputKnown: true, stage: "tasks · 6m", answered: 3}
 
 // TestDockStripTitleFull: unfitted, the chat's title says what the v2
 // MARSHAL CHAT strip says, then the [m] switch hint.
@@ -110,10 +110,17 @@ func TestDockStripOf(t *testing.T) {
 	if !s.known || s.bound || s.clear || s.answered != 2 || s.model != "opus5.5" || s.effort != "high" {
 		t.Fatalf("requests only: %+v", s)
 	}
-	b.Chat = vm.Chat{Bound: true, InputClear: true, Answered: 7, Stage: "review · 2m"}
-	if s := dockStripOf(b); !s.bound || !s.clear || s.answered != 7 || s.stage != "review · 2m" {
+	b.Chat = vm.Chat{Bound: true, InputClear: true, InputKnown: true, Answered: 7, Stage: "review · 2m"}
+	if s := dockStripOf(b); !s.bound || !s.clear || !s.inputKnown || s.answered != 7 || s.stage != "review · 2m" {
 		t.Fatalf("chat: %+v", s)
 	}
+	// An input box not looked at yet says nothing: not "input waiting".
+	b.Chat.InputKnown, b.Chat.InputClear = false, false
+	s = dockStripOf(b)
+	if got, _ := dockStripTitle(s, true, 0, false); s.inputKnown || s.clear || strings.Contains(got, "input") {
+		t.Fatalf("unknown input: %+v %q", s, got)
+	}
+	b.Chat.InputKnown, b.Chat.InputClear = true, true
 	// The chat collector's "live" and "not bound" stages are the binding
 	// mark's to say; the title does not repeat them.
 	for _, stage := range []string{"live", "not bound"} {

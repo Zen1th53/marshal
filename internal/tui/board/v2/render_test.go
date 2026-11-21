@@ -84,22 +84,25 @@ func TestScreensMatchDesign(t *testing.T) {
 }
 
 // TestScreenGoldens keeps the stripped cells of every screen at 132 columns
-// (Unicode and ASCII), 100 and 80 columns in testdata.
+// (Unicode and ASCII), 100 and 80 columns in testdata, and on a tall
+// 190x52 terminal, where panes keep the height their content needs and the
+// rows left over stay blank below them.
 func TestScreenGoldens(t *testing.T) {
 	for _, sc := range screens {
 		for _, v := range []struct {
-			tag  string
-			cols int
-			th   Theme
+			tag        string
+			cols, rows int
+			th         Theme
 		}{
-			{"132", 132, Theme{Color: ColorTrue, Unicode: true}},
-			{"132-ascii", 132, Theme{Color: ColorNone, Unicode: false}},
-			{"100", 100, Theme{Color: Color256, Unicode: true}},
-			{"080", 80, Theme{Color: Color256, Unicode: true}},
+			{"132", 132, sc.rows, Theme{Color: ColorTrue, Unicode: true}},
+			{"132-ascii", 132, sc.rows, Theme{Color: ColorNone, Unicode: false}},
+			{"100", 100, sc.rows, Theme{Color: Color256, Unicode: true}},
+			{"080", 80, sc.rows, Theme{Color: Color256, Unicode: true}},
+			{"190x52", 190, 52, Theme{Color: Color256, Unicode: true}},
 		} {
 			name := fmt.Sprintf("screen%d-%s-%s", sc.n, sc.name, v.tag)
 			t.Run(name, func(t *testing.T) {
-				lines := sc.render(v.cols, sc.rows, v.th)
+				lines := sc.render(v.cols, v.rows, v.th)
 				var b strings.Builder
 				for _, l := range lines {
 					s := strip(l)

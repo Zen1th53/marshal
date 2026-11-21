@@ -312,6 +312,51 @@ func noteChatInput(pane string, clear bool) {
 	chatInputs.panes[pane] = chatInputSeen{clear: clear, at: time.Now()}
 }
 
+// observeChatInput notes the chat input box as one tick of the chat window's
+// monitor saw it in frame (styled), for the Board's "input clear".
+func (w *Workspace) observeChatInput(pane, provider, frame string) {
+	if clear, known := chatInputIn(composerDialectFor(provider), frame); known {
+		noteChatInput(pane, clear)
+		return
+	}
+	forgetChatInput(pane)
+}
+
+// forgetChatInput drops pane's observation: its input box is not on screen
+// (a provider dialog, a screen being redrawn), so the input is unknown again.
+func forgetChatInput(pane string) {
+	chatInputs.mu.Lock()
+	defer chatInputs.mu.Unlock()
+	delete(chatInputs.panes, pane)
+}
+
+// chatInputIn reads the input box off one styled frame of the chat pane:
+// clear when it holds nothing the owner typed (empty, a provider hint, or
+// the provider's dimmed placeholder), whether or not a turn is running.
+// known is false when the frame shows no input box.
+func chatInputIn(d composerDialect, frame string) (clear, known bool) {
+	content, ok := chatComposer(frame)
+	if !ok {
+		return false, false
+	}
+	return d.hint(content) || promptOnlyDim(frame), true
+}
+
+// promptOnlyDim reports whether the last prompt line holds only dimmed
+// text after its marker: the provider's placeholder, not typing.
+func promptOnlyDim(frame string) bool {
+	raw := strings.Split(strings.TrimRight(frame, "\n"), "\n")
+	for i := len(raw) - 1; i >= 0; i-- {
+		body := strings.TrimLeft(StripANSI(raw[i]), " │┃║|")
+		for _, m := range promptMarkers {
+			if after, ok := strings.CutPrefix(body, m); ok && (after == "" || after[0] == ' ' || strings.HasPrefix(after, "\u00a0")) {
+				return onlyDim(promptRest(raw[i]))
+			}
+		}
+	}
+	return false
+}
+
 // chatInputClear reports the last observation of pane's input box.
 func chatInputClear(pane string) (clear, known bool) {
 	chatInputs.mu.Lock()

@@ -1067,6 +1067,9 @@ func (w *Workspace) monitorAgent(
 						}(snapshot.paneID)
 					}
 					w.observeMarshalProposalFiles(root)
+					// Steps the Marshal's MCP child logged for the tools it
+					// serves itself reach the Board's steps pane here.
+					w.stepsLog().refresh()
 					// A published draft must never wait for a relaunch: if no
 					// watcher is importing it, start one (a no-op while running).
 					if marshalDraftReady(root) {
@@ -1267,7 +1270,17 @@ func (w *Workspace) monitorAgent(
 				}
 
 				if snapshot.paneID != "" && !shouldSkipAuthPreflight(nil, snapshot.args) {
-					if visible, capErr := tmux.CaptureVisiblePane(agentCtx, snapshot.paneID); capErr == nil {
+					capture := tmux.CaptureVisiblePane
+					if snapshot.role == "marshal-chat" {
+						// The same one capture, styled: it also tells the Board
+						// whether the chat's input box is clear.
+						capture = tmux.CaptureVisiblePaneStyled
+					}
+					if visible, capErr := capture(agentCtx, snapshot.paneID); capErr == nil {
+						if snapshot.role == "marshal-chat" {
+							w.observeChatInput(snapshot.paneID, snapshot.provider, visible)
+							visible = StripANSI(visible)
+						}
 						if detectProviderAuthFailure(snapshot.provider, visible) {
 							if !authReported {
 								authReported = true
