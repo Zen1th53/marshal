@@ -9746,8 +9746,8 @@
     },
     {
       "path": "internal/sessionmcp/marshal.go",
-      "sha256": "4515adab61f543df5f220c9dc5fdbe151064f9f5d941c3d98bfa687b37909cb4",
-      "bytes": 2334
+      "sha256": "523f954fb48382bbe7eec26e1e8e47aff5d6d7a68160b5cb2bd6c7d578be1228",
+      "bytes": 2332
     },
     {
       "path": "internal/sessionmcp/marshal_test.go",
@@ -11831,8 +11831,8 @@
     },
     {
       "path": "internal/tui/auth_preflight.go",
-      "sha256": "4885c7f0012b00d49dc4856290e3e0de72cd17381144452b44c0b3d7308447e5",
-      "bytes": 23403
+      "sha256": "4b7723cbd8931adcd3ff60762fea965ef2e029d3819b8f42e6eb8faf414a1209",
+      "bytes": 23369
     },
     {
       "path": "internal/tui/auth_preflight_test.go",
@@ -13616,8 +13616,8 @@
     },
     {
       "path": "internal/tui/marshal_mcp.go",
-      "sha256": "194c7fea29e8da66818c11712075c6f808dd0dd134908b94d6d69bb6315f39ad",
-      "bytes": 24237
+      "sha256": "6872d12b4020f38bfac2ed71a5ca1e544e7a1ddd935099138c51a2949357600d",
+      "bytes": 24235
     },
     {
       "path": "internal/tui/marshal_mcp_default.go",
@@ -14471,8 +14471,8 @@
     },
     {
       "path": "internal/tui/proposal_mcp_extreme.go",
-      "sha256": "d66d91f2f5cb4e48a2e012a1ce29005023cb15568da3f91ae531b78beb68f3bc",
-      "bytes": 22463
+      "sha256": "2318e06b7d2ce6c81f714b6538a3a7aa6891f83ba21d8190b675df5de37e910b",
+      "bytes": 22461
     },
     {
       "path": "internal/tui/proposal_mcp_extreme_test.go",
@@ -16801,8 +16801,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "f87d46ff17b71431d640f1a07cf1cbe5e9d560025ce647ff66324f62c838a624",
-      "bytes": 445510
+      "sha256": "94ce0ceefcd881e3264133db6c1527d9cb1ea81da5b9b5a3e97795802e6c94c4",
+      "bytes": 445684
     },
     {
       "path": "tools/extreme/prq/main_default.go",
