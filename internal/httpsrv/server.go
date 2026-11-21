@@ -3,7 +3,6 @@ package httpsrv
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"time"
 )
@@ -86,18 +85,6 @@ func LimitBodyMiddleware(next http.Handler, maxBytes int64) http.Handler {
 	})
 }
 
-func (s *Server) HTTPServer() *http.Server {
-	return s.httpServer
-}
-
-func (s *Server) Serve(l net.Listener) error {
-	err := s.httpServer.Serve(l)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
-}
-
 func (s *Server) ListenAndServe() error {
 	err := s.httpServer.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
@@ -108,8 +95,4 @@ func (s *Server) ListenAndServe() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
-}
-
-func (s *Server) Close() error {
-	return s.httpServer.Close()
 }
