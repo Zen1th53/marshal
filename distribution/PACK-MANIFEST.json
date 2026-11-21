@@ -16945,6 +16945,11 @@
       "bytes": 1882
     },
     {
+      "path": "release/RELEASE_NOTES_0.3.7.md",
+      "sha256": "1152b045008c4b5e0f1d6fe6c6a318d9e966757820439811a120bd9ac6732a0d",
+      "bytes": 1562
+    },
+    {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
       "sha256": "60da76751a5ad983b797e0ecae6816bdd0b60286c8d6ab508211c0a754d3bbf0",
       "bytes": 2823
