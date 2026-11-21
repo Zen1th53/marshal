@@ -2566,13 +2566,18 @@
     },
     {
       "path": "internal/app/marshal_execute.go",
-      "sha256": "5e301a377eaf51b88f113ac8da5d16c36811e8fa7746bba94b0261ab65fcaf01",
-      "bytes": 22423
+      "sha256": "c251fa73df710cb9f38567fd920c37290c7bcf968fa216d42917bc9704b0eb43",
+      "bytes": 22982
     },
     {
       "path": "internal/app/marshal_execute_test.go",
       "sha256": "510df9cce0a349560bb380945d8ba2c19fd80546674125cc2537bdf93d436787",
       "bytes": 29832
+    },
+    {
+      "path": "internal/app/marshal_execution_paused_extreme_test.go",
+      "sha256": "1f260b3c939570dda93678393fcb4617e47b2b885a58116f28c9c905576e2d0b",
+      "bytes": 5992
     },
     {
       "path": "internal/app/marshal_expired_approval_rework_extreme_test.go",
@@ -2736,8 +2741,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "0e04b636ac7b9a82e7ab9f613641cc60b34e8c59544138b09ad103a6b0e00652",
-      "bytes": 81603
+      "sha256": "4f92598b99aa3d19f09e9bce5cc80a1f24b98113a56e439af6195cc5f9690fcc",
+      "bytes": 84619
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -2871,8 +2876,8 @@
     },
     {
       "path": "internal/app/marshal_process05.go",
-      "sha256": "97521b53cba90c496aef941fbe85e6e4a6b3096be44389a9914d6461c98ca3c3",
-      "bytes": 14383
+      "sha256": "18c157b67b0407ed31a6f8f3431424e85b8b5bc5249bd068148fc8bf0eabf91a",
+      "bytes": 15060
     },
     {
       "path": "internal/app/marshal_process05_failover_default.go",
@@ -3006,13 +3011,13 @@
     },
     {
       "path": "internal/app/marshal_run_paused_test.go",
-      "sha256": "c94e4d081696d34ccba30cacb4fb373564e168697b5e49b0653d536dc3ac30ce",
-      "bytes": 1477
+      "sha256": "31c3308167c4a7ee2b5aa9416d6fbf1c25a68423ba09ed3b6eb459b123bb10a8",
+      "bytes": 1853
     },
     {
       "path": "internal/app/marshal_service.go",
-      "sha256": "7c78645e6945d83b39324c514a44ae92688d89e6fb3b5f899f9643f5d3c6cef0",
-      "bytes": 24791
+      "sha256": "1e07703909a4c375bfc69cd6d6ba9e9891489b958a556c4ef32ed1697bbdd4c1",
+      "bytes": 24991
     },
     {
       "path": "internal/app/marshal_service_test.go",
@@ -3041,8 +3046,8 @@
     },
     {
       "path": "internal/app/marshal_task_lane_extreme.go",
-      "sha256": "47e82d6cce466b68b32884786b4928beaf50b4295c1ae3e9635ecaa3e20b3a21",
-      "bytes": 5053
+      "sha256": "9a02f2cd2920042ff5910a232d54f13298c601996542ea97ecee2aac048a42ba",
+      "bytes": 5160
     },
     {
       "path": "internal/app/marshal_turn_error_test.go",
@@ -4071,8 +4076,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "caa1bcc9429fea916c71719b3faa73bec36556cc39a9fded2dacc8e2e5a8e13b",
-      "bytes": 95826
+      "sha256": "583cc69da301a9641bb3e70d10ce73dd11b11b4757c16a59e6b6157281f18551",
+      "bytes": 95883
     },
     {
       "path": "internal/app/runtime_base_test.go",
@@ -7631,8 +7636,8 @@
     },
     {
       "path": "internal/marshal/domain.go",
-      "sha256": "6ad2fb8ab9b88ed3b7e07c9d5f7435563aeb5a927c860ec17e840be3f6e1195c",
-      "bytes": 25034
+      "sha256": "101208a5e304017a2b44b3eb8c1b39e57efca2fe250dcdd3a25bfab289621c11",
+      "bytes": 25082
     },
     {
       "path": "internal/marshal/domain_test.go",
@@ -13276,13 +13281,18 @@
     },
     {
       "path": "internal/tui/boardv2_cards_owner_test.go",
-      "sha256": "e6d8324138ff58679e7090ef99b1c537c9cbcbe8ccded43dd79221ed888963f2",
-      "bytes": 18586
+      "sha256": "7d85216c56e316dddb54ce0a63c9518dfcb94c6f8edfa9fce940fe8be816fbb7",
+      "bytes": 18571
     },
     {
       "path": "internal/tui/boardv2_cards_paused.go",
-      "sha256": "479e34d015a2b00418df232afd40694d777e869160a201754a8de87fd9edfd39",
-      "bytes": 13678
+      "sha256": "ea32c9fbe5d38db770a6aa6c489366b9b795c05a906325814f9a43b407c07e45",
+      "bytes": 13840
+    },
+    {
+      "path": "internal/tui/boardv2_cards_raw_error_test.go",
+      "sha256": "98d9b17e1dd8bb8b34084abd05013d8536470e9613582501cdfe9e21267484ff",
+      "bytes": 1270
     },
     {
       "path": "internal/tui/boardv2_cards_state.go",
