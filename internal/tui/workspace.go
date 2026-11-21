@@ -1643,6 +1643,7 @@ func (w *Workspace) runCommandFunc(ctx context.Context, label string, do func(co
 			// move first (it takes the lane), then the Marshal switch, which
 			// waits again if a move just started.
 			w.drainTaskMoves(ctx)
+			queuedStopDrain(w, ctx)
 			w.applyQueuedMarshal(ctx)
 		}) {
 			w.commandBusy.Store(false)

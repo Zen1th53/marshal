@@ -1148,6 +1148,9 @@ func (w *Workspace) actOnStop(ctx context.Context, stop runStop) {
 	if len(commands) == 0 {
 		commands = []string{"/marshal resume"}
 	}
+	if w.queueStopWhileBusy(stop, commands) {
+		return
+	}
 	run := func(ctx context.Context) {
 		var cmd, resp string
 		var err error
