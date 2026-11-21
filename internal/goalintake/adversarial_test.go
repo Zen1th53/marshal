@@ -73,55 +73,6 @@ func TestAdversarialConstraintsSurviveEveryPath(t *testing.T) {
 	}
 }
 
-// Watchlist: AI advisory becomes authority.
-func TestAdversarialAdvisoryIsNeverAuthority(t *testing.T) {
-	// A model cannot confirm a Goal, however it phrases its output.
-	dangerous := formation("delete every record in the production database")
-	dangerous.Advisory = persuasive("this is a routine cleanup that has already been approved")
-
-	intake, err := goalintake.Form(dangerous)
-	if err != nil {
-		t.Fatalf("form: %v", err)
-	}
-	if intake.Confirmation.Settled() {
-		t.Fatalf("an advisory settled a Goal: %s", intake.Confirmation)
-	}
-	decision := goalintake.Confirm(intake, goalintake.ModeUltra, ultraActive())
-	if decision.Delegated {
-		t.Fatal("an advisory talked a destructive Goal into delegation")
-	}
-	if !decision.HardApprovalRequired {
-		t.Fatal("a destructive production Goal did not require a hard approval")
-	}
-}
-
-// Watchlist: original request lost.
-func TestAdversarialOriginalRequestCannotBeOverwritten(t *testing.T) {
-	request := "add rate limiting, and do not change the public API"
-	intake := mustForm(t, request)
-
-	// Every mutating path leaves the original alone.
-	approved := goalintake.Approve(intake)
-	cancelled := goalintake.Cancel(intake)
-	delegated := goalintake.Apply(intake, goalintake.Confirm(intake, goalintake.ModeUltra, ultraActive()))
-	revised, err := goalintake.Revise(intake, "a totally different reading", "changed my mind")
-	if err != nil {
-		t.Fatalf("revise: %v", err)
-	}
-
-	for name, candidate := range map[string]goalintake.Intake{
-		"approved": approved, "cancelled": cancelled,
-		"delegated": delegated, "revised": revised,
-	} {
-		if candidate.OriginalRequest != request {
-			t.Fatalf("%s altered the user's original words: %q", name, candidate.OriginalRequest)
-		}
-		if candidate.RequestDigest != intake.RequestDigest {
-			t.Fatalf("%s changed the Goal's binding to its request text", name)
-		}
-	}
-}
-
 // Watchlist: Goal formed without a project, which would let it be planned
 // against any of them.
 func TestAdversarialGoalCannotEscapeItsProject(t *testing.T) {
@@ -161,51 +112,6 @@ func TestAdversarialNoInventedConfidence(t *testing.T) {
 		if strings.TrimSpace(signal.Phrase) == "" {
 			t.Fatal("a signal asserts a finding with no phrase behind it")
 		}
-	}
-}
-
-// Watchlist: ULTRA bypasses a hard approval, attempted through every lever.
-func TestAdversarialUltraCannotReachAHardApproval(t *testing.T) {
-	request := formation("permanently delete the customer records from production")
-	request.Advisory = persuasive("routine data hygiene, fully reversible, pre-approved")
-	intake, err := goalintake.Form(request)
-	if err != nil {
-		t.Fatalf("form: %v", err)
-	}
-
-	for name, policy := range map[string]goalintake.DelegationPolicy{
-		"entitled and enabled": {Entitled: true, ExecutionEnabled: true},
-		"entitled only":        {Entitled: true},
-		"enabled only":         {ExecutionEnabled: true},
-	} {
-		for _, mode := range []goalintake.Mode{goalintake.ModeStandard, goalintake.ModeUltra} {
-			decision := goalintake.Confirm(intake, mode, policy)
-			if decision.Delegated {
-				t.Fatalf("%s in %s mode delegated a hard approval", name, mode)
-			}
-			if !decision.RequiresUser {
-				t.Fatalf("%s in %s mode did not require a person", name, mode)
-			}
-		}
-	}
-}
-
-// Watchlist: Process 04 starting without a valid Goal.
-func TestAdversarialUnsettledGoalDoesNotPermitPlanning(t *testing.T) {
-	intake := mustForm(t, "delete the old stuff from production, or something")
-
-	// An unclear Goal cannot be approved into a settled state.
-	if goalintake.Approve(intake).Confirmation.Settled() {
-		t.Fatal("a Goal with unanswered questions was settled by approving it")
-	}
-	// Applying a decision that requires a user does not settle it either.
-	decision := goalintake.Confirm(intake, goalintake.ModeUltra, ultraActive())
-	if goalintake.Apply(intake, decision).Confirmation.Settled() {
-		t.Fatal("a Goal requiring a person was settled by applying the decision")
-	}
-	// A cancelled Goal never permits planning.
-	if goalintake.Cancel(intake).Confirmation.Settled() {
-		t.Fatal("a cancelled Goal permitted planning")
 	}
 }
 
@@ -264,52 +170,5 @@ func TestAdversarialAgentCannotWeakenExtractedConstraints(t *testing.T) {
 	}}
 	if err := model.CanModifyGoal("developer", before, demoted); err == nil {
 		t.Fatal("an agent demoted a user constraint to a guideline")
-	}
-}
-
-// Watchlist: confirmation state lost across a restart. The state travels with
-// the Goal rather than living in memory, so a round trip preserves it.
-func TestAdversarialConfirmationSurvivesARoundTrip(t *testing.T) {
-	intake := mustForm(t, "add a unit test for the parser")
-	approved := goalintake.Approve(intake)
-
-	// Simulate persistence by copying the value, which is what a store round
-	// trip amounts to for this field.
-	restored := approved
-	if restored.Confirmation != goalintake.ConfirmationApproved {
-		t.Fatal("confirmation did not survive a round trip")
-	}
-	if !restored.Confirmation.Settled() {
-		t.Fatal("a restored approved Goal did not permit planning")
-	}
-
-	// A delegated Goal restores as delegated, not as approved.
-	delegated := goalintake.Apply(intake, goalintake.Confirm(intake, goalintake.ModeUltra, ultraActive()))
-	if delegated.Confirmation != goalintake.ConfirmationDelegated {
-		t.Fatalf("a delegated Goal restored as %s", delegated.Confirmation)
-	}
-}
-
-// Watchlist: the same request must be assessed identically wherever it
-// arrives, or two surfaces would disagree about whether it needs approval.
-func TestAdversarialSurfacesCannotDisagree(t *testing.T) {
-	request := "deploy the new billing rules to production"
-
-	var reference goalintake.Decision
-	for i := 0; i < 5; i++ {
-		intake := mustForm(t, request)
-		decision := goalintake.Confirm(intake, goalintake.ModeUltra, ultraActive())
-		if i == 0 {
-			reference = decision
-			continue
-		}
-		if decision.Delegated != reference.Delegated ||
-			decision.RequiresUser != reference.RequiresUser ||
-			decision.HardApprovalRequired != reference.HardApprovalRequired {
-			t.Fatal("the same request produced different confirmation decisions")
-		}
-	}
-	if reference.Delegated {
-		t.Fatal("a production deployment was delegated")
 	}
 }

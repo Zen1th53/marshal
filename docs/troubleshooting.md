@@ -131,6 +131,12 @@ marshal status
 
 `marshal status` and `marshal tasks` read the project directly. `marshal logs`, `marshal events`, `marshal artifacts`, `marshal agents`, `marshal run`, `marshal verify`, `marshal reconcile`, `marshal cancel` and `marshal task show|claim|release|import` work only through Marshal's background service: start it with `marshal daemon` in another terminal in the project first. If Marshal is already open for the project in another window, use that window instead.
 
+`marshal run` and `marshal task claim` need a registered agent; register one with `marshal agent register --name NAME --role developer` (also through the background service).
+
+`marshal state backup --output PATH` copies the project's state database, `marshal state verify-backup PATH` checks a copy, and `marshal state restore PATH` restores one while Marshal is stopped.
+
+`marshal egm status` reports whether the optional EGM design-review plugin is installed for each provider, and `marshal egm install --provider PROVIDER` prints its install steps; without it Marshal uses its built-in design review.
+
 ## Governed Workers on macOS or Linux arm64
 
 ### Symptom

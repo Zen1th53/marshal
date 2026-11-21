@@ -308,28 +308,6 @@ func runInstallationTelemetryClientStarted(ctx context.Context, client *Client, 
 	}
 }
 
-// PrepareEntitlementRequest enrolls the machine identity without trying to
-// acquire a lease. Request observations never constitute authorization.
-func PrepareEntitlementRequest(ctx context.Context, cfg Config, dir, version string) (*Client, State, string, error) {
-	client, err := NewClient(cfg.Endpoint, version)
-	if err != nil {
-		return nil, State{}, "", err
-	}
-	client.store = NewStore(dir)
-	st, err := client.store.TelemetryPreference(ctx)
-	if err != nil {
-		return nil, State{}, "", err
-	}
-	session, err := NewSessionID()
-	if err != nil {
-		return nil, State{}, "", err
-	}
-	if _, err := client.ensureRegistered(ctx, st, false); err != nil {
-		return nil, State{}, "", err
-	}
-	return client, st, session, nil
-}
-
 // TelemetryActive reports whether this machine sends anonymous telemetry
 // now: an endpoint is configured and the owner has not disabled it. It only
 // reads; a missing identity counts as on, because the next start creates

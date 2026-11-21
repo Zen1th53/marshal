@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/a2a"
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
@@ -171,90 +170,5 @@ func TestRealCodexMCPFullChain(t *testing.T) {
 	}
 	if task.Status != model.TaskReview {
 		t.Fatalf("expected task status in review after real Codex run, got %v", task.Status)
-	}
-}
-
-func TestRealCodexA2AFullChain(t *testing.T) {
-	if os.Getenv("MARSHAL_TEST_REAL_CODEX") != "1" {
-		t.Skip("set MARSHAL_TEST_REAL_CODEX=1 for authenticated external integration")
-	}
-	repo := runtimeIntegrationRepo(t)
-	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
-		t.Fatal(err)
-	}
-	runtime, err := app.Open(context.Background(), repo.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runtime.Close()
-	allowRealProviderCredentials(t, runtime, "codex")
-
-	a2aServer, err := a2a.NewInsecureServer(runtime, "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts := httptest.NewServer(a2aServer.Handler())
-	defer ts.Close()
-
-	// 1. Discover Agent Card
-	cardResp, err := http.Get(ts.URL + "/.well-known/agent-card.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cardResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK for Agent Card, got %d", cardResp.StatusCode)
-	}
-	cardResp.Body.Close()
-
-	// 2. Delegate & execute task via standard A2A 1.0 POST /message:send
-	taskReq := map[string]any{
-		"message": map[string]any{
-			"message_id": "msg-a2a-codex-1",
-			"role":       "ROLE_USER",
-			"parts": []map[string]string{
-				{"text": "Create a2a-proof.txt containing A2A full chain proof. Do not commit; the runtime commits changes."},
-			},
-		},
-		"task_id": "TASK-A2A-CODEX",
-		"adapter": "codex",
-	}
-	body, _ := json.Marshal(taskReq)
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK from A2A message:send, got %d", resp.StatusCode)
-	}
-
-	var a2aResp map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&a2aResp); err != nil {
-		t.Fatal(err)
-	}
-
-	if a2aResp["state"] != "TASK_STATE_COMPLETED" {
-		t.Fatalf("expected A2A task state TASK_STATE_COMPLETED, got %v", a2aResp["state"])
-	}
-	artifacts, _ := a2aResp["artifacts"].([]any)
-	if len(artifacts) == 0 {
-		t.Fatalf("expected commit artifact in A2A task response")
-	}
-
-	// Verify canonical SQLite task state in runtime
-	task, err := runtime.Task(context.Background(), "TASK-A2A-CODEX")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if task.Status != model.TaskReview {
-		t.Fatalf("expected canonical MARSHAL task status review, got %v", task.Status)
 	}
 }

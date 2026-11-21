@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/hostgit"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
@@ -405,4 +407,13 @@ func (c *command) reportStartedRepository(commit firstCommit, second []string) {
 		c.startedRepository = startedRepositoryLine(c.root, commit, second)
 		fmt.Fprintln(c.stderr, c.startedRepository)
 	}
+}
+
+// projectRoot resolves the repository root for the current directory.
+func (c *command) projectRoot(ctx context.Context) (string, error) {
+	output, err := projectid.NewGitCollector().Run(ctx, c.root, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("%w: this directory is not part of a Git repository", model.ErrInvalid)
+	}
+	return strings.TrimSpace(string(output)), nil
 }

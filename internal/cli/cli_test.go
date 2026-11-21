@@ -5,14 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 	"github.com/Zen1th53/marshal/internal/tui"
@@ -89,7 +87,7 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
+	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapter", "mcp", "events", "artifacts", "verify", "reconcile", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal ") {
@@ -98,45 +96,15 @@ func TestRequiredCommandsHaveUsage(t *testing.T) {
 	}
 }
 
-func TestPolicyTestSubcommandHasUsage(t *testing.T) {
+func TestAdapterProbeCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Execute(context.Background(), ".", []string{"policy", "test", "--help"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal policy test SUITE-FILE") {
-		t.Fatalf("policy test help code=%d output=%q", code, stdout.String()+stderr.String())
-	}
-}
-
-func TestPlanCommandIsRegistered(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Execute(context.Background(), ".", []string{"plan"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), "marshal plan create") {
-		t.Fatalf("code=%d stderr=%q", code, stderr.String())
-	}
-}
-
-func TestAdaptersAndProbeCLI(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := Execute(context.Background(), ".", []string{"--json", "adapters"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("adapters code=%d stderr=%s", code, stderr.String())
-	}
-	var adapters []map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &adapters); err != nil {
-		t.Fatalf("unmarshal adapters: %v", err)
-	}
-	if len(adapters) != 4 {
-		t.Fatalf("expected 4 adapters, got %d", len(adapters))
-	}
-
-	stdout.Reset()
-	stderr.Reset()
-	code = Execute(context.Background(), ".", []string{"--json", "adapter", "probe", "agy"}, strings.NewReader(""), &stdout, &stderr)
+	code := Execute(context.Background(), ".", []string{"--json", "adapter", "probe", "agy"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("adapter probe code=%d stderr=%s", code, stderr.String())
 	}
 }
 
-func TestMCPAndA2AStatusCLI(t *testing.T) {
+func TestMCPStatusCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), ".", []string{"--json", "mcp", "status"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 || !strings.Contains(stdout.String(), "2026-07-28") {
@@ -151,13 +119,6 @@ func TestMCPAndA2AStatusCLI(t *testing.T) {
 	code = Execute(context.Background(), ".", []string{"mcp", "status"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 || !strings.Contains(stdout.String(), "Provider connections:") {
 		t.Fatalf("mcp status text should include Provider connections: code=%d stdout=%s", code, stdout.String())
-	}
-
-	stdout.Reset()
-	stderr.Reset()
-	code = Execute(context.Background(), ".", []string{"--json", "a2a", "status"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String(), "1.0.0") {
-		t.Fatalf("a2a status code=%d stdout=%s", code, stdout.String())
 	}
 }
 
@@ -227,110 +188,6 @@ func TestLegalCLI(t *testing.T) {
 	if _, err := os.Stat(exportTar); err != nil {
 		t.Fatalf("expected export tar file to exist: %v", err)
 	}
-}
-
-func TestPolicyTestCLIPassAndFailExitCodes(t *testing.T) {
-	repo := cliRepo(t)
-	passFile := filepath.Join(repo.Path(), "pass.json")
-	if err := os.WriteFile(passFile, policyTestFixture(t, "deny"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", passFile}, strings.NewReader(""), &stdout, &stderr); code != 0 {
-		t.Fatalf("pass code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-	}
-	stdout.Reset()
-	stderr.Reset()
-	failFile := filepath.Join(repo.Path(), "fail.json")
-	if err := os.WriteFile(failFile, policyTestFixture(t, "allow"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", failFile}, strings.NewReader(""), &stdout, &stderr); code == 0 {
-		t.Fatalf("fail unexpectedly returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-	if _, err := os.Stat(filepath.Join(repo.Path(), statepath.DirName)); !os.IsNotExist(err) {
-		t.Fatalf("read-only policy test created runtime state: err=%v", err)
-	}
-}
-
-func TestPolicyTestCLIRejectsMalformedAndUnknownFields(t *testing.T) {
-	repo := cliRepo(t)
-	secret := "MARSHAL_TEST_SECRET_T49_A08_CLI_9f31"
-	unknown := filepath.Join(repo.Path(), "unknown.json")
-	var document map[string]any
-	if err := json.Unmarshal(policyTestFixture(t, "deny"), &document); err != nil {
-		t.Fatal(err)
-	}
-	document["unexpected"] = secret
-	data, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(unknown, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", unknown}, strings.NewReader(""), &stdout, &stderr); code == 0 {
-		t.Fatalf("unknown field returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-	if strings.Contains(stdout.String()+stderr.String(), secret) {
-		t.Fatalf("secret leaked in CLI output: %q", stdout.String()+stderr.String())
-	}
-	malformed := filepath.Join(repo.Path(), "malformed.json")
-	if err := os.WriteFile(malformed, []byte("{"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	stdout.Reset()
-	stderr.Reset()
-	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", malformed}, strings.NewReader(""), &stdout, &stderr); code == 0 {
-		t.Fatalf("malformed input returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-}
-
-func TestPolicyTestCLIEvaluatorErrorIsNonzero(t *testing.T) {
-	repo := cliRepo(t)
-	file := filepath.Join(repo.Path(), "error.json")
-	if err := os.WriteFile(file, policyTestFixtureWithDefault(t, "require", "deny"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-	if code := Execute(context.Background(), repo.Path(), []string{"--json", "policy", "test", file}, strings.NewReader(""), &stdout, &stderr); code == 0 {
-		t.Fatalf("evaluator error returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-	if !strings.Contains(stdout.String(), `"status": "ERROR"`) {
-		t.Fatalf("missing typed error status: %q", stdout.String())
-	}
-}
-
-func policyTestFixture(t *testing.T, expected string) []byte {
-	return policyTestFixtureWithDefault(t, "deny", expected)
-}
-
-func policyTestFixtureWithDefault(t *testing.T, defaultEffect, expected string) []byte {
-	t.Helper()
-	p := policy.Policy{ID: "cli-policy", Version: 1, Default: policy.Effect(defaultEffect)}
-	digest, err := p.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	fixture := map[string]any{
-		"id": "cli-suite",
-		"cases": []any{map[string]any{
-			"id":   "case-1",
-			"name": "default decision",
-			"given": map[string]any{
-				"policy":  map[string]any{"id": string(p.ID), "version": p.Version, "default": string(p.Default), "rules": []any{}},
-				"binding": map[string]any{"version": p.Version, "digest": string(digest), "generation": 1},
-			},
-			"when":   map[string]any{"subject_id": "subject-1", "task_id": "task-1", "change_id": "change-1", "action": "read", "resource": "repo"},
-			"expect": map[string]any{"decision": expected},
-		}},
-	}
-	data, err := json.Marshal(fixture)
-	if err != nil {
-		t.Fatal(fmt.Errorf("marshal fixture: %w", err))
-	}
-	return data
 }
 
 func TestCLIDevelopmentVersion(t *testing.T) {
@@ -409,15 +266,6 @@ func TestMCPA2AServerInsecureRemoteBindRejection(t *testing.T) {
 	if !strings.Contains(err.Error(), "--insecure mode is forbidden on non-loopback") {
 		t.Fatalf("unexpected error message: %v", err)
 	}
-
-	// 2. A2A serve with --insecure on 0.0.0.0:8081 should fail immediately
-	err = c.a2a(context.Background(), []string{"serve", "--listen", "0.0.0.0:8081", "--insecure"})
-	if err == nil {
-		t.Fatal("expected error for a2a serve with --insecure on non-loopback 0.0.0.0, got nil")
-	}
-	if !strings.Contains(err.Error(), "--insecure mode is forbidden on non-loopback") {
-		t.Fatalf("unexpected error message: %v", err)
-	}
 }
 
 func TestCLITokenCreationCapabilitiesValidation(t *testing.T) {
@@ -447,51 +295,6 @@ func TestCLITokenCreationCapabilitiesValidation(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "TOKEN-") {
 		t.Fatalf("expected token ID in output, got: %s", stdout.String())
-	}
-}
-
-func TestCLIGCWorktrees(t *testing.T) {
-	repo := cliRepo(t)
-	var stdout, stderr bytes.Buffer
-
-	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
-		t.Fatal(stderr.String())
-	}
-
-	// 1. gc without args fails with usage
-	code := Execute(context.Background(), repo.Path(), []string{"gc"}, strings.NewReader(""), &stdout, &stderr)
-	if code == 0 {
-		t.Fatalf("expected failure for gc without args, got code %d", code)
-	}
-
-	// 2. gc worktrees --dry-run
-	stdout.Reset()
-	stderr.Reset()
-	code = Execute(context.Background(), repo.Path(), []string{"gc", "worktrees", "--dry-run"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("gc worktrees --dry-run failed with code %d: stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "Inspected:") {
-		t.Fatalf("unexpected gc output: %s", stdout.String())
-	}
-}
-
-func TestCLIGCArtifacts(t *testing.T) {
-	repo := cliRepo(t)
-	var stdout, stderr bytes.Buffer
-
-	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
-		t.Fatal(stderr.String())
-	}
-
-	stdout.Reset()
-	stderr.Reset()
-	code := Execute(context.Background(), repo.Path(), []string{"gc", "artifacts", "--dry-run"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("gc artifacts --dry-run failed with code %d: stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "Total:") {
-		t.Fatalf("unexpected gc artifacts output: %s", stdout.String())
 	}
 }
 

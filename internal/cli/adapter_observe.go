@@ -12,7 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/opencodecli"
 )
 
-// adapterObservation is what `marshal adapters` reports for one provider
+// adapterObservation is what `marshal adapter probe` reports for one provider
 // CLI. It runs only `--version` (and, for OpenCode, `run --help`); neither
 // opens a model session.
 type adapterObservation struct {

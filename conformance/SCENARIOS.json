@@ -162,12 +162,6 @@
       "fixture": "mcp-version-mismatch",
       "expected": "DENY",
       "invariant": "Incompatible MCP protocol version must be explicitly rejected."
-    },
-    {
-      "id": "CONF-028",
-      "fixture": "a2a-role-spoofing",
-      "expected": "DENY",
-      "invariant": "Remote A2A caller role spoofing must be denied."
     }
   ]
 }

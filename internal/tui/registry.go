@@ -157,91 +157,91 @@ func (r *CapabilityRegistry) FormatAuditReport() string {
 }
 
 func registerAllCapabilities(r *CapabilityRegistry) {
-	r.Register(Capability{ID: "verification.status", Category: "VERIFICATION", Name: "Inspect Process 06 verification", Description: "Read canonical evidence-driven verification state", Access: AccessRead, CLISurface: "marshal review status VERIFICATION-ID", TUISurface: "/review <verification_id>", PalettePath: "verification status"})
+	r.Register(Capability{ID: "verification.status", Category: "VERIFICATION", Name: "Inspect Process 06 verification", Description: "Read canonical evidence-driven verification state", Access: AccessRead, CLISurface: "", TUISurface: "/review <verification_id>", PalettePath: "verification status"})
 	// Process 07 learning and memory. Every capability here is read: promotion,
 	// revision and invalidation are runtime-service operations, so no surface
 	// offers a print-only mutation.
 	// Process 08 governed optimization. Every capability here is read:
 	// promotion, canary and rollback are runtime-service operations, so no
 	// surface offers a print-only mutation of an optimization decision.
-	r.Register(Capability{ID: "optimization.cycle.status", Category: "OPTIMIZATION", Name: "Inspect Process 08 optimization cycle", Description: "Read a canonical optimization cycle with its vetoes and blocked paths", Access: AccessRead, CLISurface: "marshal optimization show OPTIMIZATION-ID", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization cycle"})
-	r.Register(Capability{ID: "optimization.candidates", Category: "OPTIMIZATION", Name: "Inspect optimization candidates", Description: "List candidates with their declared effects and cluster identity", Access: AccessRead, CLISurface: "marshal optimization candidates OPTIMIZATION-ID", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization candidates"})
-	r.Register(Capability{ID: "optimization.counterfactuals", Category: "OPTIMIZATION", Name: "Inspect counterfactual evaluations", Description: "Read alternate-route comparisons with their stated limitations", Access: AccessRead, CLISurface: "marshal optimization counterfactuals OPTIMIZATION-ID", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization counterfactuals"})
-	r.Register(Capability{ID: "optimization.manifests", Category: "OPTIMIZATION", Name: "Inspect benchmark manifests", Description: "Read pinned benchmark provenance, including which runs were official", Access: AccessRead, CLISurface: "marshal optimization manifests OPTIMIZATION-ID", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization manifests"})
-	r.Register(Capability{ID: "optimization.canaries", Category: "OPTIMIZATION", Name: "Inspect canary rollouts", Description: "Read bounded rollouts, their triggers and their rollback reasons", Access: AccessRead, CLISurface: "marshal optimization canaries OPTIMIZATION-ID", TUISurface: "/rollback <canary_id>", PalettePath: "optimization canaries"})
-	r.Register(Capability{ID: "learning.commit.status", Category: "LEARNING", Name: "Inspect Process 07 memory commit", Description: "Read a canonical memory commit with its promotions and refusals", Access: AccessRead, CLISurface: "marshal learning show MEMORY-COMMIT-ID", TUISurface: "/learning <memory_commit_id>", PalettePath: "learning commit"})
-	r.Register(Capability{ID: "learning.memory.search", Category: "LEARNING", Name: "Search durable memory", Description: "Bounded, scope- and freshness-aware memory retrieval with contradiction signals", Access: AccessRead, CLISurface: "marshal learning search --project ID", TUISurface: "/memory-search <project_id>", PalettePath: "learning search"})
-	r.Register(Capability{ID: "learning.memory.provenance", Category: "LEARNING", Name: "Inspect memory provenance", Description: "Read one memory item's full immutable version history", Access: AccessRead, CLISurface: "marshal learning history ITEM-ID", TUISurface: "/provenance <item_id>", PalettePath: "learning provenance"})
-	r.Register(Capability{ID: "learning.routing.trust", Category: "LEARNING", Name: "Inspect routing trust", Description: "Measured routing outcomes including failures, blocked runs and selection bias", Access: AccessRead, CLISurface: "marshal learning trust TASK-CLASS", TUISurface: "/trust [task-class]", PalettePath: "learning trust"})
-	r.Register(Capability{ID: "learning.fingerprints", Category: "LEARNING", Name: "Inspect failure fingerprints", Description: "Bounded, freshness-aware failure fingerprints", Access: AccessRead, CLISurface: "marshal learning fingerprints --project ID", TUISurface: "/fingerprints <project_id>", PalettePath: "learning fingerprints"})
-	r.Register(Capability{ID: "learning.playbooks", Category: "LEARNING", Name: "Inspect playbook candidates", Description: "List candidate procedures awaiting review; candidates are never active", Access: AccessRead, CLISurface: "marshal learning playbooks --project ID", TUISurface: "/playbooks <project_id>", PalettePath: "learning playbooks"})
-	r.Register(Capability{ID: "learning.replay.index", Category: "LEARNING", Name: "Inspect replay index", Description: "Read reproducibility classes and the side effects that block automatic replay", Access: AccessRead, CLISurface: "marshal learning replays RUN-ID", TUISurface: "/replay-index [run_id]", PalettePath: "learning replay"})
-	r.Register(Capability{ID: "learning.benchmarks", Category: "LEARNING", Name: "Inspect benchmark records", Description: "Read reproducible evaluation records pinned to a benchmark version and tree", Access: AccessRead, CLISurface: "marshal learning benchmarks NAME", TUISurface: "/replay-index", PalettePath: "learning benchmarks"})
+	r.Register(Capability{ID: "optimization.cycle.status", Category: "OPTIMIZATION", Name: "Inspect Process 08 optimization cycle", Description: "Read a canonical optimization cycle with its vetoes and blocked paths", Access: AccessRead, CLISurface: "", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization cycle"})
+	r.Register(Capability{ID: "optimization.candidates", Category: "OPTIMIZATION", Name: "Inspect optimization candidates", Description: "List candidates with their declared effects and cluster identity", Access: AccessRead, CLISurface: "", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization candidates"})
+	r.Register(Capability{ID: "optimization.counterfactuals", Category: "OPTIMIZATION", Name: "Inspect counterfactual evaluations", Description: "Read alternate-route comparisons with their stated limitations", Access: AccessRead, CLISurface: "", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization counterfactuals"})
+	r.Register(Capability{ID: "optimization.manifests", Category: "OPTIMIZATION", Name: "Inspect benchmark manifests", Description: "Read pinned benchmark provenance, including which runs were official", Access: AccessRead, CLISurface: "", TUISurface: "/optimization <optimization_id>", PalettePath: "optimization manifests"})
+	r.Register(Capability{ID: "optimization.canaries", Category: "OPTIMIZATION", Name: "Inspect canary rollouts", Description: "Read bounded rollouts, their triggers and their rollback reasons", Access: AccessRead, CLISurface: "", TUISurface: "/rollback <canary_id>", PalettePath: "optimization canaries"})
+	r.Register(Capability{ID: "learning.commit.status", Category: "LEARNING", Name: "Inspect Process 07 memory commit", Description: "Read a canonical memory commit with its promotions and refusals", Access: AccessRead, CLISurface: "", TUISurface: "/learning <memory_commit_id>", PalettePath: "learning commit"})
+	r.Register(Capability{ID: "learning.memory.search", Category: "LEARNING", Name: "Search durable memory", Description: "Bounded, scope- and freshness-aware memory retrieval with contradiction signals", Access: AccessRead, CLISurface: "", TUISurface: "/memory-search <project_id>", PalettePath: "learning search"})
+	r.Register(Capability{ID: "learning.memory.provenance", Category: "LEARNING", Name: "Inspect memory provenance", Description: "Read one memory item's full immutable version history", Access: AccessRead, CLISurface: "", TUISurface: "/provenance <item_id>", PalettePath: "learning provenance"})
+	r.Register(Capability{ID: "learning.routing.trust", Category: "LEARNING", Name: "Inspect routing trust", Description: "Measured routing outcomes including failures, blocked runs and selection bias", Access: AccessRead, CLISurface: "", TUISurface: "/trust [task-class]", PalettePath: "learning trust"})
+	r.Register(Capability{ID: "learning.fingerprints", Category: "LEARNING", Name: "Inspect failure fingerprints", Description: "Bounded, freshness-aware failure fingerprints", Access: AccessRead, CLISurface: "", TUISurface: "/fingerprints <project_id>", PalettePath: "learning fingerprints"})
+	r.Register(Capability{ID: "learning.playbooks", Category: "LEARNING", Name: "Inspect playbook candidates", Description: "List candidate procedures awaiting review; candidates are never active", Access: AccessRead, CLISurface: "", TUISurface: "/playbooks <project_id>", PalettePath: "learning playbooks"})
+	r.Register(Capability{ID: "learning.replay.index", Category: "LEARNING", Name: "Inspect replay index", Description: "Read reproducibility classes and the side effects that block automatic replay", Access: AccessRead, CLISurface: "", TUISurface: "/replay-index [run_id]", PalettePath: "learning replay"})
+	r.Register(Capability{ID: "learning.benchmarks", Category: "LEARNING", Name: "Inspect benchmark records", Description: "Read reproducible evaluation records pinned to a benchmark version and tree", Access: AccessRead, CLISurface: "", TUISurface: "/replay-index", PalettePath: "learning benchmarks"})
 	// 1. Goal Domain (12)
 	r.Register(Capability{
 		ID: "goal.create", Category: "GOAL", Name: "Create Goal",
 		Description: "Initialize a new goal with objectives and criteria",
-		Access:      AccessWrite, CLISurface: "marshal goal create",
+		Access:      AccessWrite, CLISurface: "",
 		TUISurface: "/goal create", PalettePath: "goal create",
 	})
 	r.Register(Capability{
 		ID: "goal.inspect", Category: "GOAL", Name: "Inspect Goal",
 		Description: "View active goal objectives, progress, and criteria",
-		Access:      AccessRead, CLISurface: "marshal goal",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal", PalettePath: "goal inspect",
 	})
 	r.Register(Capability{
 		ID: "goal.edit", Category: "GOAL", Name: "Edit Goal",
 		Description: "Modify active goal objective and description",
-		Access:      AccessWrite, CLISurface: "marshal goal edit",
+		Access:      AccessWrite, CLISurface: "",
 		TUISurface: "/goal edit", PalettePath: "goal edit",
 	})
 	r.Register(Capability{
 		ID: "goal.version", Category: "GOAL", Name: "View Goal Version",
 		Description: "Inspect goal revision history and version numbers",
-		Access:      AccessRead, CLISurface: "marshal goal version",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal version", PalettePath: "goal version",
 	})
 	r.Register(Capability{
 		ID: "goal.diff", Category: "GOAL", Name: "View Goal Diff",
 		Description: "View diff between active goal and previous version",
-		Access:      AccessRead, CLISurface: "marshal goal diff",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal diff", PalettePath: "goal diff",
 	})
 	r.Register(Capability{
 		ID: "goal.success_criteria", Category: "GOAL", Name: "Success Criteria",
 		Description: "Inspect verifiable success conditions for goal completion",
-		Access:      AccessRead, CLISurface: "marshal goal criteria",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal criteria", PalettePath: "goal criteria",
 	})
 	r.Register(Capability{
 		ID: "goal.constraints.view", Category: "GOAL", Name: "View Constraints",
 		Description: "Inspect immutable and active constraints on goal",
-		Access:      AccessRead, CLISurface: "marshal goal constraints",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal constraints", PalettePath: "goal constraints",
 	})
 	r.Register(Capability{
 		ID: "goal.constraints.add", Category: "GOAL", Name: "Add Constraint",
 		Description: "Add a new constraint to prevent undesirable behaviors",
-		Access:      AccessWrite, CLISurface: "marshal goal add-constraint",
+		Access:      AccessWrite, CLISurface: "",
 		TUISurface: "/goal add-constraint", PalettePath: "goal add constraint",
 	})
 	r.Register(Capability{
 		ID: "goal.constraints.remove", Category: "GOAL", Name: "Remove Constraint",
 		Description: "Remove a mutable constraint adhering to policy",
-		Access:      AccessWrite, CLISurface: "marshal goal rm-constraint",
+		Access:      AccessWrite, CLISurface: "",
 		TUISurface: "/goal rm-constraint", PalettePath: "goal remove constraint",
 	})
 	r.Register(Capability{
 		ID: "goal.donotdo", Category: "GOAL", Name: "Do-Not-Do Constraints",
 		Description: "Inspect explicit negative constraints (anti-goals)",
-		Access:      AccessRead, CLISurface: "marshal goal donotdo",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal donotdo", PalettePath: "goal do not do",
 	})
 	r.Register(Capability{
 		ID: "goal.progress", Category: "GOAL", Name: "Inspect Goal Progress",
 		Description: "Inspect percentage and task completion metrics",
-		Access:      AccessRead, CLISurface: "marshal goal progress",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/goal progress", PalettePath: "goal progress",
 	})
 	// Each lifecycle verb is registered separately: TUISurface names exactly one
@@ -371,7 +371,7 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 	r.Register(Capability{
 		ID: "policy.tool", Category: "HARNESS", Name: "Configure Tool Policy",
 		Description: "Restrict or permit specific tools per harness",
-		Access:      AccessWrite, CLISurface: "marshal policy tool",
+		Access:      AccessWrite, CLISurface: "",
 		TUISurface: "/policy tool", PalettePath: "policy tools configure",
 	})
 	r.Register(Capability{
@@ -383,7 +383,7 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 	r.Register(Capability{
 		ID: "ultra.toggle", Category: "HARNESS", Name: "ULTRA Entitlement Status",
 		Description: "Report that ULTRA is unavailable without a verified entitlement",
-		Access:      AccessRead, CLISurface: "marshal ultra",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/ultra toggle", PalettePath: "ultra toggle mode",
 	})
 	r.Register(Capability{
@@ -717,7 +717,7 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 	r.Register(Capability{
 		ID: "policy.network", Category: "POLICY", Name: "Network Policy",
 		Description: "Inspect network isolation, egress rules, and fail-closed state",
-		Access:      AccessRead, CLISurface: "marshal policy network",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/policy network", PalettePath: "network policy egress",
 	})
 	r.Register(Capability{
@@ -729,25 +729,25 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 	r.Register(Capability{
 		ID: "policy.capability", Category: "POLICY", Name: "Capability Policy",
 		Description: "Inspect process capabilities and system call boundaries",
-		Access:      AccessRead, CLISurface: "marshal policy capability",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/policy capability", PalettePath: "capability policy",
 	})
 	r.Register(Capability{
 		ID: "policy.scope", Category: "POLICY", Name: "Scope Policy",
 		Description: "Inspect filesystem read/write boundary rules",
-		Access:      AccessRead, CLISurface: "marshal policy scope",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/policy scope", PalettePath: "scope policy",
 	})
 	r.Register(Capability{
 		ID: "policy.write", Category: "POLICY", Name: "Write Permissions",
 		Description: "Inspect explicit write permissions and approvals per agent",
-		Access:      AccessRead, CLISurface: "marshal policy write",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/policy write", PalettePath: "write permissions policy",
 	})
 	r.Register(Capability{
 		ID: "policy.audit", Category: "POLICY", Name: "Security Audit Log",
 		Description: "View security audit events, sandbox escapes, and denials",
-		Access:      AccessRead, CLISurface: "marshal policy audit",
+		Access:      AccessRead, CLISurface: "",
 		TUISurface: "/policy audit", PalettePath: "security audit log",
 	})
 	r.Register(Capability{
