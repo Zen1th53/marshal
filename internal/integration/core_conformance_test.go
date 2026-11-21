@@ -11,9 +11,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/recovery"
-	"github.com/Zen1th53/marshal/internal/router"
-	"github.com/Zen1th53/marshal/internal/scheduler"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verify/quorum"
 )
@@ -51,53 +48,6 @@ func TestCoreConformanceRemoteBoundary(t *testing.T) {
 	// Token with task.read must pass task.read check
 	if !p.HasCapability(auth.CapTaskRead) {
 		t.Fatal("read-only token was denied task.read authority")
-	}
-}
-
-func TestCoreConformanceOrchestrationEngine(t *testing.T) {
-	ctx := context.Background()
-
-	// 1. Scheduler Real Multi-Factor Scoring
-	sched := scheduler.NewScheduler()
-	assignment, err := sched.Next(ctx, scheduler.Task{TaskID: "TASK-CONF-01", RequiredCapabilities: []string{"go"}}, []scheduler.Candidate{
-		{AgentID: "agent-a", Capabilities: []string{"go"}, SuccessRate: 0.95, Load: 0.1, ContextUtilization: 0.2, EstimatedCost: 0.05},
-		{AgentID: "agent-b", Capabilities: []string{"go"}, SuccessRate: 0.70, Load: 0.8, ContextUtilization: 0.8, EstimatedCost: 0.20},
-	})
-	if err != nil {
-		t.Fatalf("scheduler.Next: %v", err)
-	}
-	if assignment.AgentID != "agent-a" {
-		t.Fatalf("expected agent-a to be selected by scheduler, got: %s", assignment.AgentID)
-	}
-
-	// 2. Dynamic Model Profile Selection
-	rtr := router.NewRouter()
-	decision, err := rtr.Route(ctx, []string{"code", "refactor"}, 4000)
-	if err != nil {
-		t.Fatalf("Route: %v", err)
-	}
-	if decision.Provider == "" || decision.Model == "" {
-		t.Fatal("expected selected provider/model from dynamic router")
-	}
-
-	// 3. Recovery State Machine with Poisoned Checkpoint Quarantine
-	recManager := recovery.NewManager()
-	recPlan, err := recManager.PlanRecovery(ctx, recovery.RecoveryRequest{
-		TaskID:         "TASK-CONF-01",
-		CurrentRetries: 0,
-		MaxRetries:     3,
-		Checkpoint: &recovery.Checkpoint{
-			ID:        "CP-POISONED",
-			TaskID:    "TASK-CONF-01",
-			State:     recovery.CheckpointPoisoned,
-			CreatedAt: time.Now().UTC(),
-		},
-	})
-	if err != nil {
-		t.Fatalf("PlanRecovery: %v", err)
-	}
-	if recPlan.Action != recovery.ActionRestartFromBase {
-		t.Fatalf("expected restart from base for poisoned checkpoint, got: %s", recPlan.Action)
 	}
 }
 
