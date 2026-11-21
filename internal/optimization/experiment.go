@@ -289,12 +289,6 @@ func (m BenchmarkManifest) Verify() error {
 	return nil
 }
 
-// OfficialResolution reports whether a benchmark result may be described as an
-// official score. Only a run through the benchmark's own evaluator qualifies.
-func (m BenchmarkManifest) OfficialResolution() bool {
-	return m.Official && m.Kind != BenchmarkInternal && strings.TrimSpace(m.EvaluatorVersion) != ""
-}
-
 // Comparison summarizes a paired comparison between a baseline and a candidate
 // over the same task set.
 type Comparison struct {
@@ -387,22 +381,4 @@ func ComparePaired(baseline, candidate []ExperimentResult) Comparison {
 	low, high := effect-margin, effect+margin
 	c.IntervalLow, c.IntervalHigh = &low, &high
 	return c
-}
-
-// Improved reports whether the comparison shows a real improvement.
-//
-// A positive effect size is not enough on a weak sample: one task win is not
-// global superiority, and an interval spanning zero has not distinguished the
-// candidate from the baseline.
-func (c Comparison) Improved() bool {
-	if c.EffectSize == nil || *c.EffectSize <= 0 {
-		return false
-	}
-	if c.WeakEvidence {
-		return false
-	}
-	if c.IntervalLow != nil && *c.IntervalLow <= 0 {
-		return false
-	}
-	return true
 }

@@ -212,20 +212,6 @@ func (r *ExecutionRun) Fail(reason string, now time.Time) error {
 	return nil
 }
 
-// CompletePendingVerification transitions the run to DONE_PENDING_VERIFICATION.
-// Invariant: This is NOT final Goal completion; Process 06 must perform verification.
-func (r *ExecutionRun) CompletePendingVerification(now time.Time) error {
-	canComplete, unfulfilled := r.CanComplete()
-	if !canComplete {
-		return fmt.Errorf("%w: cannot complete run: %v", ErrInvalidStateTransition, unfulfilled)
-	}
-	r.State = RunDonePendingVerification
-	r.CurrentPhase = PhaseCompletedPending
-	r.UpdatedAt = now
-	r.EndedAt = &now
-	return nil
-}
-
 // CanComplete checks whether all required tasks and obligations are met for handoff to Process 06.
 func (r *ExecutionRun) CanComplete() (bool, []string) {
 	var unfulfilled []string

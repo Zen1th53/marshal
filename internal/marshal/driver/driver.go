@@ -97,11 +97,6 @@ func (h *Handle) SetObserved(rec marshal.CommandRecord) {
 	h.observed = rec
 }
 
-// SetReported records the worker-reported actions on the handle.
-func (h *Handle) SetReported(recs []marshal.CommandRecord) {
-	h.reported = recs
-}
-
 // SetRunErr records the execution error on the handle.
 func (h *Handle) SetRunErr(err error) {
 	h.runErr = err

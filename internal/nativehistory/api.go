@@ -222,8 +222,6 @@ func ReadOpenCodeLive(dbPath, root string) ([]OpenCodeLiveSession, error) {
 
 func SplitWorkspaceURIs(value string) []string { return splitWorkspaceURIs(value) }
 
-func (c *Capture) SaveIndex() error             { return c.saveIndex() }
-func (c *Capture) SeenEmpty() bool              { return len(c.seen) == 0 }
 func (c *Capture) LoadIndex() error             { return c.loadIndex() }
 func (c *Capture) IndexState() (bool, bool)     { return c.indexSaved, c.indexDirty }
 func (c *Capture) SeenIndex() map[string]string { return c.seen }

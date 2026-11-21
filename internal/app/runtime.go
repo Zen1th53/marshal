@@ -171,15 +171,6 @@ func (r *Runtime) SetWorkspaceRecoveryHooks(h SessionRecoveryHooks) {
 	r.recoveryHooks = h
 }
 
-// WorkspaceRecoveryHooks returns the installed recovery hooks. A zero value
-// makes SessionRecoveryService adoption fail closed with ErrUnavailable.
-func (r *Runtime) WorkspaceRecoveryHooks() SessionRecoveryHooks {
-	if r == nil {
-		return SessionRecoveryHooks{}
-	}
-	return r.recoveryHooks
-}
-
 // SetWorkspaceEntitlementRequests installs the persisted request service built
 // by trusted workspace composition. It owns no lease or gate.
 func (r *Runtime) SetWorkspaceEntitlementRequests(s *ULTRARequestService) {
@@ -2293,10 +2284,6 @@ func DeriveQuorumRequirements(risk model.Risk) []quorum.Requirement {
 			{Kind: "qa", Minimum: 1, AllowedRoles: []string{"qa", "reviewer", "architect"}},
 		}
 	}
-}
-
-func (r *Runtime) QuorumEngine() *quorum.Engine {
-	return r.quorumEngine
 }
 
 func (r *Runtime) VerifyQuorum(ctx context.Context, req QuorumVerifyRequest) (quorum.Evaluation, error) {

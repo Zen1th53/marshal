@@ -37,13 +37,6 @@ func NewRouterWithProfiles(profiles []ModelProfile) *Router {
 	}
 }
 
-func (r *Router) SetProfiles(profiles []ModelProfile) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.profiles = make([]ModelProfile, len(profiles))
-	copy(r.profiles, profiles)
-}
-
 func (r *Router) Profiles() []ModelProfile {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -17,8 +17,8 @@ var (
 
 // Collector securely manages unanchored, independent interpretation submissions.
 type Collector struct {
-	mu      sync.RWMutex
-	store   map[string][]model.Interpretation // key: sessionID:goalID:revision
+	mu    sync.RWMutex
+	store map[string][]model.Interpretation // key: sessionID:goalID:revision
 }
 
 func NewCollector() *Collector {
@@ -53,18 +53,6 @@ func (c *Collector) Submit(ctx context.Context, interp model.Interpretation) err
 
 	c.store[key] = append(c.store[key], interp)
 	return nil
-}
-
-// GetCollected returns the sealed interpretations only when evaluated by the comparator.
-func (c *Collector) GetCollected(sessionID, goalID string, revision int64) []model.Interpretation {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	key := cacheKey(sessionID, goalID, revision)
-	src := c.store[key]
-	out := make([]model.Interpretation, len(src))
-	copy(out, src)
-	return out
 }
 
 // ValidateDiversity verifies whether the collected interpretations meet the required diversity constraints.

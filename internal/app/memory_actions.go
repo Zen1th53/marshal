@@ -52,38 +52,6 @@ func (r *Runtime) memoryCommand(ctx context.Context, e CommandEnvelope, operatio
 	return store.WithCommand(ctx, record), principal, record, nil
 }
 
-func (r *Runtime) CommandPromoteMemory(ctx context.Context, e CommandEnvelope, req PromoteRequest) (model.MemoryRecordV2, error) {
-	if req.ProjectID != e.ProjectID || req.MemoryID != e.TargetID || req.ExpectedRevision == nil || req.ExpectedDigest == "" || *req.ExpectedRevision != e.ExpectedVersion {
-		return model.MemoryRecordV2{}, model.ErrInvalid
-	}
-	ctx, p, command, err := r.memoryCommand(ctx, e, "memory.promote", req)
-	if err != nil {
-		return model.MemoryRecordV2{}, err
-	}
-	if version, found, err := r.store.MemoryCommandResult(ctx, command); err != nil {
-		return model.MemoryRecordV2{}, err
-	} else if found {
-		rec, err := r.memoryService.Get(ctx, p, r.ProjectID(), e.TargetID)
-		if err != nil {
-			return rec, err
-		}
-		if rec.Revision != version || rec.Lifecycle != model.MemoryDurable {
-			return rec, model.ErrConflict
-		}
-		return rec, nil
-	}
-	// Preserve current ACL and applicability checks before entering the service.
-	rec, err := r.memoryService.Get(ctx, p, r.ProjectID(), e.TargetID)
-	if err != nil {
-		return model.MemoryRecordV2{}, err
-	}
-	if err = r.memoryService.revalidateMemoryRecord(ctx, rec, MemoryReconcileRequest{}); err != nil {
-		return model.MemoryRecordV2{}, err
-	}
-	req.ProjectID = r.ProjectID()
-	return r.memoryService.Promote(ctx, p, req)
-}
-
 // Policy digest binds runtime policy, constitution and current authority
 // configuration. Recovery never uses an old snapshot as policy authority.
 func (r *Runtime) memoryPolicyDigest() string {

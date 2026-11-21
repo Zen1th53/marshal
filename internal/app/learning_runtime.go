@@ -332,38 +332,12 @@ func (s *LearningService) Replays(ctx context.Context, runID string) ([]learning
 	return s.runtime.store.ReplayRecords(ctx, runID)
 }
 
-// RecordReplay indexes one reproducible run against a stored memory commit.
-func (s *LearningService) RecordReplay(ctx context.Context, commitID string, r learning.ReplayRecord) error {
-	if s == nil || s.runtime == nil {
-		return model.ErrUnavailable
-	}
-	if _, err := s.runtime.store.GetMemoryCommit(ctx, commitID); err != nil {
-		return err
-	}
-	if r.RecordedAt.IsZero() {
-		r.RecordedAt = s.now()
-	}
-	return s.runtime.store.AppendReplayRecord(ctx, commitID, r)
-}
-
 // Benchmarks returns stored evaluation records.
 func (s *LearningService) Benchmarks(ctx context.Context, benchmark string) ([]learning.BenchmarkRecord, error) {
 	if s == nil || s.runtime == nil {
 		return nil, model.ErrUnavailable
 	}
 	return s.runtime.store.BenchmarkRecords(ctx, benchmark)
-}
-
-// RecordBenchmark stores one reproducible evaluation result. A benchmark score
-// is telemetry: it is recorded here and never promotes a provider by itself.
-func (s *LearningService) RecordBenchmark(ctx context.Context, b learning.BenchmarkRecord) error {
-	if s == nil || s.runtime == nil {
-		return model.ErrUnavailable
-	}
-	if b.RecordedAt.IsZero() {
-		b.RecordedAt = s.now()
-	}
-	return s.runtime.store.AppendBenchmarkRecord(ctx, b)
 }
 
 // Export produces a secret-safe, integrity-checked backup of project memory.

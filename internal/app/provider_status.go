@@ -164,22 +164,6 @@ func trackerFor(r *Runtime) *ProviderStatusTracker {
 	return t
 }
 
-// RecordProviderAuth stores an authoritative authentication observation.
-func (r *Runtime) RecordProviderAuth(obs ProviderAuthObservation) {
-	if obs.Provider == "" {
-		return
-	}
-	canonical := CanonicalProviderName(obs.Provider)
-	obs.Provider = canonical
-	if obs.ObservedAt.IsZero() {
-		obs.ObservedAt = time.Now().UTC()
-	}
-	t := trackerFor(r)
-	t.mu.Lock()
-	t.auth[canonical] = obs
-	t.mu.Unlock()
-}
-
 // RecordProviderUsage stores durable usage for a provider in the runtime session.
 func (r *Runtime) RecordProviderUsage(provider string, obs ProviderUsageObservation) error {
 	canonical := CanonicalProviderName(provider)

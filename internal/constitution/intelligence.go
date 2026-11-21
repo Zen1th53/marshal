@@ -234,21 +234,6 @@ func (b Brief) Validate() error {
 	return nil
 }
 
-// PermitsDomain reports whether the brief allows a proposal in the domain. An
-// empty AllowedDomains list permits only the envelope's own domain, so an
-// unset field cannot be read as unrestricted permission.
-func (b Brief) PermitsDomain(domain Domain) bool {
-	if len(b.AllowedDomains) == 0 {
-		return domain == b.Envelope.Domain
-	}
-	for _, allowed := range b.AllowedDomains {
-		if allowed == domain {
-			return true
-		}
-	}
-	return false
-}
-
 // AdvisoryStatus reports how an advisory was treated.
 type AdvisoryStatus string
 
