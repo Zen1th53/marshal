@@ -137,18 +137,6 @@ func (h *Handle) Outcome() (marshal.CommandRecord, error, bool) {
 	}
 }
 
-// WorkerCommander is an optional interface implemented by drivers that can
-// describe the worker command line, arguments, and environment.
-type WorkerCommander interface {
-	WorkerCommand(req Request) (binary string, args []string, env []string)
-}
-
-// OutputParser is an optional interface implemented by drivers that can parse
-// worker-reported actions from output.
-type OutputParser interface {
-	ParseOutput(stream []byte) []marshal.CommandRecord
-}
-
 // Driver runs tasks on one kind of worker.
 type Driver interface {
 	Mode() marshal.WorkerMode
@@ -406,11 +394,6 @@ func lines(s string) []string {
 	return out
 }
 
-// Bound keeps the head of an output and says how much was dropped.
-func Bound(s string) string {
-	return bound(s)
-}
-
 // bound keeps the head of an output and says how much was dropped.
 func bound(s string) string {
 	if len(s) <= maxOutput {
@@ -434,29 +417,6 @@ type Governed struct {
 }
 
 func (Governed) Mode() marshal.WorkerMode { return marshal.Governed }
-
-func (g Governed) WorkerCommand(req Request) (string, []string, []string) {
-	provider := g.Provider
-	if provider == "" {
-		provider = req.Task.Worker
-	}
-	switch provider {
-	case "codex":
-		d := Codex("")
-		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
-	case "claude", "claude-code":
-		d := Claude("")
-		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
-	case "agy", "antigravity":
-		d := Agy("")
-		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
-	case "opencode":
-		d := OpenCode("")
-		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
-	default:
-		return provider, nil, cleanWorkerEnv(os.Environ())
-	}
-}
 
 // Launch starts the governed run.
 func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {
