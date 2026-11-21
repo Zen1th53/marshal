@@ -101,6 +101,28 @@ assert.equal(run('path.length'),0);assert.equal(get('crumbs').hidden,true);asser
 part('untouched').onkeydown({key:' ',target:part('untouched'),preventDefault(){}});await tick();assert.equal(run('path.length'),0);assert.equal(run('target.id'),'untouched');
 part('untouched').onkeydown({key:'Enter',target:part('untouched'),preventDefault(){}});await tick();await tick();assert.equal(run("path.join('/')"),'untouched');
 run(`closeEditor();path=[];delete state.layouts['sub:untouched'];state.architecture.components=state.architecture.components.filter(c=>c.id!=='inner');draw()`);
+// Derived levels: Shift-click marks a file, the request names its path and
+// binds to the enclosing reviewed part; area selection marks several files.
+{
+const code={kind:'files',dir:'pkg',part:'added',architecture:{components:[{id:'file-1',name:'a.go',responsibility:'File pkg/a.go',files:['pkg/a.go']},{id:'file-2',name:'b.go',responsibility:'File pkg/b.go',files:['pkg/b.go']}],connections:[{id:'use-1',source:'file-1',target:'file-2',label:'uses X',protocol:''}]},layout:{version:'derived-v1',width:600,height:200,nodes:[{id:'file-1',x:20,y:20,width:160,height:72},{id:'file-2',x:300,y:20,width:160,height:72}],edges:[{id:'use-1',source:'file-1',target:'file-2',points:[[180,56],[300,56]]}]}};
+context.code=code;run(`advanced=true;path=['added'];derivedView={key:'code:added',data:code,snapshot:codeSnapshot('code:added',code)};draw()`);
+assert.equal(run('view'),'code:added');assert.equal(get('area').disabled,false);
+part('file-1').onclick({detail:1,shiftKey:true});
+assert.equal(get('editor').hidden,false);assert.equal(get('decl-row').hidden,false);assert.ok(get('selection-meta').textContent.includes('a.go'));
+const posts=[];context.fetch=async(url,opt)=>{const body=JSON.parse(opt.body);posts.push(body);const next=JSON.parse(JSON.stringify(run('state')));next.comments.push({id:'c'+posts.length,target:body.target,derived:{part:'added',elements:body.derived.items.map(i=>({kind:i.to?'connection':'file',...i})),breadcrumb:['added','pkg','a.go'],note:'derived from code, not reviewed'},request_type:body.request_type,comment:body.comment,status:'queued',resolved:false});return {ok:true,json:async()=>next};};
+get('request-text').value='Why does a.go use b.go?';get('decl-name').value='Serve';await get('submit').onclick();
+const sent=posts.at(-1);
+assert.deepEqual(sent.derived,{part:'added',items:[{path:'pkg/a.go'}],name:'Serve'});
+assert.equal(sent.target.kind,'component');assert.equal(sent.target.id,'added');assert.equal(sent.target.diagram_id,'architecture');
+assert.ok(part('file-1').children.some(n=>n.className==='feedback-dot'),'open derived request shows a dot on the file');
+assert.ok(!part('file-2').children.some(n=>n.className==='feedback-dot'));
+assert.ok(run("acceptBlocker()!==t('accept_wait_reply')&&acceptBlocker()!==t('accept_open_request')"),'an open derived request never blocks Accept');
+run('closeEditor()');run(`state.comments=state.comments.map(c=>({...c,status:'answered',resolved:true}));target={kind:'area',diagram_id:view,layout_version:'derived-v1',rect:{x:0,y:0,width:600,height:200},component_ids:['file-1','file-2'],connection_ids:['use-1']};openEditor()`);
+get('request-text').value='Explain these files';await get('submit').onclick();
+assert.deepEqual(posts.at(-1).derived,{part:'added',items:[{path:'pkg/a.go'},{path:'pkg/b.go'},{path:'pkg/a.go',to:'pkg/b.go'}]});
+run('renderHistory()');assert.ok(JSON.stringify(get('history-list').children.at(-1).children).includes('pkg/a.go'));
+run(`closeEditor();state.comments=[];advanced=false;path=[];derivedView=null;draw()`);
+}
 // The part panel names the contract revision too, never the review-state counter.
 run("target={kind:'component',id:'edited'};openEditor()");assert.equal(get('selection-meta').textContent,'Revision 4 · edited');run('closeEditor()');
 // The whole connection carries its full label as a tooltip; the caption may be cut.

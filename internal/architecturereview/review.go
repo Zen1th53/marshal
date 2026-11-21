@@ -583,11 +583,26 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 	if err != nil {
 		return nil, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if q["protocol_version"] != Version || !onlyKeys(q, "protocol_version", "action", "revision", "digest", "ui_digest", "language", "target", "request_type", "comment", "followup_to", "request_id", "reason", "component_id", "builder", "builders_digest", "design_digest") {
+	if q["protocol_version"] != Version || !onlyKeys(q, "protocol_version", "action", "revision", "digest", "ui_digest", "language", "target", "request_type", "comment", "followup_to", "request_id", "reason", "component_id", "builder", "builders_digest", "design_digest", "derived") {
 		return nil, errors.New("review protocol or request fields are invalid")
 	}
+	// A request about a code-derived element is re-derived and bound before
+	// the state lock: the code view takes that lock itself.
+	var derived map[string]any
+	if raw, present := q["derived"]; present {
+		if q["action"] != "submit" {
+			return nil, errors.New("derived code selection is valid only on a submitted request")
+		}
+		ask, err := parseDerived(raw)
+		if err != nil {
+			return nil, err
+		}
+		if derived, err = r.resolveDerived(ctx, ask); err != nil {
+			return nil, err
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	revision, valid := integer(q["revision"])
 	current, _ := integer(r.state["revision"])
 	if !valid || revision != current || q["digest"] != r.state["digest"] || q["ui_digest"] != r.state["ui_digest"] || q["language"] != r.state["language"] {
@@ -619,7 +634,8 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 			}
 		}
 		for _, value := range next["comments"].([]any) {
-			if value.(map[string]any)["resolved"] != true {
+			// A question about derived code never takes part in acceptance.
+			if entry := value.(map[string]any); entry["resolved"] != true && entry["derived"] == nil {
 				return nil, errors.New("unresolved feedback prevents approval")
 			}
 		}
@@ -700,6 +716,9 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 	if err != nil {
 		return nil, err
 	}
+	if derived != nil && (target["kind"] != "component" || target["id"] != derived["part"]) {
+		return nil, errors.New("derived code selection must name its enclosing part")
+	}
 	architecture := next["architecture"].(map[string]any)
 	selection := selectionFor(architecture, r.layouts, target)
 	prior := []any{}
@@ -715,7 +734,7 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 				return nil, errors.New("continue the most recent followup; branching is forbidden")
 			}
 		}
-		if !equalJSON(previous["target"], target) || previous["request_type"] != kind {
+		if !equalJSON(previous["target"], target) || previous["request_type"] != kind || !equalJSON(previous["derived"], derivedValue(derived)) {
 			return nil, errors.New("followup must address the exact previous target and request type")
 		}
 		stored, err := readPrivate(filepath.Join(r.config.StateDir, "requests", id+".json"))
@@ -734,7 +753,7 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 			}
 			seen[cursorID] = true
 			copy := map[string]any{}
-			for _, key := range []string{"id", "revision", "digest", "target", "request_type", "comment", "status", "reply", "questions", "error"} {
+			for _, key := range []string{"id", "revision", "digest", "target", "derived", "request_type", "comment", "status", "reply", "questions", "error"} {
 				if value, exists := cursor[key]; exists {
 					copy[key] = value
 				}
@@ -763,12 +782,18 @@ func (r *Review) Apply(ctx context.Context, raw json.RawMessage) (json.RawMessag
 	if len(prior) > 0 {
 		envelope["prior_requests"] = prior
 	}
+	if derived != nil {
+		entry["derived"] = derived
+		envelope["derived"] = derived
+	}
 	if err = r.writeFile(filepath.Join(r.config.StateDir, "requests", id+".json"), envelope); err != nil {
 		return nil, err
 	}
 	next["comments"] = append(next["comments"].([]any), entry)
-	next["approved"] = false
-	delete(next, "approval")
+	if derived == nil {
+		next["approved"] = false
+		delete(next, "approval")
+	}
 	if err = r.commit(next); err != nil {
 		return nil, err
 	}
@@ -878,7 +903,7 @@ func (r *Review) applyResult(id string, envelope, result map[string]any) error {
 		current := next["architecture"].(map[string]any)
 		for _, value := range next["comments"].([]any) {
 			entry := value.(map[string]any)
-			if entry["resolved"] == true || lineage[entry["id"].(string)] {
+			if entry["resolved"] == true || lineage[entry["id"].(string)] || entry["derived"] != nil {
 				continue
 			}
 			target, ok := entry["target"].(map[string]any)
@@ -970,6 +995,9 @@ func checkResult(envelope, result map[string]any, layouts map[string]Layout) err
 		return err
 	}
 	changed := !equalJSON(before, after)
+	if envelope["derived"] != nil && (changed || status == "proposed_change") {
+		return errors.New("a request about derived code cannot change the architecture")
+	}
 	if status != "proposed_change" || envelope["request_type"] == "comment" {
 		if changed {
 			return errors.New("a comment or clarification cannot change architecture")
@@ -1141,4 +1169,12 @@ func (r *Review) CodeView(ctx context.Context, part, dir string) (*CodeView, err
 	r.codeViews[key] = codeViewEntry{time.Now(), view}
 	r.mu.Unlock()
 	return view, nil
+}
+
+// derivedValue keeps a missing derived record and a nil one equal.
+func derivedValue(record map[string]any) any {
+	if record == nil {
+		return nil
+	}
+	return record
 }

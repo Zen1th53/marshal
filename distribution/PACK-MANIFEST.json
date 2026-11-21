@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "3f346cc01203d478ba4ba7456d9d0af54c71f2efcebb50c3d2e4388d44a13704",
-      "bytes": 26888
+      "sha256": "a1e99de5be96ed6c1c7b92a605f911655e81ba35a8934ea361872634b8a30d63",
+      "bytes": 27303
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -581,8 +581,8 @@
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "59c37dd2c13ad0987989a2259fb502ee3df83156c1ead42c1213298078309b5d",
-      "bytes": 6821
+      "sha256": "a85bda5e8b805050215c10b57783554f056b8a28a99e4d74e645d2a26dbfdeca",
+      "bytes": 7593
     },
     {
       "path": "docs/index.md",
@@ -2446,13 +2446,13 @@
     },
     {
       "path": "internal/app/marshal_architecture.go",
-      "sha256": "88e10154ccbfbc9f22d385ba089afe6005d80b438919abc71b8d3f7f7e90d7c2",
-      "bytes": 12331
+      "sha256": "3dca187f09dae798306fdadef5067a0a1246fad1f8a1aae37fd72a850c654da3",
+      "bytes": 13302
     },
     {
       "path": "internal/app/marshal_architecture_test.go",
-      "sha256": "1caa1d09b00d85bc306d5effbe445e9e9bb944cafe8f4dfeca2cd5ba065ce0ed",
-      "bytes": 16201
+      "sha256": "bfde6c35969fb0c3791b515cdf1e84c19d43f1b29e1ab4f7ca23a2aa65a4f1b1",
+      "bytes": 17775
     },
     {
       "path": "internal/app/marshal_bind_plan.go",
@@ -4731,13 +4731,13 @@
     },
     {
       "path": "internal/architecturecodec/json.go",
-      "sha256": "444e66564667d36894fe5b0d805dea6983af41c6a5f7aa896b864d6b2f2a019a",
-      "bytes": 19895
+      "sha256": "a4d30df781adc72c19ee8b3fa981882f531d483cd7bfc16d61f5db489854e624",
+      "bytes": 19989
     },
     {
       "path": "internal/architecturecodec/language.go",
-      "sha256": "c6dc4b452c4cfb1ef3cd48f5c5e66b5d06e9c1d56df6ca5e5b9301c0af7ef814",
-      "bytes": 14749
+      "sha256": "5322139bea6f6d68b37f5fac5d8fba116dbcffa211692fdbb9ea96d08d9735d4",
+      "bytes": 15204
     },
     {
       "path": "internal/architecturecodec/layout.go",
@@ -4786,8 +4786,18 @@
     },
     {
       "path": "internal/architecturereview/demo_test.go",
-      "sha256": "7650b35f48e1117d6f4bb43a39c793a0bab2434ec269054bffd70be1bec1ff34",
-      "bytes": 2504
+      "sha256": "5920c03c46bce89b435995715eda97df8bbf64537d5bcce321928ecceb30ab26",
+      "bytes": 2662
+    },
+    {
+      "path": "internal/architecturereview/derived.go",
+      "sha256": "3f563bc72be95c984061d66b9bcf85b9192a6c06ebd95aefe21f271948fbbef7",
+      "bytes": 8169
+    },
+    {
+      "path": "internal/architecturereview/derived_test.go",
+      "sha256": "e6bd0d2e5a7a95300bb2b17e4b3a64cfa4b46a4269b9ed866895af01e0cab2db",
+      "bytes": 10427
     },
     {
       "path": "internal/architecturereview/design_test.go",
@@ -4811,8 +4821,8 @@
     },
     {
       "path": "internal/architecturereview/language.go",
-      "sha256": "c094cdd67edd26af42d9173e354b6d99cc360e994e269971fef280a75bb745d5",
-      "bytes": 15851
+      "sha256": "d62ce2ada3f0ea1d8c2b5cb7043fc5a7bbdfe2cb469b432b3beac52a90c36335",
+      "bytes": 16306
     },
     {
       "path": "internal/architecturereview/language_test.go",
@@ -4836,13 +4846,13 @@
     },
     {
       "path": "internal/architecturereview/review.go",
-      "sha256": "1d90531973bcb4c06d86a47edddc1450f7168a26ba06d6af3163a16e67754c8f",
-      "bytes": 37371
+      "sha256": "85d6ed435a9877a403192973e84bcc62853d99dd311501e6fdc26abcda601198",
+      "bytes": 38694
     },
     {
       "path": "internal/architecturereview/review.html",
-      "sha256": "2dd99a74359cda72713ae66d43466945f2e22f48b601651fea14ef0a4b266edf",
-      "bytes": 88458
+      "sha256": "cdef8764f7872709083d670f5e70cf54e81b2ad0d909ac78a0046b264c81ac1c",
+      "bytes": 92047
     },
     {
       "path": "internal/architecturereview/review_browser_test.go",
@@ -4861,8 +4871,8 @@
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.cjs",
-      "sha256": "a2325c2b7dfceff1169c9c72a52d3338035c5c780a639d0f610d0522fcdd9a8e",
-      "bytes": 12901
+      "sha256": "c78c12404e6c9fcc1feabf25b98b7a1b4f971ee34a75e49669a88cb7cbc042e5",
+      "bytes": 15924
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.json",
