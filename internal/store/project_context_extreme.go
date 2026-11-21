@@ -468,56 +468,16 @@ func (s *Store) commitMCPProjectContractDecision(ctx context.Context, req permis
 		}
 		return projectcontext.Contract{}, tx.Commit()
 	}
-	inventory, err := readProjectContractInventory(ctx, tx, sub.Contract.Project, audience)
-	if err != nil {
+	if err = checkProjectContractActivationTx(ctx, tx, sub, audience, now); err != nil {
 		return projectcontext.Contract{}, err
-	}
-	if projectInventoryDigest(inventory) != sub.Contract.ReviewedInventoryDigest {
-		return projectcontext.Contract{}, projectcontext.ErrReviewPending
-	}
-	if err = validateProjectContractReferences(ctx, tx, sub.Contract, inventory, audience, now); err != nil {
-		return projectcontext.Contract{}, err
-	}
-	var currentVersion int64
-	var currentID, currentDigest string
-	err = tx.QueryRowContext(ctx, `SELECT cas_version,coalesce(contract_id,''),coalesce(digest,'') FROM extreme_project_contract_active WHERE project_id=?`, sub.Contract.Project.CanonicalID).Scan(&currentVersion, &currentID, &currentDigest)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return projectcontext.Contract{}, err
-	}
-	if currentVersion != sub.ExpectedVersion || sub.Contract.Revision != currentVersion+1 || (currentVersion > 0 && (currentID != sub.Contract.ID || sub.Contract.SupersedesDigest != currentDigest || strings.TrimSpace(sub.Contract.RevisionReason) == "")) {
-		return projectcontext.Contract{}, model.ErrConflict
-	}
-	if currentVersion > 0 {
-		previous, _, _, err := readProjectContract(ctx, tx, sub.Contract.Project)
-		if err != nil {
-			return projectcontext.Contract{}, err
-		}
-		if err := projectcontext.ValidateContractRevision(previous, sub.Contract); err != nil {
-			return projectcontext.Contract{}, err
-		}
 	}
 	if ownerInstruction {
-		if _, err = consumeProjectContractInstructionTx(ctx, tx, req.Scope, req.SourceLaunch, decision.ID, sub, contractDigest); err != nil {
+		if _, err = consumeProjectContractInstructionTx(ctx, tx, req.Scope, decision.ID, sub, contractDigest); err != nil {
 			return projectcontext.Contract{}, err
 		}
 	}
-	contractJSON, _ := json.Marshal(sub.Contract)
-	if _, err = tx.ExecContext(ctx, `INSERT INTO extreme_project_contract_revisions(project_id,contract_id,revision,digest,contract_json,acceptance_occurrence,created_at) VALUES(?,?,?,?,?,?,?)`, sub.Contract.Project.CanonicalID, sub.Contract.ID, sub.Contract.Revision, contractDigest, string(contractJSON), decision.ID, now.UTC().Format(time.RFC3339Nano)); err != nil {
+	if err = activateProjectContractTx(ctx, tx, sub, contractDigest, decision.ID, now); err != nil {
 		return projectcontext.Contract{}, err
-	}
-	for _, ref := range sub.Contract.Required {
-		raw, _ := json.Marshal(ref)
-		if _, err = tx.ExecContext(ctx, `INSERT INTO extreme_project_contract_required_refs(project_id,contract_id,contract_revision,memory_project_id,memory_id,memory_revision,content_digest,class,ref_json) VALUES(?,?,?,?,?,?,?,?,?)`, sub.Contract.Project.CanonicalID, sub.Contract.ID, sub.Contract.Revision, ref.ProjectID, ref.ID, ref.Revision, ref.ContentDigest, ref.Class, string(raw)); err != nil {
-			return projectcontext.Contract{}, err
-		}
-	}
-	activeResult, activeErr := tx.ExecContext(ctx, `INSERT INTO extreme_project_contract_active(project_id,storage_project_id,contract_id,revision,digest,cas_version,bootstrap_state) VALUES(?,?,?,?,?,?,'accepted') ON CONFLICT(project_id) DO UPDATE SET contract_id=excluded.contract_id,revision=excluded.revision,digest=excluded.digest,cas_version=excluded.cas_version,bootstrap_state='accepted' WHERE extreme_project_contract_active.cas_version=? AND extreme_project_contract_active.storage_project_id=excluded.storage_project_id`, sub.Contract.Project.CanonicalID, sub.Contract.Project.StorageID, sub.Contract.ID, sub.Contract.Revision, contractDigest, sub.Contract.Revision, sub.ExpectedVersion)
-	if activeErr != nil {
-		return projectcontext.Contract{}, activeErr
-	}
-	activeCount, activeErr := activeResult.RowsAffected()
-	if activeErr != nil || activeCount != 1 {
-		return projectcontext.Contract{}, model.ErrConflict
 	}
 	if err = commitProjectDecisionJournal(ctx, s, tx, original, decision, "committed", audit); err != nil {
 		return projectcontext.Contract{}, err
@@ -527,6 +487,66 @@ func (s *Store) commitMCPProjectContractDecision(ctx context.Context, req permis
 	}
 	return sub.Contract, nil
 }
+
+// checkProjectContractActivationTx is every check an acceptance makes before
+// the contract becomes active, whoever applies it: the exact reviewed
+// inventory, the required references, and the active version the draft was
+// made against (a revision must supersede the accepted contract it names).
+func checkProjectContractActivationTx(ctx context.Context, tx *sql.Tx, sub ProjectContractSubmission, audience ProjectContextAudience, now time.Time) error {
+	inventory, err := readProjectContractInventory(ctx, tx, sub.Contract.Project, audience)
+	if err != nil {
+		return err
+	}
+	if projectInventoryDigest(inventory) != sub.Contract.ReviewedInventoryDigest {
+		return projectcontext.ErrReviewPending
+	}
+	if err = validateProjectContractReferences(ctx, tx, sub.Contract, inventory, audience, now); err != nil {
+		return err
+	}
+	var currentVersion int64
+	var currentID, currentDigest string
+	err = tx.QueryRowContext(ctx, `SELECT cas_version,coalesce(contract_id,''),coalesce(digest,'') FROM extreme_project_contract_active WHERE project_id=?`, sub.Contract.Project.CanonicalID).Scan(&currentVersion, &currentID, &currentDigest)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if currentVersion != sub.ExpectedVersion || sub.Contract.Revision != currentVersion+1 || (currentVersion > 0 && (currentID != sub.Contract.ID || sub.Contract.SupersedesDigest != currentDigest || strings.TrimSpace(sub.Contract.RevisionReason) == "")) {
+		return model.ErrConflict
+	}
+	if currentVersion > 0 {
+		previous, _, _, err := readProjectContract(ctx, tx, sub.Contract.Project)
+		if err != nil {
+			return err
+		}
+		if err := projectcontext.ValidateContractRevision(previous, sub.Contract); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// activateProjectContractTx writes the accepted revision, its required refs
+// and the active pointer under compare-and-swap on the expected version.
+func activateProjectContractTx(ctx context.Context, tx *sql.Tx, sub ProjectContractSubmission, contractDigest, acceptanceOccurrence string, now time.Time) error {
+	contractJSON, _ := json.Marshal(sub.Contract)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO extreme_project_contract_revisions(project_id,contract_id,revision,digest,contract_json,acceptance_occurrence,created_at) VALUES(?,?,?,?,?,?,?)`, sub.Contract.Project.CanonicalID, sub.Contract.ID, sub.Contract.Revision, contractDigest, string(contractJSON), acceptanceOccurrence, now.UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	for _, ref := range sub.Contract.Required {
+		raw, _ := json.Marshal(ref)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO extreme_project_contract_required_refs(project_id,contract_id,contract_revision,memory_project_id,memory_id,memory_revision,content_digest,class,ref_json) VALUES(?,?,?,?,?,?,?,?,?)`, sub.Contract.Project.CanonicalID, sub.Contract.ID, sub.Contract.Revision, ref.ProjectID, ref.ID, ref.Revision, ref.ContentDigest, ref.Class, string(raw)); err != nil {
+			return err
+		}
+	}
+	activeResult, err := tx.ExecContext(ctx, `INSERT INTO extreme_project_contract_active(project_id,storage_project_id,contract_id,revision,digest,cas_version,bootstrap_state) VALUES(?,?,?,?,?,?,'accepted') ON CONFLICT(project_id) DO UPDATE SET contract_id=excluded.contract_id,revision=excluded.revision,digest=excluded.digest,cas_version=excluded.cas_version,bootstrap_state='accepted' WHERE extreme_project_contract_active.cas_version=? AND extreme_project_contract_active.storage_project_id=excluded.storage_project_id`, sub.Contract.Project.CanonicalID, sub.Contract.Project.StorageID, sub.Contract.ID, sub.Contract.Revision, contractDigest, sub.Contract.Revision, sub.ExpectedVersion)
+	if err != nil {
+		return err
+	}
+	if n, err := activeResult.RowsAffected(); err != nil || n != 1 {
+		return model.ErrConflict
+	}
+	return nil
+}
+
 func mcpPayloadDigest(payload string) string {
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])

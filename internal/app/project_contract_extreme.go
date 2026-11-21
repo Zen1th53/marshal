@@ -105,6 +105,24 @@ func (r *Runtime) commitBrokerProjectContractPermission(ctx context.Context, req
 	return true, err
 }
 
+// ReconcileOwnerAcceptedProjectContract applies a project contract the owner
+// already accepted in the browser that never became active (the Marshal's
+// allow was lost to a chat restart, or refused before identical
+// resubmissions were recognised). Only the owner's recorded browser Accept of
+// that exact revision and digest authorizes it; a different digest is never
+// applied. It runs when the owner runtime opens and is recorded as a
+// PROJECT_CONTRACT_OWNER_ACCEPTANCE_APPLIED event.
+func (r *Runtime) ReconcileOwnerAcceptedProjectContract(ctx context.Context) (bool, error) {
+	if r == nil || r.store == nil {
+		return false, nil
+	}
+	_, applied, err := r.store.ApplyOwnerAcceptedProjectContract(ctx, r.ProjectContractBinding(), r.projectContractOwnerAudience, time.Now().UTC(), "owner browser acceptance recorded but not applied; applied when the runtime opened")
+	if err == nil && applied {
+		r.recordArchitectureCommit(ctx, r.ProjectRoot(), "", "accepted", "")
+	}
+	return applied, err
+}
+
 // RecordProjectContractOperatorInstruction binds the owner's browser Accept to
 // the newest unaccepted contract draft of the live MCP launch, as the owner's
 // recorded instruction for exactly that contract.

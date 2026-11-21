@@ -171,17 +171,22 @@ func readProjectContractInstruction(ctx context.Context, q mcpQuery, project, re
 }
 
 // consumeProjectContractInstructionTx binds the newest unconsumed owner
-// instruction for this exact contract, launch and expected version to the
-// applying decision inside the acceptance transaction.
-func consumeProjectContractInstructionTx(ctx context.Context, tx *sql.Tx, project, launch, decision string, sub ProjectContractSubmission, contractDigest string) (string, error) {
+// instruction for this exact contract (id, revision, canonical digest,
+// reviewed inventory and expected version) to the applying decision inside
+// the acceptance transaction. The owner accepted that exact content, not the
+// launch that happened to carry it: a Marshal chat restarted (or rebound)
+// after the owner's Accept resubmits the identical contract under a new
+// launch, and that identical copy is what the owner accepted. A contract
+// whose digest differs is never covered.
+func consumeProjectContractInstructionTx(ctx context.Context, tx *sql.Tx, project, decision string, sub ProjectContractSubmission, contractDigest string) (string, error) {
 	if _, err := tx.ExecContext(ctx, projectContractInstructionSchema); err != nil {
 		return "", err
 	}
 	var ref string
 	err := tx.QueryRowContext(ctx, `SELECT i.instruction_ref FROM extreme_project_contract_instructions i
-	WHERE i.project_id=? AND i.launch_id=? AND i.contract_id=? AND i.revision=? AND i.contract_digest=? AND i.inventory_digest=? AND i.expected_version=?
+	WHERE i.project_id=? AND i.contract_id=? AND i.revision=? AND i.contract_digest=? AND i.inventory_digest=? AND i.expected_version=?
 	AND NOT EXISTS(SELECT 1 FROM extreme_project_contract_instruction_receipts r WHERE r.project_id=i.project_id AND r.instruction_ref=i.instruction_ref)
-	ORDER BY i.rowid DESC LIMIT 1`, project, launch, sub.Contract.ID, sub.Contract.Revision, contractDigest, sub.Contract.ReviewedInventoryDigest, sub.ExpectedVersion).Scan(&ref)
+	ORDER BY i.rowid DESC LIMIT 1`, project, sub.Contract.ID, sub.Contract.Revision, contractDigest, sub.Contract.ReviewedInventoryDigest, sub.ExpectedVersion).Scan(&ref)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrProjectContractInstructionMissing
 	}

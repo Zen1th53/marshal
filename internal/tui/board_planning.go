@@ -32,10 +32,16 @@ func (w *Workspace) planningNow(empty bool, goal model.GoalContract) bool {
 	if goal.Confirmation == model.ConfirmationCancelled {
 		return false
 	}
+	snap := w.archSnapshotNow()
 	if w.planning.Load() {
+		// The flag covers the seconds before the follower reads the
+		// review after an Accept; once read, the stored acceptance (the
+		// same project contract the Marshal's context reads) decides.
+		if snap.Loaded && snap.Status.Exists && !snap.Status.Accepted {
+			return false
+		}
 		return true
 	}
-	snap := w.archSnapshotNow()
 	if goal.ID == "" || !snap.Loaded || !snap.Status.Accepted {
 		return false
 	}

@@ -15,11 +15,16 @@ import (
 // ArchitectureStatus is what the workspace shows about the browser
 // architecture review. It reads the review's own state; it grants nothing.
 type ArchitectureStatus struct {
-	Exists    bool
-	Revision  int64
-	Accepted  bool
-	Answering bool // the Marshal is answering a request
-	Open      int  // unresolved requests waiting for the owner
+	Exists   bool
+	Revision int64
+	Accepted bool
+	// OwnerAccepted is set when the owner accepted the review in the
+	// browser but the project contract it was built from is not active yet
+	// (Accepted is false): the owner's part is done, the runtime or the
+	// Marshal's allow has yet to apply it.
+	OwnerAccepted bool
+	Answering     bool // the Marshal is answering a request
+	Open          int  // unresolved requests waiting for the owner
 }
 
 // ArchitectureReviewStatus reads the browser review's own state for the TUI
@@ -63,6 +68,11 @@ func (r *Runtime) ArchitectureReviewStatus(ctx context.Context) (ArchitectureSta
 		return ArchitectureStatus{}, err
 	}
 	status := ArchitectureStatus{Exists: true, Revision: bound.Revision, Accepted: bound.Status == "accepted"}
+	// A review built from a project contract is accepted only when that
+	// contract is: the Board and the Marshal read the same acceptance.
+	if err := r.bindArchitectureAcceptance(ctx, data, &status); err != nil {
+		return ArchitectureStatus{}, err
+	}
 	for _, c := range raw.Comments {
 		if c.Status == "queued" || c.Status == "running" {
 			status.Answering = true

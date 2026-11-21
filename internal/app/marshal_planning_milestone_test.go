@@ -23,6 +23,7 @@ func TestMarshalPlanningMilestone(t *testing.T) {
 		{"design draft", func(h *MarshalGoalHandoff) { h.RequirementsConfirmed, h.DesignInProgress = true, true }, 2, "drafting and reviewing the design", false},
 		{"design approved", func(h *MarshalGoalHandoff) { h.DesignInProgress, h.DesignApproved = true, true }, 3, "drafting the architecture", false},
 		{"architecture submitted", func(h *MarshalGoalHandoff) { h.DesignApproved, h.ArchitecturePending = true, true }, 3, "the architecture is ready for you to accept in the browser", true},
+		{"architecture accepted by the owner, not applied yet", func(h *MarshalGoalHandoff) { h.DesignApproved, h.ArchitectureApplying = true, true }, 3, "applying the architecture you accepted", false},
 		{"architecture accepted", func(h *MarshalGoalHandoff) { h.ArchitecturePending, h.ArchitectureAccepted = true, true }, 4, "planning the tasks", false},
 		{"plan draft written", func(h *MarshalGoalHandoff) { h.ArchitectureAccepted, h.HasPlanDraft = true, true }, 4, "the plan is written · it appears here for your approval", false},
 	}
