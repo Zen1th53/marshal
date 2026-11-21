@@ -115,11 +115,14 @@ func dur(d time.Duration) string {
 	}
 }
 
+// clock is a time on the Board: always the local wall clock. Run events are
+// stored and read back in UTC and notes are stamped with time.Now(); without
+// the conversion one pane mixed the two clocks.
 func clock(t time.Time) string {
 	if t.IsZero() {
 		return dash
 	}
-	return t.Format("15:04")
+	return t.Local().Format("15:04")
 }
 
 func tokens(n int64) string {

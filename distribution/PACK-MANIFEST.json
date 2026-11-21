@@ -13175,6 +13175,11 @@
       "bytes": 8417
     },
     {
+      "path": "internal/tui/board/v2/clock_test.go",
+      "sha256": "4322c08e866ecf0dacede106535de1d47cac41c6108dcd7bb16a3edb4ccb8f77",
+      "bytes": 2625
+    },
+    {
       "path": "internal/tui/board/v2/fixture_test.go",
       "sha256": "3cb685c053c0269eabae14bf61ce7fae2c53ef1bdf1774d12707fae8f284dffb",
       "bytes": 13440
@@ -13185,14 +13190,19 @@
       "bytes": 2624
     },
     {
+      "path": "internal/tui/board/v2/main_test.go",
+      "sha256": "1dab19359a67cd92bb58f824dee526ad972f5a886c58783cdf3168e1f08d3e56",
+      "bytes": 397
+    },
+    {
       "path": "internal/tui/board/v2/nowstrip_test.go",
       "sha256": "cc1614f800ed6f51a609f948272467047095396529ba778742053ee4f4061ca3",
       "bytes": 1244
     },
     {
       "path": "internal/tui/board/v2/parts.go",
-      "sha256": "aae8345877634ec09b82decee64b6518e3475d2b2a19209b6f20a3aa1d7cf7ee",
-      "bytes": 8946
+      "sha256": "d37dc338a40878f72836c2604295eec496633f92de57a26ed0beccca02198d82",
+      "bytes": 9158
     },
     {
       "path": "internal/tui/board/v2/render.go",
@@ -13206,8 +13216,8 @@
     },
     {
       "path": "internal/tui/board/v2/screens.go",
-      "sha256": "ffb912447d72151ed11ef16099662d04dec864618ef0b40abd96983e7802dba6",
-      "bytes": 32228
+      "sha256": "5e5580832d8a3709b0e3318c9dab967ec60519e6ab9a86a0f15a38a204b955a9",
+      "bytes": 32449
     },
     {
       "path": "internal/tui/board/v2/testdata/card-ask-100.golden",
@@ -13486,13 +13496,18 @@
     },
     {
       "path": "internal/tui/board/widgets/chat/chat.go",
-      "sha256": "01f0ff5b91608a196a135ef317819cb5a6bf4b4384e13c2f8b881c71604f432c",
-      "bytes": 14569
+      "sha256": "c4fbbda97731d43b9994a688254f580201147e38f7699cc46c3f9c9da5ef745e",
+      "bytes": 14577
     },
     {
       "path": "internal/tui/board/widgets/chat/chat_test.go",
       "sha256": "acf30e8a600cffd363df7931d4b9b929115af122ae64cde638c2ac4b0db929eb",
       "bytes": 5936
+    },
+    {
+      "path": "internal/tui/board/widgets/chat/main_test.go",
+      "sha256": "ee539e3303850f0eab9f3eaf5f7dcd26a02012472052ff83de335e6b371d045b",
+      "bytes": 399
     },
     {
       "path": "internal/tui/board/widgets/chat/testdata/chat-056x30.golden",
@@ -14126,8 +14141,8 @@
     },
     {
       "path": "internal/tui/boardv2_collect_flow_test.go",
-      "sha256": "5f921d585f1829bdc66d1a97e6a236a9cc6c7e571e29402e043ea12601bafc46",
-      "bytes": 20271
+      "sha256": "c02935013df942d31f0722a1985f39361bb0f87ffa2b11d27508c069065ea7a4",
+      "bytes": 22588
     },
     {
       "path": "internal/tui/boardv2_collect_marshal.go",

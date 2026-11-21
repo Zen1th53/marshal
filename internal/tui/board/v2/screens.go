@@ -421,7 +421,14 @@ func activityPane(b vm.Board, title string, compact bool) slot {
 			if compact && count != "" {
 				text += " " + count
 			}
-			p.segs(2, dy, []seg{{clock(e.At), sFaint}, {"  " + fit(e.Kind, 6), st{fg: tone(e.Tone)}}, {"  " + text, ts}})
+			// The rows are newest first by their latest time, so that is
+			// the time a row shows: a folded row showed its first time and
+			// read as out of order.
+			when := e.Last
+			if when.IsZero() {
+				when = e.At
+			}
+			p.segs(2, dy, []seg{{clock(when), sFaint}, {"  " + fit(e.Kind, 6), st{fg: tone(e.Tone)}}, {"  " + text, ts}})
 			if count != "" && !compact {
 				p.put(w-2-width(count), dy, count, sFaint)
 			}

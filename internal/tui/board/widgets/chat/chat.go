@@ -393,7 +393,7 @@ func (v *View) transcript(width int, st Style, g glyphs) []string {
 				}
 				head := label
 				if !e.At.IsZero() {
-					head += " " + apply(st.Dim, e.At.Format("15:04"))
+					head += " " + apply(st.Dim, e.At.Local().Format("15:04"))
 				}
 				if e.Streaming {
 					head += "  " + apply(st.Accent, v.spin(st))
