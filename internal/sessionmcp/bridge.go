@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -238,12 +239,14 @@ func Relay(ctx context.Context, requests, responses string, in io.Reader, out io
 		return fmt.Errorf("MCP relay already active: %w", err)
 	}
 	defer release()
-	// O_NONBLOCK is only for the open (it must not wait for a reader). Writes
-	// block: Go never polls a FIFO on macOS (kqueue, golang/go#24164), so a
-	// still-non-blocking writer surfaced EAGAIN once the FIFO filled. On Linux
-	// Fd() above has already made the descriptor blocking.
-	if err := unix.SetNonblock(int(input.Fd()), false); err != nil {
-		return err
+	// O_NONBLOCK is only for the open (it must not wait for a reader). Go never
+	// polls a FIFO on macOS (kqueue, golang/go#24164), so there a still
+	// non-blocking writer surfaced EAGAIN once the FIFO filled; make its writes
+	// block. Elsewhere the runtime poller owns the descriptor and waits itself.
+	if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if err := unix.SetNonblock(int(input.Fd()), false); err != nil {
+			return err
+		}
 	}
 	output, err := os.OpenFile(responses, os.O_RDONLY|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -273,10 +276,11 @@ func Relay(ctx context.Context, requests, responses string, in io.Reader, out io
 	var emptyInput atomic.Bool
 	go func() {
 		count, err := io.Copy(input, source)
-		emptyInput.Store(count == 0 && err == nil)
 		// Publish completion before closing the writer: response EOF can follow
-		// immediately, and must never outrun the successful copy result.
+		// immediately, and must never outrun the successful copy result. The
+		// empty mark follows the send, so a loop that ends on it finds the result.
 		copied <- err
+		emptyInput.Store(count == 0 && err == nil)
 		// Closing the FIFO writer at stdin EOF is required for the host MCP
 		// process to observe EOF and terminate its stdio session.
 		_ = input.Close()
