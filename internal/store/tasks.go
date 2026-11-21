@@ -99,48 +99,6 @@ func (s *Store) ImportTasks(ctx context.Context, tasks []model.Task) (model.Impo
 	return result, nil
 }
 
-func (s *Store) ReadyTasks(ctx context.Context) ([]model.Task, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT t.task_id, t.title, t.status, t.risk, t.owner_agent_id, t.branch,
-		       t.worktree, t.base_commit, t.head_commit, t.revision
-		FROM tasks t
-		WHERE t.status = 'ready' AND NOT EXISTS (SELECT 1 FROM task_controls c WHERE c.task_id=t.task_id AND c.state<>'')
-		  AND NOT EXISTS (
-		    SELECT 1 FROM task_dependencies d
-		    JOIN tasks required ON required.task_id = d.depends_on_task_id
-		    WHERE d.task_id = t.task_id AND required.status <> 'merged'
-		  )
-		  AND NOT EXISTS (
-		    SELECT 1 FROM leases l WHERE l.task_id = t.task_id AND l.status = 'active'
-		  )
-		ORDER BY (
-		  SELECT count(*) FROM task_dependencies blocked WHERE blocked.depends_on_task_id = t.task_id
-		) DESC, t.task_id ASC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("query ready tasks: %w", err)
-	}
-	defer rows.Close()
-	var tasks []model.Task
-	for rows.Next() {
-		task, err := scanTask(rows)
-		if err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, task)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate ready tasks: %w", err)
-	}
-	for i := range tasks {
-		tasks[i].Dependencies, err = s.taskDependencies(ctx, tasks[i].ID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return tasks, nil
-}
-
 func (s *Store) ClaimTask(ctx context.Context, request model.ClaimRequest) (model.Lease, error) {
 	if request.TaskID == "" || request.AgentID == "" || request.SessionID == "" || !request.ExpiresAt.After(time.Now().UTC()) {
 		return model.Lease{}, fmt.Errorf("%w: incomplete claim request", model.ErrInvalid)

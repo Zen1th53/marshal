@@ -298,48 +298,6 @@ func (s *Store) ListConstitutionalDecisions(ctx context.Context, sessionID strin
 	return decisions, nil
 }
 
-// FindDecisionsByBinding returns decisions sharing an approval binding digest
-// within a project. Approval replay is detectable through this index: the same
-// binding appearing under a different actor or at a different time is exactly
-// the pattern a replayed approval leaves behind.
-func (s *Store) FindDecisionsByBinding(ctx context.Context, projectID, bindingDigest string) ([]ConstitutionalDecisionRow, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT decision_id, project_id, session_id, constitution_version, process,
-		       domain, action, actor, surface, mode, outcome, reason,
-		       binding_digest, state_digest, advisory_status, findings_json, evaluated_at
-		FROM constitutional_decisions
-		WHERE project_id = ? AND binding_digest = ?
-		ORDER BY evaluated_at, decision_id
-	`, projectID, bindingDigest)
-	if err != nil {
-		return nil, fmt.Errorf("read decisions by binding: %w", err)
-	}
-	defer rows.Close()
-
-	var decisions []ConstitutionalDecisionRow
-	for rows.Next() {
-		var (
-			decision    ConstitutionalDecisionRow
-			evaluatedAt string
-		)
-		if err := rows.Scan(&decision.DecisionID, &decision.ProjectID, &decision.SessionID,
-			&decision.Version, &decision.Process, &decision.Domain, &decision.Action,
-			&decision.Actor, &decision.Surface, &decision.Mode, &decision.Outcome,
-			&decision.Reason, &decision.BindingDigest, &decision.StateDigest,
-			&decision.AdvisoryStatus, &decision.FindingsJSON, &evaluatedAt); err != nil {
-			return nil, fmt.Errorf("scan decision: %w", err)
-		}
-		if parsed, parseErr := time.Parse(time.RFC3339Nano, evaluatedAt); parseErr == nil {
-			decision.EvaluatedAt = parsed
-		}
-		decisions = append(decisions, decision)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate decisions: %w", err)
-	}
-	return decisions, nil
-}
-
 var (
 	errInvalidConstitutionalInput = errors.New("constitutional record is incomplete")
 	errConstitutionConflict       = errors.New("constitution binding conflict")

@@ -70,21 +70,7 @@ func TestT84TransactionalMemoryOutbox(t *testing.T) {
 		t.Fatalf("unexpected outbox pointer: payload=%s decoded=%+v", events[0].PayloadJSON, pointer)
 	}
 
-	// 3. Acknowledge the event
-	if err := st.AckMemoryOutbox(ctx, []string{events[0].EventID}); err != nil {
-		t.Fatalf("AckMemoryOutbox: %v", err)
-	}
-
-	// 4. Verify no remaining unprocessed events
-	remEvents, err := st.FetchUnprocessedMemoryOutbox(ctx, projID, 10)
-	if err != nil {
-		t.Fatalf("FetchUnprocessedMemoryOutbox after ack: %v", err)
-	}
-	if len(remEvents) != 0 {
-		t.Fatalf("expected 0 unprocessed events after ack, got %d", len(remEvents))
-	}
-
-	// 5. UpdateMemory creates a 'memory.updated' outbox event atomically
+	// 3. UpdateMemory creates a 'memory.updated' outbox event atomically
 	_, err = st.UpdateMemory(ctx, projID, "MEM-OUTBOX-01", 0, func(m *model.MemoryRecordV2) error {
 		m.Body = "Updated body via CAS"
 		return nil
@@ -97,10 +83,13 @@ func TestT84TransactionalMemoryOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchUnprocessedMemoryOutbox after update: %v", err)
 	}
-	if len(eventsUpdate) != 1 {
-		t.Fatalf("expected 1 update event, got %d", len(eventsUpdate))
+	updates := 0
+	for _, e := range eventsUpdate {
+		if e.EventType == "memory.updated" && e.MemoryID == "MEM-OUTBOX-01" {
+			updates++
+		}
 	}
-	if eventsUpdate[0].EventType != "memory.updated" {
-		t.Fatalf("expected eventType 'memory.updated', got: %s", eventsUpdate[0].EventType)
+	if len(eventsUpdate) != 2 || updates != 1 {
+		t.Fatalf("expected the created event and 1 update event, got %d events (%d updates)", len(eventsUpdate), updates)
 	}
 }

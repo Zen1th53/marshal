@@ -209,12 +209,14 @@ func TestPlanHistoryIsRetained(t *testing.T) {
 		t.Fatalf("SavePlan v3: %v", err)
 	}
 
-	versions, err := st.ListPlanVersions(ctx, "PLAN-1")
-	if err != nil {
-		t.Fatalf("ListPlanVersions: %v", err)
+	if got := queryInt(t, st.db, "SELECT count(*) FROM execution_plans WHERE plan_id='PLAN-1'"); got != 3 {
+		t.Fatalf("history holds %d versions, want 3", got)
 	}
-	if len(versions) != 3 {
-		t.Fatalf("history holds %d versions, want 3", len(versions))
+	versions := make([]plan.ExecutionPlan, 3)
+	for i := range versions {
+		if versions[i], err = st.GetPlan(ctx, "PLAN-1", int64(i+1)); err != nil {
+			t.Fatalf("GetPlan v%d: %v", i+1, err)
+		}
 	}
 	// The approved version is still readable as it was approved.
 	if versions[1].State != plan.StateApproved {
@@ -287,44 +289,8 @@ func TestStoredPlanVersionsAreImmutable(t *testing.T) {
 		t.Fatalf("version 1 now reads as %s", stored.State)
 	}
 
-	versions, err := st.ListPlanVersions(ctx, "PLAN-1")
-	if err != nil {
-		t.Fatalf("ListPlanVersions: %v", err)
-	}
-	if len(versions) != 1 {
-		t.Fatalf("history holds %d versions after a refused rewrite, want 1", len(versions))
-	}
-}
-
-// Plans are found by the Goal revision they were built from, which is how
-// staleness is detected after a Goal moves on.
-func TestPlansAreQueryableByGoalRevision(t *testing.T) {
-	ctx := context.Background()
-	st := migratedStore(t)
-
-	if err := st.SavePlan(ctx, storedPlan(), 0); err != nil {
-		t.Fatalf("SavePlan: %v", err)
-	}
-	forRevisionTwo := storedPlan()
-	forRevisionTwo.ID = "PLAN-2"
-	forRevisionTwo.Goal.Revision = 2
-	if err := st.SavePlan(ctx, forRevisionTwo, 0); err != nil {
-		t.Fatalf("SavePlan: %v", err)
-	}
-
-	atOne, err := st.PlansForGoal(ctx, "GOAL-1", 1)
-	if err != nil {
-		t.Fatalf("PlansForGoal: %v", err)
-	}
-	if len(atOne) != 1 || atOne[0].ID != "PLAN-1" {
-		t.Fatalf("revision 1 returned %d plans", len(atOne))
-	}
-	atTwo, err := st.PlansForGoal(ctx, "GOAL-1", 2)
-	if err != nil {
-		t.Fatalf("PlansForGoal: %v", err)
-	}
-	if len(atTwo) != 1 || atTwo[0].ID != "PLAN-2" {
-		t.Fatalf("revision 2 returned %d plans", len(atTwo))
+	if got := queryInt(t, st.db, "SELECT count(*) FROM execution_plans WHERE plan_id='PLAN-1'"); got != 1 {
+		t.Fatalf("history holds %d versions after a refused rewrite, want 1", got)
 	}
 }
 
