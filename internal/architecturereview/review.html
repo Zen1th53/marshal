@@ -147,7 +147,7 @@ function drill(id){if(!isDrillable(id))return;const box=layout().nodes.find(n=>n
 // A click on a part with an inside opens it, then shows that part's panel in
 // the opened level, so its description, covers and links stay one glance away.
 async function openInside(id){if(areaMode||!isDrillable(id))return;const declared=!view.startsWith('code:'),before=path.join('\n');await drill(id);if(!declared||path.join('\n')===before||path.at(-1)!==id)return;openContainer(id);}
-function openContainer(id){const key=viewOf(id),l=key&&base().layouts[key];if(!l||!closeEditor())return;selectionRect=null;target={kind:'component',id,diagram_id:key,layout_version:l.version};openEditor(true);hideTip();}
+function openContainer(id){const key=viewOf(id),l=key&&base().layouts[key];if(!l||!closeEditor())return;selectionRect=null;target={kind:'component',id,diagram_id:key,layout_version:l.version};openEditor(true);hideTip();loadBuilders().then(()=>renderBuilders(id)).catch(e=>notice(e.message,true));}
 function hashFor(p){return p.length?'#/'+p.map(encodeURIComponent).join('/'):'#/';}
 function parseHash(){const h=globalThis.location?.hash||'';return h.startsWith('#/')?h.slice(2).split('/').filter(Boolean).map(s=>{try{return decodeURIComponent(s);}catch{return '';}}).filter(Boolean):[];}
 async function navigate(next,opt={}){if(navigating||!state)return;if(!closeEditor())return;navigating=true;const svg=$('diagram'),prev=path,motion=!reduceMotion()&&typeof requestAnimationFrame==='function',same=next.join('\n')===prev.join('\n'),up=next.length<prev.length&&next.every((s,i)=>s===prev[i]),child=up?prev[next.length]:null;try{

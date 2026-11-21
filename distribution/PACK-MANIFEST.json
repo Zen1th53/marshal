@@ -4841,8 +4841,8 @@
     },
     {
       "path": "internal/architecturereview/review.html",
-      "sha256": "b83ade7c59f5d1c2ac5e738490b960dcd720294751e7d8bf2a8e3edeea0d0ad9",
-      "bytes": 88381
+      "sha256": "2dd99a74359cda72713ae66d43466945f2e22f48b601651fea14ef0a4b266edf",
+      "bytes": 88458
     },
     {
       "path": "internal/architecturereview/review_browser_test.go",
