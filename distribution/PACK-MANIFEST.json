@@ -13591,8 +13591,8 @@
     },
     {
       "path": "internal/tui/board_active_goal_test.go",
-      "sha256": "b959c0de82d1dd68e00a7c04acc823d5e8fb8e87174d7647e67282f1cda46170",
-      "bytes": 14152
+      "sha256": "7628044c1191ab921425f74e660a303a485697b7a23e85fd321fe1e0864b90b2",
+      "bytes": 14166
     },
     {
       "path": "internal/tui/board_activity_test.go",
