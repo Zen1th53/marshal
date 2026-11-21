@@ -421,7 +421,14 @@ func activityPane(b vm.Board, title string, compact bool) slot {
 			if compact && count != "" {
 				text += " " + count
 			}
-			p.segs(2, dy, []seg{{clock(e.At), sFaint}, {"  " + fit(e.Kind, 6), st{fg: tone(e.Tone)}}, {"  " + text, ts}})
+			// The rows are newest first by their latest time, so that is
+			// the time a row shows: a folded row showed its first time and
+			// read as out of order.
+			when := e.Last
+			if when.IsZero() {
+				when = e.At
+			}
+			p.segs(2, dy, []seg{{clock(when), sFaint}, {"  " + fit(e.Kind, 6), st{fg: tone(e.Tone)}}, {"  " + text, ts}})
 			if count != "" && !compact {
 				p.put(w-2-width(count), dy, count, sFaint)
 			}
@@ -1070,7 +1077,27 @@ func side(c *canvas, b vm.Board, x, w, y, h int) {
 	if !n.FromYouOK {
 		bg, fg = cYouW, cWarn
 	}
-	c.segsClip(x, y, []seg{{" NOW ", st{fg: cAcc, bg: cNow, b: true}}, {" " + or(n.Work, dash) + " ", sInk}, {" from you " + or(n.FromYou, dash) + " ", st{fg: fg, bg: bg, b: true}}}, x+w)
+	// What is needed from the owner is kept whole first: the work text is
+	// cut, then dropped, before it is.
+	work, fy := c.txt(or(n.Work, dash)), c.txt(or(n.FromYou, dash))
+	room := w - 5 - (10 + c.tw(fy) + 1) - 2 // NOW, " from you X ", the work's spaces
+	switch {
+	case room >= c.tw(work):
+	case room >= 8:
+		work = c.cutWords(work, room)
+	default:
+		work = ""
+	}
+	parts := []seg{{" NOW ", st{fg: cAcc, bg: cNow, b: true}}}
+	if work != "" {
+		parts = append(parts, seg{" " + work + " ", sInk})
+	}
+	used := 5
+	for _, p := range parts[1:] {
+		used += c.tw(p.t)
+	}
+	parts = append(parts, seg{" from you " + c.cutWords(fy, w-used-10) + " ", st{fg: fg, bg: bg, b: true}})
+	c.segsClip(x, y, parts, x+w)
 	if b.Decision == nil && b.Paused != nil {
 		stack(c, []slot{pausedPane(b), compactWorkers(b), activityPane(b, "Activity", true)}, x, y+1, w, h-1)
 		return

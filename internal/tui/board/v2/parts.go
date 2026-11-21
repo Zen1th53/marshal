@@ -115,11 +115,14 @@ func dur(d time.Duration) string {
 	}
 }
 
+// clock is a time on the Board: always the local wall clock. Run events are
+// stored and read back in UTC and notes are stamped with time.Now(); without
+// the conversion one pane mixed the two clocks.
 func clock(t time.Time) string {
 	if t.IsZero() {
 		return dash
 	}
-	return t.Format("15:04")
+	return t.Local().Format("15:04")
 }
 
 func tokens(n int64) string {
@@ -184,29 +187,38 @@ func modelName(id string) string {
 
 // topBar is row 0: brand and version, crumbs, the state chip, the Marshal
 // segment with its m key, and the meters on the right.
+//
+// The state chip and the clock always stay, whole and apart. On a narrow
+// row the other parts give way, least needed first: the build suffix of the
+// version, the run crumb, the workers and inbox meters, the Marshal
+// segment, the version, the "project" label; then the project name is cut
+// with "…", the brand goes, and last the project name.
 func topBar(c *canvas, y int, b vm.Board) {
 	t := b.Top
 	c.fill(0, y, c.w, 1, cTop)
 	top := func(s st) st { s.bg = cTop; return s }
-	x := c.put(1, y, " MARSHAL ", top(sBold))
-	x = c.put(x, y, or(t.Version, dash), top(sFaint))
-	x = c.put(x, y, "   ", top(sInk))
-	crumbs := [][2]string{{"project", or(t.Project, dash)}}
-	if t.Run != "" {
-		crumbs = append(crumbs, [2]string{"run", t.Run})
-	}
-	var meters []string
-	if t.Workers > 0 {
-		meters = append(meters, strconv.Itoa(t.Workers)+" workers")
-	}
-	meters = append(meters, "inbox "+strconv.Itoa(t.Inbox))
 	ck := t.Clock
 	if ck.IsZero() {
 		ck = b.Now
 	}
-	meters = append(meters, clock(ck))
-	m := strings.Join(meters, "  ") + " "
-	mx := c.w - width(m) - 1
+	state := or(t.State, dash)
+	chipW := c.tw(state) + 2
+
+	brand, label, meters, segment := true, true, true, true
+	version := or(t.Version, dash)
+	project := or(t.Project, dash)
+	run := t.Run
+
+	meterText := func() string {
+		var ms []string
+		if meters {
+			if t.Workers > 0 {
+				ms = append(ms, strconv.Itoa(t.Workers)+" workers")
+			}
+			ms = append(ms, "inbox "+strconv.Itoa(t.Inbox))
+		}
+		return strings.Join(append(ms, clock(ck)), "  ") + " "
+	}
 
 	mk := b.Marshal
 	prov := or(mk.Provider, dash)
@@ -222,71 +234,182 @@ func topBar(c *canvas, y int, b vm.Board) {
 	segs = append(segs, seg{" m ", st{fg: cInk, bg: cSegKey, b: true}})
 	ln := 1
 	for _, s := range segs {
-		ln += width(s.t)
+		ln += c.tw(s.t)
 	}
-	state := or(t.State, dash)
-	// Space for the crumbs: drop the run, then the meters, when narrow.
-	need := func() int {
-		n := x
-		for i, cr := range crumbs {
-			if i > 0 {
-				n += 3
+
+	// gap follows the brand and version; " MARSHAL " ends in a blank.
+	gap := func() string {
+		switch {
+		case version != "":
+			return "   "
+		case brand:
+			return "  "
+		}
+		return ""
+	}
+	// prefix is the column after the brand, version and crumbs; chipX is
+	// where the state chip starts.
+	prefix := func() int {
+		n := 1
+		if brand {
+			n += 9 // " MARSHAL "
+		}
+		n += c.tw(version) + width(gap())
+		if label {
+			n += 8 // "project "
+		}
+		n += c.tw(project)
+		if run != "" {
+			n += 3 + 4 + c.tw(run) // " / run X"
+		}
+		return n
+	}
+	chipX := func() int {
+		if p := prefix(); p > 1 {
+			return p + 2
+		}
+		return 1
+	}
+	mx := func() int { return c.w - c.tw(meterText()) - 1 }
+	// limit is the column the state chip must end before, a blank cell
+	// short of the Marshal segment or the meters.
+	limit := func() int {
+		if segment {
+			return mx() - ln - 2
+		}
+		return mx()
+	}
+	fits := func() bool { return chipX()+chipW < limit() }
+	shrink := func(least int) {
+		room := limit() - 1 - chipW - 2 - (prefix() - c.tw(project))
+		if project != "" && c.tw(project) > room && room >= least {
+			project = c.cut(project, room)
+		}
+	}
+	steps := []func(){
+		func() {
+			if i := strings.IndexByte(version, '+'); i > 0 {
+				version = version[:i]
 			}
-			n += width(cr[0]) + 1 + width(cr[1])
+		},
+		func() { run = "" },
+		func() { meters = false },
+		func() { segment = false },
+		func() { version = "" },
+		func() { label = false },
+		func() { shrink(6) },
+		func() { brand = false },
+		func() { shrink(4) },
+		func() { project = "" },
+	}
+	for _, step := range steps {
+		if fits() {
+			break
 		}
-		return n + 2 + width(state) + 2
+		step()
 	}
-	segX := mx - ln - 2
-	if need() > segX-1 && len(crumbs) > 1 {
-		crumbs = crumbs[:1]
+
+	x := 1
+	if brand {
+		x = c.put(x, y, " MARSHAL ", top(sBold))
 	}
-	if need() > segX-1 {
-		m, mx = clock(ck)+" ", c.w-width(clock(ck))-2
-		segX = mx - ln - 2
+	x = c.put(x, y, version, top(sFaint))
+	x = c.put(x, y, gap(), top(sInk))
+	if label {
+		x = c.put(x, y, "project ", top(sDim))
 	}
-	if need() > segX-1 {
-		segX = -1 // no room for the Marshal segment
+	x = c.put(x, y, project, top(sBold))
+	if run != "" {
+		x = c.put(x, y, " / ", top(sFaint))
+		x = c.put(x, y, "run ", top(sDim))
+		c.put(x, y, run, top(sBold))
 	}
-	for i, cr := range crumbs {
-		if i > 0 {
-			x = c.put(x, y, " / ", top(sFaint))
-		}
-		x = c.put(x, y, cr[0]+" ", top(sDim))
-		x = c.put(x, y, cr[1], top(sBold))
-	}
-	c.put(x+2, y, " "+state+" ", st{fg: cDark, bg: tone(t.StateTone), b: true})
+	bg := tone(t.StateTone)
 	if t.StateTone == vm.ToneNone {
-		c.put(x+2, y, " "+state+" ", st{fg: cDark, bg: cDim, b: true})
+		bg = cDim
 	}
-	c.put(mx, y, m, top(sDim))
-	if segX >= 0 {
-		c.segsClip(segX, y, append([]seg{{" ", st{bg: cSeg}}}, segs...), mx)
+	cx := chipX()
+	c.put(cx, y, " "+state+" ", st{fg: cDark, bg: bg, b: true})
+	// The clock never covers the chip: on a row too narrow for both it is
+	// drawn a blank cell after the chip, and only when it fits there.
+	m, at := meterText(), mx()
+	if at <= cx+chipW {
+		m, at = clock(ck), cx+chipW+1
+		if at+c.tw(m) > c.w {
+			m = ""
+		}
+	}
+	c.put(at, y, m, top(sDim))
+	if segment {
+		c.segsClip(at-ln-2, y, append([]seg{{" ", st{bg: cSeg}}}, segs...), at)
 	}
 }
 
 // nowStrip is row 1: what the Marshal does, what the work does and what is
 // needed from the owner.
+//
+// What is needed from the owner is kept whole when it can be: on a narrow
+// row the marshal and work columns shrink first, then the marshal column
+// goes, then the work column; only then is it cut, with "…". Every cut
+// falls between words where it can and always ends in "…".
 func nowStrip(c *canvas, y int, n vm.NowLine) {
 	c.fill(0, y, c.w, 1, cBg)
 	mw, ww := 34, 30
 	if c.w < 132 {
 		mw, ww = 34*c.w/132, 30*c.w/132
 	}
+	// " NOW ", " marshal " with its "│", " work ", " from you ", and the
+	// least a shrunk column keeps.
+	const nowW, mLab, wLab, fyLab, least = 5, 10, 6, 10, 10
+	fy := c.txt(or(n.FromYou, dash))
+	showM, showW := true, true
+	if nowW+mLab+mw+wLab+ww+fyLab+c.tw(fy) > c.w {
+		avail := c.w - nowW - fyLab - c.tw(fy)
+		room := avail - mLab - wLab
+		// What each column's text takes, at most its full width.
+		mn, wn := min(mw, c.tw(or(n.Marshal, dash))+1), min(ww, c.tw(or(n.Work, dash))+1)
+		switch {
+		case mn+wn <= room:
+			// Both texts fit: take the cells needed from the blank ends
+			// of the columns, from each as it has them.
+			over, sm, sw := mw+ww-room, mw-mn, ww-wn
+			dm := over * sm / max(sm+sw, 1)
+			mw, ww = mw-dm, ww-(over-dm)
+		case room >= 2*least:
+			switch half := room / 2; {
+			case wn <= half:
+				mw, ww = room-wn, wn
+			case mn <= half:
+				mw, ww = mn, room-mn
+			default:
+				mw = min(mw, max(least, room*mw/(mw+ww)))
+				ww = room - mw
+			}
+		case avail-wLab >= least:
+			showM, ww = false, avail-wLab
+		default:
+			showM, showW = false, false
+		}
+	}
 	x := c.put(0, y, " NOW ", st{fg: cAcc, bg: cNow, b: true})
-	x = c.put(x, y, " marshal ", sFaint)
-	// One cell always stays blank before the rule: a long line is cut
-	// with "…" one cell short of the column, not run up against "│".
-	x = c.put(x, y, fit(or(n.Marshal, dash), max(mw-1, 1))+" ", sInk)
-	x = c.put(x, y, "│", st{fg: cRule})
-	x = c.put(x, y, " work ", sFaint)
-	x = c.put(x, y, fit(or(n.Work, dash), ww), sInk)
+	if showM {
+		x = c.put(x, y, " marshal ", sFaint)
+		// One cell always stays blank before the rule: a long line is cut
+		// with "…" one cell short of the column, not run up against "│".
+		x = c.put(x, y, c.fitWords(or(n.Marshal, dash), max(mw-1, 1))+" ", sInk)
+		x = c.put(x, y, "│", st{fg: cRule})
+	}
+	if showW {
+		x = c.put(x, y, " work ", sFaint)
+		x = c.put(x, y, c.fitWords(or(n.Work, dash), max(ww, 1)), sInk)
+	}
 	bg, fg := cYouOK, cOK
 	if !n.FromYouOK {
 		bg, fg = cYouW, cWarn
 	}
 	c.fill(x, y, c.w-x, 1, bg)
 	x = c.put(x, y, " from you ", st{fg: cFaint, bg: bg})
-	c.put(x, y, or(n.FromYou, dash), st{fg: fg, bg: bg, b: true})
+	c.put(x, y, c.cutWords(fy, c.w-x), st{fg: fg, bg: bg, b: true})
 }
 
 // keyBar is the row of key hints.
