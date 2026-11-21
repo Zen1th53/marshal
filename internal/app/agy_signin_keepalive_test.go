@@ -22,8 +22,6 @@ func TestAgySigninKeepaliveCommunityIsNoop(t *testing.T) {
 	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
 
 	r := openNetpolRuntime(t)
-	r.keepAgySigninFresh(t.Context())
-	r.refreshAgySigninBeforeDispatch(t.Context())
 	r.startAgySigninKeepaliveLoop(t.Context())
 
 	if data, err := os.ReadFile(callsPath); err == nil && strings.TrimSpace(string(data)) != "" {

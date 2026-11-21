@@ -40,9 +40,6 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	return handin, errors.Join(fmt.Errorf("provider limit: %s", reason), alertErr)
 }
 
-// ResetProviderCooldowns is a no-op in default build.
-func ResetProviderCooldowns() {}
-
 // GetEffectiveFailoverOrder returns default providers in default build.
 func GetEffectiveFailoverOrder(_ marshal.Settings) []string {
 	return MarshalProviders()
