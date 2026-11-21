@@ -11,10 +11,7 @@ import (
 // memory table is added to the schema without being classified there, this test
 // fails to enforce the convergence policy.
 var knownMemoryTables = map[string]string{
-	"memory_records":          "canonical-legacy: general memory, T77",
-	"persistent_agent_memory": "canonical-legacy: agent-scoped memory, T77",
-	"decision_records":        "canonical-legacy: task-scoped decisions, T77",
-	"failure_memory_records":  "canonical-legacy: failure patterns, T77",
+	"memory_records": "canonical-legacy: general memory, T77",
 	// T79: canonical v2 convergence destination
 	"memory_records_v2": "canonical-v2: primary memory store, T79",
 	// T84: transactional outbox for derived indexers
@@ -45,11 +42,9 @@ var knownMemoryTables = map[string]string{
 // derivedDecisionTables are subsystem decision logs, not canonical memory.
 // They must NOT be merged into the memory store.
 var derivedDecisionTables = map[string]bool{
-	"gate_decisions":           true,
-	"egress_decisions":         true,
-	"context_budget_decisions": true,
-	"model_router_decisions":   true,
-	"decisions":                true,
+	"gate_decisions":   true,
+	"egress_decisions": true,
+	"decisions":        true,
 	// Process 00: the audit log of constitutional gate verdicts. It records
 	// what was decided about material actions, never what the project knows,
 	// so it must stay out of the memory store.
