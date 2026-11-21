@@ -46,7 +46,7 @@ func TestLowLimitNoteOncePerPeriod(t *testing.T) {
 	warned := map[string]limitWarned{}
 	got := lowLimitNotes(limitsQuotas(12), nil, warned, limitsNow)
 	want := []string{
-		"codex weekly: 19% left · resets 21 Nov",
+		"codex weekly: 19% left · resets Nov 21 09:00",
 		"agy Claude and GPT 5h: 12% left · resets 14:32",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -137,7 +137,7 @@ func TestVitalsLowWindowNamed(t *testing.T) {
 
 func TestPlanLimitText(t *testing.T) {
 	got, low := planLimitText(limitsQuotas(5), []string{"codex"}, 18, limitsNow)
-	want := "Limits: codex 19% weekly (resets 21 Nov), 45% 5h — this plan has 18 tasks. Below 20%: codex weekly."
+	want := "Limits: codex 19% weekly (resets Nov 21 09:00), 45% 5h — this plan has 18 tasks. Below 20%: codex weekly."
 	if got != want || !low {
 		t.Fatalf("got %q low=%v\nwant %q", got, low, want)
 	}
@@ -187,7 +187,7 @@ func TestPlanGateShowsLimits(t *testing.T) {
 	}
 	g.limits, g.limitsLow = planLimitText(limitsQuotas(50), []string{"codex"}, 18, limitsNow)
 	lines := v.gateEntry(g, 0, 0, 120)
-	if len(lines) != 3 || !strings.HasPrefix(StripANSI(lines[2]), "    Limits: codex 19% weekly (resets 21 Nov), 45% 5h — this plan has 18 tasks") {
+	if len(lines) != 3 || !strings.HasPrefix(StripANSI(lines[2]), "    Limits: codex 19% weekly (resets Nov 21 09:00), 45% 5h — this plan has 18 tasks") {
 		t.Fatalf("rows = %q", lines)
 	}
 	if n := VisibleLen(lines[2]); n != 120 {

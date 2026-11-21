@@ -44,6 +44,7 @@ type Board struct {
 	Lanes    Lanes
 	Tasks    []Task
 	Workers  []Worker
+	Limits   []ProviderLimits
 	Inbox    Inbox
 	Activity []Event
 	Steps    Steps
@@ -153,6 +154,41 @@ type Worker struct {
 	SignedIn  bool
 	Installed bool
 	Reason    string // plain cause when not usable: "not signed in: run agy once"
+}
+
+// LimitState is whether the dispatcher sends a provider work, as its limits
+// and sign-in say.
+type LimitState string
+
+const (
+	LimitUsable       LimitState = "usable"        // takes work: the model it runs has limit left, or its limit is not reported
+	LimitOut          LimitState = "out"           // the model it runs has no limit left, or the provider reported a limit
+	LimitNotSignedIn  LimitState = "not signed in" // installed, but its CLI is signed out
+	LimitNotChecked   LimitState = "not checked"   // not checked yet, or a check is running
+	LimitNotInstalled LimitState = "not installed" // its CLI is not on PATH
+)
+
+// ProviderLimits is one provider's limits, one row per family and window,
+// and its dispatch state with the rows that decide it.
+type ProviderLimits struct {
+	Provider string
+	Model    string // the model id its workers run, which picks the rows that apply; "" unknown
+	State    LimitState
+	Reason   string // the plain cause of State; "" when usable and nothing to add
+	Rows     []LimitRow
+}
+
+// LimitRow is one limit window as the provider reported it. Nothing is
+// estimated: a limit the provider does not report has PercentLeft -1 and a
+// Source that says so, and draws no bar.
+type LimitRow struct {
+	Family      string    // model family the limit covers ("Claude and GPT"); "" for every model
+	Window      string    // "5h", "weekly" or another length ("90m"); "" when not reported
+	PercentLeft int       // -1 not reported or unknown
+	ResetsAt    time.Time // with its date; zero unknown
+	ObservedAt  time.Time // when the provider wrote the figure; zero unknown
+	Source      string    // "codex session log", "agy /usage", "agy models", "not reported by the CLI", "not checked"
+	Drives      bool      // this row decides State: the tightest window of the model the provider runs, or one at 0%
 }
 
 // Inbox is the Inbox pane.

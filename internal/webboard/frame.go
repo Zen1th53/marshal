@@ -24,25 +24,29 @@ const Version = 1
 // Frame is one Board frame as the browser reads it. Times are RFC 3339 with
 // their zone ("" when unknown), durations whole seconds (0 when unknown).
 type Frame struct {
-	V        int       `json:"v"`
-	Screen   string    `json:"screen"`
-	Now      string    `json:"now"`
-	Top      TopBar    `json:"top"`
-	NowLine  NowLine   `json:"nowLine"`
-	Marshal  Marshal   `json:"marshal"`
-	Plan     Plan      `json:"plan"`
-	Lanes    Lanes     `json:"lanes"`
-	Tasks    []Task    `json:"tasks"`
-	Workers  []Worker  `json:"workers"`
-	Inbox    Inbox     `json:"inbox"`
-	Activity []Event   `json:"activity"`
-	Steps    Steps     `json:"steps"`
-	Requests []Request `json:"requests"`
-	Chat     Chat      `json:"chat"`
-	Ready    Readiness `json:"ready"`
-	Decision *Decision `json:"decision"`
-	Paused   *Paused   `json:"paused"`
-	Keys     []Key     `json:"keys"`
+	V       int      `json:"v"`
+	Screen  string   `json:"screen"`
+	Now     string   `json:"now"`
+	Top     TopBar   `json:"top"`
+	NowLine NowLine  `json:"nowLine"`
+	Marshal Marshal  `json:"marshal"`
+	Plan    Plan     `json:"plan"`
+	Lanes   Lanes    `json:"lanes"`
+	Tasks   []Task   `json:"tasks"`
+	Workers []Worker `json:"workers"`
+	// Limits is every provider's limit rows and dispatch state; added in
+	// version 1 without a version change (a reader that ignores it is
+	// unaffected).
+	Limits   []ProviderLimits `json:"limits"`
+	Inbox    Inbox            `json:"inbox"`
+	Activity []Event          `json:"activity"`
+	Steps    Steps            `json:"steps"`
+	Requests []Request        `json:"requests"`
+	Chat     Chat             `json:"chat"`
+	Ready    Readiness        `json:"ready"`
+	Decision *Decision        `json:"decision"`
+	Paused   *Paused          `json:"paused"`
+	Keys     []Key            `json:"keys"`
 	// Act is the owner actions the page may send now (phase 2); nil on a
 	// read-only server. It is minted by the server, not read from vm.
 	Act *Act `json:"act,omitempty"`
@@ -141,6 +145,30 @@ type Worker struct {
 	SignedIn  bool   `json:"signedIn"`
 	Installed bool   `json:"installed"`
 	Reason    string `json:"reason"`
+}
+
+// ProviderLimits is one provider's limits. State is "usable", "out", "not
+// signed in", "not checked" or "not installed"; the rows with drives set
+// decide it.
+type ProviderLimits struct {
+	Provider string     `json:"provider"`
+	Model    string     `json:"model"`
+	State    string     `json:"state"`
+	Reason   string     `json:"reason"`
+	Rows     []LimitRow `json:"rows"`
+}
+
+// LimitRow is one limit window. percentLeft is -1 when the provider does not
+// report it (source says why): the page draws no bar for it. resetsAt and
+// observedAt are RFC 3339 with their zone, "" when unknown.
+type LimitRow struct {
+	Family      string `json:"family"`
+	Window      string `json:"window"`
+	PercentLeft int    `json:"percentLeft"`
+	ResetsAt    string `json:"resetsAt"`
+	ObservedAt  string `json:"observedAt"`
+	Source      string `json:"source"`
+	Drives      bool   `json:"drives"`
 }
 
 type Inbox struct {
@@ -296,6 +324,19 @@ func keys(in []vm.Key) []Key {
 	return out
 }
 
+func limits(in []vm.ProviderLimits) []ProviderLimits {
+	out := make([]ProviderLimits, 0, len(in))
+	for _, p := range in {
+		l := ProviderLimits{Provider: p.Provider, Model: p.Model, State: string(p.State), Reason: p.Reason, Rows: make([]LimitRow, 0, len(p.Rows))}
+		for _, r := range p.Rows {
+			l.Rows = append(l.Rows, LimitRow{Family: r.Family, Window: r.Window, PercentLeft: r.PercentLeft, ResetsAt: stamp(r.ResetsAt),
+				ObservedAt: stamp(r.ObservedAt), Source: r.Source, Drives: r.Drives})
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
 // FromBoard is b in its wire form. Every slice is non-nil, so the page reads
 // an empty list, never null.
 func FromBoard(b vm.Board) Frame {
@@ -314,6 +355,7 @@ func FromBoard(b vm.Board) Frame {
 		Lanes:    Lanes{Items: []Lane{}, Limits: b.Lanes.Limits},
 		Tasks:    []Task{},
 		Workers:  []Worker{},
+		Limits:   limits(b.Limits),
 		Inbox:    Inbox{Count: b.Inbox.Count, Lines: append([]string{}, b.Inbox.Lines...), Next: b.Inbox.Next},
 		Activity: []Event{},
 		Steps:    Steps{Items: []Step{}, Quiet: secs(b.Steps.Quiet), Model: b.Steps.Model},

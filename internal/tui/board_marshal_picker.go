@@ -270,7 +270,7 @@ func (w *Workspace) applyPickerChoice(ctx context.Context, i int) {
 	if cand.out {
 		fig := "out of limit"
 		if !cand.until.IsZero() {
-			fig += " until " + cand.until.In(time.Now().Location()).Format("15:04")
+			fig += " until " + resetClock(cand.until, time.Now())
 		}
 		w.setOutput(marshalDisplayName(cand.provider)+" is "+fig+".", false)
 		return
@@ -382,7 +382,7 @@ func (v boardVisual) marshalPickerOverlay(r layout.Rect, view marshalPickerView)
 		case c.out:
 			figure = "out of limit"
 			if !c.until.IsZero() {
-				figure += " until " + c.until.In(v.now.Location()).Format("15:04")
+				figure += " until " + resetClock(c.until, v.now)
 			}
 			colour = "failed"
 		case !c.known:

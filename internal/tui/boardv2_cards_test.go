@@ -279,7 +279,7 @@ func TestPausedCardQuotaWithTwoTasks(t *testing.T) {
 		return b.Paused != nil && len(b.Paused.Tasks) == 2 && strings.Contains(b.Paused.Tasks[1].Kept, "commit")
 	})
 	z := b.Paused
-	if z.Kind != "quota" || z.Title != "Paused · agy Gemini 5h limit" || z.Resets != reset.Format("15:04") {
+	if z.Kind != "quota" || z.Title != "Paused · agy Gemini 5h limit" || z.Resets != resetClock(reset, time.Now()) {
 		t.Fatalf("title %q %q resets %q", z.Kind, z.Title, z.Resets)
 	}
 	if z.Cause != "T06 and T09 hit the agy Gemini 5h limit. Their work is kept." {
@@ -295,7 +295,7 @@ func TestPausedCardQuotaWithTwoTasks(t *testing.T) {
 	if z.Will != "move T06 and T09 to claude in fresh sessions, keep commits, and resume the run." {
 		t.Fatalf("will %q", z.Will)
 	}
-	if got := keyNames(z.Actions); !slices.Equal(got, []string{"⏎ move to claude", "w wait until " + reset.Format("15:04"), "d raw error", "x stop the run"}) {
+	if got := keyNames(z.Actions); !slices.Equal(got, []string{"⏎ move to claude", "w wait until " + resetClock(reset, time.Now()), "d raw error", "x stop the run"}) {
 		t.Fatalf("actions %q", got)
 	}
 	if b.Decision != nil {

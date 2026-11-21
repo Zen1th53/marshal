@@ -549,7 +549,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		col := firstUseStateColor[c.state]
 		word := c.state
 		if c.state == "limited" && !c.until.IsZero() {
-			word = "limited until " + c.until.In(v.now.Location()).Format("15:04")
+			word = "limited until " + resetClock(c.until, v.now)
 		}
 		text := v.fg(col, v.firstUseGlyph(c.state)) + " " + v.mark(c.name, "") + v.bold(v.fg("white", c.name)) + " " + v.fg(col, word)
 		n := VisibleLen(text)
