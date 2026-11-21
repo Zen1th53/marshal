@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/sessionmcp"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 type Client struct {
@@ -131,7 +132,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		}
 		args = append(args, "--model", request.Model)
 	}
-	args, env, cleanup, err := sessionmcp.Configure(ctx, "claude", args, os.Environ())
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "claude", args, workerenv.Host(os.Environ()))
 	if err != nil {
 		return adapter.Result{}, err
 	}
