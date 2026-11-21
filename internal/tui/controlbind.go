@@ -368,13 +368,6 @@ type ControlSource struct {
 	Now func() time.Time
 }
 
-func (s *ControlSource) now() time.Time {
-	if s == nil || s.Now == nil {
-		return time.Now().UTC()
-	}
-	return s.Now()
-}
-
 // available reports why Control cannot act, if it cannot.
 func (s *ControlSource) available() error {
 	if s == nil || s.Authority == nil {

@@ -406,25 +406,6 @@ func countClaims(claims []model.Claim) (verified, contested, supported, stale in
 	return
 }
 
-func summarizeClaims(claims []model.Claim) string {
-	if len(claims) == 0 {
-		return "0/0"
-	}
-	verified := 0
-	contested := 0
-	for _, c := range claims {
-		if c.State == model.ClaimStateVerified {
-			verified++
-		} else if c.State == model.ClaimStateContested {
-			contested++
-		}
-	}
-	if contested > 0 {
-		return fmt.Sprintf("%d/%d (contested %d)", verified, len(claims), contested)
-	}
-	return fmt.Sprintf("%d/%d", verified, len(claims))
-}
-
 func filterMeaningfulMessages(msgs []model.AgentMessage, limit int) []model.AgentMessage {
 	var filtered []model.AgentMessage
 	for i := len(msgs) - 1; i >= 0; i-- {

@@ -95,7 +95,3 @@ func describeCompletion(candidate string) string {
 	}
 	return ""
 }
-
-func describeWidth(candidate string) int {
-	return VisibleLen(describeCompletion(candidate)) + 2
-}

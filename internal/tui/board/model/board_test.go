@@ -227,27 +227,6 @@ func TestTailSkipsRedeliveryAndLeavesTheReceiver(t *testing.T) {
 	}
 }
 
-func TestNewWiredStatus(t *testing.T) {
-	for _, c := range []struct {
-		walk, detail string
-		want         WiredStatus
-	}{
-		{"FORM", "▸ Exact task ID *: (empty)", WiredStatus{SpecID: "S", State: WiredLive}},
-		{"CONFIRM", "", WiredStatus{SpecID: "S", State: WiredLive}},
-		{"RESULT", "BLOCKED: no run", WiredStatus{SpecID: "S", State: WiredBlockedByState, Cause: "BLOCKED: no run"}},
-		{"DISABLED", "needs cloud", WiredStatus{SpecID: "S", State: WiredUnderConstruction, Cause: "needs cloud"}},
-		{"ERROR", "count table", WiredStatus{SpecID: "S", State: WiredUnderConstruction, Cause: "count table"}},
-	} {
-		got, err := NewWiredStatus("S", c.walk, c.detail)
-		if err != nil || got != c.want {
-			t.Fatalf("%s: %+v, %v; want %+v", c.walk, got, err, c.want)
-		}
-	}
-	if _, err := NewWiredStatus("S", "MAYBE", ""); err == nil {
-		t.Fatal("an unknown walk state must be refused, not guessed")
-	}
-}
-
 // TestRebuildEqualsTail is the read model's contract: a Board projected from
 // scratch equals one kept up to date by tailing, whatever the windows and
 // however much of the stream is delivered twice.

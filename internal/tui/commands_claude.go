@@ -4,64 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/project"
 )
-
-// runGovernedClaudeCmd executes a native Claude CLI command inside MARSHAL's
-// isolated CLAUDE_CONFIG_DIR so the operator's own Claude Code state and
-// credentials are never modified by a governed inspection.
-func runGovernedClaudeCmd(ctx context.Context, args []string) (result string, resultErr error) {
-	args = app.NormalizeProviderArgs("claude", args)
-
-	binary, err := project.FindBinary("claude")
-	if err != nil {
-		return "", fmt.Errorf("claude binary not found on PATH: %w; install Claude and make claude available on PATH, then retry", err)
-	}
-	if err := claude.ValidateDangerousFlags(args); err != nil {
-		return "", err
-	}
-	cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", args)
-	if refusal != "" {
-		return "", errors.New(refusal)
-	}
-	args = cleanArgv
-	dialect := app.ObserveProviderDialect(ctx, "claude")
-	if showQualificationLabel && dialect.Operation(app.ProviderArgOperation("claude", args)).Status == app.ProviderUnknown {
-		defer func() {
-			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation("claude", args)
-			if resultErr != nil {
-				resultErr = fmt.Errorf("%s: %w", label, resultErr)
-			}
-		}()
-	}
-	if err := dialect.Check(app.ProviderArgOperation("claude", args), false); err != nil {
-		return "", err
-	}
-	govHome, err := claude.EnsureGovernedClaudeHome()
-	if err != nil {
-		return "", fmt.Errorf("ensure governed CLAUDE_CONFIG_DIR: %w", err)
-	}
-	cmdCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(cmdCtx, binary, args...)
-	cmd.WaitDelay = 100 * time.Millisecond
-	cmd.Env = append(os.Environ(), "CLAUDE_CONFIG_DIR="+govHome)
-	out, err := cmd.CombinedOutput()
-	outStr := strings.TrimSpace(string(out))
-	if err != nil {
-		return outStr, fmt.Errorf("claude %s failed: %w", strings.Join(args, " "), err)
-	}
-	return outStr, nil
-}
 
 // handleClaude exposes the governed Claude control plane. It mirrors the Codex
 // surface, minus the operations Claude Code has no equivalent for.

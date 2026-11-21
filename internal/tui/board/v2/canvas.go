@@ -303,9 +303,6 @@ func (p pane) hit(dx, dy, endX int, kind string, index int, key string) {
 	p.c.hit(p.y+dy, p.x+max(1, dx), p.x+min(endX, p.w-1), kind, index, key)
 }
 
-// rows is the number of rows inside the box.
-func (p pane) rows() int { return max(0, p.h-2) }
-
 // width counts cells; every glyph the Board uses is one cell wide.
 func width(s string) int { return utf8.RuneCountInString(s) }
 
