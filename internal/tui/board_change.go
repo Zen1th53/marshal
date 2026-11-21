@@ -616,7 +616,7 @@ func (m *marshalSession) heldSet() map[string]bool {
 // timeout.
 func (w *Workspace) handleChangeKey(event KeyEvent) bool {
 	card := w.currentChange()
-	if card == nil || w.anyBodyView() || w.boardUI.inspect != "" {
+	if card == nil || w.anyBodyView() {
 		return false
 	}
 	w.change.mu.Lock()

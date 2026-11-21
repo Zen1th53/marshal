@@ -152,7 +152,7 @@ func (w *Workspace) clearAsk() {
 // through to keep its meaning.
 func (w *Workspace) handleAskKey(event KeyEvent) bool {
 	card := w.currentAsk()
-	if card == nil || w.anyBodyView() || w.boardUI.inspect != "" {
+	if card == nil || w.anyBodyView() {
 		return false
 	}
 	if event.Type == KeyEnter {

@@ -234,11 +234,6 @@ func TestSecurityViewKeys(t *testing.T) {
 		t.Fatal("6 opened the Security view while the composer held text")
 	}
 	w.composer.SetText("")
-	w.boardUI.inspect = "T-017"
-	if press('6') || w.secView.Load() {
-		t.Fatal("6 opened the Security view over the inspector")
-	}
-	w.boardUI.inspect = ""
 	for _, back := range []KeyEvent{{Type: KeyEsc}, {Type: KeyRune, Rune: '1'}, {Type: KeyRune, Rune: '6'}} {
 		if !press('6') || !w.secView.Load() {
 			t.Fatal("6 did not open the Security view")

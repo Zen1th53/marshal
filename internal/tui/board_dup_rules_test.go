@@ -136,31 +136,3 @@ func TestCurrentCardsAreCopies(t *testing.T) {
 		t.Fatal("no card read as a card")
 	}
 }
-
-// v verifies, on Board v2, the first provider its checklist shows as "not
-// checked yet": the Marshal's, then the workers in v2ProviderOrder.
-func TestV2NextUnchecked(t *testing.T) {
-	now := time.Now()
-	all := map[string]bool{"claude": true, "agy": true, "codex": true, "opencode": true}
-	in := v2MarshalIn{Now: now, Probed: true, Probe: v2Probe{Lead: "codex", Installed: all}, SignedIn: map[string]bool{"codex": true}}
-	// The classic chips' order would start at codex; v2 lists claude first.
-	if got := v2NextUnchecked(in); got != "claude" {
-		t.Fatalf("next = %q, want claude", got)
-	}
-	in.SignedIn = map[string]bool{"claude": true}
-	if got := v2NextUnchecked(in); got != "codex" {
-		t.Fatalf("an unchecked Marshal provider is not first: %q", got)
-	}
-	in.SignedIn = map[string]bool{"codex": true, "claude": true}
-	in.Probe.Installed = map[string]bool{"claude": true, "codex": true, "opencode": true}
-	if got := v2NextUnchecked(in); got != "opencode" {
-		t.Fatalf("next = %q, want opencode (agy is not installed)", got)
-	}
-	in.SignedIn["opencode"] = true
-	if got := v2NextUnchecked(in); got != "" {
-		t.Fatalf("every provider checked, next = %q", got)
-	}
-	if got := v2NextUnchecked(v2MarshalIn{Now: now}); got != "" {
-		t.Fatalf("before the first lookup, next = %q", got)
-	}
-}

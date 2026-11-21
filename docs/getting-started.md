@@ -40,7 +40,7 @@ On first open, Marshal sets up the project automatically. You can also run `mars
 
 ---
 
-Marshal opens inside a managed tmux environment displaying **the Board**.
+Marshal opens inside a managed tmux environment displaying **the Board**, and the **Web Board** (the full interface) opens in your browser. On a computer with no display, `/marshal web` shows its private link to open.
 
 ## 3. Choose who plans and check readiness
 
@@ -53,30 +53,24 @@ Who plans?  ⬡ codex 11% left · ✳ claude limit unknown · ◆ agy out of lim
 
 Press `Enter` to keep the suggestion, or choose another with the arrows or its number. You can change it later with `m`.
 
-The Board then shows the **readiness** screen, with `READY` in the top bar:
+The Board then shows its home screen, with `READY` on the top line:
 
 ```text
-  MARSHAL v0.3.5   project my-project   READY                                     ⬡ codex · GPT-6.2-Sol · high  m   inbox 0  18:22
- NOW  marshal codex GPT-6.2-Sol · ready         │ work none yet                       from you nothing
+ MARSHAL · my-project · READY · 0 workers · 18:22
 
-╭─ READINESS · 5 of 6 ready ────────────────────────────────────────────────────────╮
-│                                                                                   │
-│  ✓  Marshal    codex · GPT-6.2-Sol · signed in                           in use   │
-│  ✓  Workers    claude · up to 2 at once                                   ready   │
-│  !  Workers    agy is installed but not signed in                        action   │
-│                run agy once in a terminal and sign in                             │
-│  ✓  Platform   Linux amd64 · workers can run here                         ready   │
-│  ✓  Repo       clean · main @ 16091d7                                     ready   │
-│  ✓  Browser    links open in your browser                                 ready   │
+ Now:       the Marshal is waiting for a goal
+ From you:  nothing · next ask: architecture review
+ Web:       opened in your browser (w opens it again)
+ ⏎ chat   w web   s say to the Marshal   q quit
 ```
 
-Go through the rows marked `!`:
+The readiness checklist (the Marshal's provider, the workers, the platform, the repository, the browser) is on the Web Board. If something needs you there:
 
-- **A provider that is not signed in** (here agy): press `g` to open agy in a new tmux window and sign in there (or run `agy` in any terminal); when you close it, press `Enter` to check it again. For Claude Code run `claude` and sign in; for Codex run `codex login`; for OpenCode run `opencode auth login`.
-- **A provider that is not checked yet**: press `v`, then `Enter`. The check costs one model call.
+- **A provider that is not signed in**: for agy, *From you* says so and `g` opens agy in a new tmux window to sign in (or run `agy` in any terminal). For Claude Code run `claude` and sign in; for Codex run `codex login`; for OpenCode run `opencode auth login`.
+- **A provider that is not checked yet**: open the Providers view (`4`), press `v`, then `Enter`. The check costs one model call.
 - **Repo** with changes: workers start from the last commit, so commit what they should see.
 
-On a first open, a **USAGE COUNTS** card beside the list says that anonymous install and version counts go to marshal.blackhat.uz, and never code, prompts or file names. Press `y` to keep them on, `t` to turn them off, or `?` to see what is sent; `marshal telemetry disable` turns them off later. [Exactly what is sent →](telemetry.md)
+On a first open, *From you* says that anonymous usage counts are on (install and version counts to marshal.blackhat.uz, never code, prompts or file names). Press `y` to keep them on or `t` to turn them off; `marshal telemetry disable` turns them off later. [Exactly what is sent →](telemetry.md)
 
 At least one provider has to be ready. With two or more, a different provider reviews each task.
 
@@ -87,42 +81,26 @@ At least one provider has to be ready. With two or more, a different provider re
 To start work, describe what you want built:
 
 - **From the Board**: press `s`. The composer opens at the bottom of the Board (`to the Marshal › …`). Type your goal and press `Enter`.
-- **In the chat**: press `Enter` on the readiness screen (or `F11`) to open the Marshal chat beside the Board. Type your goal there. `F11` or `Alt+→` brings the keyboard back to the Board.
+- **In the chat**: press `Enter` (or `F11`) to open the Marshal chat beside the Board. Type your goal there. `F11` or `Alt+→` brings the keyboard back to the Board.
 
 Example goal:
 > "Add a health check HTTP endpoint at /healthz that returns JSON with status ok and current server uptime. Include unit tests."
 
-The top bar changes to `PLANNING`. The Board shows the plan stages, the **Marshal steps** read from its tool calls, the requests the Board sent the Marshal, and the state of the Marshal chat.
+The top line changes to `PLANNING` and *Now* says what the Marshal is doing. The Web Board shows the plan stages, the **Marshal steps** read from its tool calls, the requests the Board sent the Marshal, and the state of the Marshal chat. When the Marshal asks you something in its chat, *From you* says so: `Enter` opens the chat.
 
 ---
 
 ## 5. Confirm the requirements and accept the architecture
 
-The Marshal reads your repository, asks questions only where the answer changes the plan, and fills a **requirements card**. Press `Enter` to confirm all answers, or `e` to edit one.
+The Marshal reads your repository, asks questions only where the answer changes the plan, and fills a **requirements card** on the Web Board. Confirm all answers there, or press `y` on the Board (*From you* names it); `e` then a line's letter edits one line.
 
-Then it drafts the architecture. The top bar says `YOUR TURN`, *from you* says `architecture waits for you in the browser`, and the **Accept architecture** card opens over the Board:
+Then it drafts the architecture. The top line says `YOUR TURN` and *From you* says `architecture waits for you in the browser — open the web to decide (w)`. On the Web Board's **Accept architecture** card:
 
-```text
-╭─ ACCEPT ARCHITECTURE · rev 1 ──────────────────────────────────────────────────────────── esc later ─╮
-│ 14 parts · 37 links · covers R1–R18 · 5 parts changed by this goal (dashed)                          │
-│   …                                                                                                  │
-│  a  open in browser    c  copy link    k  comment                                                    │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-1. Press `a` (or `y`). The architecture opens in your browser.
+1. Select **Open in browser** (or press `a` on the Board). The architecture opens in your browser.
 2. Review it and select **Accept architecture** there. Only you can accept, and only in the browser: if the Marshal tries to accept for you, the card says it was refused.
-3. To ask for changes, comment in the browser, or press `k` on the card and say what to change.
+3. To ask for changes, comment in the browser, or tell the Marshal (`s`) what to change.
 
-**No browser here (SSH, a server without a display):** the card shows the review's link instead:
-
-```text
-│ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │
-```
-
-Press `c` to copy the link and open it in a browser on that machine. The link is also saved in `.marshal/architecture/review/url.txt`. Over SSH, the address is local to the remote machine: forward its port first (for example `ssh -L 37667:127.0.0.1:37667 you@server`, with the port from the link), then open the link in your local browser.
-
-`Esc` puts the card aside; the inbox keeps the decision and *from you* still names it.
+**No browser here (SSH, a server without a display):** the Web Board's card shows the review's link. The link is also saved in `.marshal/architecture/review/url.txt`. Over SSH, the address is local to the remote machine: forward its port first (for example `ssh -L 37667:127.0.0.1:37667 you@server`, with the port from the link), then open the link in your local browser.
 
 The accepted architecture becomes the binding contract for all subsequent tasks.
 
@@ -141,13 +119,7 @@ With the default settings the Marshal approves the plan itself and starts the wo
 
 ## 7. Watch the lanes
 
-Once the plan is approved the top bar says `RUNNING` and the Board shows the run:
-
-- **PLAN**: the stages, `build 5/12`, progress and ETA.
-- **LANES**: one row per worker from its heartbeats: model, task or review, step, time, and how long ago it last signalled.
-- **TASKS**: each task's files, writer, reviewer and state.
-- **MARSHAL** and **WORKERS**: the Marshal's model, context and limit; each provider's limit and lanes.
-- **INBOX** and **ACTIVITY**: what waits for you, and what happened.
+Once the plan is approved the top line says `RUNNING`, *Now* counts the tasks running, queued and done, and the Web Board shows the run: the plan, one lane per worker from its heartbeats, every task with its writer, reviewer and state, the Marshal and each provider's limit, the inbox and the activity.
 
 What happens on its own:
 
@@ -156,33 +128,20 @@ What happens on its own:
 3. **Cross-provider review**: a different provider checks the diff against the task's criteria. If it finds problems, the task goes back for rework.
 4. **Final check**: an independent check reruns the checks on the integrated result. This final ULTRA check needs Claude Code installed and unused as a worker in that run. Otherwise the run stops before the check and asks you to install Claude Code or wait for its limit, then press `Enter`.
 
-To look closer:
-- Highlight a task with `j` / `k` (or `↑` / `↓`) and press `Enter` to open its **Inspector**; press `o` there to see the worker's terminal pane.
-- Focus the lanes with `l` and press `Enter` on a lane to open its worker.
-- Press `Space` for the action palette: say to the Marshal, open the architecture, restart a task, change model or provider, pause everything, stop all workers, limits and workers, help.
-
-If a task gets stuck, select it and press `r`, then `Enter`, to restart it.
+To look closer, open the Web Board (`w`). If a task gets stuck, *From you* names it: `y` retries it in a fresh session (the Web Board's **Retry** does the same). `/task-model T03` changes the model a task runs on. `Ctrl+X` stops all workers.
 
 ---
 
 ## 8. When work pauses: the recovery card
 
-If workers stop (a provider hits its limit, is not signed in, a lane was interrupted, an operation timed out), the top bar says `PAUSED` and the **paused card** says what happened, which tasks it holds, what is kept, and what `Enter` will do:
+If workers stop (a provider hits its limit, is not signed in, a lane was interrupted, an operation timed out), the top line says `PAUSED` and *From you* says what to do, with its key:
 
 ```text
-╭─ PAUSED · agy Gemini 5h limit ───────────────────────────────────── resets 21:10 ─╮
-│ agy-2 and agy-4 hit the agy Gemini 5-hour limit. Their work is kept.              │
-│ Enter will: move T06 and T09 to claude sonnet in fresh sessions, keep commits.    │
-│  ⏎  move to claude    w  wait until 21:10    d  raw error    x  stop the run      │
-╰───────────────────────────────────────────────────────────────────────────────────╯
+ From you:  run paused: agy Gemini 5h limit — y move T06 and T09 to claude
 ```
 
-One key gets the run moving again:
-
-- `Enter` does what the card says (move the tasks to a provider with room, retry them in fresh sessions, or resume).
-- `w` waits until the limit resets and then resumes.
-- `d` shows the raw error.
-- `x` stops the run; the work is kept and `/marshal resume` continues it.
+- `y` does what the paused card's main button says (move the tasks to a provider with room, retry them in fresh sessions, or resume), once.
+- On the Web Board's paused card: **Wait until …** waits for the limit reset, **Raw error** shows it, **Stop the run** stops it (the work is kept and `/marshal resume` continues it).
 
 ---
 
@@ -190,9 +149,9 @@ One key gets the run moving again:
 
 When all tasks pass review and verification:
 - Marshal merges the task branches cleanly into your project's `main` branch.
-- The top bar says `DONE`.
+- The top line says `DONE`.
 - The chat receives a `[Marshal] The run closed: …` message.
 - You can review the completed commits with standard Git commands (`git log`, `git diff HEAD~1`).
-- Press `Ctrl+C` twice or type `/exit` in the command line to leave the Board.
+- Press `q`, `Ctrl+C` twice, or type `/exit` in the command line to leave the Board.
 
 All keys and screens: [The Board and keys](board-and-keys.md).

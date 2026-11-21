@@ -53,56 +53,6 @@ func TestBoardMouseActionHit(t *testing.T) {
 	}
 }
 
-func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
-	if !click(w, row, col) {
-		t.Fatal("a click on a task row was not taken")
-	}
-	if w.boardUI.focus != layout.Tasks || w.boardUI.task != "T-017" || w.boardUI.inspect != "" {
-		t.Fatalf("first click: focus %s task %s inspect %q", w.boardUI.focus, w.boardUI.task, w.boardUI.inspect)
-	}
-	// Anywhere on the row selects it, not only the id.
-	row2, _ := cellOf(t, w, 120, 40, "T-018  ⣾", 0)
-	if !click(w, row2, col+30) || w.boardUI.task != "T-018" {
-		t.Fatalf("a click on the row's scope did not select it: %s", w.boardUI.task)
-	}
-	// A click on the selected task inspects it, as Enter does.
-	click(w, row2, col)
-	if w.boardUI.inspect != "T-018" {
-		t.Fatalf("second click did not inspect: %q", w.boardUI.inspect)
-	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "IDENTITY") {
-		t.Fatalf("inspector not painted:\n%s", got)
-	}
-	// The inspector covers the body: a click under it reaches no task.
-	click(w, row, col)
-	if w.boardUI.task != "T-018" || w.boardUI.inspect != "T-018" {
-		t.Fatalf("a click under the inspector moved the selection to %s", w.boardUI.task)
-	}
-}
-
-func TestBoardMouseFocusesLanes(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	oldIn := boardInTmux
-	defer func() { boardInTmux = oldIn }()
-	boardInTmux = func(*Workspace) bool { return false }
-	row, col := cellOf(t, w, 120, 40, "claude-1", 0)
-	if !click(w, row, col) || w.boardUI.focus != layout.Lanes || w.boardUI.lane != "claude-1" {
-		t.Fatalf("lane click: focus %s lane %s", w.boardUI.focus, w.boardUI.lane)
-	}
-	if w.boardUI.inspect != "" {
-		t.Fatal("the first lane click did more than focus")
-	}
-	// Again on the focused lane: Enter's action, here the lane's task.
-	click(w, row, col)
-	if w.boardUI.inspect != "T-018" {
-		t.Fatalf("second lane click: inspect %q", w.boardUI.inspect)
-	}
-}
-
 func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 	// This test is about the classic Board itself.
 	w, _ := boardWorkspace(t)

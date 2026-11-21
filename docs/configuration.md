@@ -107,4 +107,5 @@ marshal --json memory list
 | `MARSHAL_NO_MODIFY_PATH` | `1` stops `install.sh` from adding the install folder to a shell startup file. |
 | `MARSHAL_INSTALL_DEPS` | `0` stops `install.sh` from installing a missing Git or tmux; it only reports them. |
 | `MARSHAL_INSTALL_YES` | `1` answers yes to `install.sh`'s questions (sudo still needs a terminal). |
+| `MARSHAL_WEB_OPEN` | `0` keeps the browser closed when the Board starts: the Web Board still starts, and `w` or `/marshal web` opens it. Unset (the default) opens it in your browser where there is a display. |
 | `BOARD_TRUECOLOR` | `1` draws the Board in 24-bit colour, as `COLORTERM=truecolor` or `24bit` does, for a terminal that takes 24-bit colour but does not set `COLORTERM`. |

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // reqProposalLine builds a MARSHAL_PROPOSAL "requirements" line. card is the
@@ -167,6 +168,45 @@ func TestRequirementsEnterConfirms(t *testing.T) {
 	if got := tr.sentTurns(); got[0] != "confirm all" {
 		t.Fatalf("sent %q, want \"confirm all\"", got)
 	}
+}
+
+// On the home screen Enter opens the chat and leaves the card; y does the
+// card's Enter (confirm all) once, and a second y right after does nothing.
+func TestHomeYesConfirmsRequirements(t *testing.T) {
+	w, _, tr := boardWithNativeChat(t)
+	p, err := parseMarshalProposal(reqProposalLine(fullReqCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.openRequirements(p)
+	w.frameLines(80, 24)
+	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.currentReq() == nil {
+		t.Fatal("Enter acted on the requirements card")
+	}
+	if got := strings.Join(frameLinesText(w, 80, 24), "\n"); !strings.Contains(got, "— y confirm all") {
+		t.Fatalf("From you does not name y:\n%s", got)
+	}
+	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'}) {
+		t.Fatal("y was not taken")
+	}
+	if w.currentReq() != nil {
+		t.Fatal("y did not confirm the requirements")
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	chatWaitFor(t, "the confirmation", func() bool { return len(tr.sentTurns()) == 1 })
+	time.Sleep(50 * time.Millisecond)
+	if got := tr.sentTurns(); len(got) != 1 || got[0] != "confirm all" {
+		t.Fatalf("sent %q, want one \"confirm all\"", got)
+	}
+}
+
+// frameLinesText is a frame's lines without escapes.
+func frameLinesText(w *Workspace, cols, rows int) []string {
+	lines, _, _ := w.frameLinesFull(cols, rows)
+	for i := range lines {
+		lines[i] = StripANSI(lines[i])
+	}
+	return lines
 }
 
 // e then c prefills the composer with that line's edit and opens it, leaving

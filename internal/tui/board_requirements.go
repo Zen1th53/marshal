@@ -203,7 +203,7 @@ func (w *Workspace) setReqEditing(on bool) {
 // an edit. Every other key falls through to keep its meaning.
 func (w *Workspace) handleRequirementsKey(event KeyEvent) bool {
 	card := w.currentReq()
-	if card == nil || w.anyBodyView() || w.boardUI.inspect != "" {
+	if card == nil || w.anyBodyView() {
 		return false
 	}
 	if card.editing {

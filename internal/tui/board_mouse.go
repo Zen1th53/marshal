@@ -209,10 +209,6 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		if !slices.ContainsFunc(p.Board.Tasks, func(t boardmodel.TaskRow) bool { return t.ID == h.id }) {
 			return true
 		}
-		if focus == layout.Tasks && ui.task == h.id {
-			// A click on the selected task inspects it, as Enter does.
-			ui.inspect = h.id
-		}
 		ui.focus, ui.task = layout.Tasks, h.id
 	case hitLane:
 		if !slices.ContainsFunc(p.Board.Lanes, func(l boardmodel.Lane) bool { return l.Worker == h.id }) {
@@ -333,7 +329,6 @@ var boardChipViews = map[string]rune{"health": '4', "host": 'h'}
 func (w *Workspace) openChip(name string) {
 	ui := &w.boardUI
 	if r, ok := boardChipViews[name]; ok {
-		ui.inspect = ""
 		if !w.switchBodyView(KeyEvent{Type: KeyRune, Rune: r}) {
 			w.setOutput("That view has nothing to read in this session.", false)
 		}
@@ -351,7 +346,6 @@ func (w *Workspace) openChip(name string) {
 		return
 	}
 	w.closeBodyViews()
-	ui.inspect = ""
 	ui.focus = pane
 }
 

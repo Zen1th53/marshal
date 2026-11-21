@@ -255,11 +255,6 @@ func TestProviderViewKeys(t *testing.T) {
 		t.Fatal("4 opened the Providers view while the composer held text")
 	}
 	w.composer.SetText("")
-	w.boardUI.inspect = "T-017"
-	if press('4') || w.provView.Load() {
-		t.Fatal("4 opened the Providers view over the inspector")
-	}
-	w.boardUI.inspect = ""
 	for _, back := range []KeyEvent{{Type: KeyEsc}, {Type: KeyRune, Rune: '1'}, {Type: KeyRune, Rune: '4'}} {
 		if !press('4') || !w.provView.Load() {
 			t.Fatal("4 did not open the Providers view")

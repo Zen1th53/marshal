@@ -388,59 +388,6 @@ func (w *Workspace) sendGate(ctx context.Context, g ownerGate) {
 	w.refreshGatesSoon()
 }
 
-// handleGateKey is the owner gates' keys on the Board: with a reply armed,
-// Enter sends it and any other key cancels; otherwise y opens a waiting
-// architecture or arms the first waiting reply. When nothing waits, y explains
-// why instead of falling through to open the composer.
-func (w *Workspace) handleGateKey(event KeyEvent, p *MarshalPanel) bool {
-	gates := w.ownerGates(p)
-	if armed := w.gateArmed(); armed != "" {
-		for _, g := range gates {
-			if g.key == armed && event.Type == KeyEnter {
-				w.sendGate(w.workers.context(), g)
-				return true
-			}
-		}
-		w.disarmGate()
-		w.memoryAnswer("Reply not sent.", false)
-		return true
-	}
-	if event.Type != KeyRune || event.Rune != 'y' || w.anyBodyView() || w.boardUI.inspect != "" || w.inboxView.Inspecting() {
-		return false
-	}
-	for _, g := range gates {
-		if g.sent {
-			continue
-		}
-		if g.kind == "architecture" {
-			// Opening the browser is not a decision: no arm, no confirm.
-			w.openArchitectureReview()
-			return true
-		}
-		w.armGate(g)
-		return true
-	}
-	if len(gates) > 0 {
-		// Every reply is sent: y says so instead of typing a "y".
-		w.armGate(gates[0])
-		return true
-	}
-	// y is the Board's architecture/gate key: with nothing waiting it says why
-	// rather than falling through to open the composer with "to the Marshal › y".
-	snap := w.archSnapshotNow()
-	switch {
-	case snap.Status.Accepted:
-		w.memoryAnswer("Nothing to open: the architecture is already accepted (8 shows it).", false)
-	case snap.Status.OwnerAccepted:
-		w.memoryAnswer("Nothing to open: you accepted the architecture; it is applied when the Marshal allows it or Marshal starts again.", false)
-	case w.planning.Load() && !(snap.Loaded && snap.Status.Exists):
-		w.memoryAnswer("Nothing to open: the architecture is already accepted (8 shows it).", false)
-	default:
-		w.memoryAnswer("Nothing to open yet: the Marshal has not sent an architecture.", false)
-	}
-	return true
-}
-
 // clickGate is a click on a gate's button: the reply button arms the
 // reply and a second click on it sends, as Enter does; the details button
 // opens what the gate is about.
@@ -465,7 +412,6 @@ func (w *Workspace) clickGate(key string, action rune) {
 			w.disarmGate()
 		default:
 			w.disarmGate()
-			w.boardUI.inspect = ""
 			if !w.switchBodyView(KeyEvent{Type: KeyRune, Rune: g.details}) {
 				w.setOutput("That view has nothing to read in this session.", false)
 			}

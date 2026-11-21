@@ -7,7 +7,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inbox"
 )
 
 // boardKey is one key of the Board as the help overlay and the command
@@ -101,25 +100,14 @@ var boardKeymap = []boardKey{
 	{Group: "VIEWS", Keys: "7", What: "plan: task graph and plan versions", View: "Plan", Press: pressRune('7'), Class: KeyOpen, ID: "view.plan", Hint: "plan", When: func(w *Workspace) bool { return w.planSrc() != nil && w.hasRun() }, Why: runViewOff("Plan", "There is no plan to show in this session.")},
 	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen, ID: "view.architecture", Hint: "architecture", When: func(w *Workspace) bool { return w.archSrc() != nil }, Why: reason("There is no architecture to show in this session.")},
 
-	{Group: "BOARD", Keys: "j k  ↑ ↓", What: "move in the focused pane, scroll", Class: KeyMove, ID: "board.move", Hint: "move"},
-	{Group: "BOARD", Keys: "Enter", What: "inspect a task; a lane: its worker", Class: KeyOpen, ID: "board.inspect", Hint: "inspect", When: func(w *Workspace) bool { return w.boardUI.task != "" || w.boardUI.lane != "" }, Why: reason("Select a task or a lane first.")},
-	{Group: "BOARD", Keys: "t  i  l", What: "focus tasks, inbox, lanes", Class: KeyMove, ID: "board.focus"},
-	{Group: "BOARD", Keys: "Tab", What: "next pane; Shift+Tab: previous", Class: KeyMove, ID: "board.pane"},
-	{Group: "BOARD", Keys: "Esc  q", What: "close the inspector, a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.boardUI.inspect != "" || w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
-	{Group: "BOARD", Keys: "e", What: "inspector: toggle all events", Class: KeyOpen, ID: "inspector.events", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
-	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen, ID: "inspector.walk", When: func(w *Workspace) bool { return w.boardUI.inspect != "" }, Why: reason("Open a task's inspector first.")},
-	{Group: "BOARD", Keys: "o", What: "inspector: show the worker's pane", Class: KeyOpen, ID: "inspector.pane"},
+	{Group: "HOME", Keys: "Enter", What: "open the Marshal chat", Press: &KeyEvent{Type: KeyEnter}, Class: KeyOpen, ID: "home.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "y", What: "do the step From you names (retry, continue, resume, confirm)", Press: pressRune('y'), Class: KeyConfirm, ID: "task.retry", Hint: "yes", Core: true, CoreOrder: 3, CoreKey: "y", CoreLabel: "retry or continue", When: (*Workspace).homeYesReady, Why: reason("Nothing safe to continue now: decisions are made on the Web Board (w).")},
+	{Group: "HOME", Keys: "w", What: "open the Web Board: every card and button", Press: pressRune('w'), Class: KeyOpen, ID: "home.web", Hint: "web", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "e", What: "requirements: edit a line, then its letter", Press: pressRune('e'), Class: KeyOpen, ID: "home.reqedit", When: func(w *Workspace) bool { return w.currentReq() != nil }, Why: reason("No requirements wait for you.")},
+	{Group: "HOME", Keys: "q", What: "quit Marshal", Press: pressRune('q'), Class: KeyConfirm, ID: "home.quit", Hint: "quit"},
+	{Group: "HOME", Keys: "Esc", What: "close a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
 	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
-	{Group: "BOARD", Keys: "r", What: "stuck task: retry it, Enter", Hint: "retry", Press: pressRune('r'), Class: KeyConfirm, ID: "task.retry", Core: true, CoreOrder: 3, CoreKey: "r", CoreLabel: "restart a task", When: func(w *Workspace) bool { _, ok := stuckTaskUnderKeyboard(w); return ok }, Why: func(w *Workspace) string { _, why := retryTarget(w); return why }},
-	{Group: "BOARD", Keys: "w", What: "task: choose the model that runs it", Hint: "model", Press: pressRune('w'), Class: KeyOpen, ID: "task.model", When: func(w *Workspace) bool { _, ok := taskUnderKeyboard(w); return ok }, Why: reason(taskModelWhy)},
 	{Group: "BOARD", Keys: "a", What: "project architecture in the browser", Command: "/marshal architecture", Class: KeyOpen, ID: "architecture.browse", Core: true, CoreOrder: 2, CoreKey: "a", CoreLabel: "open the architecture"},
-
-	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}, ID: "inbox.reply", Hint: "reply", When: func(w *Workspace) bool { return w.boardReplyWaiting() }, Why: reason("Nothing is waiting for your reply.")},
-	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm, ID: "inbox.decide", When: func(w *Workspace) bool { return len(w.boardInbox()) > 0 }, Why: reason("The inbox has nothing to decide.")},
-	{Group: "INBOX", Keys: "i  Enter", What: "show the request's reason", Class: KeyOpen, ID: "inbox.reason", Hint: "inbox", When: func(w *Workspace) bool { return len(w.boardInbox()) > 0 }, Why: reason("The inbox has nothing to show.")},
-	{Group: "INBOX", Keys: "Enter", What: "run stopped: do what it suggests", Class: KeyOpen, Listed: true, ID: "run.stopped", When: func(w *Workspace) bool { return w.boardStopWaiting() }, Why: reason("No stopped run is waiting.")},
-	{Group: "INBOX", Keys: "x", What: "cancel the decision being typed", Class: KeyOpen, ID: "inbox.cancel", When: func(w *Workspace) bool { return w.inboxView.Confirming() }, Why: reason("No decision is being typed.")},
-	{Group: "INBOX", Keys: "hard gate", What: "type the canonical id, then Enter", Class: KeyConfirm, Listed: true, ID: "inbox.hardgate"},
 
 	{Group: "IN A VIEW", Keys: "a  r  i", What: "memory: keep, reject, evidence", Class: KeyConfirm, Except: map[string]KeyClass{"i": KeyOpen}, ID: "memory.decide", When: func(w *Workspace) bool { return w.memView.Load() }, Why: reason("Open the Memory view first.")},
 	{Group: "IN A VIEW", Keys: "PgUp PgDn", What: "memory: scroll", Class: KeyMove, ID: "memory.scroll", When: func(w *Workspace) bool { return w.memView.Load() }, Why: reason("Open the Memory view first.")},
@@ -132,7 +120,7 @@ var boardKeymap = []boardKey{
 
 	{Group: "MARSHAL", Keys: "m", What: "change the Marshal", Hint: "Marshal", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.pick", Core: true, CoreOrder: 4, CoreKey: "m", CoreLabel: "change model or provider"},
 	{Group: "MARSHAL", Keys: "F11", What: "chat ⇄ Board (Alt+← / Alt+→ in tmux)", Hint: "chat", Press: &KeyEvent{Type: KeyF11}, Class: KeyOpen, ID: "marshal.chat"},
-	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", Core: true, CoreOrder: 1, CoreKey: "s", CoreLabel: "say to the Marshal", When: func(w *Workspace) bool { return w.boardVisible() && w.boardUI.inspect == "" }, Why: reason("Leave the inspector to speak to the Marshal.")},
+	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen, ID: "marshal.say", Hint: "say", Core: true, CoreOrder: 1, CoreKey: "s", CoreLabel: "say to the Marshal", When: func(w *Workspace) bool { return w.boardVisible() }, Why: reason("Open the Board first.")},
 	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen, ID: "command.line", Hint: "command"},
 	{ID: "palette", Group: "MARSHAL", Keys: "space  Ctrl+K", What: "all actions; type to filter", Hint: "actions", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "?", What: "this help", Press: pressRune('?'), Class: KeyOpen, ID: "help", Hint: "help", Core: true, CoreOrder: 8, CoreKey: "?", CoreLabel: "help"},
@@ -150,28 +138,6 @@ var boardKeymap = []boardKey{
 	{Group: "FUNCTION KEYS", Keys: "F9", What: "native OpenCode", Command: "/opencode", Class: KeyOpen, ID: "fkey.opencode"},
 	{Group: "FUNCTION KEYS", Keys: "F10", What: "update: check or install", Press: &KeyEvent{Type: KeyF10}, Class: KeyConfirm, Direct: "spec: F-keys unchanged; it installs only the update its notice offered", ID: "fkey.update"},
 	{Group: "FUNCTION KEYS", Keys: "F12", What: "native Antigravity", Command: "/agy", Class: KeyOpen, ID: "fkey.agy"},
-}
-
-// boardReplyWaiting reports whether a reply is waiting on the Board: an
-// owner gate still to send, or the plan guard's undo alert. inbox.reply's
-// keys (y, u, K) do nothing without one, so the registry marks it off.
-func (w *Workspace) boardReplyWaiting() bool {
-	g := &w.guard
-	g.mu.Lock()
-	alert := g.alert != nil
-	g.mu.Unlock()
-	if alert {
-		return true
-	}
-	w.mu.RLock()
-	p := w.state.Marshal
-	w.mu.RUnlock()
-	for _, gate := range w.ownerGates(p) {
-		if !gate.sent {
-			return true
-		}
-	}
-	return false
 }
 
 // boardStopWaiting reports whether a stopped run is waiting with an empty
@@ -383,29 +349,6 @@ var inboxPaletteKeys = []struct {
 	{'r', "Return with a reason"},
 }
 
-// inboxPaletteActions is the palette's entries for one pending request:
-// each opens the inbox's own confirmation for it, never decides it.
-func inboxPaletteActions(item boardmodel.InboxItem) []PaletteAction {
-	subject := cleanBoard(item.Request.Kind) + " " + cleanBoard(item.Request.Object)
-	if item.Request.TaskID != "" {
-		subject = cleanBoard(item.Request.TaskID) + " " + subject
-	}
-	out := make([]PaletteAction, 0, len(inboxPaletteKeys))
-	for _, k := range inboxPaletteKeys {
-		out = append(out, PaletteAction{
-			ID:          "inbox." + string(k.key) + "." + item.Canonical,
-			Category:    "INBOX",
-			Title:       k.verb + " · " + subject,
-			Description: inbox.Blast(item) + " " + inbox.Reason(item),
-			Shortcut:    string(k.key),
-			Key:         pressRune(k.key),
-			Pane:        string(layout.Inbox),
-			Inbox:       item.Request.Key(),
-		})
-	}
-	return out
-}
-
 // paletteContext is what the palette ranks by as it opens on the Board:
 // the open view or the focused pane, and the inbox's actions. The
 // selection's request is the selected inbox item's when the inbox has the
@@ -424,32 +367,10 @@ func (w *Workspace) paletteContext() PaletteContext {
 			c.Pane = v.name
 		}
 	}
-	items := w.boardInbox()
-	w.inboxView.Update(items)
-	ui := &w.boardUI
-	focus := ui.pane(len(items) > 0)
+	// The home screen has no panes; the inbox's decisions are the Web
+	// Board's, so the palette offers none.
 	if c.Pane == "" {
-		c.Pane = string(focus)
-	}
-	selected := ""
-	switch {
-	case c.Pane == string(layout.Inbox):
-		selected = w.inboxView.Selected()
-	case c.Pane == string(layout.Tasks) && ui.task != "":
-		task := ui.task
-		if ui.inspect != "" {
-			task = ui.inspect
-		}
-		if i := slices.IndexFunc(items, func(it boardmodel.InboxItem) bool { return it.Request.TaskID == task }); i >= 0 {
-			selected = items[i].Request.Key()
-		}
-	}
-	for _, it := range items {
-		if it.Request.Key() == selected {
-			c.Selection = inboxPaletteActions(it)
-		} else {
-			c.Others = append(c.Others, inboxPaletteActions(it)...)
-		}
+		c.Pane = "Home"
 	}
 	return c
 }
@@ -466,7 +387,6 @@ func (w *Workspace) beginInboxFromPalette(a PaletteAction) {
 	}
 	w.closeBodyViews()
 	w.boardHelp.Store(false)
-	w.boardUI.inspect = ""
 	w.boardUI.focus = layout.Inbox
 	w.inboxView.Update(items)
 	cur := slices.IndexFunc(items, func(it boardmodel.InboxItem) bool { return it.Request.Key() == w.inboxView.Selected() })
@@ -498,7 +418,6 @@ func (w *Workspace) openViewFromPalette(a PaletteAction) {
 		return
 	}
 	w.closeBodyViews()
-	w.boardUI.inspect = ""
 	if a.Key.Rune == '1' {
 		return
 	}
@@ -524,11 +443,8 @@ func (w *Workspace) pressBoardKey(ctx context.Context, event KeyEvent) {
 // it after the keys. Each line names a region handleBoardMouse acts on
 // (board_mouse.go); TestBoardHelpListsMouse keeps the two together.
 var boardMouseHelp = []struct{ Where, What string }{
-	{"task  lane", "select; again: inspect or show"},
-	{"header chip", "focus its pane or open its view"},
-	{"[a] [d] [y]…", "open its confirmation"},
-	{"[Enter]", "run stopped: do what it suggests"},
-	{"footer key", "press it; any click closes help"},
+	{"view header chip", "open its view"},
+	{"view footer key", "press it; any click closes help"},
 }
 
 // helpLine is one line of the help overlay: its text and, for a key that a

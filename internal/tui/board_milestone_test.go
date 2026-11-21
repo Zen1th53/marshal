@@ -51,7 +51,7 @@ func TestBoardRefreshShowsPlanningMilestone(t *testing.T) {
 		t.Fatalf("milestone after confirmed requirements = %+v", m)
 	}
 	since := m.Since
-	if text := activeGoalFrameText(w, 120, 40); !strings.Contains(text, "✓ goal → ✓ reqs →  design · ") || !strings.Contains(text, "reading the code") {
+	if text := activeGoalFrameText(w, 120, 40); !strings.Contains(text, "the Marshal is reading the code · ") {
 		t.Fatalf("home misses milestone:\n%s", text)
 	}
 

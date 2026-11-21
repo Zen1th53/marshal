@@ -51,15 +51,15 @@ type Pane struct {
 	Density Density
 }
 
-// MinSplit is the narrowest Board pane beside the Marshal chat: the Board
-// v2 compact form's own minimum (boardv2.MinCols). SplitWidths never hands
-// the Board less, and Compute shows the too-small notice below it.
+// MinSplit is the narrowest Board pane SplitWidths gives beside the Marshal
+// chat while the chat keeps MinChat; a view below it shows the too-small
+// notice. The home screen itself draws at any width (board_home.go).
 const MinSplit = 60
 
 // Breakpoints, in the Board's own columns.
 const (
-	MinCols     = 80  // Home below this shows only the too-small notice
-	MinRows     = 12  // either mode below this shows only the too-small notice (boardv2.MinRows)
+	MinCols     = 80  // Home below this a view shows only the too-small notice
+	MinRows     = 12  // either mode below this a view shows only the too-small notice
 	TwoColumns  = 110 // the host view's second column
 	LongBars    = 140 // header and footer in their long form
 	FullOverlay = 100 // below this an overlay takes the whole body
@@ -92,8 +92,8 @@ func (l Layout) Pane(id PaneID) (Pane, bool) {
 }
 
 // Compute lays the Board out for a terminal of cols by rows: the vitals
-// row, the header, the footer and the body between them, where the Board v2
-// frame or a view paints. Below the minimum size there is only the vitals
+// row, the header, the footer and the body between them, where a view
+// paints (the home screen paints the whole frame itself). Below the minimum size there is only the vitals
 // row and a one-row notice; the body is what is left under them.
 func Compute(cols, rows int, mode Mode) Layout {
 	l := Layout{Cols: cols, Rows: rows, Mode: mode}

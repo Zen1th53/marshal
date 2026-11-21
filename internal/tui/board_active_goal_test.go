@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,10 +55,10 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 	w := activeGoalBoardWorkspace(t, st, "session-active-goal")
 	defer w.Close()
 
-	// Board v2: READY with no goal, PLANNING with the goal named on the
+	// READY with no goal, PLANNING with the goal named on the Web Board's
 	// Plan pane while one is active.
 	before := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(lines0(before), " READY ") || !strings.Contains(before, "say what to build") {
+	if !strings.Contains(lines0(before), " READY ") || !strings.Contains(before, "the Marshal is waiting for a goal") {
 		t.Fatalf("before goal exists:\n%s", before)
 	}
 
@@ -86,22 +85,18 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 	if !strings.Contains(head, " PLANNING ") || strings.Contains(head, " READY ") {
 		t.Fatalf("top bar after goal saved to store: %q", head)
 	}
-	if !strings.Contains(during, "PLAN · Build a terminal RSS reader with keyboard navigation") {
-		t.Fatalf("the Plan pane does not name the goal:\n%s", during)
+	if b := w.boardV2(); !strings.Contains(b.Plan.Title, "Build a terminal RSS reader with keyboard navigation") {
+		t.Fatalf("the Plan pane does not name the goal: %q", b.Plan.Title)
 	}
-	if !strings.Contains(during, "✓ goal →  reqs") {
-		t.Fatalf("the Plan pane does not show the goal given and the requirements next:\n%s", during)
-	}
-	// The key bar also switches from "say what to build" to "say".
-	if strings.Contains(during, "say what to build") || !strings.Contains(during, "s  say ") {
-		t.Fatalf("the key bar still asks what to build while a goal is active:\n%s", during)
+	if !strings.Contains(during, "Now:       the Marshal is ") {
+		t.Fatalf("the Now line does not say the Marshal works on the goal:\n%s", during)
 	}
 
 	// A goal already delivered by a closed run returns to NO RUN YET.
 	done := goal.OriginalRequest
 	w.closedGoal.Store(&done)
 	delivered := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(lines0(delivered), " READY ") || !strings.Contains(delivered, "say what to build") {
+	if !strings.Contains(lines0(delivered), " READY ") {
 		t.Fatalf("delivered goal did not return to idle home:\n%s", delivered)
 	}
 	w.closedGoal.Store(nil)
@@ -112,7 +107,7 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 	}
 	w.refreshArch(ctx)
 	cancelled := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(lines0(cancelled), " READY ") || !strings.Contains(cancelled, "say what to build") || strings.Contains(cancelled, " PLANNING ") {
+	if !strings.Contains(lines0(cancelled), " READY ") || strings.Contains(cancelled, " PLANNING ") {
 		t.Fatalf("cancelled goal did not return to NO RUN YET:\n%s", cancelled)
 	}
 }
@@ -140,9 +135,8 @@ func TestActiveGoalWithOwnerGateShowsNeedsYou(t *testing.T) {
 	w.refreshGates(t.Context())
 
 	text := activeGoalFrameText(w, 120, 40)
-	now := strings.Split(text, "\n")[1]
-	if !strings.Contains(now, "from you architecture waits for you") || strings.Contains(now, "from you nothing") {
-		t.Fatalf("NOW line with active goal and pending gate: %q", now)
+	if !strings.Contains(text, "From you:  architecture waits for you") || strings.Contains(text, "From you:  nothing") {
+		t.Fatalf("From you with active goal and pending gate:\n%s", text)
 	}
 }
 
@@ -183,8 +177,8 @@ func TestActiveGoalFallbacksAndHints(t *testing.T) {
 	}
 	w.mu.Unlock()
 	text := activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(text, "PLAN · Add dark mode support") || strings.Contains(text, "with user toggle") {
-		t.Fatalf("did not fall back to first line of OriginalRequest:\n%s", text)
+	if title := w.boardV2().Plan.Title; !strings.Contains(title, "Add dark mode support") || strings.Contains(title, "with user toggle") {
+		t.Fatalf("did not fall back to first line of OriginalRequest: %q", title)
 	}
 	if strings.Contains(text, "GOAL-secret-id") || strings.Contains(lines0(text), " READY ") {
 		t.Fatalf("leaked goal ID or kept NO RUN YET:\n%s", text)
@@ -199,20 +193,11 @@ func TestActiveGoalFallbacksAndHints(t *testing.T) {
 	}
 	w.mu.Unlock()
 	text = activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(lines0(text), " PLANNING ") || !strings.Contains(text, "PLAN · your goal") || !strings.Contains(text, "working on your…") {
-		// The NOW column keeps one cell before its rule, so at 120
-		// columns the line is cut at the last whole word: "working on your…".
+	if !strings.Contains(lines0(text), " PLANNING ") || !strings.Contains(w.boardV2().Plan.Title, "your goal") || !strings.Contains(text, "working on your goal") {
 		t.Fatalf("minimal goal did not render fallback cleanly:\n%s", text)
 	}
-	if strings.Contains(text, "GOAL-minimal") || strings.Contains(text, "say what to build") {
+	if strings.Contains(text, "GOAL-minimal") {
 		t.Fatalf("minimal goal leaked ID or kept CTA:\n%s", text)
 	}
 
-	// Footer hints drop say.build once an active goal exists.
-	v := boardVisual{empty: true, goalGiven: true}
-	ids := w.boardHints(v)
-	want := []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}
-	if !slices.Equal(ids, want) {
-		t.Fatalf("active goal hints = %v, want %v", ids, want)
-	}
 }

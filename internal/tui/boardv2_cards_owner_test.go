@@ -17,16 +17,6 @@ import (
 // classic cards' state, the keys reach the classic cards' key handlers and
 // a click on a chip or a line the classic cards' click handlers.
 
-// v2Frame paints w with Board v2 at 132x31 and returns its text.
-func v2Frame(t *testing.T, w *Workspace) string {
-	t.Helper()
-	text := frameText(w, 132, 31)
-	if w.v2CardShown() != vm.ScreenDecision {
-		t.Fatalf("no v2 card on screen (%q):\n%s", w.v2CardShown(), text)
-	}
-	return text
-}
-
 func guardBoard(t *testing.T, byMarshal bool) *Workspace {
 	t.Helper()
 	w := emptyBoardWorkspace(t)
@@ -154,34 +144,6 @@ func TestOwnerCardCollectors(t *testing.T) {
 			t.Fatalf("armed line %+v", last)
 		}
 	})
-}
-
-// The cards come in the order the classic Board takes their keys: the
-// guard's alert before the question, the question before the
-// requirements; Esc puts one off and the next shows.
-func TestOwnerCardOrderAndLater(t *testing.T) {
-	w := reqBoard(t)
-	defer w.Close()
-	defer v2Cards.Delete(w)
-	p, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openAsk(p)
-	w.guard.alert = &guardAlert{at: time.Now(), paths: []string{"x.py"}, wasDirty: map[string]bool{}}
-	for _, want := range []string{"guard", "ask", "requirements"} {
-		if d := cardsFrame(w).Decision; d == nil || d.Kind != want {
-			t.Fatalf("card %+v, want %s", d, want)
-		}
-		v2Frame(t, w)
-		if !w.handleBoardKey(KeyEvent{Type: KeyEsc}) {
-			t.Fatalf("Esc on the %s card was not taken", want)
-		}
-	}
-	// The question is still open: the classic keys still answer it.
-	if w.currentAsk() == nil || w.currentReq() == nil || w.guardAlertNow() == nil {
-		t.Fatal("Esc closed a card")
-	}
 }
 
 // keyCase is one owner card and a key sequence: the same keys reach the
@@ -403,23 +365,6 @@ func TestOwnerCardClicksRunTheClassicActions(t *testing.T) {
 			t.Fatal("keep did not clear the alert")
 		}
 	})
-}
-
-// The cards draw as v2 cards over the Board: titled with what is asked,
-// the content, and the chips.
-func TestOwnerCardsDrawOnTheV2Board(t *testing.T) {
-	w := askBoard(t)
-	defer w.Close()
-	defer v2Cards.Delete(w)
-	text := v2Frame(t, w)
-	for _, want := range []string{"MARSHAL ASKS · feature/login", "esc later", "⏎  build on it", "l  leave it", "w  wait for it"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("no %q on the v2 ask card:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "[Enter] build on it") {
-		t.Fatalf("the classic ask entry under the v2 card:\n%s", text)
-	}
 }
 
 // A pause that needs a new plan is the paused card with that choice: Enter

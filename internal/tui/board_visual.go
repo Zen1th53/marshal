@@ -323,7 +323,7 @@ func (v boardVisual) render(p layout.Pane) []string {
 // ascii is lines in the monochrome ASCII theme, each w cells wide.
 func (v boardVisual) ascii(lines []string, w int) []string {
 	lines = slices.Clone(lines)
-	repl := strings.NewReplacer("°C", "C", "▲", "^", "·", ".", "→", "->", "›", ">", "▰", "#", "▱", "-", "◎", "*", "↻", "~", "▮", "#", "✓", "v", "○", "o", "⏎", "Enter", "▸", ">")
+	repl := strings.NewReplacer("—", "-", "×", "x", "…", ".", "°C", "C", "▲", "^", "·", ".", "→", "->", "›", ">", "▰", "#", "▱", "-", "◎", "*", "↻", "~", "▮", "#", "✓", "v", "○", "o", "⏎", "Enter", "▸", ">")
 	for i, s := range lines {
 		s = repl.Replace(s)
 		s = strings.Map(func(r rune) rune {

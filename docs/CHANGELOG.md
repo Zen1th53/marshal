@@ -2,8 +2,18 @@
 
 ## Unreleased
 
+### Changed
+- The terminal Board is one short home screen: the project and state, **Now** (what is happening), **From you** (nothing, or the one thing that needs you) and **Web** (where the Web Board is), with the keys `⏎ chat`, `w web`, `s say to the Marshal`, `q quit`. The plan, lanes, tasks, workers, activity, steps, requests, readiness checklist and the cards' details are on the Web Board, which is now the full interface.
+- `Enter` always opens the Marshal chat. A safe step (retry a stuck task, move it and continue, resume, confirm the requirements) gets `y`, named on the From-you line; a second `y` within two seconds does nothing. A decision with authority (allow or deny, a gate, the plan, the architecture, changed files, a change of goal, stopping the run) is made on the Web Board: the line says `open the web to decide (w)`.
+- The Web Board starts with the Board and opens in the browser where there is a display (`MARSHAL_WEB_OPEN=0` keeps it closed). Its private link is shown only on demand (`/marshal web`, or `w` with no display), never on the home screen.
+- *From you* says when the Marshal asked you something in its chat and waits (`⏎ open chat`), on the Board and on the Web Board.
+- `/task-model <task>` changes the model a task runs on (it was `w` on a task row).
+
+### Fixed
+- Keys typed while the first-run Marshal picker is open go to the picker, not to text left in the composer.
+
 ### Removed
-- The classic Board is removed: Board v2 is the only Board, and `MARSHAL_BOARD=classic` no longer does anything. A terminal too small for Board v2 (under 80 columns alone, 60 beside the chat, or 12 rows) shows one line saying what waits and that the window must grow, instead of the classic narrow panes. The inspector opens over the dimmed Board v2 screen. Beside the chat the Board is given at least 60 columns (from a 101-column window), up from 56.
+- The classic Board is removed, and so are the Board v2 terminal panes, the task inspector and the docked inspector column: `MARSHAL_BOARD=classic` no longer does anything. The home screen draws at any size down to about 40 × 10. Beside the chat the Board is given at least 60 columns (from a 101-column window), up from 56.
 
 ## 0.3.8
 

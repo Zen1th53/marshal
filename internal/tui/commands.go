@@ -448,6 +448,15 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/agy", "/antigravity":
 		return h.handleAntigravity(ctx, parts[1:], line)
 
+	case "/task-model":
+		// The model a task runs on: the picker the Board's w opened on a
+		// task row, now that the home screen draws no task list.
+		if len(parts) != 2 {
+			return "", fmt.Errorf("usage: /task-model <task id>")
+		}
+		h.ws.openTaskModelPicker(ctx, parts[1])
+		return "", nil
+
 	case "/view":
 		return h.ws.handleViewCommand(ctx, parts[1:])
 

@@ -220,11 +220,6 @@ func checkViewKeys(t *testing.T, w *Workspace, open []rune, isOpen func() bool) 
 		t.Fatalf("%c opened the view while the composer held text", key)
 	}
 	w.composer.SetText("")
-	w.boardUI.inspect = "T-017"
-	if press(key) || isOpen() {
-		t.Fatalf("%c opened the view over the inspector", key)
-	}
-	w.boardUI.inspect = ""
 	back := []KeyEvent{{Type: KeyEsc}, {Type: KeyRune, Rune: '1'}}
 	for _, r := range open {
 		back = append(back, KeyEvent{Type: KeyRune, Rune: r})

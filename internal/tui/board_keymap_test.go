@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
@@ -128,125 +127,6 @@ func TestBoardHelpHidesWhatCannotRun(t *testing.T) {
 			t.Errorf("help with a run and an MCP failure lacks %q", s)
 		}
 	}
-}
-
-// Every key the keymap sends is bound: each view's keys open it from the
-// Board, each palette view entry opens it from anywhere, and each view's
-// own keys are taken by that view.
-func TestBoardKeymapBound(t *testing.T) {
-	w, _, _ := viewsWorkspace(t)
-	defer w.Close()
-	hw, _, _ := testWatcher(t, nil)
-	w.hostWatch.Store(hw)
-	open := map[string]func() bool{
-		"Host": w.hostView.Load, "Memory": w.memView.Load, "Providers": w.provView.Load, "Verify": w.verView.Load,
-		"Security": w.secView.Load, "Plan": w.planView.Load, "Architecture": w.archView.Load,
-	}
-	anyOpen := func() bool {
-		for _, f := range open {
-			if f() {
-				return true
-			}
-		}
-		return false
-	}
-	for _, k := range boardKeymap {
-		if k.View == "" {
-			continue
-		}
-		events, ok := boardKeyEvents(k.Keys)
-		if !ok {
-			t.Fatalf("view key %q", k.Keys)
-		}
-		for _, e := range events {
-			w.closeBodyViews()
-			if k.View == "Board" {
-				w.openArchView()
-				if !w.handleBoardKey(e) || anyOpen() {
-					t.Errorf("%v did not return to the Board", e)
-				}
-				w.boardUI.inspect = "T-017"
-				if e.Type == KeyRune && (!w.handleBoardKey(e) || w.boardUI.inspect != "") {
-					t.Errorf("%c did not close the inspector", e.Rune)
-				}
-				w.boardUI.inspect = ""
-				continue
-			}
-			if !w.handleBoardKey(e) || !open[k.View]() {
-				t.Errorf("%v did not open the %s view", e, k.View)
-			}
-		}
-	}
-	ctx := t.Context()
-	for _, a := range boardPaletteActions(nil) {
-		if !a.View {
-			continue
-		}
-		w.openPlanView()
-		w.runPaletteAction(ctx, a)
-		name := strings.TrimSuffix(strings.TrimPrefix(a.Title, "Open "), " view")
-		if name == "the Board" {
-			if anyOpen() {
-				t.Errorf("%q left a view open", a.Title)
-			}
-			continue
-		}
-		if !open[name]() {
-			t.Errorf("%q did not open it", a.Title)
-		}
-		for other, f := range open {
-			if other != name && f() {
-				t.Errorf("%q left %s open", a.Title, other)
-			}
-		}
-	}
-	// The views' own keys.
-	for _, c := range []struct {
-		view string
-		keys string
-	}{{"Memory", "a r i PgUp PgDn j k"}, {"Providers", "v j k"}, {"Verify", "x j k"}, {"Security", "a d j k"}, {"Architecture", "o"}, {"Host", "j k"}} {
-		events, _ := boardKeyEvents(c.keys)
-		for _, e := range events {
-			w.closeBodyViews()
-			w.composer.SetText("")
-			for _, k := range boardKeymap {
-				if k.View == c.view {
-					w.runPaletteAction(ctx, boardPaletteActions(nil)[viewIndex(c.view)])
-				}
-			}
-			if !open[c.view]() {
-				t.Fatalf("%s did not open", c.view)
-			}
-			if !w.handleBoardKey(e) {
-				t.Errorf("the %s view does not take %v", c.view, e)
-			}
-		}
-	}
-	w.closeBodyViews()
-	// The Board's own keys.
-	events, _ := boardKeyEvents("t i l j k ↑ ↓")
-	for _, e := range events {
-		w.boardUI.inspect = ""
-		if !w.handleBoardKey(e) {
-			t.Errorf("the Board does not take %v", e)
-		}
-	}
-	w.boardUI.focus = layout.Tasks
-	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'j'})
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.boardUI.inspect == "" {
-		t.Error("Enter did not inspect the selected task")
-	}
-	// The inbox's keys, with a request waiting.
-	w.boardUI.inspect = ""
-	w.permissions.inbox = []permission.Request{{Kind: "network", TaskID: "T-023", Object: "registry.npmjs.org:443", Scope: "one run", Reason: "outside manifest", Who: "Marshal"}}
-	events, _ = boardKeyEvents("a A d r i x Enter")
-	for _, e := range events {
-		w.inboxView.Cancel()
-		if !w.handleBoardInboxKey(ctx, e) {
-			t.Errorf("the inbox does not take %v", e)
-		}
-	}
-	w.inboxView.Cancel()
 }
 
 func viewIndex(view string) int {

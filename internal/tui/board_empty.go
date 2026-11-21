@@ -136,28 +136,6 @@ func (w *Workspace) firstUseChips(now time.Time) []providerChip {
 	return chips
 }
 
-// verifyNext is the provider v verifies next, "" for none: what the
-// readiness checklist shows as "not checked yet", in the checklist's order
-// (v2NextUnchecked).
-func (w *Workspace) verifyNext() string {
-	return v2NextUnchecked(w.v2MarshalInput(time.Now()))
-}
-
-// v2NextUnchecked is the first provider the v2 readiness checklist shows as
-// "not checked yet": the Marshal's provider, which it lists first, then each
-// installed worker provider in v2ProviderOrder.
-func v2NextUnchecked(in v2MarshalIn) string {
-	if prov := in.marshalProvider(); prov != "" && in.provider(prov).State == "unchecked" {
-		return prov
-	}
-	for _, name := range v2ProviderOrder {
-		if p := in.provider(name); p.Installed && p.State == "unchecked" {
-			return name
-		}
-	}
-	return ""
-}
-
 // armFirstUseVerify arms the verify of provider: Enter runs it, any other
 // key cancels. The probe calls the model, so it is never one key alone.
 func (w *Workspace) armFirstUseVerify(provider string) {
@@ -190,77 +168,6 @@ func (w *Workspace) firstUseArmed() string {
 	w.firstUse.mu.Lock()
 	defer w.firstUse.mu.Unlock()
 	return w.firstUse.armed
-}
-
-// runFirstUseVerify verifies the armed provider through /harness verify,
-// the path the Providers view takes, off the input loop.
-func (w *Workspace) runFirstUseVerify() {
-	w.firstUse.mu.Lock()
-	provider := w.firstUse.armed
-	w.firstUse.armed = ""
-	if provider == "" || w.firstUse.busy != "" {
-		w.firstUse.mu.Unlock()
-		return
-	}
-	w.firstUse.busy = provider
-	w.firstUse.mu.Unlock()
-	src := w.providerSrc()
-	done := func() {
-		w.firstUse.mu.Lock()
-		w.firstUse.busy = ""
-		w.firstUse.mu.Unlock()
-	}
-	if src == nil {
-		done()
-		w.memoryAnswer("Cannot verify "+provider+" here: this session has no store.", true)
-		return
-	}
-	model := ""
-	for _, p := range w.prov.paint().Snap.Providers {
-		if providerWorker(p.Provider) == provider {
-			model = p.Model
-		}
-	}
-	// The chip says "verifying" while the probe runs; the result is the
-	// chip's new state and one Activity line, never an overlay.
-	if !w.startBackground(context.Background(), func(ctx context.Context) {
-		text, err := src.VerifyHarness(ctx, provider, model)
-		done()
-		w.recordVerifyNote(provider, text, err)
-		w.refreshProviders(ctx)
-		w.requestRepaint()
-	}) {
-		done()
-	}
-}
-
-// handleFirstUseKey is the first-use card's keys: v arms the verify of the
-// next unverified provider and Enter runs an armed verify, any other key
-// cancels it; Enter with nothing armed is the call to action, as m is.
-func (w *Workspace) handleFirstUseKey(ctx context.Context, event KeyEvent) bool {
-	if armed := w.firstUseArmed(); armed != "" {
-		w.firstUse.mu.Lock()
-		w.firstUse.armed = ""
-		w.firstUse.mu.Unlock()
-		if event.Type == KeyEnter {
-			w.firstUse.mu.Lock()
-			w.firstUse.armed = armed
-			w.firstUse.mu.Unlock()
-			w.runFirstUseVerify()
-		} else {
-			w.memoryAnswer("Verify of "+armed+" cancelled", false)
-		}
-		return true
-	}
-	switch {
-	case event.Type == KeyRune && event.Rune == 'v':
-		w.armFirstUseVerify(w.verifyNext())
-		return true
-	case event.Type == KeyEnter:
-		w.focusChatFromBoard(ctx)
-		return true
-	}
-	return false
 }
 
 // focusChatFromBoard is the card's call to action: the keyboard goes to the

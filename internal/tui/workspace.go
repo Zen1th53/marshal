@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/tmux"
 	"io"
 	"maps"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/tmux"
 
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
@@ -553,7 +554,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
-			"/view", "/focus", "/takeover", "/take-over", "/stop",
+			"/view", "/focus", "/takeover", "/take-over", "/stop", "/task-model",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
@@ -1008,6 +1009,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// The doctor runs at every start, in the background, so the first paint
 	// and the opening animation are not blocked while it checks the project.
 	w.startBackground(ctx, w.runLaunchCheck)
+	if w.homeBoard {
+		// The Web Board is the full interface: it starts with the Board.
+		w.startBackground(ctx, w.autoStartWebBoard)
+	}
 	w.startFollowers(ctx)
 	// The host watcher runs for as long as this screen does.
 	w.startHostWatch(ctx)
@@ -1288,10 +1293,8 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.renderFullView()
 		return false
 	}
-	if w.handleBoardInboxKey(ctx, event) {
-		w.renderFullView()
-		return false
-	}
+	// Inbox decisions (allow, deny, a gate's confirmation) are made on the
+	// Web Board: no terminal key reaches them (board_home.go).
 	// Space and Ctrl+K open the one palette (P5-04). Ctrl+K edits text while
 	// the composer holds some; Space is a space anywhere but the bare Board.
 	if event.Type == KeyCtrlK && (w.palette.IsOpen() || !w.composing()) {
@@ -1548,7 +1551,7 @@ func (w *Workspace) handleShortcut(ctx context.Context, event KeyEvent) bool {
 			// m opens the Marshal picker on the Board; chat focus is F11.
 			// With no Board, an inbox confirmation or the inspector open, m
 			// is ordinary composer input.
-			if !w.boardVisible() || w.inboxView.Confirming() || w.inboxView.Inspecting() || w.boardUI.inspect != "" {
+			if !w.boardVisible() || w.inboxView.Confirming() || w.inboxView.Inspecting() {
 				return false
 			}
 			w.openMarshalPicker(ctx)

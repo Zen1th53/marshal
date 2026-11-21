@@ -476,7 +476,7 @@ func (w *Workspace) handleGuardKey(event KeyEvent) bool {
 		w.memoryAnswer("Undo cancelled; nothing changed.", false)
 		return true
 	}
-	if event.Type != KeyRune || w.anyBodyView() || w.boardUI.inspect != "" || w.gateArmed() != "" {
+	if event.Type != KeyRune || w.anyBodyView() || w.gateArmed() != "" {
 		return false
 	}
 	switch event.Rune {

@@ -8,21 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/events"
-	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
-	"github.com/Zen1th53/marshal/internal/tui/board/model"
-	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
-	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inspector"
 )
-
-// The layout's minimum sizes are the Board v2 renderer's: a Board the
-// layout lays out is one v2 draws.
-func TestLayoutMinimumsAreTheV2Minimums(t *testing.T) {
-	if layout.MinSplit != boardv2.MinCols || layout.MinRows != boardv2.MinRows {
-		t.Fatalf("layout %dx%d, v2 %dx%d", layout.MinSplit, layout.MinRows, boardv2.MinCols, boardv2.MinRows)
-	}
-}
 
 // header and footer are the head and foot lines without their click spans.
 func (v boardVisual) header(w int) string {
@@ -205,20 +192,6 @@ func TestCellRangeLeavesNoHalfGlyph(t *testing.T) {
 		if got := cellRange(tc.s, tc.from, tc.to); got != tc.want {
 			t.Errorf("cellRange(%q, %d, %d) = %q, want %q", tc.s, tc.from, tc.to, got, tc.want)
 		}
-	}
-}
-
-func TestParkedTaskInspectorGolden(t *testing.T) {
-	th := NewTheme(ThemeNoColor, true, false)
-	run := marshal.Run{PlanID: "P-7", Budget: marshal.Budget{Tokens: marshal.Ceiling{Task: 500}}, Tasks: []marshal.Task{{PlanTaskID: "T-8", Title: "Release", Worker: "codex", State: marshal.Escalated, Files: []string{"internal/tui/board"}, Criteria: []string{"checks pass"}}}}
-	b := model.Project(model.Snapshot{RunID: "R-3", Run: run}, []events.Event{{ID: "ev-1", Sequence: 1, RunID: "R-3", TaskID: "T-8", Type: events.EventTypeMarshalEscalated, Data: map[string]any{"reason": "operator decision"}}})
-	for _, tc := range []struct {
-		name       string
-		cols, rows int
-	}{{"inspector-parked-100x30", 100, 30}, {"inspector-parked-220x40", 220, 40}} {
-		l := layout.Compute(tc.cols, tc.rows, layout.Home)
-		frame := paintBoardInspector(paintBoard(l, th, placeholder), v2Body(tc.rows, tc.cols), th, inspector.New(b, "T-8"), nil)
-		checkGolden(t, tc.name, frame)
 	}
 }
 

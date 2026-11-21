@@ -455,10 +455,6 @@ func TestHostViewKeys(t *testing.T) {
 		t.Fatal("2 opened the Host view while the composer held text")
 	}
 	w.composer.SetText("")
-	w.boardUI.inspect = "T-017"
-	if press('h') || w.hostView.Load() {
-		t.Fatal("h opened the Host view over the inspector")
-	}
 }
 
 func TestHostNoticeNeverDisplacesRunNote(t *testing.T) {
