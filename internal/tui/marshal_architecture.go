@@ -82,7 +82,10 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 			}) {
 				return "", errors.New("workspace is closing")
 			}
-			return "Architecture view: " + url, nil
+			// The footer names the address without its key: the link is
+			// the owner's Accept, and the architecture card shows it whole
+			// only where no browser can open it.
+			return "Architecture view: " + architectureShownURL(url) + " (opening in your browser)", nil
 		}
 	}
 	if m.architectureStarting {
@@ -117,13 +120,10 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 			m.mu.Unlock()
 			session, err = start(workerCtx, provider, goal)
 		}
-		var existing *app.ArchitectureReviewOwnedError
-		existingURL := ""
-		if errors.As(err, &existing) {
-			existingURL = existing.URL
-			err = open(workerCtx, existingURL)
-		}
-		if err == nil && session == nil && existingURL == "" {
+		// A review another MARSHAL process serves has no link here: its
+		// key is never written where this process could read it, so the
+		// error says to use that window's link.
+		if err == nil && session == nil {
 			err = errors.New("architecture review session was not created")
 		}
 		if err == nil && session != nil {
@@ -155,17 +155,15 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		for _, id := range occurrences {
 			w.resolveArchitectureProposal(id, err)
 		}
-		url := existingURL
+		url := ""
 		if session != nil {
 			url = session.URL
-		}
-		if session != nil || existingURL != "" {
 			for _, id := range w.clearDeferredArchitecture() {
 				w.resolveArchitectureProposal(id, err)
 			}
 		}
 		if err != nil {
-			if session == nil && existingURL == "" {
+			if session == nil {
 				// No page was made: say why, and the "Opening…" answer
 				// gives way to it.
 				w.RecordActivity("Architecture view failed: " + err.Error())

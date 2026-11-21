@@ -6,12 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,12 +67,30 @@ type contractReviewSeed struct {
 // project contract: no Marshal model turn may run before it is accepted.
 var contractRequestsClosed = errors.New("The Marshal can answer requests here once you accept this project summary. To change it now, tell the Marshal in the chat; it will send a new summary.")
 
-type ArchitectureReviewOwnedError struct{ URL string }
+// ArchitectureReviewOwnedError is a review another MARSHAL process serves.
+// Its link is that process's: the review's key is never written to disk,
+// where any process of the same user (the Marshal chat, a host worker) could
+// read it and press Accept, so this error cannot carry it.
+type ArchitectureReviewOwnedError struct{}
 
 func (e *ArchitectureReviewOwnedError) Error() string {
-	return "architecture review already has a live owner; view: " + e.URL
+	return "the architecture review is already open in another MARSHAL window; use the link that window shows"
 }
 func (e *ArchitectureReviewOwnedError) Unwrap() error { return ErrRuntimeOwned }
+
+// staleArchitectureURL is the file in the review directory where releases
+// up to v0.3.8 kept the review's link with its key. It is removed whenever a
+// review starts or the lease is taken, so an old key is not left behind.
+const staleArchitectureURL = "url.txt"
+
+// removeStaleArchitectureURL deletes an old link file in directory.
+func removeStaleArchitectureURL(directory string) error {
+	err := os.Remove(filepath.Join(directory, staleArchitectureURL))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
 
 func (s *ArchitectureReviewSession) Close() error {
 	if s == nil || s.close == nil {
@@ -142,9 +158,11 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	if err != nil {
 		return nil, err
 	}
-	// The lease always advertises its server at the shared URL, even when
-	// read-only inspection keeps its state in a separate subdirectory.
-	urlFile := filepath.Join(directory, "url.txt")
+	// The review's link (with its key) lives in this process only: it is
+	// handed to the browser and shown to the owner, never written to disk.
+	if err := removeStaleArchitectureURL(directory); err != nil {
+		return nil, err
+	}
 	if hooks.currentContract {
 		// Inspection must not overwrite an outstanding owner review.
 		directory = filepath.Join(directory, "current")
@@ -339,11 +357,6 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	}
 	token := hex.EncodeToString(secret)
 	url := "http://" + listener.Addr().String() + "/?token=" + token
-	if err = writeArchitectureURL(urlFile, url); err != nil {
-		cancel()
-		listener.Close()
-		return nil, err
-	}
 	// Handlers still running when Close returns would keep writing review
 	// state, so each request is counted with the model turns that Close joins.
 	reviewHandler := review.Handler(token)
@@ -407,17 +420,7 @@ func (r *Runtime) AcquireArchitectureReviewLease() (*os.File, error) {
 	}
 	lease, err := acquireRuntimeOwner(directory)
 	if errors.Is(err, ErrRuntimeOwned) {
-		data, readErr := readArchitecturePrivateFile(directory, "url.txt", 4096)
-		if readErr == nil {
-			current := strings.TrimSpace(string(data))
-			location, parseErr := url.Parse(current)
-			if parseErr == nil && location.Scheme == "http" && location.User == nil && location.Path == "/" && location.Fragment == "" {
-				if address := net.ParseIP(location.Hostname()); address != nil && address.IsLoopback() && location.Port() != "" && len(location.Query().Get("token")) >= 32 {
-					return nil, &ArchitectureReviewOwnedError{URL: current}
-				}
-			}
-		}
-		return nil, fmt.Errorf("%w; architecture generation or review already owns this project's browser state", err)
+		return nil, &ArchitectureReviewOwnedError{}
 	}
 	if err != nil {
 		return nil, err
@@ -448,34 +451,6 @@ func architectureReviewDirectory(state string) (string, error) {
 		}
 	}
 	return filepath.Join(state, "architecture", "review"), nil
-}
-
-func writeArchitectureURL(path, url string) error {
-	if info, err := os.Lstat(path); err == nil && (!info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0) {
-		return model.ErrPolicyDenied
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".architecture-url-*.tmp")
-	if err != nil {
-		return err
-	}
-	if err = file.Chmod(0600); err == nil {
-		_, err = io.WriteString(file, url)
-	}
-	name := file.Name()
-	defer os.Remove(name)
-	if err == nil {
-		err = file.Sync()
-	}
-	closeErr := file.Close()
-	if err != nil {
-		return fmt.Errorf("persist private architecture URL: %w", err)
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return os.Rename(name, path)
 }
 
 // ApprovedMarshalLanguage reads only the owner's saved intake preference.

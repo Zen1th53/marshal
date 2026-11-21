@@ -197,7 +197,7 @@ The card shows the review's private link:
 │ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │
 ```
 
-1. Press `c` on the card to copy the link (it uses your terminal's clipboard, which works over SSH where the terminal supports it). The link is also saved in `.marshal/architecture/review/url.txt` in the project.
+1. Press `c` on the card to copy the link (it uses your terminal's clipboard, which works over SSH where the terminal supports it). The link is kept in memory only, never in a file: it carries the key that accepts the architecture, so nothing else running on the machine can read it from disk.
 2. The address is local to the machine Marshal runs on. Over SSH, forward its port first, for example `ssh -L 37667:127.0.0.1:37667 you@server` with the port from the link, then open the link in your local browser.
 3. Accept the architecture in the browser. The Board moves on by itself.
 

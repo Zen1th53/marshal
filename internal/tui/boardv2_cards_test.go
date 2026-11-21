@@ -4,13 +4,12 @@ package tui
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
@@ -98,14 +97,19 @@ func architectureWorkspace(t *testing.T) *Workspace {
 	v2ContractSource = func(*Workspace, context.Context) (projectcontext.Contract, projectcontext.Contract, bool, error) {
 		return pending, accepted, true, nil
 	}
-	dir := filepath.Join(w.workDir, filepath.Dir(architectureURLFile))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(w.workDir, architectureURLFile), []byte("http://127.0.0.1:37667/?token=7964abcd462b\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	return w
+}
+
+// fixtureArchitectureLink is the review link withArchitectureLink gives w.
+const fixtureArchitectureLink = "http://127.0.0.1:37667/?token=7964abcd462b"
+
+// withArchitectureLink gives w a live review session with a fixture link:
+// the link is held by the session only, never read from a file.
+func withArchitectureLink(w *Workspace) {
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.architecture = &app.ArchitectureReviewSession{URL: fixtureArchitectureLink, Done: make(chan struct{})}
+	m.mu.Unlock()
 }
 
 func sketched(b vm.Board) bool { return b.Decision != nil && len(b.Decision.Nodes) > 0 }
@@ -157,8 +161,9 @@ func TestDecisionCardArchitectureWithDisplay(t *testing.T) {
 func TestDecisionCardArchitectureWithoutDisplay(t *testing.T) {
 	displaySeams(t, "linux", map[string]string{"TERM": "xterm"})
 	w := architectureWorkspace(t)
+	withArchitectureLink(w)
 	d := waitCards(t, w, "the sketch", sketched).Decision
-	if !d.NoDisplay || d.Link != "http://127.0.0.1:37667/?token=7964abcd462b" {
+	if !d.NoDisplay || d.Link != fixtureArchitectureLink {
 		t.Fatalf("no-display card: %v %q", d.NoDisplay, d.Link)
 	}
 

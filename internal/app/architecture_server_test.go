@@ -156,10 +156,7 @@ func TestArchitectureServerReusesPrivateViewAndSubmitsExactModelFeedback(t *test
 	if before.TaskCount != after.TaskCount || before.AgentCount != after.AgentCount || before.SessionCount != after.SessionCount {
 		t.Fatal("architecture review created task/agent/execution-session authority")
 	}
-	urlInfo, err := os.Stat(filepath.Join(runtime.layout.RuntimeDir, "architecture", "review", "url.txt"))
-	if err != nil || urlInfo.Mode().Perm() != 0600 {
-		t.Fatalf("URL token file is public: %v %v", urlInfo, err)
-	}
+	architectureAssertKeyNotOnDisk(t, runtime.layout.Root, session.URL)
 	cancel()
 	select {
 	case <-session.Done:
@@ -239,21 +236,18 @@ func TestArchitectureServerLeasePreventsDuplicateWritersBeforeModelGeneration(t 
 	}
 	defer lease.Close()
 	directory := filepath.Join(runtime.layout.RuntimeDir, "architecture", "review")
-	if err := writeArchitectureURL(filepath.Join(directory, "url.txt"), "http://127.0.0.1:34567/?token=fixture-only-token-long-enough-32characters"); err != nil {
+	// A link file an older release left behind is never read back: the
+	// refusal names no link, whatever the file says.
+	if err := os.WriteFile(filepath.Join(directory, "url.txt"), []byte("http://127.0.0.1:34567/?token=fixture-only-token-long-enough-32characters"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	proposal := architectureTestJSON(t, architectureTestProposal())
 	cli, marker := architectureServerFakeCLI(t, runtime, proposal)
-	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Build a new architecture", ArchitectureReviewHooks{}); err == nil || !strings.Contains(err.Error(), "http://127.0.0.1:34567/") {
-		t.Fatalf("duplicate writer not pointed to current view: %v", err)
+	var owned *ArchitectureReviewOwnedError
+	if _, err := runtime.startArchitectureReview(t.Context(), cli, "Build a new architecture", ArchitectureReviewHooks{}); !errors.As(err, &owned) || !errors.Is(err, ErrRuntimeOwned) || strings.Contains(err.Error(), "127.0.0.1") || strings.Contains(err.Error(), "token") {
+		t.Fatalf("duplicate writer refusal: %v", err)
 	}
 	architectureAssertNoModelTurn(t, marker)
-	if err := writeArchitectureURL(filepath.Join(directory, "url.txt"), "https://outside.example/?token=fixture-only-token-long-enough-32characters"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := runtime.AcquireArchitectureReviewLease(); err == nil || strings.Contains(err.Error(), "outside.example") {
-		t.Fatalf("foreign URL surfaced as local view: %v", err)
-	}
 	lease.Close()
 	if second, err := runtime.AcquireArchitectureReviewLease(); err != nil {
 		t.Fatal(err)
@@ -335,11 +329,16 @@ func TestArchitectureServerPrivateFilesCannotRedirectTokensOrPreferences(t *test
 	if err := os.Symlink(out, path); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeArchitectureURL(path, "private-token"); err == nil {
-		t.Fatal("URL token redirected through symlink")
+	// The stale link file is removed as a name: a symlink there is unlinked,
+	// never followed.
+	if err := removeStaleArchitectureURL(directory); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("stale link file kept: %v", err)
 	}
 	if got, err := os.ReadFile(out); err != nil || string(got) != "preserve" {
-		t.Fatal("URL token modified outside file")
+		t.Fatal("stale link removal touched the file outside")
 	}
 	if err := os.Symlink(out, filepath.Join(directory, "runtime-owner.lock")); err != nil {
 		t.Fatal(err)
@@ -381,9 +380,6 @@ func TestArchitectureServerInvalidRuntimeOrModelCannotCreateReviewState(t *testi
 	}
 	if _, err := absent.ApprovedMarshalLanguage(); err == nil {
 		t.Fatal("missing runtime invented a saved owner language")
-	}
-	if err := writeArchitectureURL(filepath.Join(runtime.layout.RuntimeDir, "missing-parent", "url.txt"), "private-token"); err == nil {
-		t.Fatal("private URL write succeeded without owned directory")
 	}
 }
 
@@ -547,4 +543,56 @@ func TestArchitectureReviewHooksAreWired(t *testing.T) {
 	if accepted != 1 {
 		t.Fatalf("Accepted ran %d times, want 1", accepted)
 	}
+}
+
+// architectureAssertKeyNotOnDisk fails when the review link's key is in any
+// file under root: anything the same user runs (the Marshal chat, a host
+// worker) could read it there and press Accept.
+func architectureAssertKeyNotOnDisk(t *testing.T, root, link string) {
+	t.Helper()
+	location, err := url.Parse(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := location.Query().Get("token")
+	if len(key) < 32 {
+		t.Fatalf("review link has no key: %q", link)
+	}
+	if _, err := os.Lstat(filepath.Join(root, ".marshal", "architecture", "review", "url.txt")); !os.IsNotExist(err) {
+		t.Fatalf("the review link file was written: %v", err)
+	}
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return err
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr == nil && strings.Contains(string(data), key) {
+			t.Errorf("the review key is on disk in %s", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A stale link file from an older release is removed when a review starts,
+// and the new review writes none.
+func TestArchitectureServerRemovesStaleLinkAndWritesNone(t *testing.T) {
+	runtime := architectureServerRuntime(t)
+	architectureServerState(t, runtime)
+	directory, err := architectureReviewDirectory(runtime.layout.RuntimeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(directory, "url.txt")
+	if err := os.WriteFile(stale, []byte("http://127.0.0.1:1/?token=stale-key-from-an-older-release-0000"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	session, err := runtime.StartArchitectureReview(t.Context(), "codex", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	architectureAssertKeyNotOnDisk(t, runtime.layout.Root, session.URL)
 }

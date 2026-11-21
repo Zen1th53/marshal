@@ -259,8 +259,8 @@ func TestArchitectureOpenGivesFeedback(t *testing.T) {
 		defer w.mu.RUnlock()
 		return w.answer == architectureOpened
 	})
-	if !strings.Contains(architectureOpened, filepath.Join(".marshal", "architecture", "review", "url.txt")) {
-		t.Fatalf("the answer does not say where the link is: %q", architectureOpened)
+	if strings.Contains(architectureOpened, "url.txt") || strings.Contains(architectureOpened, "token") {
+		t.Fatalf("the answer points at a link file or carries the key: %q", architectureOpened)
 	}
 	assertArchitectureNotes(t, w, "Architecture view opened in your browser: http://127.0.0.1:12345/")
 }
@@ -281,7 +281,7 @@ func TestArchitectureOpenWithoutBrowserPointsAtLink(t *testing.T) {
 		defer w.mu.RUnlock()
 		return w.answer == architectureNoBrowser && w.answerIsError
 	})
-	assertArchitectureNotes(t, w, "Architecture view: your browser could not be opened. Open the link in "+architectureURLFile)
+	assertArchitectureNotes(t, w, "Architecture view: your browser could not be opened. The architecture card shows the link (http://127.0.0.1:12345/)")
 	// Pressing y again reuses the page and says the same.
 	w.openArchitectureReview()
 	chatWaitFor(t, "the second answer", func() bool {

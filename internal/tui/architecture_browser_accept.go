@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // architectureReviewHooks connect the browser's Accept to this workspace.
@@ -105,17 +103,18 @@ func (w *Workspace) openArchitectureReview() {
 // never outlives what it describes.
 const architectureOpening = "Opening the architecture in your browser…"
 
-// architectureURLFile is where the review's private link is kept, relative
-// to the project. The link carries the page's key, so it is named, never
-// written to Activity.
-var architectureURLFile = filepath.Join(statepath.DirName, "architecture", "review", "url.txt")
+// The review's link carries the page's key, which is the owner's Accept. It
+// lives in this process only: it is never written to a file (any process of
+// the same user could read it there), to Activity or to the Marshal. Where
+// no browser opens, the architecture card shows it to the owner (c copies
+// it).
 
 // architectureOpened is the footer answer once the browser was asked to open
 // the page; it stays until the owner accepts or does something else.
-var architectureOpened = "The architecture is open in your browser. No page? Open the link in " + architectureURLFile + "."
+var architectureOpened = "The architecture is open in your browser. No page? Press a again to reopen it."
 
 // architectureNoBrowser is the footer answer when no browser could be opened.
-var architectureNoBrowser = "Your browser could not be opened. Open the link in " + architectureURLFile + " to review the architecture."
+var architectureNoBrowser = "Your browser could not be opened. The architecture card shows the link: press c on it to copy it."
 
 // architectureShownURL is the review's address without its key, for Activity.
 func architectureShownURL(raw string) string {
@@ -130,11 +129,11 @@ func architectureShownURL(raw string) string {
 // an open that worked or failed: the address without its key, and where the
 // full link is.
 func architectureOpenedNote(raw string) string {
-	return "Architecture view opened in your browser: " + architectureShownURL(raw) + " (the full link is in " + architectureURLFile + ")."
+	return "Architecture view opened in your browser: " + architectureShownURL(raw) + "."
 }
 
 func architectureFailedNote(raw string) string {
-	return "Architecture view: your browser could not be opened. Open the link in " + architectureURLFile + " (" + architectureShownURL(raw) + ")."
+	return "Architecture view: your browser could not be opened. The architecture card shows the link (" + architectureShownURL(raw) + ")."
 }
 
 // architectureOpenResult replaces the "Opening…" answer, while it is still
