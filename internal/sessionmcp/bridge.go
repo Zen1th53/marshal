@@ -4,12 +4,15 @@ package sessionmcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Zen1th53/marshal/internal/model"
 	"golang.org/x/sys/unix"
@@ -79,7 +82,7 @@ func startBridge(ctx context.Context, root, task, binary, lease string, servers 
 		defer response.Close()
 		defer request.Close()
 		first := make([]byte, 64*1024)
-		n, err := waitRead(runCtx, requestFD, first)
+		n, err := waitRead(runCtx, requestFD, first, false)
 		if err != nil || n == 0 {
 			return
 		}
@@ -125,7 +128,7 @@ func startBridge(ctx context.Context, root, task, binary, lease string, servers 
 				if _, err := stdin.Write(buffer[:n]); err != nil {
 					return
 				}
-				n, err = waitRead(runCtx, requestFD, buffer)
+				n, err = waitRead(runCtx, requestFD, buffer, true)
 				if err != nil || n == 0 {
 					return
 				}
@@ -187,6 +190,29 @@ func SandboxRequest(ctx context.Context, request model.SandboxRequest) (model.Sa
 	return request, nil
 }
 
+// lockRelay admits one relay per bridge. Linux locks the request FIFO itself.
+// macOS (and the BSDs) refuse flock on a FIFO with ENOTSUP, which failed every
+// worker's Marshal MCP server there; the bridge directory, private to this
+// one bridge and holding only its two FIFOs, carries the same lock instead.
+func lockRelay(input *os.File, dir string) (func(), error) {
+	err := unix.Flock(int(input.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+	if err == nil {
+		return func() {}, nil
+	}
+	if !errors.Is(err, unix.ENOTSUP) && !errors.Is(err, unix.EOPNOTSUPP) {
+		return nil, err
+	}
+	directory, openErr := os.Open(dir)
+	if openErr != nil {
+		return nil, err
+	}
+	if lockErr := unix.Flock(int(directory.Fd()), unix.LOCK_EX|unix.LOCK_NB); lockErr != nil {
+		directory.Close()
+		return nil, lockErr
+	}
+	return func() { directory.Close() }, nil
+}
+
 // Relay uses named pipes because supervised workers intentionally cannot create
 // Unix sockets. The host child enforces the read-only task/project API.
 func Relay(ctx context.Context, requests, responses string, in io.Reader, out io.Writer) error {
@@ -208,8 +234,19 @@ func Relay(ctx context.Context, requests, responses string, in io.Reader, out io
 		return err
 	}
 	defer input.Close()
-	if err := unix.Flock(int(input.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+	release, err := lockRelay(input, filepath.Dir(requests))
+	if err != nil {
 		return fmt.Errorf("MCP relay already active: %w", err)
+	}
+	defer release()
+	// O_NONBLOCK is only for the open (it must not wait for a reader). Go never
+	// polls a FIFO on macOS (kqueue, golang/go#24164), so there a still
+	// non-blocking writer surfaced EAGAIN once the FIFO filled; make its writes
+	// block. Elsewhere the runtime poller owns the descriptor and waits itself.
+	if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if err := unix.SetNonblock(int(input.Fd()), false); err != nil {
+			return err
+		}
 	}
 	output, err := os.OpenFile(responses, os.O_RDONLY|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -232,11 +269,18 @@ func Relay(ctx context.Context, requests, responses string, in io.Reader, out io
 	}()
 	defer close(done)
 	copied := make(chan error, 1)
+	// emptyInput records a stdin that ended before any byte. The host then
+	// never starts a server and closes its response writer, which Linux shows
+	// as EOF; macOS cannot show the host that EOF on the request FIFO, so the
+	// relay ends the empty session itself with the same empty response.
+	var emptyInput atomic.Bool
 	go func() {
-		_, err := io.Copy(input, source)
+		count, err := io.Copy(input, source)
 		// Publish completion before closing the writer: response EOF can follow
-		// immediately, and must never outrun the successful copy result.
+		// immediately, and must never outrun the successful copy result. The
+		// empty mark follows the send, so a loop that ends on it finds the result.
 		copied <- err
+		emptyInput.Store(count == 0 && err == nil)
 		// Closing the FIFO writer at stdin EOF is required for the host MCP
 		// process to observe EOF and terminate its stdio session.
 		_ = input.Close()
@@ -264,15 +308,17 @@ func Relay(ctx context.Context, requests, responses string, in io.Reader, out io
 			readErr = err
 			break
 		}
-		if poll[0].Revents == 0 {
-			continue
-		}
+		// The host opened its response writer before this relay started, so
+		// a read after an idle poll is safe and is how macOS reveals EOF.
 		n, err := unix.Read(outputFD, buffer)
 		if n > 0 {
 			if _, writeErr := out.Write(buffer[:n]); writeErr != nil {
 				readErr = writeErr
 				break
 			}
+		}
+		if err == unix.EAGAIN && emptyInput.Load() {
+			break
 		}
 		if err == unix.EINTR || err == unix.EAGAIN {
 			continue
@@ -308,7 +354,12 @@ func Relay(ctx context.Context, requests, responses string, in io.Reader, out io
 	return inputErr
 }
 
-func waitRead(ctx context.Context, fd int, buffer []byte) (int, error) {
+// waitRead reads a non-blocking FIFO. connected says a writer has already
+// been seen: then an idle poll is followed by a read, because macOS poll never
+// reports a FIFO writer's hangup (no POLLHUP, no POLLIN at EOF) and the EOF is
+// only visible to read. Before any writer, read also returns 0, so the first
+// wait relies on poll alone.
+func waitRead(ctx context.Context, fd int, buffer []byte, connected bool) (int, error) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -323,7 +374,7 @@ func waitRead(ctx context.Context, fd int, buffer []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if poll[0].Revents == 0 {
+		if poll[0].Revents == 0 && !connected {
 			continue
 		}
 		n, err := unix.Read(fd, buffer)

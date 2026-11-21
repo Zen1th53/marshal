@@ -14,7 +14,10 @@ type Repository struct {
 func New(t testing.TB) *Repository {
 	t.Helper()
 
-	path := t.TempDir()
+	// Production opens a project at its resolved root (project.Discover), so
+	// the fixture does too: on macOS the default TMPDIR is under /var, a
+	// symlink to /private/var.
+	path := Canonical(t, t.TempDir())
 	run(t, path, "git", "init", "-b", "main")
 	// Keep automatic maintenance from changing fixture metadata after Git exits.
 	run(t, path, "git", "config", "gc.auto", "0")

@@ -1,4 +1,6 @@
-//go:build !governed && unix
+//go:build !governed && linux
+
+// Governed Antigravity is constructed only on Linux (app/agy_provider_extreme_linux.go).
 
 package sessionmcp_test
 
