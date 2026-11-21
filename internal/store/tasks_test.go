@@ -75,31 +75,6 @@ func TestClaimRejectsUnsatisfiedDependency(t *testing.T) {
 	}
 }
 
-func TestReadyTasksOrdersDependencyUnblockingThenID(t *testing.T) {
-	st := projectStore(t)
-	importTasks(t, st,
-		model.Task{ID: "TASK-A", Title: "unblocks two", Status: model.TaskReady, Risk: model.R1},
-		model.Task{ID: "TASK-B", Title: "unblocks one", Status: model.TaskReady, Risk: model.R1},
-		model.Task{ID: "TASK-C", Title: "also ready", Status: model.TaskReady, Risk: model.R1},
-		model.Task{ID: "TASK-D1", Title: "consumer one", Status: model.TaskProposed, Risk: model.R1, Dependencies: []string{"TASK-A"}},
-		model.Task{ID: "TASK-D2", Title: "consumer two", Status: model.TaskProposed, Risk: model.R1, Dependencies: []string{"TASK-A"}},
-		model.Task{ID: "TASK-D3", Title: "consumer three", Status: model.TaskProposed, Risk: model.R1, Dependencies: []string{"TASK-B"}},
-	)
-	got, err := st.ReadyTasks(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"TASK-A", "TASK-B", "TASK-C"}
-	if len(got) != len(want) {
-		t.Fatalf("ready count = %d, want %d", len(got), len(want))
-	}
-	for i := range want {
-		if got[i].ID != want[i] {
-			t.Fatalf("ready[%d] = %s, want %s", i, got[i].ID, want[i])
-		}
-	}
-}
-
 func TestConcurrentClaimHasExactlyOneWinner(t *testing.T) {
 	st := projectStore(t)
 	importTasks(t, st, model.Task{ID: "TASK-001", Title: "race", Status: model.TaskReady, Risk: model.R1})

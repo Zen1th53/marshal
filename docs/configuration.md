@@ -108,3 +108,4 @@ marshal --json memory list
 | `MARSHAL_INSTALL_DEPS` | `0` stops `install.sh` from installing a missing Git or tmux; it only reports them. |
 | `MARSHAL_INSTALL_YES` | `1` answers yes to `install.sh`'s questions (sudo still needs a terminal). |
 | `MARSHAL_BOARD` | `classic` draws the classic Board instead of Board v2, for one release. Unset (the default) is Board v2. Set it before you start `marshal`; if the control centre is already running, `/quit` it first. |
+| `BOARD_TRUECOLOR` | `1` draws the Board in 24-bit colour, as `COLORTERM=truecolor` or `24bit` does, for a terminal that takes 24-bit colour but does not set `COLORTERM`. |

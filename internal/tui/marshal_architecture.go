@@ -3,13 +3,10 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os/exec"
-	"runtime"
 	"strings"
-	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/browser"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -221,42 +218,10 @@ func (w *Workspace) resolveArchitectureProposal(id string, err error) {
 	_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, id, status)
 }
 
+// openArchitectureBrowser opens url in the user's desktop browser.
 func openArchitectureBrowser(ctx context.Context, url string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	command := "xdg-open"
-	args := []string{url}
-	switch runtime.GOOS {
-	case "darwin":
-		command = "open"
-	case "windows":
-		command = "rundll32"
-		args = []string{"url.dll,FileProtocolHandler", url}
-	}
-	process := exec.Command(command, args...)
-	if err := process.Start(); err != nil {
-		return fmt.Errorf("open browser: %w", err)
-	}
-	// The user's desktop browser has its own lifetime. Reap its launcher without
-	// terminating that browser when the MARSHAL workspace closes. A launcher
-	// that fails at once (no browser for the link) is a failed open; one still
-	// running after browserOpenWait is taken as opened.
-	exited := make(chan error, 1)
-	go func() { exited <- process.Wait() }()
-	select {
-	case err := <-exited:
-		if err != nil {
-			return fmt.Errorf("open browser: %w", err)
-		}
-	case <-time.After(browserOpenWait):
-	case <-ctx.Done():
-	}
-	return nil
+	return browser.Open(ctx, url)
 }
-
-// browserOpenWait is how long a browser launcher may take to fail.
-const browserOpenWait = 3 * time.Second
 
 func (w *Workspace) boundMarshalArchitectureSource() string {
 	w.tmuxMu.Lock()

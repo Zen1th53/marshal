@@ -192,6 +192,10 @@ func (s *Store) LoadOrCreate() (State, error) {
 	return fresh, nil
 }
 
+// adoptLegacyMachineState makes MachineStateDir adopt a project-level state
+// file left by an earlier version. Both editions adopt it.
+const adoptLegacyMachineState = true
+
 // MachineStateDir returns the directory that holds this user's installation
 // identity, adopting a project-level state file left by an earlier version.
 //

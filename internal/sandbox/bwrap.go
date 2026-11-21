@@ -276,7 +276,7 @@ func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, netw
 	_ = risk
 	blocked := model.IsolationCapability{
 		Level: model.IsolationBlocked, Available: false, Network: networkAllowed,
-		Reason: "required isolation cannot be enforced (bubblewrap unavailable and process-only fallback not explicitly permitted)",
+		Reason: "required isolation cannot be enforced (bubblewrap unavailable; process-only execution is never permitted because it cannot enforce filesystem or network policy)",
 	}
 	return blocked, fmt.Errorf("%w: %s", model.ErrUnavailable, blocked.Reason)
 }

@@ -61,7 +61,7 @@ func dockStripOf(b vm.Board) dockStrip {
 // workspace through GetUIState. Under MARSHAL_BOARD=classic it is the zero
 // strip and the title keeps its classic form.
 func (w *Workspace) dockStripNow() dockStrip {
-	if !boardV2On() {
+	if !w.boardV2On() {
 		return dockStrip{}
 	}
 	return dockStripOf(w.boardV2())

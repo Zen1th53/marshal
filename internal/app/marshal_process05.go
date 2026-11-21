@@ -301,6 +301,20 @@ func (r *Runtime) process05Paused(ctx context.Context, run marshal.Run) bool {
 	return false
 }
 
+// resumePausedProcess05 resumes the root of the run's canonical execution
+// when the person left it paused: the person's own resume of the Marshal's
+// CodeExecutionPaused stop. Task lanes are not resumed here; the Marshal
+// continues a lane under its own dispatch once the root runs again. It only
+// changes the run state: no execution starts.
+func (r *Runtime) resumePausedProcess05(ctx context.Context, run marshal.Run) error {
+	parts, err := r.process05Runs(ctx, run)
+	if err != nil || len(parts) == 0 || parts[0].State != execution.RunPaused {
+		return err
+	}
+	_, err = r.Execution().Engine().ControlRun(ctx, parts[0].RunID, "resume", parts[0].Version)
+	return err
+}
+
 // settleProcess05 ends each part of the run's canonical execution whose
 // work all finished but that a pause left unended: a lane paused mid-turn
 // finishes its turn and its task is accepted, yet the lane stays paused

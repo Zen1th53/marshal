@@ -291,65 +291,84 @@ func (v boardVisual) layoutCounts() layout.Counts {
 
 // stateChip is the header's run state in the owner's words.
 func (v boardVisual) stateChip() string {
-	word, color := v.runWord()
+	_, word, color := v.runWord()
 	return v.bold(v.fg(color, word))
 }
 
 // stateChipShort is the state chip without its reason: the words before
 // ": ", for a header with no room for the reason.
 func (v boardVisual) stateChipShort() string {
-	word, color := v.runWord()
+	_, word, color := v.runWord()
 	short, _, _ := strings.Cut(word, ": ")
 	return v.bold(v.fg(color, short))
 }
 
-// runWord is the run's state as the header says it, and its colour key.
-func (v boardVisual) runWord() (string, string) {
+// runPhase is the run's state as runWord decides it: callers switch on it
+// instead of reading the header's words.
+type runPhase int
+
+const (
+	phaseRunning    runPhase = iota
+	phaseUserPaused          // the owner paused the run
+	phaseStopped             // the run stopped and waits for a recovery
+	phaseWaiting             // the run waits for the owner
+	phaseReviewing
+	phaseDone
+	phaseMerging
+	phaseFinalCheck
+	phasePlanning
+	phaseStarting
+	phaseNotRunning // running, but no worker for a while
+)
+
+// runWord is the run's state as the header says it: its phase, its words
+// and its colour key.
+func (v boardVisual) runWord() (runPhase, string, string) {
 	if v.board.Run.UserPaused {
-		return "paused", "waiting"
+		return phaseUserPaused, "paused", "waiting"
 	}
 	if s, ok := v.stopNotice(); ok {
 		if s.waiting {
-			return "waiting for you", "needs"
+			return phaseWaiting, "waiting for you", "needs"
 		}
-		return "paused", "failed"
+		return phaseStopped, "paused", "failed"
 	}
 	if v.ownerWaitsForRun() && !(v.board.Run.State == marshal.Closed && v.onlyNextWaits()) {
 		// The Marshal waits for the owner's reply (board_gates.go), or
 		// changed files wait for keep or undo (board_guard.go). The "what
 		// next?" card of a closed run is no wait: the run is done.
-		return "waiting for you", "needs"
+		return phaseWaiting, "waiting for you", "needs"
 	}
 	switch v.board.Run.State {
 	case marshal.Reviewing:
-		return "reviewing", "accent"
+		return phaseReviewing, "reviewing", "accent"
 	case marshal.Approved, marshal.Dispatching:
 		if v.onlyReviewing() {
 			// Every task still moving is in the Marshal's review: no
 			// worker runs, and nothing waits for the owner.
-			return "reviewing", "accent"
+			return phaseReviewing, "reviewing", "accent"
 		}
 	case marshal.Closed:
-		return "done", "merged"
+		return phaseDone, "done", "merged"
 	case marshal.Merging:
-		return "merging", "accent"
+		return phaseMerging, "merging", "accent"
 	case marshal.Verifying:
 		// The runtime's final check of the merged work runs here before the
 		// run closes. An independent verifier re-runs the checks, which can
 		// take minutes, so the header says so, and why, instead of
 		// "running"; a narrow header keeps "final check" (stateChipShort).
-		return "final check: re-running the checks on the merged result", "accent"
+		return phaseFinalCheck, "final check: re-running the checks on the merged result", "accent"
 	case marshal.Drafting:
-		return "planning", "accent"
+		return phasePlanning, "planning", "accent"
 	case "":
-		return "starting", "dim"
+		return phaseStarting, "starting", "dim"
 	}
 	if quiet, ok := v.noWorkerFor(); ok {
 		// The run says it is running, but no worker has run for a while:
 		// say so rather than "running" (board_liveness.go).
-		return "not running: no worker for " + quietFor(quiet), "needs"
+		return phaseNotRunning, "not running: no worker for " + quietFor(quiet), "needs"
 	}
-	return "running", "accent"
+	return phaseRunning, "running", "accent"
 }
 
 // ownerWaitsForRun is ownerWaits as the run's state reads it: a requirements

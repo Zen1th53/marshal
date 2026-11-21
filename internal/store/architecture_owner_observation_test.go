@@ -46,7 +46,7 @@ func registeredArchitectureOwner(t *testing.T) (*Store, SignedArchitectureReceip
 		ArchitectureTarget: ArchitectureTarget{ProjectID: string(binding.ID), Root: root, StorePath: filepath.Join(private, "state.db"), SourceRoot: root, Protocol: architecturecodec.Version, Policy: "community"},
 		Generation:         1, GitDirectory: filepath.Join(root, ".git"), Issuer: key.Public().(ed25519.PublicKey), EnrollmentID: "owner-enrollment",
 	}
-	payload, err := architectureSignedBytes("marshal.architecture.enrollment.v1", g)
+	payload, err := architecturecodec.ArchitectureSignedBytes("marshal.architecture.enrollment.v1", g)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,8 +117,8 @@ func registeredArchitectureOwner(t *testing.T) (*Store, SignedArchitectureReceip
 	c.SessionID = g.EnrollmentID
 	c.MessageID = "owner-message"
 	c.Message = "Accept this exact architecture"
-	BindArchitectureChallenge(&c)
-	payload, err = architectureSignedBytes("marshal.architecture.receipt.v1", c)
+	architecturecodec.BindArchitectureChallenge(&c)
+	payload, err = architecturecodec.ArchitectureSignedBytes("marshal.architecture.receipt.v1", c)
 	if err != nil {
 		t.Fatal(err)
 	}

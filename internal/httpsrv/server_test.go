@@ -36,7 +36,7 @@ func TestHTTPServerTimeoutsAndLimits(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Serve(ln)
+		errCh <- srv.httpServer.Serve(ln)
 	}()
 
 	addr := ln.Addr().String()
@@ -61,7 +61,7 @@ func TestHTTPServerTimeoutsAndLimits(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if err != nil {
+		if !errors.Is(err, http.ErrServerClosed) {
 			t.Fatalf("unexpected Serve error on shutdown: %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -100,9 +100,9 @@ func TestHTTPServerOversizedBodyRejection(t *testing.T) {
 	defer ln.Close()
 
 	go func() {
-		_ = srv.Serve(ln)
+		_ = srv.httpServer.Serve(ln)
 	}()
-	defer func() { _ = srv.Close() }()
+	defer func() { _ = srv.httpServer.Close() }()
 
 	addr := ln.Addr().String()
 

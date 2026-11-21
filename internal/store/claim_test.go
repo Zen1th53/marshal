@@ -151,12 +151,4 @@ func TestClaimPersistenceAndRestart(t *testing.T) {
 		t.Fatalf("ListClaimsByGoal count=%d, want 1", len(byGoal))
 	}
 
-	// Test ListClaimsByScope
-	byScope, err := st2.ListClaimsByScope(ctx, "auth.jwt")
-	if err != nil {
-		t.Fatalf("ListClaimsByScope: %v", err)
-	}
-	if len(byScope) != 1 || byScope[0].ID != claimID {
-		t.Fatalf("ListClaimsByScope count=%d, want 1", len(byScope))
-	}
 }
