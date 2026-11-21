@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -167,20 +166,6 @@ func (w *Workspace) v2Fits(cols, rows int) bool {
 		return cols >= boardv2.MinCols
 	}
 	return cols >= layout.MinCols
-}
-
-// v2Defers reports whether an owner card is open that the v2 screens do not
-// draw yet, so the classic Board shows it and a decision is never hidden:
-// an ask card, the requirements card, a change card, the "what next?" card,
-// the guard's alert, and a pause that needs a new plan (the paused card is
-// one choice; use_plan is not). Decisions (the architecture and plan gates,
-// the inbox) and the other stops are the v2 decision and paused cards.
-func v2Defers(v boardVisual) bool {
-	if v.ask != nil || v.req != nil || v.change != nil || v.next != nil || v.guard != nil {
-		return true
-	}
-	stop, ok := v.stopNotice()
-	return ok && stop.action == marshal.PauseUsePlan
 }
 
 // setV2CardShown records which v2 screen the last paint drew, so the card

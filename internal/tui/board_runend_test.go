@@ -31,6 +31,8 @@ func closedRunBesideChat(t *testing.T) *Workspace {
 // The card's rows are counted for the layout now, and the header says the
 // run is done instead of "waiting for you".
 func TestNextCardShowsBesideTheChat(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := closedRunBesideChat(t)
 	if w.boardLayoutMode() != layout.Split {
 		t.Fatalf("layout mode %q, want split", w.boardLayoutMode())

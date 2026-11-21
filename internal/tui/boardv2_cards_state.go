@@ -31,9 +31,10 @@ type v2CardState struct {
 	// commitsLoading is being counted.
 	commits        map[string]int
 	commitsLoading map[string]bool
-	// dismissed is the decision the owner put off with Esc ("later"); it
-	// shows again once a different decision waits.
-	dismissed string
+	// dismissed is the decisions the owner put off with Esc ("later"), by
+	// key: each stays off while it waits, the next one shows, and the
+	// inbox still lists them all; a key that no longer waits is dropped.
+	dismissed map[string]bool
 	// refusedSeen is when the Board first saw the Marshal's own accept of
 	// a gate refused, for a refusal whose Activity line is gone.
 	refusedSeen map[string]time.Time

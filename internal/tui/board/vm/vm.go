@@ -232,16 +232,29 @@ type Node struct {
 
 // Decision is the card over the Board when the owner must act.
 type Decision struct {
-	Kind         string // architecture, plan, inbox: what the card decides
+	Kind         string // architecture, plan, inbox, ask, requirements, change, next, guard: what the card decides
 	Title        string // "Accept architecture · rev 1"
+	Corner       string // the card's top-right note; empty: "esc later"
 	Summary      string
 	ChangedNote  string
 	Nodes        []Node
-	Link         string // shown when no browser could open
+	Lines        []CardLine // what the owner reads before deciding, under the summary
+	Link         string     // shown when no browser could open
 	NoDisplay    bool
 	SelfApproval string // non-empty: the Marshal tried to approve for the owner
 	Actions      []Key
-	Links        []Link // arrows between Nodes on the sketch (4 per row)
+	Refs         []string // per action, what a click on it reaches ("" for its key); the collector's own ids
+	Links        []Link   // arrows between Nodes on the sketch (4 per row)
+}
+
+// CardLine is one row of a card's content: a requirement line ("a", "scope",
+// its text, "· its source"), a question, a changed file. Text wraps; Note is
+// drawn dim after it when it fits.
+type CardLine struct {
+	Key, Label string
+	Text, Note string
+	Tone       Tone   // the text's colour; ToneMuted for a blank
+	Ref        string // what a click on the row reaches, "" for nothing; the collector's own id
 }
 
 // Link is one arrow between two Nodes of the decision sketch, by index.

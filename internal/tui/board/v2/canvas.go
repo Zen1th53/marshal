@@ -81,6 +81,7 @@ type canvas struct {
 //
 //	HitKey     b.Keys (or the screen's default keys) on the key bar
 //	HitAction  a button of the card shown: Decision.Actions, Paused.Actions
+//	HitLine    a content row of the decision card: Decision.Lines
 //	HitReady   a button under the readiness checks: Ready.Actions
 //	HitCheck   a readiness row: Ready.Checks
 //	HitLane    a lane row: Lanes.Items
@@ -97,6 +98,7 @@ type Hit struct {
 const (
 	HitKey    = "key"
 	HitAction = "action"
+	HitLine   = "line"
 	HitReady  = "ready"
 	HitCheck  = "check"
 	HitLane   = "lane"
@@ -190,6 +192,28 @@ func (c *canvas) dim() {
 	for y := range c.cells {
 		for x := range c.cells[y] {
 			cl := &c.cells[y][x]
+			cl.fg, cl.b = cDimInk, false
+			if cl.bg != cBg {
+				cl.bg = cDimBg
+			}
+		}
+	}
+}
+
+// dimRect greys x..x+w, y..y+h as dim does the whole canvas, and drops the
+// regions recorded there.
+func (c *canvas) dimRect(x, y, w, h int) {
+	kept := c.hits[:0]
+	for _, ht := range c.hits {
+		if ht.Row >= y && ht.Row < y+h && ht.X1 > x && ht.X0 < x+w {
+			continue
+		}
+		kept = append(kept, ht)
+	}
+	c.hits = kept
+	for yy := max(0, y); yy < min(c.h, y+h); yy++ {
+		for xx := max(0, x); xx < min(c.w, x+w); xx++ {
+			cl := &c.cells[yy][xx]
 			cl.fg, cl.b = cDimInk, false
 			if cl.bg != cBg {
 				cl.bg = cDimBg
@@ -323,6 +347,7 @@ var asciiMap = map[rune]string{
 	'✓': "v", '✗': "x", '✳': "*", '◆': "+", '⬡': "o", '◇': "o", '⣾': "*", '◎': "o", '●': "*",
 	'→': ">", '←': "<", '▶': ">", '◀': "<", '›': ">", '·': ".", '…': "...", '×': "x", '≈': "~",
 	'⚠': "!", '↓': "v", '⏎': "Enter", '–': "-", '—': "-", '⎿': "L", '❯': ">", '⏵': ">", '✻': "*",
+	'“': "\"", '”': "\"", '‘': "'", '’': "'",
 	'▐': "#", '▛': "#", '▜': "#", '▌': "#", '▝': "#", '▘': "#",
 }
 

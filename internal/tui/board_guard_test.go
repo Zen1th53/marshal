@@ -118,6 +118,8 @@ func TestGuardUndoSelection(t *testing.T) {
 // first watched look is the baseline; a change is one alert, one red
 // Activity line and one message to the Marshal, however often it is seen.
 func TestGuardTickDetectsOnceAndTellsOnce(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	files := guardFiles("notes.txt", " M", "1")

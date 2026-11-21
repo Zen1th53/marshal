@@ -223,6 +223,8 @@ func TestRequirementsAskCardTakesPrecedence(t *testing.T) {
 // The card renders in the first-use inbox: the filled count, the blanks'
 // "(to ask)", NEEDS YOU in the header, and no internal ids.
 func TestRequirementsRendersOnFirstUse(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := reqBoard(t)
 	defer w.Close()
 	text := frameText(w, 120, 40)
@@ -266,6 +268,8 @@ const realUserReqCard = `[` +
 // a 120- and a 160-column terminal give it (beside the chat, and alone): a
 // long source never squeezes the value down to "Prop…".
 func TestRequirementsValuesReadable(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	p, err := parseMarshalProposal(reqProposalLine(realUserReqCard))
