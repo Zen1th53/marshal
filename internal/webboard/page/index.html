@@ -3,149 +3,251 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark light">
+<meta name="color-scheme" content="dark">
 <meta name="referrer" content="no-referrer">
 <title>Marshal Board</title>
 <link rel="stylesheet" href="/app.css">
 <script src="/app.js" defer></script>
 </head>
 <body>
+<a class="skip" href="#main">Skip to the section</a>
+<div class="shell">
+<nav class="side" aria-label="Sections">
+  <p class="brand">MARSHAL <span id="t-version" class="faint"></span></p>
+  <ul class="navlist">
+    <li><a id="n-home" class="nav" href="#home" data-route="home">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+      <span class="nl">Home</span><span class="dot" hidden><span class="sr"> (needs you)</span></span></a></li>
+    <li><a id="n-work" class="nav" href="#work" data-route="work">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>
+      <span class="nl">Work</span><span id="n-work-count" class="ncount"></span><span class="dot" hidden><span class="sr"> (needs you)</span></span></a></li>
+    <li><a id="n-architecture" class="nav" href="#architecture" data-route="architecture">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="6" rx="1"/><rect x="14" y="3" width="7" height="6" rx="1"/><rect x="8.5" y="15" width="7" height="6" rx="1"/><path d="M6.5 9v3h11V9M12 12v3"/></svg>
+      <span class="nl"><span class="long">Architecture</span><span class="short">Arch</span></span><span class="dot" hidden><span class="sr"> (needs you)</span></span></a></li>
+    <li><a id="n-team" class="nav" href="#team" data-route="team">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.8.3 5 2.6 5 5.8"/></svg>
+      <span class="nl">Team</span><span class="dot" hidden><span class="sr"> (needs you)</span></span></a></li>
+    <li><a id="n-activity" class="nav" href="#activity" data-route="activity">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+      <span class="nl">Activity</span><span class="dot" hidden><span class="sr"> (needs you)</span></span></a></li>
+  </ul>
+  <div class="later in-nav" role="group" aria-labelledby="later-in-nav">
+    <p id="later-in-nav" class="lbl">Later</p>
+    <div class="soon" aria-disabled="true" title="Coming in a later release"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/></svg><span>Security</span><span class="tag">Coming soon</span></div>
+    <div class="soon" aria-disabled="true" title="Coming in a later release"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"/></svg><span>Verify</span><span class="tag">Coming soon</span></div>
+    <div class="soon" aria-disabled="true" title="Coming in a later release"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg><span>Memory</span><span class="tag">Coming soon</span></div>
+  </div>
+  <a id="n-settings" class="nav settings" href="#settings" data-route="settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+    <span class="nl">Settings</span></a>
+</nav>
+
+<div class="col">
 <header class="top" aria-label="Run status">
-  <span class="brand">MARSHAL <span id="t-version" class="dim"></span></span>
-  <span class="seg"><b id="t-project">–</b> <span id="t-run" class="dim"></span></span>
-  <span class="seg"><span id="t-state" class="chip">–</span></span>
-  <span class="seg grow"></span>
-  <span class="seg"><span id="t-live" class="chip tone-muted" role="status" aria-live="polite">connecting…</span></span>
-  <time id="t-clock" class="seg clock"></time>
+  <span class="proj"><b id="t-project">–</b> <span id="t-run" class="faint"></span></span>
+  <span id="t-state" class="chip">–</span>
+  <a id="you-pill" class="pill" href="#home"><span class="lbl">From you</span> <span id="you">–</span></a>
+  <span class="grow"></span>
+  <span id="t-live" class="chip tone-muted" role="status" aria-live="polite">connecting…</span>
+  <time id="t-clock" class="clock"></time>
+  <a class="gear" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></a>
 </header>
 
 <div id="offline" class="offline" role="alert" hidden></div>
 
-<main class="simple">
-  <section class="hero" aria-label="Now">
-    <p id="now" class="now">–</p>
-    <p id="you-box" class="you"><span class="lbl">From you</span> <span id="you">–</span></p>
+<main id="main" tabindex="-1">
+  <p id="feedback" class="feedback" role="status" aria-live="polite" hidden></p>
+  <p id="review" class="review" hidden><a id="review-link" href="#" target="_blank" rel="noopener noreferrer">Open the architecture review</a> <span class="faint">(opens in a new tab; Accept happens only there)</span></p>
+
+  <!-- Home -->
+  <section id="s-home" class="sect" aria-labelledby="h-home">
+    <h1 id="h-home" class="sr">Home</h1>
 
     <section id="card" class="card" aria-labelledby="card-title" hidden>
+      <p class="lbl tone-warn">Waiting for you</p>
       <h2 id="card-title"></h2>
+      <p id="card-who" class="muted"></p>
       <p id="card-self" class="self" hidden></p>
       <p id="card-summary"></p>
-      <p id="card-will" class="dim"></p>
+      <p id="card-will" class="muted"></p>
       <div class="acts">
         <button id="primary" type="button" class="primary"></button>
         <input id="confirm-text" class="confirm-text" type="text" autocomplete="off" spellcheck="false" aria-label="Type what the Board asks for" hidden>
         <span id="secondary" class="secondary"></span>
       </div>
+      <details id="d-card" class="more" hidden>
+        <summary>About this card</summary>
+        <p id="card-changed" class="muted"></p>
+        <ol id="card-nodes" class="nodes" aria-label="Parts"></ol>
+        <dl id="card-lines" class="kv"></dl>
+        <ul id="card-tasks" class="plain"></ul>
+        <p id="card-extra" class="muted"></p>
+      </details>
     </section>
 
-    <div id="controls" class="acts controls" hidden></div>
+    <p id="now" class="now">Connecting to the Board…</p>
+    <p id="nums" class="nums"></p>
+    <div id="home-bar-row" class="barrow" hidden>
+      <div id="home-bar" class="bar" role="progressbar" aria-label="Tasks merged" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+    </div>
+    <div id="home-empty" class="empty" hidden></div>
 
-    <p id="feedback" class="feedback" role="status" aria-live="polite" hidden></p>
-    <p id="review" class="review" hidden><a id="review-link" href="#" target="_blank" rel="noopener noreferrer">Open the architecture review</a></p>
+    <ul id="sum-cards" class="sumcards" aria-label="Summary"></ul>
+
+    <!-- The Marshal's last chat turn to the owner: its prose only, scrubbed
+         and capped by the server. -->
+    <section id="marshal-says" class="panel says" aria-labelledby="h-says">
+      <h2 id="h-says" class="lbl">The Marshal says</h2>
+      <p id="says-text" class="saystext"></p>
+      <p id="says-empty" class="muted">The Marshal has not written to you yet.</p>
+      <p id="says-more" class="muted" hidden>Cut short here: read the rest in the terminal chat.</p>
+      <p id="says-meta" class="muted"></p>
+    </section>
 
     <div class="say">
-      <label for="say-text" class="sr">Tell the Marshal</label>
-      <textarea id="say-text" rows="2" placeholder="Tell the Marshal…" maxlength="2000"></textarea>
-      <button id="say-send" type="button" class="send">Send</button>
+      <label for="say-text" class="lbl">Tell the Marshal</label>
+      <div class="sayrow">
+        <textarea id="say-text" rows="2" placeholder="Tell the Marshal…" maxlength="2000"></textarea>
+        <button id="say-send" type="button" class="send">Send</button>
+      </div>
+    </div>
+
+    <section class="latest" aria-labelledby="h-latest">
+      <h2 id="h-latest" class="lbl">Latest</h2>
+      <ol id="latest" class="events"></ol>
+      <p id="latest-empty" class="muted" hidden>Nothing has happened yet.</p>
+      <p><a href="#activity">All activity</a></p>
+    </section>
+  </section>
+
+  <!-- Work -->
+  <section id="s-work" class="sect" aria-labelledby="h-work" hidden>
+    <div class="sect-head"><h1 id="h-work">Work</h1><span id="work-sum" class="muted"></span></div>
+    <ol id="stages" class="stages" aria-label="Stages"></ol>
+    <div id="controls" class="acts controls" hidden></div>
+    <div id="work-empty" class="empty" hidden></div>
+    <div id="work-body">
+      <div id="filters" class="filters" role="group" aria-label="Show tasks"></div>
+      <div class="workgrid">
+        <div class="tablewrap">
+          <table class="tasks">
+            <caption class="sr">Tasks</caption>
+            <thead><tr><th scope="col">Task</th><th scope="col">Title</th><th scope="col">Worker</th><th scope="col">State</th></tr></thead>
+            <tbody id="task-rows"></tbody>
+          </table>
+          <p id="task-none" class="muted" hidden>No task in this filter.</p>
+        </div>
+        <aside id="drawer" class="drawer" aria-labelledby="dr-title" hidden>
+          <div class="drawer-head"><h2 id="dr-title"></h2><a class="close" href="#work" aria-label="Close the task">Close</a></div>
+          <p id="dr-state" class="drstate"></p>
+          <dl id="dr-facts" class="kv"></dl>
+          <div id="dr-acts" class="acts"></div>
+          <p id="dr-note" class="muted"></p>
+        </aside>
+      </div>
+    </div>
+
+    <section id="w-plan" class="panel" aria-labelledby="h-plan">
+      <h2 id="h-plan" class="lbl">Plan</h2>
+      <p id="pl-title"></p>
+      <p id="pl-accepted" class="muted"></p>
+      <p id="pl-stats" class="muted"></p>
+      <figure class="spark" id="pl-spark-fig"><svg id="pl-spark" viewBox="0 0 120 28" role="img" aria-label="Merges per 5 minutes"></svg>
+        <figcaption class="muted">merges per 5 minutes</figcaption></figure>
+    </section>
+
+    <section id="w-lanes" class="panel" aria-labelledby="h-lanes">
+      <h2 id="h-lanes" class="lbl">Workers now</h2>
+      <div class="tablewrap">
+        <table class="lanes">
+          <thead><tr><th scope="col">Lane</th><th scope="col">Model</th><th scope="col">Doing</th><th scope="col">Step</th><th scope="col" class="num">Running</th><th scope="col" class="num">Last signal</th></tr></thead>
+          <tbody id="la-rows"></tbody>
+        </table>
+      </div>
+      <p id="la-empty" class="muted" hidden>No worker is running.</p>
+    </section>
+  </section>
+
+  <!-- Architecture -->
+  <section id="s-architecture" class="sect" aria-labelledby="h-arch" hidden>
+    <div class="sect-head"><h1 id="h-arch">Architecture</h1></div>
+    <dl id="ar-facts" class="kv big"></dl>
+    <div id="ar-acts" class="acts"></div>
+    <p id="ar-note" class="muted"></p>
+    <section id="ar-parts" class="panel" aria-labelledby="h-parts" hidden>
+      <h2 id="h-parts" class="lbl">Parts in the proposal</h2>
+      <ol id="ar-nodes" class="nodes"></ol>
+    </section>
+  </section>
+
+  <!-- Team -->
+  <section id="s-team" class="sect" aria-labelledby="h-team" hidden>
+    <div class="sect-head"><h1 id="h-team">Team</h1><span id="team-sum" class="muted"></span></div>
+    <ul id="team-cards" class="teamcards"></ul>
+    <section id="tm-rules" class="panel" aria-labelledby="h-rules">
+      <h2 id="h-rules" class="lbl">How work is shared</h2>
+      <dl id="tm-defaults" class="kv"></dl>
+    </section>
+    <section id="tm-ready" class="panel" aria-labelledby="h-ready" hidden>
+      <h2 id="h-ready" class="lbl">Readiness <span id="r-count" class="muted"></span></h2>
+      <ul id="r-checks" class="checks"></ul>
+      <p id="r-checked" class="muted"></p>
+    </section>
+  </section>
+
+  <!-- Activity -->
+  <section id="s-activity" class="sect" aria-labelledby="h-activity" hidden>
+    <div class="sect-head"><h1 id="h-activity">Activity</h1></div>
+    <div class="tabs" role="tablist" aria-label="Activity views">
+      <button type="button" role="tab" id="tab-all" aria-controls="tp-all" aria-selected="true">Activity</button>
+      <button type="button" role="tab" id="tab-steps" aria-controls="tp-steps" aria-selected="false" tabindex="-1">Marshal steps</button>
+      <button type="button" role="tab" id="tab-req" aria-controls="tp-req" aria-selected="false" tabindex="-1">Requests to the Marshal</button>
+    </div>
+    <div id="tp-all" role="tabpanel" aria-labelledby="tab-all">
+      <div id="act-groups"></div>
+      <p id="act-empty" class="empty" hidden>Nothing has happened yet. Activity fills in once the Marshal starts.</p>
+    </div>
+    <div id="tp-steps" role="tabpanel" aria-labelledby="tab-steps" hidden>
+      <p id="st-model" class="muted"></p>
+      <ol id="st-rows" class="events"></ol>
+      <p id="st-empty" class="empty" hidden>The Marshal has not taken a step yet.</p>
+      <p id="st-quiet" class="muted"></p>
+    </div>
+    <div id="tp-req" role="tabpanel" aria-labelledby="tab-req" hidden>
+      <div class="tablewrap">
+        <table class="requests">
+          <thead><tr><th scope="col">Sent</th><th scope="col">What</th><th scope="col">Answer</th><th scope="col" class="num">Took</th></tr></thead>
+          <tbody id="rq-rows"></tbody>
+        </table>
+      </div>
+      <p id="rq-empty" class="empty" hidden>The Board has not asked the Marshal anything yet.</p>
+      <p id="rq-chat" class="muted"></p>
     </div>
   </section>
 
-  <details id="d-card" class="pane" hidden>
-    <summary>About this card</summary>
-    <p id="card-changed" class="dim"></p>
-    <ol id="card-nodes" class="nodes" aria-label="Parts"></ol>
-    <dl id="card-lines" class="cardlines"></dl>
-    <ul id="card-tasks" class="pausedtasks"></ul>
-    <p id="card-extra" class="dim"></p>
-  </details>
-
-  <details id="p-ready" class="pane" hidden>
-    <summary>Readiness <span id="r-count" class="dim"></span></summary>
-    <ul id="r-checks" class="checks"></ul>
-    <dl id="r-defaults" class="defaults"></dl>
-    <p id="r-checked" class="dim"></p>
-  </details>
-
-  <details id="p-plan" class="pane">
-    <summary>Plan <span id="pl-sum" class="dim"></span></summary>
-    <p id="pl-title" class="dim"></p>
-    <p id="pl-accepted" class="dim"></p>
-    <ol id="pl-stages" class="stages" aria-label="Stages"></ol>
-    <div class="progress-row">
-      <div id="pl-bar" class="bar big" role="progressbar" aria-label="Tasks merged" aria-valuemin="0"><span></span></div>
-      <span id="pl-counts"></span>
-    </div>
-    <div class="spark-row">
-      <figure class="spark"><svg id="pl-spark" viewBox="0 0 120 28" role="img" aria-label="Merges per 5 minutes"></svg>
-        <figcaption class="dim">merges / 5 min</figcaption></figure>
-      <span id="pl-stats" class="dim"></span>
-    </div>
-  </details>
-
-  <details id="p-lanes" class="pane">
-    <summary>Lanes <span id="la-sum" class="dim"></span></summary>
-    <p id="la-limits" class="dim"></p>
-    <div class="tablewrap">
-      <table class="lanes">
-        <thead><tr><th scope="col">lane</th><th scope="col">model</th><th scope="col">task</th><th scope="col">step</th><th scope="col" class="num">elapsed</th><th scope="col" class="num">signal</th></tr></thead>
-        <tbody id="la-rows"></tbody>
-      </table>
-    </div>
-    <p id="la-empty" class="dim" hidden>No lane is running.</p>
-  </details>
-
-  <details id="p-tasks" class="pane">
-    <summary>Tasks <span id="ta-sum" class="dim"></span></summary>
-    <ul id="ta-rows" class="tasks"></ul>
-    <p id="ta-empty" class="dim" hidden>No tasks yet.</p>
-  </details>
-
-  <details id="p-workers" class="pane">
-    <summary>Workers <span id="w-sum" class="dim"></span></summary>
-    <ul id="w-rows" class="workers"></ul>
-  </details>
-
-  <details id="p-marshal" class="pane">
-    <summary>Marshal <span id="m-sum" class="dim"></span></summary>
-    <p><b id="m-name">–</b> <span id="m-use" class="chip"></span></p>
-    <p id="m-doing" class="dim"></p>
-    <div class="meters">
-      <div class="meter"><span class="lbl">context</span><div id="m-ctx" class="bar" role="progressbar" aria-label="Context used" aria-valuemin="0" aria-valuemax="100"><span></span></div><span id="m-ctx-t" class="num"></span></div>
-      <div class="meter"><span class="lbl">5h left</span><div id="m-5h" class="bar" role="progressbar" aria-label="5-hour limit left" aria-valuemin="0" aria-valuemax="100"><span></span></div><span id="m-5h-t" class="num"></span></div>
-      <div class="meter"><span class="lbl">week left</span><div id="m-wk" class="bar" role="progressbar" aria-label="Weekly limit left" aria-valuemin="0" aria-valuemax="100"><span></span></div><span id="m-wk-t" class="num"></span></div>
-    </div>
-    <p><span id="m-chat" class="chip"></span> <span id="m-input" class="chip"></span> <span id="m-chatnote" class="dim"></span></p>
-  </details>
-
-  <details id="p-inbox" class="pane">
-    <summary>Inbox <span id="i-count" class="dim"></span></summary>
-    <ul id="i-rows" class="inbox"></ul>
-    <p id="i-empty" class="dim">Nothing waits for you.</p>
-    <p id="i-next" class="dim"></p>
-  </details>
-
-  <details id="p-activity" class="pane">
-    <summary>Activity <span id="a-sum" class="dim"></span></summary>
-    <ol id="a-rows" class="events"></ol>
-    <p id="a-empty" class="dim" hidden>Nothing happened yet.</p>
-  </details>
-
-  <details id="p-steps" class="pane">
-    <summary>Marshal steps <span id="st-model" class="dim"></span></summary>
-    <ol id="st-rows" class="events"></ol>
-    <p id="st-quiet" class="dim"></p>
-  </details>
-
-  <details id="p-requests" class="pane">
-    <summary>Requests to the Marshal</summary>
-    <div class="tablewrap">
-      <table class="requests">
-        <thead><tr><th scope="col">sent</th><th scope="col">what</th><th scope="col">answer</th><th scope="col" class="num">took</th></tr></thead>
-        <tbody id="rq-rows"></tbody>
-      </table>
-    </div>
-  </details>
+  <!-- Settings -->
+  <section id="s-settings" class="sect" aria-labelledby="h-settings" hidden>
+    <div class="sect-head"><h1 id="h-settings">Settings</h1><span class="muted">read-only</span></div>
+    <dl id="set-facts" class="kv big"></dl>
+  <div class="later in-settings" role="group" aria-labelledby="later-in-settings">
+    <p id="later-in-settings" class="lbl">Later</p>
+    <div class="soon" aria-disabled="true" title="Coming in a later release"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/></svg><span>Security</span><span class="tag">Coming soon</span></div>
+    <div class="soon" aria-disabled="true" title="Coming in a later release"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"/></svg><span>Verify</span><span class="tag">Coming soon</span></div>
+    <div class="soon" aria-disabled="true" title="Coming in a later release"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg><span>Memory</span><span class="tag">Coming soon</span></div>
+  </div>
+    <p><a id="docs-link" href="#settings" target="_blank" rel="noopener noreferrer">Marshal documentation</a> <span class="faint">(opens in a new tab)</span></p>
+    <section class="panel" aria-labelledby="h-notyet">
+      <h2 id="h-notyet" class="lbl">In the terminal Board only, for now</h2>
+      <ul id="set-notyet" class="plain muted">
+        <li>Changing a setting: this page shows them read-only</li>
+        <li>Raw error text, MCP failure details and worker evidence</li>
+        <li>The security, verify and memory views</li>
+      </ul>
+    </section>
+  </section>
 </main>
-<footer class="foot dim">The Marshal Board on this computer. This link acts for you: keep it private.</footer>
+<footer class="foot faint">The Marshal Board on this computer. This link acts for you: keep it private.</footer>
+</div>
+</div>
 </body>
 </html>

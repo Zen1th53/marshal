@@ -53,6 +53,32 @@ type Board struct {
 	Decision *Decision // non-nil: the decision card is shown over the Board
 	Paused   *Paused   // non-nil: the paused card is shown
 	Keys     []Key
+	System   System
+	// MarshalSays is the Marshal chat's last turn to the owner.
+	MarshalSays MarshalSays
+}
+
+// MarshalSays is the final text of the Marshal's last chat turn: assistant
+// prose only, secrets redacted. Answered is set once someone wrote in the
+// chat after it. A zero value: the Marshal has not said anything yet.
+type MarshalSays struct {
+	Text     string
+	At       time.Time
+	Answered bool
+}
+
+// System is the computer and the install the Board runs on: host load, the
+// thermal guard, a newer release, whether MCP works. Figures are -1 when
+// unknown.
+type System struct {
+	CPUPct, MemPct, DiskPct int
+	TempC                   int
+	LowDisk                 bool
+	ThermalGuard            bool   // the thermal rule is active
+	ThermalCap              int    // lane cap the guard asked for while active; 0 none
+	Notice                  string // the host watcher's notice: "host: thermal guard · …"
+	UpdateAvailable         string // tag of a newer release; "" none or not checked
+	MCPFailed               bool   // MCP failed in this session (the reason stays in the terminal, F6)
 }
 
 // TopBar is row 0 on every screen.
@@ -153,6 +179,28 @@ type Worker struct {
 	SignedIn  bool
 	Installed bool
 	Reason    string // plain cause when not usable: "not signed in: run agy once"
+	// Limits are the provider's usage windows as its CLI reports them, one
+	// row per model family and window; LeftPct above is only a summary.
+	Limits []LimitRow
+	// Dispatch is whether the Marshal hands this provider work now, and why.
+	Dispatch Dispatch
+}
+
+// LimitRow is one usage window of a provider.
+type LimitRow struct {
+	Family      string    // model family or model: "sonnet", "gemini-3.8"
+	Window      string    // "5h" or "weekly"
+	PercentLeft int       // -1: not reported by the CLI
+	ResetsAt    time.Time // zero: unknown
+	ObservedAt  time.Time // when the CLI reported it
+	Source      string    // where the number was read: "claude /usage"
+}
+
+// Dispatch is a provider's dispatch state: "dispatching", "spare",
+// "held", "out" ...; Reason says why in plain words.
+type Dispatch struct {
+	State  string
+	Reason string
 }
 
 // Inbox is the Inbox pane.

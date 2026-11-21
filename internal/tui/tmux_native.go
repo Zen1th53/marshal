@@ -2443,6 +2443,7 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		w.tmuxMu.Unlock()
 		if bound {
 			w.observeAuthenticatedMarshalProposals(tr)
+			w.noteMarshalSaid(tr)
 		}
 		// Earlier or unbound conversations are never imported by this consumer.
 		if bound && (historyAuthorized == nil || historyAuthorized(watch.dir)) {

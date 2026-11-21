@@ -305,6 +305,9 @@ type Workspace struct {
 	hostWatch atomic.Pointer[hostWatcher]
 	// mcpFault is why MCP last failed (mcp_fault.go); nil while it works.
 	mcpFault atomic.Pointer[string]
+	// marshalSaid is the bound Marshal chat's last turn to the owner, for
+	// the Web Board (marshal_says.go); nil until it said something.
+	marshalSaid atomic.Pointer[marshalSaid]
 	// planning is set from the owner's architecture Accept until the run
 	// it plans exists: the Board says the Marshal is planning instead of
 	// NO RUN YET (board_planning.go).

@@ -13,8 +13,10 @@ package webboard
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/redaction"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -43,9 +45,61 @@ type Frame struct {
 	Decision *Decision `json:"decision"`
 	Paused   *Paused   `json:"paused"`
 	Keys     []Key     `json:"keys"`
+	System   System    `json:"system"`
+	// MarshalSays is the Marshal's last chat turn to the owner, scrubbed
+	// and capped (marshalSays).
+	MarshalSays MarshalSays `json:"marshalSays"`
 	// Act is the owner actions the page may send now (phase 2); nil on a
 	// read-only server. It is minted by the server, not read from vm.
 	Act *Act `json:"act,omitempty"`
+}
+
+// MarshalSays is the Marshal's last chat turn to the owner: Text is at most
+// SaysMax characters (Truncated when cut), Question when it ends by asking
+// something, Answered once someone wrote in the chat after it.
+type MarshalSays struct {
+	Text      string `json:"text"`
+	At        string `json:"at"`
+	Answered  bool   `json:"answered"`
+	Truncated bool   `json:"truncated"`
+	Question  bool   `json:"question"`
+}
+
+// SaysMax is the most of the Marshal's message a frame carries, in
+// characters; the rest is read in the terminal chat.
+const SaysMax = 1200
+
+// marshalSays is m in its wire form: every secret the detectors know
+// redacted (again: the collector did it once), then capped.
+func marshalSays(m vm.MarshalSays) MarshalSays {
+	text := strings.TrimSpace(redaction.RedactAll(m.Text))
+	out := MarshalSays{At: stamp(m.At), Answered: m.Answered, Question: endsWithQuestion(text)}
+	if r := []rune(text); len(r) > SaysMax {
+		text, out.Truncated = strings.TrimSpace(string(r[:SaysMax]))+"…", true
+	}
+	out.Text = text
+	return out
+}
+
+// endsWithQuestion reports whether the text's last line asks something.
+func endsWithQuestion(text string) bool {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	last := strings.TrimRight(strings.TrimSpace(lines[len(lines)-1]), "*_`) ")
+	return strings.HasSuffix(last, "?")
+}
+
+// System is the computer and the install; figures are -1 when unknown.
+type System struct {
+	CPUPct          int    `json:"cpuPct"`
+	MemPct          int    `json:"memPct"`
+	DiskPct         int    `json:"diskPct"`
+	TempC           int    `json:"tempC"`
+	LowDisk         bool   `json:"lowDisk"`
+	ThermalGuard    bool   `json:"thermalGuard"`
+	ThermalCap      int    `json:"thermalCap"`
+	Notice          string `json:"notice"`
+	UpdateAvailable string `json:"updateAvailable"`
+	MCPFailed       bool   `json:"mcpFailed"`
 }
 
 type TopBar struct {
@@ -141,6 +195,27 @@ type Worker struct {
 	SignedIn  bool   `json:"signedIn"`
 	Installed bool   `json:"installed"`
 	Reason    string `json:"reason"`
+	// Limits are every usage window the provider's CLI reports; LeftPct is
+	// only the Board's summary of them.
+	Limits   []LimitRow `json:"limits"`
+	Dispatch Dispatch   `json:"dispatch"`
+}
+
+// LimitRow is one usage window: PercentLeft -1 is "not reported by the
+// CLI"; ResetsAt and ObservedAt are RFC 3339 ("" when unknown).
+type LimitRow struct {
+	Family      string `json:"family"`
+	Window      string `json:"window"`
+	PercentLeft int    `json:"percentLeft"`
+	ResetsAt    string `json:"resetsAt"`
+	ObservedAt  string `json:"observedAt"`
+	Source      string `json:"source"`
+}
+
+// Dispatch is whether the Marshal hands a provider work now, and why.
+type Dispatch struct {
+	State  string `json:"state"`
+	Reason string `json:"reason"`
 }
 
 type Inbox struct {
@@ -323,6 +398,10 @@ func FromBoard(b vm.Board) Frame {
 		Ready: Readiness{Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
 			TelemetryAsk: b.Ready.TelemetryAsk, Defaults: []Setting{}, Checked: stamp(b.Ready.Checked), Actions: keys(b.Ready.Actions)},
 		Keys: keys(b.Keys),
+		System: System{CPUPct: b.System.CPUPct, MemPct: b.System.MemPct, DiskPct: b.System.DiskPct, TempC: b.System.TempC,
+			LowDisk: b.System.LowDisk, ThermalGuard: b.System.ThermalGuard, ThermalCap: b.System.ThermalCap, Notice: b.System.Notice,
+			UpdateAvailable: b.System.UpdateAvailable, MCPFailed: b.System.MCPFailed},
+		MarshalSays: marshalSays(b.MarshalSays),
 	}
 	for _, s := range b.Plan.Stages {
 		f.Plan.Stages = append(f.Plan.Stages, Stage{Name: s.Name, State: s.State, Note: s.Note})
@@ -336,7 +415,13 @@ func FromBoard(b vm.Board) Frame {
 	}
 	for _, w := range b.Workers {
 		f.Workers = append(f.Workers, Worker{Provider: w.Provider, Glyph: w.Glyph, LeftPct: w.LeftPct, Tag: w.Tag, TagTone: string(w.TagTone),
-			Detail: w.Detail, SignedIn: w.SignedIn, Installed: w.Installed, Reason: w.Reason})
+			Detail: w.Detail, SignedIn: w.SignedIn, Installed: w.Installed, Reason: w.Reason, Limits: []LimitRow{},
+			Dispatch: Dispatch{State: w.Dispatch.State, Reason: w.Dispatch.Reason}})
+		last := &f.Workers[len(f.Workers)-1]
+		for _, l := range w.Limits {
+			last.Limits = append(last.Limits, LimitRow{Family: l.Family, Window: l.Window, PercentLeft: l.PercentLeft,
+				ResetsAt: stamp(l.ResetsAt), ObservedAt: stamp(l.ObservedAt), Source: l.Source})
+		}
 	}
 	for _, e := range b.Activity {
 		f.Activity = append(f.Activity, Event{At: stamp(e.At), Kind: e.Kind, Text: e.Text, Tone: string(e.Tone), Count: e.Count, Last: stamp(e.Last)})
