@@ -37,7 +37,7 @@ var sweepTree = map[string]string{
 	"mcp": "serve status stdio", "egm": "status install record", "a2a": "serve status", "events": "", "artifacts": "", "verify": "", "reconcile": "",
 	"memory": "status recall show list candidates promote tombstone audit remember write", "policy": "test", "legal": "audit export",
 	"setup": "status", "update": "check status install apply", "goal": "explain", "plan": "create show approve cancel handoff",
-	"architecture": "serve draft feedback receipt", "architecture receipt": "import",
+	"architecture": "serve draft feedback",
 	"exec": "start run status approve rollback handoff", "execution": "start run status approve rollback handoff",
 	"review": "start status evaluate attest", "verification": "start status evaluate attest",
 	"learning":     "commit show item history search context invalidate trust fingerprints playbooks replays benchmarks export restore",

@@ -69,7 +69,6 @@ goal explain REQUEST
 architecture serve [--proposal FILE] [--layout FILE] [--provider PROVIDER] [--no-open]
 architecture draft [--request REQUEST] [--output FILE] [--provider PROVIDER]
 architecture feedback [--provider PROVIDER]
-architecture receipt import FILE
 plan create SESSION-ID --file INPUT.json
 plan show PROJECT-ID
 plan approve PROJECT-ID

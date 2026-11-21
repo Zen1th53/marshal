@@ -105,7 +105,6 @@ Commands:
   auth token <create|list|revoke>
   gc worktrees | artifacts
   state backup | verify-backup | restore
-  architecture receipt import FILE
   daemon
   version
 `
@@ -241,11 +240,7 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	case "state":
 		err = c.state(ctx, args[1:])
 	case "architecture":
-		if len(args) > 1 && args[1] == "receipt" {
-			err = c.architectureReceipt(ctx, args[1:])
-		} else {
-			err = c.architecture(ctx, args[1:])
-		}
+		err = c.architecture(ctx, args[1:])
 	case "egm":
 		err = c.egm(ctx, args[1:])
 	case "memory":
