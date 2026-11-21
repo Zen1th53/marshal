@@ -10,10 +10,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
-// The Board home is drawn by Board v2 by default; MARSHAL_BOARD=classic
-// keeps the classic first-use card.
+// The Board home is drawn by Board v2.
 func TestBoardV2IsTheDefaultHome(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := emptyBoardWorkspace(t)
 	lines, row, _ := w.frameLinesFull(132, 31)
 	if len(lines) != 31 || row != 31 {
@@ -28,27 +26,38 @@ func TestBoardV2IsTheDefaultHome(t *testing.T) {
 	if strings.Contains(text, "Tell the Marshal what to build") {
 		t.Fatalf("classic first-use card on the v2 home:\n%s", text)
 	}
-
-	t.Setenv("MARSHAL_BOARD", "classic")
-	lines, _, _ = w.frameLinesFull(132, 31)
-	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "Tell the Marshal what to build") {
-		t.Fatalf("MARSHAL_BOARD=classic did not keep the classic Board:\n%s", text)
-	}
 }
 
-// Below 80 columns the classic narrow Board stays.
-func TestBoardV2NarrowKeepsClassic(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
+// Below 80 columns (or 12 rows) one line says the window is too small and
+// nothing else is drawn.
+func TestBoardTooSmallIsOneLine(t *testing.T) {
 	w := emptyBoardWorkspace(t)
-	lines, _, _ := w.frameLinesFull(79, 24)
-	if text := StripANSI(strings.Join(lines, "\n")); strings.Contains(text, " NOW ") {
-		t.Fatalf("v2 drawn below 80 columns:\n%s", text)
+	for _, size := range [][2]int{{79, 24}, {120, 11}, {40, 10}} {
+		lines, _, _ := w.frameLinesFull(size[0], size[1])
+		if len(lines) != size[1] {
+			t.Fatalf("%v: %d lines", size, len(lines))
+		}
+		text := StripANSI(strings.Join(lines, "\n"))
+		if strings.Contains(text, " NOW ") || strings.Contains(text, "INBOX") {
+			t.Fatalf("%v: a pane drawn when too small:\n%s", size, text)
+		}
+		if !strings.Contains(text, "make the window") {
+			t.Fatalf("%v: no too-small line:\n%s", size, text)
+		}
+		var drawn int
+		for _, l := range lines {
+			if strings.TrimSpace(StripANSI(l)) != "" {
+				drawn++
+			}
+		}
+		if drawn != 1 {
+			t.Fatalf("%v: %d lines drawn:\n%s", size, drawn, text)
+		}
 	}
 }
 
 // The composer line takes the last row.
 func TestBoardV2StatusOnLastRow(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := emptyBoardWorkspace(t)
 	w.composer.SetText("hello")
 	lines, _, _ := w.frameLinesFull(120, 30)

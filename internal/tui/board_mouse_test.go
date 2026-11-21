@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
@@ -56,7 +55,6 @@ func TestBoardMouseActionHit(t *testing.T) {
 
 func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
 	if !click(w, row, col) {
@@ -87,7 +85,6 @@ func TestBoardMouseSelectsAndInspectsTasks(t *testing.T) {
 
 func TestBoardMouseFocusesLanes(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	oldIn := boardInTmux
 	defer func() { boardInTmux = oldIn }()
@@ -108,7 +105,6 @@ func TestBoardMouseFocusesLanes(t *testing.T) {
 
 func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	for _, c := range []struct {
 		chip string
@@ -158,7 +154,6 @@ func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
 
 func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	pending := func() int { w.permissions.mu.Lock(); defer w.permissions.mu.Unlock(); return len(w.permissions.inbox) }
 	row, col := cellOf(t, w, 120, 40, "[d] deny", 0)
@@ -200,7 +195,6 @@ func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
 
 func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.permissions.mu.Lock()
 	w.permissions.inbox = []permission.Request{{Kind: "unheard-of", TaskID: "T-023", Object: "release push", Scope: "one run", Reason: "push to main", Who: "Marshal"}}
@@ -217,7 +211,6 @@ func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
 
 func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
 	for _, ev := range []KeyEvent{
@@ -242,7 +235,6 @@ func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T
 // parser and key loop the workspace runs.
 func TestBoardMouseThroughTheKeyLoop(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	row, col := cellOf(t, w, 120, 40, "T-018  ⣾", 0)
 	ev := ParseKey([]byte(fmt.Sprintf("\x1b[<0;%d;%dM", col, row)))
@@ -257,31 +249,6 @@ func TestBoardMouseThroughTheKeyLoop(t *testing.T) {
 	}
 	if w.composer.Text() != "" {
 		t.Fatalf("mouse bytes reached the composer: %q", w.composer.Text())
-	}
-}
-
-// A row the pane gives to "… N more" is not a lane: no region stays on it.
-func TestBoardLaneMoreRowIsNotClickable(t *testing.T) {
-	b := demoBoard(time.Now())
-	var hits []boardHit
-	v := boardVisual{board: b, now: time.Now(), theme: NewTheme(ThemeDefault, true, true), hits: &hits}
-	p := layout.Pane{ID: layout.Lanes, Rect: layout.Rect{X: 3, Y: 10, W: 90, H: 5}, Density: layout.Full}
-	lines := v.lanes(p)
-	if last := StripANSI(lines[len(lines)-1]); !strings.HasPrefix(last, "… ") {
-		t.Fatalf("no more row: %q", last)
-	}
-	rows := map[int]string{}
-	for _, h := range hits {
-		rows[h.row] = h.id
-		if h.x0 != 3 || h.x1 != 93 {
-			t.Fatalf("lane region %+v is not the pane's width", h)
-		}
-	}
-	if _, ok := rows[10+len(lines)-1]; ok {
-		t.Fatalf("the more row is clickable: %v", rows)
-	}
-	if len(rows) != len(lines)-3 {
-		t.Fatalf("%d lane regions for %d lane rows", len(rows), len(lines)-3)
 	}
 }
 

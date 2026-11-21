@@ -155,7 +155,6 @@ func TestVitalsASCII(t *testing.T) {
 
 func TestVitalsOnEveryView(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	for _, c := range []struct {
 		name string
 		open func(w *Workspace)

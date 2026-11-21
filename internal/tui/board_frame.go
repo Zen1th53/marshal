@@ -58,42 +58,32 @@ func paintBoard(l layout.Layout, th *Theme, content func(layout.Pane) []string) 
 	return out
 }
 
-// paintBoardInspector uses the same inspector in the docked third column or
-// over the Board body, according to the layout's inspector pane. The caller
+// paintBoardInspector draws the inspector as a centred dialog over frame,
+// the painted Board v2 screen, whose body rows dim to plain text. The caller
 // owns v, so its navigation (all events, the walk along the delegation
 // chain) survives repaints.
 // hit, when not nil, records each button of the inspector's action row.
-func paintBoardInspector(l layout.Layout, th *Theme, v *inspector.View, content func(layout.Pane) []string, hit func(boardHit)) []string {
-	frame := paintBoard(l, th, func(p layout.Pane) []string {
-		if p.ID == layout.Inspector {
-			lines := dockedInspector(th, v, p.Rect.W, p.Rect.H)
-			inspectorHits(v, lines[min(1, len(lines)):], p.Rect.Y+1, p.Rect.X, p.Rect.W, p.Rect.Y+p.Rect.H, hit)
-			return lines
-		}
-		return content(p)
-	})
-	if _, docked := l.Pane(layout.Inspector); docked {
-		return frame
-	}
+func paintBoardInspector(frame []string, body layout.Rect, th *Theme, v *inspector.View, hit func(boardHit)) []string {
+	cols := body.W
 	// The prototype uses a solid, centred dialog. Give it an opaque panel
 	// background so no Board text can show through empty inspector cells.
-	w := min(86, l.Body.W-4)
+	w := min(86, body.W-4)
 	if w < 30 {
-		w = l.Body.W
+		w = body.W
 	}
-	lines := v.Render(w-4, l.Body.H-4)
-	h := min(l.Body.H, len(lines)+4)
-	r := layout.Rect{X: (l.Cols - w) / 2, Y: l.Body.Y + (l.Body.H-h)/2, W: w, H: h}
+	lines := v.Render(w-4, body.H-4)
+	h := min(body.H, len(lines)+4)
+	r := layout.Rect{X: (cols - w) / 2, Y: body.Y + (body.H-h)/2, W: w, H: h}
 	inspectorHits(v, lines, r.Y+2, r.X+2, r.W-4, r.Y+r.H-1, hit)
 	out := slices.Clone(frame)
-	for y := l.Body.Y; y < l.Body.Y+l.Body.H; y++ {
+	for y := body.Y; y < min(len(out), body.Y+body.H); y++ {
 		plain := StripANSI(out[y])
 		out[y] = th.Colorize(th.Dim, plain)
 		if y < r.Y || y >= r.Y+r.H {
 			continue
 		}
 		left := th.Colorize(th.Dim, cellRange(plain, 0, r.X))
-		right := th.Colorize(th.Dim, cellRange(plain, r.X+r.W, l.Cols))
+		right := th.Colorize(th.Dim, cellRange(plain, r.X+r.W, cols))
 		var middle string
 		if y == r.Y || y == r.Y+r.H-1 {
 			middle = "╭" + strings.Repeat("─", r.W-2) + "╮"
@@ -123,24 +113,10 @@ func paintBoardInspector(l layout.Layout, th *Theme, v *inspector.View, content 
 	return out
 }
 
-// dockedInspector is the inspector in its own column at ultrawide sizes,
-// titled like the Board's panes ("INSPECTOR T-023 · docked", mockup 07) with
-// its section headings in the pane title weight.
-func dockedInspector(th *Theme, v *inspector.View, w, h int) []string {
-	bv := boardVisual{theme: th}
-	if h <= 0 {
-		return nil
-	}
-	out := []string{bv.title("INSPECTOR", strings.TrimSpace(v.TaskID()+" · docked"), false, w)}
-	for _, line := range v.Render(w, h-1) {
-		if isInspectorSection(line) {
-			line = bv.bold(bv.fg("white", line))
-		} else {
-			line = styleActionRow(th, v, w, line)
-		}
-		out = append(out, line)
-	}
-	return out
+// v2Body is the body of a Board v2 frame of rows lines: below its top bar
+// and above its key bar and status row, where an inspector dims it.
+func v2Body(rows, cols int) layout.Rect {
+	return layout.Rect{X: 0, Y: 1, W: cols, H: max(0, rows-3)}
 }
 
 // styleActionRow draws a line of the inspector's action rows (laid out

@@ -38,7 +38,6 @@ func stalledWorkspace(t *testing.T, state marshal.TaskState) *Workspace {
 // inbox's stop entry, and Enter runs those same commands.
 func TestStalledRunOffersRetryAndResume(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	orig := boardStopHandle
 	t.Cleanup(func() { boardStopHandle = orig })
 	var ran []string

@@ -177,20 +177,3 @@ func TestNotePlanLimitsOncePerPlan(t *testing.T) {
 		t.Fatalf("noted a run under way: %+v", w.noteList())
 	}
 }
-
-// The plan gate shows the limit check under its buttons, amber when low.
-func TestPlanGateShowsLimits(t *testing.T) {
-	v := boardVisual{theme: NewTheme(ThemeNoColor, true, false), now: limitsNow}
-	g := ownerGate{key: "plan:R-1:P-1", kind: "plan", title: "drafted plan waits for your approval", summary: "18 tasks", reply: gateReplyPlan, details: '7'}
-	if lines := v.gateEntry(g, 0, 0, 120); len(lines) != 2 {
-		t.Fatalf("no limits: %d rows", len(lines))
-	}
-	g.limits, g.limitsLow = planLimitText(limitsQuotas(50), []string{"codex"}, 18, limitsNow)
-	lines := v.gateEntry(g, 0, 0, 120)
-	if len(lines) != 3 || !strings.HasPrefix(StripANSI(lines[2]), "    Limits: codex 19% weekly (resets 21 Nov), 45% 5h — this plan has 18 tasks") {
-		t.Fatalf("rows = %q", lines)
-	}
-	if n := VisibleLen(lines[2]); n != 120 {
-		t.Fatalf("limit row width %d", n)
-	}
-}

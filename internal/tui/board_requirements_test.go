@@ -224,7 +224,6 @@ func TestRequirementsAskCardTakesPrecedence(t *testing.T) {
 // "(to ask)", NEEDS YOU in the header, and no internal ids.
 func TestRequirementsRendersOnFirstUse(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := reqBoard(t)
 	defer w.Close()
 	text := frameText(w, 120, 40)
@@ -269,7 +268,6 @@ const realUserReqCard = `[` +
 // long source never squeezes the value down to "Prop…".
 func TestRequirementsValuesReadable(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	p, err := parseMarshalProposal(reqProposalLine(realUserReqCard))

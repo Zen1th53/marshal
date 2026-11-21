@@ -4,8 +4,6 @@ The Board is Marshal's control centre. From Marshal 0.3.5 it is drawn as **Board
 
 `marshal` opens it in a tmux workspace. The Marshal chat (the provider CLI the Marshal runs in) docks on the left when you open it; the Board stays on the right.
 
-The classic Board is still available for one release: see [Classic Board for one release](#classic-board-for-one-release).
-
 ---
 
 ## The top of every screen
@@ -325,7 +323,7 @@ A button works once and only for the card the page shows: if the card changed, o
 
 ## Narrow terminals and ASCII mode
 
-- **Width**: from 120 columns the Board draws two columns; below that the right column stacks under the left. Board v2 needs at least 80 columns on its own, or 60 beside the docked chat, and 12 rows. A smaller terminal gets the classic Board: beside the docked chat at 56 to 59 columns and 24 rows or more, its compact panes; otherwise the inbox and a notice.
+- **Width**: from 120 columns the Board draws two columns; below that the right column stacks under the left. The Board needs at least 80 columns on its own, or 60 beside the docked chat, and 12 rows. Beside the chat the Board gets half the window, and at least 60 columns while the chat can keep 40 (a window of 101 columns or more). In a smaller terminal or Board pane the Board draws one line instead: how many things wait for you, the size it needs and "make the window bigger" (or wider, or taller).
 - **Colour**: truecolor when the terminal says so (`COLORTERM=truecolor`), 256 colours otherwise. `marshal tui --theme monochrome` or `--theme high-contrast` chooses another theme; `NO_COLOR` or `marshal tui --no-color` turns colour off.
 - **ASCII**: a locale that is not UTF-8 (for example `LC_ALL=C`), or `--no-color`, draws the Board with ASCII boxes and glyphs:
 
@@ -335,18 +333,6 @@ A button works once and only for the card the page shows: if the card changed, o
 | ###############################..............   done 5 . active 6 . eta 45m       | | context ####......  41% . 82k of 200k      |
 +-----------------------------------------------------------------------------------+ +--------------------------------------------+
 ```
-
----
-
-## Classic Board for one release
-
-Set `MARSHAL_BOARD=classic` when you start Marshal to keep the classic Board for this release:
-
-```bash
-MARSHAL_BOARD=classic marshal
-```
-
-The control centre keeps running in its own tmux session, so if it is already running, type `/quit` there first and then start it again with the variable set. Start it without the variable to return to Board v2. The classic Board will be removed in a later release.
 
 ---
 

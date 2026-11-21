@@ -16,8 +16,7 @@ import (
 // as APC ("Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA") to learn whether the terminal
 // draws images, and tmux made that the chat pane's title. Marshal owns this
 // pane's title: it turns allow-set-title off for the pane, so nothing the CLI
-// prints renames it, and sets the title itself (the v2 MARSHAL CHAT strip,
-// or the classic title under MARSHAL_BOARD=classic).
+// prints renames it, and sets the title itself (the v2 MARSHAL CHAT strip).
 type chatPaneTitle struct {
 	pane    string
 	title   string

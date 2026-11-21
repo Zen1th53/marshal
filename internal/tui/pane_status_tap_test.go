@@ -115,7 +115,6 @@ func TestPaneTapRedactsTheMessage(t *testing.T) {
 // Board while an unchanged one does not.
 func TestBoardLanesShowReportedWorkerStatus(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, src := boardWorkspace(t)
 	select {
 	case <-w.repaint:

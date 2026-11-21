@@ -4,13 +4,10 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/redaction"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/tui/board/model"
@@ -19,16 +16,12 @@ import (
 // boardVisual paints the approved Board prototype from the read model. It owns
 // presentation only; decisions and events remain with their existing owners.
 type boardVisual struct {
-	tails                       func(string) []string
-	tailWant                    int
-	board                       model.Board
-	now                         time.Time
-	theme                       *Theme
-	frame                       anim.Frame
-	selectedTask, selectedInbox string
-	gateInput                   string
-	focus                       layout.PaneID
-	health                      map[string]string
+	board  model.Board
+	now    time.Time
+	theme  *Theme
+	frame  anim.Frame
+	focus  layout.PaneID
+	health map[string]string
 	// vitals is the data the top-of-every-view vitals row paints.
 	vitals vitalsData
 	// telemetry is the help's footer line saying whether anonymous
@@ -56,8 +49,7 @@ type boardVisual struct {
 	hints []string
 	// inboxPrompt replaces the selected inbox item's action line while a
 	// confirmation is in progress or the item is inspected.
-	inboxPrompt  string
-	selectedLane string
+	inboxPrompt string
 	// host is the host watcher's latest state; nil leaves the header chip,
 	// the host notice and the host key out.
 	host *hostSnapshot
@@ -110,9 +102,7 @@ type boardVisual struct {
 	milestone *planningMark
 	// project is the project's name, for the first-use header.
 	project string
-	// chips is each provider's readiness for the first-use card; armed is
-	// the provider whose verify waits for Enter.
-	chips []providerChip
+	// armed is the provider whose verify waits for Enter.
 	armed string
 	// notes is the background messages Activity interleaves, newest
 	// first (board_notes.go).
@@ -156,9 +146,6 @@ type boardVisual struct {
 	marshalLeads bool
 	// docked is set while the Marshal chat is docked beside the Board.
 	docked bool
-	// echo is what the operator said to the Marshal from the composer,
-	// newest first, with where each message is.
-	echo []sayEcho
 	// launchProgress is the completed startup checks line shown under the
 	// opening wordmark while the launch check still runs (empty before any
 	// check finishes).
@@ -255,43 +242,12 @@ func (v boardVisual) bold(s string) string {
 	return "\x1b[1m" + s + "\x1b[0m"
 }
 
-// pulse draws a whole row bold, carrying the weight across the colour
-// resets inside it.
-func (v boardVisual) pulse(s string) string {
-	if v.theme == nil || v.theme.Mode == ThemeNoColor {
-		return s
-	}
-	return "\x1b[1m" + strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m\x1b[1m") + "\x1b[0m"
-}
-
 // taskIDWidth is the ID column's least width; maxTaskIDWidth is the longest
 // id shown whole before it is cut.
 const (
 	taskIDWidth    = 7
 	maxTaskIDWidth = 12
 )
-
-// truncateLeft shortens plain text to width columns by dropping its start,
-// so the end, where a path's file name is, stays readable.
-func truncateLeft(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if VisibleLen(s) <= width {
-		return s
-	}
-	if width == 1 {
-		return "…"
-	}
-	runes := []rune(s)
-	used := 1
-	i := len(runes)
-	for i > 0 && used+RuneWidth(runes[i-1]) <= width {
-		i--
-		used += RuneWidth(runes[i])
-	}
-	return "…" + string(runes[i:])
-}
 
 func (v boardVisual) unicode() bool { return v.theme == nil || v.theme.Unicode }
 func (v boardVisual) glyph(st model.TaskState) string {
@@ -419,14 +375,6 @@ func (v boardVisual) renderLines(p layout.Pane) []string {
 			v.hit(boardHit{row: p.Rect.Y, x0: p.Rect.X + sp.x0, x1: p.Rect.X + min(sp.x1, p.Rect.W), kind: hitAction, id: sp.id})
 		}
 		return []string{line}
-	case layout.Tasks:
-		return v.tasks(p)
-	case layout.Lanes:
-		return v.lanes(p)
-	case layout.Inbox:
-		return v.inbox(p)
-	case layout.Activity:
-		return v.activity(p)
 	case layout.Notice:
 		return []string{PadCell("Board needs more space", p.Rect.W)}
 	}
@@ -467,13 +415,6 @@ func spansOf(parts []headerPart, sep string, start int) []headerSpan {
 		x += n
 	}
 	return out
-}
-
-// header paints the run's head line, giving way by headerSteps when it is
-// too narrow.
-func (v boardVisual) header(w int) string {
-	line, _ := v.headerLine(w)
-	return line
 }
 
 // headerLine is header with where each part landed, for the mouse.
@@ -589,11 +530,6 @@ func fitHeaderPartsBy(parts []headerPart, w int, sep string, steps []string) []h
 		}
 	}
 	return parts
-}
-
-func (v boardVisual) footer(w int) string {
-	line, _ := v.footerSpans(w)
-	return line
 }
 
 // footerSpan is where one hint of the footer landed, for the mouse: the
@@ -720,625 +656,6 @@ func (v boardVisual) counts() (running, parked, merged int) {
 	}
 	return
 }
-func (v boardVisual) tasks(p layout.Pane) []string {
-	if p.Density == layout.Brief {
-		return v.tasksBrief(p)
-	}
-	w, h := p.Rect.W, p.Rect.H
-	_, park, merged := v.counts()
-	run := v.running()
-	if v.board.Run.Done > 0 {
-		merged = v.board.Run.Done
-	}
-	summary := fmt.Sprintf("%s · %d running · %d parked · %d merged", count(v.board.Run.Total, "task", "tasks"), run, park, merged)
-	out := []string{v.title("TASKS", summary, v.focus == layout.Tasks, w)}
-	if h == 1 {
-		return out
-	}
-	compact := w < 74
-	// The ID column fits the longest id, up to maxTaskIDWidth, so an id is
-	// shown whole; the scope column gives up the room.
-	idW := taskIDWidth
-	for _, t := range v.board.Tasks {
-		idW = max(idW, min(VisibleLen(t.ID), maxTaskIDWidth)+2)
-	}
-	if compact {
-		// A narrow pane splits what the fixed columns leave between the
-		// id and the scope, so neither is cut to a stub.
-		idW = min(idW, max(taskIDWidth, (w-37)/2+1))
-	}
-	// The sent back column is there only once a task was sent back; until
-	// then the scope takes its cells.
-	backW := 0
-	for _, t := range v.board.Tasks {
-		if t.Returns > 0 {
-			backW = 12
-			break
-		}
-	}
-	scopeW := max(1, w-44-backW-(idW-taskIDWidth))
-	if compact {
-		scopeW = max(1, w-35-backW-(idW-taskIDWidth))
-	}
-	backHead := ""
-	if backW > 0 {
-		backHead = PadCell("sent back", backW)
-	}
-	var head string
-	if compact {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + backHead
-	} else {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + backHead
-	}
-	out = append(out, v.fg("dim", PadCell(head, w)))
-	visible := max(0, h-2)
-	if len(v.board.Tasks) > visible {
-		visible = max(0, visible-1)
-	}
-	start := 0
-	for i, t := range v.board.Tasks {
-		if t.ID == v.selectedTask && i >= visible {
-			start = i - visible + 1
-			break
-		}
-	}
-	start = min(start, max(0, len(v.board.Tasks)-visible))
-	for _, t := range v.board.Tasks[start:] {
-		if len(out) >= h || len(out)-2 >= visible {
-			break
-		}
-		mark := "  "
-		sel := t.ID == v.selectedTask
-		if sel {
-			mark = v.fg("accent", "▸") + " "
-			if !v.unicode() {
-				mark = "> "
-			}
-		}
-		// A merged task reads as done: every cell dim but its state.
-		done := t.State == model.TaskMerged
-		dim := func(s string) string {
-			if done {
-				return v.fg("dim", s)
-			}
-			return s
-		}
-		state := v.fg(boardStateColor(t.State), v.glyph(t.State)+" "+string(t.State))
-		if v.board.Stalled(t) {
-			// Nothing is behind the task: drawn still, never spinning.
-			g := "◌"
-			if !v.unicode() {
-				g = "!"
-			}
-			state = v.fg("waiting", g+" stalled")
-		}
-		worker := t.Worker
-		if worker == "" {
-			worker = "—"
-		}
-		if !v.unicode() && worker == "—" {
-			worker = "-"
-		}
-		worker = v.mark(providerOf(worker), "") + worker
-		// A long scope keeps its end, where the file name is.
-		scope := truncateLeft(cleanBoard(strings.Join(t.Scope, ", ")), scopeW)
-		elapsed := "—"
-		if d, ok := t.Elapsed(v.now); ok {
-			elapsed = fmt.Sprintf("%02d:%02d", int(d.Minutes()), int(d.Seconds())%60)
-		}
-		rw := ""
-		if t.Returns > 0 {
-			times := "×"
-			if !v.unicode() {
-				times = "x"
-			}
-			rw = fmt.Sprintf("sent back %d%s", t.Returns, times)
-			if t.State == model.TaskRework {
-				// A task sent back for rework shows how many returns it used.
-				rw = v.fg("waiting", rw)
-			}
-		}
-		var line string
-		id := dim(PadCell(Truncate(t.ID, idW-1), idW))
-		if compact {
-			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(rw, backW))
-		} else {
-			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(rw, backW))
-		}
-		line = PadCell(line, w)
-		if v.frame.Pulsing(t.ID) {
-			// The task's state changed under Pulse ago.
-			line = v.pulse(line)
-		}
-		if sel {
-			line = v.bg("sel", line)
-		}
-		v.hit(boardHit{row: p.Rect.Y + len(out), x0: p.Rect.X, x1: p.Rect.X + w, kind: hitTask, id: t.ID})
-		out = append(out, line)
-	}
-	if len(v.board.Tasks) > visible && len(out) < h {
-		out = append(out, PadCell(fmt.Sprintf("… %d more", len(v.board.Tasks)-visible), w))
-	}
-	return out
-}
-
-// tasksBrief is the tasks pane of a narrow Home (mockups 05 and 06): the
-// heading counts tasks by state glyph, and each row is the id, the state
-// glyph, the worker when there is room and the scope without "internal/".
-func (v boardVisual) tasksBrief(p layout.Pane) []string {
-	w, h := p.Rect.W, p.Rect.H
-	type count struct {
-		st model.TaskState
-		n  int
-	}
-	var counts []count
-	for _, st := range []model.TaskState{model.TaskWorking, model.TaskParked, model.TaskRework, "verifying", model.TaskMerged, model.TaskQueued} {
-		n := 0
-		for _, t := range v.board.Tasks {
-			if t.State == st || (st == model.TaskWorking && t.State == model.TaskReview) {
-				n++
-			}
-		}
-		if n > 0 {
-			counts = append(counts, count{st, n})
-		}
-	}
-	var sum []string
-	if v.board.Run.Total > 0 {
-		sum = append(sum, fmt.Sprint(v.board.Run.Total))
-	}
-	for _, c := range counts {
-		sum = append(sum, fmt.Sprint(c.n)+v.fg(boardStateColor(c.st), v.glyph(c.st)))
-	}
-	out := []string{v.title("TASKS", strings.Join(sum, v.fg("dim", " · ")), v.focus == layout.Tasks, w)}
-	if h == 1 {
-		return out
-	}
-	visible := h - 1
-	if len(v.board.Tasks) > visible {
-		visible--
-	}
-	start := 0
-	for i, t := range v.board.Tasks {
-		if t.ID == v.selectedTask && i >= visible {
-			start = i - visible + 1
-			break
-		}
-	}
-	start = min(start, max(0, len(v.board.Tasks)-visible))
-	idW := taskIDWidth
-	for _, t := range v.board.Tasks {
-		idW = max(idW, min(VisibleLen(t.ID), maxTaskIDWidth)+1)
-	}
-	withWorker := w >= 90
-	for _, t := range v.board.Tasks[start:] {
-		if len(out)-1 >= visible {
-			break
-		}
-		sel := t.ID == v.selectedTask
-		mark := "  "
-		if sel {
-			mark = v.fg("accent", "▸") + " "
-			if !v.unicode() {
-				mark = "> "
-			}
-		}
-		line := mark + v.fg("accent", PadCell(Truncate(t.ID, idW-1), idW)) + v.fg(boardStateColor(t.State), v.glyph(t.State)) + " "
-		if withWorker {
-			worker := t.Worker
-			if worker == "" {
-				worker = "—"
-			}
-			line += PadCell(v.mark(providerOf(worker), "")+worker, 13)
-		}
-		scope := strings.TrimPrefix(cleanBoard(strings.Join(t.Scope, ", ")), "internal/")
-		line += v.fg("dim", truncateLeft(scope, max(1, w-VisibleLen(line))))
-		line = PadCell(line, w)
-		if sel {
-			line = v.bg("sel", line)
-		}
-		v.hit(boardHit{row: p.Rect.Y + len(out), x0: p.Rect.X, x1: p.Rect.X + w, kind: hitTask, id: t.ID})
-		out = append(out, line)
-	}
-	if n := len(v.board.Tasks) - (len(out) - 1); n > 0 && len(out) < h {
-		out = append(out, PadCell(v.fg("dim", fmt.Sprintf("  … %d more  (⏎ inspect)", n)), w))
-	}
-	return out
-}
-
-func (v boardVisual) lanes(p layout.Pane) []string {
-	w, h := p.Rect.W, p.Rect.H
-	by := map[string][2]int{}
-	for _, l := range v.board.Lanes {
-		pr := l.Provider
-		if pr == "" {
-			pr = strings.Split(l.Worker, "-")[0]
-		}
-		c := by[pr]
-		if l.State != model.LaneIdle && l.State != model.LaneLost {
-			c[0]++
-		}
-		c[1]++
-		by[pr] = c
-	}
-	names := []string{"codex", "claude", "agy", "opencode"}
-	var parts []string
-	for _, n := range names {
-		if c, ok := by[n]; ok {
-			parts = append(parts, fmt.Sprintf("%s%s %d/%d", v.mark(n, ""), n, c[0], c[1]))
-		}
-	}
-	busy := v.running()
-	summary := "idle"
-	if busy > 0 {
-		summary = fmt.Sprintf("%d running", busy)
-	} else if _, quiet := v.noWorkerFor(); quiet {
-		summary = "no worker is running"
-	}
-	if len(parts) > 0 {
-		summary += " · " + strings.Join(parts, " · ")
-	}
-	if busy == 0 && v.board.Run.State == marshal.Verifying {
-		// No worker runs while the merged result is checked again: the
-		// lanes say what the run waits for, where a narrow header has no
-		// room for it.
-		if phase, word, _ := v.runWord(); phase == phaseFinalCheck {
-			summary += " · " + word
-		}
-	}
-	out := []string{v.title("LANES", summary, v.focus == layout.Lanes, w)}
-	if h == 1 && p.Density == layout.Strip && len(v.board.Lanes) > 0 {
-		return []string{v.laneChips(p)}
-	}
-	if h == 1 {
-		return out
-	}
-	out = append(out, v.fg("dim", PadCell("  worker       task    elapsed tokens        last action", w)))
-	bars := "▁▂▃▄▅▆▇█"
-	for _, l := range v.board.Lanes {
-		if len(out) >= h {
-			break
-		}
-		st := model.TaskState(l.State)
-		for _, task := range v.board.Tasks {
-			if task.ID == l.TaskID && task.State == "verifying" {
-				st = "verifying"
-				break
-			}
-		}
-		g := v.glyph(st)
-		if l.State == model.LaneIdle {
-			g = "○"
-			if !v.unicode() {
-				g = "o"
-			}
-		}
-		sp := l.Spark()
-		var spark string
-		for _, n := range sp {
-			if v.unicode() {
-				spark += string([]rune(bars)[n])
-			} else {
-				spark += string("._-=+*##"[n])
-			}
-		}
-		el := "—"
-		if !l.Started.IsZero() && l.State != model.LaneParked {
-			d := v.now.Sub(l.Started)
-			el = fmt.Sprintf("%02d:%02d", int(d.Minutes()), int(d.Seconds())%60)
-		}
-		task := l.TaskID
-		if l.State == model.LaneIdle {
-			task = "—"
-		}
-		act := strings.TrimSpace(strings.ReplaceAll(redaction.RedactContent(l.Last, nil), "\n", " "))
-		if l.Heartbeat {
-			act = v.laneBeat(l, act)
-		}
-		act = strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) {
-				return ' '
-			}
-			return r
-		}, act)
-		worker := PadCell(v.mark(providerOf(l.Worker), "")+l.Worker, 13)
-		if l.State == model.LaneWorking {
-			// A lane at work stands out by name, as in the prototype.
-			worker = v.bold(v.fg("white", PadCell(v.mark(providerOf(l.Worker), "")+l.Worker, 13)))
-		}
-		tok := fmt.Sprintf("%dk", l.Tokens/1000)
-		line := v.fg(boardStateColor(st), g) + " " + worker + v.fg("accent", PadCell(task, 8)) + v.fg("dim", PadCell(el, 8)) + v.fg(boardStateColor(st), spark) + " " + v.fg("dim", strings.Repeat(" ", max(0, 4-VisibleLen(tok)))+tok) + "  " + v.fg(laneActColor(l), act)
-		line = PadCell(line, w)
-		if v.selectedLane != "" && l.Worker == v.selectedLane {
-			line = v.bg("sel", line)
-		}
-		v.hit(boardHit{row: p.Rect.Y + len(out), x0: p.Rect.X, x1: p.Rect.X + w, kind: hitLane, id: l.Worker})
-		out = append(out, line)
-	}
-	if len(v.board.Lanes) > len(out)-2 && len(out) == h {
-		out[h-1] = PadCell(fmt.Sprintf("… %d more", len(v.board.Lanes)-h+3), w)
-		v.unhit(p.Rect.Y + h - 1)
-	}
-	if p.Density != layout.Strip && v.tails != nil {
-		// Share the rows left after lane rows between captured running lanes.
-		// Allocate one line to each lane first, then a second and third line
-		// in rounds so a short pane does not spend its tail space on one lane.
-		tails := make([][]string, len(v.board.Lanes))
-		for i := range v.board.Lanes {
-			tails[i] = v.tails(v.board.Lanes[i].Pane)
-		}
-		// Rebuild the lane section in order, placing each tail beneath its row.
-		laneRows := make([]string, 0, len(v.board.Lanes))
-		// Lane rows were appended after the two heading rows above.
-		laneRows = append(laneRows, out[2:]...)
-		out = out[:2]
-		available := max(0, h-len(out))
-		shown := min(len(laneRows), available)
-		minTails := func(n int) int {
-			count := 0
-			for _, tail := range tails[:n] {
-				if len(tail) > 0 {
-					count++
-				}
-			}
-			return count
-		}
-		// Keep a lane and one tail row together. If they cannot all fit,
-		// reduce the number of lanes shown before giving any lane zero lines.
-		for shown > 0 && shown+minTails(shown) > available {
-			shown--
-		}
-		allocated := make([]int, len(tails))
-		remaining := available - shown
-		for i := 0; i < shown; i++ {
-			if len(tails[i]) > 0 {
-				allocated[i] = 1
-				remaining--
-			}
-		}
-		for row := 1; row < laneTailRows && remaining > 0; row++ {
-			for i := 0; i < shown && remaining > 0; i++ {
-				if len(tails[i]) > row {
-					allocated[i]++
-					remaining--
-				}
-			}
-		}
-		for i := 0; i < shown; i++ {
-			out = append(out, laneRows[i])
-			for j := 0; j < allocated[i] && len(out) < h; j++ {
-				out = append(out, PadCell("  "+redaction.RedactContent(tails[i][j], nil), w))
-			}
-		}
-	}
-	return out
-}
-
-// laneActColor is the last-action colour: a worker that reported itself
-// blocked or failing over OSC 7501 says so in the waiting or failed colour,
-// next to the word, never by colour alone.
-func laneActColor(l model.Lane) string {
-	if l.State == model.LaneLost {
-		return "failed"
-	}
-	switch l.Status {
-	case "blocked":
-		return "waiting"
-	case "error":
-		return "failed"
-	}
-	return "dim"
-}
-
-func (v boardVisual) inbox(p layout.Pane) []string {
-	w, h := p.Rect.W, p.Rect.H
-	summary := fmt.Sprintf("%d waiting · nothing blocks", len(v.board.Inbox))
-	if len(v.board.Inbox) == 0 {
-		summary = "empty · no decision waiting"
-	}
-	stop, stopped := v.stopNotice()
-	// The topmost open card names the summary, as they render: the "what
-	// next?" card over ask over requirements over change.
-	if v.change != nil && !stopped {
-		summary = "the Marshal paused the affected tasks"
-		if m := len(v.board.Inbox); m > 0 {
-			summary += fmt.Sprintf(" · %d more waiting", m)
-		}
-	}
-	if v.req != nil && !stopped {
-		summary = "the Marshal filled the requirements · you confirm or edit"
-		if m := len(v.board.Inbox); m > 0 {
-			summary += fmt.Sprintf(" · %d more waiting", m)
-		}
-	}
-	if v.ask != nil && !stopped {
-		summary = "the Marshal waits for your answer"
-		if m := len(v.board.Inbox); m > 0 {
-			summary += fmt.Sprintf(" · %d more waiting", m)
-		}
-	}
-	if v.next != nil && !stopped {
-		summary = "this run is done"
-		if m := len(v.board.Inbox); m > 0 {
-			summary += fmt.Sprintf(" · %d waiting", m)
-		}
-	}
-	if n := waitingGates(v.gates); n > 0 && !stopped {
-		summary = "the Marshal waits for your reply"
-		if m := len(v.board.Inbox); m > 0 {
-			summary += fmt.Sprintf(" · %d more waiting", m)
-		}
-	}
-	if v.guard != nil && waitingGates(v.gates) == 0 && !stopped {
-		summary = "project files changed outside a run"
-		if v.guard.byMarshal {
-			summary = "the Marshal changed project files"
-		}
-		if m := len(v.board.Inbox); m > 0 {
-			summary += fmt.Sprintf(" · %d more waiting", m)
-		}
-	}
-	if stopped {
-		summary = "the run needs you"
-		if n := len(v.board.Inbox); n > 0 {
-			summary += fmt.Sprintf(" · %d waiting", n)
-		}
-	}
-	out := []string{v.title("INBOX", summary, v.focus == layout.Inbox, w)}
-	// The "what next?" card leads the inbox when a run has just closed: the
-	// run's report is in the chat, and this card states its counts and the
-	// one key for the next goal (board_next.go).
-	if v.next != nil && len(out) < h {
-		lines := v.nextEntry(*v.next, p.Rect.X, p.Rect.Y+len(out), w)
-		if len(out)+len(lines) > h {
-			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	if stopped && h > 1 {
-		// The run's stop leads the inbox: it is what holds everything
-		// else up. The all-providers-at-limit pause shows its own card
-		// (board_quota.go); any other stop types the command to run.
-		if v.quotaCardActive() {
-			out = append(out, v.quotaEntry(p.Rect.X, p.Rect.Y+len(out), w)...)
-		} else {
-			out = append(out, v.stopEntry(stop, p.Rect.X, p.Rect.Y+len(out), w)...)
-		}
-		out = out[:min(len(out), h)]
-	}
-	// Project files changed outside a run come next: the Marshal plans
-	// and workers implement (board_guard.go).
-	if v.guard != nil && len(out) < h {
-		lines := v.guardEntry(p.Rect.X, p.Rect.Y+len(out), w)
-		if len(out)+len(lines) > h {
-			v.unhit(p.Rect.Y + len(out) + 1)
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	// A question the Marshal asked the owner is the first inbox entry: its
-	// keys come first too, so it sits on top. One key or one click sends the
-	// chosen answer to the chat (board_ask.go).
-	if v.ask != nil && len(out) < h {
-		lines := v.askEntry(*v.ask, p.Rect.X, p.Rect.Y+len(out), w)
-		if len(out)+len(lines) > h {
-			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	// The requirements card comes next: the a–h lines the Marshal filled,
-	// Enter to confirm, e to edit (board_requirements.go).
-	if v.req != nil && len(out) < h {
-		lines := v.requirementsEntry(*v.req, p.Rect.X, p.Rect.Y+len(out), w, h-len(out))
-		for len(out)+len(lines) > h && len(lines) > 0 {
-			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
-			lines = lines[:len(lines)-1]
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	// The owner's open mid-run change comes after the ask and requirements
-	// cards: apply it, or keep the current goal (board_change.go).
-	if v.change != nil && len(out) < h {
-		lines := v.changeEntry(*v.change, p.Rect.X, p.Rect.Y+len(out), w)
-		if len(out)+len(lines) > h {
-			v.unhit(p.Rect.Y + len(out) + len(lines) - 1)
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	// What the Marshal waits for the owner to say comes next: nothing
-	// moves until the owner answers it (board_gates.go).
-	for _, g := range v.gates {
-		if len(out) >= h {
-			break
-		}
-		lines := v.gateEntry(g, p.Rect.X, p.Rect.Y+len(out), w)
-		// Only the first two rows carry buttons; a cut limit line takes none.
-		if len(out)+min(len(lines), 2) > h {
-			v.unhit(p.Rect.Y + len(out) + 1)
-		}
-		out = append(out, lines...)
-		out = out[:min(len(out), h)]
-	}
-	// The selected decision sits on the selection background, its action
-	// line with it, as the prototype draws it.
-	selFrom, selTo := -1, -1
-	for _, it := range v.board.Inbox {
-		if selFrom >= 0 && selTo < 0 {
-			selTo = len(out)
-		}
-		if len(out) >= h {
-			break
-		}
-		r := it.Request
-		hard := it.Gate == model.GateTyped
-		kind := string(it.Kind)
-		if hard {
-			kind = "hard gate"
-		}
-		color := "needs"
-		if hard {
-			color = "failed"
-		}
-		join := " → "
-		if hard {
-			join = " · "
-		}
-		// The flag is the mockups' ⚑: orange for a decision, red for a
-		// hard gate, "!" in the ASCII theme.
-		flag := "⚑ "
-		if !v.unicode() {
-			flag = "! "
-		}
-		line := v.fg(color, flag) + v.fg(color, r.TaskID) + v.fg("dim", " "+kind+join) + v.bold(v.fg("white", cleanBoard(r.Object))) + "  " + v.fg("dim", cleanBoard(r.Reason))
-		key := it.Request.Key()
-		v.hit(boardHit{row: p.Rect.Y + len(out), x0: p.Rect.X, x1: p.Rect.X + w, kind: hitInbox, id: key})
-		if key == v.selectedInbox {
-			selFrom = len(out)
-		}
-		out = append(out, PadCell(line, w))
-		if key == v.selectedInbox && v.inboxPrompt != "" {
-			if len(out) < h {
-				out = append(out, PadCell("    "+v.fg("waiting", cleanBoard(v.inboxPrompt)), w))
-			}
-			continue
-		}
-		// buttons lays out an action line and records each button, a
-		// region whose click opens that action's confirmation.
-		buttons := func(parts ...inboxButton) string {
-			s, x := "    ", 4
-			for _, b := range parts {
-				s += b.text
-				if b.action != 0 {
-					v.hit(boardHit{row: p.Rect.Y + len(out), x0: p.Rect.X + x, x1: p.Rect.X + min(w, x+VisibleLen(b.text)), kind: hitInbox, id: key, action: b.action})
-				}
-				x += VisibleLen(b.text)
-			}
-			return s
-		}
-		if hard {
-			if len(out) < h {
-				typed := v.gateInput
-				if typed == "" {
-					typed = it.Canonical
-				}
-				out = append(out, PadCell(buttons(inboxButton{v.fg("dim", "confirm › ") + v.bold(typed), 'a'}, inboxButton{" ", 0}, inboxButton{v.bg("rule", "[d]") + " deny", 'd'}), w))
-			}
-		} else if key == v.selectedInbox && len(out) < h {
-			out = append(out, PadCell(buttons(inboxButton{v.bg("rule", "[a]") + " allow once", 'a'}, inboxButton{"  ", 0}, inboxButton{v.bg("rule", "[A]") + " allow for run", 'A'}, inboxButton{"  ", 0}, inboxButton{v.bg("rule", "[d]") + " deny", 'd'}, inboxButton{"  ", 0}, inboxButton{v.bg("rule", "[i]") + " inspect", 'i'}), w))
-		}
-	}
-	if selFrom >= 0 && selTo < 0 {
-		selTo = len(out)
-	}
-	for j := selFrom; selFrom >= 0 && j < selTo; j++ {
-		out[j] = v.bg("sel", out[j])
-	}
-	return out
-}
 
 // inboxButton is one piece of an inbox action line: a button standing for
 // the key action, or the space between buttons (action 0).
@@ -1355,20 +672,6 @@ func cleanBoard(s string) string {
 		return r
 	}, s)
 }
-func (v boardVisual) activity(p layout.Pane) []string {
-	w, h := p.Rect.W, p.Rect.H
-	out := []string{v.title("ACTIVITY", "state changes only · full log in inspector", v.focus == layout.Activity, w)}
-	for _, r := range v.activityRows(w) {
-		if len(out) >= h {
-			break
-		}
-		if r.note != 0 {
-			v.hit(boardHit{row: p.Rect.Y + len(out), x0: p.Rect.X, x1: p.Rect.X + w, kind: hitNote, id: strconv.Itoa(r.note)})
-		}
-		out = append(out, PadCell(r.line, w))
-	}
-	return out
-}
 
 // activityRow is one Activity line and, for a background message, the
 // note a click on it shows whole.
@@ -1378,61 +681,9 @@ type activityRow struct {
 	note int
 }
 
-// activityRows is Activity newest first: the run's state changes, what the
-// operator said to the Marshal and the background messages, interleaved by
-// time. On a tie what the operator said comes first, then the message.
-func (v boardVisual) activityRows(w int) []activityRow {
-	var rows []activityRow
-	for _, e := range v.echo {
-		rows = append(rows, activityRow{at: e.At, line: v.echoLine(e, w)})
-	}
-	for _, n := range v.notes {
-		rows = append(rows, activityRow{at: n.At, line: v.noteLine(n, w), note: n.id})
-	}
-	for _, a := range v.board.Activity {
-		rows = append(rows, activityRow{at: a.At, line: v.activityLine(a)})
-	}
-	slices.SortStableFunc(rows, func(x, y activityRow) int { return y.at.Compare(x.at) })
-	return rows
-}
-
 // runWordColor is the colour of a run-level change: a closed run is done,
 // an approved plan starts work, an amended one waits on its new tasks.
 var runWordColor = map[string]string{"closed": "merged", "approved": "working", "amended": "waiting"}
-
-// activityLine is one Activity row: when, what changed, its new word and
-// the detail. A task line reads "hello-cli merged · reason"; a run-level
-// line names its subject and reads "run closed to main 017b2d0". No line
-// shows a bare verb or a dangling separator.
-func (v boardVisual) activityLine(a model.ActivityLine) string {
-	head := v.fg("dim", a.At.In(v.now.Location()).Format("15:04:05")) + " "
-	detail := strings.TrimSpace(cleanBoard(a.Detail))
-	if a.Subject != "" || a.TaskID == "" {
-		subject, word := a.Subject, a.Word
-		if subject == "" {
-			subject = "run"
-		}
-		if word == "" {
-			// A run-level type this projection has no word for: say what
-			// the event is rather than a bare verb.
-			word = strings.TrimPrefix(string(a.Type), "marshal.")
-		}
-		color := runWordColor[word]
-		if color == "" {
-			color = "accent"
-		}
-		line := head + v.fg("accent", subject) + " " + v.fg(color, word)
-		if detail != "" {
-			line += " " + v.fg("white", detail)
-		}
-		return line
-	}
-	line := head + v.fg("accent", a.TaskID) + " " + v.fg(boardStateColor(a.State), string(a.State))
-	if detail != "" {
-		line += " " + v.fg("dim", "· "+detail)
-	}
-	return line
-}
 
 // inboxCount is what the header's inbox chip counts: every entry the inbox
 // lists that waits for the person — pending requests, the owner gates still

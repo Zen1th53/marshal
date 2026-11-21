@@ -117,13 +117,6 @@ func (v boardVisual) hit(h boardHit) {
 	}
 }
 
-// unhit drops the regions recorded on a row a later line replaced.
-func (v boardVisual) unhit(row int) {
-	if v.hits != nil {
-		*v.hits = slices.DeleteFunc(*v.hits, func(h boardHit) bool { return h.row == row })
-	}
-}
-
 // boardMouseWanted reports whether the Board reads the mouse: while it is
 // on screen with nothing over it that takes the mouse itself. The palette is
 // drawn over the Board and its rows are clickable, so it does not turn the

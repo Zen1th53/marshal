@@ -12,8 +12,28 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/tui/board/model"
+	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inspector"
 )
+
+// The layout's minimum sizes are the Board v2 renderer's: a Board the
+// layout lays out is one v2 draws.
+func TestLayoutMinimumsAreTheV2Minimums(t *testing.T) {
+	if layout.MinSplit != boardv2.MinCols || layout.MinRows != boardv2.MinRows {
+		t.Fatalf("layout %dx%d, v2 %dx%d", layout.MinSplit, layout.MinRows, boardv2.MinCols, boardv2.MinRows)
+	}
+}
+
+// header and footer are the head and foot lines without their click spans.
+func (v boardVisual) header(w int) string {
+	line, _ := v.headerLine(w)
+	return line
+}
+
+func (v boardVisual) footer(w int) string {
+	line, _ := v.footerSpans(w)
+	return line
+}
 
 var updateBoardGolden = flag.Bool("update-board-golden", false, "rewrite testdata/board/*.golden")
 
@@ -197,7 +217,7 @@ func TestParkedTaskInspectorGolden(t *testing.T) {
 		cols, rows int
 	}{{"inspector-parked-100x30", 100, 30}, {"inspector-parked-220x40", 220, 40}} {
 		l := layout.Compute(tc.cols, tc.rows, layout.Home)
-		frame := paintBoardInspector(l, th, inspector.New(b, "T-8"), placeholder, nil)
+		frame := paintBoardInspector(paintBoard(l, th, placeholder), v2Body(tc.rows, tc.cols), th, inspector.New(b, "T-8"), nil)
 		checkGolden(t, tc.name, frame)
 	}
 }

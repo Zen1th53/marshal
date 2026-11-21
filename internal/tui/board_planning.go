@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -208,74 +207,4 @@ func (w *Workspace) refreshMilestone(now time.Time) bool {
 	}
 	w.milestone.Store(next)
 	return true
-}
-
-// milestoneLine is the home card's planning milestone in one line at most w
-// cells: the steps done, what the Marshal does now with how long it has been
-// at it, and the steps still to come, e.g.
-//
-//	goal ✓ → requirements ✓ → drafting and reviewing the design · 4m → architecture → tasks
-//
-// A narrow card drops the steps to come, then the steps done, and keeps what
-// happens now. It returns "" when no milestone is known.
-func (v boardVisual) milestoneLine(w int) string {
-	m := v.milestone
-	if m == nil || w <= 0 || m.Step < 0 || m.Step >= len(app.PlanningMilestoneSteps) {
-		return ""
-	}
-	arrow, tick := " → ", " ✓"
-	if !v.unicode() {
-		arrow, tick = " -> ", " v"
-	}
-	now := m.Now
-	if !m.Since.IsZero() && !v.now.IsZero() {
-		now += " · " + goalElapsed(v.now.Sub(m.Since))
-	}
-	nowColor := "working"
-	if m.OwnerTurn {
-		nowColor = "needs"
-	}
-	done := app.PlanningMilestoneSteps[:m.Step]
-	next := app.PlanningMilestoneSteps[m.Step+1:]
-	plain := func(withDone, withNext bool) string {
-		s := ""
-		if withDone {
-			for _, p := range done {
-				s += p + tick + arrow
-			}
-		}
-		s += now
-		if withNext {
-			for _, p := range next {
-				s += arrow + p
-			}
-		}
-		return s
-	}
-	withDone, withNext := true, true
-	if VisibleLen(plain(true, true)) > w {
-		withNext = false
-		if VisibleLen(plain(true, false)) > w {
-			withDone = false
-		}
-	}
-	line := ""
-	if withDone {
-		for _, p := range done {
-			line += v.fg("dim", p+tick) + v.fg("faint", arrow)
-		}
-	} else if m.Step > 0 {
-		// The steps done are left out: say how far along this is instead.
-		now = fmt.Sprintf("step %d of %d: %s", m.Step+1, len(app.PlanningMilestoneSteps), now)
-	}
-	if VisibleLen(now) > w {
-		now = v.truncWords(now, w)
-	}
-	line += v.bold(v.fg(nowColor, now))
-	if withNext {
-		for _, p := range next {
-			line += v.fg("faint", arrow+p)
-		}
-	}
-	return line
 }

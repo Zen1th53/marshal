@@ -164,28 +164,3 @@ func TestV2NextUnchecked(t *testing.T) {
 		t.Fatalf("before the first lookup, next = %q", got)
 	}
 }
-
-// MARSHAL_BOARD is read once when the workspace runs; before that it is
-// read each time.
-func TestBoardEditionLatched(t *testing.T) {
-	w := &Workspace{}
-	t.Setenv("MARSHAL_BOARD", "classic")
-	if w.boardV2On() {
-		t.Fatal("classic read as v2")
-	}
-	t.Setenv("MARSHAL_BOARD", "")
-	if !w.boardV2On() {
-		t.Fatal("unlatched workspace did not read the environment")
-	}
-	w.latchBoardEdition()
-	t.Setenv("MARSHAL_BOARD", "classic")
-	if !w.boardV2On() {
-		t.Fatal("latched v2 changed with the environment")
-	}
-	c := &Workspace{}
-	c.latchBoardEdition()
-	t.Setenv("MARSHAL_BOARD", "")
-	if c.boardV2On() {
-		t.Fatal("latched classic changed with the environment")
-	}
-}

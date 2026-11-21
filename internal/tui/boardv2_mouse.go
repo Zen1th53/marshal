@@ -150,7 +150,7 @@ func (w *Workspace) clickV2Key(ctx context.Context, key string) {
 // the card does not take the key. Text in the composer keeps its keys, and
 // an inbox confirmation keeps them unless the card is that inbox decision.
 func (w *Workspace) v2CardKey(event KeyEvent) bool {
-	if !w.boardV2On() || w.composing() || w.v2CardShown() == "" {
+	if w.composing() || w.v2CardShown() == "" {
 		return false
 	}
 	if w.inboxView.Confirming() {

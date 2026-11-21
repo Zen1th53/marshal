@@ -18,7 +18,6 @@ import (
 // A run waiting for the operator says what happened and how Enter resolves it.
 func TestBoardRunStopNotice(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	run := fakeRun()
 	run.State = marshal.AwaitingUser
@@ -58,7 +57,6 @@ func TestBoardRunStopNotice(t *testing.T) {
 // with the raw error read the same.
 func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	for name, pause := range map[string]marshal.Pause{
 		"plain":       {Reason: "Marshal could not finish checking the run (part of it was left paused).", Resolutions: []string{"Press Enter to let the Marshal retry."}, Detail: "verification stopped: execution run conflict: required completion child identity/state", Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
 		"bare code":   {Reason: "REQUIRED_CONTEXT_REVIEW_PENDING", Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
@@ -93,7 +91,6 @@ func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
 // A stopped execution (the panel's "stopped: …" note) is a stop too.
 func TestBoardRunStoppedNotice(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), "stopped: worker codex exited 2")
 	p.Stopped = true
@@ -116,27 +113,6 @@ func TestStopEnterUsesStructuredAction(t *testing.T) {
 	stop, ok = (boardVisual{board: b}).stopNotice()
 	if !ok || strings.Join(stop.commands, ",") != "/marshal retry T-1,/marshal resume" || stop.verb != "retry the task" {
 		t.Fatalf("legacy pause commands: %+v, %v", stop, ok)
-	}
-}
-
-func TestStopEntryHasNoSlashCommands(t *testing.T) {
-	for _, action := range []marshal.PauseAction{marshal.PauseResume, marshal.PauseRetryTask, marshal.PauseUsePlan} {
-		b := boardmodel.Board{Run: boardmodel.RunHead{State: marshal.AwaitingUser, Paused: "A task is waiting.", Next: []string{"Press Enter to continue."}, PauseAction: action, PauseTask: "T-1"}}
-		v := boardVisual{board: b}
-		stop, ok := v.stopNotice()
-		if !ok {
-			t.Fatal("missing stop notice")
-		}
-		entry := StripANSI(strings.Join(v.stopEntry(stop, 0, 0, 120), "\n"))
-		line := StripANSI(v.stopLine(stop))
-		for _, got := range []string{entry, line} {
-			if strings.Contains(got, "/marshal") {
-				t.Fatalf("bad stop text for %s: %q", action, got)
-			}
-		}
-		if !strings.Contains(entry, "[Enter]") || !strings.Contains(entry, stop.verb) || !strings.Contains(line, stop.verb) {
-			t.Fatalf("entry misses action %q: %s", stop.verb, entry)
-		}
 	}
 }
 
@@ -190,7 +166,6 @@ func TestStopEnterOtherKeyDisarms(t *testing.T) {
 
 func TestStopFocusesInbox(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	run := fakeRun()
 	run.State = marshal.AwaitingUser

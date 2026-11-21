@@ -15,7 +15,6 @@ import (
 // The governed build keeps this owner plan gate; the shipped build removes it.
 func TestOwnerGateShowsDraftedPlanAwaitingApproval(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.planSource = fakePlanSource{}

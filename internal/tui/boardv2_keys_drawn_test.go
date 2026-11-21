@@ -124,7 +124,6 @@ func drawnSeams(t *testing.T) (signIn *[]string) {
 // card. Each hint bar action can run now, and each other key drawn, pressed
 // on that screen, is acted on.
 func TestV2DrawnKeysAct(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	for _, size := range [][2]int{{170, 45}, {100, 30}, {80, 24}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
 			drawnCols, drawnRows = size[0], size[1]
@@ -214,7 +213,6 @@ func (s *v2CardState) shownScreen() vm.Screen {
 // A card's key bar is its own buttons (esc for "later" on a decision) and
 // the palette and help, never the screen under it: no p, l or f.
 func TestV2CardKeyBarIsTheCards(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	drawnSeams(t)
 	w := pausedWorkspace(t, "codex", marshal.Pause{Reason: "worker failed", Detail: "codex: exit 1", Code: marshal.CodeWorkerAuth, Action: marshal.PauseResume})
 	defer w.Close()
@@ -256,7 +254,6 @@ func TestV2CardKeyBarIsTheCards(t *testing.T) {
 // The planning screen offers no faster model: no path switches the
 // Marshal's model for the rest of a step.
 func TestV2PlanningOffersNoFasterModel(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.endOpening()
@@ -271,7 +268,6 @@ func TestV2PlanningOffersNoFasterModel(t *testing.T) {
 // keeps telemetry on and records the notice; t turns it off as marshal
 // telemetry disable does. After either the card goes.
 func TestV2UsageCountsCardKeys(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	for _, key := range []rune{'y', 't'} {
 		t.Run(string(key), func(t *testing.T) {
 			drawnSeams(t)
@@ -344,7 +340,6 @@ func TestV2UsageCountsCardKeys(t *testing.T) {
 // in tmux: it opens agy in a window in the project, and when that window
 // closes the verify of agy is armed. Outside tmux the plain hint stays.
 func TestV2AgySignInKey(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	opened := drawnSeams(t)
 	var mu sync.Mutex
 	closed := false
@@ -405,7 +400,6 @@ func TestV2AgySignInKey(t *testing.T) {
 // choice there and ? is help. A click on the key bar's "? what is sent"
 // says what is sent where the card is drawn.
 func TestV2UsageCountsKeysOnlyWhereDrawn(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	drawnSeams(t)
 	var mu sync.Mutex
 	calls := 0

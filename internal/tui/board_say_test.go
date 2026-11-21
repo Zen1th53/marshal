@@ -191,18 +191,6 @@ func TestChatNetworkError(t *testing.T) {
 	}
 }
 
-func TestEchoLineQueuedWhy(t *testing.T) {
-	v := boardVisual{now: time.Now(), theme: NewTheme(ThemeDefault, true, true)}
-	plain := StripANSI(v.echoLine(sayEcho{At: v.now, Text: "hi", State: sayQueued}, 100))
-	if !strings.Contains(plain, "queued · chat is busy") {
-		t.Fatalf("default queued line: %q", plain)
-	}
-	waiting := StripANSI(v.echoLine(sayEcho{At: v.now, Text: "hi", State: sayQueued, Why: "waiting for you in the chat"}, 100))
-	if !strings.Contains(waiting, "queued · waiting for you in the chat") {
-		t.Fatalf("waiting queued line: %q", waiting)
-	}
-}
-
 // fakeChatPane starts a provider-like CLI in its own tmux window and makes
 // it the Marshal chat: it prints a "> " prompt, echoes each line it reads as
 // "got:<line>", and for a line "slow" stays busy for a moment with an
@@ -240,7 +228,6 @@ func echoState(w *Workspace, text string) string {
 // Activity, and goes in once the chat is back at its prompt.
 func TestBoardComposerReachesTheChat(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
@@ -353,7 +340,6 @@ func lastBoardOutput(w *Workspace) string {
 // busy") and keeps the queued message until the owner answers in the chat.
 func TestBoardSayShowsProviderTrustAndPermissionPrompts(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}

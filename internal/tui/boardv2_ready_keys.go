@@ -226,7 +226,7 @@ func (w *Workspace) v2CardBar(v boardVisual, b vm.Board) []vm.Key {
 // over it, before the gates take y; an armed verify keeps "any other key
 // cancels".
 func (w *Workspace) handleV2ReadyKey(ctx context.Context, event KeyEvent) bool {
-	if !w.boardV2On() || event.Type != KeyRune || w.firstUseArmed() != "" || w.inboxView.Inspecting() || len(w.boardInbox()) > 0 {
+	if event.Type != KeyRune || w.firstUseArmed() != "" || w.inboxView.Inspecting() || len(w.boardInbox()) > 0 {
 		return false
 	}
 	usage, signIn := w.v2ReadyDrawn()

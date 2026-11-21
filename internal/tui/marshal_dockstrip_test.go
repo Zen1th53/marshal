@@ -9,7 +9,7 @@ import (
 )
 
 // stripFull is the strip of docs/design/board-v2/screen6.ans.
-var stripFull = dockStrip{on: true, provider: "claude", model: "opus-5.5", effort: "medium",
+var stripFull = dockStrip{provider: "claude", model: "opus-5.5", effort: "medium",
 	known: true, bound: true, clear: true, inputKnown: true, stage: "tasks · 6m", answered: 3}
 
 // TestDockStripTitleFull: unfitted, the chat's title says what the v2
@@ -36,8 +36,8 @@ func TestDockStripTitleFull(t *testing.T) {
 // 100 and 80 window columns: exactly the chat's width less the focus marker,
 // one row, right-hand parts gone first, the glyph, the binding and [m] kept.
 func TestDockStripTitleWidths(t *testing.T) {
-	unbound := dockStrip{on: true, provider: "codex", model: "6.1-Sol", known: true}
-	bare := dockStrip{on: true, provider: "claude"}
+	unbound := dockStrip{provider: "codex", model: "6.1-Sol", known: true}
+	bare := dockStrip{provider: "claude"}
 	for _, tc := range []struct {
 		name string
 		s    dockStrip
@@ -45,12 +45,12 @@ func TestDockStripTitleWidths(t *testing.T) {
 		want string
 	}{
 		{"full 132", stripFull, 132, " MARSHAL CHAT  ✳ opus-5.5 · medium  ● live         [m] switch "},
-		{"full 100", stripFull, 100, " MARSHAL CHAT  ✳ opus-5.5  ● live   [m] "},
+		{"full 100", stripFull, 100, " MARSHAL CHAT  ✳ opus-5.5  ● live  [m] switch "},
 		{"full 80", stripFull, 80, " MARSHAL CHAT  ✳  ● live        [m] "},
 		{"unbound 132", unbound, 132, " MARSHAL CHAT  ⬡ codex · 6.1-Sol  ○ not bound      [m] switch "},
 		{"unbound 80", unbound, 80, " MARSHAL CHAT  ⬡  ○ not bound   [m] "},
 		{"bare 132", bare, 132, " MARSHAL CHAT  ✳ claude                 [m] switch  F11 Board "},
-		{"bare 100", bare, 100, " MARSHAL CHAT  ✳ claude      [m] switch "},
+		{"bare 100", bare, 100, " MARSHAL CHAT  ✳ claude            [m] switch "},
 		{"bare 80", bare, 80, " MARSHAL CHAT  ✳ claude  [m] switch "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestDockStripTitleWidths(t *testing.T) {
 // TestDockStripTitleUnknownParts: a field the collectors have not filled is
 // left out of the title, never shown as a dash or as "not bound".
 func TestDockStripTitleUnknownParts(t *testing.T) {
-	for _, s := range []dockStrip{{on: true}, {on: true, provider: "claude"}, {on: true, provider: "agy", model: "gemini-3"}} {
+	for _, s := range []dockStrip{{}, {provider: "claude"}, {provider: "agy", model: "gemini-3"}} {
 		got, _ := dockStripTitle(s, true, 0, false)
 		for _, bad := range []string{"—", "-", "not bound", "input", "stage", "answered", "bound to run"} {
 			if strings.Contains(got, bad) && !strings.Contains(s.model, bad) {
@@ -91,13 +91,13 @@ func TestDockStripTitleUnknownParts(t *testing.T) {
 			t.Errorf("%+v: title %q", s, got)
 		}
 	}
-	if got, _ := dockStripTitle(dockStrip{on: true}, true, 0, false); got != " MARSHAL CHAT  chat    [m] switch  F11 Board " {
+	if got, _ := dockStripTitle(dockStrip{}, true, 0, false); got != " MARSHAL CHAT  chat    [m] switch  F11 Board " {
 		t.Errorf("no provider: %q", got)
 	}
 }
 
 func TestDockStripOf(t *testing.T) {
-	if s := dockStripOf(vm.Board{}); s.known || s.answered != 0 || !s.on {
+	if s := dockStripOf(vm.Board{}); s.known || s.answered != 0 {
 		t.Fatalf("empty frame: %+v", s)
 	}
 	b := vm.Board{
@@ -132,19 +132,13 @@ func TestDockStripOf(t *testing.T) {
 }
 
 // TestDockTitleEdition: Board v2 titles the chat with the strip, filled from
-// the chat's own provider and --model while the Marshal collector is empty;
-// MARSHAL_BOARD=classic keeps the classic title.
+// the chat's own provider and --model while the Marshal collector is empty.
 func TestDockTitleEdition(t *testing.T) {
 	chat := &activeTmuxAgent{provider: "claude", args: []string{"--model", "claude-opus-5-5"}}
-	t.Setenv("MARSHAL_BOARD", "")
 	w := NewWorkspace(nil, "test-proj", "test-session")
 	w.workDir = t.TempDir()
 	if got, want := w.dockTitle(chat, 0), " MARSHAL CHAT  ✳ claude · Opus 5.5    [m] switch  F11 Board "; got != want {
 		t.Errorf("v2:\n got %q\nwant %q", got, want)
-	}
-	t.Setenv("MARSHAL_BOARD", "classic")
-	if got, want := w.dockTitle(chat, 0), " MARSHAL · ✳ Claude Opus 5.5    [m] switch  F11 Board "; got != want {
-		t.Errorf("classic:\n got %q\nwant %q", got, want)
 	}
 }
 

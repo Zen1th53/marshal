@@ -4,7 +4,6 @@ package tui
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,81 +18,6 @@ import (
 func firstUseVisual(th *Theme, now time.Time) boardVisual {
 	return boardVisual{
 		now: now, theme: th, edition: "Marshal", empty: true, marshalLeads: true, project: "demo", focus: layout.Tasks,
-		chips: []providerChip{
-			{name: "codex", state: "verified", model: "gpt-5"},
-			{name: "claude", state: "unverified"},
-			{name: "agy", state: "limited", until: now.Add(40 * time.Minute)},
-			{name: "opencode", state: "not installed"},
-		},
-		echo: []sayEcho{{id: 1, At: now.Add(-20 * time.Second), Text: "build a todo app with a REST API and tests", State: sayQueued}},
-	}
-}
-
-// TestFirstUseBoardGolden is the Board of a fresh project at the three
-// sizes the design names, at the docked half of a 170-column window, and in
-// the ASCII theme.
-func TestFirstUseBoardGolden(t *testing.T) {
-	now := time.Date(2026, 11, 8, 14, 2, 31, 0, time.UTC)
-	for _, tc := range []struct {
-		name       string
-		cols, rows int
-		mode       layout.Mode
-		docked     bool
-		unicode    bool
-	}{
-		{"first-use-home-080x24", 80, 24, layout.Home, false, true},
-		{"first-use-home-120x40", 120, 40, layout.Home, false, true},
-		{"first-use-home-170x45", 170, 45, layout.Home, false, true},
-		{"first-use-split-085x45", 85, 45, layout.Split, true, true},
-		{"first-use-ascii-080x24", 80, 24, layout.Home, false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			th := NewTheme(ThemeNoColor, tc.unicode, false)
-			v := firstUseVisual(th, now)
-			v.docked = tc.docked
-			// What boardHints gives this card (rule 4 and the tail), fixed
-			// here so the golden does not read the host's PATH;
-			// TestBoardHintsFollowState checks the live list.
-			v.hints = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick", "palette", "help"}
-			if tc.docked {
-				v.hints = slices.Insert(v.hints, 5, "marshal.chat")
-			}
-			var hits []boardHit
-			v.hits = &hits
-			l := layout.ComputeFor(tc.cols, tc.rows, tc.mode, v.layoutCounts())
-			frame := paintFirstUse(l, th, v)
-			if len(frame) != tc.rows {
-				t.Fatalf("%d rows", len(frame))
-			}
-			for y, line := range frame {
-				if w := VisibleLen(line); w != tc.cols {
-					t.Fatalf("row %d: %d cells: %q", y, w, line)
-				}
-			}
-			text := StripANSI(strings.Join(frame, "\n"))
-			for _, want := range []string{"Marshal", "demo", "NO RUN", "Tell the Marshal what to build", "PROVIDERS", "codex", "claude"} {
-				if !strings.Contains(text, want) {
-					t.Fatalf("missing %q:\n%s", want, text)
-				}
-			}
-			if !tc.unicode && strings.ContainsFunc(text, func(r rune) bool { return r > 127 }) {
-				t.Fatalf("ASCII theme drew a non-ASCII cell:\n%s", text)
-			}
-			// The call to action is a button for the chat, and the
-			// unverified provider is a button that arms its verify.
-			var cta, verify bool
-			for _, h := range hits {
-				cta = cta || h.kind == hitAction && h.id == "marshal.chat" && strings.Contains(StripANSI(frame[h.row]), "Tell the Marshal")
-				verify = verify || h.kind == hitVerify && h.id == "claude"
-				if h.row < 0 || h.row >= tc.rows {
-					t.Fatalf("click region off the frame: %+v", h)
-				}
-			}
-			if !cta || !verify {
-				t.Fatalf("click regions: cta %v verify %v in %+v", cta, verify, hits)
-			}
-			checkGolden(t, tc.name, frame)
-		})
 	}
 }
 

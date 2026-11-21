@@ -97,7 +97,6 @@ func TestStatusLineOwnedSessionOnly(t *testing.T) {
 // paint none of their own and keep their layout one row up.
 func TestBoardWithoutVitalsWhenStatusCarriesThem(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := NewWorkspace(nil, "test-proj", "test-session")
 	w.workDir = t.TempDir()
 	w.homeBoard = true

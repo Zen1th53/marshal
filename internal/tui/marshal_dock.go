@@ -128,7 +128,7 @@ func (w *Workspace) boardLayoutMode() layout.Mode {
 
 // dockWidth is the chat's width in a window cols wide. Below the split
 // minimum the chat stays docked anyway with the same share, and the Board
-// paints its compact form in what is left.
+// paints its too-small line in what is left (paintTooSmall).
 func dockWidth(cols int) int {
 	chat, _, _ := layout.SplitWidths(cols)
 	return max(chat, 1)
@@ -191,7 +191,7 @@ func (w *Workspace) reconcileDock(ctx context.Context) error {
 	}
 	if chat != nil && isPaneID(chat.paneID) {
 		// Runs last, still under dock.mu and within ctx: the pane title is
-		// the strip (or the classic title), never what the CLI printed.
+		// the strip, never what the CLI printed.
 		defer func() {
 			title, _ := w.dockTitleWith(chat, strip, 0, false)
 			run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
@@ -442,13 +442,10 @@ func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 	return err
 }
 
-// dockTitle is the chat pane's title. With Board v2 (the default) it is the
-// v2 MARSHAL CHAT strip (dockStripTitle): the provider's glyph, provider ·
-// model · effort, the chat's binding, the stage, the requests answered and
-// whether its input is clear, then [m] to switch. Under MARSHAL_BOARD=classic
-// it is the classic title: the Marshal brand, the Marshal model (or the
-// provider when the model is not known) with the provider's glyph, how close
-// it is to its limit, and [m] to switch. It uses only snapshots already in
+// dockTitle is the chat pane's title: the Board v2 MARSHAL CHAT strip
+// (dockStripTitle): the provider's glyph, provider · model · effort, the
+// chat's binding, the stage, the requests answered and whether its input is
+// clear, then [m] to switch. It uses only snapshots already in
 // memory (the v2 view model, the last usage reading, the chat's launch
 // arguments and the theme); it never opens a file or consults the store on
 // the rendering path. width is the chat pane's width in columns; the title
@@ -466,17 +463,13 @@ func (w *Workspace) dockTitleAt(chat *activeTmuxAgent, width int, pad bool) (str
 	return w.dockTitleWith(chat, w.dockStripNow(), width, pad)
 }
 
-// dockTitleWith is dockTitleAt with the v2 strip already taken; a strip that
-// is not on gives the classic title.
+// dockTitleWith is dockTitleAt with the v2 strip already taken.
 func (w *Workspace) dockTitleWith(chat *activeTmuxAgent, strip dockStrip, width int, pad bool) (string, int) {
 	w.mu.RLock()
 	unicode := w.theme == nil || w.theme.Unicode
 	w.mu.RUnlock()
 	qs, read := w.usageQuotas()
-	if strip.on {
-		return dockStripTitle(dockStripFill(strip, chat.provider, chat.args, qs, read), unicode, width, pad)
-	}
-	return dockTitleFor(chat.provider, chat.args, qs, read, unicode, width, pad, time.Now())
+	return dockStripTitle(dockStripFill(strip, chat.provider, chat.args, qs, read), unicode, width, pad)
 }
 
 // dockStripFill gives the strip the chat's own provider and model where the
@@ -500,103 +493,6 @@ func dockStripFill(s dockStrip, provider string, args []string, qs []usage.Quota
 		_, s.model = modelDisplayName(id)
 	}
 	return s
-}
-
-// dockTitleFor lays the chat's title out. The parts give way in a fixed
-// order until it fits: "F11 Board", then the model's long name (its vendor
-// prefix goes: "GPT-6.1-Sol" → "6.1-Sol"), the reset, the bar, " switch"
-// after [m], the model name (the glyph stays), and last the brand. The
-// percent left and [m] are never dropped; if it is still too wide, tmux cuts
-// it.
-func dockTitleFor(provider string, args []string, qs []usage.Quota, read, unicode bool, width int, pad bool, now time.Time) (string, int) {
-	sep := " · "
-	if !unicode {
-		sep = " . "
-	}
-	name := dockTitleText(provider)
-	if name == "" {
-		name = "chat"
-	}
-	glyph := providerGlyph(name, unicode)
-	// The chat provider's limit, when a reading has it: a bar of what is left
-	// and the percent left with its reset. A read entry that is not known
-	// shows "limit unknown"; before the first reading, or for a provider with
-	// no entry, there is no limit part.
-	bar, pct, reset := "", "", ""
-	modelID := chatModelArg(args)
-	if read {
-		for _, q := range qs {
-			if q.Provider != name {
-				continue
-			}
-			if modelID == "" {
-				modelID = q.Model
-			}
-			if figure, p, known := limitFigure(q, now); known {
-				if !unicode {
-					figure = strings.ReplaceAll(figure, "·", ".")
-				}
-				bar = " " + limitBar(p, unicode)
-				pct = " " + figure
-				for _, cut := range []string{" ·", " ."} {
-					if i := strings.Index(figure, cut); i >= 0 {
-						pct, reset = " "+figure[:i], figure[i:]
-						break
-					}
-				}
-			} else {
-				pct = " " + limitUnknown
-			}
-			break
-		}
-	}
-	long, short := modelDisplayName(modelID)
-	if long == "" {
-		long, short = name, name
-	}
-	model := " " + long
-	brand := " MARSHAL" + sep
-	mkey, mword, tail := "[m]", " switch", "  F11 Board"
-	build := func() (string, int) {
-		head := brand
-		if glyph != "" {
-			head += glyph
-		} else {
-			head = strings.TrimSuffix(head, " ")
-		}
-		head += model + bar + pct + reset
-		right := mkey + mword + tail + " "
-		gap := 4
-		if pad && width > 0 {
-			gap = max(2, width-3-VisibleLen(head)-VisibleLen(right))
-		}
-		return head + strings.Repeat(" ", gap) + right, VisibleLen(head) + gap
-	}
-	title, at := build()
-	if width <= 0 {
-		return title, at
-	}
-	avail := width - 3
-	for _, drop := range []func(){
-		func() { tail = "" },
-		func() { model = " " + short },
-		func() { reset = "" },
-		func() { bar = "" },
-		func() { mword = "" },
-		func() {
-			if glyph != "" {
-				model = ""
-			}
-		},
-		func() { brand = " " },
-	} {
-		if VisibleLen(title) <= avail {
-			break
-		}
-		drop()
-		title, at = build()
-	}
-	return title, at
 }
 
 // chatModelArg is the model the chat was started with (--model/-m), or "".

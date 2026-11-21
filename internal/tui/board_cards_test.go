@@ -72,50 +72,6 @@ func TestConfirmedRequirementsCardNeverReopens(t *testing.T) {
 	}
 }
 
-// A stopped run leads the inbox, so Enter is its "try again": no open card
-// below it takes Enter, and their buttons do not claim the key.
-func TestStoppedRunTakesEnterBeforeOpenCards(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _, tr := boardWithNativeChat(t)
-	w.mu.Lock()
-	w.state.Marshal = &MarshalPanel{RunID: "run", Note: "stopped: worker exited 2", Stopped: true}
-	w.mu.Unlock()
-	openReqCard(t, w, fullReqCard)
-	ap, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openAsk(ap)
-	if !w.boardStopWaiting() {
-		t.Fatal("the stopped run does not wait for Enter")
-	}
-	text := frameText(w, 160, 50)
-	if strings.Contains(text, "[Enter] confirm all") || strings.Contains(text, "[Enter] build on it") {
-		t.Fatalf("a card below the stop claims Enter:\n%s", text)
-	}
-	if !strings.Contains(text, "[click] build on it") || !strings.Contains(text, "[Enter] try again") {
-		t.Fatalf("the stop and the cards' buttons:\n%s", text)
-	}
-	stopped := boardVisual{theme: NewTheme(ThemeNoColor, true, true), stopped: true, note: "stopped: worker exited 2"}
-	if got := StripANSI(strings.Join(stopped.requirementsEntry(*w.currentReq(), 0, 0, 120, 40), "\n")); !strings.Contains(got, "[click] confirm all") || strings.Contains(got, "[Enter]") {
-		t.Fatalf("the requirements card under the stop:\n%s", got)
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter was not taken")
-	}
-	if !w.boardUI.stopArmed {
-		t.Fatal("Enter did not go to the stopped run")
-	}
-	time.Sleep(50 * time.Millisecond)
-	if got := tr.sentTurns(); len(got) != 0 {
-		t.Fatalf("Enter answered a card below the stop: %q", got)
-	}
-	if w.currentReq() == nil || w.currentAsk() == nil {
-		t.Fatal("a card closed")
-	}
-}
-
 // guardAskBoard is a Board with an open chat, a changed-files alert and the
 // Marshal's question about the same files (real-user run, 09:36:21).
 func guardAskBoard(t *testing.T) (*Workspace, *fakeChatTransport, *guardAlert, *[]string) {

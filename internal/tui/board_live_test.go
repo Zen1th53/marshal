@@ -138,7 +138,6 @@ func TestLiveBoardVitalsUsesCachedProviderStatus(t *testing.T) {
 
 func TestBoardIsTheDefaultScreenForARun(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	lines, _, _ := w.frameLines(120, 40)
 	if len(lines) != 40 {
@@ -265,7 +264,6 @@ func TestBoardFollowsTheRunIncrementally(t *testing.T) {
 
 func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, src := boardWorkspace(t)
 	select {
 	case <-w.repaint:
@@ -329,7 +327,6 @@ func TestBoardFollowerSleepsWhenNothingMoves(t *testing.T) {
 
 func TestBoardKeysMoveFocusSelectionAndInspector(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.frameLines(120, 40)
 	if got := w.boardUI.pane(true); got != layout.Inbox {
@@ -421,7 +418,6 @@ func TestBoardAnimatesOnlyWhileShown(t *testing.T) {
 // walks back down, Esc closes.
 func TestBoardInspectorKeysSurviveRepaints(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, src := boardWorkspace(t)
 	p := w.marshalPanel()
 	next := *p
@@ -486,7 +482,6 @@ func TestBoardInspectorKeysSurviveRepaints(t *testing.T) {
 // the lane's task.
 func TestBoardLaneEnterShowsWorkerPane(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	defer w.Close()
 	oldIn, oldFocus := boardInTmux, boardFocusPane
@@ -557,7 +552,6 @@ func TestBoardTabCyclesPanes(t *testing.T) {
 // says, instead of starting a command behind it.
 func TestBoardInspectorQCloses(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.frameLines(120, 40)
 	w.boardUI.focus = layout.Tasks
@@ -624,7 +618,6 @@ func TestBoardAnswerSurvivesNoteArrivingWithIt(t *testing.T) {
 // on a task with nothing waiting they answer so and type nothing.
 func TestBoardInspectorDecisionKeys(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	w.frameLines(120, 40)
 	w.boardUI.focus = layout.Tasks

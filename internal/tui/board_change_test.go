@@ -150,7 +150,6 @@ func changeNoteSeen(w *Workspace, substr string) bool {
 // is reported as finishing first.
 func TestHoldCardCountsOnlyNotStarted(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := changeChatWorkspace(t, []taskSpec{
 		{"a", marshal.Queued},
 		{"b", marshal.Dispatched},
@@ -295,7 +294,6 @@ func TestBusyAmendTimeoutKeepsCard(t *testing.T) {
 // Each answered card closes and leaves the others open.
 func TestChangeCardBesideAskAndRequirements(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, tr := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
 	hp, err := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
 	if err != nil {
@@ -582,7 +580,6 @@ func TestMarshalAmendWithoutOwnerApplyKeepsHold(t *testing.T) {
 // Marshal's inbox, survives a restart, and ends only on release.
 func TestOwnerHoldIsPinnedUntilReleased(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := changeChatWorkspace(t, []taskSpec{{"live-voice", marshal.Queued}, {"b", marshal.Queued}})
 	hp, err := parseMarshalProposal(ownerHoldProposalLine(`["live-voice"]`, "Owner: hold live-voice until ready"))
 	if err != nil {

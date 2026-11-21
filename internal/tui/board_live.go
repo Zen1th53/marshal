@@ -4,14 +4,15 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/app"
-	"github.com/Zen1th53/marshal/internal/permission"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/permission"
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -564,7 +565,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		frame = a.Frame()
 	}
 	var hits []boardHit
-	v := boardVisual{board: b, now: boardNow(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
+	v := boardVisual{board: b, now: boardNow(), theme: th, frame: frame, focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
 	// The shipped header shows "Marshal leads" when the Marshal leads
 	// acceptance. A fresh project has no run yet, so it reads the default.
 	accMode := p.run.Settings.AcceptanceMode
@@ -572,7 +573,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		accMode = marshal.DefaultSettings().AcceptanceMode
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
-	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
+	v.empty, v.docked, v.notes = empty, w.dock.docked.Load(), w.noteList()
 	v.planning = w.planningNow(empty, state.Goal)
 	if goal, ok := w.activeGoalNow(empty, state.Goal); ok {
 		v.goalGiven = true
@@ -591,10 +592,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	v.quotaArmed = w.quotaCard.isArmed()
 	if empty {
 		v.project = filepath.Base(w.providerRoot())
-		v.chips, v.armed = w.firstUseChips(v.now), w.firstUseArmed()
-	}
-	if focus == layout.Lanes {
-		v.selectedLane = ui.lane
+		v.armed = w.firstUseArmed()
 	}
 	// The vitals row's data: host, provider readiness and quota, gathered off
 	// the paint path (board_vitals.go).
@@ -663,28 +661,22 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	// The hint bar follows the state this paint shows (board_hints.go).
 	v.indexing = w.knowledgeIndexLine(v.unicode())
 	v.hints = w.boardHints(v)
-	v.tails = w.laneTailFor
-	v.tailWant = w.laneTailWant()
 	pickerOpen := w.pickerOpen()
 	if pickerOpen {
 		v.pick = w.pickerPaint()
 	}
-	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
+	l := layout.Compute(cols, rows, w.boardLayoutMode())
 	if outside {
-		l = layout.ComputeFor(cols, rows+1, w.boardLayoutMode(), v.layoutCounts()).WithoutVitals()
+		l = layout.Compute(cols, rows+1, w.boardLayoutMode()).WithoutVitals()
 	}
 	var lines []string
-	_, docked := l.Pane(layout.Inspector)
 	// The opening animation (P2-03) owns the body on the first paints of a
 	// fresh Board, before the first-use card or the Blocked screen.
 	// Only a v2 paint puts a v2 card on screen; every other paint takes it
 	// off, so its keys stop acting (boardv2_paint.go).
 	w.setV2CardShown("")
-	// Only a v2 paint stops the lane-tail sampler; every other paint may
-	// draw the classic lanes pane, which shows the tails.
-	w.laneTail.v2Painted.Store(false)
 	// v2KeyRow is the Board v2 key bar's row, -1 when v2 did not paint;
-	// like the classic hint bar it stays clickable under an overlay.
+	// like the footer it stays clickable under an overlay.
 	v2KeyRow := -1
 	var openingShow, openingChecking bool
 	var openingFrame int
@@ -717,29 +709,24 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		lines = w.paintMemory(l, th, v)
 	case v.hostView:
 		lines = paintHost(l, th, v, ui)
-	case ui.inspect != "":
-		lines = paintBoardInspector(l, th, ui.inspector(b, ui.inspect), v.render, v.hit)
-	case docked && ui.task != "" && !w.v2Fits(cols, rows):
-		// A docked inspector shows the selected task without being opened.
-		// Board v2 has no docked inspector: where v2 fits it draws the
-		// Board, as on narrower screens (the task is still selected).
-		lines = paintBoardInspector(l, th, ui.inspector(b, ui.task), v.render, v.hit)
-	case w.v2Fits(cols, rows):
-		// The Board v2 screens draw the home and run views and every
-		// owner card (boardv2_paint.go); MARSHAL_BOARD=classic keeps the
-		// classic ones.
+	case !w.v2Fits(cols, rows):
+		// Too small for the Board: one line says so (boardv2_paint.go).
 		ui.insp, ui.inspFor = nil, ""
-		w.laneTail.v2Painted.Store(true)
+		lines = w.paintTooSmall(v, cols, l.Rows)
+	case ui.inspect != "":
+		// The inspector opens over the Board v2 frame, dimmed.
 		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
 		v2KeyRow = len(lines) - 2
-	case empty:
-		ui.insp, ui.inspFor = nil, ""
-		lines = paintFirstUse(l, th, v)
+		// The card under the inspector is dimmed: its keys stay off.
+		w.setV2CardShown("")
+		lines = paintBoardInspector(lines, v2Body(len(lines), cols), th, ui.inspector(b, ui.inspect), v.hit)
 	default:
-		// Nothing shows an inspector: a later one opens fresh, however
-		// this one was closed.
+		// The Board v2 screens draw the home and run views and every
+		// owner card (boardv2_paint.go). Nothing shows an inspector: a
+		// later one opens fresh, however this one was closed.
 		ui.insp, ui.inspFor = nil, ""
-		lines = paintBoard(l, th, v.render)
+		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
+		v2KeyRow = len(lines) - 2
 	}
 	var overlayHits []boardHit
 	if len(popup) == 0 && w.boardHelp.Load() {
@@ -784,7 +771,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	if len(popup) > 0 {
 		lines = overlayBoard(lines, l, th, 0, popup)
 	}
-	if len(popup) > 0 || (ui.inspect != "" && !docked) {
+	if len(popup) > 0 || ui.inspect != "" {
 		// Something covers the body: only the header, the hint bar and the
 		// inspector's own buttons stay clickable; a popup covers those too.
 		// The Marshal picker overlay keeps its own rows clickable, and the
@@ -837,7 +824,7 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
 	w.mu.RUnlock()
 	// A Board v2 decision or paused card on screen takes its keys first
-	// (boardv2_cards_keys.go); MARSHAL_BOARD=classic never shows one.
+	// (boardv2_cards_keys.go).
 	if w.v2CardKey(event) {
 		return true
 	}

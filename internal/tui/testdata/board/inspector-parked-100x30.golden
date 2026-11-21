@@ -1,24 +1,23 @@
 VITALS compact 100x1                                                                                |
-HEADER compact 100x1                                                                                |
-INBOX f╭────────────────────────────────────────────────────────────────────────────────────╮       |
-.......│                                                                                    │.......|
-.......│ R-3 › plan P-7 › T-8 › codex                                                       │.......|
-.......│ T-8  Release  parked                                                               │.......|
-.......│                                                                                    │.......|
-       │ IDENTITY                                                                           │       |
-TASKS b│   worker codex · provider codex · branch marshal/r-3/t-8                           │       |
-.......│                                                                                    │.......|
-.......│ AUTHORITY                                                                          │.......|
-.......│   scope: internal/tui/board                                                        │.......|
-.......│   hosts: none                                                                      │.......|
-.......│   tools: none                                                                      │.......|
-.......│   budget: 500 task tokens · rework 0/0                                             │.......|
+HEADER ╭────────────────────────────────────────────────────────────────────────────────────╮       |
        │                                                                                    │       |
-LANES s│ EVIDENCE                                                                           │       |
+       │ R-3 › plan P-7 › T-8 › codex                                                       │       |
+       │ T-8  Release  parked                                                               │       |
+       │                                                                                    │       |
+       │ IDENTITY                                                                           │       |
+       │   worker codex · provider codex · branch marshal/r-3/t-8                           │       |
+       │                                                                                    │       |
+       │ AUTHORITY                                                                          │       |
+       │   scope: internal/tui/board                                                        │       |
+       │   hosts: none                                                                      │       |
+       │   tools: none                                                                      │       |
+       │   budget: 500 task tokens · rework 0/0                                             │       |
+       │                                                                                    │       |
+       │ EVIDENCE                                                                           │       |
        │   unverified: checks pass                                                          │       |
-ACTIVIT│                                                                                    │       |
-.......│ TIMELINE                                                                           │.......|
-.......│   queued → parked ← run start [ev-1] operator decision                             │.......|
+       │                                                                                    │       |
+       │ TIMELINE                                                                           │       |
+       │   queued → parked ← run start [ev-1] operator decision                             │       |
        │                                                                                    │       |
        │ ACTIONS                                                                            │       |
        │   no pending decision                                                              │       |
@@ -27,4 +26,5 @@ ACTIVIT│                                                                      
        │ e all events · Esc close                                                           │       |
        │                                                                                    │       |
        ╰────────────────────────────────────────────────────────────────────────────────────╯       |
+                                                                                                    |
 FOOTER compact 100x1                                                                                |

@@ -42,7 +42,6 @@ var webLink = regexp.MustCompile(`http://127\.0\.0\.1:\d+/\?t=[A-Za-z0-9_-]{43}`
 // writer that takes w.mu without pause would deadlock a frame that took it
 // twice.
 func TestWebBoardFrameWithoutTheWorkspaceLock(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := emptyBoardWorkspace(t)
 	w.endOpening()
 	stop := make(chan struct{})
@@ -90,7 +89,6 @@ func TestWebBoardFrameWithoutTheWorkspaceLock(t *testing.T) {
 // /marshal web starts one Web Board, opens it, answers its link, and the
 // Board's Close stops it.
 func TestMarshalWebServesTheBoard(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	opened := webBoardSeams(t)
 	origGOOS := v2GOOS
 	t.Cleanup(func() { v2GOOS = origGOOS })
@@ -158,7 +156,6 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 // opens the Web Board and types nothing; with no display the answer is the
 // link to open.
 func TestWebBoardKeyWithoutDisplay(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	opened := webBoardSeams(t)
 	origGOOS, origEnv := v2GOOS, v2Getenv
 	t.Cleanup(func() { v2GOOS, v2Getenv = origGOOS, origEnv })
@@ -186,7 +183,6 @@ func TestWebBoardKeyWithoutDisplay(t *testing.T) {
 // /marshal web runs through the command handler the composer and the
 // palette use; with more words it is a goal, not the Web Board.
 func TestMarshalWebCommand(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	webBoardSeams(t)
 	w := emptyBoardWorkspace(t)
 	defer w.Close()

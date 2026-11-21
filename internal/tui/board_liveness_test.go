@@ -45,7 +45,6 @@ func governedWorkspace(t *testing.T, state marshal.TaskState, beats func() []app
 // it a running lane, with its elapsed time and the age of its last beat.
 func TestBoardLaneFollowsGovernedWorkerHeartbeat(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	started := time.Now().Add(-18 * time.Minute)
 	beat := time.Now().Add(-12 * time.Second)
 	w, _, p := governedWorkspace(t, marshal.Returned, func() []app.WorkerBeat {
@@ -76,7 +75,6 @@ func TestBoardLaneFollowsGovernedWorkerHeartbeat(t *testing.T) {
 // saying running, and the poll notices it without any new decision.
 func TestBoardLaneLostWhenHeartbeatsStop(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	started := time.Now().Add(-20 * time.Minute)
 	beat := time.Now()
 	w, src, p := governedWorkspace(t, marshal.Dispatched, func() []app.WorkerBeat {
@@ -162,20 +160,5 @@ func TestBoardFeedWorkerSeen(t *testing.T) {
 	}
 	if changed, _ := f.noteWorkers("R", nil, false, later.Add(10*time.Second)); changed {
 		t.Fatal("the same quiet minute repainted again")
-	}
-}
-
-// A heartbeat lane's last action names the age of its last beat; a lost
-// lane says first that no worker is running its task.
-func TestBoardLaneBeatText(t *testing.T) {
-	now := time.Now()
-	v := boardVisual{now: now}
-	live := model.Lane{Heartbeat: true, State: model.LaneWorking, Beat: now.Add(-12 * time.Second)}
-	if got := v.laneBeat(live, ""); got != "last signal 12s ago" {
-		t.Fatalf("live = %q", got)
-	}
-	lost := model.Lane{Heartbeat: true, State: model.LaneLost, Beat: now.Add(-4 * time.Minute)}
-	if got := v.laneBeat(lost, "editing app.js"); got != "no worker is running this task · last signal 4m ago · editing app.js" {
-		t.Fatalf("lost = %q", got)
 	}
 }

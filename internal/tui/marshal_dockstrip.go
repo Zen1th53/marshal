@@ -14,7 +14,6 @@ import (
 // and a false known mean the collector has not said; that part is left out
 // of the title rather than shown as a dash.
 type dockStrip struct {
-	on       bool // Board v2 is the edition (MARSHAL_BOARD is not classic)
 	provider string
 	model    string
 	effort   string
@@ -31,7 +30,6 @@ type dockStrip struct {
 // dockStripOf reads the strip's fields out of a v2 frame.
 func dockStripOf(b vm.Board) dockStrip {
 	s := dockStrip{
-		on:       true,
 		provider: dockTitleText(b.Marshal.Provider),
 		model:    dockStripText(b.Marshal.Model),
 		effort:   dockTitleText(b.Marshal.Effort),
@@ -58,12 +56,8 @@ func dockStripOf(b vm.Board) dockStrip {
 
 // dockStripNow is the strip for the chat's title now. It builds a v2 frame,
 // so the caller must hold neither w.mu nor dock.mu: the collectors read the
-// workspace through GetUIState. Under MARSHAL_BOARD=classic it is the zero
-// strip and the title keeps its classic form.
+// workspace through GetUIState.
 func (w *Workspace) dockStripNow() dockStrip {
-	if !w.boardV2On() {
-		return dockStrip{}
-	}
 	return dockStripOf(w.boardV2())
 }
 

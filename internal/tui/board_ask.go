@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -252,48 +251,6 @@ func (w *Workspace) askForGuard(a *guardAlert) (*askCard, int) {
 		}
 	}
 	return card, -1
-}
-
-// askEntry is the open card as the inbox shows it: the question on at most
-// two rows, truncated with an ellipsis, then a row of choices. x is the
-// inbox's first cell, row its frame row.
-func (v boardVisual) askEntry(c askCard, x, row, w int) []string {
-	flag := "⚑ "
-	if !v.unicode() {
-		flag = "! "
-	}
-	head := v.fg("waiting", flag+"question") + v.fg("dim", " · ")
-	prefix := VisibleLen(head)
-	lines := wrapWords(cleanBoard(c.Question), max(8, w-prefix))
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-	out := []string{PadCell(head+v.bold(v.fg("white", lines[0])), w)}
-	if len(lines) > 1 {
-		second := lines[1]
-		if len(lines) > 2 {
-			second = v.trunc(strings.Join(lines[1:], " "), max(8, w-prefix))
-		}
-		out = append(out, PadCell(strings.Repeat(" ", prefix)+v.bold(v.fg("white", second)), w))
-	}
-	crow := row + len(out)
-	line, at := "    ", 4
-	for i, ch := range c.Choices {
-		if i > 0 {
-			line += "  "
-			at += 2
-		}
-		key := ch.Key
-		if key == "enter" {
-			key = v.cardEnterKey()
-		}
-		button := v.bg("rule", "["+key+"]") + " " + ch.Label
-		v.hit(boardHit{row: crow, x0: x + at, x1: x + min(w, at+VisibleLen(button)), kind: hitAsk, id: strconv.Itoa(i)})
-		line += button
-		at += VisibleLen(button)
-	}
-	out = append(out, PadCell(line, w))
-	return out
 }
 
 // askCount is 1 while a card is open, for the inbox's counts.

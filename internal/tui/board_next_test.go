@@ -23,7 +23,6 @@ func closedPanel(runID string, state marshal.RunState, done, total int, limit, t
 // card with n, does not re-open it.
 func TestNextCardOnClose(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	prev := closedPanel("RUN-1", marshal.Verifying, 4, 4, 0, 0)
 	cur := closedPanel("RUN-1", marshal.Closed, 4, 4, 0, 0)
@@ -153,7 +152,6 @@ func TestNextCardFromHead(t *testing.T) {
 // takes n first; Enter still reaches the ask card, which stays open until then.
 func TestNextCardBeforeAskCard(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	ap, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))

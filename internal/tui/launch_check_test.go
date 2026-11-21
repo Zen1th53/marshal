@@ -12,7 +12,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/project"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
 // newLaunchRepo makes a committed Git repository in a temp dir and returns its
@@ -252,49 +251,5 @@ func TestLaunchLinesRepositoryFailureIsOneLine(t *testing.T) {
 	want := "I can't fix this safely: this folder is not a Git repository with a first commit. Run git init && git add -A && git commit -m \"first commit\", then press r."
 	if len(blockers) != 1 || blockers[0] != want {
 		t.Fatalf("blockers = %#v, want exactly [%q]", blockers, want)
-	}
-}
-
-func TestBlockedScreenHasNoJargon(t *testing.T) {
-	th := NewTheme(ThemeNoColor, true, false)
-	w := &Workspace{homeBoard: true}
-	w.launch.phase = launchBlocked
-	// A spread of blockers, including the one case that must keep the literal
-	// "marshal doctor --json" command.
-	lay := project.Layout{RuntimeDir: "/p/.marshal", Artifacts: "/p/.marshal/artifacts", Socket: "/p/.marshal/runtime.sock"}
-	for _, name := range []string{"worktree", "permissions", "sqlite", "pack"} {
-		report := doctor.Report{Verdict: doctor.Fail, Results: []doctor.Result{{Name: name, Verdict: doctor.Fail, Detail: name}}}
-		lines, _ := launchLines(report, lay)
-		w.launch.blockers = append(w.launch.blockers, lines...)
-	}
-
-	var hits []boardHit
-	v := boardVisual{theme: th, hits: &hits}
-	l := layout.ComputeFor(100, 30, layout.Home, v.layoutCounts())
-	frame := w.paintBlocked(l, th, v)
-	body := StripANSI(strings.Join(frame, "\n"))
-
-	// These words never belong on the Blocked screen, in a <what> or a command.
-	for _, jargon := range []string{"PASS", "FAIL", "DEGRADED", "sqlite", "verdict"} {
-		if strings.Contains(body, jargon) {
-			t.Fatalf("Blocked screen shows jargon %q:\n%s", jargon, body)
-		}
-	}
-	// "doctor" is allowed inside the sqlite case's bug-report command, so the
-	// no-jargon rule is asserted on the <what> parts (what each line names as
-	// the problem, before ". Run <command>").
-	for _, blocker := range w.launchBlockers() {
-		what := strings.TrimPrefix(blocker, "I can't fix this safely: ")
-		if i := strings.Index(what, ". Run "); i >= 0 {
-			what = what[:i]
-		}
-		for _, jargon := range []string{"PASS", "FAIL", "DEGRADED", "doctor", "sqlite", "verdict"} {
-			if strings.Contains(what, jargon) {
-				t.Fatalf("Blocked line's <what> shows jargon %q: %q", jargon, what)
-			}
-		}
-	}
-	if !strings.Contains(body, "[r] Retry") || !strings.Contains(body, "[q] Quit") {
-		t.Fatalf("Blocked screen missing the retry/quit footer:\n%s", body)
 	}
 }

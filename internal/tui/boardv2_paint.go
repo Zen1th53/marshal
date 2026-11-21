@@ -1,47 +1,13 @@
 package tui
 
 import (
-	"os"
+	"fmt"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
-
-// boardV2On reports whether the Board home and run views are drawn by the
-// Board v2 renderer. MARSHAL_BOARD=classic keeps the classic Board for one
-// release. It is read once, when the workspace starts (Run latches it); a
-// workspace that never ran, as in tests, reads the environment each time.
-func (w *Workspace) boardV2On() bool {
-	switch w.boardEdition.Load() {
-	case boardEditionV2:
-		return true
-	case boardEditionClassic:
-		return false
-	}
-	return boardV2Env()
-}
-
-// The latched Board editions; zero is not latched yet.
-const (
-	boardEditionV2      int32 = 1
-	boardEditionClassic int32 = 2
-)
-
-// latchBoardEdition reads MARSHAL_BOARD once, as the workspace starts.
-func (w *Workspace) latchBoardEdition() {
-	e := boardEditionClassic
-	if boardV2Env() {
-		e = boardEditionV2
-	}
-	w.boardEdition.Store(e)
-}
-
-// boardV2Env is MARSHAL_BOARD as boardV2On reads it.
-func boardV2Env() bool {
-	return !strings.EqualFold(strings.TrimSpace(os.Getenv("MARSHAL_BOARD")), "classic")
-}
 
 // v2Theme is the renderer's view of the workspace theme: the colour mode the
 // terminal takes and whether it draws Unicode.
@@ -88,7 +54,7 @@ func v2Screen(b vm.Board, empty, planning bool) vm.Screen {
 // compact Board is drawn. The last row carries the status or composer line.
 // The key bar shows the hint bar's keys for the state on screen (board_hints.go)
 // unless a card is shown, which keeps its own; the regions the renderer drew
-// are recorded so a click acts as on the classic Board (boardv2_mouse.go).
+// are recorded so a click acts on what it drew (boardv2_mouse.go).
 //
 // It is called without w.mu held: the collectors read the workspace state
 // through its own locked accessors (GetUIState, marshalPanel).
@@ -192,19 +158,68 @@ func (v boardVisual) v2HintKeys() ([]vm.Key, []string) {
 	return keys, ids
 }
 
-// v2Fits reports whether the v2 screens draw at this size: 80 columns or
-// more on its own, 60 or more beside the docked chat. Smaller keeps the
-// classic Board: beside the chat at layout.MinTasks (56) to 59 columns its
-// compact split panes, below that (or under 80 on its own) the inbox and a
-// notice.
+// v2Fits reports whether the Board v2 screens draw at this size: 80
+// columns or more on its own, layout.MinSplit (boardv2.MinCols) or more
+// beside the docked chat, and boardv2.MinRows rows. Smaller draws only the
+// too-small notice (paintTooSmall).
 func (w *Workspace) v2Fits(cols, rows int) bool {
-	if !w.boardV2On() || rows < boardv2.MinRows {
+	if rows < boardv2.MinRows {
 		return false
 	}
 	if w.boardLayoutMode() == layout.Split {
-		return cols >= boardv2.MinCols
+		return cols >= layout.MinSplit
 	}
 	return cols >= layout.MinCols
+}
+
+// paintTooSmall is the Board in a terminal too small for it: one line says
+// what is happening and that the window must grow, and the last row keeps
+// the status or composer line. Nothing else is drawn, so no pane can be
+// cut in half.
+func (w *Workspace) paintTooSmall(v boardVisual, cols, rows int) []string {
+	if rows <= 0 || cols <= 0 {
+		return nil
+	}
+	need, wide := layout.MinCols, "bigger"
+	if w.boardLayoutMode() == layout.Split {
+		need = layout.MinSplit
+	}
+	if rows >= boardv2.MinRows {
+		wide = "wider"
+	} else if cols >= need {
+		wide = "taller"
+	}
+	x := "×"
+	if !v.unicode() {
+		x = "x"
+	}
+	text := fmt.Sprintf("Marshal needs %d%s%d (now %d%s%d) · make the window %s", need, x, boardv2.MinRows, cols, x, rows, wide)
+	if n := v.inboxCount() + v2CardWaiting(v); n > 0 {
+		text = fmt.Sprintf("%d waiting for you · ", n) + text
+	} else if !v.empty {
+		text = "Run in progress · " + text
+	}
+	if !v.unicode() {
+		text = strings.ReplaceAll(text, "·", "-")
+	}
+	lines := make([]string, rows)
+	for i := range lines {
+		lines[i] = strings.Repeat(" ", cols)
+	}
+	lines[0] = PadCell(" "+Truncate(text, cols-1), cols)
+	if rows > 1 && v.status != "" {
+		lines[rows-1] = PadCell(" "+Truncate(v.status, cols-1), cols)
+	}
+	return lines
+}
+
+// v2CardWaiting is 1 while a decision or paused card waits for the owner
+// and the inbox does not already count it.
+func v2CardWaiting(v boardVisual) int {
+	if v.stopped && len(v.board.Inbox) == 0 {
+		return 1
+	}
+	return 0
 }
 
 // setV2CardShown records which v2 screen the last paint drew, so the card

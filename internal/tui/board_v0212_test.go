@@ -41,7 +41,6 @@ func TestMarshalPickerWordsMatchLaunchPicker(t *testing.T) {
 // is on screen the state ends.
 func TestBoardPlanningAfterAccept(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.endOpening()
@@ -106,7 +105,6 @@ func TestProvidersViewListsInstalledProviders(t *testing.T) {
 // shows NO RUN YET.
 func TestBoardPlanningFromStoredAccept(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	frame := func(w *Workspace) string {
 		lines, _, _ := w.frameLines(160, 40)
 		return StripANSI(strings.Join(lines, "\n"))

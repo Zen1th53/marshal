@@ -32,7 +32,6 @@ func closedRunBesideChat(t *testing.T) *Workspace {
 // run is done instead of "waiting for you".
 func TestNextCardShowsBesideTheChat(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := closedRunBesideChat(t)
 	if w.boardLayoutMode() != layout.Split {
 		t.Fatalf("layout mode %q, want split", w.boardLayoutMode())
@@ -103,20 +102,5 @@ func TestHeaderFinalCheckSaysWhy(t *testing.T) {
 		if got := VisibleLen(head); got != w {
 			t.Errorf("width %d: the header is %d cells", w, got)
 		}
-	}
-}
-
-// Beside the chat the Board's header has no room for the reason: the idle
-// lanes say it, so a minutes-long final check is understood.
-func TestLanesSayFinalCheckWhenHeaderIsNarrow(t *testing.T) {
-	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true), now: time.Now(), board: model.Board{Run: model.RunHead{State: marshal.Verifying, Done: 1, Total: 1}}}
-	lines := v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})
-	if len(lines) == 0 || !strings.Contains(StripANSI(lines[0]), "final check: re-running the checks on the merged result") {
-		t.Fatalf("the lanes do not say why the run waits: %q", lines)
-	}
-	v.board.Run.State = marshal.Dispatching
-	lines = v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})
-	if strings.Contains(StripANSI(lines[0]), "final check") {
-		t.Fatalf("the lanes speak of a final check while the run works: %q", lines[0])
 	}
 }

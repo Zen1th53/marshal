@@ -94,7 +94,6 @@ func askBoard(t *testing.T) *Workspace {
 // and NEEDS YOU in the header.
 func TestAskCardRendersOnFirstUse(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := askBoard(t)
 	defer w.Close()
 	text := frameText(w, 120, 40)
@@ -173,7 +172,6 @@ func TestAskCardDigitsKeepViews(t *testing.T) {
 // A second ask replaces the first: one open question at a time.
 func TestAskCardReplaces(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := askBoard(t)
 	defer w.Close()
 	second := "the task reruns clean now. I'd keep the current goal."

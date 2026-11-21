@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+- The classic Board is removed: Board v2 is the only Board, and `MARSHAL_BOARD=classic` no longer does anything. A terminal too small for Board v2 (under 80 columns alone, 60 beside the chat, or 12 rows) shows one line saying what waits and that the window must grow, instead of the classic narrow panes. The inspector opens over the dimmed Board v2 screen. Beside the chat the Board is given at least 60 columns (from a 101-column window), up from 56.
+
 ## 0.3.8
 
 ### Added

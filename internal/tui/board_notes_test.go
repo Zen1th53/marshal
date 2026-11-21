@@ -39,7 +39,6 @@ func clickText(t *testing.T, w *Workspace, cols, rows int, text string) {
 // whole text.
 func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	defer w.Close()
 	w.theme = NewTheme(ThemeNoColor, true, false)
@@ -91,7 +90,6 @@ func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
 // and one Activity line, never an overlay over the card.
 func TestFirstUseVerifyResultIsAChipAndOneActivityLine(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	now := time.Now()

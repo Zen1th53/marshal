@@ -9,7 +9,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
@@ -17,7 +16,6 @@ import (
 // and the call to action no longer asks for a goal the Marshal already has.
 func TestRequirementsCardIsCountedAndHidesTheCallToAction(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := reqBoard(t)
 	defer w.Close()
 	text := frameText(w, 120, 40)
@@ -34,7 +32,6 @@ func TestRequirementsCardIsCountedAndHidesTheCallToAction(t *testing.T) {
 // (or a cancelled one) it asks.
 func TestFirstUseCallToActionHidesOnceAGoalIsGiven(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	if text := frameText(w, 120, 40); !strings.Contains(text, firstUseCTA) {
@@ -69,7 +66,6 @@ func TestFirstUseCallToActionHidesOnceAGoalIsGiven(t *testing.T) {
 // three, beside the chat as at full width.
 func TestInboxListsEveryEntryTheHeaderCounts(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	for _, docked := range []bool{true, false} {
 		w := emptyBoardWorkspace(t)
 		w.dock.docked.Store(docked)
@@ -130,20 +126,5 @@ func TestReviewRowIsNotStalledWhileTheMarshalDrivesTheRun(t *testing.T) {
 	m.mu.Unlock()
 	if !stalled() {
 		t.Fatal("a hand-in nothing drives is not shown stalled")
-	}
-}
-
-// A merged task's elapsed cell keeps how long it took, however long ago it
-// merged.
-func TestMergedTaskRowElapsedDoesNotTick(t *testing.T) {
-	at := time.Date(2026, 11, 2, 14, 0, 0, 0, time.UTC)
-	b := boardmodel.Board{Tasks: []boardmodel.TaskRow{{ID: "calc-add", State: boardmodel.TaskMerged, Worker: "codex", Began: at, Since: at.Add(90 * time.Second)}}}
-	for _, later := range []time.Duration{0, 2 * time.Minute, 7 * time.Minute} {
-		v := rowsVisual(b, ThemeNoColor, true)
-		v.now = at.Add(90*time.Second + later)
-		line := StripANSI(taskLine(t, v.tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: 120, H: 4}}), "calc-add"))
-		if !strings.Contains(line, "01:30") {
-			t.Fatalf("%s after the merge the row reads %q, want 01:30", later, line)
-		}
 	}
 }

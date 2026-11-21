@@ -250,7 +250,6 @@ func TestBoardHintsFollowState(t *testing.T) {
 // right while it fits; when it does not, the status wins.
 func TestBoardHintsBesideStatus(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := runHintWorkspace(t, "T-017")
 	defer w.Close()
 	w.composer.SetText("add a README")
@@ -276,7 +275,6 @@ func TestBoardHintsBesideStatus(t *testing.T) {
 // action, and a click does what the key does.
 func TestBoardHintsAreButtons(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	boardMarshalCandidates = func(*Workspace, context.Context) []pickerCand {
 		return []pickerCand{{provider: "codex"}, {provider: "claude"}}
 	}
@@ -419,7 +417,6 @@ func TestBoardHintsAreButtons(t *testing.T) {
 // labels shorten next, and only then the lead's later items.
 func TestBoardHintsDropTailFirst(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	for _, task := range []string{"T-017", "T-023", "T-033"} {
 		w := runHintWorkspace(t, task)
 		wide, _ := footerIDs(t, w, 170, 45)
@@ -533,8 +530,6 @@ func goldenHints(v boardVisual) []string {
 		lead = []string{"marshal.say", "firstuse.chat", "marshal.pick"}
 	case v.empty:
 		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
-	case v.selectedTask != "":
-		lead = []string{"board.move", "task.inspect", "marshal.say", "task.model"}
 	default:
 		lead = []string{"board.move", "task.inspect", "marshal.say"}
 	}

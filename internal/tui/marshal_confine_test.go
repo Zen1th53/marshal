@@ -171,7 +171,6 @@ func TestWorkspaceMarshalChatConfinement(t *testing.T) {
 // Marshal to recommend undo as well.
 func TestGuardSaysTheMarshalChangedFiles(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.noteMarshalWrites("opencode", "")

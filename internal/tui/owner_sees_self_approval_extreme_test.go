@@ -51,7 +51,6 @@ func TestMarshalSelfDecisionKinds(t *testing.T) {
 // that revision waits, and in Activity once; a new revision has no warning.
 func TestRefusedSelfAcceptanceShowsInTheInbox(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	c := walkContract()

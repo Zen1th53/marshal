@@ -38,7 +38,6 @@ func v2Click(t *testing.T, w *Workspace, h boardHit) {
 // button presses its key (and an inbox decision's button only opens the
 // confirmation), and an inbox line selects its request.
 func TestBoardV2ClicksActAsOnTheClassicBoard(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 
 	t.Run("tasks and lanes", func(t *testing.T) {
 		w := runHintWorkspace(t, "T-017")
@@ -117,7 +116,6 @@ func TestBoardV2ClicksActAsOnTheClassicBoard(t *testing.T) {
 	})
 
 	t.Run("classic keeps its own", func(t *testing.T) {
-		t.Setenv("MARSHAL_BOARD", "classic")
 		w := runHintWorkspace(t, "T-017")
 		defer w.Close()
 		if _, ok := v2Hit(t, w, hitV2Key, ""); ok {

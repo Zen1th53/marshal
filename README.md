@@ -216,7 +216,7 @@ on the right. The Board is a control centre of titled panes:
 | `Ctrl+X` | Stop all workers (never the Marshal) |
 | `?` | Every key |
 
-Select a task and press `Enter` to inspect it; press `o` in the inspector to open its worker pane, or `w` to change its model. The final ULTRA check requires Claude Code installed and not used as a worker in that run; if unavailable, the run stops before checking and tells you to install Claude Code or wait for its limit, then press `Enter`. `MARSHAL_BOARD=classic` keeps the classic Board for one release. [All screens and keys →](docs/board-and-keys.md)
+Select a task and press `Enter` to inspect it; press `o` in the inspector to open its worker pane, or `w` to change its model. The final ULTRA check requires Claude Code installed and not used as a worker in that run; if unavailable, the run stops before checking and tells you to install Claude Code or wait for its limit, then press `Enter`. [All screens and keys →](docs/board-and-keys.md)
 
 ---
 

@@ -32,10 +32,7 @@ import (
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
 	// marshalLive is marshal once it exists, for lock-free readers.
-	marshalLive atomic.Pointer[marshalSession]
-	laneTail    laneTailState
-	// boardEdition is MARSHAL_BOARD as read once at start (boardV2On).
-	boardEdition       atomic.Int32
+	marshalLive        atomic.Pointer[marshalSession]
 	taskDiff           taskDiffOverlay
 	attn               attentionState
 	usage              usageState
@@ -910,8 +907,6 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	w.latchBoardEdition()
-	w.startLaneTail(ctx)
 	w.startAttention(ctx)
 	w.startUsage(ctx)
 	defer w.Close()

@@ -160,7 +160,6 @@ func TestOwnerCardCollectors(t *testing.T) {
 // guard's alert before the question, the question before the
 // requirements; Esc puts one off and the next shows.
 func TestOwnerCardOrderAndLater(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := reqBoard(t)
 	defer w.Close()
 	defer v2Cards.Delete(w)
@@ -297,47 +296,9 @@ func lastActivity(w *Workspace) string {
 	return notes[0].Text
 }
 
-// Every key of every owner card does on the v2 card what it does on the
-// classic Board: the v2 card's key path hands it to the classic card's own
-// key handler.
-func TestOwnerCardKeysReachTheClassicHandlers(t *testing.T) {
-	for _, c := range ownerKeyCases {
-		t.Run(c.name, func(t *testing.T) {
-			run := func(mode string) string {
-				t.Setenv("MARSHAL_BOARD", mode)
-				w := c.setup(t)
-				defer w.Close()
-				defer v2Cards.Delete(w)
-				for _, k := range c.keys {
-					if mode == "" {
-						v2Frame(t, w)
-						if !w.v2CardKey(k) {
-							t.Fatalf("the v2 card did not take %+v", k)
-						}
-						continue
-					}
-					frameText(w, 132, 31)
-					if w.v2CardShown() != "" {
-						t.Fatal("a v2 card on the classic Board")
-					}
-					if !w.handleBoardKey(k) {
-						t.Fatalf("the classic Board did not take %+v", k)
-					}
-				}
-				return c.state(w)
-			}
-			classic, v2 := run("classic"), run("")
-			if classic != v2 {
-				t.Fatalf("v2 card: %q\nclassic: %q", v2, classic)
-			}
-		})
-	}
-}
-
 // clickCase is a click on an owner card's chip or line: it records the
 // classic card's own click region, so it runs the classic click handler.
 func TestOwnerCardClicksRunTheClassicActions(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	t.Run("ask choice", func(t *testing.T) {
 		w, _, tr := boardWithNativeChat(t)
 		defer v2Cards.Delete(w)
@@ -447,7 +408,6 @@ func TestOwnerCardClicksRunTheClassicActions(t *testing.T) {
 // The cards draw as v2 cards over the Board: titled with what is asked,
 // the content, and the chips.
 func TestOwnerCardsDrawOnTheV2Board(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := askBoard(t)
 	defer w.Close()
 	defer v2Cards.Delete(w)

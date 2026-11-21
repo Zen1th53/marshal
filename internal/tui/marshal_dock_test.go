@@ -308,7 +308,6 @@ func codexWindow(now time.Time) usage.Window {
 }
 
 func TestMarshalDockTitleShowsLimit(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	f := newDockFake(t, 120)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 120)
@@ -346,7 +345,6 @@ func TestMarshalDockTitleShowsLimit(t *testing.T) {
 // the v2 view model, fitted to the chat's width at 132 columns; the classic
 // limit title is not used, and an unchanged strip writes no title again.
 func TestMarshalDockTitleV2Strip(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	f := newDockFake(t, 132)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 132)
@@ -372,7 +370,6 @@ func TestMarshalDockTitleV2Strip(t *testing.T) {
 }
 
 func TestDockTitleFits(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	w := &Workspace{}
 	chat := &activeTmuxAgent{provider: "codex"}
 	now := time.Now()
@@ -394,49 +391,6 @@ func TestDockTitleFits(t *testing.T) {
 	}
 }
 
-// TestDockTitleModelAndLimit is the chat's title row at the two window widths
-// the plan names: the Marshal model (from the chat's --model, else the
-// provider's own last reading), its live limit and [m] flush right. At 100
-// columns the model name is shortened before any part of the limit goes, and
-// the percent left and [m] always stay.
-func TestDockTitleModelAndLimit(t *testing.T) {
-	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-	codex := []usage.Quota{{Provider: "codex", Known: true, AsOf: now, Model: "gpt-6.1-sol",
-		Windows: []usage.Window{{Label: "wk", LeftPercent: 29, ResetsAt: now.Add(50 * time.Hour)}}}}
-	claude := []usage.Quota{{Provider: "claude", Known: true, AsOf: now,
-		Windows: []usage.Window{{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(98 * time.Hour)}}}}
-	for _, tc := range []struct {
-		name, provider string
-		args           []string
-		qs             []usage.Quota
-		windowCols     int
-		want           string
-	}{
-		{"codex 160", "codex", nil, codex, 160, " MARSHAL · ⬡ GPT-6.1-Sol ▓░░ 29% left ·2d             [m] switch  F11 Board "},
-		{"codex 100", "codex", nil, codex, 100, " MARSHAL · ⬡ 6.1-Sol 29% left       [m] "},
-		{"claude arg 160", "claude", []string{"--model", "claude-opus-5-5"}, claude, 160, " MARSHAL · ✳ Claude Opus 5.5 ▓▓░ 58% left ·4d         [m] switch  F11 Board "},
-		{"claude arg 100", "claude", []string{"--model=claude-opus-5-5"}, claude, 100, " MARSHAL · ✳ Opus 5.5 58% left      [m] "},
-		{"unknown model 100", "claude", nil, claude, 100, " MARSHAL · ✳ claude 58% left        [m] "},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			chatW := dockWidth(tc.windowCols)
-			got, at := dockTitleFor(tc.provider, tc.args, tc.qs, true, true, chatW, true, now)
-			if got != tc.want {
-				t.Errorf("got  %q\nwant %q", got, tc.want)
-			}
-			if n := VisibleLen(got); n != chatW-3 {
-				t.Errorf("width %d, want %d", n, chatW-3)
-			}
-			if at < 0 || !strings.HasPrefix(string([]rune(got)[at:]), "[m]") {
-				t.Errorf("[m] at %d in %q", at, got)
-			}
-			if !strings.Contains(got, "% left") {
-				t.Errorf("limit dropped: %q", got)
-			}
-		})
-	}
-}
-
 func TestModelDisplayName(t *testing.T) {
 	for id, want := range map[string][2]string{
 		"gpt-6.1-sol":                {"GPT-6.1-Sol", "6.1-Sol"},
@@ -455,7 +409,6 @@ func TestModelDisplayName(t *testing.T) {
 }
 
 func TestDockTitleCases(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	now := time.Now()
 	codexKnown := func(stale bool) usage.Quota {
 		return usage.Quota{Provider: "codex", Known: true, Stale: stale, AsOf: now,
@@ -493,7 +446,6 @@ func TestDockTitleCases(t *testing.T) {
 }
 
 func TestUsageReadKicksDock(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
 	f := newDockFake(t, 120)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 120)

@@ -13,7 +13,6 @@ import (
 // the two. A writer that takes w.mu without pause makes that happen on the
 // first frame painted under the lock; -race checks what the paint reads.
 func TestBoardV2PaintRunsWithoutTheWorkspaceLock(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	// Closed only after the frames came back: a deadlocked paint keeps
 	// w.mu, and Close would wait on it too.
 	w := emptyBoardWorkspace(t)

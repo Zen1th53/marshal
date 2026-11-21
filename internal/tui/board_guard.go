@@ -732,62 +732,6 @@ func (w *Workspace) clickGuard(action rune) {
 	}
 }
 
-// guardEntry is the alert as the inbox shows it, two rows: what changed,
-// then its buttons, or while armed the confirmation. x is the inbox's
-// first cell, row its frame row.
-func (v boardVisual) guardEntry(x, row, w int) []string {
-	a := v.guard
-	flag := "⚑ "
-	if !v.unicode() {
-		flag = "! "
-	}
-	what, why := "project files changed outside a run: ", " · workers should implement"
-	if a.byMarshal {
-		what, why = "the Marshal changed project files: ", " · only workers may change them"
-	}
-	first := v.fg("failed", flag+"files changed") + v.fg("dim", " · ") + v.bold(v.fg("white", what))
-	first += v.fg("white", v.trunc(guardShown(a.paths, v.guardPrefix, 4), max(8, w-VisibleLen(first)-VisibleLen(why))))
-	first += v.fg("dim", why)
-	second, at := "    ", 4
-	button := func(label string, action rune) {
-		v.hit(boardHit{row: row + 1, x0: x + at, x1: x + min(w, at+VisibleLen(label)), kind: hitGuard, id: "guard", action: action})
-		second += label
-		at += VisibleLen(label)
-	}
-	gap := func(s string) {
-		second += s
-		at += VisibleLen(s)
-	}
-	if v.guardArmed {
-		u := v.guardUndo
-		what := []string{}
-		if n := len(u.remove); n > 0 {
-			what = append(what, fmt.Sprintf("delete %d new %s", n, plural(n, "file", "files")))
-		}
-		if n := len(u.restore); n > 0 {
-			what = append(what, fmt.Sprintf("restore %d to HEAD", n))
-		}
-		gap(v.fg("waiting", "undo: "+strings.Join(what, ", ")+", nothing else? "))
-		button(v.bg("rule", "[Enter]")+" undo", 'u')
-		gap("  ")
-		button(v.bg("rule", "[Esc]")+" cancel", 'n')
-	} else {
-		if a.byMarshal {
-			button(v.bg("rule", "[u]")+" undo (recommended)", 'u')
-		} else {
-			button(v.bg("rule", "[u]")+" undo", 'u')
-		}
-		gap("  ")
-		button(v.bg("rule", "[K]")+" keep", 'K')
-		if a.answered != "" {
-			gap(v.fg("dim", "  · you answered “"+cleanBoard(a.answered)+"”; nothing is undone yet"))
-		} else {
-			gap(v.fg("dim", "  · the Marshal was told not to implement"))
-		}
-	}
-	return []string{PadCell(first, w), PadCell(second, w)}
-}
-
 // guardCount is 1 while an alert waits, for the inbox's counts.
 func (v boardVisual) guardCount() int {
 	if v.guard != nil {

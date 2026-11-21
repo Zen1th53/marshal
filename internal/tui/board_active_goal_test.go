@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
 type activeGoalFakeArch struct{}
@@ -37,115 +35,6 @@ func activeGoalBoardWorkspace(t *testing.T, st *store.Store, session string) *Wo
 func activeGoalFrameText(w *Workspace, cols, rows int) string {
 	lines, _, _ := w.frameLines(cols, rows)
 	return StripANSI(strings.Join(lines, "\n"))
-}
-
-func activeGoalVisual(th *Theme, now time.Time) boardVisual {
-	return boardVisual{
-		now: now, theme: th, edition: "Marshal", empty: true, marshalLeads: true, project: "demo", focus: layout.Tasks,
-		chips: []providerChip{
-			{name: "codex", state: "verified", model: "gpt-5"},
-			{name: "claude", state: "unverified"},
-			{name: "agy", state: "limited", until: now.Add(40 * time.Minute)},
-			{name: "opencode", state: "not installed"},
-		},
-	}
-}
-
-// TestFirstUseActiveGoalShowsWorkingState verifies that when an active goal
-// exists before any run has started, the home card shows what the Marshal is
-// working on (with elapsed duration) instead of asking what to build, and the
-// header shows PLANNING instead of NO RUN YET.
-func TestFirstUseActiveGoalShowsWorkingState(t *testing.T) {
-	now := time.Date(2026, 11, 8, 14, 2, 31, 0, time.UTC)
-	longGoal := "Build a local-first voice assistant with offline transcription, wake word detection, and an HTTP control panel"
-
-	t.Run("full width unicode", func(t *testing.T) {
-		th := NewTheme(ThemeNoColor, true, false)
-		v := activeGoalVisual(th, now)
-		v.goalGiven = true
-		v.goalText = "Build a voice assistant with local transcription"
-		v.goalSince = now.Add(-80 * time.Minute)
-		v.hints = []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}
-		var hits []boardHit
-		v.hits = &hits
-		l := layout.ComputeFor(120, 40, layout.Home, v.layoutCounts())
-		frame := paintFirstUse(l, th, v)
-		for y, line := range frame {
-			if got := VisibleLen(line); got != 120 {
-				t.Fatalf("row %d: width %d, want 120: %q", y, got, line)
-			}
-		}
-		text := StripANSI(strings.Join(frame, "\n"))
-		head := StripANSI(frame[1])
-		if !strings.Contains(head, " PLANNING ") || strings.Contains(head, "NO RUN YET") {
-			t.Fatalf("header did not switch to PLANNING: %q", head)
-		}
-		if strings.Contains(text, firstUseCTA) {
-			t.Fatalf("home still shows first-use CTA:\n%s", text)
-		}
-		for _, want := range []string{
-			"▸ The Marshal is working on: Build a voice assistant with local transcription",
-			"1h20m",
-			"The Marshal has your goal",
-		} {
-			if !strings.Contains(text, want) {
-				t.Fatalf("home misses %q:\n%s", want, text)
-			}
-		}
-		var chatHit bool
-		for _, h := range hits {
-			if h.kind == hitAction && h.id == "marshal.chat" && strings.Contains(StripANSI(frame[h.row]), "The Marshal is working on:") {
-				chatHit = true
-			}
-		}
-		if !chatHit {
-			t.Fatalf("working-on-goal line is not clickable to focus chat: %+v", hits)
-		}
-	})
-
-	t.Run("narrow truncates cleanly and keeps elapsed", func(t *testing.T) {
-		th := NewTheme(ThemeNoColor, true, false)
-		v := activeGoalVisual(th, now)
-		v.goalGiven = true
-		v.goalText = longGoal
-		v.goalSince = now.Add(-12 * time.Minute)
-		v.hints = []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}
-		l := layout.ComputeFor(80, 24, layout.Home, v.layoutCounts())
-		frame := paintFirstUse(l, th, v)
-		for y, line := range frame {
-			if got := VisibleLen(line); got != 80 {
-				t.Fatalf("row %d: width %d, want 80: %q", y, got, line)
-			}
-		}
-		text := StripANSI(strings.Join(frame, "\n"))
-		if !strings.Contains(text, "▸ The Marshal is working on: Build a local-first") {
-			t.Fatalf("narrow card lost goal lead:\n%s", text)
-		}
-		if !strings.Contains(text, "12m") {
-			t.Fatalf("narrow card clipped elapsed duration:\n%s", text)
-		}
-		if strings.Contains(text, firstUseCTA) || strings.Contains(text, "NO RUN YET") {
-			t.Fatalf("narrow card still shows idle state:\n%s", text)
-		}
-	})
-
-	t.Run("ascii theme has no non-ASCII runes", func(t *testing.T) {
-		th := NewTheme(ThemeNoColor, false, false)
-		v := activeGoalVisual(th, now)
-		v.goalGiven = true
-		v.goalText = longGoal
-		v.goalSince = now.Add(-45 * time.Second)
-		v.hints = []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}
-		l := layout.ComputeFor(80, 24, layout.Home, v.layoutCounts())
-		frame := paintFirstUse(l, th, v)
-		text := StripANSI(strings.Join(frame, "\n"))
-		if strings.ContainsFunc(text, func(r rune) bool { return r > 127 }) {
-			t.Fatalf("ASCII theme emitted non-ASCII cell:\n%s", text)
-		}
-		if !strings.Contains(text, "> The Marshal is working on:") || !strings.Contains(text, "45s") {
-			t.Fatalf("ASCII home card misses working goal or elapsed:\n%s", text)
-		}
-	})
 }
 
 // TestBoardRefreshPicksUpActiveGoalFromStore verifies that when a goal contract
@@ -234,7 +123,6 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 // being worked on rather than the first-use call to action.
 func TestActiveGoalWithOwnerGateShowsNeedsYou(t *testing.T) {
 	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := activeGoalBoardWorkspace(t, nil, "session-gate")
 	defer w.Close()
 	w.mu.Lock()
@@ -252,15 +140,9 @@ func TestActiveGoalWithOwnerGateShowsNeedsYou(t *testing.T) {
 	w.refreshGates(t.Context())
 
 	text := activeGoalFrameText(w, 120, 40)
-	head := strings.Split(text, "\n")[1]
-	if !strings.Contains(head, "NEEDS YOU") || strings.Contains(head, "NO RUN YET") || strings.Contains(head, "PLANNING") {
-		t.Fatalf("header with active goal and pending gate: %q", head)
-	}
-	if strings.Contains(text, firstUseCTA) {
-		t.Fatalf("body still shows first-use CTA:\n%s", text)
-	}
-	if !strings.Contains(text, "▸ The Marshal is working on: Build hello-uz CLI") {
-		t.Fatalf("body misses working-on-goal line:\n%s", text)
+	now := strings.Split(text, "\n")[1]
+	if !strings.Contains(now, "from you architecture waits for you") || strings.Contains(now, "from you nothing") {
+		t.Fatalf("NOW line with active goal and pending gate: %q", now)
 	}
 }
 
@@ -332,40 +214,5 @@ func TestActiveGoalFallbacksAndHints(t *testing.T) {
 	want := []string{"marshal.say", "firstuse.chat", "marshal.pick", "palette", "help"}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("active goal hints = %v, want %v", ids, want)
-	}
-}
-
-// TestFirstUseIdleGoldenUnchanged ensures the no-goal first-use home layout
-// still matches the checked-in golden byte-for-byte.
-func TestFirstUseIdleGoldenUnchanged(t *testing.T) {
-	now := time.Date(2026, 11, 8, 14, 2, 31, 0, time.UTC)
-	for _, tc := range []struct {
-		name       string
-		cols, rows int
-		unicode    bool
-	}{
-		{"first-use-home-120x40", 120, 40, true},
-		{"first-use-ascii-080x24", 80, 24, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			th := NewTheme(ThemeNoColor, tc.unicode, false)
-			v := activeGoalVisual(th, now)
-			v.echo = []sayEcho{{id: 1, At: now.Add(-20 * time.Second), Text: "build a todo app with a REST API and tests", State: sayQueued}}
-			v.hints = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick", "palette", "help"}
-			l := layout.ComputeFor(tc.cols, tc.rows, layout.Home, v.layoutCounts())
-			frame := paintFirstUse(l, th, v)
-			var b strings.Builder
-			for _, line := range frame {
-				b.WriteString(StripANSI(line))
-				b.WriteString("|\n")
-			}
-			want, err := os.ReadFile(filepath.Join("testdata", "board", tc.name+".golden"))
-			if err != nil {
-				t.Fatalf("read golden: %v", err)
-			}
-			if b.String() != string(want) {
-				t.Fatalf("first-use golden %s drifted:\nGOT:\n%s\nWANT:\n%s", tc.name, b.String(), string(want))
-			}
-		})
 	}
 }
