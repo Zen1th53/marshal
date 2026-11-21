@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Fixed
-- macOS: workers' Marshal MCP server (`marshal mcp relay`) exited at once with "MCP relay already active: operation not supported", so workers ran without Marshal's tools. The relay now locks its private directory where a FIFO cannot be locked, and handles macOS FIFO EOF and write behaviour.
+- macOS: workers' Marshal MCP server (`marshal mcp relay`) exited at once with "MCP relay already active: operation not supported", so a worker's Marshal MCP server never started. The relay now locks its private directory where a FIFO cannot be locked, and handles macOS FIFO EOF and write behaviour.
 - macOS: `marshal update install` refused with "release binaries are built for Linux"; it now installs the darwin release archive, verified against `checksums.txt` as before.
 - macOS: with `marshal daemon` running, every command that talks to it (`marshal status`, `tasks`, `events`, `logs`, …) was refused ("local socket peer authentication refused"). The runtime socket now reads the peer's UID with `LOCAL_PEERCRED`.
 

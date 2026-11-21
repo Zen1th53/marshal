@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "1db13e4636ffb1d1cdd51c49afe4f83324910931fc8869643ade6415e4986d44",
-      "bytes": 29503
+      "sha256": "ae4abaec9724d8ea9f7f36fe117286f1d90766026b1c0ff0cf59616f4cf28581",
+      "bytes": 29511
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -796,8 +796,8 @@
     },
     {
       "path": "internal/adapter/antigravity/governed_extreme_test.go",
-      "sha256": "c0d480d1695cd8162660a500cc613b068abad0c0162a800420c22eddfa541836",
-      "bytes": 11695
+      "sha256": "3eb0d6afd9ab78de8706db9980745aebeb4aaafd4553eb4794c4b751ef57759c",
+      "bytes": 12235
     },
     {
       "path": "internal/adapter/antigravity/interface_test.go",
@@ -3021,8 +3021,8 @@
     },
     {
       "path": "internal/app/marshal_service_test.go",
-      "sha256": "1105de134c4b7bb20201c55749e143aa7e3eac5ad6685da4072046cd67737dd5",
-      "bytes": 54081
+      "sha256": "c78631293c98bd6fe7ae71ac8e1308d4feb10c5a2040a902ac8a606c14431ea4",
+      "bytes": 54451
     },
     {
       "path": "internal/app/marshal_session_rule_test.go",
@@ -3651,8 +3651,8 @@
     },
     {
       "path": "internal/app/project_context_marshal_test_extreme_test.go",
-      "sha256": "2392ef715e2e14e29268431099a63ccc3f9f5211a94436d40f684b6f4f19cd39",
-      "bytes": 2361
+      "sha256": "363c8e98d6cb73c9e2f8beac3a44a6904ccded0bd2995ed46043256ad74e0a3e",
+      "bytes": 2581
     },
     {
       "path": "internal/app/project_context_native_planning_extreme.go",
@@ -7131,13 +7131,8 @@
     },
     {
       "path": "internal/hostgit/identity.go",
-      "sha256": "ee6b82f6ee7d9da601f8e62f0ea288107658300a3b61922e9567e68a2099e662",
-      "bytes": 4897
-    },
-    {
-      "path": "internal/hostgit/identity_test.go",
-      "sha256": "3bd8d15ae0dd3d010da6c6081c33564f6cfa750a3fd326b92dd3f0ac685ab97c",
-      "bytes": 1290
+      "sha256": "117446f209f21e4115996aa83d38eb72b015c05d5f3ff97985970593e347ad41",
+      "bytes": 4367
     },
     {
       "path": "internal/hostgit/redirect_test.go",
@@ -9936,8 +9931,8 @@
     },
     {
       "path": "internal/sessionmcp/antigravity_extreme_test.go",
-      "sha256": "2e0bd5128264aa920726f7cea1bff93f8d1fbf18c23f0b92f60ce6613e9fd874",
-      "bytes": 8003
+      "sha256": "a145725fd9cf2cccba0b310608c08e1801c7ffabdbc44292292e07fb0fb0da7b",
+      "bytes": 8095
     },
     {
       "path": "internal/sessionmcp/antigravity_oldbwrap_extreme_test.go",
@@ -9951,8 +9946,8 @@
     },
     {
       "path": "internal/sessionmcp/bridge.go",
-      "sha256": "fc56c55ae5e0e9b4e791353b4b6e516a1f880fe94ec6519573a00e3f62a61738",
-      "bytes": 11168
+      "sha256": "7b11e6da3b91caa841ebab00a08093f6473632675a971618d65bfbada7a9073c",
+      "bytes": 11343
     },
     {
       "path": "internal/sessionmcp/bridge_test.go",
@@ -16741,8 +16736,8 @@
     },
     {
       "path": "internal/worktree/gc_test.go",
-      "sha256": "fda9e83bd4d57842030357e2f9a4ea0e23fbcdac67e45e2c9cad12487d552b64",
-      "bytes": 4361
+      "sha256": "a75cd8d2877970aff82dcad5daf8c5a667547baf49d1a85c4b48daa12e9cd270",
+      "bytes": 4383
     },
     {
       "path": "internal/worktree/m04_resume_test.go",
@@ -16756,8 +16751,8 @@
     },
     {
       "path": "internal/worktree/manager.go",
-      "sha256": "98b53ca04c6eb677f2d1111d843f300eb4180be98189174cefd5c524b11fda2d",
-      "bytes": 12247
+      "sha256": "3c5c5a836a95d6e869304ef23ea0c9aa2ab36672cfeaa0005e44ebaeba94f52f",
+      "bytes": 11997
     },
     {
       "path": "internal/worktree/manager_test.go",
@@ -17401,8 +17396,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d3cf7d8663f72495940ffd7edc3ea29cfcec54fb380948a892f3d904885a1ea2",
-      "bytes": 464876
+      "sha256": "3cfee3461dd41909263dade06038a4c1dcd36c28275d89966a441d2e20494953",
+      "bytes": 464496
     },
     {
       "path": "tools/extreme/prq/main_default.go",
