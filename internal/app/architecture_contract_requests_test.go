@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/architecturereview"
@@ -120,5 +121,37 @@ func TestContractSeedDrawsSubArchitectures(t *testing.T) {
 	}
 	if _, ok := views["sub:web"]; !ok || len(views["architecture"].Edges) != 1 {
 		t.Fatalf("views = %v", views)
+	}
+}
+
+// A request about derived code reaches the Marshal with its exact elements and
+// can only be answered: a proposed change is refused before any pending
+// contract is read.
+func TestContractFeedbackDerivedCodeIsAnsweredOnly(t *testing.T) {
+	seed := contractSeedForTest(t, 1, "d1", "Checkout")
+	var envelope map[string]any
+	_ = json.Unmarshal(requestEnvelopeForTest(t, seed, "change"), &envelope)
+	envelope["derived"] = map[string]any{"part": "orders", "elements": []any{map[string]any{"kind": "file", "path": "orders/refund.go"}}, "breadcrumb": []any{"orders", "refund.go"}, "note": "derived from code, not reviewed"}
+	raw, _ := json.Marshal(envelope)
+	var got ArchitectureRequest
+	status := "answered"
+	forward := func(_ context.Context, req ArchitectureRequest) (ArchitectureAnswer, error) {
+		got = req
+		return ArchitectureAnswer{Status: status, Reply: "It refunds in refund.go.", Provider: "claude", Session: "s"}, nil
+	}
+	pendingRead := false
+	pending := func(context.Context) (*contractReviewSeed, error) {
+		pendingRead = true
+		return contractSeedForTest(t, 2, "d2", "Changed"), nil
+	}
+	if _, err := contractFeedback(forward, pending)(context.Background(), raw); err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(got.Derived) || !strings.Contains(string(got.Derived), `"orders/refund.go"`) {
+		t.Fatalf("derived elements were not forwarded: %s", got.Derived)
+	}
+	status = "proposed_change"
+	if _, err := contractFeedback(forward, pending)(context.Background(), raw); !errors.Is(err, errDerivedChange) || pendingRead {
+		t.Fatalf("a derived change was not refused before the pending contract: %v %v", err, pendingRead)
 	}
 }

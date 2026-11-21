@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Architecture review: mark any element on any level, including code-derived packages, files, declarations and their connections (pencil, Shift-click or Select area), and ask the Marshal about it. The request names the exact breadcrumb, kind and repository path, which the server validates. It never changes the contract or **Accept**. Open requests show as dots, and History lists them with their path.
+
+### Changed
+- Architecture review: one click (or tap, or `Enter`) on a part with something inside opens it with the zoom-in, breadcrumb and `#path`, and keeps its panel open inside; a part with nothing inside still focuses; `Space` focuses.
+
 ## 0.3.6
 
 ### Added

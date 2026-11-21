@@ -19,7 +19,15 @@ type ArchitectureRequest struct {
 	Anchor      json.RawMessage `json:"anchor"`
 	Components  json.RawMessage `json:"components"`
 	Connections json.RawMessage `json:"connections"`
+	// Derived, when present, names code elements (package, file, declaration
+	// or connection by repository path) inside the selected part, from a level
+	// derived from code that the owner has not reviewed. It is answered only.
+	Derived json.RawMessage `json:"derived,omitempty"`
 }
+
+// errDerivedChange refuses a contract change answered for a request about
+// derived code: such a request never changes the architecture.
+var errDerivedChange = errors.New("a request about derived code cannot change the architecture")
 
 // ArchitectureAnswer is the Marshal's answer to an ArchitectureRequest. A
 // proposed change is the pending project contract the Marshal submitted for
@@ -53,6 +61,7 @@ func contractFeedback(forward func(context.Context, ArchitectureRequest) (Archit
 				Components  json.RawMessage `json:"components"`
 				Connections json.RawMessage `json:"connections"`
 			} `json:"selection"`
+			Derived json.RawMessage `json:"derived"`
 		}
 		if err := json.Unmarshal(raw, &envelope); err != nil {
 			return nil, err
@@ -63,13 +72,21 @@ func contractFeedback(forward func(context.Context, ArchitectureRequest) (Archit
 		if err := json.Unmarshal(envelope.Architecture, &graph); err != nil || len(graph.Source) == 0 {
 			return nil, errors.New("the page is not built from a project summary")
 		}
+		var derived json.RawMessage
+		if len(envelope.Derived) > 0 && string(envelope.Derived) != "null" {
+			derived = envelope.Derived
+		}
 		answer, err := forward(ctx, ArchitectureRequest{
 			ID: envelope.RequestID, Type: envelope.RequestType, Text: envelope.Request, Revision: envelope.Revision,
 			Source: graph.Source, Anchor: envelope.Selection.Anchor,
 			Components: envelope.Selection.Components, Connections: envelope.Selection.Connections,
+			Derived: derived,
 		})
 		if err != nil {
 			return nil, err
+		}
+		if derived != nil && answer.Status == "proposed_change" {
+			return nil, errDerivedChange
 		}
 		architecture := envelope.Architecture
 		if answer.Status == "proposed_change" {
