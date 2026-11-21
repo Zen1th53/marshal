@@ -252,11 +252,7 @@ func (s *Store) GetClaimTransitions(ctx context.Context, claimID string) ([]mode
 	return transitions, rows.Err()
 }
 
-type claimScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanClaim(scanner claimScanner) (model.Claim, error) {
+func scanClaim(scanner rowScanner) (model.Claim, error) {
 	var c model.Claim
 	var critStr, stateStr, authorJSON, suppJSON, contraJSON, clustJSON, bindJSON string
 	var createdStr, updatedStr, evalStr string

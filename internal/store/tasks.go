@@ -377,11 +377,7 @@ func loadTaskTx(ctx context.Context, tx *sql.Tx, projectID, taskID string) (mode
 	return task, true, rows.Err()
 }
 
-type taskScanner interface {
-	Scan(...any) error
-}
-
-func scanTask(scanner taskScanner) (model.Task, error) {
+func scanTask(scanner rowScanner) (model.Task, error) {
 	var task model.Task
 	var status, risk string
 	var owner, branch, worktree, base, head sql.NullString
