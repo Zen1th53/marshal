@@ -716,8 +716,10 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		lines = paintHost(l, th, v, ui)
 	case ui.inspect != "":
 		lines = paintBoardInspector(l, th, ui.inspector(b, ui.inspect), v.render, v.hit)
-	case docked && ui.task != "":
+	case docked && ui.task != "" && !w.v2Fits(cols, rows):
 		// A docked inspector shows the selected task without being opened.
+		// Board v2 has no docked inspector: where v2 fits it draws the
+		// Board, as on narrower screens (the task is still selected).
 		lines = paintBoardInspector(l, th, ui.inspector(b, ui.task), v.render, v.hit)
 	case w.v2Fits(cols, rows):
 		// The Board v2 screens draw the home and run views and every

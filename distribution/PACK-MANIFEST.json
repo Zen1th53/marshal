@@ -5256,8 +5256,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "b6c682558d7623a7b7fcee704aed192dbdc78509ac92a4370cfbe766cc793ffc",
-      "bytes": 44891
+      "sha256": "a9250a2282709532de27d3da082d614c13c8c5dd73475105958f3a18c54a90a1",
+      "bytes": 44986
     },
     {
       "path": "internal/cli/cli_mcp_default.go",
@@ -5443,6 +5443,11 @@
       "path": "internal/cli/learning_test.go",
       "sha256": "0c328f61f5877f90e393234b1657534036512e52d74b9560bfda812b9611909e",
       "bytes": 2079
+    },
+    {
+      "path": "internal/cli/loopback_addr_test.go",
+      "sha256": "efad6ca99d48bbd2137a671ba34513688f649b1db547a40a643f777baf889e88",
+      "bytes": 613
     },
     {
       "path": "internal/cli/main_test.go",
@@ -13816,8 +13821,8 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "a525d922a7c316a859ea943fa5421fd4353675e23d748138fb5f6dc693192e59",
-      "bytes": 48714
+      "sha256": "055b685e77bc39014ffa6b9aa5591601d67529d685675729cceab7fe5bc1980c",
+      "bytes": 48870
     },
     {
       "path": "internal/tui/board_live_test.go",
@@ -14253,6 +14258,11 @@
       "path": "internal/tui/boardv2_verify_signin.go",
       "sha256": "7e3811743f4e109e5f76702951864615015527f0d88e6e8f59e610dcdb67627b",
       "bytes": 2217
+    },
+    {
+      "path": "internal/tui/boardv2_wide_test.go",
+      "sha256": "10f47835c76cb8aa69e6912234818a9363e19741cf60662d13fbf78d6c506093",
+      "bytes": 672
     },
     {
       "path": "internal/tui/briefing_dir.go",
