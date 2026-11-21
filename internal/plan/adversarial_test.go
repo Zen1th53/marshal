@@ -20,34 +20,6 @@ import (
 // to skip a gate can only write text, so each test below writes the most
 // persuasive text available and checks the gate is still there.
 
-// A1: a planner proposes work the Goal forbids.
-func TestPlannerCannotProposeForbiddenDeletion(t *testing.T) {
-	forbidden := plan.Proposal{
-		ID: "forbidden",
-		Tasks: []plan.Task{{
-			ID: "wipe", Title: "modify the database schema and drop the users table",
-			Mutating: true, Weight: 1, Paths: []string{"internal/store/schema.sql"},
-			Criteria: []string{"responses are cached", "existing tests pass"},
-		}},
-	}
-	compliant := plan.Proposal{
-		ID: "compliant",
-		Tasks: []plan.Task{{
-			ID: "cache", Title: "add the cache", Mutating: true, Weight: 1,
-			Criteria: []string{"responses are cached"},
-		}},
-	}
-
-	selection := plan.SelectBest(plan.UltraRequest{
-		Proposals:       []plan.Proposal{forbidden, compliant},
-		Criteria:        []string{"responses are cached", "existing tests pass"},
-		HardConstraints: []string{"Do not modify the database schema"},
-	})
-	if selection.Best == "forbidden" {
-		t.Fatal("a proposal breaching a hard constraint was selected despite covering more")
-	}
-}
-
 // A2: a planner asserts the work is already approved.
 //
 // The assertion is placed in every field a planner can influence. None of them
@@ -176,34 +148,6 @@ func TestOutOfScopeTaskServesNoCriterion(t *testing.T) {
 	}
 	if !gated {
 		t.Fatalf("an out-of-scope network upload drew no approval gate: %+v", built.Approvals)
-	}
-}
-
-// A8: a secret in memory never reaches an unrelated task's package.
-func TestSecretMemoryDoesNotLeakIntoUnrelatedContext(t *testing.T) {
-	credential := secretish()
-	tasks := coveringTasks()
-
-	packages := plan.BuildContextPackages(plan.PackageRequest{
-		Plan: packagedPlan(t, tasks),
-		MemoryCandidates: []plan.MemoryCandidate{{
-			ID: "M1", Content: "the deploy key is " + credential,
-			Fresh: true, ProjectBound: true, Tasks: []string{"implement"},
-		}},
-	})
-
-	for _, contextPackage := range packages {
-		encoded, err := json.Marshal(contextPackage)
-		if err != nil {
-			t.Fatalf("marshal: %v", err)
-		}
-		if strings.Contains(string(encoded), credential) {
-			t.Fatalf("package %s carries a credential", contextPackage.TaskID)
-		}
-		// The unrelated task does not even receive the memory reference.
-		if contextPackage.TaskID == "test" && len(contextPackage.Memory) > 0 {
-			t.Fatal("memory scoped to another task reached an unrelated package")
-		}
 	}
 }
 
@@ -342,14 +286,6 @@ func TestFallbackDoesNotDropHardConstraints(t *testing.T) {
 	if len(handoff.HardConstraints) == 0 {
 		t.Fatal("the handoff carries no hard constraints to preserve")
 	}
-	// Every context package restates them too, so switching provider mid-flight
-	// cannot lose them: they are not held in one place.
-	packages := plan.BuildContextPackages(plan.PackageRequest{Plan: approved})
-	for _, contextPackage := range packages {
-		if len(contextPackage.HardConstraints) == 0 {
-			t.Fatalf("package %s carries no hard constraints", contextPackage.TaskID)
-		}
-	}
 }
 
 // A20: a user override cannot select a provider policy forbids.
@@ -462,28 +398,5 @@ func TestBudgetPressureCannotRemoveVerification(t *testing.T) {
 	}
 	if _, err := trimmed.Approve(planTime); err == nil {
 		t.Fatal("a plan that saved budget by dropping a check was approvable")
-	}
-
-	// Under ULTRA the same trade is refused by ranking rather than by state: a
-	// proposal that fits the budget by covering less does not beat one that
-	// covers more, because coverage is compared before anything else.
-	selection := plan.SelectBest(plan.UltraRequest{
-		Proposals: []plan.Proposal{
-			{ID: "a-complete", Tasks: []plan.Task{
-				{ID: "impl", Title: "add the cache", Mutating: true, Weight: 1,
-					Criteria: []string{"responses are cached"}},
-				{ID: "check", Title: "run the security tests", Weight: 1,
-					Criteria: []string{"existing tests pass"}},
-			}},
-			{ID: "b-cheap", Tasks: []plan.Task{
-				{ID: "impl", Title: "add the cache", Mutating: true, Weight: 1,
-					Criteria: []string{"responses are cached"}},
-			}},
-		},
-		Criteria: []string{"responses are cached", "existing tests pass"},
-		MaxTasks: 2,
-	})
-	if selection.Best != "a-complete" {
-		t.Fatalf("selected %q; the cheaper plan won by checking less", selection.Best)
 	}
 }

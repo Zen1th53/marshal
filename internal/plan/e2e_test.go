@@ -18,7 +18,6 @@ import (
 type scenario struct {
 	built    plan.ExecutionPlan
 	assigned plan.AssignmentPlan
-	packages []plan.ContextPackage
 }
 
 // harnesses are the probed harnesses available for role assignment. Plan
@@ -39,9 +38,8 @@ func runScenario(t *testing.T, goal model.GoalContract, assessment goalintake.As
 		Candidates: harnesses, Now: planTime,
 	})
 	built.Assignments = assigned
-	packages := plan.BuildContextPackages(plan.PackageRequest{Plan: built})
 
-	return scenario{built: built, assigned: assigned, packages: packages}
+	return scenario{built: built, assigned: assigned}
 }
 
 // E1: a low-risk fix plans a small team, few gates, and reaches ready.
@@ -261,52 +259,6 @@ func TestFullPathFromGoalToHandoff(t *testing.T) {
 	if len(handoff.HardConstraints) == 0 {
 		t.Fatal("the handoff lost the hard constraints")
 	}
-	if len(result.packages) != len(coveringTasks()) {
-		t.Fatalf("%d context packages for %d tasks", len(result.packages), len(coveringTasks()))
-	}
-	for _, contextPackage := range result.packages {
-		if len(contextPackage.HardConstraints) == 0 {
-			t.Fatalf("package %s carries no constraints", contextPackage.TaskID)
-		}
-	}
-}
-
-// E15: an ULTRA comparison end to end, with a hostile proposal in the field.
-func TestUltraComparisonEndToEnd(t *testing.T) {
-	selection := plan.SelectBest(plan.UltraRequest{
-		Proposals: []plan.Proposal{
-			{ID: "a-complete", Tasks: []plan.Task{
-				{ID: "impl", Title: "add the cache", Mutating: true, Weight: 1,
-					Criteria: []string{"responses are cached"}},
-				{ID: "check", Title: "run the tests", Weight: 1,
-					Criteria: []string{"existing tests pass"}},
-			}},
-			{ID: "b-partial", Tasks: []plan.Task{
-				{ID: "impl", Title: "add the cache", Mutating: true, Weight: 1,
-					Criteria: []string{"responses are cached"}},
-			}},
-			{ID: "c-forbidden", Tasks: []plan.Task{
-				{ID: "impl", Title: "modify the database schema for speed", Mutating: true,
-					Weight: 1, Paths: []string{"schema.sql"},
-					Criteria: []string{"responses are cached", "existing tests pass"}},
-			}},
-		},
-		Criteria:        []string{"responses are cached", "existing tests pass"},
-		HardConstraints: []string{"Do not modify the database schema"},
-	})
-
-	if selection.Best != "a-complete" {
-		t.Fatalf("selected %q, want the complete compliant plan", selection.Best)
-	}
-	// The forbidden proposal is disqualified rather than merely outranked.
-	for _, comparison := range selection.Comparisons {
-		if comparison.ProposalID == "c-forbidden" && !comparison.Disqualified {
-			t.Fatal("the constraint-breaching proposal was only outranked, not disqualified")
-		}
-	}
-	if len(selection.Comparisons) != 3 {
-		t.Fatalf("%d proposals were scored, want all 3 inspectable", len(selection.Comparisons))
-	}
 }
 
 // E18: no scenario above produced execution. The plan is description only.
@@ -316,13 +268,6 @@ func TestNoScenarioExecutesWork(t *testing.T) {
 
 	if result.built.State.Executable() {
 		t.Fatal("planning alone produced an executable plan")
-	}
-	// Context packages describe what a worker would be given; they carry no
-	// output, because no worker has run.
-	for _, contextPackage := range result.packages {
-		if strings.TrimSpace(contextPackage.ExpectedOutput) == "" {
-			t.Fatalf("package %s does not say what is expected", contextPackage.TaskID)
-		}
 	}
 	for _, obligation := range result.built.Verification.Obligations {
 		if strings.TrimSpace(obligation.Method) == "" {
