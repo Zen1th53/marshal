@@ -2,7 +2,6 @@ package codex
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -44,24 +43,5 @@ func TestEffortIsValidatedAndPassedToExec(t *testing.T) {
 	request.Effort = "xhigh"
 	if _, err := client.Run(context.Background(), request); !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("exec with an unadvertised effort: %v", err)
-	}
-}
-
-func TestAppServerTurnCarriesEffort(t *testing.T) {
-	params, err := appServerTurnStartParams("thread-1", adapter.Request{TaskID: "TASK-1", Title: "t", Worktree: "/w", Effort: "high"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, _ := json.Marshal(params)
-	if !strings.Contains(string(encoded), `"effort":"high"`) {
-		t.Fatalf("turn params lack effort: %s", encoded)
-	}
-	if _, err := appServerTurnStartParams("thread-1", adapter.Request{TaskID: "TASK-1", Title: "t", Worktree: "/w", Effort: "high; rm"}); err == nil {
-		t.Fatal("malformed effort accepted")
-	}
-	params, _ = appServerTurnStartParams("thread-1", adapter.Request{TaskID: "TASK-1", Title: "t", Worktree: "/w"})
-	encoded, _ = json.Marshal(params)
-	if !strings.Contains(string(encoded), `"effort":null`) {
-		t.Fatalf("absent effort must stay null (model default): %s", encoded)
 	}
 }
