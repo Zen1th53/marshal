@@ -76,17 +76,17 @@ func skippedDir(name string) bool {
 }
 
 // regular reports a regular file below root without following links.
-func regular(root, rel string) (os.FileInfo, bool) {
-	info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel)))
+func regular(root *os.Root, rel string) (os.FileInfo, bool) {
+	info, err := root.Lstat(filepath.FromSlash(rel))
 	return info, err == nil && info.Mode().IsRegular()
 }
 
 // noLinks reports that no element of rel below root is a symbolic link.
-func noLinks(root, rel string) bool {
-	current := root
+func noLinks(root *os.Root, rel string) bool {
+	current := ""
 	for _, element := range strings.Split(rel, "/") {
-		current = filepath.Join(current, element)
-		info, err := os.Lstat(current)
+		current = path.Join(current, element)
+		info, err := root.Lstat(filepath.FromSlash(current))
 		if err != nil || info.Mode()&os.ModeSymlink != 0 {
 			return false
 		}
@@ -96,6 +96,7 @@ func noLinks(root, rel string) bool {
 
 type codeScan struct {
 	root     string
+	fs       *os.Root // every read goes through it, so nothing leaves root
 	deadline time.Time
 	walked   int
 	cut      bool
@@ -109,10 +110,10 @@ func (s *codeScan) packages(paths []string) (dirs []string, files []string) {
 	seenDir, seenFile := map[string]bool{}, map[string]bool{}
 	for _, raw := range paths {
 		rel := confined(raw)
-		if rel == "" || !noLinks(s.root, rel) {
+		if rel == "" || !noLinks(s.fs, rel) {
 			continue
 		}
-		info, err := os.Lstat(filepath.Join(s.root, filepath.FromSlash(rel)))
+		info, err := s.fs.Lstat(filepath.FromSlash(rel))
 		if err != nil {
 			continue
 		}
@@ -126,17 +127,14 @@ func (s *codeScan) packages(paths []string) (dirs []string, files []string) {
 		if !info.IsDir() {
 			continue
 		}
-		base := filepath.Join(s.root, filepath.FromSlash(rel))
-		_ = filepath.WalkDir(base, func(full string, d fs.DirEntry, err error) error {
+		_ = fs.WalkDir(s.fs.FS(), rel, func(sub string, d fs.DirEntry, err error) error {
 			if err != nil || s.expired() || s.walked >= codeViewMaxWalked {
 				s.cut = s.cut || err == nil
 				return fs.SkipAll
 			}
 			s.walked++
-			sub, _ := filepath.Rel(s.root, full)
-			sub = filepath.ToSlash(sub)
 			if d.IsDir() {
-				if full != base && (skippedDir(d.Name()) || strings.Count(strings.TrimPrefix(sub, rel), "/") > codeViewMaxDepth) {
+				if sub != rel && (skippedDir(d.Name()) || strings.Count(strings.TrimPrefix(sub, rel), "/") > codeViewMaxDepth) {
 					return fs.SkipDir
 				}
 				return nil
@@ -163,7 +161,7 @@ func (s *codeScan) packages(paths []string) (dirs []string, files []string) {
 // goFiles lists a directory's non-test Go files (or, when it has none, its
 // regular files), bounded.
 func (s *codeScan) goFiles(dir string) (names []string, gocode bool) {
-	entries, err := os.ReadDir(filepath.Join(s.root, filepath.FromSlash(dir)))
+	entries, err := fs.ReadDir(s.fs.FS(), dir)
 	if err != nil {
 		return nil, false
 	}
@@ -189,12 +187,12 @@ func (s *codeScan) goFiles(dir string) (names []string, gocode bool) {
 	return names, gocode
 }
 
-func modulePath(root string) string {
+func modulePath(root *os.Root) string {
 	info, ok := regular(root, "go.mod")
 	if !ok || info.Size() > codeViewMaxFileSize {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	data, err := root.ReadFile("go.mod")
 	if err != nil {
 		return ""
 	}
@@ -211,11 +209,11 @@ func (s *codeScan) parse(rel string, mode parser.Mode) *ast.File {
 		s.cut = true
 		return nil
 	}
-	info, ok := regular(s.root, rel)
+	info, ok := regular(s.fs, rel)
 	if !ok || info.Size() > codeViewMaxFileSize {
 		return nil
 	}
-	data, err := os.ReadFile(filepath.Join(s.root, filepath.FromSlash(rel)))
+	data, err := s.fs.ReadFile(filepath.FromSlash(rel))
 	if err != nil {
 		return nil
 	}
@@ -225,7 +223,7 @@ func (s *codeScan) parse(rel string, mode parser.Mode) *ast.File {
 
 // packageLevel: one node per package, an edge per import between them.
 func (s *codeScan) packageLevel(dirs []string) ([]codeNode, []codeEdge) {
-	module := modulePath(s.root)
+	module := modulePath(s.fs)
 	common := dirs[0]
 	for _, d := range dirs[1:] {
 		for common != "." && d != common && !strings.HasPrefix(d, common+"/") {
@@ -383,7 +381,12 @@ func DeriveCodeView(ctx context.Context, root, part string, paths []string, dir 
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
-	s := &codeScan{root: root, deadline: deadline}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer rootFS.Close()
+	s := &codeScan{root: root, fs: rootFS, deadline: deadline}
 	dirs, explicit := s.packages(paths)
 	view := &CodeView{Derived: true, Part: part, Dir: dir}
 	var nodes []codeNode

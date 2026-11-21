@@ -4831,8 +4831,8 @@
     },
     {
       "path": "internal/architecturereview/codeview.go",
-      "sha256": "290ca6b9b042fc7c5c6dc443388852195cd7bfb321e9ce81165436f8397db55b",
-      "bytes": 14120
+      "sha256": "0b4af83b2295da47263d568d8083dc9c48c4ebb8ed609a563b4ad7d7e434456e",
+      "bytes": 14090
     },
     {
       "path": "internal/architecturereview/codeview_test.go",
@@ -4846,8 +4846,8 @@
     },
     {
       "path": "internal/architecturereview/demo_test.go",
-      "sha256": "8b0a83854868f0fa59f379de3c728dcd47822c111036a6a95cf1041a3bb9e040",
-      "bytes": 2497
+      "sha256": "7650b35f48e1117d6f4bb43a39c793a0bab2434ec269054bffd70be1bec1ff34",
+      "bytes": 2504
     },
     {
       "path": "internal/architecturereview/design_test.go",

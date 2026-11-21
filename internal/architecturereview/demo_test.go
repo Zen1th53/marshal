@@ -52,7 +52,9 @@ func TestArchitectureDemo(t *testing.T) {
 	}
 	for i, fixture := range demoFixtures() {
 		r, err := New(Config{Context: t.Context(), Project: "demo", ArchitectureID: "architecture-demo", StateDir: filepath.Join(t.TempDir(), fixture.name), Proposal: fixture.raw, CodeRoot: root,
-			Feedback: func(_ context.Context, e json.RawMessage) (json.RawMessage, error) { return resultFixture(e, "answered", false), nil }})
+			Feedback: func(_ context.Context, e json.RawMessage) (json.RawMessage, error) {
+				return resultFixture(e, "answered", false), nil
+			}})
 		if err != nil {
 			t.Fatalf("%s: %v", fixture.name, err)
 		}
