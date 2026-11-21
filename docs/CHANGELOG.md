@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.3.8
+## Unreleased
+
+### Fixed
+- macOS: workers' Marshal MCP server (`marshal mcp relay`) exited at once with "MCP relay already active: operation not supported", so workers ran without Marshal's tools. The relay now locks its private directory where a FIFO cannot be locked, and handles macOS FIFO EOF and write behaviour.
+- macOS: `marshal update install` refused with "release binaries are built for Linux"; it now installs the darwin release archive, verified against `checksums.txt` as before.
+- macOS: with `marshal daemon` running, every command that talks to it (`marshal status`, `tasks`, `events`, `logs`, …) was refused ("local socket peer authentication refused"). The runtime socket now reads the peer's UID with `LOCAL_PEERCRED`.
+
 
 ### Added
 - Web Board: owner actions from the browser. The page puts what is happening and the card's main button at the top (for example **Move to claude**, **Retry T03**), at most two more buttons, and a **Tell the Marshal…** box; everything else is under Details. Each button presses the card's own key on the Board (`POST /api/act`: bearer token, exact Origin, JSON only, one-use token bound to the card shown); every action writes its Activity line "From the web: …". With no card, **Retry <task>** (the Board's `r`) and **Stop all workers** (`Ctrl+X`), each with two clicks.
