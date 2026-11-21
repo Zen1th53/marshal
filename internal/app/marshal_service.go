@@ -76,6 +76,12 @@ type MarshalService struct {
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.
 	QuotaLeft func(provider string) (left int, known bool)
+	// ModelQuotaLeft reports the percent left of the limits that apply to
+	// one model of a provider (agy reports one limit per model family) and
+	// whether it is known. When set and the model a task runs on is known,
+	// admission and failover decide on that model's limits instead of the
+	// provider's worst window (failover_model_extreme.go).
+	ModelQuotaLeft func(provider, model string) (left int, known bool)
 	// HeldTask reports whether the owner's change is holding this plan task:
 	// a task the owner asked to pause while they decide a mid-run change.
 	// dispatchReady skips a held task that has not started yet, so it does
