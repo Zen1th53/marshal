@@ -37,7 +37,7 @@ Changes apply to the **next** drafted plan.
 
 ### Provider Limits
 
-How many workers each provider may run at once, and how many may run in total. The Board shows them in **DEFAULTS · this project** on the readiness screen and in the LANES pane title (`limit claude 4 · agy 4 · total 12`).
+How many workers each provider may run at once, and how many may run in total. The Web Board shows them in **DEFAULTS · this project** with the readiness checklist and in the Lanes title (`limit claude 4 · agy 4 · total 12`).
 
 ```text
 /marshal settings claude-limit 4

@@ -775,17 +775,17 @@ func (w *Workspace) providerDots(now time.Time) map[string]string {
 // runs while the composer holds text or an inbox confirmation is open, and
 // inside the inbox only t and l, which move focus away, are taken.
 func (w *Workspace) handleBoardKey(event KeyEvent) bool {
-	if !w.boardVisible() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
+	if !w.boardVisible() {
 		return false
 	}
-	w.mu.RLock()
-	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
-	w.mu.RUnlock()
 	// The launch Marshal picker is modal while it is open: it must be
 	// answered before the chat starts, and it owns the keys even over a
-	// draft left in the composer. Function keys and Ctrl chords go on to
-	// the global keys.
+	// draft left in the composer or its completion menu. Function keys and
+	// Ctrl chords go on to the global keys.
 	if w.pickerOpen() {
+		if w.completionOpen {
+			w.closeCompletion()
+		}
 		if w.handlePickerKey(event) {
 			return true
 		}
@@ -795,6 +795,12 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		}
 		return false
 	}
+	if w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
+		return false
+	}
+	w.mu.RLock()
+	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
+	w.mu.RUnlock()
 	if w.inboxView.Confirming() || w.composing() {
 		return false
 	}

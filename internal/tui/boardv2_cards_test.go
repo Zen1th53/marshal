@@ -427,6 +427,58 @@ func TestPausedCardEnterDispatchesPerCause(t *testing.T) {
 	})
 }
 
+// On the home screen y does what the paused card's Enter does, once: the
+// From-you line names it, Enter itself only opens the chat, and a second y
+// within homeYesQuiet runs nothing more.
+func TestHomeYesIsThePausedCardsEnter(t *testing.T) {
+	ran := recordStopCommands(t)
+	w := pausedWorkspace(t, "codex", marshal.Pause{Reason: "codex stopped answering.", Detail: "infra retry: worker operation timed out", Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: "T03"})
+	if z := cardsFrame(w).Paused; z == nil {
+		t.Fatal("no paused card")
+	}
+	lines, _, _ := w.frameLinesFull(120, 40)
+	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "— y ") {
+		t.Fatalf("From you does not name y:\n%s", text)
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyEnter})
+	if len(*ran) != 0 {
+		t.Fatalf("Enter ran %q", *ran)
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	if want := []string{"/marshal retry T03 fresh-session", "/marshal resume"}; !slices.Equal(*ran, want) {
+		t.Fatalf("y ran %q, want %q once", *ran, want)
+	}
+}
+
+// With no card, y retries the stuck task From you names, through the same
+// retry the Web Board's Retry runs.
+func TestHomeYesRetriesTheStuckTask(t *testing.T) {
+	orig := boardRetry
+	t.Cleanup(func() { boardRetry = orig })
+	var calls []string
+	boardRetry = func(_ *Workspace, _ context.Context, id string) (string, error) {
+		calls = append(calls, id)
+		return id + " starts again in a fresh session.", nil
+	}
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	w.permissions.inbox = nil
+	in := w.homeIn()
+	if in.retry == "" {
+		t.Skip("the fixture run has no stuck task without a decision")
+	}
+	lines, _, _ := w.frameLinesFull(120, 40)
+	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, in.retry+" is stuck — y retry "+in.retry) && !strings.Contains(text, "— y ") {
+		t.Fatalf("From you does not name the retry:\n%s", text)
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	w.commandWG.Wait()
+	if !slices.Equal(calls, []string{in.retry}) {
+		t.Fatalf("retried %q, want %q", calls, in.retry)
+	}
+}
+
 // sketchContract counts what a first draft covers: every part is new.
 func TestSketchOfAFirstDraft(t *testing.T) {
 	s := sketchContract(projectcontext.Contract{ID: "p", Revision: 1, Components: []projectcontext.Component{

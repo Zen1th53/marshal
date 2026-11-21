@@ -43,15 +43,21 @@ const (
 // the From-you line and what it does.
 type homePrimary struct {
 	label string
-	kind  string // paused, requirements, retry
-	task  string // the task a retry retries
+	kind  string // paused, requirements, retry, verify, telemetry
+	task  string // the task a retry retries, the provider a verify checks
+}
+
+// homeIn is what the home screen's From you reads besides the view model:
+// the stuck task a retry would retry and the provider a verify would check.
+type homeIn struct {
+	retry, verify string
 }
 
 // homePrimaryOf is b's safe action: the paused card's Enter (retry, move
 // and continue, resume), the requirements card's Enter (confirm them), or,
 // with no card, the retry of the stuck task the Web Board would offer.
 // A decision with authority has none.
-func homePrimaryOf(b vm.Board, retry string) homePrimary {
+func homePrimaryOf(b vm.Board, in homeIn) homePrimary {
 	switch {
 	case b.Decision != nil:
 		if b.Decision.Kind == decisionRequirements {
@@ -63,10 +69,14 @@ func homePrimaryOf(b vm.Board, retry string) homePrimary {
 			return homePrimary{label: l, kind: "paused"}
 		}
 		return homePrimary{}
-	case retry != "":
-		return homePrimary{label: "retry " + retry, kind: "retry", task: retry}
-	case b.Ready.TelemetryAsk && b.NowLine.FromYouOK:
+	case in.retry != "":
+		return homePrimary{label: "retry " + in.retry, kind: "retry", task: in.retry}
+	case !b.NowLine.FromYouOK || b.NowLine.ChatAsked:
+		return homePrimary{}
+	case b.Ready.TelemetryAsk:
 		return homePrimary{label: "keep them on · t turns them off", kind: "telemetry"}
+	case in.verify != "" && b.Top.Run == "":
+		return homePrimary{label: "check " + in.verify + " (one model call)", kind: "verify", task: in.verify}
 	}
 	return homePrimary{}
 }
@@ -112,11 +122,22 @@ func homeNow(b vm.Board) string {
 func homeFromYou(b vm.Board, p homePrimary) (string, bool) {
 	n := b.NowLine
 	what := firstSet(n.FromYou, "nothing")
+	if n.FromYouOK {
+		// Nothing on a card: the line says what the key is for.
+		switch p.kind {
+		case "telemetry":
+			return "anonymous usage counts are on (docs/telemetry.md) — y " + p.label, true
+		case "retry":
+			return p.task + " is stuck — y " + p.label, true
+		case "verify":
+			return p.task + " is not checked yet — y " + p.label, true
+		case "":
+			if homeSignIn(b) {
+				return "agy is not signed in — g opens its sign-in window", true
+			}
+		}
+	}
 	switch {
-	case p.kind == "telemetry" && n.FromYouOK:
-		return "anonymous usage counts are on (docs/telemetry.md) — y " + p.label, true
-	case p.label == "" && n.FromYouOK && homeSignIn(b):
-		return "agy is not signed in — g opens its sign-in window", true
 	case n.ChatAsked:
 		return what + " — ⏎ open chat", true
 	case p.label != "":
@@ -234,7 +255,7 @@ func (w *Workspace) paintHome(v boardVisual, cols, rows int) []string {
 	if b.Top.Clock.IsZero() {
 		b.Top.Clock = v.now
 	}
-	return renderHome(v, b, homePrimaryOf(b, w.homeRetry()), cols, rows)
+	return renderHome(v, b, homePrimaryOf(b, w.homeIn()), cols, rows)
 }
 
 // renderHome is the home screen of b in cols x rows, p its safe action. It
@@ -311,23 +332,28 @@ func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 	// The requirements card keeps its line edit in the terminal: e, then
 	// the line's letter, puts the line in the composer (the Web Board can
 	// only confirm them all).
-	if c := w.currentReq(); c != nil && (c.editing || event.Rune == 'e') {
+	if c := w.currentReq(); c != nil && c.editing {
 		return w.handleRequirementsKey(event)
 	}
 	switch event.Rune {
 	case 'y':
 		w.homeYes(ctx)
 		return true
-	case 't', 'g':
+	case 't', 'g', 'e':
+		// Each acts only while its prompt is on the From-you line.
 		b := w.boardV2()
-		switch {
-		case event.Rune == 't' && b.Ready.TelemetryAsk:
-			w.chooseTelemetry(ctx, false)
-			return true
-		case event.Rune == 'g' && homeSignIn(b):
-			w.openAgySignIn(ctx)
-			return true
+		if !homeKeyShown(b, homePrimaryOf(b, w.homeIn()), event.Rune) {
+			return false
 		}
+		switch event.Rune {
+		case 't':
+			w.chooseTelemetry(ctx, false)
+		case 'g':
+			w.openAgySignIn(ctx)
+		case 'e':
+			return w.handleRequirementsKey(event)
+		}
+		return true
 	case 'w':
 		w.openWebBoardKey()
 		return true
@@ -346,12 +372,33 @@ func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 	return w.openViewKey(event)
 }
 
-// homeRetry is the stuck task y would retry, "" for none (retryTarget).
-func (w *Workspace) homeRetry() string {
+// homeIn is the stuck task y would retry (retryTarget) and, with no run,
+// the provider y would check: the one whose check the agy sign-in armed,
+// or the readiness checklist's next "not checked yet".
+func (w *Workspace) homeIn() homeIn {
+	var in homeIn
 	if id, why := retryTarget(w); why == "" {
-		return id
+		in.retry = id
 	}
-	return ""
+	if w.marshalPanel() == nil {
+		in.verify = firstSet(w.firstUseArmed(), v2NextUnchecked(w.v2MarshalInput(time.Now())))
+	}
+	return in
+}
+
+// homeKeyShown reports whether a home key's prompt is on the From-you line
+// now: t only with the usage counts, g only with agy's sign-in, e only with
+// the requirements. A key whose prompt is not drawn types into the composer.
+func homeKeyShown(b vm.Board, p homePrimary, r rune) bool {
+	switch r {
+	case 't':
+		return p.kind == "telemetry"
+	case 'g':
+		return p.kind == "" && b.NowLine.FromYouOK && homeSignIn(b)
+	case 'e':
+		return p.kind == decisionRequirements
+	}
+	return false
 }
 
 // homeYesReady reports whether y has a safe action to run now.
@@ -359,7 +406,7 @@ func (w *Workspace) homeYesReady() bool {
 	if !w.boardVisible() || w.anyBodyView() {
 		return false
 	}
-	return homePrimaryOf(w.boardV2(), w.homeRetry()).kind != ""
+	return homePrimaryOf(w.boardV2(), w.homeIn()).kind != ""
 }
 
 // homeYes is y: the safe action the From-you line names, once. A second y
@@ -372,7 +419,7 @@ func (w *Workspace) homeYes(ctx context.Context) {
 		return
 	}
 	b := w.boardV2()
-	p := homePrimaryOf(b, w.homeRetry())
+	p := homePrimaryOf(b, w.homeIn())
 	switch p.kind {
 	case "":
 		switch {
@@ -390,6 +437,13 @@ func (w *Workspace) homeYes(ctx context.Context) {
 	case "telemetry":
 		ui.homeYesAt = now
 		w.chooseTelemetry(ctx, true)
+	case "verify":
+		ui.homeYesAt = now
+		w.firstUse.mu.Lock()
+		w.firstUse.armed = p.task
+		w.firstUse.mu.Unlock()
+		w.runFirstUseVerify()
+		w.setOutput("Checking "+p.task+": one model call; Activity says how it went.", false)
 	default:
 		ui.homeYesAt = now
 		if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {

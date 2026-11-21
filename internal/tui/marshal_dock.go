@@ -128,7 +128,7 @@ func (w *Workspace) boardLayoutMode() layout.Mode {
 
 // dockWidth is the chat's width in a window cols wide. Below the split
 // minimum the chat stays docked anyway with the same share, and the Board
-// paints its too-small line in what is left (paintTooSmall).
+// paints its home screen in what is left (board_home.go).
 func dockWidth(cols int) int {
 	chat, _, _ := layout.SplitWidths(cols)
 	return max(chat, 1)

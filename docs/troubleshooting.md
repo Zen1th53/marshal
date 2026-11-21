@@ -103,7 +103,7 @@ To resume where you left off:
    marshal
    ```
 2. Marshal automatically detects the latest unfinished run in `.marshal/state.db` and reloads the Board.
-3. If the run was waiting for you, its card opens again (`YOUR TURN` in the top bar, and *from you* names it). Reply as requested; for the architecture, press **`a`** (or **`y`**) to open it in your browser and accept it there.
+3. If the run was waiting for you, its card opens again on the Web Board (`YOUR TURN` on the Board's top line, and *From you* names it). Reply as requested; for the architecture, press **`a`** to open it in your browser and accept it there.
 4. If workers were stopped while dispatching, Marshal releases stale leases, reschedules incomplete tasks, and resumes execution.
 
 ---
@@ -165,7 +165,7 @@ Claude Code draws its prompt with a no-break space, so earlier Boards did not re
 
 ### How to Fix It
 
-- **0.3.5 or newer**: nothing to do. If *from you* on the NOW line says `send or clear your unsent text in the Marshal chat`, the input holds text you typed: send it or clear it, and the Board delivers its next request.
+- **0.3.5 or newer**: nothing to do. If *From you* on the Board says `send or clear your unsent text in the Marshal chat`, the input holds text you typed: send it or clear it, and the Board delivers its next request.
 - **Older versions**: press `F11` to go to the chat and press `Enter` to submit the pasted text. If the request already expired, clear the input and press `s` on the Board to ask the Marshal to read its inbox again. Then update Marshal (`F10`, or the installer) to get the fix.
 
 ## The Marshal Chat Restarted and Its Answers Are Refused
@@ -209,8 +209,8 @@ The readiness list shows `Workers · agy is installed but not signed in` with th
 
 ### How to Fix It
 
-1. On the readiness screen press `g`: agy opens in a new tmux window in the project; sign in there and close it. (Or run `agy` once in any terminal.)
-2. Back on the Board, press `Enter` (or `v` and then `Enter`) to check it again (one model call). The row turns to `ready`.
-3. If a run paused for it, press `Enter` on the paused card to retry, or let the card move the tasks to another provider.
+1. When *From you* says agy is not signed in, press `g`: agy opens in a new tmux window in the project; sign in there and close it. (Or run `agy` once in any terminal.)
+2. Back on the Board, *From you* says `agy is not checked yet`: press `y` to check it again (one model call), or use the Providers view (`4`, `v`, `Enter`). The readiness row turns to `ready`.
+3. If a run paused for it, press `y` to do what the paused card says (retry, or move the tasks to another provider), or use the Web Board's card.
 
 The same applies to the other providers: run `claude` and sign in, run `codex login`, or run `opencode auth login`.

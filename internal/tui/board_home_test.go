@@ -52,7 +52,7 @@ func TestHomeScreenGoldens(t *testing.T) {
 			}
 			t.Run(name, func(t *testing.T) {
 				v := boardVisual{theme: NewTheme(ThemeNoColor, unicode, false), now: tc.b.Top.Clock}
-				frame := renderHome(v, tc.b, homePrimaryOf(tc.b, ""), tc.cols, tc.rows)
+				frame := renderHome(v, tc.b, homePrimaryOf(tc.b, homeIn{}), tc.cols, tc.rows)
 				if len(frame) != tc.rows {
 					t.Fatalf("%d rows", len(frame))
 				}
@@ -80,7 +80,7 @@ func TestHomeScreenGoldens(t *testing.T) {
 func TestHomeScreenSmallSizes(t *testing.T) {
 	v := boardVisual{theme: NewTheme(ThemeNoColor, true, false)}
 	b := homePausedBoard()
-	frame := renderHome(v, b, homePrimaryOf(b, ""), 40, 10)
+	frame := renderHome(v, b, homePrimaryOf(b, homeIn{}), 40, 10)
 	text := strings.Join(frame, "\n")
 	for _, want := range []string{"MARSHAL", "Now:", "From you:", "Web:", "⏎ chat"} {
 		if !strings.Contains(text, want) {
@@ -89,7 +89,7 @@ func TestHomeScreenSmallSizes(t *testing.T) {
 	}
 	for cols := 1; cols <= 45; cols++ {
 		for rows := 1; rows <= 8; rows++ {
-			if got := renderHome(v, b, homePrimaryOf(b, ""), cols, rows); len(got) != rows {
+			if got := renderHome(v, b, homePrimaryOf(b, homeIn{}), cols, rows); len(got) != rows {
 				t.Fatalf("%dx%d: %d rows", cols, rows, len(got))
 			}
 		}
@@ -100,40 +100,113 @@ func TestHomeScreenSmallSizes(t *testing.T) {
 // to open the web, and the Marshal's question in chat says Enter.
 func TestHomeFromYou(t *testing.T) {
 	paused := homePausedBoard()
-	if got, _ := homeFromYou(paused, homePrimaryOf(paused, "")); got != "run paused: rv06 stuck — y move rv06 to codex and continue" {
+	if got, _ := homeFromYou(paused, homePrimaryOf(paused, homeIn{})); got != "run paused: rv06 stuck — y move rv06 to codex and continue" {
 		t.Fatalf("paused: %q", got)
 	}
 	inbox := homeRunning()
 	inbox.NowLine.FromYou, inbox.NowLine.FromYouOK = "allow network access to example.com", false
 	inbox.Decision = &vm.Decision{Kind: decisionInbox, Actions: []vm.Key{{Key: "⏎", Label: "allow once"}}}
-	if p := homePrimaryOf(inbox, ""); p.kind != "" {
+	if p := homePrimaryOf(inbox, homeIn{}); p.kind != "" {
 		t.Fatalf("an inbox decision got y: %+v", p)
 	}
-	if got, _ := homeFromYou(inbox, homePrimaryOf(inbox, "")); !strings.HasSuffix(got, "— open the web to decide (w)") {
+	if got, _ := homeFromYou(inbox, homePrimaryOf(inbox, homeIn{})); !strings.HasSuffix(got, "— open the web to decide (w)") {
 		t.Fatalf("inbox: %q", got)
 	}
 	for _, kind := range []string{decisionArchitecture, decisionPlan, decisionGuard, decisionAsk, decisionChange, decisionNext} {
 		b := homeRunning()
 		b.Decision = &vm.Decision{Kind: kind, Actions: []vm.Key{{Key: "⏎", Label: "do it"}}}
-		if p := homePrimaryOf(b, ""); p.kind != "" {
+		if p := homePrimaryOf(b, homeIn{}); p.kind != "" {
 			t.Fatalf("%s got y: %+v", kind, p)
 		}
 	}
 	req := homeRunning()
 	req.Decision = &vm.Decision{Kind: decisionRequirements, Actions: []vm.Key{{Key: "⏎", Label: "confirm all"}}}
-	if p := homePrimaryOf(req, ""); p.kind != decisionRequirements || p.label != "confirm all" {
+	if p := homePrimaryOf(req, homeIn{}); p.kind != decisionRequirements || p.label != "confirm all" {
 		t.Fatalf("requirements: %+v", p)
 	}
-	if p := homePrimaryOf(homeRunning(), "T03"); p.kind != "retry" || p.task != "T03" {
+	if p := homePrimaryOf(homeRunning(), homeIn{retry: "T03"}); p.kind != "retry" || p.task != "T03" {
 		t.Fatalf("retry: %+v", p)
 	}
 	asked := homeRunning()
 	asked.NowLine = vm.NowLine{FromYou: vm.ChatAskedLine, ChatAsked: true}
-	if got, _ := homeFromYou(asked, homePrimaryOf(asked, "")); got != vm.ChatAskedLine+" — ⏎ open chat" {
+	if got, _ := homeFromYou(asked, homePrimaryOf(asked, homeIn{})); got != vm.ChatAskedLine+" — ⏎ open chat" {
 		t.Fatalf("chat asked: %q", got)
 	}
 	if got, needs := homeFromYou(homeRunning(), homePrimary{}); got != "nothing" || needs {
 		t.Fatalf("nothing: %q %v", got, needs)
+	}
+}
+
+// With nothing on a card, the From-you line says what y is for: a stuck
+// task, a provider not checked yet; never "nothing — y …".
+func TestHomeFromYouWithoutACard(t *testing.T) {
+	b := homeRunning()
+	if got, _ := homeFromYou(b, homePrimaryOf(b, homeIn{retry: "T03"})); got != "T03 is stuck — y retry T03" {
+		t.Fatalf("retry: %q", got)
+	}
+	ready := vm.Board{NowLine: vm.NowLine{FromYou: "nothing", FromYouOK: true}}
+	if got, _ := homeFromYou(ready, homePrimaryOf(ready, homeIn{verify: "claude"})); got != "claude is not checked yet — y check claude (one model call)" {
+		t.Fatalf("verify: %q", got)
+	}
+	// A run on the Board is no time for a readiness check.
+	if p := homePrimaryOf(b, homeIn{verify: "claude"}); p.kind != "" {
+		t.Fatalf("verify during a run: %+v", p)
+	}
+	ready.Ready.TelemetryAsk = true
+	if got, _ := homeFromYou(ready, homePrimaryOf(ready, homeIn{})); !strings.HasPrefix(got, "anonymous usage counts are on") {
+		t.Fatalf("telemetry: %q", got)
+	}
+}
+
+// t, g and e act only while their prompt is on the From-you line: with a
+// paused card shown, the usage counts and agy's sign-in take no keys.
+func TestHomeUndrawnPromptsTakeNoKeys(t *testing.T) {
+	b := homePausedBoard()
+	b.Ready.TelemetryAsk = true
+	b.Ready.Actions = []vm.Key{{Key: "g", Label: "sign in"}}
+	p := homePrimaryOf(b, homeIn{})
+	for _, r := range "tge" {
+		if homeKeyShown(b, p, r) {
+			t.Errorf("%c acts while the paused card holds From you", r)
+		}
+	}
+	ready := vm.Board{NowLine: vm.NowLine{FromYou: "nothing", FromYouOK: true}, Ready: vm.Readiness{TelemetryAsk: true}}
+	if !homeKeyShown(ready, homePrimaryOf(ready, homeIn{}), 't') {
+		t.Error("t does not act while the usage counts are on the line")
+	}
+	signIn := vm.Board{NowLine: vm.NowLine{FromYou: "nothing", FromYouOK: true}, Ready: vm.Readiness{Actions: []vm.Key{{Key: "g"}}}}
+	if !homeKeyShown(signIn, homePrimaryOf(signIn, homeIn{}), 'g') || homeKeyShown(signIn, homePrimaryOf(signIn, homeIn{}), 't') {
+		t.Error("g and t do not follow agy's sign-in line")
+	}
+}
+
+// The first-run Marshal picker owns the keys even over a draft left in the
+// composer, a plain one or a command with its completion menu open.
+func TestPickerOwnsTheKeysOverADraft(t *testing.T) {
+	for _, draft := range []string{"hello", "/he"} {
+		t.Run(draft, func(t *testing.T) {
+			w := emptyBoardWorkspace(t)
+			defer w.Close()
+			w.endOpening()
+			w.composer.SetText(draft)
+			if draft[0] == '/' {
+				w.completionOpen = true
+			}
+			w.openPicker([]pickerCand{{provider: "codex", known: true, left: 40}, {provider: "claude"}}, 0, "")
+			ctx := context.Background()
+			w.handleTerminalKey(ctx, KeyEvent{Type: KeyDown})
+			w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'x'})
+			w.handleTerminalKey(ctx, KeyEvent{Type: KeyBackspace})
+			if got := w.composer.Text(); got != draft {
+				t.Fatalf("the draft took the picker's keys: %q", got)
+			}
+			w.picker.mu.Lock()
+			sel, open := w.picker.sel, w.picker.open
+			w.picker.mu.Unlock()
+			if !open || sel != 1 {
+				t.Fatalf("the picker did not take Down: open %v sel %d", open, sel)
+			}
+		})
 	}
 }
 

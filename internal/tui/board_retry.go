@@ -13,7 +13,7 @@ import (
 const retryNoTaskWhy = "No task is stuck: nothing to retry."
 
 // retryTarget is the stuck task the home screen's y (and the Web Board's
-// Retry) would retry: the first parked or returned task of the run with no
+// Retry) would retry: the first parked (stuck) task of the run with no
 // decision waiting for it and not already moved to another model. With
 // none it is "" and one plain sentence saying why.
 func retryTarget(w *Workspace) (string, string) {
@@ -27,7 +27,7 @@ func retryTarget(w *Workspace) (string, string) {
 	inbox := w.boardInbox()
 	why := retryNoTaskWhy
 	for _, row := range p.Board.Tasks {
-		if row.State != boardmodel.TaskParked && row.State != boardmodel.TaskRework {
+		if row.State != boardmodel.TaskParked {
 			continue
 		}
 		id, cid := row.ID, cleanBoard(row.ID)

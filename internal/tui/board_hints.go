@@ -122,7 +122,7 @@ func (w *Workspace) boardConfirmArmed() bool {
 	g.mu.Lock()
 	guard := g.alert != nil && g.armed
 	g.mu.Unlock()
-	return w.boardUI.retryArmed != "" || guard || w.gateArmed() != "" || w.firstUseArmed() != "" || w.inboxView.Confirming()
+	return w.boardUI.retryArmed != "" || guard || w.gateArmed() != "" || w.inboxView.Confirming()
 }
 
 // firstUseBoard reports whether the first-use card is on screen: the Board
