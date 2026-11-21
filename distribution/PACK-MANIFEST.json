@@ -12486,8 +12486,8 @@
     },
     {
       "path": "internal/tui/board_gates_default_test.go",
-      "sha256": "30073c0106ac1d3255b570d2023682217eca9de39902f2f33ed483a1ad9129ea",
-      "bytes": 1846
+      "sha256": "790c02fc3dfb984a5c77ec2ade7db26e46c516274d4597c842389bf7a0fca3be",
+      "bytes": 1569
     },
     {
       "path": "internal/tui/board_gates_extreme.go",
@@ -12501,8 +12501,8 @@
     },
     {
       "path": "internal/tui/board_gates_test.go",
-      "sha256": "23e11cc6107ae08624ce3ac92decadefa57622b9b316f39f1364f2fa08a60723",
-      "bytes": 3898
+      "sha256": "2a53813c7a87f45740a9a1bb50d99835c6fababc3a9c2242188dbc31df1df9d8",
+      "bytes": 3990
     },
     {
       "path": "internal/tui/board_guard.go",

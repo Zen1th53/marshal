@@ -84,14 +84,16 @@ func TestOwnerGateRepliesReachTheChatExactly(t *testing.T) {
 		return
 	}
 	w.setMarshalPanel(draftingPanel("awaiting plan approval; /marshal approve"))
-	clickText(t, w, 170, 40, "[y] approve the plan")
-	if w.gateArmed() == "" {
-		t.Fatal("a click did not arm the plan reply")
+	// The Web Board's plan card: its button arms the reply, the second
+	// press sends it.
+	w.handleV2CardKey(KeyEvent{Type: KeyEnter})
+	if w.v2PlanArmed() == "" {
+		t.Fatal("the button did not arm the plan reply")
 	}
 	if out, _ := tmux.CapturePane(ctx, pane); strings.Contains(out, "approve the plan") {
-		t.Fatalf("one click sent the reply:\n%s", out)
+		t.Fatalf("one press sent the reply:\n%s", out)
 	}
-	clickText(t, w, 170, 40, "[Enter] send")
+	w.handleV2CardKey(KeyEvent{Type: KeyEnter})
 	waitForTmuxOutput(t, pane, "got:approve the plan")
 	if n := len(w.sayEchoList()); n != 1 {
 		t.Fatalf("echoes %+v", w.sayEchoList())
