@@ -4901,8 +4901,13 @@
     },
     {
       "path": "internal/browser/open.go",
-      "sha256": "b1bc79ce7a2978ff25ee2d60689f3ffec6f27667cebaaca74347e508c9ff078a",
-      "bytes": 1377
+      "sha256": "3dc032825084565bd40e1060f304804875018dd959ec5a88b9c224a49fbbaa01",
+      "bytes": 1888
+    },
+    {
+      "path": "internal/browser/opener_test.go",
+      "sha256": "9ba4be3593fa8abe76b0424cbddfab239af0d4caddaefd45b7cb6fd492212dc3",
+      "bytes": 540
     },
     {
       "path": "internal/budget/budget_test.go",
@@ -12196,13 +12201,13 @@
     },
     {
       "path": "internal/tui/board_home.go",
-      "sha256": "8912b4a0b3f574bf79aecc794dfc1ebce40329f5033213c7e8ad0ac802e5a96b",
-      "bytes": 13962
+      "sha256": "cbbddec4a9b98e4aa988c14467783f2a5162540ca6413f1e5a990d0cc5f35111",
+      "bytes": 14228
     },
     {
       "path": "internal/tui/board_home_test.go",
-      "sha256": "cf391a2e43781fb80e76009c6f00ade75dcf44d36d27863b4fa7d1b464aac71c",
-      "bytes": 14035
+      "sha256": "ea46096cf3a352bacd523c101b892b80cf451d5e5edb3134f72cd480ab1ff016",
+      "bytes": 14629
     },
     {
       "path": "internal/tui/board_inbox.go",
@@ -16801,8 +16806,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "94ce0ceefcd881e3264133db6c1527d9cb1ea81da5b9b5a3e97795802e6c94c4",
-      "bytes": 445684
+      "sha256": "0d3b8c0bacbb4dfadf59a231b3c478a45a4c3ed6d69556865d9de33429eb15e8",
+      "bytes": 445812
     },
     {
       "path": "tools/extreme/prq/main_default.go",

@@ -4,6 +4,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"time"
@@ -16,15 +17,7 @@ func Open(ctx context.Context, url string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	command := "xdg-open"
-	args := []string{url}
-	switch runtime.GOOS {
-	case "darwin":
-		command = "open"
-	case "windows":
-		command = "rundll32"
-		args = []string{"url.dll,FileProtocolHandler", url}
-	}
+	command, args := opener(url)
 	process := exec.Command(command, args...)
 	if err := process.Start(); err != nil {
 		return fmt.Errorf("open browser: %w", err)
@@ -48,3 +41,21 @@ func Open(ctx context.Context, url string) error {
 
 // openWait is how long a browser launcher may take to fail.
 const openWait = 3 * time.Second
+
+// opener names the platform's URL opener by absolute path where the system
+// installs it, so a program earlier on PATH cannot stand in for it and receive
+// the URL (Marshal hands it one-use owner links).
+func opener(url string) (string, []string) {
+	switch runtime.GOOS {
+	case "darwin":
+		return "/usr/bin/open", []string{url}
+	case "windows":
+		return `C:\Windows\System32\rundll32.exe`, []string{"url.dll,FileProtocolHandler", url}
+	}
+	for _, path := range []string{"/usr/bin/xdg-open", "/usr/local/bin/xdg-open", "/bin/xdg-open"} {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path, []string{url}
+		}
+	}
+	return "xdg-open", []string{url}
+}

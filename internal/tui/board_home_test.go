@@ -375,3 +375,16 @@ func TestHomeYesOncePerPress(t *testing.T) {
 		t.Fatal("a second y within the quiet time did something")
 	}
 }
+
+// A Marshal state that is already a sentence is not prefixed again ("the
+// Marshal is the architecture is ready…" was drawn live).
+func TestHomeNowDoesNotDoubleASentence(t *testing.T) {
+	for doing, want := range map[string]string{
+		"claude · reading the code": "the Marshal is reading the code",
+		"claude · the architecture is ready for you to accept in the browser": "the architecture is ready for you to accept in the browser",
+	} {
+		if got := homeNow(vm.Board{NowLine: vm.NowLine{Marshal: doing}}); got != want {
+			t.Errorf("homeNow(%q) = %q, want %q", doing, got, want)
+		}
+	}
+}

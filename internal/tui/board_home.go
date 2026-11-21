@@ -115,6 +115,11 @@ func homeNow(b vm.Board) string {
 	} else {
 		doing = "waiting for a goal"
 	}
+	// Some states already read as a whole sentence ("the architecture is
+	// ready for you to accept in the browser"); do not prefix those.
+	if strings.HasPrefix(doing, "the ") || strings.Contains(doing, " is ") || strings.Contains(doing, " are ") {
+		return doing
+	}
 	return "the Marshal is " + doing
 }
 
