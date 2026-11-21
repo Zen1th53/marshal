@@ -2576,8 +2576,8 @@
     },
     {
       "path": "internal/app/marshal_execution_paused_extreme_test.go",
-      "sha256": "7f2dfdc62aee3ce038e784cff79debbbd732d83706c18c84170e64d01f58735e",
-      "bytes": 5461
+      "sha256": "1f260b3c939570dda93678393fcb4617e47b2b885a58116f28c9c905576e2d0b",
+      "bytes": 5992
     },
     {
       "path": "internal/app/marshal_expired_approval_rework_extreme_test.go",
@@ -2741,8 +2741,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "4ae6c4c6f0d8ba68b8f2dae0634aa20dfbecafe32073458180fd0beacbe827a2",
-      "bytes": 84134
+      "sha256": "4f92598b99aa3d19f09e9bce5cc80a1f24b98113a56e439af6195cc5f9690fcc",
+      "bytes": 84619
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -3046,8 +3046,8 @@
     },
     {
       "path": "internal/app/marshal_task_lane_extreme.go",
-      "sha256": "47e82d6cce466b68b32884786b4928beaf50b4295c1ae3e9635ecaa3e20b3a21",
-      "bytes": 5053
+      "sha256": "9a02f2cd2920042ff5910a232d54f13298c601996542ea97ecee2aac048a42ba",
+      "bytes": 5160
     },
     {
       "path": "internal/app/marshal_turn_error_test.go",

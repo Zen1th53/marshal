@@ -2207,15 +2207,24 @@ func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispa
 		return true, errors.Join(cause, model.ErrConflict)
 	}
 	run.Tasks[i].State = marshal.Queued
-	if s.HeldTask == nil || !s.HeldTask(runID, dispatch.TaskID) {
-		// No pause hold of this session waits for the person's resume (a
-		// restart drops it), so dispatching again would only find the same
-		// paused run, round after round, until the run counts as stalled.
-		// The run waits for the person instead; Enter resumes the paused
-		// part and continues (Resume, CodeExecutionPaused).
-		pauseMarshal(&run, executionPausedPause(dispatch.TaskID, cause))
+	if s.HeldTask != nil && s.HeldTask(runID, dispatch.TaskID) {
+		// This session's pause holds the task: Execute waits for the hold.
+		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 	}
-	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+	// No pause hold of this session waits for the person's resume (a
+	// restart drops it), so dispatching again would only find the same
+	// paused run, round after round, until the run counted as stalled
+	// (rv06: 239 silent dispatches in five seconds). The run waits for the
+	// person instead, and says so; Enter resumes the paused part and
+	// continues (Resume, CodeExecutionPaused).
+	pause := executionPausedPause(dispatch.TaskID, cause)
+	pauseMarshal(&run, pause)
+	if err := s.save(context.WithoutCancel(ctx), runID, run, rev); err != nil {
+		return true, err
+	}
+	return true, s.record(context.WithoutCancel(ctx), runID, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{
+		"reason": pause.Reason, "summary": pause.Reason, "detail": pause.Detail, "code": pause.Code, "counted": false,
+	})
 }
 
 // executionPausedPause is the run's stop when a task could not start because

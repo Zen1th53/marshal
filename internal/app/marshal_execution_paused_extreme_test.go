@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 )
@@ -61,6 +62,20 @@ func TestExtremePausedExecutionWithoutHoldStopsInsteadOfLooping(t *testing.T) {
 	}
 	if b := run.Tasks[taskIndex(run, "b")]; b.State != marshal.Queued || taskReturns(b) != 0 {
 		t.Fatalf("parked task %s returns %d", b.State, taskReturns(b))
+	}
+	// The stop is visible: an uncounted escalation event with its cause.
+	decisions, err := s.Store.MarshalDecisions(t.Context(), "par")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := false
+	for _, e := range decisions {
+		if e.TaskID == "b" && e.Type == events.EventTypeMarshalEscalated && e.Data["code"] == marshal.CodeExecutionPaused && e.Data["counted"] == false && e.Data["detail"] != "" {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Fatal("the paused-execution stop recorded no event")
 	}
 	mu.Lock()
 	// The sibling's merge in the same round may take the run on once more
