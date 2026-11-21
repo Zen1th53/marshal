@@ -290,14 +290,6 @@ func (w *Workspace) afterLaunchCheck(fn func()) {
 	w.launch.mu.Unlock()
 }
 
-// launchWarnings is the warning lines from the last check, for the PROJECT SCAN
-// card (P2-14) and Activity.
-func (w *Workspace) launchWarnings() []string {
-	w.launch.mu.Lock()
-	defer w.launch.mu.Unlock()
-	return append([]string(nil), w.launch.warnings...)
-}
-
 // launchBlocked reports whether the Board must show the Blocked screen.
 func (w *Workspace) launchBlocked() bool {
 	w.launch.mu.Lock()

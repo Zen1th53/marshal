@@ -300,11 +300,6 @@ func openCodeStandaloneArgs(args []string) []string {
 	return c.RunArgs(args)
 }
 
-// ConfigureMarshalMCP exports per-session MCP launch configuration for Marshal providers.
-func ConfigureMarshalMCP(provider, root string, args, env []string) ([]string, []string, *briefingDir, error) {
-	return configureMarshalMCP(provider, root, args, env, nil, "marshal", "")
-}
-
 func marshalMCPProvider(provider string) string {
 	if provider == "agy" {
 		return "antigravity"

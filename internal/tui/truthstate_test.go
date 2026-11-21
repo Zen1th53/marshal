@@ -132,42 +132,6 @@ func TestOnlyRealValuesAreCopyable(t *testing.T) {
 	}
 }
 
-// An unrecognised backend verdict becomes UNKNOWN, never PASS. A new verdict
-// must be taught to MARSHAL deliberately.
-func TestUnrecognisedVerdictsBecomeUnknown(t *testing.T) {
-	for _, s := range []string{"", "ok", "SUCCESS", "green", "passed", "???"} {
-		if got := ParseVerdict(s); got != VerdictUnknown {
-			t.Fatalf("ParseVerdict(%q) = %s, want UNKNOWN", s, got)
-		}
-	}
-	if got := ParseVerdict(" pass "); got != VerdictPass {
-		t.Fatalf("ParseVerdict tolerates neither case nor spacing: %s", got)
-	}
-}
-
-// A summary shows the worst outcome. Rounding up would let a failure vanish
-// behind an aggregate on Home or Status.
-func TestSummaryTakesTheWorstOutcome(t *testing.T) {
-	cases := []struct {
-		in   []Verdict
-		want Verdict
-	}{
-		{nil, VerdictNotRun},
-		{[]Verdict{}, VerdictNotRun},
-		{[]Verdict{VerdictPass, VerdictPass}, VerdictPass},
-		{[]Verdict{VerdictPass, VerdictNotRun}, VerdictNotRun},
-		{[]Verdict{VerdictPass, VerdictUnknown}, VerdictUnknown},
-		{[]Verdict{VerdictUnknown, VerdictBlocked}, VerdictBlocked},
-		{[]Verdict{VerdictBlocked, VerdictFail}, VerdictFail},
-		{[]Verdict{VerdictFail, VerdictPass, VerdictPass}, VerdictFail},
-	}
-	for _, c := range cases {
-		if got := Summarize(c.in); got != c.want {
-			t.Fatalf("Summarize(%v) = %s, want %s", c.in, got, c.want)
-		}
-	}
-}
-
 // An error message is bounded before it is stored, because provider and
 // filesystem errors are exactly the text that carries a path or a fragment of a
 // credential.
@@ -191,24 +155,6 @@ func TestBlockedValuesNameTheirRemediationOwner(t *testing.T) {
 	}
 	if !strings.Contains(v.Display(), "plan approval required") {
 		t.Fatalf("a blocked value does not explain itself: %q", v.Display())
-	}
-}
-
-// Field rendering must keep the status badge visible at narrow widths, since a
-// truncated badge is the one part that must never be lost.
-func TestFieldsRenderAtNarrowWidths(t *testing.T) {
-	fields := []Field{
-		{Label: "A very long label indeed that would dominate", Value: Unknown("no probe ran", "src")},
-		{Label: "Short", Value: Known("ok", "src")},
-	}
-	for _, width := range []int{20, 40, 80, 200} {
-		lines := RenderFields(fields, width)
-		if len(lines) != len(fields) {
-			t.Fatalf("width %d produced %d lines for %d fields", width, len(lines), len(fields))
-		}
-		if !strings.Contains(lines[0], "UNKNOWN") {
-			t.Fatalf("width %d lost the status badge: %q", width, lines[0])
-		}
 	}
 }
 
@@ -300,7 +246,6 @@ func TestTheZeroValueIsNotAClaim(t *testing.T) {
 		t.Fatal("an unset value was copyable")
 	}
 }
-
 
 // A deliberately empty value still means EMPTY. The unset default must not cost
 // the real answer its meaning.

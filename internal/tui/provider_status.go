@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -150,76 +149,4 @@ func formatAuthValue(auth app.ProviderAuthObservation, found bool, now time.Time
 	default:
 		return Unknown("authentication status has no inspectable evidence", source)
 	}
-}
-
-func formatTokensValue(tokens *int64, reported bool, source string) Value {
-	if source == "" {
-		source = "internal/adapter/adapter.go, internal/store/budget.go"
-	}
-	if !reported {
-		return NotRun("no task execution recorded in this session", source)
-	}
-	if tokens == nil {
-		return Unknown("token consumption was not reported by provider", source)
-	}
-	// Measured zero distinct from unknown
-	return Known(fmt.Sprintf("%d tokens", *tokens), source)
-}
-
-func formatCostValue(cost *float64, reported bool, source string) Value {
-	if source == "" {
-		source = "internal/adapter/adapter.go, internal/store/budget.go"
-	}
-	if !reported {
-		return NotRun("no task execution recorded in this session", source)
-	}
-	if cost == nil {
-		return Unknown("cost was not reported by provider", source)
-	}
-	// Measured zero distinct from unknown
-	return Known(fmt.Sprintf("$%.4f", *cost), source)
-}
-
-func formatCallsValue(calls int, reported bool, source string) Value {
-	if source == "" {
-		source = "internal/adapter/adapter.go, internal/store/budget.go"
-	}
-	if !reported {
-		return NotRun("no task execution recorded in this session", source)
-	}
-	return Known(fmt.Sprintf("%d calls", calls), source)
-}
-
-func formatDurationValue(d time.Duration, reported bool, source string) Value {
-	if source == "" {
-		source = "internal/adapter/adapter.go, internal/store/budget.go"
-	}
-	if !reported {
-		return NotRun("no task execution recorded in this session", source)
-	}
-	return Known(roundDuration(d), source)
-}
-
-func formatCooldownValue(cd app.ProviderCooldownObservation, found bool, now time.Time) Value {
-	const source = "internal/execution/rate_limit.go"
-	if !found {
-		return NotRun("provider executable was not found on PATH", source)
-	}
-	if cd.Active {
-		dur := cd.RetryAfter
-		if !cd.ResetTime.IsZero() && cd.ResetTime.After(now) {
-			dur = cd.ResetTime.Sub(now)
-		}
-		reason := cd.Reason
-		if reason == "" {
-			reason = "active rate limit cooldown"
-		}
-		return Value{
-			Text:   fmt.Sprintf("throttled (retry in %s)", roundDuration(dur)),
-			Status: TruthKnown,
-			Reason: reason,
-			Source: source,
-		}
-	}
-	return Known("no active cooldown", source)
 }

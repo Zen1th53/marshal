@@ -72,10 +72,6 @@ func nativeArgs(s string) ([]string, error) {
 
 type nativeRequestedArgsKey struct{}
 
-func isDirectCLI(args []string) bool {
-	return len(args) > 0 && (args[0] == "--help" || args[0] == "-h")
-}
-
 func (w *Workspace) runOneShotHelp(ctx context.Context, provider, binary string, args []string) (string, error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -925,24 +921,6 @@ func (w *nativeHistoryWatch) loadIndex() error {
 	return nil
 }
 
-func (w *nativeHistoryWatch) saveIndex() error {
-	capture, err := w.sharedCapture()
-	if err != nil {
-		return err
-	}
-	err = capture.SaveIndex()
-	w.indexSaved, w.indexDirty = capture.IndexState()
-	return err
-}
-
-func (w *nativeHistoryWatch) syncFile(path string) error {
-	capture, err := w.sharedCapture()
-	if err != nil {
-		return err
-	}
-	return capture.SyncFile(path)
-}
-
 // newPeerHistoryWatch builds a watcher for another agent's history.
 //
 // Each provider keeps its history its own way, and the watcher has to be built
@@ -973,11 +951,4 @@ func newPeerHistoryWatch(peer, root string) (*nativeHistoryWatch, error) {
 	watch := newNativeHistoryWatch(dir, root)
 	watch.claude = peer == "claude"
 	return watch, nil
-}
-
-func (w *nativeHistoryWatch) saveIndexIfChanged() error {
-	if w.indexSaved && !w.indexDirty {
-		return nil
-	}
-	return w.saveIndex()
 }

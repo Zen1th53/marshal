@@ -550,12 +550,6 @@ func (v boardVisual) narrowHeader(w int, brand, full, run, shortRun, inboxColor 
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }
 
-// fitHeader joins the parts with sep and takes headerSteps until the line
-// fits in w cells with its leading space.
-func fitHeader(parts []headerPart, w int, sep string) string {
-	return joinHeader(fitHeaderParts(parts, w, sep), sep)
-}
-
 func joinHeader(parts []headerPart, sep string) string {
 	s := make([]string, len(parts))
 	for i, p := range parts {
@@ -1444,11 +1438,4 @@ func (v boardVisual) inboxCount() int {
 // "what next?".
 func (v boardVisual) cardCount() int {
 	return v.guardCount() + v.askCount() + v.reqCount() + v.changeCount() + v.nextCount()
-}
-
-func boolInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }

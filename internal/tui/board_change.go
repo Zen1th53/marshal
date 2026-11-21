@@ -261,16 +261,6 @@ func (m *marshalSession) releaseChangeHeld() []string {
 	return sortedHoldIDs(m.pinned)
 }
 
-// releaseAllHeld clears the whole held set, pinned holds included.
-func (m *marshalSession) releaseAllHeld() {
-	m.holdMu.Lock()
-	defer m.holdMu.Unlock()
-	m.held, m.pinned = nil, nil
-	m.heldRunID = ""
-	m.saveHoldsLocked()
-	m.notifyHoldLocked()
-}
-
 // pinnedIDs is the owner's held task IDs, sorted.
 func (m *marshalSession) pinnedIDs() []string {
 	m.holdMu.Lock()

@@ -10,7 +10,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -206,14 +205,6 @@ func (s *stream) since(cursor int64) ([]streamEntry, error) {
 	return out, nil
 }
 
-// head reports the newest sequence number, which is where a reader that does
-// not want history starts.
-func (s *stream) head() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.next - 1
-}
-
 func (s *stream) readAll() ([]streamEntry, error) {
 	f, err := os.Open(s.path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -394,16 +385,6 @@ func saveCursors(root string, c cursors) error {
 		return err
 	}
 	return os.Rename(tmp, cursorPath(root))
-}
-
-// readerNames lists the readers with a cursor, for reporting.
-func (c cursors) readerNames() []string {
-	names := make([]string, 0, len(c))
-	for name := range c {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 // publishNativeTranscript binds authorship to the history watcher's producer.

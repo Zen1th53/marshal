@@ -557,32 +557,6 @@ func ParseKey(b []byte) KeyEvent {
 	return k
 }
 
-// ClearScreenSeq returns the ANSI sequence to clear the screen and move to home.
-func ClearScreenSeq() string {
-	return "\x1b[2J\x1b[H"
-}
-
-// HideCursorSeq returns ANSI sequence to hide cursor.
-func HideCursorSeq() string {
-	return "\x1b[?25l"
-}
-
-// ShowCursorSeq returns ANSI sequence to show cursor.
-func ShowCursorSeq() string {
-	return "\x1b[?25h"
-}
-
-// MoveCursorSeq returns ANSI sequence to move cursor to (row, col) (1-indexed).
-func MoveCursorSeq(row, col int) string {
-	if row < 1 {
-		row = 1
-	}
-	if col < 1 {
-		col = 1
-	}
-	return fmt.Sprintf("\x1b[%d;%dH", row, col)
-}
-
 // IsNoColor reports whether the NO_COLOR environment variable is set and nonempty.
 // See https://no-color.org.
 func IsNoColor() bool {

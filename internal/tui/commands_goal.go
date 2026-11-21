@@ -110,13 +110,6 @@ func (h *CommandHandler) handleGoalShortForm(ctx context.Context, text string) (
 	return h.handleGoalMutation(ctx, "create", text)
 }
 
-func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text string) (string, error) {
-	return h.handleGoalMutation(ctx, "add-constraint", text)
-}
-func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, text string) (string, error) {
-	return h.handleGoalMutation(ctx, "rm-constraint", text)
-}
-
 // handleGoalCancel confirms /goal cancel in the composer, the same two-step way
 // /ultra stop does. It never cancels directly: /goal cancel <reason> reads and
 // remembers the exact goal revision and asks the person to type /goal cancel

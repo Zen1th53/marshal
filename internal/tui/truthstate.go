@@ -9,8 +9,6 @@ package tui
 // here, and a value cannot be displayed without saying which kind it is.
 
 import (
-	"fmt"
-	"strings"
 	"time"
 )
 
@@ -288,49 +286,6 @@ const (
 	VerdictUnknown Verdict = "UNKNOWN"
 )
 
-// ParseVerdict maps a backend string to a verdict.
-//
-// Anything unrecognised becomes UNKNOWN rather than PASS. A backend that starts
-// returning a new verdict must be taught to this function deliberately; until
-// then the honest answer is that MARSHAL does not know what it means.
-func ParseVerdict(s string) Verdict {
-	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case "PASS":
-		return VerdictPass
-	case "FAIL":
-		return VerdictFail
-	case "BLOCKED":
-		return VerdictBlocked
-	case "NOT_RUN", "NOTRUN":
-		return VerdictNotRun
-	case "UNKNOWN":
-		return VerdictUnknown
-	}
-	return VerdictUnknown
-}
-
-// Summarize reduces several verdicts to the one a summary screen shows.
-//
-// The worst outcome wins, and an absence of results is NOT_RUN rather than
-// PASS. Home and Status both summarize, and a summary that rounded up would let
-// a failure disappear behind an aggregate.
-func Summarize(verdicts []Verdict) Verdict {
-	if len(verdicts) == 0 {
-		return VerdictNotRun
-	}
-	worst := VerdictPass
-	rank := map[Verdict]int{
-		VerdictPass: 0, VerdictNotRun: 1, VerdictUnknown: 2,
-		VerdictBlocked: 3, VerdictFail: 4,
-	}
-	for _, v := range verdicts {
-		if rank[v] > rank[worst] {
-			worst = v
-		}
-	}
-	return worst
-}
-
 // Field is a labelled value for the detail pane.
 type Field struct {
 	Label string
@@ -341,95 +296,4 @@ type Field struct {
 type Section struct {
 	Title  string
 	Fields []Field
-}
-
-// RenderFields lays out fields as aligned label/value lines.
-//
-// Width is respected so a narrow terminal reflows rather than truncating a
-// status badge: the keyboard contract requires status and safety to stay
-// visible at any width.
-func RenderFields(fields []Field, width int) []string {
-	if len(fields) == 0 {
-		return nil
-	}
-	widest := 0
-	for _, f := range fields {
-		if n := len([]rune(f.Label)); n > widest {
-			widest = n
-		}
-	}
-	// Never let labels consume so much width that the value is squeezed out.
-	if max := width / 3; widest > max && max > 0 {
-		widest = max
-	}
-
-	out := make([]string, 0, len(fields))
-	for _, f := range fields {
-		label := communityLabel(f.Label)
-		if len([]rune(label)) > widest {
-			label = string([]rune(label)[:widest])
-		}
-		display := f.Value.Display()
-		// Reasons and truth-state notices are MARSHAL-generated guidance, not
-		// captured evidence. Make their vocabulary match the Community
-		// navigation without rewriting user content or evidence held in a known
-		// value.
-		if f.Value.Status != TruthKnown && f.Value.Status != TruthStale {
-			display = communityLabel(display)
-		}
-		line := fmt.Sprintf("%-*s  %s", widest, label, display)
-		out = append(out, line)
-	}
-	return out
-}
-
-// humanReason rewrites internal wording in a refusal reason for the operator.
-func humanReason(reason string) string {
-	return strings.NewReplacer(
-		"goal contract not found", "there is no goal yet; create and confirm one first",
-		"NOT_RUN", "not run yet",
-	).Replace(reason)
-}
-
-// communityLabel removes implementation-phase names from the Community UI.
-// Those numbers are useful in design notes and source history, but they do
-// not tell an operator what a screen does. Spec IDs and the original manifest
-// paths remain unchanged for durable bindings, cross-links, and auditability.
-func communityLabel(text string) string {
-	return strings.NewReplacer(
-		"Constitution — Process 00", "Constitution",
-		"Goal & Intent — Process 03", "Goal & Intent",
-		"Plan — Process 04", "Plan",
-		"Runs — Process 05", "Runs",
-		"Review — Process 06", "Review",
-		"Learning — Process 07", "Learning",
-		"Governed Optimization — Process 08", "Governed Optimization",
-		"Process 00→08 timeline", "Lifecycle timeline",
-		"Process 05 action approval", "Execution action approval",
-		"Process 06 verification state", "Verification state",
-		"Process 07 learning state", "Learning state",
-		"Process 08 optimization state", "Optimization state",
-		"Process 06 handoff bundle", "Verification handoff bundle",
-		"Hand off approved plan to Process 05", "Hand off approved plan",
-		"Export Process 07 project/general bundle", "Export learning bundle",
-		"Start from Process 07 commit", "Start from learning record",
-		"Policy proposal → new Process 03 goal", "Policy proposal → new goal",
-		"Process 07 Feedback", "Learning feedback",
-		"Local-only Process 03→07 contract", "Local lifecycle contract",
-		"Memory handoffs and Process 07 reads", "Memory handoffs and learning reads",
-		"Process 06 verification status", "Verification status",
-		"Process 07 memory/search", "Memory search",
-		"Read-only Process 08 evidence tools", "Read-only optimization evidence tools",
-		"Read-only Process 08 evidence", "Read-only optimization evidence",
-		"Process 01–02 / pre-lifecycle readiness", "Setup and readiness",
-		"Process 00→08", "lifecycle",
-		"Process 03→07", "lifecycle",
-		"Process 00", "constitution",
-		"Process 03", "goal service",
-		"Process 04", "planning service",
-		"Process 05", "execution service",
-		"Process 06", "verification service",
-		"Process 07", "learning service",
-		"Process 08", "optimization service",
-	).Replace(humanReason(editionLabel(text)))
 }

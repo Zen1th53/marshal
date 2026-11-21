@@ -79,11 +79,6 @@ func (r *CapabilityRegistry) All() []Capability {
 	return list
 }
 
-// Count returns the total number of registered capabilities.
-func (r *CapabilityRegistry) Count() int {
-	return len(r.capabilities)
-}
-
 // ToPaletteActions converts registered capabilities into searchable CommandPalette actions.
 func (r *CapabilityRegistry) ToPaletteActions() []PaletteAction {
 	var actions []PaletteAction

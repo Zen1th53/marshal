@@ -273,12 +273,6 @@ type Lane struct {
 	Beat      time.Time
 }
 
-// NewLane projects one worker invocation. A worker whose task the run does
-// not know, or whose task is not in a working state, is idle.
-func NewLane(w Worker, tasks []TaskRow) Lane {
-	return newLane(w, tasks, time.Time{})
-}
-
 // newLane is NewLane judged at now. A heartbeat worker's own beats say what
 // it does, whatever its task's snapshot says: it is working while it beats
 // and lost once it has not beaten for WorkerBeatGrace.
