@@ -82,6 +82,9 @@ func (w *Workspace) flowInputs() flowIn {
 		in.chatAsked = chatAskedNow(a.paneID)
 	}
 	w.tmuxMu.Unlock()
+	if !in.chatAsked {
+		in.chatAsked = w.nativeChatAsked()
+	}
 	in.limits, in.globalCap = laneLimits(in.run.Settings)
 	ui := &w.boardUI
 	_, stopped := v.stopNotice()

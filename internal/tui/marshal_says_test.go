@@ -64,3 +64,19 @@ func TestNoteMarshalSaid(t *testing.T) {
 		t.Fatalf("new text: %+v", b.MarshalSays)
 	}
 }
+
+// The native chat's "asked you" reads the last line of the Marshal's turn:
+// a question mark mid-text is not a question to the owner.
+func TestEndsWithQuestion(t *testing.T) {
+	for text, want := range map[string]bool{
+		"Should I retry it from scratch?":             true,
+		"Two changes.\n**Shall I merge?**":            true,
+		"Is it? No, it is done.":                      false,
+		strings.Repeat("words ", 300) + "\nAll good?": true,
+		"": false,
+	} {
+		if got := endsWithQuestion(text); got != want {
+			t.Errorf("endsWithQuestion(%.30q) = %v", text, got)
+		}
+	}
+}

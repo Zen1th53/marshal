@@ -5,7 +5,7 @@
 ### Changed
 - The terminal Board is one short home screen: the project and state, **Now** (what is happening), **From you** (nothing, or the one thing that needs you) and **Web** (where the Web Board is), with the keys `⏎ chat`, `w web`, `s say to the Marshal`, `q quit`. The plan, lanes, tasks, workers, activity, steps, requests, readiness checklist and the cards' details are on the Web Board, which is now the full interface.
 - `Enter` always opens the Marshal chat. A safe step (retry a stuck task, move it and continue, resume, confirm the requirements) gets `y`, named on the From-you line; a second `y` within two seconds does nothing. A decision with authority (allow or deny, a gate, the plan, the architecture, changed files, a change of goal, stopping the run) is made on the Web Board: the line says `open the web to decide (w)`.
-- The Web Board starts with the Board and opens in the browser where there is a display (`MARSHAL_WEB_OPEN=0` keeps it closed). Its private link is shown only on demand (`/marshal web`, or `w` with no display), never on the home screen.
+- The Web Board starts with the Board and opens in the browser where there is a display (`MARSHAL_WEB_OPEN=0` keeps it closed). Each open (at start, `w`, `/marshal web`) uses a fresh one-use link. The link is never on the home screen; the footer shows it only where no browser can be opened (no display, or `/marshal web` could not open it).
 - *From you* says when the Marshal asked you something in its chat and waits (`⏎ open chat`), on the Board and on the Web Board.
 - `/task-model <task>` changes the model a task runs on (it was `w` on a task row).
 

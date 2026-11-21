@@ -92,6 +92,27 @@ func marshalProse(text string) string {
 	return redaction.RedactAll(RedactContent(out, nil))
 }
 
+// nativeChatAsked is chatAskedNow for the in-process (native) chat, which
+// has no pane for the monitor to read: no turn is running and the
+// Marshal's last turn, not answered yet, ends with a question to the owner.
+func (w *Workspace) nativeChatAsked() bool {
+	w.chat.mu.Lock()
+	idle := w.chat.tr != nil && !w.chat.view.Thinking()
+	w.chat.mu.Unlock()
+	if !idle {
+		return false
+	}
+	s := w.marshalSaid.Load()
+	return s != nil && !s.answered && endsWithQuestion(s.text)
+}
+
+// endsWithQuestion reports whether the text's last line asks something.
+func endsWithQuestion(text string) bool {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	last := strings.TrimRight(strings.TrimSpace(lines[len(lines)-1]), "*_`) ")
+	return strings.HasSuffix(last, "?")
+}
+
 // collectV2MarshalSays fills b.MarshalSays from the last turn kept.
 func (w *Workspace) collectV2MarshalSays(b *vm.Board) {
 	if s := w.marshalSaid.Load(); s != nil {
