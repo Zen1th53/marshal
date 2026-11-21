@@ -3831,8 +3831,8 @@
     },
     {
       "path": "internal/app/project_contract_extreme.go",
-      "sha256": "a426f31cc84e8c3074fb74d8891017607dca52e166edf7113d79be6f895a591c",
-      "bytes": 8855
+      "sha256": "c0a72d162ab8e0983a21ce79d5f0761212018788d2e1a015b7459ee6d1dee6ef",
+      "bytes": 9528
     },
     {
       "path": "internal/app/project_contract_extreme_test.go",
@@ -12221,8 +12221,8 @@
     },
     {
       "path": "internal/store/project_context_extreme.go",
-      "sha256": "1eec742c0c8494527f94dd3d1023529297c308ff73dd1ba158dd326b99c51b36",
-      "bytes": 49561
+      "sha256": "a6c5523f1b3c5e774903605e1d817394fbbdbd96dad32f6044e41e96150a580b",
+      "bytes": 49579
     },
     {
       "path": "internal/store/project_context_extreme_test.go",
@@ -12301,8 +12301,8 @@
     },
     {
       "path": "internal/store/project_contract_instruction_extreme.go",
-      "sha256": "0799277becda7d598579d243ddf7150b265e5d1d2dcb55be4aefca467e8d3c2f",
-      "bytes": 12929
+      "sha256": "befe6d17d385bc340e50193a2733450a8b8023e3db8700cca902c0f4581393c9",
+      "bytes": 13134
     },
     {
       "path": "internal/store/project_contract_instruction_extreme_test.go",
@@ -12321,8 +12321,8 @@
     },
     {
       "path": "internal/store/project_contract_pending_extreme.go",
-      "sha256": "cf252c91cdf2a221e3feebc35e3e5aa2d4d7aebc89c4fc1873f9542b02f1abff",
-      "bytes": 5485
+      "sha256": "6adbfd607189c7a93963c8c583aa610ccd50f17ae3ed0b6ab54bf3de1c8c97f8",
+      "bytes": 5608
     },
     {
       "path": "internal/store/project_contract_pending_extreme_test.go",
@@ -12331,13 +12331,13 @@
     },
     {
       "path": "internal/store/project_contract_reconcile_extreme.go",
-      "sha256": "6e1a643a3bde01a29a86e4695b93bbd41be75a08ebdbe98ad7eed52fc2ee1706",
-      "bytes": 10631
+      "sha256": "be4f58686f1d1ff90aa93a612cc001d2b7be79c0eae46b1066f521f8620a58c0",
+      "bytes": 11414
     },
     {
       "path": "internal/store/project_contract_reconcile_extreme_test.go",
-      "sha256": "51b0457e270cb0241f826cc89231a91e83aea3aeed2ec83527d337ee49fd2ae6",
-      "bytes": 10471
+      "sha256": "5c16c46bab67016f93c0d8bd2d53ea4981d5de8d45a7939872a8ef03d9dbda64",
+      "bytes": 11725
     },
     {
       "path": "internal/store/provenance_persistence_a02_test.go",
@@ -18036,8 +18036,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "b1c930838ed23969fa5aedfad30902a7bb8d7feec41970bfc9fb213e2dcc2907",
-      "bytes": 486528
+      "sha256": "7d312fcf65eb3064d1e9dbffaeaaea227d37bdd1b277887f49e0674fb456e5cf",
+      "bytes": 486909
     },
     {
       "path": "tools/extreme/prq/main_default.go",

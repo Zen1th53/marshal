@@ -29,6 +29,22 @@ type projectContractQuery interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+// HasUnconsumedBrowserAcceptance reports whether any browser Accept of the
+// project is recorded and not yet consumed: the cheap check the open-time
+// reconcile makes before it reads anything else.
+func (s *Store) HasUnconsumedBrowserAcceptance(ctx context.Context, storage string) (bool, error) {
+	if s == nil || s.db == nil || storage == "" {
+		return false, nil
+	}
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM extreme_project_contract_instructions i WHERE i.project_id=? AND substr(i.instruction_ref,1,8)='browser:'
+	AND NOT EXISTS(SELECT 1 FROM extreme_project_contract_instruction_receipts r WHERE r.project_id=i.project_id AND r.instruction_ref=i.instruction_ref)`, storage).Scan(&n)
+	if noSuchTable(err) {
+		return false, nil
+	}
+	return n > 0, err
+}
+
 // ReadOwnerAcceptedProjectContract finds the newest unconsumed browser Accept
 // ("browser:" instruction) made against the active contract version that
 // covers the exact canonical contract (id, revision, digest, reviewed
