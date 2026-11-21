@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 package workerterminal
 
@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -22,12 +21,12 @@ import (
 func TestProviderPTYUsesHostSizeAndResizes(t *testing.T) {
 	var dimensions atomic.Uint32
 	dimensions.Store(23<<16 | 80)
-	fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+	master, fd, slave, err := openPTY()
 	if err != nil {
 		t.Fatal(err)
 	}
-	master := os.NewFile(uintptr(fd), "test-pty")
 	defer master.Close()
+	defer slave.Close()
 	stop, err := propagateTerminalSize(t.Context(), fd, func(context.Context) (uint16, uint16, error) {
 		size := dimensions.Load()
 		return uint16(size >> 16), uint16(size), nil
@@ -54,44 +53,36 @@ func TestProviderPTYUsesHostSizeAndResizes(t *testing.T) {
 }
 
 func TestInteractiveProviderForegroundInputAndSIGWINCH(t *testing.T) {
-	fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+	master, fd, slave, err := openPTY()
 	if err != nil {
 		t.Fatal(err)
 	}
-	master := os.NewFile(uintptr(fd), "provider-test-pty")
 	defer master.Close()
-	if err := unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil {
-		t.Fatal(err)
-	}
-	number, err := unix.IoctlGetInt(fd, unix.TIOCGPTN)
-	if err != nil {
-		t.Fatal(err)
-	}
-	slave, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", number), os.O_RDWR|unix.O_NOCTTY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer slave.Close()
 	dir := t.TempDir()
 	script := `stty size > "$1/initial"
 trap 'stty size > "$1/resized"' WINCH
 IFS= read -r input
 printf '%s' "$input" > "$1/input"
-while true; do read -r -t .1 ignored; done`
+while true; do sleep 0.05; done`
 	cmd := exec.Command("/bin/bash", "-c", script, "provider", dir)
 	if err := processgroup.Wrap(cmd); err != nil {
 		t.Fatal(err)
 	}
 	configureInteractivePTY(cmd, slave)
-	if cmd.SysProcAttr.Pdeathsig != syscall.SIGKILL || !cmd.SysProcAttr.Setsid {
-		t.Fatal("interactive PTY dropped worker parent-death signal or process group")
+	if !cmd.SysProcAttr.Setsid || !cmd.SysProcAttr.Setctty {
+		t.Fatal("interactive PTY did not make the worker its session leader")
 	}
+	assertParentDeathSignal(t, cmd.SysProcAttr)
 	if err := unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &unix.Winsize{Row: 23, Col: 80}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	// Drain the terminal as the hosted relay does: on macOS a session leader
+	// cannot exit while its terminal holds unread output.
+	go io.Copy(io.Discard, master)
 	defer func() { _ = processgroup.Stop(cmd); _ = cmd.Wait() }()
 	waitFile := func(name, want string) {
 		t.Helper()
@@ -121,11 +112,12 @@ while true; do read -r -t .1 ignored; done`
 func TestProviderPTYFallsBackAndRecoversHostSize(t *testing.T) {
 	for _, initialError := range []bool{false, true} {
 		t.Run(fmt.Sprint(initialError), func(t *testing.T) {
-			fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+			master, fd, slave, err := openPTY()
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer unix.Close(fd)
+			defer master.Close()
+			defer slave.Close()
 			var dimensions atomic.Uint32
 			stop, err := propagateTerminalSize(t.Context(), fd, func(context.Context) (uint16, uint16, error) {
 				d := dimensions.Load()

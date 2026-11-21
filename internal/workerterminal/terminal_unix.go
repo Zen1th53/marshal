@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 // Package workerterminal attaches a driver-owned command to a terminal host.
 package workerterminal
@@ -41,24 +41,12 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	if host == nil {
 		return func() {}, nil
 	}
-	fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+	master, fd, slave, err := openPTY()
 	if err != nil {
 		return nil, err
 	}
-	master := os.NewFile(uintptr(fd), "worker-pty")
 	fail := func(err error) (func(), error) { master.Close(); return nil, err }
-	if err = unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil {
-		return fail(err)
-	}
-	number, err := unix.IoctlGetInt(fd, unix.TIOCGPTN)
-	if err != nil {
-		return fail(err)
-	}
-	slave, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", number), os.O_RDWR|unix.O_NOCTTY, 0)
-	if err != nil {
-		return fail(err)
-	}
-	dir, err := os.MkdirTemp("", "marshal-terminal-")
+	dir, err := os.MkdirTemp(socketParent(), "marshal-terminal-")
 	if err != nil {
 		slave.Close()
 		return fail(err)
@@ -81,6 +69,10 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 		defer close(drained)
 		c, err := listener.Accept()
 		if err != nil {
+			// No relay will read the terminal. Keep draining it so the
+			// worker never blocks on a full terminal buffer; on macOS a
+			// session leader cannot even exit while its output is unread.
+			io.Copy(io.Discard, master)
 			return
 		}
 		mu.Lock()
@@ -137,6 +129,20 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	cmd.Stdout = io.MultiWriter(cmd.Stdout, slave)
 	cmd.Stderr = io.MultiWriter(cmd.Stderr, slave)
 	return cleanup, nil
+}
+
+// maxSocketPath keeps the relay socket within sun_path on every supported
+// kernel (104 bytes on macOS, 108 on Linux).
+const maxSocketPath = 100
+
+// socketParent is the temporary directory unless its path would leave the
+// relay socket too long to bind (a deep per-user TMPDIR on macOS).
+func socketParent() string {
+	parent := os.TempDir()
+	if len(filepath.Join(parent, "marshal-terminal-0123456789", "terminal.sock")) > maxSocketPath {
+		return "/tmp"
+	}
+	return parent
 }
 
 // TIOCSWINSZ updates provider layout and signals the foreground process group.
