@@ -87,12 +87,22 @@ func TestStartBindsLoopbackWithStrongToken(t *testing.T) {
 	if err != nil || host != "127.0.0.1" || port == "0" {
 		t.Fatalf("addr %q", s.Addr())
 	}
-	u, err := url.Parse(s.URL)
-	if err != nil || u.Host != s.Addr() || u.Path != "/" {
-		t.Fatalf("url %q", s.URL)
+	link, err := s.Link()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if tok := u.Query().Get("t"); tok != s.token || !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(tok) {
-		t.Fatalf("token %q is not 256 random bits", tok)
+	u, err := url.Parse(link)
+	if err != nil || u.Host != s.Addr() || u.Path != "/" {
+		t.Fatalf("url %q", link)
+	}
+	if tok := u.Query().Get("t"); !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(tok) {
+		t.Fatalf("link secret %q is not 256 random bits", tok)
+	}
+	if tok := u.Query().Get("t"); tok == s.token {
+		t.Fatal("the link carries the API secret")
+	}
+	if !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(s.token) {
+		t.Fatalf("API secret %q is not 256 random bits", s.token)
 	}
 	other := startTest(t, nil)
 	if other.token == s.token {
@@ -189,8 +199,14 @@ func TestDemoToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if !strings.HasSuffix(s.URL, "/?t=demo") {
-		t.Fatalf("demo url %q", s.URL)
+	if link, _ := s.Link(); !strings.HasSuffix(link, "/?t=demo") {
+		t.Fatalf("demo url %q", link)
+	}
+	// The demo's link is never spent: it can be opened again and again.
+	for range 2 {
+		if r := spend(t, s, "demo"); r.StatusCode != http.StatusOK {
+			t.Fatalf("demo link spend: %d", r.StatusCode)
+		}
 	}
 	if r := get(t, s, "GET", "/?t=demo", "", ""); r.StatusCode != http.StatusOK {
 		t.Fatalf("demo page: %d", r.StatusCode)

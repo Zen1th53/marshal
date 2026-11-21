@@ -120,7 +120,7 @@ Then it drafts the architecture. The top bar says `YOUR TURN`, *from you* says `
 │ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │
 ```
 
-Press `c` to copy the link and open it in a browser on that machine. The link is also saved in `.marshal/architecture/review/url.txt`. Over SSH, the address is local to the remote machine: forward its port first (for example `ssh -L 37667:127.0.0.1:37667 you@server`, with the port from the link), then open the link in your local browser.
+Press `c` to copy the link and open it in a browser on that machine. The link is kept in memory only, never in a file. Over SSH, the address is local to the remote machine: forward its port first (for example `ssh -L 37667:127.0.0.1:37667 you@server`, with the port from the link), then open the link in your local browser.
 
 `Esc` puts the card aside; the inbox keeps the decision and *from you* still names it.
 

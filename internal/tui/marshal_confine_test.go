@@ -16,7 +16,7 @@ import (
 
 const (
 	wantCodexProfile    = `default_permissions="marshal_planner"`
-	wantCodexFilesystem = `permissions.marshal_planner.filesystem={":root"="read", ":workspace_roots"={"."="read", ".marshal/marshal"="write", ".marshal/proposals"="write", ".marshal/state.db"="none", ".marshal/state.db-wal"="none", ".marshal/state.db-shm"="none", ".marshal/state.db-journal"="none", ".marshal/knowledge"="none", ".marshal/backups"="none"}}`
+	wantCodexFilesystem = `permissions.marshal_planner.filesystem={":root"="read", ":workspace_roots"={"."="read", ".marshal/marshal"="write", ".marshal/proposals"="write", ".marshal/state.db"="none", ".marshal/state.db-wal"="none", ".marshal/state.db-shm"="none", ".marshal/state.db-journal"="none", ".marshal/knowledge"="none", ".marshal/backups"="none", ".marshal/architecture"="none"}}`
 	wantClaudeSettings  = `{"permissions":{"allow":["Edit(./.marshal/marshal/**)","Edit(./.marshal/proposals/**)"]}}`
 )
 

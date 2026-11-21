@@ -9,21 +9,42 @@
   var frame = null, frameAt = 0, lastOK = null;
   var retry = 0, retryTimer = null;
 
-  // The link's token (?t=…) is read once, taken out of the address bar and
-  // the history at once, and kept for this tab only, so a reload still
-  // works. It goes to the server as a bearer header; no cookie is used.
-  var tokenKey = "marshal-board-token";
-  var token = (function () {
-    var t = null;
-    try { t = new URLSearchParams(location.search).get("t"); } catch (e) { t = null; }
-    if (t) {
-      try { history.replaceState(null, "", "/"); } catch (e) { /* keep going */ }
-      try { sessionStorage.setItem(tokenKey, t); } catch (e) { /* in memory only */ }
-      return t;
-    }
-    try { return sessionStorage.getItem(tokenKey); } catch (e) { return null; }
-  })();
+  // The link's secret (?t=…) works once: it is taken out of the address bar
+  // and the history at once and spent (POST /api/session) for the page's
+  // own API secret, which is kept for this tab only, so a reload still
+  // works. A copy of the link left anywhere else is then worthless. The
+  // secret goes to the server as a bearer header; no cookie is used.
+  var tokenKey = "marshal-board-session";
+  var link = null, token = null;
+  try { link = new URLSearchParams(location.search).get("t"); } catch (e) { link = null; }
+  if (link) {
+    try { history.replaceState(null, "", "/"); } catch (e) { /* keep going */ }
+  } else {
+    try { token = sessionStorage.getItem(tokenKey); } catch (e) { token = null; }
+  }
   function auth() { return { "Authorization": "Bearer " + token }; }
+
+  // spendLink trades the link for the API secret, then calls next. A link
+  // already used is refused, and the page says so.
+  function spendLink(next) {
+    if (!link) { next(); return; }
+    var opened = link;
+    link = null;
+    fetch("/api/session", { method: "POST", headers: { "Authorization": "Bearer " + opened }, cache: "no-store", credentials: "omit" })
+      .then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; });
+      })
+      .then(function (x) {
+        if (x.ok && x.d.session) {
+          token = x.d.session;
+          try { sessionStorage.setItem(tokenKey, token); } catch (e) { /* in memory only */ }
+          next();
+          return;
+        }
+        disconnected(x.d.text || "This link does not work any more. Run /marshal web for a new one.");
+      })
+      .catch(function () { disconnected("The Board is not answering (closed?)."); });
+  }
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -684,6 +705,6 @@
     $("say-text").addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });
-    connect();
+    spendLink(connect);
   });
 })();

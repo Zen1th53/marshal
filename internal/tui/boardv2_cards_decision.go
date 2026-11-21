@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -83,23 +82,10 @@ func (w *Workspace) browserOpenFailed() bool {
 	return false
 }
 
-// architectureLink is the review page's private address: the link the
-// review server wrote (.marshal/architecture/review/url.txt), or the live
-// session's own. "" when no review page is up.
+// architectureLink is the review page's private address: the live session's
+// own, held in this process only (no file has it). "" when no review page
+// is up.
 func (w *Workspace) architectureLink() string {
-	w.mu.RLock()
-	rt, root := w.runtime, w.workDir
-	w.mu.RUnlock()
-	if rt != nil && rt.ProjectRoot() != "" {
-		root = rt.ProjectRoot()
-	}
-	if root != "" {
-		if data, err := readSmallFile(filepath.Join(root, architectureURLFile), 4096); err == nil {
-			if link := strings.TrimSpace(string(data)); strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") {
-				return link
-			}
-		}
-	}
 	// The session is read, never made: making it restores owner holds.
 	w.mu.RLock()
 	m := w.marshal

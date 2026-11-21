@@ -33,6 +33,9 @@ func TestWebActQuotaMoveIsTheKey(t *testing.T) {
 func TestWebActOpensTheArchitectureReview(t *testing.T) {
 	displaySeams(t, "darwin", nil)
 	w := architectureWorkspace(t)
+	// The live review session holds the link (no file does); the card the
+	// page saw already knows it, so the action is not stale.
+	withArchitectureLink(w)
 	f := webCard(t, w)
 	if f.Decision == nil || f.Decision.Kind != decisionArchitecture {
 		t.Fatalf("card %+v", f.Decision)
@@ -41,7 +44,7 @@ func TestWebActOpensTheArchitectureReview(t *testing.T) {
 	// The open may fail in a test workspace (no review server); then the
 	// page is told so, and no link is sent.
 	switch {
-	case res.Status == "done" && res.Link == "http://127.0.0.1:37667/?token=7964abcd462b":
+	case res.Status == "done" && res.Link == fixtureArchitectureLink:
 		if !webNoteHas(w, "From the web: open in browser") {
 			t.Fatalf("activity %+v", w.noteList())
 		}

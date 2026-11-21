@@ -39,7 +39,8 @@ func TestDemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	t.Logf("Web Board demo (%s): %s", name, s.URL)
+	link, _ := s.Link()
+	t.Logf("Web Board demo (%s): %s", name, link)
 	select {}
 }
 

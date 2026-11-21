@@ -172,7 +172,7 @@ var v2ClipboardWrite func(w *Workspace, text string) bool
 // copyCardLink puts the review link on the clipboard.
 func (w *Workspace) copyCardLink(link string) {
 	if link == "" {
-		w.memoryAnswer("No review link yet: a opens the architecture and writes it.", false)
+		w.memoryAnswer("No review link yet: a opens the architecture and makes one.", false)
 		return
 	}
 	write := v2ClipboardWrite
@@ -186,7 +186,7 @@ func (w *Workspace) copyCardLink(link string) {
 		}
 	}
 	if !write(w, link) {
-		w.memoryAnswer("Could not reach the clipboard here; the link is in "+architectureURLFile+".", true)
+		w.memoryAnswer("Could not reach the clipboard here; the link is on the card.", true)
 		return
 	}
 	w.memoryAnswer("Copied the review link.", false)
