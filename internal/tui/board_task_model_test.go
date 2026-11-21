@@ -201,3 +201,57 @@ func slicesEqualStr(a, b []string) bool {
 	}
 	return true
 }
+
+// pressW is /task-model on id, as the composer and the palette run it.
+func pressW(w *Workspace, id string) {
+	if _, err := w.cmd.Handle(context.Background(), "/task-model "+id); err != nil {
+		panic(err)
+	}
+}
+
+func TestTaskModelCommandByState(t *testing.T) {
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	seedTaskCandidates(t, fourModels())
+
+	for _, c := range []struct {
+		id         string
+		wantPicker bool
+		wantAnswer string
+	}{
+		{"T-017", false, "T-017 is running on Codex now. Its model can change once it hands in, is sent back or gets stuck."},
+		{"T-020", false, "T-020 is finished; its model cannot change."},
+		{"T-009", false, "T-009 is finished; its model cannot change."},
+		{"T-023", true, ""},
+	} {
+		w.closeMarshalPicker()
+		w.setOutput("", false)
+		pressW(w, c.id)
+		if got := w.marshalPickerOpen(); got != c.wantPicker {
+			t.Errorf("%s: picker open %v, want %v", c.id, got, c.wantPicker)
+		}
+		if !c.wantPicker {
+			if got := pickerLastOutput(w); got != c.wantAnswer {
+				t.Errorf("%s answer %q, want %q", c.id, got, c.wantAnswer)
+			}
+		}
+	}
+
+	// A queued task opens the picker in the shipped build and answers the
+	// governed line with -tags governed.
+	w.closeMarshalPicker()
+	w.setOutput("", false)
+	pressW(w, "T-033")
+	if app.OperatorCanMoveQueuedTask() {
+		if !w.marshalPickerOpen() {
+			t.Errorf("T-033 (shipped) did not open the picker")
+		}
+	} else {
+		if w.marshalPickerOpen() {
+			t.Errorf("T-033 (governed) opened the picker")
+		}
+		if got, want := pickerLastOutput(w), "T-033 has not started yet; in this edition its model can change only after it gets stuck."; got != want {
+			t.Errorf("T-033 governed answer %q, want %q", got, want)
+		}
+	}
+}
