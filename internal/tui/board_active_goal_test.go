@@ -317,9 +317,9 @@ func TestActiveGoalFallbacksAndHints(t *testing.T) {
 	}
 	w.mu.Unlock()
 	text = activeGoalFrameText(w, 120, 40)
-	if !strings.Contains(lines0(text), " PLANNING ") || !strings.Contains(text, "PLAN · your goal") || !strings.Contains(text, "working on your go") {
+	if !strings.Contains(lines0(text), " PLANNING ") || !strings.Contains(text, "PLAN · your goal") || !strings.Contains(text, "working on your…") {
 		// The NOW column keeps one cell before its rule, so at 120
-		// columns the line is cut there: "working on your go…".
+		// columns the line is cut at the last whole word: "working on your…".
 		t.Fatalf("minimal goal did not render fallback cleanly:\n%s", text)
 	}
 	if strings.Contains(text, "GOAL-minimal") || strings.Contains(text, "say what to build") {

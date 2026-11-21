@@ -81,6 +81,11 @@ type marshalSession struct {
 	// running, keyed by task id; they drain when the step finishes (onIdle →
 	// drainTaskMoves), before the Marshal switch above.
 	nextTaskMoves map[string]string
+	// nextStop is the stop's commands the owner chose (Enter on the paused
+	// card or the inbox's stop entry) while a step was running: they queue
+	// once and drain when the step finishes (onIdle → drainQueuedStop), so
+	// repeated presses never fire a retry the busy step would refuse.
+	nextStop []string
 	// onIdle runs after a reserved step finishes when a switch or a task move
 	// is queued.
 	onIdle                  func()
@@ -171,6 +176,7 @@ func (w *Workspace) marshalSession() *marshalSession {
 		w.marshal.onIdle = func() {
 			w.postUI(context.Background(), func() {
 				w.drainTaskMoves(context.Background())
+				queuedStopDrain(w, context.Background())
 				w.applyQueuedMarshal(context.Background())
 			})
 		}
@@ -992,7 +998,7 @@ func (m *marshalSession) finishWithNativeTurn(cancel context.CancelFunc, nativeT
 		m.nativeCancels = append(m.nativeCancels, cancel)
 	}
 	drain := m.onIdle
-	queued := m.nextProvider != "" || len(m.nextTaskMoves) > 0
+	queued := m.nextProvider != "" || len(m.nextTaskMoves) > 0 || len(m.nextStop) > 0
 	m.mu.Unlock()
 	if !nativeTurnWaiting && cancel != nil {
 		cancel()
@@ -1683,6 +1689,8 @@ func (w *Workspace) marshalStop() string {
 	cancel := m.cancel
 	waiting := m.nativeCancels
 	m.nativeCancels = nil
+	// A stop's action queued behind the step is dropped with it.
+	m.nextStop = nil
 	m.mu.Unlock()
 	if cancel == nil && len(waiting) == 0 {
 		return "No Marshal operation is running."
@@ -1885,7 +1893,7 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 	busy := m.busy
 	m.mu.Unlock()
 	if busy {
-		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+		return "", errors.New("a Marshal operation is already running; try again when it finishes (/marshal stop cancels it)")
 	}
 	task := args[0]
 	m.grant(runID, "return:"+task)
@@ -1911,7 +1919,7 @@ func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, er
 	busy := m.busy
 	m.mu.Unlock()
 	if busy {
-		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+		return "", errors.New("a Marshal operation is already running; try again when it finishes (/marshal stop cancels it)")
 	}
 	task := args[0]
 	freshSession := false
@@ -1943,7 +1951,7 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 	busy := m.busy
 	m.mu.Unlock()
 	if busy {
-		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+		return "", errors.New("a Marshal operation is already running; try again when it finishes (/marshal stop cancels it)")
 	}
 	task, worker := args[0], args[1]
 	if err := service.ReassignByOperator(ctx, runID, task, worker, "operator /marshal reassign "+task+" "+worker); err != nil {
@@ -1967,7 +1975,7 @@ func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, e
 	busy := m.busy
 	m.mu.Unlock()
 	if busy {
-		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+		return "", errors.New("a Marshal operation is already running; try again when it finishes (/marshal stop cancels it)")
 	}
 	task := args[0]
 	if err := service.CancelTask(ctx, runID, task); err != nil {
