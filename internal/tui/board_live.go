@@ -1056,12 +1056,12 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		return true
 	}
 	// w chooses the model that runs the task under the keyboard (P5-05); with
-	// no task it answers why instead of typing a w into the composer.
+	// no task it opens the Board in the browser (the Web Board).
 	if event.Type == KeyRune && event.Rune == 'w' {
 		if id, ok := taskUnderKeyboard(w); ok {
 			w.openTaskModelPicker(context.Background(), id)
 		} else {
-			w.setOutput(taskModelWhy, false)
+			w.openWebBoardKey()
 		}
 		return true
 	}

@@ -48,8 +48,21 @@ func (r *Review) Handler(token string) http.Handler {
 			_, _ = io.WriteString(w, page)
 			return
 		}
-		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
+		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance" && q.URL.Path != "/api/codeview") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
 			reply(http.StatusForbidden, map[string]any{"error": "Review access denied"})
+			return
+		}
+		if q.URL.Path == "/api/codeview" {
+			if q.Method != http.MethodGet {
+				reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported review method"})
+				return
+			}
+			view, err := r.CodeView(q.Context(), q.URL.Query().Get("part"), q.URL.Query().Get("dir"))
+			if err != nil {
+				reply(http.StatusNotFound, map[string]any{"error": err.Error()})
+				return
+			}
+			reply(http.StatusOK, view)
 			return
 		}
 		if q.URL.Path == "/api/conformance" {

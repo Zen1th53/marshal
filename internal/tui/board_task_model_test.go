@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -86,8 +87,9 @@ func TestTaskModelKeyByState(t *testing.T) {
 		}
 	}
 
-	// With no task under the keyboard, w answers why instead of opening the
-	// picker.
+	// With no task under the keyboard, w opens the Board in the browser
+	// (the Web Board) instead of the picker.
+	webBoardSeams(t)
 	w.closeMarshalPicker()
 	w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = layout.Lanes, "", ""
 	w.setOutput("", false)
@@ -95,8 +97,8 @@ func TestTaskModelKeyByState(t *testing.T) {
 	if w.marshalPickerOpen() {
 		t.Error("w opened the picker with no task under the keyboard")
 	}
-	if got := pickerLastOutput(w); got != taskModelWhy {
-		t.Errorf("no-task answer %q, want %q", got, taskModelWhy)
+	if got := pickerLastOutput(w); !strings.Contains(got, "Web Board") || webLink.FindString(got) == "" {
+		t.Errorf("no-task answer %q, want the Web Board's link", got)
 	}
 }
 

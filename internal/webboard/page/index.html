@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<title>Marshal Board</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="top" aria-label="Run status">
+  <span class="brand">MARSHAL <span id="t-version" class="dim"></span></span>
+  <span class="seg"><span class="lbl">project</span> <b id="t-project">–</b></span>
+  <span class="seg"><span class="lbl">run</span> <b id="t-run">–</b></span>
+  <span class="seg"><span id="t-state" class="chip">–</span></span>
+  <span class="seg"><span class="lbl">workers</span> <b id="t-workers">–</b></span>
+  <span class="seg"><span class="lbl">inbox</span> <b id="t-inbox">–</b></span>
+  <span class="seg grow"></span>
+  <span class="seg"><span id="t-live" class="chip tone-muted" role="status" aria-live="polite">connecting…</span></span>
+  <time id="t-clock" class="seg clock"></time>
+</header>
+
+<div id="offline" class="offline" role="alert" hidden></div>
+
+<section class="nowline" aria-label="Now">
+  <div><span class="lbl">MARSHAL</span> <span id="n-marshal">–</span></div>
+  <div><span class="lbl">WORK</span> <span id="n-work">–</span></div>
+  <div id="n-you-box" class="you"><span class="lbl">FROM YOU</span> <span id="n-you">–</span> <span id="n-you-tag" class="chip"></span></div>
+</section>
+
+<section id="card" class="card" aria-labelledby="card-title" hidden>
+  <div class="card-head">
+    <h2 id="card-title"></h2>
+    <span id="card-corner" class="dim"></span>
+  </div>
+  <p id="card-self" class="self" hidden></p>
+  <p id="card-summary"></p>
+  <p id="card-changed" class="dim"></p>
+  <ol id="card-nodes" class="nodes" aria-label="Parts"></ol>
+  <dl id="card-lines" class="cardlines"></dl>
+  <ul id="card-tasks" class="pausedtasks"></ul>
+  <p id="card-will"></p>
+  <p id="card-extra" class="dim"></p>
+  <div class="card-act">
+    <p class="readonly">This page is read-only. <span id="card-how"></span></p>
+    <ul id="card-keys" class="keys" aria-label="Keys in the terminal Board"></ul>
+  </div>
+</section>
+
+<main class="grid">
+  <div class="col">
+    <section id="p-ready" class="pane" aria-labelledby="h-ready" hidden>
+      <h2 id="h-ready">READINESS <span id="r-count" class="dim"></span></h2>
+      <ul id="r-checks" class="checks"></ul>
+      <dl id="r-defaults" class="defaults"></dl>
+      <p id="r-checked" class="dim"></p>
+      <ul id="r-keys" class="keys" aria-label="Keys in the terminal Board"></ul>
+    </section>
+
+    <section id="p-plan" class="pane" aria-labelledby="h-plan">
+      <h2 id="h-plan">PLAN <span id="pl-title" class="dim"></span></h2>
+      <p id="pl-accepted" class="dim"></p>
+      <ol id="pl-stages" class="stages" aria-label="Stages"></ol>
+      <div class="progress-row">
+        <div id="pl-bar" class="bar big" role="progressbar" aria-label="Tasks merged" aria-valuemin="0"><span></span></div>
+        <span id="pl-counts"></span>
+      </div>
+      <div class="spark-row">
+        <figure class="spark"><svg id="pl-spark" viewBox="0 0 120 28" role="img" aria-label="Merges per 5 minutes"></svg>
+          <figcaption class="dim">merges / 5 min</figcaption></figure>
+        <span id="pl-stats" class="dim"></span>
+      </div>
+    </section>
+
+    <section id="p-lanes" class="pane" aria-labelledby="h-lanes">
+      <h2 id="h-lanes">LANES <span id="la-limits" class="dim"></span></h2>
+      <div class="tablewrap">
+        <table class="lanes">
+          <thead><tr><th scope="col">lane</th><th scope="col">model</th><th scope="col">task</th><th scope="col">step</th><th scope="col" class="num">elapsed</th><th scope="col" class="num">signal</th></tr></thead>
+          <tbody id="la-rows"></tbody>
+        </table>
+      </div>
+      <p id="la-empty" class="dim" hidden>No lane is running.</p>
+    </section>
+
+    <section id="p-tasks" class="pane" aria-labelledby="h-tasks">
+      <h2 id="h-tasks">TASKS</h2>
+      <ul id="ta-rows" class="tasks"></ul>
+      <p id="ta-empty" class="dim" hidden>No tasks yet.</p>
+    </section>
+
+    <section id="p-steps" class="pane" aria-labelledby="h-steps">
+      <h2 id="h-steps">MARSHAL STEPS <span id="st-model" class="dim"></span></h2>
+      <ol id="st-rows" class="events"></ol>
+      <p id="st-quiet" class="dim"></p>
+    </section>
+  </div>
+
+  <div class="col">
+    <section id="p-marshal" class="pane" aria-labelledby="h-marshal">
+      <h2 id="h-marshal">MARSHAL</h2>
+      <p><b id="m-name">–</b> <span id="m-use" class="chip"></span></p>
+      <p id="m-doing" class="dim"></p>
+      <div class="meters">
+        <div class="meter"><span class="lbl">context</span><div id="m-ctx" class="bar" role="progressbar" aria-label="Context used" aria-valuemin="0" aria-valuemax="100"><span></span></div><span id="m-ctx-t" class="num"></span></div>
+        <div class="meter"><span class="lbl">5h left</span><div id="m-5h" class="bar" role="progressbar" aria-label="5-hour limit left" aria-valuemin="0" aria-valuemax="100"><span></span></div><span id="m-5h-t" class="num"></span></div>
+        <div class="meter"><span class="lbl">week left</span><div id="m-wk" class="bar" role="progressbar" aria-label="Weekly limit left" aria-valuemin="0" aria-valuemax="100"><span></span></div><span id="m-wk-t" class="num"></span></div>
+      </div>
+      <p><span id="m-chat" class="chip"></span> <span id="m-input" class="chip"></span> <span id="m-chatnote" class="dim"></span></p>
+    </section>
+
+    <section id="p-workers" class="pane" aria-labelledby="h-workers">
+      <h2 id="h-workers">WORKERS</h2>
+      <ul id="w-rows" class="workers"></ul>
+    </section>
+
+    <section id="p-inbox" class="pane" aria-labelledby="h-inbox">
+      <h2 id="h-inbox">INBOX <span id="i-count" class="dim"></span></h2>
+      <ul id="i-rows" class="inbox"></ul>
+      <p id="i-empty" class="dim">Nothing waits for you.</p>
+      <p id="i-next" class="dim"></p>
+    </section>
+
+    <section id="p-requests" class="pane" aria-labelledby="h-requests">
+      <h2 id="h-requests">REQUESTS TO THE MARSHAL</h2>
+      <div class="tablewrap">
+        <table class="requests">
+          <thead><tr><th scope="col">sent</th><th scope="col">what</th><th scope="col">answer</th><th scope="col" class="num">took</th></tr></thead>
+          <tbody id="rq-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="p-activity" class="pane" aria-labelledby="h-activity">
+      <h2 id="h-activity">ACTIVITY</h2>
+      <ol id="a-rows" class="events"></ol>
+      <p id="a-empty" class="dim" hidden>Nothing happened yet.</p>
+    </section>
+  </div>
+</main>
+<footer class="foot dim">Local view of the Marshal Board on this computer · read-only · act in the terminal Board.</footer>
+</body>
+</html>
