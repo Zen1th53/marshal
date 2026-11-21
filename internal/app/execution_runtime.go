@@ -5,14 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/adapter/claude"
-	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/statepath"
+
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
@@ -253,21 +252,6 @@ func (s *ExecutionService) ExecuteTaskBound(ctx context.Context, runID, taskID, 
 	return s.engine.ExecuteTaskBound(ctx, runID, taskID, baseCommit)
 }
 
-func (s *ExecutionService) resumeNativeRun(ctx context.Context, runID string) (*execution.ExecutionRun, error) {
-	run, err := s.engine.GetRun(ctx, runID)
-	if err != nil {
-		return nil, err
-	}
-	if run.SelectedTask != "" {
-		task, ok := run.Tasks[run.SelectedTask]
-		if !ok || task.BaseCommit == "" {
-			return nil, fmt.Errorf("%w: selected native task lost its base", execution.ErrRunInvalid)
-		}
-		return s.engine.ExecuteTaskBound(ctx, runID, run.SelectedTask, task.BaseCommit)
-	}
-	return s.engine.ExecuteRun(ctx, runID)
-}
-
 // ListRuns returns the canonical durable Process 05 runs. It is a read-only
 // boundary used by local status surfaces; callers must not infer mutations
 // from the returned copies.
@@ -294,6 +278,26 @@ func (s *ExecutionService) GetRun(ctx context.Context, runID string) (execution.
 	return s.engine.GetRun(ctx, runID)
 }
 
+// Approval operation types written by the removed Claude stream and Codex
+// app-server native-turn paths. Stored records of either kind can still exist;
+// no live turn can ever exist to release, so deciding one is refused.
+const (
+	claudeStreamApprovalOperation   = "CLAUDE_STREAM_NATIVE"
+	codexAppServerApprovalOperation = "CODEX_APP_SERVER_NATIVE"
+)
+
+// refuseNativeTurnApproval keeps a stored native-turn approval pending: there
+// is no proof a later provider turn would be the turn that asked for it.
+func refuseNativeTurnApproval(approval execution.RuntimeApproval) error {
+	switch approval.OperationType {
+	case codexAppServerApprovalOperation:
+		return fmt.Errorf("%w: live Codex app-server turn is unavailable; recovery is blocked pending operator review", model.ErrUnavailable)
+	case claudeStreamApprovalOperation:
+		return fmt.Errorf("%w: live Claude stream turn is unavailable; recovery is blocked pending operator review", model.ErrUnavailable)
+	}
+	return nil
+}
+
 // Approve records a human approval decision for an action blocked on approval.
 func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, rationale string) error {
 	if err := s.available(); err != nil {
@@ -310,11 +314,8 @@ func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, 
 	if err := s.engine.ValidateRunGoal(ctx, run); err != nil {
 		return err
 	}
-	if pending.OperationType == codexAppServerApprovalOperation {
-		return s.resolveCodexAppServerApproval(ctx, *pending, true, approverID, rationale)
-	}
-	if pending.OperationType == claudeStreamApprovalOperation {
-		return s.resolveClaudeStreamApproval(ctx, *pending, true, approverID, rationale)
+	if err := refuseNativeTurnApproval(*pending); err != nil {
+		return err
 	}
 	return s.engine.DecideApproval(ctx, approvalID, true, approverID, rationale)
 }
@@ -328,188 +329,10 @@ func (s *ExecutionService) Reject(ctx context.Context, approvalID, approverID, r
 	if err != nil {
 		return err
 	}
-	if pending.OperationType == codexAppServerApprovalOperation {
-		return s.resolveCodexAppServerApproval(ctx, *pending, false, approverID, rationale)
-	}
-	if pending.OperationType == claudeStreamApprovalOperation {
-		return s.resolveClaudeStreamApproval(ctx, *pending, false, approverID, rationale)
+	if err := refuseNativeTurnApproval(*pending); err != nil {
+		return err
 	}
 	return s.engine.DecideApproval(ctx, approvalID, false, approverID, rationale)
-}
-
-// resolveClaudeStreamApproval mirrors the Codex resolver: the canonical record
-// is decided first, then the exact native request is consumed through the
-// bridge before the live turn is allowed to proceed. A restart that dropped the
-// local process is a refusal, never an approval.
-func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, approval execution.RuntimeApproval, approve bool, operator, rationale string) error {
-	if s.runtime == nil {
-		return fmt.Errorf("%w: runtime is unavailable for native Claude approval", model.ErrUnavailable)
-	}
-	key := approval.RunID + "\x00" + approval.TaskID
-	s.runtime.claudeStreamMu.Lock()
-	live := s.runtime.claudeStreamTurns[key]
-	s.runtime.claudeStreamMu.Unlock()
-	if live == nil || live.client == nil || live.approval == nil {
-		// Restart removed the local process. Do not mark the approval approved:
-		// there is no proof that a later native turn would be the same turn.
-		return fmt.Errorf("%w: live Claude stream turn is unavailable; recovery is blocked pending operator review", model.ErrUnavailable)
-	}
-	bridge, err := s.ClaudeStreamApprovals(ctx, approval.RunID, approval.TaskID)
-	if err != nil {
-		return err
-	}
-	if approve {
-		if err := s.engine.ApprovalManager().ApproveContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
-			return err
-		}
-		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
-			return err
-		}
-		// From this instant the native turn may perform precisely the action
-		// whose digest/state the bridge just consumed. The pre-approval worktree
-		// digest remains the fail-closed boundary until this line; a restart
-		// drops this live marker and refuses reattachment.
-		live.accepted = true
-		if err := s.engine.ResumeNativeApproval(ctx, approval.ApprovalID); err != nil {
-			return err
-		}
-		// Process 05, rather than the TUI, owns continuation. The background
-		// operation waits only on the existing native turn and cannot issue a
-		// second turn because the persisted binding is already present.
-		go func(runID, approvalID string, turnCtx context.Context) {
-			if turnCtx == nil {
-				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation has no live turn context")
-				return
-			}
-			// The native turn owns turnCtx and its cleanup cancels it once a
-			// terminal event arrives. Process 05 still needs one final scheduler
-			// pass to durably record COMPLETED_PENDING_VERIFY; inheriting that
-			// cancellation would rewrite a completed run as PAUSED.
-			if _, err := s.resumeNativeRun(context.WithoutCancel(turnCtx), runID); err != nil {
-				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation failed: "+err.Error())
-			}
-		}(approval.RunID, approval.ApprovalID, live.runCtx)
-		return nil
-	}
-	if err := s.engine.ApprovalManager().DenyContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
-		return err
-	}
-	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
-		return err
-	}
-	s.runtime.removeLiveClaudeStreamTurn(key)
-	return s.engine.FailNativeApproval(ctx, approval.ApprovalID, fmt.Sprintf("native Claude approval rejected by %s: %s", operator, rationale))
-}
-
-// CancelCodexAppServerTurn interrupts exactly one live local native turn and
-// then persists the canonical Process 05 cancellation. It is intentionally
-// separate from generic task cancellation because a live app-server thread
-// needs its typed turn/interrupt acknowledgement first.
-// CancelClaudeStreamTurn interrupts exactly one live local Claude turn and then
-// persists the canonical Process 05 cancellation. Like its Codex counterpart it
-// is separate from generic task cancellation because a live turn owns a local
-// child process that must be stopped before the run is recorded cancelled.
-func (s *ExecutionService) CancelClaudeStreamTurn(ctx context.Context, runID, taskID, reason string) error {
-	if err := s.available(); err != nil {
-		return err
-	}
-	if s.runtime == nil {
-		return fmt.Errorf("%w: runtime is unavailable for native Claude cancellation", model.ErrUnavailable)
-	}
-	key := runID + "\x00" + taskID
-	s.runtime.claudeStreamMu.Lock()
-	live := s.runtime.claudeStreamTurns[key]
-	s.runtime.claudeStreamMu.Unlock()
-	if live == nil || live.client == nil {
-		return fmt.Errorf("%w: live Claude stream turn is unavailable; refusing unbound cancellation", model.ErrUnavailable)
-	}
-	if err := live.client.InterruptTurn(ctx, claude.StreamTurn{SessionID: live.binding.ThreadID, TurnID: live.binding.TurnID}); err != nil {
-		return err
-	}
-	s.runtime.removeLiveClaudeStreamTurn(key)
-	return s.engine.CancelNativeTurn(ctx, runID, taskID, reason)
-}
-
-func (s *ExecutionService) CancelCodexAppServerTurn(ctx context.Context, runID, taskID, reason string) error {
-	if err := s.available(); err != nil {
-		return err
-	}
-	if s.runtime == nil {
-		return fmt.Errorf("%w: runtime is unavailable for native Codex cancellation", model.ErrUnavailable)
-	}
-	key := runID + "\x00" + taskID
-	s.runtime.codexAppServerMu.Lock()
-	live := s.runtime.codexAppServerTurns[key]
-	s.runtime.codexAppServerMu.Unlock()
-	if live == nil || live.client == nil {
-		return fmt.Errorf("%w: live Codex app-server turn is unavailable; refusing unbound cancellation", model.ErrUnavailable)
-	}
-	if err := live.client.InterruptTurn(ctx, codex.AppServerTurn{ThreadID: live.binding.ThreadID, TurnID: live.binding.TurnID}); err != nil {
-		return err
-	}
-	s.runtime.removeLiveCodexAppServerTurn(key)
-	return s.engine.CancelNativeTurn(ctx, runID, taskID, reason)
-}
-
-func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, approval execution.RuntimeApproval, approve bool, operator, rationale string) error {
-	if s.runtime == nil {
-		return fmt.Errorf("%w: runtime is unavailable for native Codex approval", model.ErrUnavailable)
-	}
-	key := approval.RunID + "\x00" + approval.TaskID
-	s.runtime.codexAppServerMu.Lock()
-	live := s.runtime.codexAppServerTurns[key]
-	s.runtime.codexAppServerMu.Unlock()
-	if live == nil || live.client == nil || live.approval == nil {
-		// Restart removed the stdio connection. Do not mark approval approved:
-		// there is no proof that a later native turn would be the same turn.
-		return fmt.Errorf("%w: live Codex app-server turn is unavailable; recovery is blocked pending operator review", model.ErrUnavailable)
-	}
-	bridge, err := s.CodexAppServerApprovals(ctx, approval.RunID, approval.TaskID)
-	if err != nil {
-		return err
-	}
-	if approve {
-		if err := s.engine.ApprovalManager().ApproveContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
-			return err
-		}
-		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
-			return err
-		}
-		// From this instant onward the native turn may perform precisely the
-		// action whose digest/state the bridge just consumed. The pre-approval
-		// worktree digest remains the fail-closed boundary until this line; a
-		// restart drops this live marker and refuses reattachment.
-		live.accepted = true
-		if err := s.engine.ResumeNativeApproval(ctx, approval.ApprovalID); err != nil {
-			return err
-		}
-		// Process 05, rather than the TUI, owns continuation. The background
-		// operation waits only on the existing native turn and cannot issue a
-		// second turn/start because the persisted binding is already present.
-		go func(runID, approvalID string, turnCtx context.Context) {
-			if turnCtx == nil {
-				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation has no live turn context")
-				return
-			}
-			// The native turn owns turnCtx and its cleanup cancels it once a
-			// terminal app-server event is received. Process 05 still needs one
-			// final scheduler pass to durably record COMPLETED_PENDING_VERIFY;
-			// inheriting that provider cleanup cancellation would incorrectly
-			// rewrite an otherwise completed run as PAUSED.
-			if _, err := s.resumeNativeRun(context.WithoutCancel(turnCtx), runID); err != nil {
-				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation failed: "+err.Error())
-			}
-		}(approval.RunID, approval.ApprovalID, live.runCtx)
-		return nil
-	}
-	if err := s.engine.ApprovalManager().DenyContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
-		return err
-	}
-	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
-		return err
-	}
-	s.runtime.removeLiveCodexAppServerTurn(key)
-	return s.engine.FailNativeApproval(ctx, approval.ApprovalID, fmt.Sprintf("native Codex approval rejected by %s: %s", operator, rationale))
 }
 
 // CreateCheckpoint manually snapshots the project workspace.

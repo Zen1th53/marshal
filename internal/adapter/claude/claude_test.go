@@ -296,3 +296,21 @@ func TestGovernedClaudeRunRefusesInvalidModelBeforeLaunch(t *testing.T) {
 		})
 	}
 }
+
+func argValue(args []string, flag string) (string, bool) {
+	for i, arg := range args {
+		if arg == flag && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
+}
+
+func hasArg(args []string, flag string) bool {
+	for _, arg := range args {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
+}

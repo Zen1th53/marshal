@@ -105,15 +105,9 @@ type Runtime struct {
 	taskRuns                   map[string]context.CancelFunc
 	execMu                     sync.Mutex
 	// workerLeaseTTL overrides the engine's worker lease TTL (tests only).
-	workerLeaseTTL      time.Duration
-	codexAppServerMu    sync.Mutex
-	codexAppServerTurns map[string]*liveCodexAppServerTurn
-	codexAppServerNew   func(string, string) codexAppServerClient
-	claudeStreamMu      sync.Mutex
-	claudeStreamTurns   map[string]*liveClaudeStreamTurn
-	claudeStreamNew     func(string, string) claudeStreamClient
-	tokenManager        *auth.Manager
-	workerMCPFactory    sessionmcp.WorkerServerFactory
+	workerLeaseTTL   time.Duration
+	tokenManager     *auth.Manager
+	workerMCPFactory sessionmcp.WorkerServerFactory
 
 	// workerBeats are the governed worker attempts in flight (worker_liveness.go).
 	workerBeats workerBeatRegistry
@@ -422,8 +416,6 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		runtimeInstanceID:       instanceID,
 		tokenManager:            auth.NewManager(layout.RuntimeDir),
 		workerMCPFactory:        sessionmcp.WorkerServerFactoryFrom(ctx),
-		codexAppServerTurns:     make(map[string]*liveCodexAppServerTurn),
-		claudeStreamTurns:       make(map[string]*liveClaudeStreamTurn),
 	}
 	rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
 	if rt.secretBroker == nil {
@@ -940,30 +932,6 @@ func (r *Runtime) Close() error {
 			delete(r.egressRuns, id)
 		}
 		r.egressMu.Unlock()
-		r.codexAppServerMu.Lock()
-		for key, turn := range r.codexAppServerTurns {
-			if turn != nil && turn.client != nil {
-				if turn.cancel != nil {
-					turn.cancel()
-				}
-				_ = turn.client.Close()
-			}
-			delete(r.codexAppServerTurns, key)
-		}
-		r.codexAppServerMu.Unlock()
-		// A live Claude turn owns a local child process; leaving it running
-		// after the runtime closes would orphan a governed provider session.
-		r.claudeStreamMu.Lock()
-		for key, turn := range r.claudeStreamTurns {
-			if turn != nil && turn.client != nil {
-				if turn.cancel != nil {
-					turn.cancel()
-				}
-				_ = turn.client.Close()
-			}
-			delete(r.claudeStreamTurns, key)
-		}
-		r.claudeStreamMu.Unlock()
 		r.honeypotMu.Lock()
 		for _, trap := range r.honeypots {
 			_ = trap.Close()

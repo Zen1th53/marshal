@@ -4,51 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
-	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/risk"
 )
-
-// codexAppServerClient is deliberately the narrow typed lifecycle exposed to
-// Process 05. It is not a generic Codex RPC client and does not expose shell,
-// filesystem, plugin, daemon, websocket, or remote-control operations.
-type codexAppServerClient interface {
-	StartSession(context.Context, adapter.Request) (codex.AppServerSession, error)
-	ResumeSession(context.Context, string, adapter.Request) (codex.AppServerSession, error)
-	StartTurn(context.Context, codex.AppServerSession, adapter.Request) (codex.AppServerTurn, error)
-	WaitTurn(context.Context, codex.AppServerTurn) (codex.AppServerTurnResult, error)
-	InterruptTurn(context.Context, codex.AppServerTurn) error
-	DeclineApproval(context.Context, codex.AppServerApprovalRequest) error
-	ResolveApproval(context.Context, codex.AppServerApprovalRequest, codex.AppServerApprovalAuthority) error
-	Close() error
-}
-
-type liveCodexAppServerTurn struct {
-	startedAt time.Time
-	client    codexAppServerClient
-	binding   execution.NativeTurnBinding
-	// initialWorktreeDigest is retained only while the native stdio turn is
-	// live. Unlike binding.WorktreeDigest, which advances to the exact pause
-	// point for approval TOCTOU checks, it proves whether a mutating task made
-	// any worktree change at all before a terminal success can be recorded.
-	initialWorktreeDigest string
-	approval              *codex.AppServerApprovalRequest
-	runCtx                context.Context
-	cancel                context.CancelFunc
-	// accepted becomes true only after ResolveApproval has consumed the exact
-	// canonical approval and sent native accept. Before then the stored pause
-	// digest is fail-closed; after then changes are the expressly-approved
-	// provider action, not an external TOCTOU mutation.
-	accepted bool
-}
 
 // runtimeCodexHarness is the only Process 05 Codex harness registered by an
 // application Runtime. It delegates to the existing real provider adapter;
@@ -232,183 +197,6 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 			return workerFailureMessage("Codex execution did not complete successfully", stderr, stdout)
 		}(),
 	}, nil
-}
-
-// executeProcess05CodexAppServer starts or continues one exact local Codex
-// turn. A live turn remains in process memory only; the redacted binding is
-// returned to Engine and persisted with the run. If a process restarts before
-// the turn reaches a terminal notification, we refuse rather than fabricate a
-// result or start another turn.
-func (r *Runtime) executeProcess05CodexAppServer(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string, cli *codex.Client, request adapter.Request, binaryVersion string) (execution.TaskResult, bool, error) {
-	if task.RunID == "" || task.RunRevision <= 0 || cli == nil || cli.Binary() == "" {
-		return execution.TaskResult{TaskID: task.TaskID}, false, fmt.Errorf("%w: native Codex app-server binding is unavailable", model.ErrUnavailable)
-	}
-	key := task.RunID + "\x00" + task.TaskID
-	r.codexAppServerMu.Lock()
-	live := r.codexAppServerTurns[key]
-	r.codexAppServerMu.Unlock()
-
-	if live == nil && task.NativeTurn != nil {
-		// A persisted turn without its owning local stdio process proves an
-		// interrupted session, not a safe invitation to start a replacement.
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: task.NativeTurn}, true, fmt.Errorf("%w: Codex app-server turn %s cannot be reattached after restart; inspect recovery before retrying", model.ErrUnavailable, task.NativeTurn.TurnID)
-	}
-	if live == nil {
-		runCtx, runCancel := context.WithCancel(ctx)
-		factory := r.codexAppServerNew
-		if factory == nil {
-			factory = func(binary, version string) codexAppServerClient { return codex.NewAppServer(binary, version) }
-		}
-		server := factory(cli.Binary(), binaryVersion)
-		if server == nil {
-			runCancel()
-			return execution.TaskResult{TaskID: task.TaskID}, false, fmt.Errorf("%w: Codex app-server client is unavailable", model.ErrUnavailable)
-		}
-		session, err := server.StartSession(runCtx, request)
-		if err != nil {
-			runCancel()
-			_ = server.Close()
-			return execution.TaskResult{TaskID: task.TaskID}, false, err
-		}
-		startedAt := time.Now().UTC()
-		turn, err := server.StartTurn(runCtx, session, request)
-		if err != nil {
-			runCancel()
-			_ = server.Close()
-			// A thread may have been created, but no turn was accepted; never
-			// fall back in this ambiguous state.
-			return execution.TaskResult{TaskID: task.TaskID}, true, err
-		}
-		worktreeDigest, err := execution.WorkspaceTreeDigest(worktree)
-		if err != nil {
-			runCancel()
-			_ = server.Close()
-			return execution.TaskResult{TaskID: task.TaskID}, true, err
-		}
-		live = &liveCodexAppServerTurn{startedAt: startedAt, client: server, initialWorktreeDigest: worktreeDigest, binding: execution.NativeTurnBinding{
-			Provider: "codex-app-server", ThreadID: turn.ThreadID, TurnID: turn.TurnID, SessionID: session.SessionID,
-			Worktree: worktree, WorktreeDigest: worktreeDigest, Model: session.Model, ConstraintDigest: pkg.Digest,
-			RunRevision: task.RunRevision, State: "RUNNING",
-		}, runCtx: runCtx, cancel: runCancel}
-		r.codexAppServerMu.Lock()
-		if existing := r.codexAppServerTurns[key]; existing != nil {
-			r.codexAppServerMu.Unlock()
-			runCancel()
-			_ = server.Close()
-			return execution.TaskResult{TaskID: task.TaskID}, true, fmt.Errorf("%w: duplicate Codex app-server turn start", model.ErrConflict)
-		}
-		r.codexAppServerTurns[key] = live
-		r.codexAppServerMu.Unlock()
-		// Persist the accepted native identity before WaitTurn. Without this
-		// durable binding, Control could interrupt the live provider process but
-		// Process 05 would have no exact turn to cancel, leaving the task in an
-		// ambiguous running state. BindNativeTurn performs the run/task CAS and
-		// refuses any stale or substituted worktree/constraint identity.
-		if err := r.Execution().Engine().BindNativeTurn(ctx, task.RunID, task.TaskID, live.binding); err != nil {
-			r.removeLiveCodexAppServerTurn(key)
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-		}
-	}
-	if live.binding.Worktree != worktree || live.binding.ConstraintDigest != pkg.Digest || (task.NativeTurn != nil && (task.NativeTurn.ThreadID != live.binding.ThreadID || task.NativeTurn.TurnID != live.binding.TurnID || task.NativeTurn.WorktreeDigest != live.binding.WorktreeDigest)) {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: Codex app-server binding changed before turn continuation", model.ErrConflict)
-	}
-	if !live.accepted {
-		if digest, err := execution.WorkspaceTreeDigest(worktree); err != nil || digest != live.binding.WorktreeDigest {
-			if err != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-			}
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: worktree changed while Codex native turn was paused", model.ErrConflict)
-		}
-	}
-	// Engine has just admitted this exact waiting task at its current CAS
-	// revision. Preserve that revision on the returned binding; the stable
-	// thread/turn/worktree/constraint identity above is what prevents a
-	// replacement turn from being smuggled in across the handoff.
-	live.binding.RunRevision = task.RunRevision
-	turnCtx := live.runCtx
-	if turnCtx == nil {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: native Codex turn has no termination context", model.ErrUnavailable)
-	}
-	result, err := live.client.WaitTurn(turnCtx, codex.AppServerTurn{ThreadID: live.binding.ThreadID, TurnID: live.binding.TurnID})
-	if err != nil {
-		var nativeApproval *codex.AppServerApprovalRequiredError
-		if errors.As(err, &nativeApproval) {
-			boundApproval, bindErr := codex.BindAppServerApprovalWorktree(nativeApproval.Request, worktree)
-			if bindErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, bindErr
-			}
-			// Codex may have completed earlier governed actions in this same
-			// turn before asking approval for its next action. The pre-turn tree
-			// digest is therefore not the TOCTOU boundary. Snapshot the tree at
-			// the exact pause instead; continuation will refuse any change after
-			// the operator was shown this native request.
-			pauseDigest, digestErr := execution.WorkspaceTreeDigest(worktree)
-			if digestErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, digestErr
-			}
-			live.binding.WorktreeDigest = pauseDigest
-			bridge, bridgeErr := r.Execution().CodexAppServerApprovals(ctx, task.RunID, task.TaskID)
-			if bridgeErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, bridgeErr
-			}
-			record, bridgeErr := bridge.Request(ctx, boundApproval)
-			if bridgeErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, bridgeErr
-			}
-			live.approval = &boundApproval
-			live.binding.State = "APPROVAL_REQUIRED"
-			return execution.TaskResult{TaskID: task.TaskID, NeedsApproval: true, NativeApprovalID: record.ApprovalID, NativeTurn: &live.binding, ApprovalReq: &execution.ApprovalRequest{OperationType: codexAppServerApprovalOperation, TargetResource: worktree, Scope: codexAppServerApprovalScope(boundApproval), DiffPreview: boundApproval.Method, Parameters: boundApproval.Digest, CurrentState: codexAppServerApprovalState(boundApproval)}}, true, nil
-		}
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-	}
-	// Keep the turn context alive while terminal output crosses the evidence
-	// sanitizer. removeLiveCodexAppServerTurn cancels that context; doing it
-	// first made StrictSanitizer fail closed as if safe terminal evidence were
-	// secret material. Cleanup still happens on every terminal return below,
-	// but only after evidence has been sanitized and projected.
-	defer r.removeLiveCodexAppServerTurn(key)
-	if task.Mutates {
-		finalWorktreeDigest, digestErr := execution.WorkspaceTreeDigest(worktree)
-		if digestErr != nil {
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, digestErr
-		}
-		if live.initialWorktreeDigest == "" || finalWorktreeDigest == live.initialWorktreeDigest {
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: completed native Codex turn made no worktree change for mutating task", model.ErrConflict)
-		}
-	}
-	stdout, sanitizeErr := r.sanitizeProviderOutput(ctx, []byte(result.FinalText))
-	if sanitizeErr != nil {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("sanitize Codex app-server output: %w", sanitizeErr)
-	}
-	digest := sha256.Sum256(stdout)
-	evidenceID, err := model.NewID("EVID-P05-CODEX-")
-	if err != nil {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-	}
-	observed := process05ProviderObservation(task, adapter.Result{StartedAt: live.startedAt, EndedAt: time.Now().UTC()}, &live.binding, "runtime_native_turn_lifecycle")
-	success := result.Status == "completed"
-	return execution.TaskResult{TaskID: task.TaskID, Success: success, NativeTurn: &live.binding, EvidenceList: []execution.ExecutionEvidence{{ProviderObservation: observed, EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "codex-app-server", Cwd: worktree, ExitCode: 0, StdoutSummary: string(stdout), OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: binaryVersion, Status: execution.EvidenceValid, DurationMs: 0, RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC()}}, ErrorMessage: func() string {
-		if success {
-			return ""
-		}
-		if result.ErrorMessage != "" {
-			return "Codex app-server turn failed: " + result.ErrorMessage
-		}
-		return "Codex app-server turn did not complete successfully"
-	}()}, true, nil
-}
-
-func (r *Runtime) removeLiveCodexAppServerTurn(key string) {
-	r.codexAppServerMu.Lock()
-	live := r.codexAppServerTurns[key]
-	delete(r.codexAppServerTurns, key)
-	r.codexAppServerMu.Unlock()
-	if live != nil && live.client != nil {
-		if live.cancel != nil {
-			live.cancel()
-		}
-		_ = live.client.Close()
-	}
 }
 
 // process05CodexAgent resolves a planned role to a real locally registered

@@ -173,9 +173,9 @@ func New(provider string, runner Runner) (Transport, error) {
 	case "claude":
 		return NewClaude(runner), nil
 	default:
-		// Codex's adapter exposes app-server only for governed worker turns
-		// (config-free CODEX_HOME, no streamed deltas); OpenCode serve and
-		// ACP are not wired. All of them keep the tmux-docked chat.
+		// Codex has no structured chat client (governed worker turns run
+		// through codex exec); OpenCode serve and ACP are not wired. All of
+		// them keep the tmux-docked chat.
 		return nil, fmt.Errorf("%w: %s has no qualified structured chat mode; the tmux-docked chat stays in use", ErrUnqualified, provider)
 	}
 }

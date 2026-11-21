@@ -49,7 +49,7 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 			"CODEX GOVERNED CONTROL PLANE:",
 			"Status:",
 			"Available:",
-			"App-Server:",
+			"Codex Home:",
 			"Active Model:",
 			"/codex doctor",
 			"/codex models",

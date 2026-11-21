@@ -4,49 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
-	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/risk"
 )
-
-// claudeStreamClient is deliberately the narrow typed lifecycle exposed to
-// Process 05. It is not a generic Claude CLI client and does not expose shell,
-// filesystem, plugin, MCP, or remote-control operations.
-type claudeStreamClient interface {
-	StartSession(context.Context, adapter.Request) (claude.StreamSession, error)
-	ResumeSession(context.Context, string, adapter.Request) (claude.StreamSession, error)
-	StartTurn(context.Context, claude.StreamSession, adapter.Request) (claude.StreamTurn, error)
-	WaitTurn(context.Context, claude.StreamTurn) (claude.StreamTurnResult, error)
-	InterruptTurn(context.Context, claude.StreamTurn) error
-	DeclineApproval(context.Context, claude.StreamApprovalRequest) error
-	ResolveApproval(context.Context, claude.StreamApprovalRequest, claude.StreamApprovalAuthority) error
-	Close() error
-}
-
-type liveClaudeStreamTurn struct {
-	startedAt time.Time
-	client    claudeStreamClient
-	binding   execution.NativeTurnBinding
-	// initialWorktreeDigest is retained only while the native turn is live.
-	// Unlike binding.WorktreeDigest, which advances to the exact pause point
-	// for approval TOCTOU checks, it proves whether a mutating task made any
-	// worktree change at all before a terminal success can be recorded.
-	initialWorktreeDigest string
-	approval              *claude.StreamApprovalRequest
-	runCtx                context.Context
-	cancel                context.CancelFunc
-	// accepted becomes true only after ResolveApproval has consumed the exact
-	// canonical approval. Before then the stored pause digest is fail-closed.
-	accepted bool
-}
 
 // runtimeClaudeHarness is the only Process 05 Claude harness registered by an
 // application Runtime. It delegates to the real provider adapter; it does not
@@ -223,174 +190,6 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 			return workerFailureMessage("Claude execution did not complete successfully", stderr, stdout)
 		}(),
 	}, nil
-}
-
-// executeProcess05ClaudeStream starts or continues one exact local Claude
-// turn. A live turn remains in process memory only; the redacted binding is
-// returned to Engine and persisted with the run. If a process restarts before
-// the turn reaches a terminal event, we refuse rather than fabricate a result
-// or start another turn.
-func (r *Runtime) executeProcess05ClaudeStream(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string, cli *claude.Client, request adapter.Request, binaryVersion string) (execution.TaskResult, bool, error) {
-	if task.RunID == "" || task.RunRevision <= 0 || cli == nil || cli.Binary() == "" {
-		return execution.TaskResult{TaskID: task.TaskID}, false, fmt.Errorf("%w: native Claude stream binding is unavailable", model.ErrUnavailable)
-	}
-	key := task.RunID + "\x00" + task.TaskID
-	r.claudeStreamMu.Lock()
-	live := r.claudeStreamTurns[key]
-	r.claudeStreamMu.Unlock()
-
-	if live == nil && task.NativeTurn != nil {
-		// A persisted turn without its owning local process proves an
-		// interrupted session, not a safe invitation to start a replacement.
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: task.NativeTurn}, true, fmt.Errorf("%w: Claude turn %s cannot be reattached after restart; inspect recovery before retrying", model.ErrUnavailable, task.NativeTurn.TurnID)
-	}
-	if live == nil {
-		runCtx, runCancel := context.WithCancel(ctx)
-		factory := r.claudeStreamNew
-		if factory == nil {
-			factory = func(binary, version string) claudeStreamClient { return claude.NewStreamClient(binary, version) }
-		}
-		server := factory(cli.Binary(), binaryVersion)
-		if server == nil {
-			runCancel()
-			return execution.TaskResult{TaskID: task.TaskID}, false, fmt.Errorf("%w: Claude stream client is unavailable", model.ErrUnavailable)
-		}
-		session, err := server.StartSession(runCtx, request)
-		if err != nil {
-			runCancel()
-			_ = server.Close()
-			return execution.TaskResult{TaskID: task.TaskID}, false, err
-		}
-		startedAt := time.Now().UTC()
-		turn, err := server.StartTurn(runCtx, session, request)
-		if err != nil {
-			runCancel()
-			_ = server.Close()
-			// A session may exist but no turn was accepted; never fall back in
-			// this ambiguous state.
-			return execution.TaskResult{TaskID: task.TaskID}, true, err
-		}
-		worktreeDigest, err := execution.WorkspaceTreeDigest(worktree)
-		if err != nil {
-			runCancel()
-			_ = server.Close()
-			return execution.TaskResult{TaskID: task.TaskID}, true, err
-		}
-		live = &liveClaudeStreamTurn{startedAt: startedAt, client: server, initialWorktreeDigest: worktreeDigest, binding: execution.NativeTurnBinding{
-			Provider: "claude-stream", ThreadID: turn.SessionID, TurnID: turn.TurnID, SessionID: turn.SessionID,
-			Worktree: worktree, WorktreeDigest: worktreeDigest, Model: session.Model, ConstraintDigest: pkg.Digest,
-			RunRevision: task.RunRevision, State: "RUNNING",
-		}, runCtx: runCtx, cancel: runCancel}
-		r.claudeStreamMu.Lock()
-		if existing := r.claudeStreamTurns[key]; existing != nil {
-			r.claudeStreamMu.Unlock()
-			runCancel()
-			_ = server.Close()
-			return execution.TaskResult{TaskID: task.TaskID}, true, fmt.Errorf("%w: duplicate Claude turn start", model.ErrConflict)
-		}
-		r.claudeStreamTurns[key] = live
-		r.claudeStreamMu.Unlock()
-		// Persist the accepted native identity before WaitTurn. Without this
-		// durable binding, Control could interrupt the live provider process
-		// but Process 05 would have no exact turn to cancel, leaving the task
-		// in an ambiguous running state.
-		if err := r.Execution().Engine().BindNativeTurn(ctx, task.RunID, task.TaskID, live.binding); err != nil {
-			r.removeLiveClaudeStreamTurn(key)
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-		}
-	}
-	if live.binding.Worktree != worktree || live.binding.ConstraintDigest != pkg.Digest || (task.NativeTurn != nil && (task.NativeTurn.ThreadID != live.binding.ThreadID || task.NativeTurn.TurnID != live.binding.TurnID || task.NativeTurn.WorktreeDigest != live.binding.WorktreeDigest)) {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: Claude stream binding changed before turn continuation", model.ErrConflict)
-	}
-	if !live.accepted {
-		if digest, err := execution.WorkspaceTreeDigest(worktree); err != nil || digest != live.binding.WorktreeDigest {
-			if err != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-			}
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: worktree changed while Claude native turn was paused", model.ErrConflict)
-		}
-	}
-	live.binding.RunRevision = task.RunRevision
-	turnCtx := live.runCtx
-	if turnCtx == nil {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: native Claude turn has no termination context", model.ErrUnavailable)
-	}
-	result, err := live.client.WaitTurn(turnCtx, claude.StreamTurn{SessionID: live.binding.ThreadID, TurnID: live.binding.TurnID})
-	if err != nil {
-		var nativeApproval *claude.StreamApprovalRequiredError
-		if errors.As(err, &nativeApproval) {
-			boundApproval, bindErr := claude.BindStreamApprovalWorktree(nativeApproval.Request, worktree)
-			if bindErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, bindErr
-			}
-			// Claude may have completed earlier governed actions in this same
-			// turn before asking permission for its next one. The pre-turn tree
-			// digest is therefore not the TOCTOU boundary; snapshot the tree at
-			// the exact pause instead.
-			pauseDigest, digestErr := execution.WorkspaceTreeDigest(worktree)
-			if digestErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, digestErr
-			}
-			live.binding.WorktreeDigest = pauseDigest
-			bridge, bridgeErr := r.Execution().ClaudeStreamApprovals(ctx, task.RunID, task.TaskID)
-			if bridgeErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, bridgeErr
-			}
-			record, bridgeErr := bridge.Request(ctx, boundApproval)
-			if bridgeErr != nil {
-				return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, bridgeErr
-			}
-			live.approval = &boundApproval
-			live.binding.State = "APPROVAL_REQUIRED"
-			return execution.TaskResult{TaskID: task.TaskID, NeedsApproval: true, NativeApprovalID: record.ApprovalID, NativeTurn: &live.binding, ApprovalReq: &execution.ApprovalRequest{OperationType: claudeStreamApprovalOperation, TargetResource: worktree, Scope: claudeStreamApprovalScope(boundApproval), DiffPreview: boundApproval.ToolName, Parameters: boundApproval.Digest, CurrentState: claudeStreamApprovalState(boundApproval)}}, true, nil
-		}
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-	}
-	// Keep the turn context alive while terminal output crosses the evidence
-	// sanitizer; removeLiveClaudeStreamTurn cancels that context.
-	defer r.removeLiveClaudeStreamTurn(key)
-	if task.Mutates {
-		finalWorktreeDigest, digestErr := execution.WorkspaceTreeDigest(worktree)
-		if digestErr != nil {
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, digestErr
-		}
-		if live.initialWorktreeDigest == "" || finalWorktreeDigest == live.initialWorktreeDigest {
-			return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("%w: completed native Claude turn made no worktree change for mutating task", model.ErrConflict)
-		}
-	}
-	stdout, sanitizeErr := r.sanitizeProviderOutput(ctx, []byte(result.FinalText))
-	if sanitizeErr != nil {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, fmt.Errorf("sanitize Claude stream output: %w", sanitizeErr)
-	}
-	digest := sha256.Sum256(stdout)
-	evidenceID, err := model.NewID("EVID-P05-CLAUDE-")
-	if err != nil {
-		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
-	}
-	observed := process05ProviderObservation(task, adapter.Result{StartedAt: live.startedAt, EndedAt: time.Now().UTC(), Usage: result.Usage}, &live.binding, "runtime_native_turn_lifecycle")
-	success := result.Status == "completed"
-	return execution.TaskResult{TaskID: task.TaskID, Success: success, NativeTurn: &live.binding, EvidenceList: []execution.ExecutionEvidence{{ProviderObservation: observed, EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "claude-stream", Cwd: worktree, ExitCode: 0, StdoutSummary: string(stdout), OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: binaryVersion, Status: execution.EvidenceValid, DurationMs: result.Usage.DurationMs, RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC()}}, ErrorMessage: func() string {
-		if success {
-			return ""
-		}
-		if result.ErrorMessage != "" {
-			return "Claude stream turn failed: " + result.ErrorMessage
-		}
-		return "Claude stream turn did not complete successfully"
-	}()}, true, nil
-}
-
-func (r *Runtime) removeLiveClaudeStreamTurn(key string) {
-	r.claudeStreamMu.Lock()
-	live := r.claudeStreamTurns[key]
-	delete(r.claudeStreamTurns, key)
-	r.claudeStreamMu.Unlock()
-	if live != nil && live.client != nil {
-		if live.cancel != nil {
-			live.cancel()
-		}
-		_ = live.client.Close()
-	}
 }
 
 // process05ClaudeAgent resolves a planned role to a real locally registered

@@ -1310,8 +1310,8 @@ func (a *runtimeControlAuthority) CodexHealth(ctx context.Context) (CodexHealthR
 	}
 	checks := make(map[string]string)
 	checks["runtime"] = "attached"
-	appServerStatus, appServerReason := codexAppServerBoundaryStatus()
-	checks["app-server"] = appServerStatus
+	appServerStatus, appServerReason := codexHomeBoundaryStatus()
+	checks["codex-home"] = appServerStatus
 
 	if candidate := a.runtime.Adapter("codex"); candidate != nil {
 		if probe, err := candidate.Probe(ctx); err == nil {
@@ -1375,15 +1375,10 @@ func (a *runtimeControlAuthority) CodexHealth(ctx context.Context) (CodexHealthR
 	}, nil
 }
 
-// codexAppServerBoundaryStatus distinguishes an installed CLI from an
-// app-server that is safe to start under MARSHAL's config-free contract. The
-// temporary migration override is deliberately BLOCKED, never a PASS-like
-// readiness state: it allows supervised local work without laundering host
-// configuration into a governed execution claim.
-func codexAppServerBoundaryStatus() (string, string) {
-	if os.Getenv("MARSHAL_CODEX_APP_SERVER_ALLOW_HOST_CONFIG") == "1" {
-		return "BLOCKED", "HOST_CONFIG_OVERRIDE"
-	}
+// codexHomeBoundaryStatus reports whether the Codex home a native Codex
+// process would read is free of a user config.toml. It is a configuration
+// observation only, never a claim that a provider turn has executed.
+func codexHomeBoundaryStatus() (string, string) {
 	if err := codex.RequireAppServerConfigFree(); err != nil {
 		if errors.Is(err, model.ErrPolicyDenied) {
 			return "BLOCKED", "USER_CONFIG_PRESENT"

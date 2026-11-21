@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
@@ -32,10 +34,20 @@ func TestCodexModelSelectionAndRefusal(t *testing.T) {
 	}
 }
 
-func TestCodexAppServerHostConfigOverrideIsBlockedInTUIStatus(t *testing.T) {
-	t.Setenv("MARSHAL_CODEX_APP_SERVER_ALLOW_HOST_CONFIG", "1")
-	status, reason := codexAppServerBoundaryStatus()
-	if status != "BLOCKED" || reason != "HOST_CONFIG_OVERRIDE" {
-		t.Fatalf("override boundary status = %s/%s", status, reason)
+func TestCodexHomeWithUserConfigIsBlockedInTUIStatus(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("sandbox_mode = 'danger-full-access'\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if status, reason := codexHomeBoundaryStatus(); status != "BLOCKED" || reason != "USER_CONFIG_PRESENT" {
+		t.Fatalf("configured Codex home status = %s/%s", status, reason)
+	}
+	if err := os.Remove(filepath.Join(home, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+	if status, reason := codexHomeBoundaryStatus(); status != "CONFIG_FREE" || reason != "CONFIG_FREE_VERIFIED" {
+		t.Fatalf("config-free Codex home status = %s/%s", status, reason)
 	}
 }

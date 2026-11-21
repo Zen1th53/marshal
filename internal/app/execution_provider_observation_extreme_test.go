@@ -3,17 +3,15 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/adapter"
-	"github.com/Zen1th53/marshal/internal/adapter/claude"
-	"github.com/Zen1th53/marshal/internal/evidence"
-	"github.com/Zen1th53/marshal/internal/execution"
-	"github.com/Zen1th53/marshal/internal/marshal"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
 func assertNativeProviderObservation(t *testing.T, task execution.TaskExecution, result execution.TaskResult) {
@@ -118,36 +116,6 @@ func TestPrivateProviderObservationHandInSurvivesRestartAndRefusesForeignEvidenc
 	}
 	if records, err := marshalProcess05Observations(&execution.ExecutionRun{}, task); err != nil || len(records) != 0 {
 		t.Fatalf("legacy missing observations synthesized: %+v %v", records, err)
-	}
-}
-
-type completingObservedClaudeStream struct{ fakeLiveClaudeStream }
-
-func (*completingObservedClaudeStream) StartSession(_ context.Context, r adapter.Request) (claude.StreamSession, error) {
-	return claude.StreamSession{SessionID: "claude-session", Model: r.Model, Worktree: r.Worktree}, nil
-}
-func (*completingObservedClaudeStream) StartTurn(context.Context, claude.StreamSession, adapter.Request) (claude.StreamTurn, error) {
-	return claude.StreamTurn{SessionID: "claude-session", TurnID: "claude-turn"}, nil
-}
-func (*completingObservedClaudeStream) WaitTurn(context.Context, claude.StreamTurn) (claude.StreamTurnResult, error) {
-	return claude.StreamTurnResult{Status: "completed", FinalText: "safe completion", Usage: adapter.Usage{Reported: true, ModelCalls: 1}}, nil
-}
-func TestPrivateClaudeNativeObservationPreservesTurnIdentity(t *testing.T) {
-	repo := runtimeRepo(t)
-	server := &completingObservedClaudeStream{}
-	runtime := &Runtime{evidenceSanitizer: evidence.NewStrictSanitizer(evidence.SanitizerConfig{}), claudeStreamTurns: make(map[string]*liveClaudeStreamTurn), claudeStreamNew: func(string, string) claudeStreamClient { return server }}
-	task := execution.TaskExecution{RunID: "claude-run", RunRevision: 1, TaskID: "claude-task", CanonicalTaskID: "canonical", Attempts: 1, State: execution.TaskRunning, WorktreePath: repo.Path()}
-	attachRunningNativeTestRun(t, runtime, task, repo.Path())
-	pkg := execution.ConstraintPackage{TaskID: task.TaskID}
-	pkg.Digest = execution.ComputeConstraintDigest(pkg)
-	result, handled, err := runtime.executeProcess05ClaudeStream(t.Context(), task, pkg, repo.Path(), claude.New("/prepared/claude", nil), adapter.Request{TaskID: "canonical", Worktree: repo.Path(), Model: "claude-model"}, "test")
-	if err != nil || !handled || !result.Success {
-		t.Fatalf("native turn failed: %+v %v", result, err)
-	}
-	assertNativeProviderObservation(t, task, result)
-	o := result.EvidenceList[0].ProviderObservation
-	if o.SessionID != "claude-session" || !o.Usage.Reported || o.Usage.ModelCalls != 1 {
-		t.Fatalf("Claude identity/usage lost: %+v", o)
 	}
 }
 
