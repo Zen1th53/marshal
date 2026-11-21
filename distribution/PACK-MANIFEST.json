@@ -8006,13 +8006,13 @@
     },
     {
       "path": "internal/marshalsteps/steps.go",
-      "sha256": "20d0423d22581cc7f59c7a4ce65b3a03d2fbf8f7c6727b4bccf5b01b82542a64",
-      "bytes": 6537
+      "sha256": "d0bc2e5c2ae4cac3dfda7ad7ece5e8a118d94fcde192a63fe094ea5a6fc7fa6c",
+      "bytes": 7039
     },
     {
       "path": "internal/marshalsteps/steps_test.go",
-      "sha256": "c0c84585abec9dea937e3851f67a51432267c1d19592da1b2d8095ce9ee8a7a2",
-      "bytes": 5285
+      "sha256": "2f584512298027058a2794cc6bfcac5d50e2d55720d81c99556fd3ce90f3cdaf",
+      "bytes": 6564
     },
     {
       "path": "internal/mcp/chat_permission.go",
