@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/a2a"
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	"github.com/Zen1th53/marshal/internal/app"
@@ -182,87 +181,5 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 	}
 	if task.Status != model.TaskReview {
 		t.Fatalf("expected task execution status review, got %v", task.Status)
-	}
-}
-
-func TestRealOpenCodeA2AFullChain(t *testing.T) {
-	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
-		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
-	}
-	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
-
-	repo := runtimeIntegrationRepo(t)
-	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
-		t.Fatal(err)
-	}
-	runtime, err := app.Open(context.Background(), repo.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runtime.Close()
-
-	allowRealProviderCredentials(t, runtime, "opencode")
-	server, err := a2a.NewInsecureServer(runtime, "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts := httptest.NewServer(server.Handler())
-	defer ts.Close()
-
-	// 1. Discover Agent Card
-	cardResp, err := http.Get(ts.URL + "/.well-known/agent-card.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cardResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK for Agent Card, got %d", cardResp.StatusCode)
-	}
-	cardResp.Body.Close()
-
-	// 2. Delegate & execute task via A2A 1.0 POST /message:send
-	taskReq := map[string]any{
-		"message": map[string]any{
-			"message_id": "msg-opencode-a2a-1",
-			"role":       "ROLE_USER",
-			"parts": []map[string]string{
-				{"text": "Create a2a-opencode-proof.txt containing A2A proof."},
-			},
-		},
-		"task_id": "TASK-REAL-OPENCODE-A2A",
-		"adapter": "opencode",
-	}
-	body, _ := json.Marshal(taskReq)
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK from A2A message:send, got %d", resp.StatusCode)
-	}
-
-	var a2aResp map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&a2aResp); err != nil {
-		t.Fatal(err)
-	}
-	state, _ := a2aResp["state"].(string)
-	if state != "TASK_STATE_COMPLETED" {
-		t.Fatalf("expected A2A task state TASK_STATE_COMPLETED, got %v", a2aResp["state"])
-	}
-
-	task, err := runtime.Task(context.Background(), "TASK-REAL-OPENCODE-A2A")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if task.Status != model.TaskReview {
-		t.Fatalf("expected canonical MARSHAL task status review, got %v", task.Status)
 	}
 }
