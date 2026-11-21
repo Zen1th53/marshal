@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	wantClaudeStateDeny = `"deny":["Read(./.marshal/state.db*)","Edit(./.marshal/state.db*)","Read(./.marshal/knowledge/**)","Edit(./.marshal/knowledge/**)","Read(./.marshal/backups/**)","Edit(./.marshal/backups/**)","Read(./.marshal/architecture/**)","Edit(./.marshal/architecture/**)","Bash(sqlite3:*)","Bash(tmux:*)"]`
+	wantClaudeStateDeny = `"deny":["Read(./.marshal/state.db*)","Edit(./.marshal/state.db*)","Read(./.marshal/knowledge/**)","Edit(./.marshal/knowledge/**)","Read(./.marshal/backups/**)","Edit(./.marshal/backups/**)","Read(./.marshal/architecture/**)","Edit(./.marshal/architecture/**)","Bash(sqlite3:*)","Bash(tmux:*)","WebFetch(domain:127.0.0.1)","WebFetch(domain:localhost)"]`
 	// wantClaudeStateSettings is the governed edition's Claude Marshal chat
 	// --settings, and every edition's under small-tasks rights.
 	wantClaudeStateSettings = `{"permissions":{` + wantClaudeStateDeny + `}}`

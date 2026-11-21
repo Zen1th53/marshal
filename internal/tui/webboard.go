@@ -114,28 +114,35 @@ func (w *Workspace) closeWebBoard() {
 }
 
 // marshalWeb is /marshal web: it starts the Web Board if needed, opens it in
-// the browser where there is a display, and answers with its link. The link
-// is the owner's: it goes to the footer only, never to Activity (which the
-// Web Board itself shows) or to the Marshal.
+// the browser where there is a display, and answers. The link can act for
+// the owner, so it is shown only where it has to be: in the footer when no
+// browser can be opened, never in Activity (which the Web Board itself
+// shows), a file or the Marshal. Each link works once (the page spends it
+// for its own secret), so a copy left in the footer, the browser opener's
+// argv or the browser's history is worthless once the owner's page opened;
+// each /marshal web brings a fresh one.
 func (w *Workspace) marshalWeb() (string, error) {
 	srv, err := w.webBoardServer()
 	if err != nil {
 		return "", err
 	}
-	// The link comes first, so a narrow footer still shows it whole.
-	const what = " · Web Board: this computer only; keep the link private, it can act for you"
-	if headlessDisplay() {
-		return srv.URL + what + " · no display here: open the link in a browser on this computer", nil
+	url, err := srv.Link()
+	if err != nil {
+		return "", err
 	}
-	url := srv.URL
+	// The link comes first, so a narrow footer still shows it whole.
+	const what = " · Web Board: this computer only; the link works once and can act for you, keep it private"
+	if headlessDisplay() {
+		return url + what + " · no display here: open the link in a browser on this computer", nil
+	}
 	if !w.startBackground(w.workers.context(), func(ctx context.Context) {
 		if err := webBoardOpen(ctx, url); err != nil {
-			w.setOutput("Your browser could not be opened: /marshal web shows the Web Board's link to open.", true)
+			w.setOutput("Your browser could not be opened. Open this link in a browser on this computer: "+url+what, true)
 		}
 	}) {
 		return "", errWorkspaceClosing
 	}
-	return url + what + " · opening in your browser", nil
+	return "Web Board: opening in your browser (http://" + srv.Addr() + "/, this computer only). Run /marshal web again for a new link.", nil
 }
 
 // openWebBoardKey is the Board key: it runs /marshal web and shows its

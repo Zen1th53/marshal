@@ -87,8 +87,10 @@ func claudeMarshalStateDenyRules() []string {
 
 // claudeMarshalDenyCommands are the shell commands the Claude Marshal chat may
 // never run: sqlite3 reads MARSHAL's state database behind its tools, and
-// tmux reads or types into the owner's Board pane.
-var claudeMarshalDenyCommands = []string{"Bash(sqlite3:*)", "Bash(tmux:*)"}
+// tmux reads or types into the owner's Board pane. WebFetch of this
+// computer's loopback is denied too: the owner's review page and Web Board
+// listen there, and the Marshal has no business with either.
+var claudeMarshalDenyCommands = []string{"Bash(sqlite3:*)", "Bash(tmux:*)", "WebFetch(domain:127.0.0.1)", "WebFetch(domain:localhost)"}
 
 // claudeMarshalStateSettings adds claudeMarshalStateDenyRules to a Claude
 // Code --settings JSON object (empty for none) and returns it, or false when
