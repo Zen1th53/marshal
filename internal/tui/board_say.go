@@ -165,6 +165,9 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 		w.chat.view.SetThinking(true)
 	}
 	w.chat.mu.Unlock()
+	if !runtime {
+		w.markMarshalAnswered()
+	}
 	// Once taken, a message belongs to the workspace, not to the caller:
 	// a caller that hands over a short-lived context (a background task
 	// that ends as soon as the message is queued) must not stop it from

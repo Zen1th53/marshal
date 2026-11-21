@@ -431,6 +431,9 @@ func (w *Workspace) applyChatEvent(e chattransport.Event) {
 	changed := v.Version() != before
 	root, watch := w.chat.root, w.chat.watch
 	w.chat.mu.Unlock()
+	if e.Kind == chattransport.EventText {
+		w.noteMarshalText(e.Text, now) // the Web Board's "The Marshal says"
+	}
 	// The result repeats the session id: a binding another writer saved
 	// between init and the end of the turn is corrected here.
 	if (e.Kind == chattransport.EventSession || e.Kind == chattransport.EventResult) && e.SessionID != "" {

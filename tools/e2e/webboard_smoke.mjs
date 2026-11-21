@@ -4,8 +4,9 @@
 //
 //   node tools/e2e/webboard_smoke.mjs OUTDIR --demo
 //
-// starts one demo per fixture (running, paused, ready, planning, decision)
-// with `go test ./internal/webboard -run TestDemo` on ports 8771-8775, or
+// starts one demo per fixture (running, paused, ready, planning, decision,
+// finished, bare)
+// with `go test ./internal/webboard -run TestDemo` on ports 8771-8777, or
 // give the URLs of demos already running:
 //
 //   node tools/e2e/webboard_smoke.mjs OUTDIR running=http://127.0.0.1:8771/?t=demo paused=…
@@ -36,7 +37,7 @@ if (!out || args.length < 2) {
 mkdirSync(out, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const fixtures = ["running", "paused", "ready", "planning", "decision"];
+const fixtures = ["running", "paused", "ready", "planning", "decision", "finished", "bare"];
 const urls = {};
 const demos = [];
 if (args.includes("--demo")) {
@@ -179,11 +180,42 @@ try {
         check(await evaluate(`!document.getElementById("s-${sect}").hidden && document.getElementById("s-${sect}").innerText.trim().length > 20`), `${label}: the section is shown and not blank`);
         check(await evaluate(`document.querySelector('a.nav[data-route="${sect}"]').getAttribute("aria-current") === "page"`), `${label}: the nav marks the section`);
         check(await evaluate(`!/read-only · act/.test(document.body.innerText)`), `${label}: no "read-only" footer`);
-        if (r.startsWith("work/")) check(await evaluate(`!document.getElementById("drawer").hidden && document.getElementById("dr-title").textContent.startsWith("${r.slice(5)}")`), `${label}: the task drawer`);
+        if (r.startsWith("work/")) {
+          check(await evaluate(`!document.getElementById("drawer").hidden && document.getElementById("dr-title").textContent.startsWith("${r.slice(5)}")`), `${label}: the task drawer`);
+          check(await evaluate(`(function(){var b=document.getElementById("drawer").getBoundingClientRect();return b.top >= 0 && b.top < innerHeight - 120;})()`), `${label}: the drawer is on screen`);
+        }
         await look(label);
         await shot(`30-${name}-${r.replace("/", "-")}-${width}.png`);
       }
     }
+  }
+
+  // The checks can fail: an inline style set by script is a CSP violation
+  // the sweep would have caught.
+  if (urls.running) {
+    await size(1440);
+    await open(urls.running);
+    await evaluate(`document.body.setAttribute("style", "color: red")`);
+    await sleep(200);
+    const caught = await evaluate(`(window.__csp || []).splice(0)`);
+    problems.splice(0);
+    check(caught.length > 0, `self-test: an inline style is reported as a CSP violation ${JSON.stringify(caught)}`);
+    await evaluate(`document.body.removeAttribute("style")`);
+  }
+
+  // Finished, and a decision the page does not have the facts for.
+  if (urls.finished) {
+    await size(1440);
+    await open(urls.finished);
+    const box = await evaluate(`document.getElementById("home-empty").hidden ? "" : document.getElementById("home-empty").innerText`);
+    check(/^Finished: review-fixes/.test(box) && /11 tasks merged, 1 cancelled/.test(box) && /What next\?/.test(box), `finished: ${JSON.stringify(box)}`);
+    check(await evaluate(`document.querySelectorAll("#controls button").length === 0`), "finished: no Retry or Stop");
+  }
+  if (urls.bare) {
+    await size(1440);
+    await open(urls.bare);
+    check(await evaluate(`!document.getElementById("card").hidden && document.getElementById("primary").hidden && /Decide this in the terminal Board/.test(document.getElementById("secondary").textContent) && Array.from(document.querySelectorAll("#card button")).filter(b => b.getBoundingClientRect().width > 0).length === 0`),
+      "bare decision: not offered on the web, said so");
   }
 
   // 2. Deep link and Back.
@@ -200,6 +232,10 @@ try {
     check(/not reported by the CLI/.test(team) && /resets/.test(team) && /read /.test(team), "team: every limit row, the unreported one in words, reset and reading age");
     const act = await evaluate(`document.getElementById("act-groups").innerText`);
     check(/The Marshal asked for project contract/.test(act) && !/decision-[0-9a-f]{6}/.test(act), "activity: decision ids folded into plain words");
+    await evaluate(`location.hash = "#settings"`);
+    await sleep(200);
+    const set = await evaluate(`document.getElementById("set-facts").innerText`);
+    check(/v0\.3\.9 is available/.test(set) && /64% CPU/.test(set) && /lane cap 6/.test(set) && /MCP\s+working/.test(set) && /tasks: Marshal, then you/.test(set) && /telemetry\)\s+on/.test(set), "settings: update, host load, thermal cap, MCP, approval, telemetry");
     await look("deep links");
 
     // The Marshal's last chat turn, and its question in the pill.

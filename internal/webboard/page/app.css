@@ -175,7 +175,7 @@ td { padding: 9px 8px; border-bottom: 1px solid var(--rule); vertical-align: top
 .tasks tr.sel td { background: var(--panel2); }
 .tasks .st { white-space: nowrap; }
 tr.stale td { color: var(--warn); }
-.drawer { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; position: sticky; top: 76px; }
+.drawer { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; position: sticky; top: 76px; scroll-margin-top: 80px; }
 .drawer-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
 .drawer-head h2 { font: 650 17px/1.3 var(--sans); }
 .close { min-height: 44px; display: inline-flex; align-items: center; }
@@ -217,7 +217,7 @@ body.is-down main { opacity: .6; }
 
 @media (max-width: 1000px) {
   .workgrid.open { grid-template-columns: minmax(0, 1fr); }
-  .drawer { position: static; }
+  .drawer { position: static; order: -1; scroll-margin-top: 140px; }
 }
 @media (max-width: 719px) {
   .shell { display: block; }

@@ -50,4 +50,17 @@ func TestNoteMarshalSaid(t *testing.T) {
 	if !b.MarshalSays.Answered || b.MarshalSays.Text != m.Text {
 		t.Fatalf("answered: %+v", b.MarshalSays)
 	}
+	// Polling the same history again moves neither its time nor its
+	// answered state; a new text segment (the native chat's) starts over.
+	w.noteMarshalSaid(importer.SessionTranscript{Messages: []importer.Message{
+		{Role: "assistant", Content: "MARSHAL_PROPOSAL {\"kind\":\"retry\"}\nThe key " + key + " is set. Shall I start?"}}})
+	w.collectV2MarshalSays(&b)
+	if !b.MarshalSays.Answered || !b.MarshalSays.At.Equal(at) {
+		t.Fatalf("a re-read moved the turn: %+v", b.MarshalSays)
+	}
+	w.noteMarshalText("Started. Nothing needs you now.", time.Time{})
+	w.collectV2MarshalSays(&b)
+	if b.MarshalSays.Answered || b.MarshalSays.Text != "Started. Nothing needs you now." || b.MarshalSays.At.IsZero() {
+		t.Fatalf("new text: %+v", b.MarshalSays)
+	}
 }

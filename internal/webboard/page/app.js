@@ -155,10 +155,15 @@
     titleRoute = titles[route.name];
     if (frame) render(frame);
     if (focus) {
-      var target = route.task && !$("drawer").hidden ? $("dr-title") : $("main");
-      if (target === $("dr-title")) target.setAttribute("tabindex", "-1");
-      target.focus({ preventScroll: false });
-      window.scrollTo(0, 0);
+      if (route.task && !$("drawer").hidden) {
+        // The task's details, wherever the layout put them.
+        $("dr-title").setAttribute("tabindex", "-1");
+        $("dr-title").focus({ preventScroll: true });
+        $("drawer").scrollIntoView({ block: "start" });
+      } else {
+        $("main").focus({ preventScroll: true });
+        window.scrollTo(0, 0);
+      }
     }
   }
   var titleRoute = "Home";
@@ -219,7 +224,15 @@
     if (l) { out.appendChild(document.createTextNode(" ")); var s = el("span", "muted el"); s.dataset.lane = l.i; out.appendChild(s); }
     return out;
   }
-  function finished(f) { return f.plan.total > 0 && f.plan.done >= f.plan.total && f.plan.active === 0; }
+  // finished: the Board says DONE, or every task is merged or cancelled
+  // and none is active.
+  function cancelledCount(f) { return f.tasks.filter(function (t) { return t.state === "cancelled"; }).length; }
+  // merged counts the task rows when the frame has them, else the plan's.
+  function merged(f) { return f.tasks.length ? f.tasks.filter(function (t) { return t.state === "merged"; }).length : f.plan.done; }
+  function finished(f) {
+    if (f.top.state === "DONE") return true;
+    return f.plan.total > 0 && f.plan.done + cancelledCount(f) >= f.plan.total && f.plan.active === 0;
+  }
   // phase is what kind of moment this is, for the empty states.
   function phase(f) {
     if (f.paused) return "paused";
@@ -447,7 +460,7 @@
     if (f.decision) return "The Marshal is waiting on you: " + sentence(f.decision.title);
     if (f.paused) return "The run waits for your choice." + (n.work ? " Work: " + sentence(n.work) : "");
     var ph = phase(f);
-    if (ph === "finished") return "Finished: all " + plural(f.plan.total, "task") + " merged.";
+    if (ph === "finished") return "Finished: " + plural(merged(f), "task") + " merged" + (cancelledCount(f) ? ", " + cancelledCount(f) + " cancelled." : ".");
     var parts = [];
     if (n.marshal) parts.push("The Marshal: " + n.marshal);
     if (n.work) parts.push("Work: " + n.work);
@@ -479,7 +492,7 @@
     else if (ph === "finished") {
       var cancelled = f.tasks.filter(function (t) { return t.state === "cancelled"; }).length;
       emptyBox("home-empty", "Finished" + (f.top.run ? ": " + f.top.run : ""),
-        plural(p.done, "task") + " merged" + (cancelled ? ", " + cancelled + " cancelled" : ", none failed") +
+        plural(f.tasks.length ? f.tasks.filter(function (t) { return t.state === "merged"; }).length : p.done, "task") + " merged" + (cancelled ?", " + cancelled + " cancelled" : ", none failed") +
         ". What next? Tell the Marshal below; the run's own branch and its final review are in the terminal Board.");
     }
     renderSummary(f, ph);
@@ -526,7 +539,7 @@
   }
   function renderSummary(f, ph) {
     var ul = $("sum-cards");
-    var on = (ph === "run" || ph === "paused" || ph === "finished") && f.tasks.length > 0;
+    var on = (ph === "run" || ph === "paused") && f.tasks.length > 0;
     var building = f.tasks.filter(function (t) { return t.state === "building"; });
     var back = f.tasks.filter(function (t) { return rework(t) > 0; });
     var warn = f.workers.filter(function (w) { return w.reason || w.tagTone === "bad" || w.tagTone === "warn"; });
@@ -990,7 +1003,10 @@
     kv(dl, "Approval mode", approval || "not reported to this page yet");
     kv(dl, "Project", f.top.project || "–");
     kv(dl, "Run", f.top.run || "no run");
-    kv(dl, "Usage counts (telemetry)", r.telemetryAsk ? (r.telemetryOn ? "on · marshal telemetry disable turns it off" : "off") : "not reported to this page · marshal telemetry status");
+    // Telemetry is known once the Board probed this computer (the checks
+    // and the defaults come with it).
+    var probed = r.checks.length > 0 || r.defaults.length > 0;
+    kv(dl, "Usage counts (telemetry)", probed ? (r.telemetryOn ? "on · marshal telemetry disable turns it off" : "off") : "not checked yet · marshal telemetry status");
     if (f.plan.tokens) kv(dl, "Tokens this run", compact(f.plan.tokens));
     kv(dl, "This page", "private link for this computer only · frame format " + f.v);
   }

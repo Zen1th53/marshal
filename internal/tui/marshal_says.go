@@ -40,17 +40,37 @@ func (w *Workspace) noteMarshalSaid(tr importer.SessionTranscript) {
 	switch {
 	case lastSaid >= 0 && lastSaid > lastAsked:
 		m := tr.Messages[lastSaid]
-		at := m.Timestamp
-		if at.IsZero() {
-			at = time.Now()
-		}
-		w.marshalSaid.Store(&marshalSaid{text: marshalProse(m.Content), at: at})
+		w.noteMarshalText(m.Content, m.Timestamp)
 	case lastAsked >= 0:
-		if prev := w.marshalSaid.Load(); prev != nil && !prev.answered {
-			next := *prev
-			next.answered = true
-			w.marshalSaid.Store(&next)
-		}
+		w.markMarshalAnswered()
+	}
+}
+
+// noteMarshalText keeps text as the Marshal's last turn (the native chat
+// calls it with each final text segment). A text seen before keeps its
+// first time and its answered state, so polling the same history does not
+// move it.
+func (w *Workspace) noteMarshalText(text string, at time.Time) {
+	prose := marshalProse(text)
+	if prose == "" {
+		return
+	}
+	if prev := w.marshalSaid.Load(); prev != nil && prev.text == prose {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	w.marshalSaid.Store(&marshalSaid{text: prose, at: at})
+}
+
+// markMarshalAnswered notes that someone wrote in the chat after the
+// Marshal's last turn: the owner, or the Board on the owner's behalf.
+func (w *Workspace) markMarshalAnswered() {
+	if prev := w.marshalSaid.Load(); prev != nil && !prev.answered {
+		next := *prev
+		next.answered = true
+		w.marshalSaid.Store(&next)
 	}
 }
 

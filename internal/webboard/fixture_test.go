@@ -105,6 +105,10 @@ func fixtureRunning() vm.Board {
 			{Sent: at(18, 42), What: "parallel limit 8", Answer: "allow", Latency: 5 * sec, Tone: vm.ToneOK},
 		},
 		Chat: vm.Chat{Bound: true, InputClear: true, InputKnown: true},
+		// The probe's readiness stays on the Board during a run.
+		Ready: vm.Readiness{Ready: 1, Total: 1, TelemetryOn: true, Checked: at(18, 30),
+			Checks:   []vm.Check{{Mark: "ok", Label: "Marshal", Text: "claude · Opus 5.5 · signed in", Tag: "in use"}},
+			Defaults: [][2]string{{"workers", "claude 4 · agy 4"}, {"fallback", "codex"}, {"review", "other provider"}, {"approval", "you: architecture · tasks: Marshal, then you"}}},
 		System: vm.System{CPUPct: 64, MemPct: 71, DiskPct: 58, TempC: 83, ThermalGuard: true, ThermalCap: 6,
 			Notice: "host: thermal guard · asked owner: lane cap 12 → 6 (inbox)", UpdateAvailable: "v0.3.9"},
 		MarshalSays: vm.MarshalSays{At: at(19, 27), Text: "T02 came back from review with two changes requested: the digest check " +
@@ -217,8 +221,44 @@ func fixturePaused() vm.Board {
 	}
 }
 
+// fixtureFinished is the running Board once the run is done: eleven tasks
+// merged, one cancelled, no lane left.
+func fixtureFinished() vm.Board {
+	b := fixtureRunning()
+	b.Top.State, b.Top.StateTone, b.Top.Workers = "DONE", vm.ToneOK, 0
+	b.NowLine = vm.NowLine{Marshal: "claude Opus · idle", Work: "11 merged · 1 cancelled", FromYou: "nothing", FromYouOK: true}
+	b.Plan.Done, b.Plan.Active, b.Plan.Waiting, b.Plan.ETA = 11, 0, 0, 0
+	for i := range b.Plan.Stages {
+		b.Plan.Stages[i].State, b.Plan.Stages[i].Note = "done", ""
+	}
+	b.Lanes.Items = nil
+	tasks := append([]vm.Task(nil), b.Tasks...)
+	for i := range tasks {
+		tasks[i].State, tasks[i].Note = "merged", ""
+	}
+	tasks[len(tasks)-1].State = "cancelled"
+	b.Tasks = tasks
+	b.MarshalSays = vm.MarshalSays{At: at(21, 2), Text: "All done: 11 tasks merged into the run branch; T11 was cancelled as no longer needed."}
+	return b
+}
+
+// fixtureBareDecision is a decision card whose frame carries nothing it
+// rests on (no summary, lines, parts or note): the page does not offer it.
+func fixtureBareDecision() vm.Board {
+	b := fixtureRunning()
+	b.Screen = vm.ScreenDecision
+	b.Top.State, b.Top.StateTone, b.Top.Inbox = "YOUR TURN", vm.ToneWarn, 1
+	b.NowLine.FromYou, b.NowLine.FromYouOK = "approve the project contract · ⏎", false
+	b.Decision = &vm.Decision{Kind: "project-contract", Title: "Approve the project contract", Actions: kv("⏎", "allow", "x", "deny")}
+	return b
+}
+
 func fixture(name string) (vm.Board, bool) {
 	switch name {
+	case "finished":
+		return fixtureFinished(), true
+	case "bare":
+		return fixtureBareDecision(), true
 	case "", "running":
 		return fixtureRunning(), true
 	case "ready":
