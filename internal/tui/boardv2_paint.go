@@ -111,6 +111,9 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 		b.Keys = []vm.Key{}
 	}
 	w.setV2CardShown(b.Screen)
+	// The Web Board offers r only while it would retry a task; it is
+	// noted here, on the loop (webboard_act.go).
+	w.noteWebRetry()
 	t := v2Theme(th)
 	var lines []string
 	var hits []boardv2.Hit
