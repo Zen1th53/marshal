@@ -13961,8 +13961,8 @@
     },
     {
       "path": "internal/tui/boardv2_keys_drawn_test.go",
-      "sha256": "6cd5b2b1088109967c1dba76aa138e889e7826b3993686fcd4753659586b92bf",
-      "bytes": 12977
+      "sha256": "b6d374981da936ddc8f0dda881c3c48212a14ab7c4e205e08d5d1965336d45b9",
+      "bytes": 15185
     },
     {
       "path": "internal/tui/boardv2_lock_test.go",
@@ -13991,8 +13991,8 @@
     },
     {
       "path": "internal/tui/boardv2_paint.go",
-      "sha256": "b7baae05fa603a12c765ef2ff51c768b675dc46b5f4ad99e9a5a5f286da9501e",
-      "bytes": 7027
+      "sha256": "9c5b9a332568d915eaf1350e824b8d436be2c859eeb551e3d2cce3c599e702d7",
+      "bytes": 6917
     },
     {
       "path": "internal/tui/boardv2_paint_test.go",
@@ -14001,8 +14001,8 @@
     },
     {
       "path": "internal/tui/boardv2_ready_keys.go",
-      "sha256": "bbc9ee68cdfdcc82819356c207fecb90ecf8b5535e66d978e526f8ea7607c8a4",
-      "bytes": 10706
+      "sha256": "9e4b201ad5d34525310f1b34576e83f74310e5f1a6e2e0232e5a705e552771f4",
+      "bytes": 11886
     },
     {
       "path": "internal/tui/boardv2_steps.go",

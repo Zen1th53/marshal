@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -167,10 +168,37 @@ func v2ReadyBar(b vm.Board) []vm.Key {
 	return keys
 }
 
-// noteV2ReadyPaint records the readiness keys of a paint of b.
-func (w *Workspace) noteV2ReadyPaint(b vm.Board) {
-	ready := b.Screen == vm.ScreenReady
-	w.noteV2Ready(ready && b.Ready.TelemetryAsk, ready && slices.ContainsFunc(b.Ready.Actions, func(k vm.Key) bool { return k.Key == "g" }))
+// renderV2Ready renders b full screen and records which readiness keys the
+// render drew: the Usage counts card's buttons (the card goes first when
+// rows are short) and the g button. ? says what is sent, and the key bar
+// says so, only while the card is drawn.
+func (w *Workspace) renderV2Ready(b vm.Board, cols, rows int, t boardv2.Theme) ([]string, []boardv2.Hit) {
+	plain := b.Keys
+	if b.Screen == vm.ScreenReady && b.Ready.TelemetryAsk {
+		b.Keys = v2ReadyBar(b)
+	}
+	lines, hits := boardv2.RenderChatHits(b, cols, rows, t, nil)
+	usage, signIn := v2ReadyDrawnIn(b, lines, hits)
+	if !usage && b.Ready.TelemetryAsk && !slices.Equal(plain, b.Keys) {
+		b.Keys = plain
+		lines, hits = boardv2.RenderChatHits(b, cols, rows, t, nil)
+	}
+	w.noteV2Ready(usage, signIn)
+	return lines, hits
+}
+
+// v2ReadyDrawnIn reports whether a render of the readiness screen drew the
+// Usage counts card's buttons and the g button.
+func v2ReadyDrawnIn(b vm.Board, lines []string, hits []boardv2.Hit) (usage, signIn bool) {
+	if b.Screen != vm.ScreenReady {
+		return false, false
+	}
+	signIn = slices.ContainsFunc(hits, func(h boardv2.Hit) bool { return h.Kind == boardv2.HitReady && h.Key == "g" })
+	if b.Ready.TelemetryAsk {
+		text := StripANSI(strings.Join(lines, "\n"))
+		usage = strings.Contains(text, "t turn off") && strings.Contains(text, "y keep on") && strings.Contains(text, "? what is sent")
+	}
+	return usage, signIn
 }
 
 // v2CardBar is a decision or paused card's key bar: its buttons, esc for

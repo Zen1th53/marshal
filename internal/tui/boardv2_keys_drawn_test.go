@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -18,7 +19,9 @@ import (
 // Every key the Board v2 draws acts as labelled in the state it is drawn
 // in, or is not drawn: pressing it never starts a message to the Marshal.
 
-const drawnCols, drawnRows = 170, 45
+// drawnCols and drawnRows are the size the Board is painted at; the walk
+// also paints the smaller sizes, where panes give way.
+var drawnCols, drawnRows = 170, 45
 
 // drawnHints are the key hints the v2 renderer writes into pane titles and
 // card bodies (the key bar and the buttons are click regions, read from the
@@ -122,6 +125,16 @@ func drawnSeams(t *testing.T) (signIn *[]string) {
 // on that screen, is acted on.
 func TestV2DrawnKeysAct(t *testing.T) {
 	t.Setenv("MARSHAL_BOARD", "")
+	for _, size := range [][2]int{{170, 45}, {100, 30}, {80, 24}} {
+		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
+			drawnCols, drawnRows = size[0], size[1]
+			t.Cleanup(func() { drawnCols, drawnRows = 170, 45 })
+			walkDrawnKeys(t)
+		})
+	}
+}
+
+func walkDrawnKeys(t *testing.T) {
 	for _, sc := range []struct {
 		name   string
 		screen vm.Screen
@@ -288,6 +301,7 @@ func TestV2UsageCountsCardKeys(t *testing.T) {
 			if !strings.Contains(lastOutput(w), "random installation ID") || w.boardHelp.Load() {
 				t.Fatalf("? did not say what is sent: %q", lastOutput(w))
 			}
+			w.frameLines(drawnCols, drawnRows) // the keys act on what the last paint drew
 			w.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: key})
 			deadline := time.Now().Add(5 * time.Second)
 			for {
@@ -351,6 +365,7 @@ func TestV2AgySignInKey(t *testing.T) {
 	if len(*opened) != 1 || (*opened)[0] != w.providerRoot() || w.composer.Text() != "" {
 		t.Fatalf("g opened %v, typed %q", *opened, w.composer.Text())
 	}
+	w.frameLines(drawnCols, drawnRows)
 	w.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: 'g'})
 	if len(*opened) != 1 || !strings.Contains(lastOutput(w), "already open") {
 		t.Fatalf("a second g opened %v: %q", *opened, lastOutput(w))
@@ -383,5 +398,44 @@ func TestV2AgySignInKey(t *testing.T) {
 	failing.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: 'g'})
 	if !strings.Contains(lastOutput(failing), "run agy once") {
 		t.Fatalf("a failed open did not say how to sign in: %q", lastOutput(failing))
+	}
+}
+
+// A Usage counts card that did not fit takes no key: t is not a telemetry
+// choice there and ? is help. A click on the key bar's "? what is sent"
+// says what is sent where the card is drawn.
+func TestV2UsageCountsKeysOnlyWhereDrawn(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "")
+	drawnSeams(t)
+	var mu sync.Mutex
+	calls := 0
+	v2TelemetryParts.disable = func(context.Context, string) error { mu.Lock(); calls++; mu.Unlock(); return nil }
+	v2TelemetryParts.keep = v2TelemetryParts.disable
+	w := v2Fixture(t, time.Now())
+	defer w.Close()
+	w.endOpening()
+	lines, _, _ := w.frameLines(80, 24)
+	if text := StripANSI(strings.Join(lines, "\n")); strings.Contains(text, "t turn off") || strings.Contains(text, "what is sent") {
+		t.Fatalf("the card or its label drawn at 80x24:\n%s", text)
+	}
+	w.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: 't'})
+	w.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: 'y'})
+	w.frameLines(80, 24)
+	w.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: '?'})
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	n := calls
+	mu.Unlock()
+	if n != 0 || !w.boardHelp.Load() {
+		t.Fatalf("an undrawn card took keys: %d choices saved, help %v", n, w.boardHelp.Load())
+	}
+
+	c := v2Fixture(t, time.Now())
+	defer c.Close()
+	c.endOpening()
+	row, col := footerCell(t, c, 170, 45, "what is sent")
+	c.handleTerminalKey(context.Background(), KeyEvent{Type: KeyMouse, MouseRow: row, MouseColumn: col})
+	if !strings.Contains(lastOutput(c), "random installation ID") || c.boardHelp.Load() {
+		t.Fatalf("a click on ? what is sent: help %v, output %q", c.boardHelp.Load(), lastOutput(c))
 	}
 }
