@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.8
+
+### Added
+- Web Board: owner actions from the browser. The page puts what is happening and the card's main button at the top (for example **Move to claude**, **Retry T03**), at most two more buttons, and a **Tell the Marshal…** box; everything else is under Details. Each button presses the card's own key on the Board (`POST /api/act`: bearer token, exact Origin, JSON only, one-use token bound to the card shown); every action writes its Activity line "From the web: …". With no card, **Retry <task>** (the Board's `r`) and **Stop all workers** (`Ctrl+X`), each with two clicks.
+
+### Fixed
+- A run whose execution parent is still paused stops with a plain reason (`execution_paused`) instead of re-dispatching a task hundreds of times until the stall check; Enter resumes the parent and the run. A stall with no escalated task can be resumed, and the card's raw error shows the recorded cause.
+- The mock test harness is registered only by the test engine; the production engine no longer offers it.
+
+### Changed
+- Smaller codebase: about 25,000 lines of code that no shipped build reached were removed (unlinked packages, test-only wrappers, dead files and methods), 40 tables that nothing read or wrote are no longer created in new databases (existing databases are unchanged), and duplicated logic was merged (one run phase, one owner-card order, one browser opener, one serve loop). MCP and A2A report the real build version instead of 0.2.0; `marshal architecture serve` opens the browser on macOS.
+
 ## 0.3.7
 
 ### Added
@@ -8,15 +20,6 @@
 ### Fixed
 - Reassigned and failed-over tasks with dependencies open their next lane from the current integration head (the retired binding no longer pins the old base); foreign bindings and plain reworks at another base stay refused.
 - `/marshal resume` names `/resume` while the run waits on an operator pause.
-
-## Unreleased
-
-### Added
-- Web Board: owner actions from the browser. The page puts what is happening and the card's main button at the top (for example **Move to claude**, **Retry T03**), at most two more buttons, and a **Tell the Marshal…** box; everything else is under Details. Each button presses the card's own key on the Board (`POST /api/act`: bearer token, exact Origin, JSON only, one-use token bound to the card shown); every action writes its Activity line "From the web: …". With no card, **Retry <task>** (the Board's `r`) and **Stop all workers** (`Ctrl+X`), each with two clicks.
-- Architecture review: mark any element on any level, including code-derived packages, files, declarations and their connections (pencil, Shift-click or Select area), and ask the Marshal about it. The request names the exact breadcrumb, kind and repository path, which the server validates. It never changes the contract or **Accept**. Open requests show as dots, and History lists them with their path.
-
-### Changed
-- Architecture review: one click (or tap, or `Enter`) on a part with something inside opens it with the zoom-in, breadcrumb and `#path`, and keeps its panel open inside; a part with nothing inside still focuses; `Space` focuses.
 
 ## 0.3.6
 
