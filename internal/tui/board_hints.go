@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
@@ -248,9 +247,9 @@ func init() {
 		row("say.build", "s", "say what to build", firstUse, firstUseWhy, pressing(KeyEvent{Type: KeyRune, Rune: 's'})),
 		row("firstuse.chat", "Enter", "chat", firstUse, firstUseWhy, func(w *Workspace, ctx context.Context) { w.focusChatFromBoard(ctx) }),
 		row("firstuse.verify", "v", "verify", func(w *Workspace) bool {
-			return w.firstUseBoard() && nextUnverified(w.firstUseChips(time.Now()), w.leadProvider()) != ""
+			return w.firstUseBoard() && w.verifyNext() != ""
 		}, reason("Every installed provider is verified or busy."), func(w *Workspace, _ context.Context) {
-			w.armFirstUseVerify(nextUnverified(w.firstUseChips(time.Now()), w.leadProvider()))
+			w.armFirstUseVerify(w.verifyNext())
 		}),
 		// Rule 5: y arms the first unsent reply; Enter sends it.
 		row("gate.reply", "y", "reply", (*Workspace).gateWaiting, reason("Nothing is waiting for your reply."), pressing(KeyEvent{Type: KeyRune, Rune: 'y'})),

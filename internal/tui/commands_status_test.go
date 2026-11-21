@@ -60,7 +60,7 @@ func TestStatusIsPlainAndMatchesBoard(t *testing.T) {
 	v := boardVisual{board: b, now: time.Now(), note: p.Note}
 	v.gates = ws.ownerGates(p)
 	v.guard, _, _, _ = ws.guardPaint()
-	word, _ := v.runWord()
+	_, word, _ := v.runWord()
 	if !strings.Contains(out, "Run: \"Add login\" — "+StripANSI(v.stateChip())) || !strings.Contains(out, word) {
 		t.Fatalf("status state does not match Board state %q:\n%s", word, out)
 	}

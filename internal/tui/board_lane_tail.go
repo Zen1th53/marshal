@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/redaction"
@@ -51,6 +52,10 @@ type laneTailState struct {
 	every  time.Duration
 	// done is closed when the sampler started last has stopped.
 	done chan struct{}
+	// v2Painted is set while the last Board paint was Board v2, which
+	// shows no lane tails: the sampler then captures nothing, as when the
+	// Board is off screen. A classic Board paint clears it.
+	v2Painted atomic.Bool
 }
 
 // startLaneTail runs the lane tail sampler until ctx is done.
@@ -126,7 +131,7 @@ func (w *Workspace) sampleLaneTails(tailer paneTailer) {
 	s.mu.Unlock()
 
 	var panes []string
-	if w.boardVisible() {
+	if w.boardVisible() && !s.v2Painted.Load() {
 		panes = w.laneTailPanes()
 	}
 	width := w.laneTailWidth()

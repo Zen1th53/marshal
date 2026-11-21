@@ -295,7 +295,7 @@ The Web Board shows the same Board as a web page: the top bar, the NOW line, Pla
 
 ## Narrow terminals and ASCII mode
 
-- **Width**: from 120 columns the Board draws two columns; below that the right column stacks under the left. Board v2 needs at least 80 columns on its own, or 60 beside the docked chat, and 12 rows. A smaller terminal gets the classic narrow Board, which shows the inbox and a notice.
+- **Width**: from 120 columns the Board draws two columns; below that the right column stacks under the left. Board v2 needs at least 80 columns on its own, or 60 beside the docked chat, and 12 rows. A smaller terminal gets the classic Board: beside the docked chat at 56 to 59 columns, its compact panes; smaller still, or under 80 columns on its own, the inbox and a notice.
 - **Colour**: truecolor when the terminal says so (`COLORTERM=truecolor`), 256 colours otherwise. `marshal tui --theme monochrome` or `--theme high-contrast` chooses another theme; `NO_COLOR` or `marshal tui --no-color` turns colour off.
 - **ASCII**: a locale that is not UTF-8 (for example `LC_ALL=C`), or `--no-color`, draws the Board with ASCII boxes and glyphs:
 

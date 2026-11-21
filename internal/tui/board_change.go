@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -520,11 +521,17 @@ func (w *Workspace) resolveChangeProposal(p marshalProposal, state string) {
 	}
 }
 
-// currentChange is the open change card, nil for none.
+// currentChange is a copy of the open change card, nil for none: a paint
+// or a key reads it without holding w.change.mu while the card changes.
 func (w *Workspace) currentChange() *changeCard {
 	w.change.mu.Lock()
 	defer w.change.mu.Unlock()
-	return w.change.card
+	if w.change.card == nil {
+		return nil
+	}
+	c := *w.change.card
+	c.held = slices.Clone(c.held)
+	return &c
 }
 
 // clearChange closes the open change card.

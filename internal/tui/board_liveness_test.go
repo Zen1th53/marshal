@@ -114,7 +114,7 @@ func TestBoardRunHeaderSaysNoWorker(t *testing.T) {
 	b := model.Board{Run: model.RunHead{ID: "R-79", State: marshal.Dispatching, Driving: true, WorkerSeen: time.Now().Add(-time.Hour)},
 		Tasks: []model.TaskRow{{ID: "browser-fixes", State: model.TaskWorking, Worker: "codex"}}}
 	v := boardVisual{board: b, now: time.Now()}
-	if word, color := v.runWord(); word != "not running: no worker for 1h00m" || color != "needs" {
+	if _, word, color := v.runWord(); word != "not running: no worker for 1h00m" || color != "needs" {
 		t.Fatalf("runWord = %q %q", word, color)
 	}
 	if n := v.running(); n != 0 {
@@ -122,17 +122,17 @@ func TestBoardRunHeaderSaysNoWorker(t *testing.T) {
 	}
 	// Within the grace, or while the Marshal reviews, the run is running.
 	v.board.Run.WorkerSeen = time.Now().Add(-30 * time.Second)
-	if word, _ := v.runWord(); word != "running" {
+	if _, word, _ := v.runWord(); word != "running" {
 		t.Fatalf("within the grace runWord = %q", word)
 	}
 	v.board.Run.WorkerSeen = time.Now().Add(-time.Hour)
 	v.board.Tasks = append(v.board.Tasks, model.TaskRow{ID: "other", State: model.TaskReview})
-	if word, _ := v.runWord(); strings.Contains(word, "no worker") {
+	if _, word, _ := v.runWord(); strings.Contains(word, "no worker") {
 		t.Fatalf("a review in progress reads %q", word)
 	}
 	// A board that never learned when a worker was seen judges nothing.
 	v.board.Tasks, v.board.Run.WorkerSeen = v.board.Tasks[:1], time.Time{}
-	if word, _ := v.runWord(); word != "running" {
+	if _, word, _ := v.runWord(); word != "running" {
 		t.Fatalf("unknown liveness runWord = %q", word)
 	}
 }

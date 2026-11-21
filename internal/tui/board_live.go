@@ -726,6 +726,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		// owner card (boardv2_paint.go); MARSHAL_BOARD=classic keeps the
 		// classic ones.
 		ui.insp, ui.inspFor = nil, ""
+		w.laneTail.v2Painted.Store(true)
 		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
 		v2KeyRow = len(lines) - 2
 	case empty:
@@ -735,6 +736,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		// Nothing shows an inspector: a later one opens fresh, however
 		// this one was closed.
 		ui.insp, ui.inspFor = nil, ""
+		w.laneTail.v2Painted.Store(false)
 		lines = paintBoard(l, th, v.render)
 	}
 	var overlayHits []boardHit
