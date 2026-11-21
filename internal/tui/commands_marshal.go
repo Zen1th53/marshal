@@ -31,6 +31,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal                         Show status and usage
   /marshal chat                    Open a conversation with the Marshal
   /marshal architecture [goal]     Open the view-only architecture diagram in your browser
+  /marshal web                     Open this Board in your browser (this computer only, read-only)
   /marshal draft discard           Discard an unimported draft and reopen chat
   /marshal <goal>                  Draft a plan for the goal; governed tasks need current Process 04 evidence
   /marshal import <TASK-id> <check>  Review a finished CLI task through normal approval and merge
@@ -223,9 +224,9 @@ func (w *Workspace) marshalFailurePanel(runID, provider string, run marshal.Run,
 	return w.marshalPanelWithNote(runID, provider, note)
 }
 
-var marshalSubcommands = []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
+var marshalSubcommands = []string{"chat", "architecture", "web", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
 
-var allMarshalSubcommands = []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
+var allMarshalSubcommands = []string{"chat", "architecture", "web", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
 
 // marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
 func marshalTypoSuggestion(word string) string {
@@ -307,6 +308,11 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	switch sub {
 	case "architecture":
 		return w.marshalArchitecture(ctx, strings.Join(args[1:], " "), "")
+	case "web":
+		if len(args) != 1 {
+			return "", errors.New("usage: /marshal web")
+		}
+		return w.marshalWeb()
 	case "chat":
 		if len(args) != 1 {
 			return "", errors.New("usage: /marshal chat")

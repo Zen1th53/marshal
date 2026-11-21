@@ -21,7 +21,7 @@ var shippedPaletteAllowList = []string{
 	"memory.decide", "memory.scroll", "providers.verify", "providers.route", "verify.return", "security.decide", "plan.inspect", "arch.open",
 	"marshal.pick", "marshal.chat", "marshal.say", "command.line", "palette", "help", "workers.stop", "interrupt",
 	"fkey.help", "fkey.review", "fkey.diff", "fkey.status", "fkey.models", "fkey.mcp", "fkey.codex", "fkey.claude", "fkey.opencode", "fkey.update", "fkey.agy",
-	"run.pause", "run.resume", "app.doctor", "app.quit",
+	"run.pause", "run.resume", "web.open", "app.doctor", "app.quit",
 }
 
 func TestShippedPaletteAllowList(t *testing.T) {
