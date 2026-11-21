@@ -12,12 +12,6 @@ type CapabilityGate interface {
 	Capability(name string) bool
 }
 
-// ExecutionGate reports whether a capability is currently granted and execution is enabled.
-type ExecutionGate interface {
-	CapabilityGate
-	ExecutionEnabled() bool
-}
-
 // DispatchPolicy is the execution policy selected for one dispatch.
 type DispatchPolicy struct {
 	Tier                Tier

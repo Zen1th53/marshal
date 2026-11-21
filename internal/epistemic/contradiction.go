@@ -2,7 +2,6 @@ package epistemic
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -33,32 +32,6 @@ func (d *ContradictionDiscipline) DetectContradiction(claim model.Claim, newEvid
 			}
 		}
 	}
-	return false, ""
-}
-
-// DetectCrossClaimConflict checks if two claims in the same scope make contradictory assertions.
-func (d *ContradictionDiscipline) DetectCrossClaimConflict(a, b model.Claim) (bool, string) {
-	if a.ID == b.ID || a.Scope != b.Scope {
-		return false, ""
-	}
-
-	normSubjA := strings.ToLower(strings.TrimSpace(a.Subject))
-	normSubjB := strings.ToLower(strings.TrimSpace(b.Subject))
-
-	normTextA := strings.ToLower(strings.TrimSpace(a.NormalizedText))
-	normTextB := strings.ToLower(strings.TrimSpace(b.NormalizedText))
-
-	// If subjects match or address the same property, but one asserts success/true and the other asserts failure/false
-	if normSubjA == normSubjB && normTextA != normTextB {
-		if (strings.Contains(normTextA, "pass") && strings.Contains(normTextB, "fail")) ||
-			(strings.Contains(normTextA, "enabled") && strings.Contains(normTextB, "disabled")) ||
-			(strings.Contains(normTextA, "secure") && strings.Contains(normTextB, "vulnerable")) ||
-			(a.State == model.ClaimStateVerified && b.State == model.ClaimStateInvalidated) {
-			return true, fmt.Sprintf("cross-claim contradiction between %s and %s in scope %s: %q vs %q",
-				a.ID, b.ID, a.Scope, a.NormalizedText, b.NormalizedText)
-		}
-	}
-
 	return false, ""
 }
 

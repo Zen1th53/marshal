@@ -65,9 +65,15 @@ type Engine struct {
 	cachedHandoff    map[string]plan.Handoff
 }
 
-// NewEngine creates and initializes a Governed Execution Engine.
+// NewEngine creates a standalone Engine for tests. Only it registers the
+// simulated "mock" harness; the production constructor never does.
 func NewEngine(cfg EngineConfig, store RunStore, journal JournalStore) (*Engine, error) {
-	return NewEngineWithReaders(cfg, store, journal, nil, nil)
+	eng, err := NewEngineWithReaders(cfg, store, journal, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	eng.RegisterHarness(NewMockHarness("mock", nil))
+	return eng, nil
 }
 
 // NewEngineWithReaders creates an execution Engine with optional external PlanReader and GoalReader.
@@ -129,7 +135,6 @@ func NewEngineWithReaders(cfg EngineConfig, store RunStore, journal JournalStore
 	}
 
 	// Register default harnesses
-	eng.RegisterHarness(NewMockHarness("mock", nil))
 	eng.RegisterHarness(NewClaudeNativeHarness(""))
 	eng.RegisterHarness(NewCodexNativeHarness(""))
 	eng.RegisterHarness(NewOpenCodeNativeHarness(""))

@@ -40,10 +40,6 @@ func NewWithRequiredVersion(binary string, runner adapter.ProcessRunner, model, 
 	return &Client{binary: binary, runner: runner, model: model, requiredVersion: version}
 }
 
-func (c *Client) SetModel(model string) {
-	c.model = model
-}
-
 func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	if c.binary == "" || c.runner == nil {
 		return adapter.Probe{}, fmt.Errorf("%w: OpenCode binary and process runner are required", model.ErrInvalid)

@@ -22,11 +22,3 @@ func (r *Runtime) EventsSince(ctx context.Context, after events.Sequence) ([]eve
 	}
 	return r.eventEngine.Since(ctx, after)
 }
-
-// SubscribeEvents exposes the live stream after a durable sequence checkpoint.
-func (r *Runtime) SubscribeEvents(ctx context.Context, after events.Sequence) (events.Subscription, error) {
-	if err := ctx.Err(); err != nil {
-		return events.Subscription{}, err
-	}
-	return r.eventEngine.Subscribe(ctx, after)
-}
