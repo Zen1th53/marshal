@@ -95,7 +95,7 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 		return nil
 	}
 	w.tmuxMu.Unlock()
-	view, err := openInboxView(w.workDir, "marshal", false)
+	view, err := openMarshalInbox(w.workDir)
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ func (w *Workspace) browserAccepted(state json.RawMessage) {
 	b.WriteString("Continue: plan and launch now.\n")
 	message := b.String()
 
-	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
+	view, err := openMarshalInbox(w.runtime.ProjectRoot())
 	if err == nil {
 		err = view.write(message)
 	}

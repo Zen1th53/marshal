@@ -80,7 +80,7 @@ func (w *Workspace) askMarshalForProjectSummary() bool {
 // browserAcceptNudge wakes an idle Marshal after a recorded browser Accept.
 // It is not an acceptance and carries no binding: the instruction itself is
 // only in the inbox, and no chat text accepts anything.
-const browserAcceptNudge = marshalNotePrefix + "The owner accepted the architecture in the browser. Check your inbox."
+const browserAcceptNudge = marshalNotePrefix + "The owner accepted the architecture in the browser. Read " + marshalInboxFile + " now."
 
 // wakeMarshalAfterAccept sends the nudge through the same path the ask card
 // uses for its answer, only when a Marshal chat is open; otherwise the inbox

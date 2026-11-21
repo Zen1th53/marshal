@@ -39,19 +39,11 @@ var claudePastedText = regexp.MustCompile(`^\[Pasted text #\d+ \+(\d+) lines\]$`
 // rows, rather than searching for the message somewhere in the transcript.
 // Collapsed pastes must match the provider's character or line count.
 func ownChatComposer(frame, text string) bool {
-	compact := func(s string) string {
-		return strings.Map(func(r rune) rune {
-			if unicode.IsSpace(r) {
-				return -1
-			}
-			return r
-		}, s)
-	}
 	content, ok := chatComposer(frame)
 	if !ok || text == "" {
 		return false
 	}
-	if compact(content) == compact(text) || content == fmt.Sprintf("[Pasted Content %d chars]", utf8.RuneCountInString(text)) {
+	if ownComposerText(frame, text) || content == fmt.Sprintf("[Pasted Content %d chars]", utf8.RuneCountInString(text)) {
 		return true
 	}
 	if match := claudePastedText.FindStringSubmatch(content); match != nil {
@@ -61,9 +53,92 @@ func ownChatComposer(frame, text string) bool {
 	return false
 }
 
+// compactText drops every space, so a message compares equal however the
+// provider wrapped it.
+func compactText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// clippedFragmentMin is the least of a clipped input that may be compared:
+// a few characters could be anyone's.
+const clippedFragmentMin = 16
+
+// ownComposerText reports whether the input holds exactly text: the whole of
+// it, or, when the provider shows only part of a tall input ("─── ↑ 9 more
+// ───"), rows that are exactly the matching part of text. A provider's
+// placeholder for a paste is not text and is not matched here.
+func ownComposerText(frame, text string) bool {
+	content, clip, ok := chatComposerBox(frame)
+	if !ok || text == "" {
+		return false
+	}
+	shown, want := compactText(content), compactText(text)
+	switch {
+	case !clip.above && !clip.below:
+		return shown == want
+	case utf8.RuneCountInString(shown) < clippedFragmentMin:
+		return false
+	case clip.above && clip.below:
+		return strings.Contains(want, shown)
+	case clip.above:
+		return strings.HasSuffix(want, shown)
+	default:
+		return strings.HasPrefix(want, shown)
+	}
+}
+
+// claudeClippedRule is the rule Claude Code draws at the edge of an input
+// too tall for its pane: "─── ↑ 9 more ───" when rows are scrolled off above
+// (the prompt row with them), "─── ↓ 5 more ───" when rows are below.
+var claudeClippedRule = regexp.MustCompile(`^[─━═]+\s*([↑↓])\s*\d+\s+more\b`)
+
+// clippedRule reports which way line is an input box's clipped edge.
+func clippedRule(line string) (above, below bool) {
+	m := claudeClippedRule.FindStringSubmatch(strings.TrimSpace(StripANSI(line)))
+	if m == nil {
+		return false, false
+	}
+	return m[1] == "↑", m[1] == "↓"
+}
+
+// composerClip says the input box is shown only in part.
+type composerClip struct{ above, below bool }
+
 func chatComposer(frame string) (string, bool) {
+	content, _, ok := chatComposerBox(frame)
+	return content, ok
+}
+
+// chatComposerBox reads the input box bottom up. In a pane too short for the
+// input, Claude Code scrolls the prompt row away and draws "↑ N more" on the
+// box's top rule: the rows below that rule are then the input, and a prompt
+// row higher up is an earlier turn in the transcript, not the input.
+func chatComposerBox(frame string) (string, composerClip, bool) {
 	lines := strings.Split(StripANSI(frame), "\n")
+	// below is set once the scan has passed a "↓ N more" bottom rule.
+	var clip composerClip
 	for i := len(lines) - 1; i >= 0; i-- {
+		if above, below := clippedRule(lines[i]); below {
+			clip.below = true
+			continue
+		} else if above {
+			clip.above = true
+			content := ""
+			for _, line := range lines[i+1:] {
+				trimmed := strings.TrimSpace(line)
+				rule := strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "━") || strings.HasPrefix(trimmed, "═")
+				if trimmed == "" || rule {
+					break
+				}
+				content += strings.Trim(line, " │┃║|")
+			}
+			return strings.TrimSpace(content), clip, true
+		}
 		body := strings.TrimLeft(lines[i], " │┃║|")
 		for _, marker := range promptMarkers {
 			// Claude Code v2.1 draws its prompt as "❯" and a NO-BREAK SPACE
@@ -90,10 +165,10 @@ func chatComposer(frame string) (string, bool) {
 				}
 				content += strings.Trim(line, " │┃║|")
 			}
-			return strings.TrimSpace(content), true
+			return strings.TrimSpace(content), clip, true
 		}
 	}
-	return "", false
+	return "", composerClip{}, false
 }
 
 // errChatUnsubmitted is our own paste still sitting in the input after every
@@ -150,6 +225,11 @@ func deliverChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, p
 		}
 		content, drawn := chatComposer(string(frame))
 		if !drawn {
+			if own, ok := ownPasteFor(pane); ok && own.text == text {
+				// This request was pasted and its input cannot be read
+				// now: say it waits unsent rather than wait in silence.
+				return false, errChatUnsubmitted
+			}
 			// No input box yet (or not one we read): not the owner's text.
 			return false, errChatNotReady
 		}

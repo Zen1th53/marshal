@@ -796,7 +796,7 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 	if w.runtime == nil {
 		return
 	}
-	view, e := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
+	view, e := openMarshalInbox(w.runtime.ProjectRoot())
 	if e == nil {
 		e = view.write(text)
 	}

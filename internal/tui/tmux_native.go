@@ -2573,7 +2573,7 @@ func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, sta
 	note += " The draft watcher remains active: publish a corrected draft to import it."
 	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, note))
 	w.RecordActivity(note)
-	if view, err := openInboxView(w.workDir, "marshal", false); err == nil {
+	if view, err := openMarshalInbox(w.workDir); err == nil {
 		if view.write(fmt.Sprintf("## runtime · %s · draft rejected\n\n%s\nRun: %s\n", time.Now().UTC().Format(time.RFC3339), note, runID)) == nil {
 			_ = view.trim()
 		}

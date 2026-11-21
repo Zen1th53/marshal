@@ -55,7 +55,7 @@ var errArchitectureRequestUnanswered = errors.New("The Marshal did not answer th
 
 // architectureRequestNudge wakes an idle Marshal; the request itself is only
 // in the inbox.
-const architectureRequestNudge = marshalNotePrefix + "The owner sent a request from the architecture page. Check your inbox."
+const architectureRequestNudge = marshalNotePrefix + "The owner sent a request from the architecture page. Read " + marshalInboxFile + " now."
 
 // forwardArchitectureRequest writes the owner's exact selection and request
 // to the Marshal's inbox, wakes an open chat and waits for the answer that
@@ -66,7 +66,7 @@ func (w *Workspace) forwardArchitectureRequest(ctx context.Context, req app.Arch
 	}
 	ch := w.architectureRequests.open(req.ID)
 	defer w.architectureRequests.close(req.ID)
-	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
+	view, err := openMarshalInbox(w.runtime.ProjectRoot())
 	if err == nil {
 		err = view.write(architectureRequestMessage(req))
 	}
