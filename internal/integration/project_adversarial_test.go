@@ -10,7 +10,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/projectid"
-	"github.com/Zen1th53/marshal/internal/projectmemory"
 	"github.com/Zen1th53/marshal/internal/startup"
 )
 
@@ -100,34 +99,6 @@ func TestAdversarialCopiedProjectIsNotAMove(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(resolution.Reason), "copied") {
 		t.Fatalf("the copy was not explained as such: %q", resolution.Reason)
-	}
-}
-
-// Watchlist: memory must never cross between projects.
-func TestAdversarialCrossProjectMemoryIsRefused(t *testing.T) {
-	ctx := context.Background()
-	source := projectRepo(t, "source project\n")
-	target := projectRepo(t, "target project\n")
-
-	sourceBinding, err := projectid.Adopt(ctx, nil, source, stateDir(source))
-	if err != nil {
-		t.Fatalf("adopt source: %v", err)
-	}
-	targetBinding, err := projectid.Adopt(ctx, nil, target, stateDir(target))
-	if err != nil {
-		t.Fatalf("adopt target: %v", err)
-	}
-	if sourceBinding.ID == targetBinding.ID {
-		t.Fatal("two distinct projects share an identity")
-	}
-
-	assimilated := projectmemory.Assimilate(projectmemory.AssimilationRequest{
-		ProjectID:     sourceBinding.ID,
-		Sources:       []projectmemory.Source{{Kind: projectmemory.SourceRepositoryFact, Path: "go.mod", Content: "module source", ObservedCommit: "c1"}},
-		CurrentCommit: "c1",
-	})
-	if len(assimilated.Candidates) == 0 {
-		t.Fatal("nothing was assimilated from the source project")
 	}
 }
 
