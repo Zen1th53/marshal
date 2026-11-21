@@ -8,7 +8,7 @@
 +-------------| internal/review/history.go                                                                           |eekly 71%    ||
 +- LANES . fro| web/review.html                                                                                      |put clear    ||
 |    LANE     |                                                                                                      |-------------+|
-|  * claude-1 |  u  undo (recommended)    K  keep                                                                    | v re-check -+|
+|  * claude-1 |  u  undo (recommended)    K  keep                                                                    |-------------+|
 |  * claude-2 +------------------------------------------------------------------------------------------------------+  sonnet     ||
 |  * claude-3    sonnet-5.5   T07 legend keyboard focus     editing       6m    12s | | + agy     #######...   4 lanes  gemini-3.8 ||
 |  o claude-4    sonnet-5.5   review T02 (by agy-1)         reviewing     2m     3s | | o codex   #.........   spare    wk 11%     ||
@@ -27,5 +27,5 @@
 |   T12  regression matrix sign-off    matrix.md     claude  agy     . waits T03    | |                                            ||
 +-----------------------------------------------------------------------------------+ +--------------------------------------------+|
                                                                                                                                     |
-  s  say   Enter  open   a  architecture   r  restart task   m  model   l  limits   p  pause all   F11  chat   space  actions   ?  h|
+  s  say   Enter  open   a  architecture   r  restart task   m  model   F11  chat   space  actions   ?  help                        |
                                                                                                                                     |

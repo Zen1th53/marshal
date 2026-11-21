@@ -8,7 +8,7 @@
 +-------------| b  don't touch      internal/marshal, the store schema  . memory                                     |eekly 71%    ||
 +- LANES . fro| c  branches         one branch per task, merged by the Marshal  . AGENTS.md                          |put clear    ||
 |    LANE     | d  done when        history pages load in under 200 ms with 10k revisions and the regression matrix  |-------------+|
-|  * claude-1 |                     passes on Linux and macOS  . goal                                                | v re-check -+|
+|  * claude-1 |                     passes on Linux and macOS  . goal                                                |-------------+|
 |  * claude-2 | e  must still pass  go test ./... and the review browser tests  . Makefile                           |  sonnet     ||
 |  * claude-3 | f  may change       review.html, review.go, codec.go  . code                                         |  gemini-3.8 ||
 |  o claude-4 | g  deps . network   no new dependencies; no network in tests  . memory                               |  wk 11%     ||
@@ -27,5 +27,5 @@
 |   T12  regression matrix sign-off    matrix.md     claude  agy     . waits T03    | |                                            ||
 +-----------------------------------------------------------------------------------+ +--------------------------------------------+|
                                                                                                                                     |
-  s  say   Enter  open   a  architecture   r  restart task   m  model   l  limits   p  pause all   F11  chat   space  actions   ?  h|
+  s  say   Enter  open   a  architecture   r  restart task   m  model   F11  chat   space  actions   ?  help                        |
                                                                                                                                     |
