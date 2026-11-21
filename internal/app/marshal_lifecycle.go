@@ -1951,6 +1951,22 @@ func validateAmendModes(run marshal.Run, current plan.ExecutionPlan, next Marsha
 }
 
 func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, code, reason string) error {
+	return s.escalateWithDetail(ctx, runID, taskID, code, reason, "")
+}
+
+// hasEscalatedTask reports whether any task of run waits on an escalation.
+func hasEscalatedTask(run marshal.Run) bool {
+	for _, t := range run.Tasks {
+		if t.State == marshal.Escalated {
+			return true
+		}
+	}
+	return false
+}
+
+// escalateWithDetail is Escalate with the technical cause the pause keeps
+// for the log and the paused card's raw error.
+func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, code, reason, detail string) error {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return err
@@ -1970,11 +1986,19 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, code, reas
 		run.Tasks[i].EscalationReason = reason
 		run.Tasks[i].EscalationCode = escalationCode(code, reason)
 	}
-	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{"resolve the escalation or amend the plan"}, Code: code, Action: marshal.PauseResume})
+	resolution := "resolve the escalation or amend the plan"
+	if code == marshal.CodeRunStalled && !hasEscalatedTask(run) {
+		resolution = "Press Enter to try again (/marshal resume), or amend the plan."
+	}
+	pauseMarshal(&run, marshal.Pause{Reason: reason, Resolutions: []string{resolution}, Detail: detail, Code: code, Action: marshal.PauseResume})
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
-	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, map[string]any{"reason": reason})
+	data := map[string]any{"reason": reason}
+	if detail != "" {
+		data["detail"] = detail
+	}
+	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, data)
 }
 
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
@@ -2012,8 +2036,21 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 		return run, nil
 	}
 	if run.State == marshal.AwaitingUser {
+		if run.Pause != nil && run.Pause.ResumeState == "" && run.Pause.Code == marshal.CodeRunStalled && !hasEscalatedTask(run) {
+			// A stall with no escalated task has nothing else to resolve:
+			// the person's resume takes the run on again. A run that still
+			// cannot progress stalls again within the same round bound.
+			run.Pause.ResumeState = marshal.Reviewing
+		}
 		if run.Pause == nil || run.Pause.ResumeState == "" {
 			return run, marshalPauseError(run)
+		}
+		if run.Pause.Code == marshal.CodeExecutionPaused && s.process05ResumePaused != nil {
+			// The person's resume of this stop is the resume of the part of
+			// the run's execution they had paused.
+			if err = s.process05ResumePaused(ctx, run); err != nil {
+				return run, err
+			}
 		}
 		run.State = run.Pause.ResumeState
 		run.Pause = nil
@@ -2170,5 +2207,31 @@ func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispa
 		return true, errors.Join(cause, model.ErrConflict)
 	}
 	run.Tasks[i].State = marshal.Queued
-	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+	if s.HeldTask != nil && s.HeldTask(runID, dispatch.TaskID) {
+		// This session's pause holds the task: Execute waits for the hold.
+		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+	}
+	// No pause hold of this session waits for the person's resume (a
+	// restart drops it), so dispatching again would only find the same
+	// paused run, round after round, until the run counted as stalled
+	// (rv06: 239 silent dispatches in five seconds). The run waits for the
+	// person instead, and says so; Enter resumes the paused part and
+	// continues (Resume, CodeExecutionPaused).
+	pause := executionPausedPause(dispatch.TaskID, cause)
+	pauseMarshal(&run, pause)
+	if err := s.save(context.WithoutCancel(ctx), runID, run, rev); err != nil {
+		return true, err
+	}
+	return true, s.record(context.WithoutCancel(ctx), runID, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{
+		"reason": pause.Reason, "summary": pause.Reason, "detail": pause.Detail, "code": pause.Code, "counted": false,
+	})
+}
+
+// executionPausedPause is the run's stop when a task could not start because
+// the person left part of the run's execution paused and nothing holds the
+// run for their resume.
+func executionPausedPause(taskID string, cause error) marshal.Pause {
+	return marshal.Pause{Reason: "Part of the run is still paused (you paused it earlier), so " + taskID + " could not start. Nothing ran.",
+		Resolutions: []string{"Press Enter to resume the paused part and continue the run (/marshal resume)."},
+		Detail:      cause.Error(), ResumeState: marshal.Reviewing, Code: marshal.CodeExecutionPaused, Action: marshal.PauseResume}
 }

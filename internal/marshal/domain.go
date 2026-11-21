@@ -310,6 +310,7 @@ const (
 	CodeVerificationStopped   = "verification_stopped"
 	CodeEscalated             = "escalated"
 	CodeRunStalled            = "run_stalled"
+	CodeExecutionPaused       = "execution_paused"
 	CodeNoReassignWorker      = "no_reassign_worker"
 	CodeWorkerNotGoverned     = "worker_not_governed"
 	CodeInterruptedWorktree   = "interrupted_worktree"

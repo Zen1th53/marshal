@@ -106,10 +106,9 @@ func (w *Workspace) v2PauseNow(now time.Time) (v2Pause, bool) {
 	case p.Board.Run.State == marshal.AwaitingUser:
 		z.cause = pauseCause(run.Pause)
 		if run.Pause != nil {
+			// Only a recorded technical cause is a raw error: the reason is
+			// the card's own cause line, and d repeating it showed nothing.
 			z.detail = strings.TrimSpace(run.Pause.Detail)
-			if z.detail == "" {
-				z.detail = strings.TrimSpace(run.Pause.Reason)
-			}
 			z.until = run.Pause.Until
 		}
 		for _, t := range run.Tasks {
@@ -137,8 +136,9 @@ func (w *Workspace) v2PauseNow(now time.Time) (v2Pause, bool) {
 		}
 		z.detail = stop.reason
 	}
-	if z.detail == "" {
-		z.detail = stop.reason
+	if z.detail == stop.reason || z.detail == firstLine(stop.reason) {
+		// The cause line is already on the card: no separate raw error.
+		z.detail = ""
 	}
 	if stop.action == marshal.PauseUsePlan {
 		z.cause = pauseNewPlan

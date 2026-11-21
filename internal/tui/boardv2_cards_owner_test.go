@@ -476,7 +476,7 @@ func TestPausedCardUsePlanOffersTheNewPlan(t *testing.T) {
 	if !strings.HasPrefix(z.Will, "open the composer to tell the Marshal what to change.\nThe run asks: create and approve an amended plan") || !strings.Contains(z.Will, "/marshal use-plan") {
 		t.Fatalf("will %q", z.Will)
 	}
-	if got := keyNames(z.Actions); !slices.Equal(got, []string{"⏎ tell the Marshal what to change", "d raw error", "x stop the run"}) {
+	if got := keyNames(z.Actions); !slices.Equal(got, []string{"⏎ tell the Marshal what to change", "x stop the run"}) {
 		t.Fatalf("actions %q", got)
 	}
 	if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) || !w.say.open.Load() || len(*ran) != 0 {
