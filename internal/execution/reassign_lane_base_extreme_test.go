@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/plan"
 )
 
 // finishLaneInStore records lane as a completed attempt, as a worker that
@@ -130,5 +132,96 @@ func TestExtremeReassignedTaskLaneOpensOnNewWorkerFromNewerBase(t *testing.T) {
 	}
 	if _, err = e.OpenTaskLaneRework(ctx, parent.RunID, "task-1", newer, 3); err != nil {
 		t.Fatalf("a rework of the switched attempt was refused: %v", err)
+	}
+}
+
+// failLaneInStore records lane as an attempt its provider failed, as a
+// rate-limited worker would leave it, without running a worker.
+func failLaneInStore(t *testing.T, e *Engine, id string) {
+	t.Helper()
+	lane := mustRun(t, e, id)
+	task := lane.Tasks[lane.LaneTaskID]
+	now := time.Now().UTC()
+	task.State = TaskFailed
+	task.Attempts = 1
+	task.StartedAt = &now
+	task.LastFailureReason = "provider rate limit exceeded"
+	lane.Tasks[lane.LaneTaskID] = task
+	lane.State = RunFailed
+	if err := e.store.UpdateRun(t.Context(), lane); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Automatic provider failover follows the same rule as a reassignment: the
+// failed attempt's binding (its base included) retires with the failover, so
+// the replacement attempt opens on the fallback provider from the newer
+// integration head. A failed lane whose binding is foreign is still refused,
+// and without a failover a rework at another base is still refused.
+func TestExtremeProviderFailoverLaneOpensOnFallbackFromNewerBase(t *testing.T) {
+	e, parent, base := laneFixture(t)
+	registerWritingHarness(e)
+	e.RegisterHarness(NewMockHarness("mock2", func(_ context.Context, task TaskExecution, _ ConstraintPackage, _ string) (TaskResult, error) {
+		return TaskResult{TaskID: task.TaskID, Success: true}, nil
+	}))
+	ctx := WithVerifiedFallbackModel(t.Context(), "mock2", "verified-mock2")
+	allow := func(ExecutionRun, TaskExecution) error { return nil }
+	// The fallback selector binds the owner-approved plan scope.
+	reader := e.planReader.(*MemoryPlanReader)
+	p, err := reader.GetActivePlan(ctx, parent.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.State = plan.StateReady
+	if p, err = p.Approve(time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	reader.AddPlan(p)
+	first, err := e.OpenTaskLane(ctx, parent.RunID, "task-1", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failLaneInStore(t, e, first.RunID)
+	newer := advanceHead(t, parent.Provenance.RepoRoot)
+
+	// Without a failover the next attempt keeps the original base.
+	if _, err = e.OpenTaskLaneRework(ctx, parent.RunID, "task-1", newer, 1); !errors.Is(err, ErrRunConflict) || !strings.Contains(err.Error(), "durable task lane binding differs") {
+		t.Fatalf("a rework without failover opened from another base: %v", err)
+	}
+
+	// A failed lane that does not carry the task's binding is foreign.
+	failed := mustRun(t, e, first.RunID)
+	genuine := failed.ParentBinding
+	failed.ParentBinding = strings.Repeat("f", len(genuine))
+	if err = e.store.UpdateRun(ctx, failed); err != nil {
+		t.Fatal(err)
+	}
+	from := mustRun(t, e, parent.RunID).Tasks["task-1"].AssignedHarness
+	if _, err = e.RebindTaskLaneApprovedProviderFailover(ctx, parent.RunID, mustRun(t, e, parent.RunID).Version, "task-1", from, "mock2", newer, "failover-1", allow); !errors.Is(err, ErrRunConflict) {
+		t.Fatalf("a failover over a foreign lane binding was accepted: %v", err)
+	}
+	failed = mustRun(t, e, first.RunID)
+	failed.ParentBinding = genuine
+	if err = e.store.UpdateRun(ctx, failed); err != nil {
+		t.Fatal(err)
+	}
+
+	rebound, err := e.RebindTaskLaneApprovedProviderFailover(ctx, parent.RunID, mustRun(t, e, parent.RunID).Version, "task-1", from, "mock2", newer, "failover-1", allow)
+	if err != nil {
+		t.Fatalf("failover from the newer base was refused: %v", err)
+	}
+	if record := rebound.TaskProviderSwitches["task-1"]; record.To != "mock2" || len(record.PriorBindings) != 1 || record.PriorBindings[0] != genuine {
+		t.Fatalf("failover did not retire the failed binding: %+v", record)
+	}
+	second, err := e.OpenTaskLaneRework(ctx, parent.RunID, "task-1", newer, 1)
+	if err != nil {
+		t.Fatalf("the failed-over attempt was refused: %v", err)
+	}
+	latest := mustRun(t, e, parent.RunID)
+	if second.BaseCommit != newer || second.Tasks["task-1"].AssignedHarness != "mock2" || second.ParentBinding != taskLaneBinding(latest, latest.Tasks["task-1"], newer) {
+		t.Fatalf("failed-over attempt binding: base %s harness %s", second.BaseCommit, second.Tasks["task-1"].AssignedHarness)
+	}
+	if kept := mustRun(t, e, first.RunID); kept.BaseCommit != base || kept.Tasks["task-1"].State != TaskFailed {
+		t.Fatal("the failed attempt was not retained")
 	}
 }

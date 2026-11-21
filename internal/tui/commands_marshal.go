@@ -953,6 +953,24 @@ func (g workspaceUltraGate) ExecutionEnabled() bool {
 	return g.execution
 }
 
+// errMarshalBusy refuses a Marshal operation while another one runs.
+var errMarshalBusy = errors.New("a Marshal operation is already running")
+
+// errMarshalPausedByYou answers /marshal resume while the running step is
+// the run waiting for the person's own pause (/pause); /resume lifts it.
+var errMarshalPausedByYou = errors.New("the run is paused by you: /resume lifts the pause and the run continues")
+
+// resumeRefusal is why /marshal resume could not reserve the session. While
+// the person's pause holds runID, the running step is the run waiting for
+// that pause, so the answer names /resume instead of a busy operation; the
+// reservation itself is unchanged.
+func (m *marshalSession) resumeRefusal(runID string, err error) error {
+	if errors.Is(err, errMarshalBusy) && m.pausedFor(runID) {
+		return errMarshalPausedByYou
+	}
+	return err
+}
+
 // marshalReserve owns the session until the background operation finishes.
 func (m *marshalSession) reserve() (context.Context, context.CancelFunc, error) {
 	return m.reserveContext(context.Background())
@@ -965,7 +983,7 @@ func (m *marshalSession) reserveContext(parent context.Context) (context.Context
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.busy {
-		return nil, nil, errors.New("a Marshal operation is already running")
+		return nil, nil, errMarshalBusy
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	m.busy, m.cancel = true, cancel
@@ -1717,7 +1735,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 	}
 	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
-		return "", err
+		return "", m.resumeRefusal(runID, err)
 	}
 	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		keepNativeTurn := false
