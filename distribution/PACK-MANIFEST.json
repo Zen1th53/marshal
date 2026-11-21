@@ -491,8 +491,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "85e0b27a41a98d04ac9e7ead2c4299f6997e99d37c15a92bb3ed4142eaba14a9",
-      "bytes": 31265
+      "sha256": "7e07f260fbc33eb78cdef3f8af8fa84139d844a40b58b37b89e3fe55d78a8718",
+      "bytes": 31370
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -506,8 +506,8 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "eb0f523475101057817aac28f8f1af05695269d9907d717d03f5266524d01ae7",
-      "bytes": 13259
+      "sha256": "1eab8797c42d0c42fea95fb29bda316f5b0a76dcee97c26252cff05d5dc894d9",
+      "bytes": 13322
     },
     {
       "path": "docs/configuration.md",
@@ -12596,8 +12596,8 @@
     },
     {
       "path": "internal/tui/boardv2_collect_flow.go",
-      "sha256": "8498978e6d0772fa176f606ab8cf7d2a745f8f2d5cfd0003f89e9938b390e2ed",
-      "bytes": 4085
+      "sha256": "db41b5c9cf4a143ce3d80d00ab343047440241c3cb758147ec220a9dae7c0ce8",
+      "bytes": 4145
     },
     {
       "path": "internal/tui/boardv2_collect_flow_test.go",
@@ -13786,13 +13786,13 @@
     },
     {
       "path": "internal/tui/marshal_says.go",
-      "sha256": "c9427ed74421b321072db421ef3d4e78875ecd03c83cfbe74adec763f3835862",
-      "bytes": 2997
+      "sha256": "bb82275ded7876cedf6e030a4535f7ba38e9e06b379e4ad0ec0d2e95b97154bd",
+      "bytes": 3758
     },
     {
       "path": "internal/tui/marshal_says_test.go",
-      "sha256": "59ab557bd5e95ec410722776d46b3718c7ed1a47b88bab05474508860c181e7e",
-      "bytes": 3007
+      "sha256": "c61b82db05b25d72584774c7ece1ef06bfb9d9fce0045347b42f84ef5c508c7a",
+      "bytes": 3581
     },
     {
       "path": "internal/tui/marshal_splash.go",
