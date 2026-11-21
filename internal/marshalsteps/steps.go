@@ -115,7 +115,10 @@ func Append(path string, l Line) error {
 		return cerr
 	}
 	if serr == nil && info.Size() > MaxBytes {
-		return compact(path)
+		// The line is already in the log; a failed compaction only leaves
+		// it longer, and must not read as a lost line (the caller would
+		// keep it a second time). The next append tries again.
+		_ = compact(path)
 	}
 	return nil
 }
@@ -133,6 +136,15 @@ func compact(path string) error {
 	if len(lines) > KeepLines {
 		lines = lines[len(lines)-KeepLines:]
 	}
+	// Append never writes a line this long: one that is came from elsewhere
+	// and is dropped, so it is not read again at every compaction.
+	kept := lines[:0]
+	for _, l := range lines {
+		if len(l) <= maxLine {
+			kept = append(kept, l)
+		}
+	}
+	lines = kept
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".steps-*.tmp")
 	if err != nil {
 		return err

@@ -112,10 +112,12 @@ func readOwnerAcceptedProjectContract(ctx context.Context, q projectContractQuer
 // not overruled by an older acceptance, and a newest draft the Marshal
 // denied, or one already committed or applied, never counts.
 func ownerAcceptedDraft(ctx context.Context, q projectContractQuery, project projectcontext.ProjectBinding, i ProjectContractInstruction) (OwnerAcceptedProjectContract, bool, error) {
-	rows, err := q.QueryContext(ctx, `SELECT occurrence_id,payload FROM extreme_mcp_proposals WHERE project_id=? ORDER BY rowid DESC LIMIT 256`, project.StorageID)
+	rows, err := q.QueryContext(ctx, `SELECT occurrence_id,payload FROM extreme_mcp_proposals WHERE project_id=? ORDER BY rowid DESC`, project.StorageID)
 	if err != nil {
 		return OwnerAcceptedProjectContract{}, false, err
 	}
+	// No LIMIT: the scan stops at the newest project-contract draft, and
+	// any number of newer unrelated proposals must not hide it.
 	newest := ""
 	for rows.Next() {
 		var id, payload string

@@ -94,3 +94,57 @@ func TestClean(t *testing.T) {
 		t.Fatalf("long text kept %d runes", len([]rune(got)))
 	}
 }
+
+// A failed compaction does not report the appended line as lost: it is in
+// the log, and a caller that kept it again would count it twice.
+func TestAppendKeepsLineWhenCompactionFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	path := Path(t.TempDir())
+	at := time.Date(2026, 11, 20, 18, 0, 0, 0, time.UTC)
+	if err := Append(path, Line{At: at, Kind: "read", Text: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	// Past MaxBytes, so the next append compacts.
+	line := `{"kind":"read","text":"` + strings.Repeat("x", 100) + `"}` + "\n"
+	if err := os.WriteFile(path, []byte(strings.Repeat(line, MaxBytes/len(line)+10)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o700)
+	before, _ := os.Stat(path)
+	if err := Append(path, Line{At: at, Kind: "read", Text: "kept"}); err != nil {
+		t.Fatalf("append reported an error after writing the line: %v", err)
+	}
+	after, _ := os.Stat(path)
+	if after.Size() <= before.Size() {
+		t.Fatalf("line not written: %d -> %d", before.Size(), after.Size())
+	}
+}
+
+// A line longer than Append ever writes is dropped at compaction, so it is
+// not read again at every one.
+func TestCompactDropsForeignLongLine(t *testing.T) {
+	path := Path(t.TempDir())
+	at := time.Date(2026, 11, 20, 18, 0, 0, 0, time.UTC)
+	if err := Append(path, Line{At: at, Kind: "read", Text: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(`{"kind":"read","text":"` + strings.Repeat("y", MaxBytes) + `"}` + "\n")
+	f.Close()
+	if err := Append(path, Line{At: at, Kind: "read", Text: "last"}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if len(data) > MaxBytes || strings.Contains(string(data), "yyyy") || !strings.Contains(string(data), "last") {
+		t.Fatalf("long line kept or newest lost: %d bytes", len(data))
+	}
+}
