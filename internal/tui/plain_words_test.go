@@ -30,29 +30,6 @@ func TestPickerActivityNamesTheMarshalInPlainWords(t *testing.T) {
 	}
 }
 
-// A message the runtime wrote is never labelled as typed by the owner, and
-// with no chat open it is not dropped into the owner's composer.
-func TestRuntimeNoticeIsNotLabelledAsTheOwner(t *testing.T) {
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	w.noticeToMarshal(t.Context(), "[Marshal] Project files changed outside a run")
-	echoes := w.sayEchoList()
-	if len(echoes) != 1 || !echoes[0].Runtime {
-		t.Fatalf("echo: %+v", echoes)
-	}
-	if got := w.composer.Text(); got != "" {
-		t.Fatalf("runtime notice landed in the owner's composer: %q", got)
-	}
-	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true)}
-	line := v.echoLine(echoes[0], 100)
-	if strings.Contains(line, "you → marshal") || !strings.Contains(line, "runtime → marshal") {
-		t.Fatalf("runtime notice line: %q", line)
-	}
-	if line := v.echoLine(sayEcho{At: time.Now(), Text: "confirm all", State: saySent}, 100); !strings.Contains(line, "you → marshal") {
-		t.Fatalf("owner message line: %q", line)
-	}
-}
-
 // The footer's "Opening the architecture…" is removed once the page has
 // opened or been accepted, but a newer answer is never wiped.
 func TestArchitectureOpeningAnswerIsCleared(t *testing.T) {

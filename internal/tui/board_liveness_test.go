@@ -40,73 +40,6 @@ func governedWorkspace(t *testing.T, state marshal.TaskState, beats func() []app
 	return w, src, p
 }
 
-// Finding #80: a governed codex worker alive for 18 minutes showed as
-// "LANES idle · 0 running" and its task as rework. Its heartbeats now make
-// it a running lane, with its elapsed time and the age of its last beat.
-func TestBoardLaneFollowsGovernedWorkerHeartbeat(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	started := time.Now().Add(-18 * time.Minute)
-	beat := time.Now().Add(-12 * time.Second)
-	w, _, p := governedWorkspace(t, marshal.Returned, func() []app.WorkerBeat {
-		return []app.WorkerBeat{{RunID: "R-80", TaskID: "browser-fixes", Worker: "codex", Started: started, Beat: beat}}
-	})
-	b := p.Board
-	if len(b.Lanes) != 1 || b.Lanes[0].Worker != "codex-1" || b.Lanes[0].State != model.LaneWorking || !b.Lanes[0].Heartbeat {
-		t.Fatalf("lanes = %+v, want one working heartbeat lane codex-1", b.Lanes)
-	}
-	if b.Tasks[0].State != model.TaskWorking || b.Run.Running != 1 || b.Run.ActiveLanes != 1 {
-		t.Fatalf("task %s, running %d, lanes %d; want the beating worker's task working", b.Tasks[0].State, b.Run.Running, b.Run.ActiveLanes)
-	}
-	frame := plainFrame(w, 140, 40)
-	for _, want := range []string{"1 running", "codex-1", "18:0", "last signal 12s"} {
-		if !strings.Contains(frame, want) {
-			t.Fatalf("frame lacks %q:\n%s", want, frame)
-		}
-	}
-	for _, bad := range []string{"LANES idle", "stalled", "no worker"} {
-		if strings.Contains(frame, bad) {
-			t.Fatalf("frame says %q while the worker beats:\n%s", bad, frame)
-		}
-	}
-}
-
-// A worker that stops beating for longer than the grace is no longer
-// running: the lane says no worker is running its task, the run header stops
-// saying running, and the poll notices it without any new decision.
-func TestBoardLaneLostWhenHeartbeatsStop(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	started := time.Now().Add(-20 * time.Minute)
-	beat := time.Now()
-	w, src, p := governedWorkspace(t, marshal.Dispatched, func() []app.WorkerBeat {
-		return []app.WorkerBeat{{RunID: "R-80", TaskID: "browser-fixes", Worker: "codex", Started: started, Beat: beat}}
-	})
-	if p.Board.Lanes[0].State != model.LaneWorking {
-		t.Fatalf("lane = %+v, want working", p.Board.Lanes[0])
-	}
-	// Five minutes pass without a beat.
-	later := time.Now().Add(5 * time.Minute)
-	boardNow = func() time.Time { return later }
-	t.Cleanup(func() { boardNow = time.Now })
-	if !w.refreshBoardFrom(t.Context(), src, p) {
-		t.Fatal("a worker gone quiet did not repaint the Board")
-	}
-	b := w.marshalPanel().Board
-	if b.Lanes[0].State != model.LaneLost || b.Live("browser-fixes") || b.Run.ActiveLanes != 0 {
-		t.Fatalf("lane = %+v active %d, want lost", b.Lanes[0], b.Run.ActiveLanes)
-	}
-	frame := plainFrame(w, 180, 40)
-	for _, want := range []string{"no worker is running this task", "/marshal stop, then /marshal resume", "not running: no worker for 5m", "no worker is running"} {
-		if !strings.Contains(frame, want) {
-			t.Fatalf("frame lacks %q:\n%s", want, frame)
-		}
-	}
-	if strings.Contains(frame, "› running") || strings.Contains(frame, "1 running") || strings.Contains(frame, "· running ·") {
-		t.Fatalf("frame still says running:\n%s", frame)
-	}
-}
-
 // Finding #79: the run said running for an hour while no worker existed.
 // A run with no live worker past the grace says so in its header, from the
 // last time the Board saw one alive.
@@ -162,20 +95,5 @@ func TestBoardFeedWorkerSeen(t *testing.T) {
 	}
 	if changed, _ := f.noteWorkers("R", nil, false, later.Add(10*time.Second)); changed {
 		t.Fatal("the same quiet minute repainted again")
-	}
-}
-
-// A heartbeat lane's last action names the age of its last beat; a lost
-// lane says first that no worker is running its task.
-func TestBoardLaneBeatText(t *testing.T) {
-	now := time.Now()
-	v := boardVisual{now: now}
-	live := model.Lane{Heartbeat: true, State: model.LaneWorking, Beat: now.Add(-12 * time.Second)}
-	if got := v.laneBeat(live, ""); got != "last signal 12s ago" {
-		t.Fatalf("live = %q", got)
-	}
-	lost := model.Lane{Heartbeat: true, State: model.LaneLost, Beat: now.Add(-4 * time.Minute)}
-	if got := v.laneBeat(lost, "editing app.js"); got != "no worker is running this task · last signal 4m ago · editing app.js" {
-		t.Fatalf("lost = %q", got)
 	}
 }

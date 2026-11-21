@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // reqProposalLine builds a MARSHAL_PROPOSAL "requirements" line. card is the
@@ -138,7 +139,7 @@ func reqBoard(t *testing.T) *Workspace {
 func TestRequirementsEnterNeedsNoBlanks(t *testing.T) {
 	w := reqBoard(t)
 	defer w.Close()
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("Enter was not taken by the card")
 	}
 	if w.currentReq() == nil {
@@ -157,7 +158,7 @@ func TestRequirementsEnterConfirms(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.openRequirements(p)
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("Enter was not taken by the card")
 	}
 	if w.currentReq() != nil {
@@ -169,15 +170,54 @@ func TestRequirementsEnterConfirms(t *testing.T) {
 	}
 }
 
+// On the home screen Enter opens the chat and leaves the card; y does the
+// card's Enter (confirm all) once, and a second y right after does nothing.
+func TestHomeYesConfirmsRequirements(t *testing.T) {
+	w, _, tr := boardWithNativeChat(t)
+	p, err := parseMarshalProposal(reqProposalLine(fullReqCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.openRequirements(p)
+	w.frameLines(80, 24)
+	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.currentReq() == nil {
+		t.Fatal("Enter acted on the requirements card")
+	}
+	if got := strings.Join(frameLinesText(w, 80, 24), "\n"); !strings.Contains(got, "— y confirm all") {
+		t.Fatalf("From you does not name y:\n%s", got)
+	}
+	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'}) {
+		t.Fatal("y was not taken")
+	}
+	if w.currentReq() != nil {
+		t.Fatal("y did not confirm the requirements")
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	chatWaitFor(t, "the confirmation", func() bool { return len(tr.sentTurns()) == 1 })
+	time.Sleep(50 * time.Millisecond)
+	if got := tr.sentTurns(); len(got) != 1 || got[0] != "confirm all" {
+		t.Fatalf("sent %q, want one \"confirm all\"", got)
+	}
+}
+
+// frameLinesText is a frame's lines without escapes.
+func frameLinesText(w *Workspace, cols, rows int) []string {
+	lines, _, _ := w.frameLinesFull(cols, rows)
+	for i := range lines {
+		lines[i] = StripANSI(lines[i])
+	}
+	return lines
+}
+
 // e then c prefills the composer with that line's edit and opens it, leaving
 // the card open.
 func TestRequirementsEditPrefillsComposer(t *testing.T) {
 	w := reqBoard(t)
 	defer w.Close()
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'e'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'e'}) {
 		t.Fatal("e was not taken by the card")
 	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'c'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'c'}) {
 		t.Fatal("c was not taken by the card")
 	}
 	if got := w.composer.Text(); got != "edit c: from main, lands on main" {
@@ -205,7 +245,7 @@ func TestRequirementsAskCardTakesPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.openAsk(ap)
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("Enter was not taken")
 	}
 	chatWaitFor(t, "the ask answer", func() bool { return len(tr.sentTurns()) == 1 })
@@ -217,37 +257,6 @@ func TestRequirementsAskCardTakesPrecedence(t *testing.T) {
 	}
 	if w.currentReq() == nil {
 		t.Fatal("the requirements card closed when the ask was answered")
-	}
-}
-
-// The card renders in the first-use inbox: the filled count, the blanks'
-// "(to ask)", NEEDS YOU in the header, and no internal ids.
-func TestRequirementsRendersOnFirstUse(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w := reqBoard(t)
-	defer w.Close()
-	text := frameText(w, 120, 40)
-	// Row 0 is the vitals row; the Board header is row 1.
-	head := strings.SplitN(text, "\n", 3)[1]
-	if !strings.Contains(head, "NEEDS YOU") {
-		t.Fatalf("header does not say NEEDS YOU: %q", head)
-	}
-	for _, want := range []string{
-		"requirements · 6 of 8 filled",
-		"Add login with email; out: OAuth",
-		"(to ask)",
-		"[Enter] confirm all",
-		"[e] edit a line",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the card misses %q:\n%s", want, text)
-		}
-	}
-	for _, bad := range []string{"RUN-", "PLAN-", "INSTANCE-"} {
-		if strings.Contains(text, bad) {
-			t.Errorf("an internal id %q is on the card:\n%s", bad, text)
-		}
 	}
 }
 
@@ -263,34 +272,3 @@ const realUserReqCard = `[` +
 	`{"line":"g","text":"Proposed: standard-library only, no network","source":"Implementation recommendation"},` +
 	`{"line":"h","text":"No configured token budget; use the default","source":"Launch current limits; owner request"}` +
 	`]`
-
-// Every requirement's own words are readable on the card at the Board widths
-// a 120- and a 160-column terminal give it (beside the chat, and alone): a
-// long source never squeezes the value down to "Prop…".
-func TestRequirementsValuesReadable(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	p, err := parseMarshalProposal(reqProposalLine(realUserReqCard))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openRequirements(p)
-	lines, err := parseRequirementsCard(p.card)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, cols := range []int{60, 80, 120, 160} {
-		text := frameText(w, cols, 40)
-		flat := strings.Join(strings.Fields(text), " ")
-		for _, l := range lines {
-			if !strings.Contains(flat, l.Text) {
-				t.Errorf("at %d columns line %s is not readable in full (%q):\n%s", cols, l.Line, l.Text, text)
-			}
-		}
-		if !strings.Contains(text, "[Enter] confirm all") {
-			t.Errorf("at %d columns the confirm key is cut off:\n%s", cols, text)
-		}
-	}
-}

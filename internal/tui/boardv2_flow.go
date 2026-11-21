@@ -44,9 +44,12 @@ type flowIn struct {
 	marshalModel        string // as the top bar names it ("Opus 5.5")
 	chatBlocked         int
 	chatWaiting         int
-	limits              map[string]int
-	globalCap           int
-	selectedLane        string
+	// chatAsked is set when the Marshal's last chat turn asked the owner
+	// something and the chat's input sits idle (chatAskedIn).
+	chatAsked    bool
+	limits       map[string]int
+	globalCap    int
+	selectedLane string
 }
 
 // stageNames are the Plan pipeline's stages as the Board names them.
@@ -161,6 +164,7 @@ func flowNowLine(in flowIn) vm.NowLine {
 	}
 	n.Work = flowWork(in)
 	n.FromYou, n.FromYouOK = fromYou(in)
+	n.ChatAsked = n.FromYou == vm.ChatAskedLine
 	return n
 }
 
@@ -352,6 +356,11 @@ func inboxAskLine(it boardmodel.InboxItem) string {
 // owner (and how many more), or "nothing" with the next expected ask.
 func fromYou(in flowIn) (string, bool) {
 	asks := ownerAsks(in)
+	if len(asks) == 0 && in.chatAsked {
+		// Nothing on a card waits, but the Marshal's chat does: its last
+		// turn asked the owner something.
+		return vm.ChatAskedLine, false
+	}
 	if len(asks) == 0 {
 		if next := nextAsk(in); next != "" {
 			return "nothing · next ask: " + next, true

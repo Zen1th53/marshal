@@ -270,7 +270,7 @@ func TestBlockedScreenHasNoJargon(t *testing.T) {
 
 	var hits []boardHit
 	v := boardVisual{theme: th, hits: &hits}
-	l := layout.ComputeFor(100, 30, layout.Home, v.layoutCounts())
+	l := layout.Compute(100, 30, layout.Home)
 	frame := w.paintBlocked(l, th, v)
 	body := StripANSI(strings.Join(frame, "\n"))
 

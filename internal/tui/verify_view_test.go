@@ -238,11 +238,6 @@ func TestVerifyViewKeys(t *testing.T) {
 		t.Fatal("5 opened the Verify view while the composer held text")
 	}
 	w.composer.SetText("")
-	w.boardUI.inspect = "T-017"
-	if press('5') || w.verView.Load() {
-		t.Fatal("5 opened the Verify view over the inspector")
-	}
-	w.boardUI.inspect = ""
 	for _, back := range []KeyEvent{{Type: KeyEsc}, {Type: KeyRune, Rune: '1'}, {Type: KeyRune, Rune: '5'}} {
 		if !press('5') || !w.verView.Load() {
 			t.Fatal("5 did not open the Verify view")

@@ -50,11 +50,10 @@
 
   var docsURL = "https://marshal.blackhat.uz/docs";
 
-  // asksOwner: the Marshal's last chat turn ends with a question nobody
-  // has answered yet.
+  // asksOwner: the Marshal asked the owner something in its chat and waits
+  // (the Board's From-you line says so: nowLine.chatAsked).
   function asksOwner(f) {
-    var m = f.marshalSays;
-    return !!(m && m.text && m.question && !m.answered);
+    return !!(f.nowLine && f.nowLine.chatAsked);
   }
 
   // ---- small helpers ----------------------------------------------------
@@ -454,11 +453,11 @@
     chip($("t-state"), t.state || "–", t.stateTone);
     document.title = titleRoute + " · " + (t.state ? t.state + " · " : "") + (t.project || "Marshal") + " · Marshal Board";
     var n = f.nowLine, pill = $("you-pill");
-    var needs = !n.fromYouOK || !!f.decision || !!f.paused;
-    // With nothing else waiting, a question the Marshal asked in chat and
-    // nobody answered yet is what the owner is asked for.
-    var asked = asksOwner(f) && !needs;
-    var you = asked ? "the Marshal asked you something" : n.fromYou || "nothing";
+    // A question the Marshal asked in chat is what the owner is asked for
+    // only when nothing else waits; the Board's From-you line says it.
+    var asked = asksOwner(f) && !f.decision && !f.paused;
+    var needs = (!n.fromYouOK && !asked) || !!f.decision || !!f.paused;
+    var you = n.fromYou || "nothing";
     setText("you", you);
     pill.className = "pill" + (needs || asked ? " act" : "");
     var rt = retryTask(f);
@@ -523,7 +522,7 @@
   // that answers it.
   function renderSays(f) {
     var m = f.marshalSays || {};
-    if (!changed("says", m)) return;
+    if (!changed("says", [m, asksOwner(f)])) return;
     var has = !!m.text;
     setText("says-text", has ? m.text : "");
     show("says-empty", !has);

@@ -90,31 +90,6 @@ func askBoard(t *testing.T) *Workspace {
 	return w
 }
 
-// The ask card renders in the first-use inbox: the question, its three keys,
-// and NEEDS YOU in the header.
-func TestAskCardRendersOnFirstUse(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w := askBoard(t)
-	defer w.Close()
-	text := frameText(w, 120, 40)
-	// Row 0 is the vitals row; the Board header is row 1.
-	head := strings.SplitN(text, "\n", 3)[1]
-	if !strings.Contains(head, "NEEDS YOU") {
-		t.Fatalf("header does not say NEEDS YOU: %q", head)
-	}
-	for _, want := range []string{
-		"question · " + exampleAskQuestion,
-		"[Enter] build on it",
-		"[l] leave it",
-		"[w] wait for it",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the card misses %q:\n%s", want, text)
-		}
-	}
-}
-
 // Pressing a choice's letter sends that choice's label to the Marshal chat
 // once, through the Board's say path, and closes the card.
 func TestAskCardOneKeySends(t *testing.T) {
@@ -124,7 +99,7 @@ func TestAskCardOneKeySends(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.openAsk(p)
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'l'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'l'}) {
 		t.Fatal("l was not taken by the card")
 	}
 	if w.currentAsk() != nil {
@@ -144,7 +119,7 @@ func TestAskCardEnterIsRecommended(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.openAsk(p)
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("Enter was not taken by the card")
 	}
 	chatWaitFor(t, "the answer", func() bool { return len(tr.sentTurns()) == 1 })
@@ -170,33 +145,6 @@ func TestAskCardDigitsKeepViews(t *testing.T) {
 	}
 }
 
-// A second ask replaces the first: one open question at a time.
-func TestAskCardReplaces(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w := askBoard(t)
-	defer w.Close()
-	second := "the task reruns clean now. I'd keep the current goal."
-	p, err := parseMarshalProposal(askProposalLine(second, `[{"key":"enter","label":"keep the current goal"},{"key":"a","label":"apply this change"}]`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openAsk(p)
-	card := w.currentAsk()
-	if card == nil || card.Question != second {
-		t.Fatalf("the second ask did not replace the first: %+v", card)
-	}
-	text := frameText(w, 120, 40)
-	// The first card's choice line is drawn only by a card, never by the
-	// Activity log, so its absence proves the first card is gone.
-	if strings.Contains(text, "[Enter] build on it") {
-		t.Fatalf("the first card is still on screen:\n%s", text)
-	}
-	if !strings.Contains(text, second) || !strings.Contains(text, "[Enter] keep the current goal") {
-		t.Fatalf("the second question is not shown:\n%s", text)
-	}
-}
-
 // With no chat open, a key does not close the card and says the answer was
 // not sent.
 func TestAskNoChatKeepsCard(t *testing.T) {
@@ -205,7 +153,7 @@ func TestAskNoChatKeepsCard(t *testing.T) {
 	if w.sayPane() != "" || w.nativeChatShown() {
 		t.Fatal("the fixture already has a chat open")
 	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'l'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'l'}) {
 		t.Fatal("l was not taken by the card")
 	}
 	if w.currentAsk() == nil {

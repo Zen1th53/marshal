@@ -3,11 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/adapter/providers"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/adapter/providers"
 
 	"github.com/Zen1th53/marshal/internal/usage"
 )

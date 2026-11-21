@@ -2,11 +2,23 @@
 
 ## Unreleased
 
+### Changed
+- The terminal Board is one short home screen: the project and state, **Now** (what is happening), **From you** (nothing, or the one thing that needs you) and **Web** (where the Web Board is), with the keys `⏎ chat`, `w web`, `s say to the Marshal`, `q quit`. The plan, lanes, tasks, workers, activity, steps, requests, readiness checklist and the cards' details are on the Web Board, which is now the full interface.
+- `Enter` always opens the Marshal chat. A safe step (retry a stuck task, move it and continue, resume, confirm the requirements) gets `y`, named on the From-you line; a second `y` within two seconds does nothing. A decision with authority (allow or deny, a gate, the plan, the architecture, changed files, a change of goal, stopping the run) is made on the Web Board: the line says `open the web to decide (w)`.
+- The Web Board starts with the Board and opens in the browser where there is a display (`MARSHAL_WEB_OPEN=0` keeps it closed). Its private link is shown only on demand (`/marshal web`, or `w` with no display), never on the home screen.
+- *From you* says when the Marshal asked you something in its chat and waits (`⏎ open chat`), on the Board and on the Web Board.
+- `/task-model <task>` changes the model a task runs on (it was `w` on a task row).
+
 ### Fixed
+- Keys typed while the first-run Marshal picker is open go to the picker, not to text left in the composer.
 - macOS: workers' Marshal MCP server (`marshal mcp relay`) exited at once with "MCP relay already active: operation not supported", so a worker's Marshal MCP server never started. The relay now locks its private directory where a FIFO cannot be locked, and handles macOS FIFO EOF and write behaviour.
 - macOS: `marshal update install` refused with "release binaries are built for Linux"; it now installs the darwin release archive, verified against `checksums.txt` as before.
 - macOS: with `marshal daemon` running, every command that talks to it (`marshal status`, `tasks`, `events`, `logs`, …) was refused ("local socket peer authentication refused"). The runtime socket now reads the peer's UID with `LOCAL_PEERCRED`.
 
+### Removed
+- The classic Board is removed, and so are the Board v2 terminal panes, the task inspector and the docked inspector column: `MARSHAL_BOARD=classic` no longer does anything. The home screen draws at any size down to about 40 × 10. Beside the chat the Board is given at least 60 columns (from a 101-column window), up from 56.
+
+## 0.3.8
 
 ### Added
 - Web Board: owner actions from the browser. The page puts what is happening and the card's main button at the top (for example **Move to claude**, **Retry T03**), at most two more buttons, and a **Tell the Marshal…** box; everything else is under Details. Each button presses the card's own key on the Board (`POST /api/act`: bearer token, exact Origin, JSON only, one-use token bound to the card shown); every action writes its Activity line "From the web: …". With no card, **Retry <task>** (the Board's `r`) and **Stop all workers** (`Ctrl+X`), each with two clicks.

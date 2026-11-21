@@ -314,7 +314,4 @@ func TestFirstUseChipMarshalProviderInUse(t *testing.T) {
 			t.Fatalf("claude chip %+v", c)
 		}
 	}
-	if next := nextUnverified(chips, "claude"); next == "claude" {
-		t.Fatal("v picks the live Marshal provider to verify")
-	}
 }

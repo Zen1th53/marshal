@@ -1225,39 +1225,3 @@ func atoiSGR(s string) int {
 	}
 	return n
 }
-
-// echoLine is one message in Activity: when, to whom, what and where it is.
-func (v boardVisual) echoLine(e sayEcho, w int) string {
-	state := e.State
-	col := map[string]string{saySending: "working", sayQueued: "waiting", saySent: "merged", sayFailed: "failed"}[state]
-	switch state {
-	case sayQueued:
-		if e.Why != "" {
-			state = "queued · " + e.Why
-		} else {
-			state = "queued · chat is busy"
-		}
-	case saySent:
-		state = "sent to chat"
-	case sayFailed:
-		if e.Why != "" {
-			state = "not sent · " + e.Why
-		}
-	}
-	from := "you"
-	if e.Runtime {
-		from = "runtime"
-	}
-	to := from + " → marshal"
-	if !v.unicode() {
-		to = from + " -> marshal"
-	}
-	head := v.fg("dim", e.At.In(v.now.Location()).Format("15:04:05")) + " " + v.fg("accent", to) + " "
-	tail := " " + v.fg(col, "· "+state)
-	room := w - VisibleLen(head) - VisibleLen(tail) - 2
-	open, shut := "“", "”"
-	if !v.unicode() {
-		open, shut = "\"", "\""
-	}
-	return head + open + v.trunc(cleanBoard(e.Text), max(8, room)) + shut + tail
-}

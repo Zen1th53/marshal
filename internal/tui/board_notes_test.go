@@ -38,8 +38,6 @@ func clickText(t *testing.T, w *Workspace, cols, rows int, text string) {
 // after it was read does not open it again. A click on the note shows the
 // whole text.
 func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	defer w.Close()
 	w.theme = NewTheme(ThemeNoColor, true, false)
@@ -57,13 +55,19 @@ func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
 	if strings.Contains(text, " ANSWER ") {
 		t.Fatalf("a background message opened the ANSWER overlay:\n%s", text)
 	}
+	// Activity is the Web Board's: one line a message.
+	var activity []string
+	for _, e := range w.boardV2().Activity {
+		activity = append(activity, e.Kind+" "+e.Text)
+	}
+	all := strings.Join(activity, "\n")
 	for _, want := range []string{"note The Marshal was busy", "note Recorded owner instruction for the project contract", "note Verified codex codex-cli 0.167.0"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("Activity misses %q:\n%s", want, text)
+		if !strings.Contains(all, want) {
+			t.Errorf("Activity misses %q:\n%s", want, all)
 		}
 	}
-	if strings.Contains(text, "Native chat transport") {
-		t.Errorf("Activity shows more than one line of a message:\n%s", text)
+	if strings.Contains(all, "Native chat transport") {
+		t.Errorf("Activity shows more than one line of a message:\n%s", all)
 	}
 	if foot := strings.Split(text, "\n")[44]; strings.Contains(foot, "Native chat") || strings.Contains(foot, "Marshal did not answer") {
 		t.Errorf("the footer shows a background message: %q", foot)
@@ -79,19 +83,11 @@ func TestBackgroundMessagesNeverOpenTheAnswerOverlay(t *testing.T) {
 	if text := frameText(w, 170, 45); strings.Contains(text, " ANSWER ") {
 		t.Fatalf("a background message reopened the read answer:\n%s", text)
 	}
-
-	// The whole message is a click away.
-	clickText(t, w, 170, 45, "note Recorded owner instruction")
-	if text := frameText(w, 170, 45); !strings.Contains(text, " ANSWER ") || !strings.Contains(text, "Answer the pending project-contract Decision") {
-		t.Fatalf("a click on the note did not show it whole:\n%s", text)
-	}
 }
 
-// A v verify on the first-use card ends as the provider chip's new state
-// and one Activity line, never an overlay over the card.
+// A verify from the home screen (y on "not checked yet") ends as one
+// Activity line, never an overlay over the screen.
 func TestFirstUseVerifyResultIsAChipAndOneActivityLine(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	now := time.Now()
@@ -100,9 +96,15 @@ func TestFirstUseVerifyResultIsAChipAndOneActivityLine(t *testing.T) {
 	lookPath = func(string) (string, error) { return "/bin/true", nil }
 	defer func() { lookPath = execLookPath }()
 	w.loadFirstUse(context.Background())
-	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'v'})
-	w.handleBoardKey(KeyEvent{Type: KeyEnter})
-	<-src.verified
+	if in := w.homeIn(); in.verify == "" {
+		t.Fatal("no provider waits for its check")
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	select {
+	case <-src.verified:
+	case <-time.After(10 * time.Second):
+		t.Fatal("y did not run the check")
+	}
 	src.providers = []store.ProviderStatus{{Provider: "codex", VerifiedAt: now, ExpiresAt: now.Add(time.Hour)}}
 	waitFor(t, func() bool { return len(w.noteList()) == 1 && w.firstUse.busy == "" })
 	w.refreshProviders(context.Background())
@@ -110,8 +112,8 @@ func TestFirstUseVerifyResultIsAChipAndOneActivityLine(t *testing.T) {
 	if strings.Contains(text, " ANSWER ") || strings.Contains(text, "Native chat transport") {
 		t.Fatalf("the verify result covered the card:\n%s", text)
 	}
-	if !strings.Contains(text, "note Verified codex codex-cli 0.167.0") || !strings.Contains(text, "codex verified") {
-		t.Fatalf("no chip state and Activity line:\n%s", text)
+	if n := w.noteList(); len(n) != 1 || !strings.HasPrefix(n[0].Text, "Verified ") {
+		t.Fatalf("no Activity line: %+v", n)
 	}
 }
 

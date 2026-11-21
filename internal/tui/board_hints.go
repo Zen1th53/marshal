@@ -4,9 +4,6 @@ import (
 	"context"
 	"slices"
 	"strings"
-
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
-	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // boardHints is the hint bar of one paint: registry IDs in display order,
@@ -30,24 +27,10 @@ func (w *Workspace) boardHints(v boardVisual) []string {
 		lead, tail = []string{"picker.use", "picker.choose", "picker.keep"}, false
 	case w.composing(): // 3: typing
 		lead, tail = []string{"typing.send", "typing.cancel"}, false
-	case waitingGates(v.gates) > 0: // 5: a gate waits; more urgent than rule 4
-		lead = []string{"gate.reply"}
-	case v.empty && (v.planning || v.goalGiven): // 4: no run yet, the Marshal is planning a goal
-		lead = []string{"marshal.say", "firstuse.chat", "marshal.pick"}
-	case v.empty: // 4: no run on screen
-		lead = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick"}
-	case v.guard != nil: // 6: the guard's alert
-		lead = []string{"guard.undo", "guard.keep"}
-	case w.stuckUnderKeyboard(): // 7: a stuck task
-		lead = []string{"task.retry", "task.model", "task.inspect"}
-	case w.waitingUnderKeyboard(): // 8: a queued or sent-back task
-		lead = []string{"task.model", "task.inspect"}
-	case !inView && v.focus == layout.Inbox && len(v.board.Inbox) > 0: // 9: the inbox
-		lead = []string{"inbox.allow", "inbox.deny", "inbox.show"}
 	case inView: // 10: a body view's own keys
 		lead = v.viewHints()
-	default: // 11; w chooses the highlighted task's model
-		lead = []string{"board.move", "task.inspect", "marshal.say", "task.model"}
+	default: // the home screen's keys
+		lead = []string{"home.chat", "task.retry", "home.web", "marshal.say"}
 	}
 	out := lead
 	if tail {
@@ -139,24 +122,7 @@ func (w *Workspace) boardConfirmArmed() bool {
 	g.mu.Lock()
 	guard := g.alert != nil && g.armed
 	g.mu.Unlock()
-	return w.boardUI.retryArmed != "" || guard || w.gateArmed() != "" || w.firstUseArmed() != "" || w.inboxView.Confirming()
-}
-
-// stuckUnderKeyboard is rule 7: the task under the keyboard is stuck.
-func (w *Workspace) stuckUnderKeyboard() bool {
-	_, ok := stuckTaskUnderKeyboard(w)
-	return ok
-}
-
-// waitingUnderKeyboard is rule 8: the task under the keyboard has not
-// started or was sent back for rework.
-func (w *Workspace) waitingUnderKeyboard() bool {
-	id, ok := taskUnderKeyboard(w)
-	if !ok {
-		return false
-	}
-	row, _ := taskRow(w.marshalPanel().Board, id)
-	return row.State == boardmodel.TaskQueued || row.State == boardmodel.TaskRework
+	return w.boardUI.retryArmed != "" || guard || w.gateArmed() != "" || w.inboxView.Confirming()
 }
 
 // firstUseBoard reports whether the first-use card is on screen: the Board
@@ -165,42 +131,10 @@ func (w *Workspace) firstUseBoard() bool {
 	return w.boardVisible() && w.marshalPanel() == nil && !w.launchBlocked()
 }
 
-// guardAlerting reports whether the plan-only guard's alert is up; armed
-// reports whether its undo waits for Enter.
-func (w *Workspace) guardAlerting() (alert, armed bool) {
-	g := &w.guard
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.alert != nil, g.armed
-}
-
-// gateWaiting reports whether an owner gate's reply is still to send.
-func (w *Workspace) gateWaiting() bool {
-	return waitingGates(w.ownerGates(w.marshalPanel())) > 0
-}
-
 // pressing is a Run that presses ev through the path a keypress takes, so a
 // click on the hint does exactly what its key does.
 func pressing(ev KeyEvent) func(*Workspace, context.Context) {
 	return func(w *Workspace, ctx context.Context) { w.handleTerminalKey(ctx, ev) }
-}
-
-// beginInbox is a Run that opens the inbox's own confirmation for key on the
-// selected request, as the key pressed in the inbox does. It never decides:
-// only Enter in that confirmation does.
-func beginInbox(key rune) func(*Workspace, context.Context) {
-	return func(w *Workspace, _ context.Context) {
-		items := w.boardInbox()
-		if len(items) == 0 {
-			return
-		}
-		w.closeBodyViews()
-		w.boardHelp.Store(false)
-		w.boardUI.inspect = ""
-		w.boardUI.focus = layout.Inbox
-		w.inboxView.Update(items)
-		w.inboxView.Begin(key)
-	}
 }
 
 // boardHintKeymap is the hint bar's own rows: one per key and label a state
@@ -215,10 +149,6 @@ func init() {
 	confirmWhy := reason("Nothing is waiting for Enter.")
 	pickerOpen := func(w *Workspace) bool { return w.pickerOpen() || w.marshalPickerOpen() }
 	composing := func(w *Workspace) bool { return w.composing() }
-	firstUse := func(w *Workspace) bool { return w.firstUseBoard() }
-	firstUseWhy := reason("There is a run on screen.")
-	inboxWaiting := func(w *Workspace) bool { return len(w.boardInbox()) > 0 }
-	inboxWhy := reason("The inbox has nothing to decide.")
 	anyView := func(w *Workspace) bool { return w.anyBodyView() }
 	viewWhy := reason("No view is open.")
 	mem := func(w *Workspace) bool { return w.memView.Load() }
@@ -243,26 +173,6 @@ func init() {
 		// Rule 3.
 		row("typing.send", "Enter", "send", composing, reason("Nothing is being typed."), pressing(KeyEvent{Type: KeyEnter})),
 		row("typing.cancel", "Esc", "cancel", composing, reason("Nothing is being typed."), pressing(KeyEvent{Type: KeyEsc})),
-		// Rule 4: the first-use card's own keys.
-		row("say.build", "s", "say what to build", firstUse, firstUseWhy, pressing(KeyEvent{Type: KeyRune, Rune: 's'})),
-		row("firstuse.chat", "Enter", "chat", firstUse, firstUseWhy, func(w *Workspace, ctx context.Context) { w.focusChatFromBoard(ctx) }),
-		row("firstuse.verify", "v", "verify", func(w *Workspace) bool {
-			return w.firstUseBoard() && w.verifyNext() != ""
-		}, reason("Every installed provider is verified or busy."), func(w *Workspace, _ context.Context) {
-			w.armFirstUseVerify(w.verifyNext())
-		}),
-		// Rule 5: y arms the first unsent reply; Enter sends it.
-		row("gate.reply", "y", "reply", (*Workspace).gateWaiting, reason("Nothing is waiting for your reply."), pressing(KeyEvent{Type: KeyRune, Rune: 'y'})),
-		// Rule 6: undo opens its confirmation; keep dismisses the alert, as
-		// the alert's own K button does.
-		row("guard.undo", "u", "undo", func(w *Workspace) bool { alert, armed := w.guardAlerting(); return alert && !armed }, reason("No changed files wait for undo."), func(w *Workspace, _ context.Context) { w.guardArm() }),
-		row("guard.keep", "K", "keep", func(w *Workspace) bool { alert, _ := w.guardAlerting(); return alert }, reason("No changed files wait for a decision."), func(w *Workspace, _ context.Context) { w.clickGuard('K') }),
-		// Rules 7, 8 and 11: Enter on the selection.
-		row("task.inspect", "Enter", "inspect", func(w *Workspace) bool { return w.boardUI.task != "" || w.boardUI.lane != "" }, reason("Select a task or a lane first."), pressing(KeyEvent{Type: KeyEnter})),
-		// Rule 9: each opens the inbox's confirmation, never decides.
-		row("inbox.allow", "a", "allow", inboxWaiting, inboxWhy, beginInbox('a')),
-		row("inbox.deny", "d", "deny", inboxWaiting, inboxWhy, beginInbox('d')),
-		row("inbox.show", "i", "reason", inboxWaiting, inboxWhy, beginInbox('i')),
 		// Rule 10: a body view's keys, each its key's own path.
 		row("view.scroll", "j k", "scroll", anyView, viewWhy, nil),
 		row("view.select", "j k", "select", anyView, viewWhy, nil),

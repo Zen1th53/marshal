@@ -244,7 +244,7 @@ try {
     await evaluate(`location.hash = "#home"`);
     await sleep(200);
     check(await evaluate(`/Should I retry it from scratch/.test(document.getElementById("says-text").textContent) && document.getElementById("says-empty").hidden`), "home: The Marshal says");
-    check(await evaluate(`document.getElementById("you").textContent === "the Marshal asked you something" && document.getElementById("you-pill").classList.contains("act")`), "pill: the Marshal asked you something");
+    check(await evaluate(`document.getElementById("you").textContent === "the Marshal asked you something in chat" && document.getElementById("you-pill").classList.contains("act")`), "pill: the Marshal asked you something in chat (nowLine.chatAsked)");
 
     // Security, Verify and Memory: listed, dimmed, not links, no route.
     for (const width of [1440, 390]) {

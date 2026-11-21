@@ -55,6 +55,7 @@ type Board struct {
 	Paused   *Paused   // non-nil: the paused card is shown
 	Keys     []Key
 	System   System
+	Web      Web
 	// MarshalSays is the Marshal chat's last turn to the owner.
 	MarshalSays MarshalSays
 }
@@ -101,6 +102,20 @@ type NowLine struct {
 	Work      string
 	FromYou   string
 	FromYouOK bool // true: nothing needed (green); false: owner action (yellow)
+	// ChatAsked is set when FromYou is the Marshal's question in its chat:
+	// its last turn ended asking the owner something and the chat's input
+	// sits idle, so the answer is typed in the chat, not on a card.
+	ChatAsked bool
+}
+
+// ChatAskedLine is FromYou while the Marshal waits on its question in chat.
+const ChatAskedLine = "the Marshal asked you something in chat"
+
+// Web is the Web Board's state, for the line that says where it is.
+type Web struct {
+	Running   bool // the server is up
+	Opened    bool // the browser was opened on it
+	NoDisplay bool // no display here: the link must be opened by hand (/marshal web)
 }
 
 // Marshal is the Marshal pane and the Marshal segment of the top bar.

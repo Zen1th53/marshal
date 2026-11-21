@@ -209,44 +209,6 @@ func (w *Workspace) requestExit() {
 	w.mu.Unlock()
 }
 
-// nextEntry is the open card as the inbox shows it: the counts on at most two
-// rows, then the "What next?" keys. x is the inbox's first cell, row its
-// frame row.
-func (v boardVisual) nextEntry(c nextCard, x, row, w int) []string {
-	flag := "⚑ "
-	if !v.unicode() {
-		flag = "! "
-	}
-	head := v.fg("merged", flag+"done") + v.fg("dim", " · ")
-	prefix := VisibleLen(head)
-	lines := wrapWords(cleanBoard(c.line()), max(8, w-prefix))
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-	out := []string{PadCell(head+v.bold(v.fg("white", lines[0])), w)}
-	for _, extra := range lines[1:] {
-		out = append(out, PadCell(strings.Repeat(" ", prefix)+v.bold(v.fg("white", extra)), w))
-	}
-	crow := row + len(out)
-	line := "    " + v.fg("dim", "What next?") + "  "
-	at := 4 + VisibleLen("What next?") + 2
-	button := func(key, label, id string) {
-		b := v.bg("rule", "["+key+"]") + " " + label
-		v.hit(boardHit{row: crow, x0: x + at, x1: x + min(w, at+VisibleLen(b)), kind: hitNext, id: id})
-		line += b
-		at += VisibleLen(b)
-	}
-	button("n", "new goal", "n")
-	line += "  "
-	at += 2
-	button("d", "details", "d")
-	line += "  "
-	at += 2
-	button("q", "quit", "q")
-	out = append(out, PadCell(line, w))
-	return out
-}
-
 // nextCount is 1 while the card is open, for the inbox's counts.
 func (v boardVisual) nextCount() int {
 	if v.next != nil {

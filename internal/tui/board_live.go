@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/app"
-	"github.com/Zen1th53/marshal/internal/permission"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -13,13 +11,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/permission"
+
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/tui/board/anim"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inspector"
 )
 
 // boardFollowEvery is how often the Board looks for new decisions and
@@ -415,9 +415,10 @@ func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p 
 type boardUI struct {
 	focus     layout.PaneID
 	stopArmed bool
+	// homeYesAt is when y last ran the home screen's safe action (homeYes).
+	homeYesAt time.Time
 	task      string // selected task
 	lane      string // selected lane's worker
-	inspect   string // task open in the inspector
 	ack       string // command answer already seen; the footer stops showing it
 	ackSeq    uint64 // output sequence when ack was taken: a repeated answer is new
 	note      string // run note last painted
@@ -433,29 +434,9 @@ type boardUI struct {
 	// outSeq is the workspace's output sequence at the last paint, so a
 	// run note and a command answer arriving together keep the answer.
 	outSeq uint64
-	// insp is the inspector on screen, kept across paints so its
-	// navigation survives them; inspFor is the task it opened on.
-	insp    *inspector.View
-	inspFor string
 	// retryArmed is the stuck task whose retry r has armed: the footer asks
 	// for Enter and the next key runs it or cancels (board_retry.go).
 	retryArmed string
-}
-
-// inspector is the one inspector for taskID, fed the Board just
-// projected. Opening another task starts a fresh one.
-func (u *boardUI) inspector(b boardmodel.Board, taskID string) *inspector.View {
-	if u.insp == nil || u.inspFor != taskID {
-		u.insp, u.inspFor = inspector.New(b, taskID), taskID
-	} else {
-		u.insp.SetBoard(b)
-	}
-	return u.insp
-}
-
-// closeInspector closes the open inspector; the next one opens fresh.
-func (u *boardUI) closeInspector() {
-	u.inspect, u.insp, u.inspFor = "", nil, ""
 }
 
 func (u *boardUI) pane(inbox bool) layout.PaneID {
@@ -478,9 +459,6 @@ func (u *boardUI) clamp(b boardmodel.Board) {
 		if len(b.Tasks) > 0 {
 			u.task = b.Tasks[0].ID
 		}
-	}
-	if u.inspect != "" && !has(u.inspect) {
-		u.inspect = ""
 	}
 	if !slices.ContainsFunc(b.Lanes, func(l boardmodel.Lane) bool { return l.Worker == u.lane }) {
 		u.lane = ""
@@ -564,7 +542,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		frame = a.Frame()
 	}
 	var hits []boardHit
-	v := boardVisual{board: b, now: boardNow(), theme: th, frame: frame, selectedTask: ui.task, selectedInbox: w.inboxView.Selected(), focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
+	v := boardVisual{board: b, now: boardNow(), theme: th, frame: frame, focus: focus, edition: boardEdition(), note: p.Note, stopped: p.Stopped, stall: sv.stall, stopArmed: ui.stopArmed, hits: &hits}
 	// The shipped header shows "Marshal leads" when the Marshal leads
 	// acceptance. A fresh project has no run yet, so it reads the default.
 	accMode := p.run.Settings.AcceptanceMode
@@ -572,7 +550,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		accMode = marshal.DefaultSettings().AcceptanceMode
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
-	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
+	v.empty, v.docked, v.notes = empty, w.dock.docked.Load(), w.noteList()
 	v.planning = w.planningNow(empty, state.Goal)
 	if goal, ok := w.activeGoalNow(empty, state.Goal); ok {
 		v.goalGiven = true
@@ -591,10 +569,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	v.quotaArmed = w.quotaCard.isArmed()
 	if empty {
 		v.project = filepath.Base(w.providerRoot())
-		v.chips, v.armed = w.firstUseChips(v.now), w.firstUseArmed()
-	}
-	if focus == layout.Lanes {
-		v.selectedLane = ui.lane
+		v.armed = w.firstUseArmed()
 	}
 	// The vitals row's data: host, provider readiness and quota, gathered off
 	// the paint path (board_vitals.go).
@@ -663,29 +638,20 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	// The hint bar follows the state this paint shows (board_hints.go).
 	v.indexing = w.knowledgeIndexLine(v.unicode())
 	v.hints = w.boardHints(v)
-	v.tails = w.laneTailFor
-	v.tailWant = w.laneTailWant()
 	pickerOpen := w.pickerOpen()
 	if pickerOpen {
 		v.pick = w.pickerPaint()
 	}
-	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
+	l := layout.Compute(cols, rows, w.boardLayoutMode())
 	if outside {
-		l = layout.ComputeFor(cols, rows+1, w.boardLayoutMode(), v.layoutCounts()).WithoutVitals()
+		l = layout.Compute(cols, rows+1, w.boardLayoutMode()).WithoutVitals()
 	}
 	var lines []string
-	_, docked := l.Pane(layout.Inspector)
 	// The opening animation (P2-03) owns the body on the first paints of a
 	// fresh Board, before the first-use card or the Blocked screen.
 	// Only a v2 paint puts a v2 card on screen; every other paint takes it
 	// off, so its keys stop acting (boardv2_paint.go).
 	w.setV2CardShown("")
-	// Only a v2 paint stops the lane-tail sampler; every other paint may
-	// draw the classic lanes pane, which shows the tails.
-	w.laneTail.v2Painted.Store(false)
-	// v2KeyRow is the Board v2 key bar's row, -1 when v2 did not paint;
-	// like the classic hint bar it stays clickable under an overlay.
-	v2KeyRow := -1
 	var openingShow, openingChecking bool
 	var openingFrame int
 	if empty {
@@ -693,7 +659,6 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	}
 	switch {
 	case openingShow:
-		ui.insp, ui.inspFor = nil, ""
 		lines = w.paintOpening(l, th, v, openingFrame, openingChecking)
 	case w.launchBlocked():
 		// A problem the Marshal can't fix safely replaces the Board body with
@@ -701,7 +666,6 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		lines = w.paintBlocked(l, th, v)
 	case pickerOpen:
 		// The launch Marshal picker owns the body until it is answered.
-		ui.insp, ui.inspFor = nil, ""
 		lines = w.paintPicker(l, th, v)
 	case v.archView:
 		lines = w.paintArch(l, th, v)
@@ -717,29 +681,11 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		lines = w.paintMemory(l, th, v)
 	case v.hostView:
 		lines = paintHost(l, th, v, ui)
-	case ui.inspect != "":
-		lines = paintBoardInspector(l, th, ui.inspector(b, ui.inspect), v.render, v.hit)
-	case docked && ui.task != "" && !w.v2Fits(cols, rows):
-		// A docked inspector shows the selected task without being opened.
-		// Board v2 has no docked inspector: where v2 fits it draws the
-		// Board, as on narrower screens (the task is still selected).
-		lines = paintBoardInspector(l, th, ui.inspector(b, ui.task), v.render, v.hit)
-	case w.v2Fits(cols, rows):
-		// The Board v2 screens draw the home and run views and every
-		// owner card (boardv2_paint.go); MARSHAL_BOARD=classic keeps the
-		// classic ones.
-		ui.insp, ui.inspFor = nil, ""
-		w.laneTail.v2Painted.Store(true)
-		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
-		v2KeyRow = len(lines) - 2
-	case empty:
-		ui.insp, ui.inspFor = nil, ""
-		lines = paintFirstUse(l, th, v)
 	default:
-		// Nothing shows an inspector: a later one opens fresh, however
-		// this one was closed.
-		ui.insp, ui.inspFor = nil, ""
-		lines = paintBoard(l, th, v.render)
+		// The home screen: what is happening, the one thing needed from
+		// the owner and where the Web Board is (board_home.go). Nothing
+		// shows an inspector: a later one opens fresh.
+		lines = w.paintHome(v, cols, l.Rows)
 	}
 	var overlayHits []boardHit
 	if len(popup) == 0 && w.boardHelp.Load() {
@@ -784,14 +730,14 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	if len(popup) > 0 {
 		lines = overlayBoard(lines, l, th, 0, popup)
 	}
-	if len(popup) > 0 || (ui.inspect != "" && !docked) {
+	if len(popup) > 0 {
 		// Something covers the body: only the header, the hint bar and the
 		// inspector's own buttons stay clickable; a popup covers those too.
 		// The Marshal picker overlay keeps its own rows clickable, and the
 		// hint bar's row is never covered.
 		footer, _ := l.Pane(layout.Footer)
 		hits = slices.DeleteFunc(hits, func(h boardHit) bool {
-			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && (h.row == footer.Rect.Y || h.row == v2KeyRow) {
+			if marshalPickerPopup && h.kind == hitPicker || h.kind == hitAction && h.row == footer.Rect.Y {
 				return false
 			}
 			return h.kind != hitChip && (h.kind != hitInspect || len(popup) > 0)
@@ -829,26 +775,35 @@ func (w *Workspace) providerDots(now time.Time) map[string]string {
 // runs while the composer holds text or an inbox confirmation is open, and
 // inside the inbox only t and l, which move focus away, are taken.
 func (w *Workspace) handleBoardKey(event KeyEvent) bool {
-	if !w.boardVisible() || w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
+	if !w.boardVisible() {
+		return false
+	}
+	// The launch Marshal picker is modal while it is open: it must be
+	// answered before the chat starts, and it owns the keys even over a
+	// draft left in the composer or its completion menu. Function keys and
+	// Ctrl chords go on to the global keys.
+	if w.pickerOpen() {
+		if w.completionOpen {
+			w.closeCompletion()
+		}
+		if w.handlePickerKey(event) {
+			return true
+		}
+		switch event.Type {
+		case KeyRune, KeyBackspace, KeyEnter, KeyEsc, KeyTab, KeyShiftTab, KeyUp, KeyDown, KeyLeft, KeyRight:
+			return true
+		}
+		return false
+	}
+	if w.diffViewer.IsOpen() || w.palette.IsOpen() || w.completionOpen {
 		return false
 	}
 	w.mu.RLock()
-	p := w.state.Marshal
 	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
 	w.mu.RUnlock()
-	// A Board v2 decision or paused card on screen takes its keys first
-	// (boardv2_cards_keys.go); MARSHAL_BOARD=classic never shows one.
-	if w.v2CardKey(event) {
-		return true
-	}
 	if w.inboxView.Confirming() || w.composing() {
 		return false
 	}
-	empty := p == nil
-	if empty {
-		p = &MarshalPanel{}
-	}
-	ui := &w.boardUI
 	// A key during the opening animation (P2-03) ends it and is consumed, so
 	// it never reaches the Board; q and Ctrl+C still quit (Ctrl+C is handled
 	// before this path). A mouse click ends it too (board_mouse.go).
@@ -856,290 +811,68 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		w.endOpening()
 		return !(event.Type == KeyRune && event.Rune == 'q')
 	}
-	if ui.stopArmed {
-		ui.stopArmed = false
-		if event.Type == KeyEnter && len(w.boardInbox()) == 0 {
-			if stop, ok := w.stopVisual(p).stopNotice(); ok {
-				w.actOnStop(context.Background(), stop)
-			}
-		}
-		return true
+	if !w.anyBodyView() {
+		return w.handleHomeKey(event)
 	}
-	// Project files changed outside a run: u arms the undo, which Enter
-	// runs and any other key cancels; K keeps them (board_guard.go).
-	if w.handleGuardKey(event) {
-		return true
-	}
-	// The launch Marshal picker is modal while it is open: it must be
-	// answered before the chat starts.
-	if w.pickerOpen() {
-		if w.handlePickerKey(event) {
-			return true
-		}
-	}
-	// The "what next?" card after a run closes takes n, d and q while it is
-	// open, before the other cards: n starts the next goal, d opens the
-	// Verify view, q quits through the normal exit (board_next.go).
-	if w.handleNextKey(event) {
-		return true
-	}
-	// An open ask card takes its keys next: Enter picks the recommended
-	// choice, each letter picks its own; the card closes when one sends.
-	if w.handleAskKey(event) {
-		return true
-	}
-	// The requirements card's keys come next, after any ask card: Enter
-	// confirms once every line is filled, e edits a line.
-	if w.handleRequirementsKey(event) {
-		return true
-	}
-	// An open change card takes its keys after the ask and requirements
-	// cards: Enter applies the change, k keeps the current goal; other keys
-	// fall through.
-	if w.handleChangeKey(event) {
-		return true
-	}
-	// The v2 readiness screen's own cards (Usage counts, the agy sign-in)
-	// take their keys while drawn, before y reaches the gates.
-	if empty && !w.anyBodyView() && ui.inspect == "" && w.handleV2ReadyKey(context.Background(), event) {
-		return true
-	}
-	// An owner gate's armed reply takes the next key: Enter sends it,
-	// anything else cancels. y arms the first gate still waiting.
-	if w.handleGateKey(event, w.state.Marshal) {
-		return true
-	}
-	// a opens the project architecture in the browser between goals and
-	// during a run. While the inbox holds a decision a is its "allow once",
-	// so the Board leaves the key to the inbox. It never answers a
-	// permission or accepts a draft.
-	if event.Type == KeyRune && event.Rune == 'a' && !w.anyBodyView() && ui.inspect == "" && !w.inboxView.Inspecting() && len(w.boardInbox()) == 0 {
-		response, err := w.marshalArchitecture(context.Background(), "", "")
-		w.recordCommandResult("/marshal architecture", response, err)
-		return true
-	}
-	// r armed a stuck task's retry: Enter runs it, any other key cancels.
-	if w.handleRetryKey(event) {
-		return true
-	}
-	// The all-providers-at-limit card's keys: r arms auto-resume, s stops
-	// here (board_quota.go).
-	if w.handleQuotaKey(event, p.Board.Run) {
-		return true
-	}
-	// s opens the composer for a message to the Marshal, from the Board
-	// or any of its views.
-	if event.Type == KeyRune && event.Rune == 's' && ui.inspect == "" && !w.inboxView.Inspecting() {
+	// s opens the composer for a message to the Marshal from any view.
+	if event.Type == KeyRune && event.Rune == 's' {
 		w.openSay()
 		return true
 	}
-	// The first-use card's own keys, when it is what the body shows and
-	// no decision waits in the inbox.
-	if empty && !w.anyBodyView() && ui.inspect == "" && !w.inboxView.Inspecting() && len(w.boardInbox()) == 0 && w.handleFirstUseKey(context.Background(), event) {
-		return true
-	}
-	if w.archView.Load() {
+	switch {
+	case w.archView.Load():
 		return w.handleArchKey(event)
-	}
-	if w.planView.Load() {
+	case w.planView.Load():
 		return w.handlePlanKey(event)
-	}
-	if w.secView.Load() {
+	case w.secView.Load():
 		return w.handleSecurityKey(event)
-	}
-	if w.verView.Load() {
+	case w.verView.Load():
 		return w.handleVerifyKey(event)
-	}
-	if w.provView.Load() {
+	case w.provView.Load():
 		return w.handleProviderKey(event)
-	}
-	if w.memView.Load() {
+	case w.memView.Load():
 		return w.handleMemoryKey(event)
-	}
-	if w.hostView.Load() {
+	case w.hostView.Load():
 		return w.handleHostKey(event)
 	}
-	// 3 opens the Memory view under the same rules.
-	if event.Type == KeyRune && event.Rune == '3' && ui.inspect == "" && !w.inboxView.Inspecting() && w.memorySrc() != nil {
-		w.openMemoryView()
-		return true
+	return false
+}
+
+// openViewKey opens a view from the home screen by its key: 2 or h the
+// Host view, 3 Memory, 4 Providers, 5 Verify, 6 Security, 7 Plan, 8 or b
+// Architecture, each when it can open.
+func (w *Workspace) openViewKey(event KeyEvent) bool {
+	if event.Type != KeyRune {
+		return false
 	}
-	// 4 opens the Providers view under the same rules.
-	if event.Type == KeyRune && event.Rune == '4' && ui.inspect == "" && !w.inboxView.Inspecting() && w.providerSrc() != nil {
-		w.openProviderView()
-		return true
-	}
-	// 5 opens the Verify view under the same rules.
-	if event.Type == KeyRune && event.Rune == '5' && ui.inspect == "" && !w.inboxView.Inspecting() && w.verifySrc() != nil {
-		w.openVerifyView()
-		return true
-	}
-	// 6 opens the Security view under the same rules.
-	if event.Type == KeyRune && event.Rune == '6' && ui.inspect == "" && !w.inboxView.Inspecting() && w.securitySrc() != nil {
-		w.openSecurityView()
-		return true
-	}
-	// 7 opens the Plan view, and b or 8 the Architecture view, under the
-	// same rules.
-	if event.Type == KeyRune && (event.Rune == '7' || event.Rune == 'b' || event.Rune == '8') && ui.inspect == "" && !w.inboxView.Inspecting() && w.switchBodyView(event) {
-		return true
-	}
-	// h and 2 open the Host view, as the prototype's keys do, when
-	// nothing else is open over the Board.
-	if event.Type == KeyRune && (event.Rune == 'h' || event.Rune == '2') && ui.inspect == "" && !w.inboxView.Inspecting() && w.hostWatch.Load() != nil {
-		ui.hostScroll = 0
-		w.hostView.Store(true)
-		return true
-	}
-	// 1 is the Board: it closes the inspector, as it closes any view.
-	if event.Type == KeyRune && event.Rune == '1' && !w.inboxView.Inspecting() {
-		ui.inspect = ""
-		return true
-	}
-	ui.clamp(p.Board)
-	inbox := len(w.boardInbox()) > 0
-	_, stopped := w.stopVisual(p).stopNotice()
-	focus := ui.pane(inbox || stopped)
-	move := 0
-	switch {
-	case event.Type == KeyUp || event.Type == KeyRune && event.Rune == 'k':
-		move = -1
-	case event.Type == KeyDown || event.Type == KeyRune && event.Rune == 'j':
-		move = 1
-	}
-	taskID := func(t boardmodel.TaskRow) string { return t.ID }
-	if ui.inspect != "" {
-		// The inspector keeps its own navigation: e toggles all events,
-		// Enter walks down the delegation chain, Backspace up it and, at
-		// the top, closes like Esc.
-		if event.Type == KeyRune && event.Rune == 'D' && w.openTaskDiff(ui.inspect) {
+	switch event.Rune {
+	case '3':
+		if w.memorySrc() != nil {
+			w.openMemoryView()
 			return true
 		}
-		v := ui.inspector(p.Board, ui.inspect)
-		switch {
-		case event.Type == KeyEsc || event.Type == KeyRune && event.Rune == 'q':
-			// q closes too, as the mockup's inspector bar says; it never
-			// starts a command in the composer behind the inspector.
-			ui.closeInspector()
-		case event.Type == KeyBackspace:
-			if !v.Key('\b') {
-				ui.closeInspector()
-			}
-		case event.Type == KeyEnter:
-			v.Key('\n')
-		case event.Type == KeyRune && event.Rune == 'e':
-			v.Key('e')
-		case move != 0:
-			ui.task = step(p.Board.Tasks, taskID, ui.task, move)
-			ui.inspect = ui.task
-		case event.Type == KeyRune && event.Rune == 'r':
-			// A stuck or returned task with no waiting decision: r arms its
-			// retry. A waiting decision keeps r as its "return"; any other
-			// task says why r does nothing, never typing the r.
-			if id, why := retryTarget(w); why == "" {
-				w.armRetry(id)
-			} else if w.taskHasDecision(ui.inspect) {
-				w.inspectorDecision(ui.inspect, event.Rune)
-			} else {
-				w.setOutput(why, false)
-			}
-		case event.Type == KeyRune && strings.ContainsRune("aAdrxi", event.Rune):
-			// The decision keys act on the task's waiting decision: they
-			// take it to the inbox and open the same confirmation the
-			// inbox key opens, never deciding. Without one they say so
-			// instead of typing the letter into the composer behind.
-			w.inspectorDecision(ui.inspect, event.Rune)
-		case event.Type == KeyRune && event.Rune == 'o':
-			w.inspectorWorkerPane(p.Board, ui.inspect)
-		case event.Type == KeyRune && event.Rune == 'w':
-			// w chooses the model that runs the inspected task (P5-05).
-			w.openTaskModelPicker(context.Background(), ui.inspect)
-		default:
-			return false
-		}
-		return true
-	}
-	// w chooses the model that runs the task under the keyboard (P5-05); with
-	// no task it opens the Board in the browser (the Web Board).
-	if event.Type == KeyRune && event.Rune == 'w' {
-		if id, ok := taskUnderKeyboard(w); ok {
-			w.openTaskModelPicker(context.Background(), id)
-		} else {
-			w.openWebBoardKey()
-		}
-		return true
-	}
-	if event.Type == KeyTab || event.Type == KeyShiftTab {
-		// Tab is the next pane, Shift+Tab the one before, as the
-		// design's key table has it. Command completion still runs once
-		// the composer holds text ("/" then Tab), because the Board takes
-		// no key while it does.
-		order := []layout.PaneID{layout.Tasks, layout.Lanes, layout.Inbox}
-		i := max(0, slices.Index(order, focus))
-		if event.Type == KeyTab {
-			i = (i + 1) % len(order)
-		} else {
-			i = (i + len(order) - 1) % len(order)
-		}
-		ui.focus = order[i]
-		return true
-	}
-	if event.Type == KeyRune {
-		switch event.Rune {
-		case 't':
-			ui.focus = layout.Tasks
-			return true
-		case 'l':
-			ui.focus = layout.Lanes
-			return true
-		case 'i':
-			if focus != layout.Inbox {
-				ui.focus = layout.Inbox
-				return true
-			}
-		}
-	}
-	// r retries the stuck task under the keyboard. While the inbox holds a
-	// request r stays its "return"; otherwise r always answers, and never
-	// reaches the composer as a message to the Marshal.
-	if event.Type == KeyRune && event.Rune == 'r' && !empty {
-		if id, why := retryTarget(w); why == "" {
-			w.armRetry(id)
-			return true
-		} else if !inbox {
-			w.setOutput(why, false)
+	case '4':
+		if w.providerSrc() != nil {
+			w.openProviderView()
 			return true
 		}
-	}
-	switch focus {
-	case layout.Tasks:
-		switch {
-		case move != 0:
-			ui.task = step(p.Board.Tasks, taskID, ui.task, move)
-			return true
-		case event.Type == KeyEnter && ui.task != "":
-			ui.inspect = ui.task
+	case '5':
+		if w.verifySrc() != nil {
+			w.openVerifyView()
 			return true
 		}
-	case layout.Lanes:
-		if move != 0 {
-			ui.lane = step(p.Board.Lanes, func(l boardmodel.Lane) string { return l.Worker }, ui.lane, move)
+	case '6':
+		if w.securitySrc() != nil {
+			w.openSecurityView()
 			return true
 		}
-		if event.Type == KeyEnter {
-			return w.enterLane(p.Board)
-		}
-	case layout.Inbox:
-		// An empty inbox still owns movement, so j and k never fall
-		// through into the composer.
-		if move != 0 && !inbox {
+	case '7', 'b', '8':
+		return w.switchBodyView(event)
+	case 'h', '2':
+		if w.hostWatch.Load() != nil {
+			w.boardUI.hostScroll = 0
+			w.hostView.Store(true)
 			return true
-		}
-		if event.Type == KeyEnter && !inbox {
-			if _, ok := w.stopVisual(p).stopNotice(); ok {
-				ui.stopArmed = true
-				return true
-			}
 		}
 	}
 	return false
@@ -1246,7 +979,7 @@ func (w *Workspace) enterLane(b boardmodel.Board) bool {
 		return true
 	}
 	if lane.TaskID != "" && slices.ContainsFunc(b.Tasks, func(t boardmodel.TaskRow) bool { return t.ID == lane.TaskID }) {
-		ui.task, ui.inspect = lane.TaskID, lane.TaskID
+		ui.task = lane.TaskID
 		return true
 	}
 	w.memoryAnswer(cleanBoard(lane.Worker)+" has no pane to show and no task to inspect", false)
@@ -1404,7 +1137,6 @@ func (w *Workspace) inspectorDecision(taskID string, key rune) {
 	want := slices.IndexFunc(items, func(it boardmodel.InboxItem) bool { return it.Request.TaskID == taskID })
 	if want < 0 && key == 'i' && len(items) > 0 {
 		// The inspector's i also points at the inbox as a whole.
-		ui.closeInspector()
 		ui.focus = layout.Inbox
 		return
 	}
@@ -1416,7 +1148,6 @@ func (w *Workspace) inspectorDecision(taskID string, key rune) {
 	if cur >= 0 && cur != want {
 		w.inboxView.Move(want - cur)
 	}
-	ui.closeInspector()
 	ui.focus = layout.Inbox
 	if key != 'i' {
 		w.inboxView.Begin(key)

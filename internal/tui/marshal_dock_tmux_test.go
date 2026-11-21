@@ -98,7 +98,7 @@ func TestRealTmuxMarshalDock(t *testing.T) {
 	now := time.Date(2026, 11, 2, 14, 2, 31, 0, time.UTC)
 	b := demoBoard(now)
 	th := NewTheme(ThemeDefault, true, true)
-	v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, selectedTask: "T-023", selectedInbox: b.Inbox[0].Request.Key(), focus: layout.Tasks, edition: "Marshal"}
+	v := boardVisual{board: b, now: now, theme: th, frame: anim.Frame{}, focus: layout.Tasks, edition: "Marshal"}
 	frame := paintBoard(layout.Compute(100, 49, w.boardLayoutMode()), th, v.render)
 	if err := os.WriteFile(filepath.Join(work, "frame"), []byte(strings.Join(frame, "\r\n")), 0o600); err != nil {
 		t.Fatal(err)
@@ -198,8 +198,6 @@ func writeDockANS(t *testing.T, ctx context.Context, chat, board, path string) {
 // the chat, F11 typed on an attached client returns it to the Board, and
 // exit gives the chat its window back and stops the reconciler.
 func TestRealTmuxDockThroughTheKeyPath(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
@@ -269,7 +267,7 @@ func TestRealTmuxDockThroughTheKeyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines, _, _ := w.frameLines(g.PaneWidth, 40)
-	if plain := StripANSI(strings.Join(lines, "\n")); !strings.Contains(plain, "TASKS") || len(lines) != 40 {
+	if plain := StripANSI(strings.Join(lines, "\n")); !strings.Contains(plain, "From you:") || len(lines) != 40 {
 		t.Fatalf("Board frame beside the chat:\n%s", plain)
 	}
 

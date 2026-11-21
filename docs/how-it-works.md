@@ -13,7 +13,7 @@ Marshal coordinates multiple AI coding agents to complete software engineering g
 
 ## 1. Plan (Drafting Phase)
 
-A run begins when you provide a goal—either by pressing `s` on the Board or typing into the docked chat pane. The Marshal fills a requirements card; press `Enter` to confirm all, or `e` to edit an answer.
+A run begins when you provide a goal—either by pressing `s` on the Board or typing into the docked chat pane. The Marshal fills a requirements card; confirm all on the Web Board or with `y` on the Board, or press `e` and a line's letter to edit an answer.
 
 1. **Clarification**: The model acting as the **Marshal** analyzes your repository structure, asks clarifying questions if requirements are ambiguous, and aligns on technical constraints.
 2. **Architecture Contract**: The Marshal drafts an architectural proposal and project contract. The **Accept architecture** card opens on the Board (`YOUR TURN`); press `a` (or `y`) to open the architecture in your browser and accept it there. Without a browser, the card shows the review's link. This is the owner gate.
@@ -51,7 +51,7 @@ To prevent models from overlooking their own mistakes, Marshal enforces **cross-
 After the tasks finish, Marshal prepares for integration:
 
 - **Final check**: An independent check evaluates the integrated solution and reruns its checks.
-- **Claude Code requirement**: The final ULTRA check requires Claude Code installed and not used as a worker in that run. If unavailable, the run stops before the check and tells you to install Claude Code or wait for its limit, then press `Enter`.
+- **Claude Code requirement**: The final ULTRA check requires Claude Code installed and not used as a worker in that run. If unavailable, the run stops before the check and tells you to install Claude Code or wait for its limit, then continue with `y` (or the Web Board's button).
 - **Objective Proof**: Completion is based on real execution status, process exit codes, and test outputs, not on model self-assertions.
 
 ---

@@ -33,7 +33,7 @@ func fixtureRunning() vm.Board {
 		Screen:  vm.ScreenRunning,
 		Now:     at(19, 31),
 		Top:     vm.TopBar{Version: "v0.3.5", Project: "marshal-work", Run: "review-fixes", State: "RUNNING", StateTone: vm.ToneInfo, Workers: 8, Clock: at(19, 31)},
-		NowLine: vm.NowLine{Marshal: "claude Opus · watching reviews", Work: "8 running · 4 queued", FromYou: "nothing · next ask: final review", FromYouOK: true},
+		NowLine: vm.NowLine{Marshal: "claude Opus · watching reviews", Work: "8 running · 4 queued", FromYou: vm.ChatAskedLine, ChatAsked: true},
 		Marshal: marshalClaude("high"),
 		Plan: vm.Plan{Title: "12 tasks · 18 requirements", Accepted: "accepted rev 1 · 18:52",
 			Stages: []vm.Stage{{Name: "goal", State: "done"}, {Name: "reqs", State: "done"}, {Name: "design", State: "done"}, {Name: "arch", State: "done"},

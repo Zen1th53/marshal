@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
@@ -79,11 +78,8 @@ func TestWebActRetryIsTheKey(t *testing.T) {
 	defer v2Cards.Delete(w)
 	w.webBoard() // a Web Board is open
 	w.permissions.inbox = nil
-	w.noteWebRetry()
-	if f := webboard.FromBoard(w.webBoardFrame()); slices.ContainsFunc(f.Keys, func(k webboard.Key) bool { return k.Key == "r" }) {
-		t.Fatalf("Retry offered with no task under the keyboard: %+v", f.Keys)
-	}
-	w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = layout.Tasks, "T-023", ""
+	// The stuck task is offered with nothing selected: the home has no
+	// task list to select in.
 	w.noteWebRetry()
 	f := webboard.FromBoard(w.webBoardFrame())
 	if f.Decision != nil || f.Paused != nil {

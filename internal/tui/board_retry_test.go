@@ -6,63 +6,10 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
-
-// r arms a retry only on a stuck task with no waiting decision; with a
-// decision waiting it keeps its inbox meaning, and a working task does not
-// arm.
-func TestBoardRetryArmsOnlyOnAStuckTask(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	defer w.Close()
-	ctx := t.Context()
-	press := func(e KeyEvent) bool { return w.handleBoardKey(e) || w.handleBoardInboxKey(ctx, e) }
-
-	// (a) T-023 is parked with a network request waiting: r opens that
-	// request's return, as today, and arms nothing.
-	w.boardUI.focus, w.boardUI.task = layout.Tasks, "T-023"
-	if !press(KeyEvent{Type: KeyRune, Rune: 'r'}) {
-		t.Fatal("r was not taken on the parked task with a request")
-	}
-	if !w.inboxView.Confirming() {
-		t.Fatal("r did not open the inbox return")
-	}
-	if w.boardUI.retryArmed != "" {
-		t.Fatalf("r armed a retry though a request waits: %q", w.boardUI.retryArmed)
-	}
-	w.inboxView.Cancel()
-
-	// (b) With no request waiting, r arms the retry and the footer asks for
-	// Enter; x cancels it and says nothing changed.
-	w.permissions.inbox = nil
-	w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = layout.Tasks, "T-023", ""
-	if !press(KeyEvent{Type: KeyRune, Rune: 'r'}) || w.boardUI.retryArmed != "T-023" {
-		t.Fatalf("r did not arm the retry: armed %q", w.boardUI.retryArmed)
-	}
-	if frame := plainFrame(w, 120, 40); !strings.Contains(frame, "Retry T-023") {
-		t.Fatalf("footer lacks the arm prompt:\n%s", frame)
-	}
-	if !press(KeyEvent{Type: KeyRune, Rune: 'x'}) || w.boardUI.retryArmed != "" {
-		t.Fatalf("x did not cancel the arm: armed %q", w.boardUI.retryArmed)
-	}
-	w.mu.RLock()
-	answer := w.state.LastOutput
-	w.mu.RUnlock()
-	if answer != "Retry cancelled; nothing changed." {
-		t.Fatalf("cancel answer %q", answer)
-	}
-
-	// (c) A working task does not arm.
-	w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = layout.Tasks, "T-017", ""
-	press(KeyEvent{Type: KeyRune, Rune: 'r'})
-	if w.boardUI.retryArmed != "" {
-		t.Fatalf("r armed on a working task: %q", w.boardUI.retryArmed)
-	}
-}
 
 // Enter on an armed retry runs the retry and, when no other stuck task holds
 // the run, the resume; otherwise only the retry, and the answer says so.
@@ -142,29 +89,5 @@ func TestPlainRetryError(t *testing.T) {
 				t.Fatalf("plainRetryError = %q, want %q", got, c.want)
 			}
 		})
-	}
-}
-
-// While the run is stopped an unset focus is the inbox's stop entry, as
-// handleBoardKey reads it, so the stuck task is not the one under the
-// keyboard until the Tasks pane is focused.
-func TestBoardRetryFollowsTheStopFocus(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	defer w.Close()
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil
-	w.permissions.mu.Unlock()
-	w.mu.Lock()
-	stopped := *w.state.Marshal
-	stopped.Note, stopped.Stopped = "stopped: worker exited 2", true
-	w.state.Marshal = &stopped
-	w.mu.Unlock()
-	w.boardUI.focus, w.boardUI.task, w.boardUI.inspect = "", "T-023", ""
-	if id, ok := stuckTaskUnderKeyboard(w); ok {
-		t.Fatalf("the stop entry has the keyboard, yet %q reads as under it", id)
-	}
-	w.boardUI.focus = layout.Tasks
-	if id, ok := stuckTaskUnderKeyboard(w); !ok || id != "T-023" {
-		t.Fatalf("with the Tasks pane focused got %q, %v; want T-023", id, ok)
 	}
 }

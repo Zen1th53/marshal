@@ -27,9 +27,9 @@ func TestLaunchScreensCarryVitals(t *testing.T) {
 		v.project = "proj"
 		v.pick = pickerView{cands: []pickerCand{{provider: "codex", left: 29, known: true}, {provider: "claude", known: false}}, sel: 0}
 		for _, outside := range []bool{false, true} {
-			l := layout.ComputeFor(cols, rows, layout.Home, v.layoutCounts())
+			l := layout.Compute(cols, rows, layout.Home)
 			if outside {
-				l = layout.ComputeFor(cols, rows+1, layout.Home, v.layoutCounts()).WithoutVitals()
+				l = layout.Compute(cols, rows+1, layout.Home).WithoutVitals()
 			}
 			vitals, _ := v.vitalsLine(cols)
 			for name, frame := range map[string][]string{

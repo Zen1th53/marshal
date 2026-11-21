@@ -93,6 +93,8 @@ var excluded = map[string]bool{
 	"Decision.Refs": true, // collector ids
 	"CardLine.Ref":  true,
 	"Inbox.Refs":    true,
+	// The terminal home's own: the page is the Web Board.
+	"Board.Web": true,
 }
 
 // Every vm field is either sent (a wire field of the same name) or listed in
@@ -206,14 +208,17 @@ func TestEncodeLimits(t *testing.T) {
 	}
 }
 
-// The Marshal's last turn reaches the page scrubbed and capped, and says
-// whether it ends with a question.
+// The Marshal's last turn reaches the page scrubbed and capped; whether it
+// asks the owner something comes from the Board's From-you line only.
 func TestFrameMarshalSays(t *testing.T) {
 	f := FromBoard(fixtureRunning())
-	if m := f.MarshalSays; !m.Question || m.Truncated || m.Answered || m.At != "2026-11-20T19:27:00Z" || !strings.HasPrefix(m.Text, "T02 came back") {
+	if !f.NowLine.ChatAsked || f.NowLine.FromYou != vm.ChatAskedLine {
+		t.Fatalf("chat asked: %+v", f.NowLine)
+	}
+	if m := f.MarshalSays; m.Truncated || m.Answered || m.At != "2026-11-20T19:27:00Z" || !strings.HasPrefix(m.Text, "T02 came back") {
 		t.Fatalf("running: %+v", m)
 	}
-	if m := FromBoard(vm.Board{}).MarshalSays; m.Text != "" || m.Question || m.At != "" {
+	if m := FromBoard(vm.Board{}).MarshalSays; m.Text != "" || m.At != "" {
 		t.Fatalf("nothing said: %+v", m)
 	}
 	key := "sk-ant-api03-" + strings.Repeat("Zx9Qw3Er7Ty", 6)
@@ -232,12 +237,6 @@ func TestFrameMarshalSays(t *testing.T) {
 	m := FromBoard(vm.Board{MarshalSays: vm.MarshalSays{Text: long}}).MarshalSays
 	if !m.Truncated || len([]rune(m.Text)) != SaysMax+1 || !strings.HasSuffix(m.Text, "…") {
 		t.Fatalf("cap: truncated=%v len=%d", m.Truncated, len([]rune(m.Text)))
-	}
-	if !m.Question {
-		t.Fatal("the question at the end of a long message is lost by the cap")
-	}
-	if FromBoard(vm.Board{MarshalSays: vm.MarshalSays{Text: "Is it? No, it is done."}}).MarshalSays.Question {
-		t.Fatal("a question mark mid-text is not a question to the owner")
 	}
 }
 

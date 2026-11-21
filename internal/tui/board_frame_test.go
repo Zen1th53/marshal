@@ -8,12 +8,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/events"
-	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
-	"github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inspector"
 )
+
+// header and footer are the head and foot lines without their click spans.
+func (v boardVisual) header(w int) string {
+	line, _ := v.headerLine(w)
+	return line
+}
+
+func (v boardVisual) footer(w int) string {
+	line, _ := v.footerSpans(w)
+	return line
+}
 
 var updateBoardGolden = flag.Bool("update-board-golden", false, "rewrite testdata/board/*.golden")
 
@@ -185,20 +192,6 @@ func TestCellRangeLeavesNoHalfGlyph(t *testing.T) {
 		if got := cellRange(tc.s, tc.from, tc.to); got != tc.want {
 			t.Errorf("cellRange(%q, %d, %d) = %q, want %q", tc.s, tc.from, tc.to, got, tc.want)
 		}
-	}
-}
-
-func TestParkedTaskInspectorGolden(t *testing.T) {
-	th := NewTheme(ThemeNoColor, true, false)
-	run := marshal.Run{PlanID: "P-7", Budget: marshal.Budget{Tokens: marshal.Ceiling{Task: 500}}, Tasks: []marshal.Task{{PlanTaskID: "T-8", Title: "Release", Worker: "codex", State: marshal.Escalated, Files: []string{"internal/tui/board"}, Criteria: []string{"checks pass"}}}}
-	b := model.Project(model.Snapshot{RunID: "R-3", Run: run}, []events.Event{{ID: "ev-1", Sequence: 1, RunID: "R-3", TaskID: "T-8", Type: events.EventTypeMarshalEscalated, Data: map[string]any{"reason": "operator decision"}}})
-	for _, tc := range []struct {
-		name       string
-		cols, rows int
-	}{{"inspector-parked-100x30", 100, 30}, {"inspector-parked-220x40", 220, 40}} {
-		l := layout.Compute(tc.cols, tc.rows, layout.Home)
-		frame := paintBoardInspector(l, th, inspector.New(b, "T-8"), placeholder, nil)
-		checkGolden(t, tc.name, frame)
 	}
 }
 

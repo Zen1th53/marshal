@@ -59,14 +59,14 @@ type Frame struct {
 }
 
 // MarshalSays is the Marshal's last chat turn to the owner: Text is at most
-// SaysMax characters (Truncated when cut), Question when it ends by asking
-// something, Answered once someone wrote in the chat after it.
+// SaysMax characters (Truncated when cut), Answered once someone wrote in
+// the chat after it. Whether it asks the owner something is
+// NowLine.ChatAsked, not read from this text.
 type MarshalSays struct {
 	Text      string `json:"text"`
 	At        string `json:"at"`
 	Answered  bool   `json:"answered"`
 	Truncated bool   `json:"truncated"`
-	Question  bool   `json:"question"`
 }
 
 // SaysMax is the most of the Marshal's message a frame carries, in
@@ -77,19 +77,12 @@ const SaysMax = 1200
 // redacted (again: the collector did it once), then capped.
 func marshalSays(m vm.MarshalSays) MarshalSays {
 	text := strings.TrimSpace(redaction.RedactAll(m.Text))
-	out := MarshalSays{At: stamp(m.At), Answered: m.Answered, Question: endsWithQuestion(text)}
+	out := MarshalSays{At: stamp(m.At), Answered: m.Answered}
 	if r := []rune(text); len(r) > SaysMax {
 		text, out.Truncated = strings.TrimSpace(string(r[:SaysMax]))+"…", true
 	}
 	out.Text = text
 	return out
-}
-
-// endsWithQuestion reports whether the text's last line asks something.
-func endsWithQuestion(text string) bool {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-	last := strings.TrimRight(strings.TrimSpace(lines[len(lines)-1]), "*_`) ")
-	return strings.HasSuffix(last, "?")
 }
 
 // System is the computer and the install; figures are -1 when unknown.
@@ -122,6 +115,9 @@ type NowLine struct {
 	Work      string `json:"work"`
 	FromYou   string `json:"fromYou"`
 	FromYouOK bool   `json:"fromYouOK"`
+	// ChatAsked: FromYou is the Marshal's question in its chat (the one
+	// source of "the Marshal asked you something", vm.NowLine.ChatAsked).
+	ChatAsked bool `json:"chatAsked"`
 }
 
 type Marshal struct {
@@ -398,7 +394,7 @@ func FromBoard(b vm.Board) Frame {
 		V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
 		Top: TopBar{Version: b.Top.Version, Project: b.Top.Project, Run: b.Top.Run, State: b.Top.State, StateTone: string(b.Top.StateTone),
 			Workers: b.Top.Workers, Inbox: b.Top.Inbox, Clock: stamp(b.Top.Clock)},
-		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK},
+		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK, ChatAsked: b.NowLine.ChatAsked},
 		Marshal: Marshal{Provider: b.Marshal.Provider, Model: b.Marshal.Model, Effort: b.Marshal.Effort, InUse: b.Marshal.InUse, Doing: b.Marshal.Doing,
 			ContextPct: b.Marshal.ContextPct, ContextUsed: b.Marshal.ContextUsed, ContextWindow: b.Marshal.ContextWindow,
 			Limit5hPct: b.Marshal.Limit5hPct, WeeklyPct: b.Marshal.WeeklyPct, ChatBound: b.Marshal.ChatBound,

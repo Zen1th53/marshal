@@ -281,11 +281,6 @@ func TestMemoryViewKeys(t *testing.T) {
 		t.Fatal("3 opened the Memory view while the composer held text")
 	}
 	w.composer.SetText("")
-	w.boardUI.inspect = "T-017"
-	if press('3') || w.memView.Load() {
-		t.Fatal("3 opened the Memory view over the inspector")
-	}
-	w.boardUI.inspect = ""
 	if !press('3') || !w.memView.Load() {
 		t.Fatal("3 did not open the Memory view")
 	}

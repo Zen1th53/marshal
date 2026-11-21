@@ -1,13 +1,7 @@
 package tui
 
 import (
-	"strings"
 	"testing"
-	"time"
-
-	"github.com/Zen1th53/marshal/internal/tui/board/anim"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
-	"github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // Every provider has a one-cell glyph and a two-letter ASCII form, worker
@@ -47,37 +41,5 @@ func TestProviderMarks(t *testing.T) {
 	}
 	if _, ok := board256["parked"]; ok {
 		t.Error("parked still in board256")
-	}
-}
-
-// Orange (needs, 256-colour 215) marks only "the owner must act": an owner
-// wait shows it; an ordinary parked task row uses amber (waiting, 179).
-func TestNeedsColourOnlyForOwner(t *testing.T) {
-	t.Setenv("COLORTERM", "")
-	t.Setenv("BOARD_TRUECOLOR", "")
-	th := NewTheme(ThemeDefault, true, false)
-
-	wait := boardVisual{theme: th, guard: &guardAlert{}}
-	if chip := wait.stateChip(); !strings.Contains(chip, "\x1b[38;5;215m") {
-		t.Errorf("owner-wait chip lacks the needs colour: %q", chip)
-	}
-
-	b := model.Board{Tasks: []model.TaskRow{{ID: "T-1", State: model.TaskParked, Worker: "codex"}}}
-	v := boardVisual{board: b, now: time.Now(), theme: th, frame: anim.Frame{}}
-	lines := v.tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: 120, H: 8}})
-	var row string
-	for _, l := range lines {
-		if strings.Contains(StripANSI(l), "T-1") {
-			row = l
-		}
-	}
-	if row == "" {
-		t.Fatalf("no row for T-1 in:\n%s", StripANSI(strings.Join(lines, "\n")))
-	}
-	if strings.Contains(row, "\x1b[38;5;215m") {
-		t.Errorf("parked row uses the needs colour: %q", row)
-	}
-	if !strings.Contains(row, "38;5;179") {
-		t.Errorf("parked row lacks the waiting colour: %q", row)
 	}
 }
