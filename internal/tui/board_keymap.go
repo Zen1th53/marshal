@@ -278,7 +278,7 @@ type paletteCommand struct {
 var shippedPaletteCommands = []paletteCommand{
 	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; the Marshal starts no new one until you resume", Command: "/pause all", Core: true, CoreOrder: 5, CoreKey: "p", CoreLabel: "pause everything"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
 	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Resume every paused task and let the Marshal go on", Command: "/resume all"}, When: func(w *Workspace) bool { return w.runResumable.Load() > 0 }, Why: reason("No run is paused.")},
-	{PaletteAction: PaletteAction{ID: "web.open", Category: "MARSHAL", Title: "Open the Board in the browser", Description: "A read-only view of this Board on this computer only; /marshal web shows its private link", Command: "/marshal web"}},
+	{PaletteAction: PaletteAction{ID: "web.open", Category: "MARSHAL", Title: "Open the Board in the browser", Description: "This Board on this computer only: see it and answer its card from the browser; /marshal web shows its private link", Command: "/marshal web"}},
 	{PaletteAction: PaletteAction{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"}},
 	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"}},
 }

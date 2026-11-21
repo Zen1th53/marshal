@@ -22,7 +22,7 @@ func startTest(t *testing.T, src Source) *Server {
 	if src == nil {
 		src = fixtureRunning
 	}
-	s, err := Start(src)
+	s, err := Start(src, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestStartBindsLoopbackWithStrongToken(t *testing.T) {
 		t.Fatal("two Boards share a token")
 	}
 	for _, addr := range []string{"0.0.0.0:0", ":0", "[::]:0", "192.168.1.2:0", "localhost:0"} {
-		if s, err := start(addr, "", fixtureRunning); err == nil {
+		if s, err := start(addr, "", fixtureRunning, nil); err == nil {
 			s.Close()
 			t.Errorf("start(%q) bound a non-127.0.0.1 address", addr)
 		}
@@ -184,7 +184,7 @@ func TestBearerToken(t *testing.T) {
 
 // The demo's fixed token works the same way.
 func TestDemoToken(t *testing.T) {
-	s, err := start("127.0.0.1:0", "demo", fixtureRunning)
+	s, err := start("127.0.0.1:0", "demo", fixtureRunning, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestDemoToken(t *testing.T) {
 	}
 }
 
-// Phase 1 is read-only: every method but GET is refused, with or without
+// The read paths are GET only: every other method is refused, with or without
 // the token.
 func TestOnlyGet(t *testing.T) {
 	s := startTest(t, nil)

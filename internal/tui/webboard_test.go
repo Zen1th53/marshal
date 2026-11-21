@@ -108,7 +108,7 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := webLink.FindString(resp)
-	if link == "" || !strings.Contains(resp, "read-only") {
+	if link == "" || !strings.Contains(resp, "keep the link private") {
 		t.Fatalf("answer %q has no Web Board link", resp)
 	}
 	again, err := w.marshalWeb()

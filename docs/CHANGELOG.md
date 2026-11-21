@@ -12,6 +12,7 @@
 ## Unreleased
 
 ### Added
+- Web Board: owner actions from the browser. The page puts what is happening and the card's main button at the top (for example **Move to claude**, **Retry T03**), at most two more buttons, and a **Tell the Marshal…** box; everything else is under Details. Each button presses the card's own key on the Board (`POST /api/act`: bearer token, exact Origin, JSON only, one-use token bound to the card shown); every action writes its Activity line "From the web: …".
 - Architecture review: mark any element on any level, including code-derived packages, files, declarations and their connections (pencil, Shift-click or Select area), and ask the Marshal about it. The request names the exact breadcrumb, kind and repository path, which the server validates. It never changes the contract or **Accept**. Open requests show as dots, and History lists them with their path.
 
 ### Changed

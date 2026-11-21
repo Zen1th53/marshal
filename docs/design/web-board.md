@@ -55,48 +55,96 @@ Security rules (tests in `internal/webboard/server_test.go`):
 - The tokened link goes to the footer only, never to Activity (which the Web
   Board itself shows) or to the Marshal.
 
-## Phase 2: owner actions
+## Phase 2: owner actions (built)
 
-The owner answers a decision, accepts, or chooses on a paused card from the
-page. Design, not built:
+The owner presses the buttons of the card on screen and writes to the Marshal
+from the page. What shipped, and where it differs from the first design:
 
-- **Transport**: `POST /api/act` with a JSON body `{"action": "...", "card":
-  "<card id>", "csrf": "<token>"}`. Only listed actions: the keys the card
-  shows (`Decision.Actions`, `Paused.Actions`, `Ready.Actions`), each mapped
-  server-side to the same handler the terminal key reaches
-  (`handleV2CardKey`, `handleV2PauseKey`, the inbox decide path), run on the
-  Board's own goroutine as a key would be. No free-form commands, no shell.
-- **Authentication**: the bearer token as in phase 1 (`Authorization:
-  Bearer TOKEN`, no cookie), plus:
-  - a per-action CSRF token: the frame carries, per card, a random token bound
-    to the card's identity and revision (`HMAC(server key, card id ||
-    revision || action)`); a POST must echo it, so a stale page cannot act on
-    a newer card, and one token works for one card revision only;
-  - an `Origin` check: `Origin` must be exactly `http://127.0.0.1:PORT` or
-    `http://localhost:PORT` (absent `Origin` is refused for POST);
-  - `Content-Type: application/json` only (no form posts), body at most
-    16 KiB, `Sec-Fetch-Site: same-origin` when the browser sends it.
-  A bearer header is never sent by the browser on its own, so a page on
-  another local port cannot make an authenticated request; the Origin and
-  content-type checks are a second line should the token ever reach one.
-- **Authority**: the same rules as the browser architecture Accept
-  (`internal/tui/architecture_browser_accept*.go`, the store's
-  edition-gated operator-instruction receipt). An action from the Web Board is
-  the owner's because only the owner holds the link and its token; the
-  Marshal never gets either: the link never reaches Activity, the Marshal
-  chat, MCP tools or any file the Marshal can read, and the server refuses a
-  request from the Marshal's own processes the same way the architecture
-  review does. The Marshal can never act as the owner: a self-approval stays
-  refused and is shown on the card as it is in the terminal.
-- **Confirmation**: a decision that needs two presses in the terminal (arm,
-  then Enter) needs two clicks on the page; the hard gate's typed canonical id
-  is typed on the page too.
-- **Audit**: each action is recorded as the terminal key's would be, with
-  "from the Web Board" in the Activity line (without the link).
-- **Tests**: POST without or with a wrong bearer token, without or with a wrong/stale CSRF token,
-  with a foreign or missing Origin, with a form content type, for an action
-  the card does not show, after the card changed; and that a key and a click
-  produce the same receipt.
+- **Page**: one sentence of what is happening (`nowLine`), the "From you"
+  line, and, when a card waits, its title, cause, what the main button will
+  do, one big primary button (the card's first action the web can take, its
+  label capitalized) and at most two secondary text buttons; a single
+  **Tell the Marshal…** box with **Send**. Everything else is under
+  `<details>` sections, closed by default below 861 px. After each action the
+  page says **Done** / **Sent** / **Queued** with the Board's own answer, or
+  **Refused** with the plain reason, then reads the frame again. Keys that only
+  change the terminal's own screen are not offered: `c` (terminal clipboard),
+  `7` (a terminal view), `e` (edit in the terminal), `q` (quit), `esc`
+  ("later"), and the inbox card's `⏎ details`; `k` (comment) focuses the
+  message box.
+- **Transport**: `POST /api/act`, JSON body `{"action": "key"|"say", "card":
+  "<card id>", "key": "<card key>", "text": "…", "token": "<action token>",
+  "confirmed": bool}`. Unknown fields, trailing data or another action kind
+  are `400`. Only `/api/act` takes POST (`405 Allow: POST` for any other
+  method); every other path stays GET only.
+- **Checks**, in order: Host (`421`), bearer token (`401`; still never in the
+  query, never a cookie), `Origin` exactly `http://127.0.0.1:PORT` or
+  `http://localhost:PORT` (missing or other: `403`), `Sec-Fetch-Site:
+  same-origin` when sent (`403`), `Content-Type: application/json` parsed
+  with `mime.ParseMediaType` (`415`), body at most 16 KiB (`413`), a message
+  at most 2000 characters (`413`), then the action token (`409`). No CORS
+  headers, no cookie.
+- **Action token** (the CSRF token of the first design): every frame carries
+  `act: {card, tokens, sayMax}`, minted by the server, not read from `vm`.
+  `card` is `CardID`: `decision:`/`paused:` plus a digest of what the card
+  says (kind, title, cause or summary, the task titles, the action keys;
+  not the reset clock or a task's progress, so a ticking card is not a new
+  card), or `screen:<screen>` with no card. `tokens` holds one token per key
+  the card shows (plus `esc` on a decision) and `say`:
+  `HMAC-SHA256(server key, card || action count || key)`. The action count
+  goes up on every accepted action, so each token works once: a replay, or a
+  second tab acting on the same frame, is `409`. The server rebuilds the
+  frame (never the cached one) to check the card and the token, spends the
+  count before the action runs, and drops the frame cache, so the event
+  stream pushes new tokens at once. Actions are serialized.
+- **Dispatch** (`internal/tui/webboard_act.go`): the sink posts the action to
+  the Board's input loop (`postUI`) and waits up to 10 s; an action the loop
+  did not reach in time is refused and never runs later (a claim flag). On
+  the loop it checks again that `CardID` of the frame the terminal would
+  paint equals the page's, and that the key is on that card, then:
+  - an owner card's button with a click reference runs the classic card's
+    click handler (`clickGuard`, `answerAsk`, `clickRequirements`,
+    `clickChange`, `clickNext`), as a click in the terminal does;
+  - any other key goes to `handleV2CardKey` with the key event `v2KeyEvent`
+    makes of it: the paused card's `Enter` (`actOnPause`: `/marshal retry …
+    fresh-session`, `/marshal reassign …`, `/marshal resume`, or the wait for
+    the reset), `w`, `d`, `x` (`stopPausedRun`), the plan's armed reply, the
+    inbox's decision keys, `a` on the architecture card
+    (`openArchitectureReview`);
+  - `say` goes to `sayToMarshal`, the `s` composer's path, as the owner's
+    words (never a command). With no Marshal chat open it is refused rather
+    than put into the terminal's composer.
+  It does not go through `handleTerminalKey` or `v2CardKey`, whose result
+  depends on what the terminal last painted and on its composer.
+  The handler's own result is the answer: a key the Board did not take is
+  "refused", the text is the footer answer the key set, and a key that armed
+  a second step (the inbox's confirmation, the plan's armed reply) returns a
+  `confirm` step, which the page shows as a **Confirm …** button (with a text
+  field when the hard gate reads its canonical id) and a **Cancel** (`esc`).
+- **Two-step stop**: `x` on the paused card is one key in the terminal; the
+  page asks for a second click and sends `confirmed: true`, which the sink
+  requires.
+- **Authority**: an action is the owner's because only the owner holds the
+  link; the link reaches the footer only, never Activity, the Marshal chat,
+  MCP tools or a file the Marshal reads. There is no peer-process check (the
+  architecture review has none either; it relies on its token in the same
+  way). Nothing on the page accepts an architecture: the card offers no
+  accept key, and **Open in browser** returns the review's private link in
+  the POST answer only (never in a frame, never in Activity), where the owner
+  accepts as before. A self-approval stays refused and shown. `q` is refused.
+- **Audit**: the handlers write their own Activity lines; the sink adds one
+  "From the web: <button> (<card title>)." per accepted action (and "From
+  the web: a message to the Marshal (sent|queued).").
+- **Tests**: `internal/webboard/act_test.go` (bearer, Origin, Sec-Fetch-Site,
+  content type, size, unknown fields, stale and replayed tokens, card
+  change, methods, no cookie, Host, read-only server without a sink, fresh
+  tokens pushed on the stream); `internal/tui/webboard_act_test.go` (darwin
+  and Linux: the paused card's button runs what `Enter` runs, the two-step
+  stop, the raw error, refusals, say without a chat, the input loop and its
+  timeout) and `webboard_act_linux_test.go` (the quota move, the
+  architecture link, the inbox's two steps); `tools/e2e/webboard_smoke.mjs`
+  drives Playwright's headless shell over DevTools against the demo, whose
+  fake sink answers every action.
 
 ## Phase 3 idea: the Marshal chat in the browser
 

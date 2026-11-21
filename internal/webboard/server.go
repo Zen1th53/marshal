@@ -52,6 +52,11 @@ type Server struct {
 	port   string
 	token  string
 	source Source
+	sink   Sink
+	// actKey signs the action tokens; epoch counts the actions taken, so a
+	// token works once.
+	actKey []byte
+	actMu  sync.Mutex
 
 	listener net.Listener
 	http     *http.Server
@@ -65,6 +70,7 @@ type Server struct {
 	lastKey   []byte
 	lastBody  []byte
 	seq       uint64
+	epoch     uint64
 
 	subMu   sync.Mutex
 	subs    map[chan struct{}]struct{}
@@ -74,9 +80,9 @@ type Server struct {
 }
 
 // Start serves source on 127.0.0.1 at a random port with a fresh 256-bit
-// token. The server runs until Close.
-func Start(source Source) (*Server, error) {
-	return start("127.0.0.1:0", "", source)
+// token. A nil sink keeps the page read-only. The server runs until Close.
+func Start(source Source, sink Sink) (*Server, error) {
+	return start("127.0.0.1:0", "", source, sink)
 }
 
 // randomToken is n random bytes, URL-safe base64 without padding.
@@ -89,7 +95,7 @@ func randomToken(n int) (string, error) {
 }
 
 // start is Start on addr; a non-empty token is used as given (the demo).
-func start(addr, token string, source Source) (*Server, error) {
+func start(addr, token string, source Source, sink Sink) (*Server, error) {
 	if source == nil {
 		return nil, errors.New("web board: no source")
 	}
@@ -102,6 +108,10 @@ func start(addr, token string, source Source) (*Server, error) {
 			return nil, err
 		}
 	}
+	actKey := make([]byte, 32)
+	if _, err := rand.Read(actKey); err != nil {
+		return nil, err
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("web board: listen: %w", err)
@@ -109,7 +119,7 @@ func start(addr, token string, source Source) (*Server, error) {
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
-		addr: "127.0.0.1:" + port, port: port, token: token, source: source, listener: ln,
+		addr: "127.0.0.1:" + port, port: port, token: token, source: source, sink: sink, actKey: actKey, listener: ln,
 		ctx: ctx, cancel: cancel, done: make(chan struct{}), subs: map[chan struct{}]struct{}{},
 	}
 	s.URL = "http://" + s.addr + "/?t=" + token
@@ -182,7 +192,8 @@ func deny(w http.ResponseWriter, status int, text string) {
 	_, _ = w.Write([]byte(text + "\n"))
 }
 
-// Handler is the Web Board's HTTP handler. Phase 1 is read-only: only GET.
+// Handler is the Web Board's HTTP handler: GET everywhere, and POST on
+// /api/act only.
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
 		h := w.Header()
@@ -197,9 +208,23 @@ func (s *Server) Handler() http.Handler {
 			deny(w, http.StatusMisdirectedRequest, "This Board answers only at "+s.addr+".")
 			return
 		}
+		if q.URL.Path == "/api/act" {
+			if q.Method != http.MethodPost {
+				h.Set("Allow", http.MethodPost)
+				deny(w, http.StatusMethodNotAllowed, "Actions are sent with POST.")
+				return
+			}
+			if !s.authorized(q) {
+				h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
+				refuse(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+				return
+			}
+			s.serveAct(w, q)
+			return
+		}
 		if q.Method != http.MethodGet {
 			h.Set("Allow", http.MethodGet)
-			deny(w, http.StatusMethodNotAllowed, "The Web Board is read-only.")
+			deny(w, http.StatusMethodNotAllowed, "Only GET here; actions go to /api/act.")
 			return
 		}
 		if f, ok := static[q.URL.Path]; ok {
@@ -255,11 +280,21 @@ func (s *Server) frame() ([]byte, uint64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	key, err := changeKey(b)
+	f := FromBoard(b)
+	if s.sink != nil {
+		f.Act = s.mint(f, s.epoch)
+	}
+	body, err := encodeFrame(f)
 	if err != nil {
 		return nil, 0, err
 	}
-	body, err := Encode(b)
+	// The change key is the frame without its clocks; the action tokens
+	// are part of it, so a spent token makes the stream push new ones.
+	kb := b
+	kb.Now, kb.Top.Clock = time.Time{}, time.Time{}
+	kf := FromBoard(kb)
+	kf.Act = f.Act
+	key, err := encodeFrame(kf)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -270,6 +305,21 @@ func (s *Server) frame() ([]byte, uint64, error) {
 		s.seq++
 	}
 	return body, s.seq, nil
+}
+
+// currentFrame is a frame built now, never the cached one, and the action
+// count its tokens are bound to. serveAct checks an action against it.
+func (s *Server) currentFrame() (Frame, uint64, error) {
+	s.frameMu.Lock()
+	defer s.frameMu.Unlock()
+	if s.closed {
+		return Frame{}, 0, errors.New("web board: closed")
+	}
+	b, err := s.build()
+	if err != nil {
+		return Frame{}, 0, err
+	}
+	return FromBoard(b), s.epoch, nil
 }
 
 // build calls the source; a panic in it is a failed frame, never a crash of

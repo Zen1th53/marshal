@@ -1,5 +1,8 @@
-// Marshal Web Board: a read-only view of the terminal Board. Every value
-// from the frame is written with textContent, never as HTML.
+// Marshal Web Board: the terminal Board in a browser. The top says what is
+// happening and, when the Board waits for the owner, shows the card's own
+// buttons; a click presses that button on the Board (POST /api/act with the
+// frame's one-use token). Every value from the frame is written with
+// textContent, never as HTML.
 "use strict";
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -60,16 +63,6 @@
   // the lanes' clocks do not run on data that is no longer live.
   var downAt = 0;
   function since() { return frame ? ((downAt || performance.now()) - frameAt) / 1000 : 0; }
-  function keyItem(k) {
-    var li = el("li");
-    li.appendChild(el("kbd", "", k.key));
-    li.appendChild(document.createTextNode(k.label));
-    return li;
-  }
-  function keyList(id, keys) {
-    var ul = clear($(id));
-    (keys || []).forEach(function (k) { ul.appendChild(keyItem(k)); });
-  }
   function bar(id, pct, tone) {
     var b = $(id), known = pct !== undefined && pct !== null && pct >= 0;
     var v = known ? Math.max(0, Math.min(100, pct)) : 0;
@@ -84,34 +77,70 @@
     var t = f.top;
     setText("t-version", t.version);
     setText("t-project", t.project || "–");
-    setText("t-run", t.run || "no run");
+    setText("t-run", t.run ? "· " + t.run : "");
     chip($("t-state"), t.state || "–", t.stateTone, true);
-    setText("t-workers", t.workers);
-    setText("t-inbox", t.inbox);
     document.title = (t.state ? t.state + " · " : "") + (t.project || "Marshal") + " · Marshal Board";
   }
 
-  function renderNow(f) {
-    var n = f.nowLine;
-    setText("n-marshal", n.marshal || "–");
-    setText("n-work", n.work || "–");
-    setText("n-you", n.fromYou || "nothing");
-    $("n-you-box").className = "you" + (n.fromYouOK ? "" : " act");
-    chip($("n-you-tag"), n.fromYouOK ? "nothing needed" : "your turn", n.fromYouOK ? "ok" : "warn", !n.fromYouOK);
+  function sentence(text) {
+    text = String(text || "").trim();
+    if (!text) return "";
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    return /[.!?…]$/.test(text) ? text : text + ".";
   }
+
+  // renderNow is the one sentence of what is happening and the one line of
+  // what the Board needs from the owner.
+  function renderNow(f) {
+    var n = f.nowLine, parts = [];
+    if (n.marshal) parts.push("The Marshal: " + n.marshal);
+    if (n.work) parts.push("Work: " + n.work);
+    setText("now", parts.length ? parts.map(sentence).join(" ") : "Connected to the Board.");
+    setText("you", n.fromYou || "nothing");
+    $("you-box").className = "you" + (n.fromYouOK ? "" : " act");
+  }
+
+  // Keys that only change the terminal's own screen are not offered here:
+  // c copies to the terminal's clipboard, 7 opens a terminal view, e edits
+  // in the terminal, q quits the terminal Board, esc steps the card aside.
+  var terminalOnly = { "c": 1, "7": 1, "e": 1, "q": 1, "esc": 1 };
+  function cap(s) { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // cardButtons are the card's buttons as the page offers them: the first
+  // is the primary, at most two more are secondary.
+  function cardButtons(f) {
+    var d = f.decision, p = f.paused, keys = d ? d.actions : p ? p.actions : [];
+    var out = [];
+    keys.forEach(function (k) {
+      if (terminalOnly[k.key]) return;
+      if (d && d.kind === "inbox" && k.key === "⏎") return; // details: the terminal's inspector
+      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" });
+    });
+    if (out.length > 3) {
+      // Keep the primary and the stop; the raw error is the first to go.
+      var first = out[0], rest = out.slice(1).filter(function (b) { return b.key !== "d"; });
+      out = [first].concat(rest.slice(0, 2));
+    }
+    return out;
+  }
+
+  var armedStop = null, confirmStep = null;
 
   function renderCard(f) {
     var card = $("card"), d = f.decision, p = f.paused;
-    if (!d && !p) { card.hidden = true; return; }
+    var cardID = f.act ? f.act.card : "";
+    if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
+    if (!d && !p) { card.hidden = true; $("d-card").hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");
     clear($("card-nodes")); clear($("card-lines")); clear($("card-tasks"));
+    var more = false;
     if (d) {
       setText("card-title", d.title);
-      setText("card-corner", d.corner || "");
       $("card-self").hidden = !d.selfApproval;
       setText("card-self", d.selfApproval);
       setText("card-summary", d.summary);
+      setText("card-will", d.corner || "");
       setText("card-changed", d.changedNote);
       d.nodes.forEach(function (n) {
         var li = el("li", n.changed ? "changed" : "", n.name);
@@ -125,16 +154,13 @@
         if (l.note) dd.appendChild(el("span", "dim", " · " + l.note));
         $("card-lines").appendChild(dd);
       });
-      setText("card-will", "");
-      setText("card-extra", d.hasLink ? (d.noDisplay ? "The review link is shown in the terminal Board (c copies it)." : "The review opens in your browser from the terminal Board.") : "");
-      var k = d.actions[0];
-      setText("card-how", k ? "Answer in the Marshal Board (key " + k.key + ": " + k.label + ")." : "Answer in the Marshal Board.");
-      keyList("card-keys", d.actions);
+      setText("card-extra", "");
+      more = !!(d.changedNote || d.nodes.length || d.lines.length);
     } else {
       setText("card-title", p.title);
-      setText("card-corner", p.resets);
       $("card-self").hidden = true;
-      setText("card-summary", p.cause);
+      setText("card-summary", [p.cause, p.resets].filter(Boolean).join(" · "));
+      setText("card-will", p.will ? "The main button will " + p.will.split("\n")[0] : "");
       setText("card-changed", "");
       p.tasks.forEach(function (t) {
         var li = el("li");
@@ -142,12 +168,75 @@
         li.appendChild(el("span", "dim", " · " + [t.progress, t.kept].filter(Boolean).join(" · ")));
         $("card-tasks").appendChild(li);
       });
-      setText("card-will", p.will ? "⏎ will " + p.will.split("\n")[0] : "");
-      setText("card-extra", [p.will && p.will.split("\n")[1], p.room, p.run].filter(Boolean).join(" · "));
-      var pk = p.actions[0];
-      setText("card-how", pk ? "Choose in the Marshal Board (key " + pk.key + ": " + pk.label + ")." : "Choose in the Marshal Board.");
-      keyList("card-keys", p.actions);
+      setText("card-extra", [p.will && p.will.split("\n").slice(1).join(" "), p.room, p.run].filter(Boolean).join(" · "));
+      more = !!(p.tasks.length || p.room || p.run);
     }
+    $("d-card").hidden = !more;
+    renderButtons(f);
+  }
+
+  function button(cls, text, onClick) {
+    var b = el("button", cls, text);
+    b.type = "button";
+    b.disabled = pending;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  // renderButtons draws the primary and the secondary buttons, or the
+  // confirmation the Board waits for after a first press.
+  function renderButtons(f) {
+    var prim = $("primary"), sec = clear($("secondary")), typed = $("confirm-text");
+    var acts = !!f.act;
+    prim.disabled = pending || !acts;
+    var fresh = prim.cloneNode(false);
+    prim.parentNode.replaceChild(fresh, prim);
+    prim = fresh;
+    prim.className = "primary";
+    if (confirmStep) {
+      prim.textContent = confirmStep.label || "Confirm";
+      typed.hidden = !confirmStep.text;
+      prim.addEventListener("click", function () {
+        var text = confirmStep.text ? typed.value.trim() : "";
+        if (confirmStep.text && !text) { feedback("bad", "Type what the Board asks for first."); typed.focus(); return; }
+        act({ action: "key", key: "⏎", text: text }, "Confirm");
+      });
+      if (frame && frame.act && frame.act.tokens.esc) {
+        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; act({ action: "key", key: "esc" }, "Cancel"); }));
+      } else {
+        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; render(frame); }));
+      }
+      return;
+    }
+    typed.hidden = true;
+    typed.value = "";
+    var bs = cardButtons(f);
+    if (!bs.length) { prim.hidden = true; return; }
+    prim.hidden = false;
+    bs.forEach(function (b, i) {
+      var stop = !!f.paused && b.key === "x";
+      var armed = stop && armedStop === (f.act && f.act.card);
+      var text = armed ? "Click again to stop the run" : b.label;
+      var go = function () {
+        if (b.local) { $("say-text").focus(); feedback("wait", "Write what to change below and press Send."); return; }
+        if (stop && !armed) {
+          armedStop = f.act && f.act.card;
+          feedback("wait", "Stopping keeps the run and its work; /marshal resume continues it. Click again to stop.");
+          render(frame);
+          setTimeout(function () { if (armedStop) { armedStop = null; render(frame); } }, 6000);
+          return;
+        }
+        armedStop = null;
+        act({ action: "key", key: b.key, confirmed: stop }, b.label);
+      };
+      if (i === 0) {
+        prim.textContent = text;
+        if (armed) prim.className = "primary danger";
+        prim.addEventListener("click", go);
+      } else {
+        sec.appendChild(button("linkbtn" + (armed ? " danger" : ""), text, go));
+      }
+    });
   }
 
   function renderReady(f) {
@@ -170,14 +259,14 @@
     var dl = clear($("r-defaults"));
     r.defaults.forEach(function (d) { dl.appendChild(el("dt", "", d.name)); dl.appendChild(el("dd", "", d.value)); });
     setText("r-checked", r.checked ? "checked " + hm(r.checked) + (r.telemetryAsk ? " · usage counts: " + (r.telemetryOn ? "on" : "off") : "") : "");
-    keyList("r-keys", r.actions);
   }
 
   function renderPlan(f) {
     var p = f.plan, on = p.stages.length > 0 || p.total > 0;
     show("p-plan", on);
     if (!on) return;
-    setText("pl-title", p.title ? "· " + p.title : "");
+    setText("pl-title", p.title);
+    setText("pl-sum", p.total ? "· " + p.done + "/" + p.total + " merged" : "");
     setText("pl-accepted", p.accepted);
     var ol = clear($("pl-stages"));
     p.stages.forEach(function (s) {
@@ -221,7 +310,8 @@
     var l = f.lanes, on = l.items.length > 0 || ["running", "split", "decision", "paused"].indexOf(f.screen) >= 0 && f.top.run;
     show("p-lanes", on);
     if (!on) return;
-    setText("la-limits", l.limits ? "· " + l.limits : "");
+    setText("la-limits", l.limits);
+    setText("la-sum", l.items.length ? "· " + l.items.length + " running" : "");
     var tb = clear($("la-rows"));
     l.items.forEach(function (x, i) {
       var tr = el("tr", x.selected ? "sel" : "");
@@ -268,6 +358,7 @@
       ul.appendChild(li);
     });
     show("ta-empty", f.tasks.length === 0);
+    setText("ta-sum", f.tasks.length ? "· " + f.tasks.length : "");
   }
 
   function renderSteps(f) {
@@ -308,10 +399,12 @@
     if (c.answered) notes.push(c.answered + " answered");
     if (c.stage) notes.push(c.stage);
     setText("m-chatnote", notes.join(" · "));
+    setText("m-sum", m.provider ? "· " + [m.provider, m.model].filter(Boolean).join(" ") : "");
   }
 
   function renderWorkers(f) {
     show("p-workers", f.workers.length > 0);
+    setText("w-sum", f.workers.length ? "· " + f.workers.map(function (w) { return w.provider + (w.leftPct >= 0 ? " " + w.leftPct + "%" : ""); }).join(" · ") : "");
     var ul = clear($("w-rows"));
     f.workers.forEach(function (w) {
       var li = el("li");
@@ -371,12 +464,92 @@
       ol.appendChild(li);
     });
     show("a-empty", f.activity.length === 0);
+    setText("a-sum", f.activity.length ? "· " + f.activity[0].text : "");
   }
 
   function render(f) {
+    if (!f) return;
     renderTop(f); renderNow(f); renderCard(f); renderReady(f); renderPlan(f); renderLanes(f);
     renderTasks(f); renderSteps(f); renderMarshal(f); renderWorkers(f); renderInbox(f);
     renderRequests(f); renderActivity(f);
+  }
+
+  // pending is set while an action is on its way: the buttons wait.
+  var pending = false;
+
+  function feedback(kind, text) {
+    var fb = $("feedback");
+    fb.hidden = !text;
+    fb.className = "feedback " + kind;
+    fb.textContent = text || "";
+  }
+
+  // refresh reads the frame now, so the next click has a fresh token.
+  function refresh() {
+    return fetch("/api/board", { headers: auth(), cache: "no-store", credentials: "omit" }).then(function (r) {
+      if (!r.ok) return null;
+      return r.text().then(onFrame);
+    }).catch(function () { return null; });
+  }
+
+  // act sends one action for the card the page shows, with its token.
+  function act(body, label) {
+    if (pending) return Promise.resolve();
+    if (!frame || !frame.act) { feedback("bad", "Not connected to the Board yet."); return Promise.resolve(); }
+    var name = body.action === "say" ? "say" : body.key;
+    var token = frame.act.tokens[name];
+    if (!token) { feedback("bad", "Refused: that button is not on the Board now."); return Promise.resolve(); }
+    body.card = frame.act.card;
+    body.token = token;
+    pending = true;
+    render(frame);
+    feedback("wait", (body.action === "say" ? "Sending…" : label + "…"));
+    var h = auth();
+    h["Content-Type"] = "application/json";
+    return fetch("/api/act", { method: "POST", headers: h, body: JSON.stringify(body), cache: "no-store", credentials: "omit" })
+      .then(function (r) {
+        return r.json().catch(function () { return { status: "refused", text: "The Board answered " + r.status + "." }; }).then(function (res) {
+          return { code: r.status, res: res || {} };
+        });
+      })
+      .then(function (x) {
+        var res = x.res, text = res.text || "";
+        if (x.code === 401) { feedback("bad", "Refused: this link has expired. Run /marshal web in the Board for a new one."); return false; }
+        if (x.code === 409) { confirmStep = null; feedback("bad", "Refused: " + (text || "the Board changed.")); return false; }
+        if (x.code !== 200 || res.status === "refused") { feedback("bad", "Refused: " + (text || "the Board answered " + x.code + ".")); return false; }
+        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card } : null;
+        var word = res.status === "sent" ? "Sent" : res.status === "queued" ? "Queued" : "Done";
+        feedback("ok", !text ? word + "." : text.indexOf(word) === 0 ? text : word + ": " + text);
+        if (res.link) {
+          $("review").hidden = false;
+          $("review-link").href = res.link;
+        }
+        return true;
+      })
+      .catch(function () { feedback("bad", "Not sent: the Board is not answering."); return false; })
+      .then(function (ok) {
+        pending = false;
+        return refresh().then(function () {
+          if (confirmStep && frame && frame.act) confirmStep.card = frame.act.card;
+          render(frame);
+          return ok;
+        });
+      });
+  }
+
+  function send() {
+    var box = $("say-text"), text = box.value.trim();
+    if (!text) { box.focus(); return; }
+    var max = frame && frame.act ? frame.act.sayMax : 2000;
+    if (text.length > max) { feedback("bad", "Too long: at most " + max + " characters."); return; }
+    act({ action: "say", text: text }, "Send").then(function (ok) { if (ok) box.value = ""; });
+  }
+
+  // Details start closed on a phone and open on a wide screen; after that
+  // they stay as the owner left them.
+  function openDetails() {
+    var wide = window.matchMedia && window.matchMedia("(min-width: 861px)").matches;
+    Array.prototype.forEach.call(document.querySelectorAll("details.pane"), function (d) { d.open = !!wide; });
   }
 
   function tick() {
@@ -476,6 +649,11 @@
   document.addEventListener("DOMContentLoaded", function () {
     tick();
     setInterval(tick, 1000);
+    openDetails();
+    $("say-send").addEventListener("click", send);
+    $("say-text").addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+    });
     connect();
   });
 })();

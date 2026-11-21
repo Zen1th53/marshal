@@ -1,5 +1,7 @@
 // Package webboard serves the Board v2 view model to a local browser: a
-// read-only, loopback-only page that shows what the terminal Board shows.
+// loopback-only page that shows what the terminal Board shows and, behind
+// the same private link, lets the owner press the buttons of the card on
+// screen (act.go).
 //
 // The wire form is its own set of structs, not vm.Board with JSON tags, so
 // a field added to the view model reaches the browser only when it is
@@ -41,6 +43,9 @@ type Frame struct {
 	Decision *Decision `json:"decision"`
 	Paused   *Paused   `json:"paused"`
 	Keys     []Key     `json:"keys"`
+	// Act is the owner actions the page may send now (phase 2); nil on a
+	// read-only server. It is minted by the server, not read from vm.
+	Act *Act `json:"act,omitempty"`
 }
 
 type TopBar struct {
@@ -381,7 +386,12 @@ var tokenParam = regexp.MustCompile(`((?:[?&]|\\u0026)(?:token|t)=)[A-Za-z0-9_.~
 // Encode is b as JSON in the version 1 frame format. A private link's key
 // that free text carries (an Activity line, a card line) is cut out.
 func Encode(b vm.Board) ([]byte, error) {
-	body, err := json.Marshal(FromBoard(b))
+	return encodeFrame(FromBoard(b))
+}
+
+// encodeFrame is f as JSON with private link keys cut out of free text.
+func encodeFrame(f Frame) ([]byte, error) {
+	body, err := json.Marshal(f)
 	if err != nil {
 		return nil, err
 	}

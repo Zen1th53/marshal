@@ -284,12 +284,39 @@ A left click selects and opens; it never decides on its own.
 
 ## The Board in your browser (Web Board)
 
-The Web Board shows the same Board as a web page: the top bar, the NOW line, Plan, Lanes, Tasks, Workers, Inbox, Activity, the Marshal pane, Marshal steps, Requests, the readiness checklist, and the decision and paused cards. It updates live (at most four times a second) and works at phone width, so you can watch a run from a phone through your own remote desktop to this computer.
+The Web Board is the Board as a simple web page. It updates live (at most four times a second) and works at phone width, so you can follow and steer a run from a phone through your own remote desktop to this computer.
 
 - Open it with `w` when no task is highlighted (during a run, `l` first moves the keyboard to the lanes), the palette entry **Open the Board in the browser**, or `/marshal web`. Where there is a display it opens in your browser; the Board's footer shows the link either way, so on a machine with no display you open the link in a browser on that computer.
 - It runs inside the open Board and stops when the Board closes. It listens on `127.0.0.1` only, at a random port, and never on the network.
-- The link carries a private, random token (`http://127.0.0.1:PORT/?t=…`). The page takes the token out of the address bar and the history at once, keeps it for that browser tab only (a reload still works), and sends it with each request for the Board's data. No cookie is used. Without the link the page shows no data; a link from an earlier Board no longer works. Do not share the link: anyone on this computer who has it can read the Board.
-- It is **read-only**. To answer a decision, accept, or choose on a paused card, use the terminal Board; the web card names the key to press there. Nothing is loaded from the internet, and it shows only what the terminal Board shows: never prompts, the chat transcript, file contents or secrets. The architecture review link is not shown on it.
+- The link carries a private, random token (`http://127.0.0.1:PORT/?t=…`). The page takes the token out of the address bar and the history at once, keeps it for that browser tab only (a reload still works), and sends it with each request. No cookie is used. Without the link the page shows no data and can do nothing; a link from an earlier Board no longer works. **Do not share the link: anyone on this computer who has it can act for you on the Board.** It never goes to Activity, the Marshal chat or any file the Marshal reads.
+
+### What the page shows
+
+- At the top, one sentence of what is happening now and one **From you** line.
+- When the Board waits for you, the card: its title, the cause in one line, what the main button will do, one big button with the card's main action (for example **Retry T03 in a fresh session**, **Move to claude**, **Continue the run**) and at most two text buttons (for example **Wait until 21:10**, **Stop the run**).
+- One box, **Tell the Marshal…**, with **Send**.
+- Everything else (the card in full, Plan, Lanes, Tasks, Workers, the Marshal, Inbox, Activity, Marshal steps, Requests, readiness) under **Details** sections: closed on a phone, open on a wide screen.
+
+### What you can do from the web
+
+Only what the terminal Board offers on screen right now. Each button presses the same key, through the same handler, that the terminal Board's key (or a click on that button) reaches; nothing on the page builds a command of its own.
+
+| On the page | The same as in the terminal |
+|---|---|
+| The paused card's big button | `Enter` on the card: it runs exactly what the card says, for example `/marshal retry T03 fresh-session` then `/marshal resume`, `/marshal reassign T06 claude` then `/marshal resume`, `/marshal resume`, or waits for the limit reset |
+| **Wait until …** | `w` on the paused card |
+| **Raw error** | `d`: the answer shows on the page |
+| **Stop the run** (two clicks: the first only asks) | `x` on the paused card (`/marshal stop`; the run and its work are kept) |
+| A decision card's buttons | its keys: the plan's reply and the inbox's allow or deny ask for a second click (**Confirm …**), as `Enter` does after the first key in the terminal; a hard gate asks you to type its id |
+| **Open in browser** on the architecture card | `a`: the review opens on this computer, and the page shows the review link. The architecture is accepted only in its own review page, never from the Board |
+| **Comment** | moves you to the **Tell the Marshal…** box |
+| **Tell the Marshal…** + **Send** (at most 2000 characters) | `s` on the Board: the message goes to the Marshal chat as yours, never as a command, even when it starts with `/` |
+
+Not offered on the page: quitting, copying a link to the terminal's clipboard, opening a terminal view, and editing in the terminal.
+
+After each click the page says what happened: **Done** (with the Board's own answer), **Sent** or **Queued**, or **Refused** with the plain reason (for example "The Board changed since this page showed it; look again", or "No Marshal chat is open"). Every action writes the Activity line the terminal key writes, plus "From the web: …".
+
+A button works once and only for the card the page shows: if the card changed, or the same click arrives twice, it is refused and the page shows the Board as it is now. Nothing is loaded from the internet, and the page shows only what the terminal Board shows: never prompts, the chat transcript, file contents or secrets.
 
 ---
 
