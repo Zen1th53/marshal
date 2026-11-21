@@ -2,11 +2,7 @@ package app
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"os"
 
-	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/policytest"
 )
@@ -24,22 +20,6 @@ type PolicyTestCaseReport struct {
 	Status policytest.ResultStatus `json:"status"`
 	Diff   string                  `json:"diff,omitempty"`
 	Reason policy.ErrorCode        `json:"reason,omitempty"`
-}
-
-// RunPolicyTestFile evaluates a declarative suite without creating or
-// mutating a durable policy-test run. Durable lifecycle execution remains in
-// store.RunPolicyTest and retains its A04 authorization boundary.
-func RunPolicyTestFile(ctx context.Context, path string) (PolicyTestReport, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return PolicyTestReport{}, fmt.Errorf("%w: policy test file unavailable", model.ErrUnavailable)
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxPolicyTestFileSize+1))
-	if err != nil {
-		return PolicyTestReport{}, fmt.Errorf("%w: policy test file unavailable", model.ErrUnavailable)
-	}
-	return runPolicyTestData(ctx, data)
 }
 
 // runPolicyTestData evaluates an already-read declarative suite.

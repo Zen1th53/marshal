@@ -60,10 +60,10 @@ func goFiles(t *testing.T, root string) []string {
 }
 
 // goalintake.Confirm is the one function that decides whether ULTRA may
-// delegate a confirmation. If a second call site appears, it must be given the
-// canonical gate's mode and policy, so this test fails on any new one and asks
-// whoever added it to wire it deliberately.
-func TestConfirmHasASingleCallSite(t *testing.T) {
+// delegate a confirmation. Any call site must be given the canonical gate's
+// mode and policy, so this test fails on any new one and asks whoever added it
+// to wire it deliberately.
+func TestConfirmHasNoUnreviewedCallSite(t *testing.T) {
 	root := repoRoot(t)
 	fset := token.NewFileSet()
 
@@ -92,12 +92,11 @@ func TestConfirmHasASingleCallSite(t *testing.T) {
 		})
 	}
 
-	if len(sites) != 1 {
-		t.Fatalf("goalintake.Confirm must have exactly one call site so ULTRA is decided in one place; found %d:\n  %s",
+	// The `marshal goal` command was its only call site and has been removed,
+	// so none is expected; a new one must be wired to the gate deliberately.
+	if len(sites) != 0 {
+		t.Fatalf("goalintake.Confirm has no reviewed call site; wire a new one to the canonical gate and update this test; found %d:\n  %s",
 			len(sites), strings.Join(sites, "\n  "))
-	}
-	if !strings.Contains(sites[0], "internal/cli/goal.go") {
-		t.Fatalf("the ULTRA decision moved to %s; the gate wiring must move with it", sites[0])
 	}
 }
 
