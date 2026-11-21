@@ -54,6 +54,32 @@ type Board struct {
 	Decision *Decision // non-nil: the decision card is shown over the Board
 	Paused   *Paused   // non-nil: the paused card is shown
 	Keys     []Key
+	System   System
+	// MarshalSays is the Marshal chat's last turn to the owner.
+	MarshalSays MarshalSays
+}
+
+// MarshalSays is the final text of the Marshal's last chat turn: assistant
+// prose only, secrets redacted. Answered is set once someone wrote in the
+// chat after it. A zero value: the Marshal has not said anything yet.
+type MarshalSays struct {
+	Text     string
+	At       time.Time
+	Answered bool
+}
+
+// System is the computer and the install the Board runs on: host load, the
+// thermal guard, a newer release, whether MCP works. Figures are -1 when
+// unknown.
+type System struct {
+	CPUPct, MemPct, DiskPct int
+	TempC                   int
+	LowDisk                 bool
+	ThermalGuard            bool   // the thermal rule is active
+	ThermalCap              int    // lane cap the guard asked for while active; 0 none
+	Notice                  string // the host watcher's notice: "host: thermal guard · …"
+	UpdateAvailable         string // tag of a newer release; "" none or not checked
+	MCPFailed               bool   // MCP failed in this session (the reason stays in the terminal, F6)
 }
 
 // TopBar is row 0 on every screen.

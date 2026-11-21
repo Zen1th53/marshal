@@ -1,6 +1,8 @@
-// Marshal Web Board: the terminal Board in a browser. The top says what is
-// happening and, when the Board waits for the owner, shows the card's own
-// buttons; a click presses that button on the Board (POST /api/act with the
+// Marshal Web Board: the owner's interface to the Board, in sections (Home,
+// Work, Architecture, Team, Activity, Settings) behind hash routes, so Back
+// and deep links (#work/<task>) work. When the Board waits for the owner, the
+// card with its buttons is at the top of Home and the "From you" pill links
+// to it; a click presses that button on the Board (POST /api/act with the
 // frame's one-use token). Every value from the frame is written with
 // textContent, never as HTML.
 "use strict";
@@ -10,15 +12,15 @@
   var retry = 0, retryTimer = null;
 
   // The link's secret (?t=…) works once: it is taken out of the address bar
-  // and the history at once and spent (POST /api/session) for the page's
+  // and the history at once (the route after # stays) and spent (POST /api/session) for the page's
   // own API secret, which is kept for this tab only, so a reload still
   // works. A copy of the link left anywhere else is then worthless. The
   // secret goes to the server as a bearer header; no cookie is used.
   var tokenKey = "marshal-board-session";
-  var link = null, token = null;
-  try { link = new URLSearchParams(location.search).get("t"); } catch (e) { link = null; }
-  if (link) {
-    try { history.replaceState(null, "", "/"); } catch (e) { /* keep going */ }
+  var linkSecret = null, token = null;
+  try { linkSecret = new URLSearchParams(location.search).get("t"); } catch (e) { linkSecret = null; }
+  if (linkSecret) {
+    try { history.replaceState(null, "", "/" + location.hash); } catch (e) { /* keep going */ }
   } else {
     try { token = sessionStorage.getItem(tokenKey); } catch (e) { token = null; }
   }
@@ -27,9 +29,9 @@
   // spendLink trades the link for the API secret, then calls next. A link
   // already used is refused, and the page says so.
   function spendLink(next) {
-    if (!link) { next(); return; }
-    var opened = link;
-    link = null;
+    if (!linkSecret) { next(); return; }
+    var opened = linkSecret;
+    linkSecret = null;
     fetch("/api/session", { method: "POST", headers: { "Authorization": "Bearer " + opened }, cache: "no-store", credentials: "omit" })
       .then(function (r) {
         return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; });
@@ -46,6 +48,16 @@
       .catch(function () { disconnected("The Board is not answering (closed?)."); });
   }
 
+  var docsURL = "https://marshal.blackhat.uz/docs";
+
+  // asksOwner: the Marshal's last chat turn ends with a question nobody
+  // has answered yet.
+  function asksOwner(f) {
+    var m = f.marshalSays;
+    return !!(m && m.text && m.question && !m.answered);
+  }
+
+  // ---- small helpers ----------------------------------------------------
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -54,25 +66,39 @@
   }
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); return node; }
   function show(id, on) { $(id).hidden = !on; }
-  function setText(id, text) { $(id).textContent = text === undefined || text === null || text === "" ? "" : String(text); }
+  function setText(id, text) { $(id).textContent = text === undefined || text === null ? "" : String(text); }
   function toneClass(t) { return t ? "tone-" + t : ""; }
-  function chip(node, text, tone, solid) {
+  function chip(node, text, tone) {
     node.textContent = text || "";
-    node.className = "chip" + (tone ? " " + toneClass(tone) : "") + (solid ? " solid" : "");
+    node.className = "chip" + (tone ? " " + toneClass(tone) : "");
   }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
-  function hm(iso) {
-    if (!iso) return "";
-    var d = new Date(iso);
-    return isNaN(d) ? "" : pad(d.getHours()) + ":" + pad(d.getMinutes());
+  function parse(iso) { if (!iso) return null; var d = new Date(iso); return isNaN(d) ? null : d; }
+  function hm(iso) { var d = parse(iso); return d ? pad(d.getHours()) + ":" + pad(d.getMinutes()) : ""; }
+  var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // when is a time of day, with the date when it is not today.
+  function when(iso) {
+    var d = parse(iso);
+    if (!d) return "";
+    var n = new Date();
+    var today = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+    return (today ? "" : days[d.getDay()] + " " + d.getDate() + " " + months[d.getMonth()] + " ") + pad(d.getHours()) + ":" + pad(d.getMinutes());
   }
   function dur(s) {
     if (s === undefined || s === null || s < 0) return "–";
     s = Math.floor(s);
     if (s < 60) return s + "s";
     var m = Math.floor(s / 60);
-    if (m < 60) return m + "m " + pad(s % 60) + "s";
-    return Math.floor(m / 60) + "h " + pad(m % 60) + "m";
+    if (m < 60) return m + "m";
+    if (m < 48 * 60) return Math.floor(m / 60) + "h " + pad(m % 60) + "m";
+    return Math.floor(m / 1440) + "d";
+  }
+  function ago(iso) {
+    var d = parse(iso);
+    if (!d) return "";
+    var s = (Date.now() - d.getTime()) / 1000;
+    return s < 30 ? "just now" : dur(s) + " ago";
   }
   function compact(n) {
     if (!n) return "0";
@@ -80,55 +106,173 @@
     if (n >= 1e3) return Math.round(n / 1e3) + "k";
     return String(n);
   }
-  // since is how long ago the frame came; it stops while disconnected, so
-  // the lanes' clocks do not run on data that is no longer live.
-  var downAt = 0;
-  function since() { return frame ? ((downAt || performance.now()) - frameAt) / 1000 : 0; }
-  function bar(id, pct, tone) {
-    var b = $(id), known = pct !== undefined && pct !== null && pct >= 0;
-    var v = known ? Math.max(0, Math.min(100, pct)) : 0;
-    b.firstElementChild.style.width = v + "%";
-    b.className = b.className.replace(/\btone-\w+/g, "").trim() + (tone ? " " + toneClass(tone) : "");
-    if (known) { b.setAttribute("aria-valuenow", String(v)); b.removeAttribute("aria-valuetext"); }
-    else { b.removeAttribute("aria-valuenow"); b.setAttribute("aria-valuetext", "unknown"); }
-  }
-  function leftTone(p) { return p < 0 ? "" : p <= 15 ? "bad" : p <= 35 ? "warn" : "ok"; }
-
-  function renderTop(f) {
-    var t = f.top;
-    setText("t-version", t.version);
-    setText("t-project", t.project || "–");
-    setText("t-run", t.run ? "· " + t.run : "");
-    chip($("t-state"), t.state || "–", t.stateTone, true);
-    document.title = (t.state ? t.state + " · " : "") + (t.project || "Marshal") + " · Marshal Board";
-  }
-
+  function cap(s) { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); }
   function sentence(text) {
     text = String(text || "").trim();
     if (!text) return "";
-    text = text.charAt(0).toUpperCase() + text.slice(1);
+    text = cap(text);
     return /[.!?…]$/.test(text) ? text : text + ".";
   }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many || one + "s"); }
 
-  // renderNow is the one sentence of what is happening and the one line of
-  // what the Board needs from the owner.
-  function renderNow(f) {
-    var n = f.nowLine, parts = [];
-    if (n.marshal) parts.push("The Marshal: " + n.marshal);
-    if (n.work) parts.push("Work: " + n.work);
-    setText("now", parts.length ? parts.map(sentence).join(" ") : "Connected to the Board.");
-    setText("you", n.fromYou || "nothing");
-    $("you-box").className = "you" + (n.fromYouOK ? "" : " act");
+  // since is how long ago the frame came; it stops while disconnected, so
+  // the clocks do not run on data that is no longer live.
+  var downAt = 0;
+  function since() { return frame ? ((downAt || performance.now()) - frameAt) / 1000 : 0; }
+  function setBar(b, pct, tone) {
+    var known = pct !== undefined && pct !== null && pct >= 0;
+    var v = known ? Math.max(0, Math.min(100, pct)) : 0;
+    b.firstElementChild.style.width = v + "%";
+    b.className = "bar" + (tone ? " " + toneClass(tone) : "");
+    if (known) { b.setAttribute("aria-valuenow", String(v)); b.removeAttribute("aria-valuetext"); }
+    else { b.removeAttribute("aria-valuenow"); b.setAttribute("aria-valuetext", "unknown"); }
+  }
+  function newBar(label, pct, tone) {
+    var b = el("div", "bar");
+    b.setAttribute("role", "progressbar");
+    b.setAttribute("aria-label", label);
+    b.setAttribute("aria-valuemin", "0"); b.setAttribute("aria-valuemax", "100");
+    b.appendChild(el("span"));
+    setBar(b, pct, tone);
+    return b;
+  }
+  function leftTone(p) { return p < 0 ? "" : p <= 15 ? "bad" : p <= 35 ? "warn" : "ok"; }
+  function link(href, text, cls) { var a = el("a", cls, text); a.href = href; return a; }
+  function kv(dl, name, value, cls) {
+    if (value === undefined || value === null || value === "") return;
+    dl.appendChild(el("dt", "", name));
+    var dd = el("dd", cls || "");
+    if (value instanceof Node) dd.appendChild(value); else dd.textContent = String(value);
+    dl.appendChild(dd);
   }
 
+  // Sections are rebuilt only when what they show changed, so a frame that
+  // only moved a clock does not take the focus from under the owner.
+  var sigs = {};
+  function changed(name, value) {
+    var s = JSON.stringify(value);
+    if (sigs[name] === s) return false;
+    sigs[name] = s;
+    return true;
+  }
+
+  // ---- routes -------------------------------------------------------------
+  var sections = ["home", "work", "architecture", "team", "activity", "settings"];
+  var route = { name: "home", task: "" };
+  function readRoute() {
+    var h = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+    var parts = h.split("/");
+    var name = sections.indexOf(parts[0]) >= 0 ? parts[0] : "home";
+    return { name: name, task: name === "work" && parts[1] ? parts[1] : "" };
+  }
+  function applyRoute(focus) {
+    route = readRoute();
+    sections.forEach(function (s) { $("s-" + s).hidden = s !== route.name; });
+    Array.prototype.forEach.call(document.querySelectorAll("a.nav"), function (a) {
+      if (a.dataset.route === route.name) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    var titles = { home: "Home", work: "Work", architecture: "Architecture", team: "Team", activity: "Activity", settings: "Settings" };
+    titleRoute = titles[route.name];
+    if (frame) render(frame);
+    if (focus) {
+      if (route.task && !$("drawer").hidden) {
+        // The task's details, wherever the layout put them.
+        $("dr-title").setAttribute("tabindex", "-1");
+        $("dr-title").focus({ preventScroll: true });
+        $("drawer").scrollIntoView({ block: "start" });
+      } else {
+        $("main").focus({ preventScroll: true });
+        window.scrollTo(0, 0);
+      }
+    }
+  }
+  var titleRoute = "Home";
+
+  // ---- the frame's words ---------------------------------------------------
+  // Raw ids (decision-<hex>, long hex ids) mean nothing to the owner: a
+  // "Marshal decision requested" line becomes what the Marshal asked for.
+  var hexID = /\b(?:decision-)?[0-9a-f]{12,}\b/gi;
+  function plainText(text) {
+    text = String(text || "");
+    var m = /^Marshal decision requested:\s*decision-[0-9a-z]+\s*(\S*)\s*(.*)$/i.exec(text.split("\n")[0]);
+    if (m) {
+      var kind = (m[1] || "a decision").replace(/[-_]/g, " ");
+      var obj = (m[2] || "").replace(/\b[A-Z]+(?:-[A-Z]+)*-[0-9a-f]{8,}\b/g, "").replace(hexID, "").trim();
+      return "The Marshal asked for " + kind + (obj ? " (" + obj + ")" : "");
+    }
+    return text.replace(/\bdecision-[0-9a-f]{6,}\b/gi, "a decision").replace(hexID, "…");
+  }
+
+  var taskTone = { merged: "ok", review: "vio", building: "info", waiting: "", cancelled: "muted" };
+  function rework(t) { var m = /^rework (\d+)/.exec(t.note || ""); return m ? +m[1] : 0; }
+  function laneFor(f, id) {
+    for (var i = 0; i < f.lanes.items.length; i++) {
+      var x = f.lanes.items[i];
+      if (!x.reviewing && (x.task === id || x.task.indexOf(id + " ") === 0)) return { lane: x, i: i };
+    }
+    return null;
+  }
+  function reviewLaneFor(f, id) {
+    for (var i = 0; i < f.lanes.items.length; i++) {
+      var x = f.lanes.items[i];
+      if (x.reviewing && new RegExp("\\b" + id + "\\b").test(x.task)) return { lane: x, i: i };
+    }
+    return null;
+  }
+  function bucket(t) {
+    if (t.state === "merged") return "merged";
+    if (rework(t)) return "sentback";
+    if (t.state === "building") return "building";
+    if (t.state === "waiting") return "waiting";
+    return "other";
+  }
+  // stateWords is a task's state in plain words; the running time is a
+  // span the clock fills.
+  function stateWords(f, t) {
+    var out = el("span", "st");
+    var n = rework(t);
+    var word;
+    switch (t.state) {
+      case "building": word = n ? "sent back " + n + "×, building" : "building"; break;
+      case "review": word = t.note === "merging" ? "accepted, merging" : "in review"; break;
+      case "waiting": word = t.note ? t.note.replace(/^waits /, "waits ") : "waiting"; break;
+      default: word = t.state || "–";
+    }
+    var c = el("span", "chip " + toneClass(n ? "warn" : /stuck/.test(t.note || "") ? "bad" : taskTone[t.state]), word);
+    out.appendChild(c);
+    var l = t.state === "building" ? laneFor(f, t.id) : null;
+    if (l) { out.appendChild(document.createTextNode(" ")); var s = el("span", "muted el"); s.dataset.lane = l.i; out.appendChild(s); }
+    return out;
+  }
+  // finished: the Board says DONE, or every task is merged or cancelled
+  // and none is active.
+  function cancelledCount(f) { return f.tasks.filter(function (t) { return t.state === "cancelled"; }).length; }
+  // merged counts the task rows when the frame has them, else the plan's.
+  function merged(f) { return f.tasks.length ? f.tasks.filter(function (t) { return t.state === "merged"; }).length : f.plan.done; }
+  function finished(f) {
+    if (f.top.state === "DONE") return true;
+    return f.plan.total > 0 && f.plan.done + cancelledCount(f) >= f.plan.total && f.plan.active === 0;
+  }
+  // phase is what kind of moment this is, for the empty states.
+  function phase(f) {
+    if (f.paused) return "paused";
+    if (f.screen === "ready" || (!f.top.run && f.screen !== "planning" && f.screen !== "decision" && !f.plan.stages.length)) return "norun";
+    if (f.screen === "planning" || (f.screen === "decision" && !f.top.run)) return "planning";
+    if (finished(f)) return "finished";
+    return "run";
+  }
+  function emptyBox(id, title, text) {
+    var box = clear($(id));
+    box.appendChild(el("b", "", title));
+    box.appendChild(el("span", "", text));
+    box.hidden = false;
+  }
+
+  // ---- owner actions -----------------------------------------------------
   // Keys that only change the terminal's own screen are not offered here:
   // c copies to the terminal's clipboard, 7 opens a terminal view, e edits
   // in the terminal, q quits the terminal Board, esc steps the card aside.
   var terminalOnly = { "c": 1, "7": 1, "e": 1, "q": 1, "esc": 1 };
-  function cap(s) { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); }
-
-  // cardButtons are the card's buttons as the page offers them: the first
-  // is the primary, at most two more are secondary.
   function cardButtons(f) {
     var d = f.decision, p = f.paused, keys = d ? d.actions : p ? p.actions : [];
     var out = [];
@@ -144,48 +288,60 @@
     }
     return out;
   }
+  function screenKey(f, key) {
+    if (f.decision || f.paused || !f.act || !f.act.tokens[key]) return null;
+    for (var i = 0; i < f.keys.length; i++) if (f.keys[i].key === key) return f.keys[i];
+    return null;
+  }
+  // retryTask is the task the screen's Retry would start again, or "".
+  function retryTask(f) {
+    var k = screenKey(f, "r");
+    var m = k && /^retry\s+(\S+)/i.exec(k.label);
+    return m ? m[1] : "";
+  }
 
-  var armedStop = null, confirmStep = null;
-
-  // renderControls is the screen's own buttons when no card is shown: Retry
-  // <task> while the Board's r would retry one, and Stop all workers
-  // (Ctrl+X). Both take a second click before anything is sent.
-  var armedControl = null;
-  function renderControls(f) {
-    var box = clear($("controls"));
-    var keys = !f.decision && !f.paused && f.act ? (f.keys || []) : [];
-    box.hidden = keys.length === 0;
-    keys.forEach(function (k) {
-      if (!f.act.tokens[k.key]) return;
-      var id = f.act.card + "|" + k.key, armed = armedControl === id;
-      var retry = k.key === "r";
-      var text = armed ? "Click again to " + k.label : cap(k.label);
-      var b = button(retry ? "primary" + (armed ? " danger" : "") : "linkbtn" + (armed ? " danger" : ""), text, function () {
-        if (!armed) {
-          armedControl = id;
-          feedback("wait", retry ? "Retrying starts the task again in a fresh session, keeping its branch. Click again to retry." :
-            "This stops every worker; the Marshal keeps running. Click again to stop them.");
-          render(frame);
-          setTimeout(function () { if (armedControl === id) { armedControl = null; render(frame); } }, 6000);
-          return;
-        }
-        armedControl = null;
-        act({ action: "key", key: k.key, confirmed: true }, cap(k.label));
-      });
-      box.appendChild(b);
+  var armedStop = null, confirmStep = null, armed = null, pending = false;
+  // arm is the first click of a two-step action: it says what the second
+  // click does and disarms itself after 6 seconds.
+  function arm(id, text) {
+    armed = id;
+    feedback("wait", text);
+    render(frame);
+    setTimeout(function () { if (armed === id) { armed = null; render(frame); } }, 6000);
+  }
+  function twoStep(cls, key, label, warn) {
+    var id = (frame.act ? frame.act.card : "") + "|" + key;
+    var on = armed === id;
+    return button(cls + (on ? " danger" : ""), on ? "Click again to " + label : cap(label), function () {
+      if (armed !== id) { arm(id, warn); return; }
+      armed = null;
+      act({ action: "key", key: key, confirmed: true }, cap(label));
     });
+  }
+  var retryWarn = "Retrying starts the task again from scratch in a fresh session, keeping its branch. Click again to retry.";
+  var stopAllWarn = "This stops every worker; the Marshal keeps running. Click again to stop them.";
+
+  function button(cls, text, onClick) {
+    var b = el("button", cls, text);
+    b.type = "button";
+    b.disabled = pending;
+    b.addEventListener("click", onClick);
+    return b;
   }
 
   function renderCard(f) {
     var card = $("card"), d = f.decision, p = f.paused;
     var cardID = f.act ? f.act.card : "";
     if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
-    renderControls(f);
-    if (!d && !p) { card.hidden = true; $("d-card").hidden = true; confirmStep = null; return; }
+    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop])) return;
+    if (!d && !p) { card.hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");
     clear($("card-nodes")); clear($("card-lines")); clear($("card-tasks"));
     var more = false;
+    var kinds = { architecture: "the architecture", inbox: "a request waiting in the inbox", plan: "the plan" };
+    setText("card-who", d ? "What is decided: " + (kinds[d.kind] || (d.kind ? d.kind.replace(/[-_]/g, " ") : "this card")) + " · decided by: you, never the Marshal" :
+      "What is decided: how the run goes on · decided by: you");
     if (d) {
       setText("card-title", d.title);
       $("card-self").hidden = !d.selfApproval;
@@ -202,7 +358,7 @@
       d.lines.forEach(function (l) {
         $("card-lines").appendChild(el("dt", "", l.label || l.key || ""));
         var dd = el("dd", toneClass(l.tone), l.text);
-        if (l.note) dd.appendChild(el("span", "dim", " · " + l.note));
+        if (l.note) dd.appendChild(el("span", "muted", " · " + l.note));
         $("card-lines").appendChild(dd);
       });
       setText("card-extra", "");
@@ -216,7 +372,7 @@
       p.tasks.forEach(function (t) {
         var li = el("li");
         li.appendChild(el("b", "", t.title));
-        li.appendChild(el("span", "dim", " · " + [t.progress, t.kept].filter(Boolean).join(" · ")));
+        li.appendChild(el("span", "muted", " · " + [t.progress, t.kept].filter(Boolean).join(" · ")));
         $("card-tasks").appendChild(li);
       });
       setText("card-extra", [p.will && p.will.split("\n").slice(1).join(" "), p.room, p.run].filter(Boolean).join(" · "));
@@ -226,24 +382,15 @@
     renderButtons(f);
   }
 
-  function button(cls, text, onClick) {
-    var b = el("button", cls, text);
-    b.type = "button";
-    b.disabled = pending;
-    b.addEventListener("click", onClick);
-    return b;
-  }
-
   // renderButtons draws the primary and the secondary buttons, or the
   // confirmation the Board waits for after a first press.
   function renderButtons(f) {
     var prim = $("primary"), sec = clear($("secondary")), typed = $("confirm-text");
-    var acts = !!f.act;
-    prim.disabled = pending || !acts;
     var fresh = prim.cloneNode(false);
     prim.parentNode.replaceChild(fresh, prim);
     prim = fresh;
     prim.className = "primary";
+    prim.disabled = pending || !f.act;
     if (confirmStep) {
       prim.textContent = confirmStep.label || "Confirm";
       typed.hidden = !confirmStep.text;
@@ -255,22 +402,30 @@
       if (frame && frame.act && frame.act.tokens.esc) {
         sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; act({ action: "key", key: "esc" }, "Cancel"); }));
       } else {
-        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; render(frame); }));
+        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; sigs.card = ""; render(frame); }));
       }
       return;
     }
     typed.hidden = true;
     typed.value = "";
     var bs = cardButtons(f);
+    var d = f.decision;
+    if (d && !d.summary && !d.lines.length && !d.nodes.length && !d.corner) {
+      // The frame does not carry what this decision rests on: it is not
+      // offered here.
+      prim.hidden = true;
+      sec.appendChild(el("span", "tone-warn", "Decide this in the terminal Board: this page does not have the facts it rests on."));
+      return;
+    }
     if (!bs.length) { prim.hidden = true; return; }
     prim.hidden = false;
     bs.forEach(function (b, i) {
       var stop = !!f.paused && b.key === "x";
-      var armed = stop && armedStop === (f.act && f.act.card);
-      var text = armed ? "Click again to stop the run" : b.label;
+      var on = stop && armedStop === (f.act && f.act.card);
+      var text = on ? "Click again to stop the run" : b.label;
       var go = function () {
-        if (b.local) { $("say-text").focus(); feedback("wait", "Write what to change below and press Send."); return; }
-        if (stop && !armed) {
+        if (b.local) { location.hash = "#home"; $("say-text").focus(); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (stop && !on) {
           armedStop = f.act && f.act.card;
           feedback("wait", "Stopping keeps the run and its work; /marshal resume continues it. Click again to stop.");
           render(frame);
@@ -282,70 +437,322 @@
       };
       if (i === 0) {
         prim.textContent = text;
-        if (armed) prim.className = "primary danger";
+        if (on) prim.className = "primary danger";
         prim.addEventListener("click", go);
       } else {
-        sec.appendChild(button("linkbtn" + (armed ? " danger" : ""), text, go));
+        sec.appendChild(button("linkbtn" + (on ? " danger" : ""), text, go));
       }
     });
   }
 
-  function renderReady(f) {
-    var r = f.ready, on = f.screen === "ready" || (r.checks.length > 0 && !f.top.run);
-    show("p-ready", on);
-    if (!on) return;
-    setText("r-count", r.total ? r.ready + " of " + r.total + " ready" : "");
-    var ul = clear($("r-checks"));
-    var marks = { ok: ["✓ ok", "ok"], warn: ["! check", "warn"], bad: ["✗ fix", "bad"] };
-    r.checks.forEach(function (c) {
-      var m = marks[c.mark] || ["·", ""];
+  // ---- header and nav ------------------------------------------------------
+  function renderTop(f) {
+    var t = f.top;
+    setText("t-version", t.version);
+    setText("t-project", t.project || "–");
+    setText("t-run", t.run ? "· " + t.run : "");
+    chip($("t-state"), t.state || "–", t.stateTone);
+    document.title = titleRoute + " · " + (t.state ? t.state + " · " : "") + (t.project || "Marshal") + " · Marshal Board";
+    var n = f.nowLine, pill = $("you-pill");
+    var needs = !n.fromYouOK || !!f.decision || !!f.paused;
+    // With nothing else waiting, a question the Marshal asked in chat and
+    // nobody answered yet is what the owner is asked for.
+    var asked = asksOwner(f) && !needs;
+    var you = asked ? "the Marshal asked you something" : n.fromYou || "nothing";
+    setText("you", you);
+    pill.className = "pill" + (needs || asked ? " act" : "");
+    var rt = retryTask(f);
+    pill.setAttribute("href", f.decision || f.paused ? "#home" : asked ? "#home" : rt ? "#work/" + rt : "#home");
+    pill.setAttribute("aria-label", "From you: " + you + (needs || asked ? " (needs you)" : ""));
+    // A dot (with words for a screen reader) where the owner must act.
+    var dots = { home: !!(f.decision || f.paused) || asked, work: !!rt, team: f.ready.checks.some(function (c) { return c.mark !== "ok" && c.tag === "action"; }) };
+    ["home", "work", "architecture", "team", "activity"].forEach(function (s) {
+      $("n-" + s).querySelector(".dot").hidden = !dots[s];
+    });
+    setText("n-work-count", f.plan.total ? f.plan.done + "/" + f.plan.total : "");
+    if (f.plan.total) $("n-work").setAttribute("aria-label", "Work, " + f.plan.done + " of " + f.plan.total + " merged" + (dots.work ? " (needs you)" : ""));
+    else $("n-work").removeAttribute("aria-label");
+  }
+
+  // ---- Home ------------------------------------------------------------------
+  function heroSentence(f) {
+    var n = f.nowLine;
+    if (f.decision) return "The Marshal is waiting on you: " + sentence(f.decision.title);
+    if (f.paused) return "The run waits for your choice." + (n.work ? " Work: " + sentence(n.work) : "");
+    var ph = phase(f);
+    if (ph === "finished") return "Finished: " + plural(merged(f), "task") + " merged" + (cancelledCount(f) ? ", " + cancelledCount(f) + " cancelled." : ".");
+    var parts = [];
+    if (n.marshal) parts.push("The Marshal: " + n.marshal);
+    if (n.work) parts.push("Work: " + n.work);
+    return parts.length ? parts.map(sentence).join(" ") : "Connected to the Board.";
+  }
+  function renderHome(f) {
+    setText("now", heroSentence(f));
+    var p = f.plan, nums = clear($("nums"));
+    var bits = [];
+    if (p.total) bits.push([p.done + " of " + p.total, " merged"]);
+    if (p.active) bits.push([String(p.active), " active"]);
+    if (p.waiting) bits.push([String(p.waiting), " waiting"]);
+    if (f.top.workers) bits.push([String(f.top.workers), " workers"]);
+    if (p.mergedPerHr) bits.push([String(p.mergedPerHr), " merged per hour"]);
+    if (p.reworked) bits.push([String(p.reworked), " sent back"]);
+    if (p.etaSec > 0) bits.push(["≈ " + dur(p.etaSec), " to go"]);
+    bits.forEach(function (b, i) {
+      if (i) nums.appendChild(document.createTextNode(" · "));
+      nums.appendChild(el("b", "", b[0]));
+      nums.appendChild(document.createTextNode(b[1]));
+    });
+    show("home-bar-row", p.total > 0);
+    if (p.total) setBar($("home-bar"), Math.round(100 * p.done / p.total), "ok");
+
+    var ph = phase(f);
+    $("home-empty").hidden = true;
+    if (ph === "norun" && !f.decision) firstRun(f);
+    else if (ph === "planning" && !f.decision) emptyBox("home-empty", "The Marshal is planning", "Tasks appear in Work once the plan is ready. Its steps are in Activity.");
+    else if (ph === "finished") {
+      var cancelled = f.tasks.filter(function (t) { return t.state === "cancelled"; }).length;
+      emptyBox("home-empty", "Finished" + (f.top.run ? ": " + f.top.run : ""),
+        plural(f.tasks.length ? f.tasks.filter(function (t) { return t.state === "merged"; }).length : p.done, "task") + " merged" + (cancelled ?", " + cancelled + " cancelled" : ", none failed") +
+        ". What next? Tell the Marshal below; the run's own branch and its final review are in the terminal Board.");
+    }
+    renderSummary(f, ph);
+    renderSays(f);
+    renderLatest(f);
+  }
+  // renderSays is the Marshal's last chat turn to the owner, above the box
+  // that answers it.
+  function renderSays(f) {
+    var m = f.marshalSays || {};
+    if (!changed("says", m)) return;
+    var has = !!m.text;
+    setText("says-text", has ? m.text : "");
+    show("says-empty", !has);
+    var meta = [];
+    if (m.at) meta.push("said " + when(m.at));
+    if (asksOwner(f)) meta.push("asks you; answer in “Tell the Marshal” below");
+    else if (m.answered) meta.push("answered");
+    setText("says-meta", meta.join(" · "));
+    $("says-meta").className = asksOwner(f) ? "tone-warn" : "muted";
+    show("says-more", !!m.truncated);
+  }
+  // firstRun says plainly what must still be finished in the terminal and
+  // why: those prompts belong to the CLIs themselves, which this page
+  // cannot reach.
+  function firstRun(f) {
+    var box = clear($("home-empty"));
+    box.hidden = false;
+    box.appendChild(el("b", "", "No run yet"));
+    box.appendChild(el("p", "", "Tell the Marshal what to build below. A few first steps happen only in the terminal, because they are the provider CLIs' own prompts and this page cannot answer them for you:"));
+    var ul = el("ul", "plain");
+    var todo = f.ready.checks.filter(function (c) { return c.mark !== "ok"; });
+    todo.forEach(function (c) {
       var li = el("li");
-      li.appendChild(el("span", "chip " + toneClass(m[1]), m[0]));
-      li.appendChild(el("b", "", c.label));
-      li.appendChild(el("span", "", c.text));
-      li.appendChild(el("span", "dim", c.tag));
-      if (c.hint) li.appendChild(el("span", "hint", c.hint));
+      li.appendChild(el("b", "", (c.mark === "bad" ? "✗ " : "! ") + c.label + ": "));
+      li.appendChild(document.createTextNode(c.text + (c.hint ? " (" + c.hint.replace(/\s+/g, " ").trim() + ")" : "")));
       ul.appendChild(li);
     });
-    var dl = clear($("r-defaults"));
-    r.defaults.forEach(function (d) { dl.appendChild(el("dt", "", d.name)); dl.appendChild(el("dd", "", d.value)); });
-    setText("r-checked", r.checked ? "checked " + hm(r.checked) + (r.telemetryAsk ? " · usage counts: " + (r.telemetryOn ? "on" : "off") : "") : "");
+    ["Choosing the Marshal: the picker when the Board first opens.",
+      "A provider CLI's own questions, such as trusting this folder.",
+      "Signing in to a provider (agy, claude, codex) in its own window."].forEach(function (t) { ul.appendChild(el("li", "muted", t)); });
+    box.appendChild(ul);
+    box.appendChild(link("#team", "See the team's readiness"));
   }
-
-  function renderPlan(f) {
-    var p = f.plan, on = p.stages.length > 0 || p.total > 0;
-    show("p-plan", on);
+  function renderSummary(f, ph) {
+    var ul = $("sum-cards");
+    var on = (ph === "run" || ph === "paused") && f.tasks.length > 0;
+    var building = f.tasks.filter(function (t) { return t.state === "building"; });
+    var back = f.tasks.filter(function (t) { return rework(t) > 0; });
+    var warn = f.workers.filter(function (w) { return w.reason || w.tagTone === "bad" || w.tagTone === "warn"; });
+    if (!changed("summary", [on, building.map(function (t) { return t.id; }), back.map(function (t) { return t.id; }),
+      warn.map(function (w) { return [w.provider, w.reason, w.tag]; }), f.lanes.items.length])) return;
+    clear(ul);
+    ul.hidden = !on;
     if (!on) return;
-    setText("pl-title", p.title);
-    setText("pl-sum", p.total ? "· " + p.done + "/" + p.total + " merged" : "");
-    setText("pl-accepted", p.accepted);
-    var ol = clear($("pl-stages"));
-    p.stages.forEach(function (s) {
-      var st = s.state || "todo";
-      var li = el("li", st, (st === "done" ? "✓ " : st === "current" ? "▶ " : "") + s.name + (s.note ? " " + s.note : ""));
-      li.setAttribute("aria-label", s.name + ": " + st + (s.note ? " " + s.note : ""));
-      if (st === "current") li.setAttribute("aria-current", "step");
-      ol.appendChild(li);
-    });
-    $("pl-bar").parentNode.hidden = !p.total;
-    var pct = p.total ? Math.round(100 * p.done / p.total) : 0;
-    bar("pl-bar", pct, "ok");
-    $("pl-bar").setAttribute("aria-valuemax", "100");
-    setText("pl-counts", p.total ? p.done + "/" + p.total + " merged · " + p.active + " active · " + p.waiting + " waiting" : "");
-    spark(p.throughput);
-    var stats = [];
-    if (p.mergedPerHr) stats.push(p.mergedPerHr + " merged/h");
-    if (p.etaSec) stats.push("ETA ≈ " + dur(p.etaSec));
-    if (p.reworked) stats.push(p.reworked + " reworked");
-    if (p.tokens) stats.push(compact(p.tokens) + " tokens");
-    setText("pl-stats", stats.join(" · "));
+    function card(href, label, big, sub, cls) {
+      var li = el("li"), a = link(href, "", cls);
+      a.appendChild(el("span", "lbl", label));
+      a.appendChild(el("span", "big", big));
+      a.appendChild(el("span", "sub", sub));
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    var ids = function (ts) { return ts.slice(0, 3).map(function (t) { return t.id; }).join(", ") + (ts.length > 3 ? " and " + (ts.length - 3) + " more" : ""); };
+    card("#work", "Building now", String(building.length), building.length ? ids(building) + " · " + plural(f.lanes.items.length, "worker") + " busy" : "nothing is being built");
+    card(back.length ? "#work/" + back[0].id : "#work", "Sent back", String(back.length), back.length ? ids(back) + ": reviewers asked for changes" : "no task was sent back", back.length ? "warn" : "");
+    card("#team", "Team warning", warn.length ? String(warn.length) : "none",
+      warn.length ? warn[0].provider + ": " + (warn[0].reason || warn[0].tag) : "every provider is fine", warn.length ? "warn" : "");
+  }
+  function meaningful(e) { return e.tone !== "muted"; }
+  function eventRow(e) {
+    var li = el("li");
+    li.appendChild(el("time", "", hm(e.at)));
+    li.appendChild(el("span", "kind " + toneClass(e.tone), e.kind));
+    li.appendChild(el("span", "text", plainText(e.text)));
+    li.appendChild(el("span", "count", e.count > 1 ? "×" + e.count + (e.last ? " · last " + hm(e.last) : "") : ""));
+    return li;
+  }
+  function renderLatest(f) {
+    var list = f.activity.filter(meaningful).slice(0, 3);
+    if (!changed("latest", list)) return;
+    var ol = clear($("latest"));
+    list.forEach(function (e) { ol.appendChild(eventRow(e)); });
+    show("latest-empty", list.length === 0);
   }
 
+  // ---- Work ------------------------------------------------------------------
+  var filter = "all";
+  var filters = [["all", "All"], ["building", "Building"], ["sentback", "Sent back"], ["waiting", "Waiting"], ["merged", "Merged"]];
+  function renderWork(f) {
+    var p = f.plan, ph = phase(f);
+    setText("work-sum", p.total ? p.done + " of " + p.total + " merged" + (p.title ? " · " + p.title : "") : p.title);
+    if (changed("stages", p.stages)) {
+      var ol = clear($("stages"));
+      p.stages.forEach(function (s) {
+        var st = s.state || "todo";
+        var li = el("li", st, (st === "done" ? "✓ " : st === "current" ? "▶ " : "") + s.name + (s.note ? " " + s.note : ""));
+        li.setAttribute("aria-label", s.name + ": " + (st === "current" ? "now" : st) + (s.note ? ", " + s.note : ""));
+        if (st === "current") li.setAttribute("aria-current", "step");
+        ol.appendChild(li);
+      });
+    }
+    renderControls(f);
+    var none = f.tasks.length === 0;
+    $("work-empty").hidden = true;
+    if (none) {
+      if (ph === "planning") emptyBox("work-empty", "Planning", "The Marshal is writing the plan; its tasks appear here when it is ready.");
+      else if (ph === "norun") emptyBox("work-empty", "No run yet", "Tell the Marshal what to build on Home; the plan and its tasks show up here.");
+      else if (ph === "paused") emptyBox("work-empty", "Paused", "The run waits for your choice on Home. Its task list is not sent with this card.");
+      else emptyBox("work-empty", "No tasks yet", "The run has no tasks on the Board yet.");
+    }
+    show("work-body", !none);
+    renderFilters(f);
+    renderTasks(f);
+    renderDrawer(f);
+    renderPlan(f);
+    renderLanes(f);
+  }
+  function renderControls(f) {
+    var rt = retryTask(f), stop = screenKey(f, "ctrl+x");
+    var rtTask = f.tasks.filter(function (x) { return x.id === rt; });
+    if (!changed("controls", [rt, rtTask, !!stop, f.lanes.items.length, armed, pending, f.act && f.act.card])) return;
+    var box = clear($("controls"));
+    // Each button with the facts it decides on next to it.
+    if (rt) {
+      var t = null;
+      f.tasks.forEach(function (x) { if (x.id === rt) t = x; });
+      box.appendChild(twoStep("ghost", "r", "retry " + rt + " from scratch", retryWarn));
+      box.appendChild(el("span", "muted", rt + (t ? " · " + t.title + (t.note ? " · " + t.note : "") : "") + " · starts again in a fresh session, keeps its branch"));
+    }
+    if (stop) {
+      box.appendChild(twoStep("ghost", "ctrl+x", "stop all workers", stopAllWarn));
+      box.appendChild(el("span", "muted", plural(f.lanes.items.length, "worker") + " running · the Marshal keeps running"));
+    }
+    box.hidden = !box.firstChild;
+  }
+  function renderFilters(f) {
+    var counts = { all: f.tasks.length, building: 0, sentback: 0, waiting: 0, merged: 0 };
+    f.tasks.forEach(function (t) { var b = bucket(t); if (counts[b] !== undefined) counts[b]++; });
+    if (!changed("filters", [counts, filter])) return;
+    var box = clear($("filters"));
+    filters.forEach(function (x) {
+      var b = el("button", "", x[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(filter === x[0]));
+      b.appendChild(el("span", "n", String(counts[x[0]])));
+      b.addEventListener("click", function () { filter = x[0]; render(frame); });
+      box.appendChild(b);
+    });
+  }
+  function renderTasks(f) {
+    var rows = f.tasks.filter(function (t) { return filter === "all" || bucket(t) === filter; });
+    var lanes = f.lanes.items.map(function (x) { return [x.name, x.task, x.step, x.reviewing]; });
+    if (!changed("tasks", [rows, lanes, route.task])) return;
+    var tb = clear($("task-rows"));
+    rows.forEach(function (t) {
+      var tr = el("tr", route.task === t.id ? "sel" : "");
+      var td = el("td");
+      var a = link("#work/" + encodeURIComponent(t.id), t.id);
+      if (route.task === t.id) a.setAttribute("aria-current", "true");
+      a.setAttribute("aria-label", t.id + ": " + t.title + ", open details");
+      td.appendChild(a);
+      tr.appendChild(td);
+      tr.appendChild(el("td", "", t.title));
+      var l = laneFor(f, t.id);
+      tr.appendChild(el("td", "muted", [t.writer, l && l.lane.name].filter(Boolean).join(" · ") || "–"));
+      var st = el("td");
+      st.appendChild(stateWords(f, t));
+      tr.appendChild(st);
+      tb.appendChild(tr);
+    });
+    show("task-none", rows.length === 0);
+    tickLanes();
+  }
+  function renderDrawer(f) {
+    var id = route.name === "work" ? route.task : "";
+    var t = null;
+    f.tasks.forEach(function (x) { if (x.id === id) t = x; });
+    var pt = null;
+    if (!t && id && f.paused) f.paused.tasks.forEach(function (x) { if (x.title.indexOf(id + " ") === 0 || x.title === id) pt = x; });
+    var dr = $("drawer");
+    $("drawer").parentNode.className = "workgrid" + ((t || pt || id) ? " open" : "");
+    if (!id) { dr.hidden = true; sigs.drawer = ""; return; }
+    var l = t ? laneFor(f, t.id) : null, rl = t ? reviewLaneFor(f, t.id) : null;
+    var rt = retryTask(f);
+    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused])) return;
+    dr.hidden = false;
+    var facts = clear($("dr-facts")), acts = clear($("dr-acts"));
+    setText("dr-note", "");
+    if (!t && !pt) {
+      setText("dr-title", id);
+      clear($("dr-state")).textContent = "This task is not on the Board now.";
+      return;
+    }
+    if (pt) {
+      setText("dr-title", pt.title);
+      chip(clear($("dr-state")).appendChild(el("span")), "paused", "bad");
+      kv(facts, "Progress", pt.progress);
+      kv(facts, "Kept", pt.kept);
+      setText("dr-note", "The choice for this task is on Home, in the paused card.");
+      acts.appendChild(link("#home", "Go to the paused card"));
+      return;
+    }
+    setText("dr-title", t.id + " · " + t.title);
+    var stBox = clear($("dr-state"));
+    stBox.appendChild(stateWords(f, t));
+    kv(facts, "Files", t.files);
+    kv(facts, "Worker", [t.writer, l && l.lane.name, l && l.lane.model].filter(Boolean).join(" · ") || "not assigned yet");
+    if (l) {
+      kv(facts, "Step", l.lane.step);
+      var run = el("span", "el"); run.dataset.lane = l.i; kv(facts, "Running for", run);
+      var sig = el("span", "sig"); sig.dataset.lane = l.i; kv(facts, "Last signal", sig);
+    }
+    kv(facts, "Reviewer", [t.reviewer, rl && "reviewing now on " + rl.lane.name].filter(Boolean).join(" · "));
+    var n = rework(t);
+    kv(facts, "Attempt", n ? "attempt " + (n + 1) + ": the reviewer sent it back " + plural(n, "time") : t.state === "building" || t.state === "review" ? "first attempt" : "");
+    if (n) kv(facts, "Why sent back", "The reviewer's reason is not sent to this page yet; the terminal Board's task inspector shows it.", "muted");
+    if (t.note && !n) kv(facts, "Note", t.note);
+    if (rt === t.id) acts.appendChild(twoStep("ghost", "r", "retry " + t.id + " from scratch", retryWarn));
+    else setText("dr-note", "No action for this task from here: the Board offers Retry only for a stuck task, and moving work to another provider only on a paused card.");
+    tickLanes();
+  }
+  function renderPlan(f) {
+    var p = f.plan;
+    show("w-plan", !!(p.title || p.accepted || p.total));
+    setText("pl-title", p.title);
+    setText("pl-accepted", p.accepted ? cap(p.accepted) : "");
+    var stats = [];
+    if (p.mergedPerHr) stats.push(p.mergedPerHr + " merged per hour");
+    if (p.reworked) stats.push(p.reworked + " sent back");
+    if (p.tokens) stats.push(compact(p.tokens) + " tokens used");
+    if (p.etaSec > 0) stats.push("≈ " + dur(p.etaSec) + " to go");
+    setText("pl-stats", stats.join(" · "));
+    if (changed("spark", p.throughput)) spark(p.throughput);
+  }
   function spark(values) {
     var svg = $("pl-spark"), ns = "http://www.w3.org/2000/svg";
     clear(svg);
-    if (!values || values.length < 2) { svg.parentNode.hidden = true; return; }
-    svg.parentNode.hidden = false;
+    if (!values || values.length < 2) { $("pl-spark-fig").hidden = true; return; }
+    $("pl-spark-fig").hidden = false;
     var max = Math.max.apply(null, values.concat([1])), w = 120, h = 28, step = w / (values.length - 1);
     var pts = values.map(function (v, i) { return (i * step).toFixed(1) + "," + (h - 2 - (v / max) * (h - 4)).toFixed(1); });
     var area = document.createElementNS(ns, "polygon");
@@ -356,177 +763,285 @@
     svg.appendChild(area); svg.appendChild(line);
     svg.setAttribute("aria-label", "Merges per 5 minutes, oldest first: " + values.join(", "));
   }
-
   function renderLanes(f) {
-    var l = f.lanes, on = l.items.length > 0 || ["running", "split", "decision", "paused"].indexOf(f.screen) >= 0 && f.top.run;
-    show("p-lanes", on);
-    if (!on) return;
-    setText("la-limits", l.limits);
-    setText("la-sum", l.items.length ? "· " + l.items.length + " running" : "");
+    var l = f.lanes;
+    show("w-lanes", l.items.length > 0 || !!f.top.run);
+    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected]; }))) { tickLanes(); return; }
     var tb = clear($("la-rows"));
     l.items.forEach(function (x, i) {
-      var tr = el("tr", x.selected ? "sel" : "");
-      tr.dataset.i = i;
+      var tr = el("tr");
+      tr.dataset.lane = i;
       tr.appendChild(el("td", "", x.name));
-      tr.appendChild(el("td", "dim", x.model || x.provider));
-      tr.appendChild(el("td", "task" + (x.reviewing ? " tone-vio" : ""), x.task));
+      tr.appendChild(el("td", "muted", x.model || x.provider));
+      tr.appendChild(el("td", x.reviewing ? "tone-vio" : "", x.task));
       tr.appendChild(el("td", "", x.step));
-      tr.appendChild(el("td", "num elapsed"));
-      tr.appendChild(el("td", "num signal"));
+      var e = el("td", "num el"); e.dataset.lane = i; tr.appendChild(e);
+      var s = el("td", "num sig"); s.dataset.lane = i; tr.appendChild(s);
       tb.appendChild(tr);
     });
     show("la-empty", l.items.length === 0);
     $("la-rows").closest(".tablewrap").hidden = l.items.length === 0;
     tickLanes();
   }
-
+  // tickLanes moves every running clock on the page by the time since the
+  // frame came.
   function tickLanes() {
     if (!frame) return;
     var add = since();
-    Array.prototype.forEach.call($("la-rows").children, function (tr) {
-      var x = frame.lanes.items[+tr.dataset.i];
+    Array.prototype.forEach.call(document.querySelectorAll("[data-lane]"), function (n) {
+      var x = frame.lanes.items[+n.dataset.lane];
       if (!x) return;
       var sig = x.lastSignalSec + add, stale = x.stale || sig > 60;
-      tr.classList.toggle("stale", stale);
-      tr.querySelector(".elapsed").textContent = dur(x.elapsedSec + add);
-      tr.querySelector(".signal").textContent = dur(sig) + " ago" + (stale ? " · stale" : "");
+      if (n.tagName === "TR") { n.classList.toggle("stale", stale); return; }
+      if (n.classList.contains("el")) n.textContent = dur(x.elapsedSec + add);
+      else if (n.classList.contains("sig")) n.textContent = dur(sig) + " ago" + (stale ? " · no signal for a while" : "");
     });
   }
 
-  var taskTone = { merged: "ok", review: "vio", building: "info", waiting: "", failed: "bad", stuck: "bad", returned: "warn" };
-  function renderTasks(f) {
-    var on = f.tasks.length > 0 || f.screen === "running";
-    show("p-tasks", on);
-    var ul = clear($("ta-rows"));
-    f.tasks.forEach(function (t) {
-      var li = el("li");
-      li.appendChild(el("span", "id", t.id));
-      li.appendChild(el("span", "chip " + toneClass(taskTone[t.state]), t.state || "–"));
-      li.appendChild(el("span", "title", t.title));
-      var meta = [t.files, t.writer && "by " + t.writer, t.reviewer && "review " + t.reviewer].filter(Boolean).join(" · ");
-      if (meta) li.appendChild(el("span", "meta", meta));
-      if (t.note) li.appendChild(el("span", "chip tone-warn", t.note));
-      ul.appendChild(li);
-    });
-    show("ta-empty", f.tasks.length === 0);
-    setText("ta-sum", f.tasks.length ? "· " + f.tasks.length : "");
-  }
-
-  function renderSteps(f) {
-    var s = f.steps, on = s.items.length > 0;
-    show("p-steps", on);
-    if (!on) return;
-    setText("st-model", s.model ? "· " + s.model : "");
-    var ol = clear($("st-rows"));
-    s.items.forEach(function (x) {
-      var li = el("li");
-      li.appendChild(el("time", "", hm(x.at)));
-      li.appendChild(el("span", "kind tone-info", x.kind));
-      li.appendChild(el("span", "", x.text));
-      li.appendChild(el("span", ""));
+  // ---- Architecture ------------------------------------------------------------
+  function renderArchitecture(f) {
+    var d = f.decision && f.decision.kind === "architecture" ? f.decision : null;
+    var arch = null;
+    f.plan.stages.forEach(function (s) { if (s.name === "arch") arch = s; });
+    var rev = "";
+    var m = /rev(?:ision)?\s*(\d+)/i.exec((d && d.title) || (arch && arch.note) || f.plan.accepted || "");
+    if (m) rev = "revision " + m[1];
+    var pendingReq = f.requests.filter(function (r) { return r.answer === "pending"; }).length;
+    var canOpen = !!(d && f.act && f.act.tokens.a);
+    if (!changed("arch", [d, arch, f.plan.accepted, pendingReq, canOpen, pending, f.screen])) return;
+    var dl = clear($("ar-facts"));
+    kv(dl, "Revision", rev || "no architecture yet");
+    var status = d ? "proposed: waiting for your Accept on the review page" :
+      f.plan.accepted ? cap(f.plan.accepted) : arch && arch.state === "done" ? "accepted" : arch && arch.state === "current" ? "being drafted by the Marshal" : "not drafted yet";
+    kv(dl, "State", status, d ? "tone-warn" : "");
+    if (d) kv(dl, "Proposal", [d.summary, d.changedNote].filter(Boolean).join(" · "));
+    kv(dl, "Open requests to the Marshal", String(pendingReq));
+    var acts = clear($("ar-acts"));
+    if (canOpen) {
+      acts.appendChild(button("primary", "Open the architecture map", function () { act({ action: "key", key: "a" }, "Open the architecture map"); }));
+      setText("ar-note", "The map opens on its own review page in a new tab; Accept happens only there, never on this page.");
+    } else {
+      setText("ar-note", d ? "The review page opens from the card on Home." :
+        "The architecture map opens from here while the Marshal proposes a revision. Accept happens only on its review page.");
+    }
+    var parts = d ? d.nodes : [];
+    show("ar-parts", parts.length > 0);
+    var ol = clear($("ar-nodes"));
+    parts.forEach(function (n) {
+      var li = el("li", n.changed ? "changed" : "", n.name);
+      if (n.sub) li.appendChild(el("small", "", n.sub));
+      if (n.changed) li.appendChild(el("small", "tone-info", "changed by this goal"));
       ol.appendChild(li);
     });
-    setText("st-quiet", s.quietSec ? "last tool call " + dur(s.quietSec) + " ago" : "");
   }
 
-  function renderMarshal(f) {
+  // ---- Team ------------------------------------------------------------------
+  var windowName = { "5h": "5-hour window", "weekly": "weekly window" };
+  function limitRows(rows, who) {
+    var ul = el("ul", "limits");
+    rows.forEach(function (r) {
+      var li = el("li");
+      li.appendChild(el("span", "what", [r.family || "all models", windowName[r.window] || r.window].filter(Boolean).join(" · ")));
+      if (r.percentLeft >= 0) {
+        li.appendChild(el("span", "num " + toneClass(leftTone(r.percentLeft)), r.percentLeft + "% left"));
+        li.appendChild(newBar(who + " " + (r.family || "") + " " + (windowName[r.window] || r.window) + " left", r.percentLeft, leftTone(r.percentLeft)));
+      } else {
+        li.appendChild(el("span", "muted", /^not /.test(r.source || "") ? r.source : "not reported by the CLI"));
+      }
+      var w = [];
+      if (r.resetsAt) w.push("resets " + when(r.resetsAt));
+      if (r.observedAt) w.push("read " + ago(r.observedAt));
+      if (r.source && !/^not /.test(r.source)) w.push("from " + r.source);
+      if (r.drives) w.push("decides dispatch");
+      if (w.length) li.appendChild(el("span", "when", w.join(" · ")));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+  function renderTeam(f) {
     var m = f.marshal;
-    setText("m-name", [m.provider, m.model, m.effort && m.effort + " effort"].filter(Boolean).join(" · ") || "–");
-    chip($("m-use"), m.provider ? (m.inUse ? "in use" : "idle") : "", m.inUse ? "ok" : "");
-    setText("m-doing", m.doing);
-    bar("m-ctx", m.contextPct, m.contextPct >= 85 ? "bad" : m.contextPct >= 65 ? "warn" : "");
-    setText("m-ctx-t", m.contextPct >= 0 ? m.contextPct + "%" + (m.contextWindow ? " of " + compact(m.contextWindow) : "") : "unknown");
-    bar("m-5h", m.limit5hPct, leftTone(m.limit5hPct));
-    setText("m-5h-t", m.limit5hPct >= 0 ? m.limit5hPct + "% left" : "unknown");
-    bar("m-wk", m.weeklyPct, leftTone(m.weeklyPct));
-    setText("m-wk-t", m.weeklyPct >= 0 ? m.weeklyPct + "% left" : "unknown");
-    var bound = m.chatBound || f.chat.bound;
-    chip($("m-chat"), bound ? "chat bound" : "chat not bound", bound ? "ok" : "warn");
-    var known = m.inputKnown || f.chat.inputKnown, clearIn = m.inputClear || f.chat.inputClear;
-    chip($("m-input"), known ? (clearIn ? "input clear" : "input waiting") : "", known ? (clearIn ? "ok" : "warn") : "");
-    var c = f.chat, notes = [];
-    if (c.restarts) notes.push(c.restarts + " restart" + (c.restarts > 1 ? "s" : "") + (c.reboundAt ? " · rebound " + hm(c.reboundAt) : ""));
-    if (c.resent) notes.push(c.resent + " resent");
-    if (c.answered) notes.push(c.answered + " answered");
-    if (c.stage) notes.push(c.stage);
-    setText("m-chatnote", notes.join(" · "));
-    setText("m-sum", m.provider ? "· " + [m.provider, m.model].filter(Boolean).join(" ") : "");
-  }
-
-  function renderWorkers(f) {
-    show("p-workers", f.workers.length > 0);
-    setText("w-sum", f.workers.length ? "· " + f.workers.map(function (w) { return w.provider + (w.leftPct >= 0 ? " " + w.leftPct + "%" : ""); }).join(" · ") : "");
-    var ul = clear($("w-rows"));
+    if (!changed("team", [m, f.workers, f.limits, f.lanes.limits, f.ready, f.chat, Math.floor(Date.now() / 60000)])) return;
+    var limitsOf = {};
+    (f.limits || []).forEach(function (p) { limitsOf[p.provider] = p; });
+    var ul = clear($("team-cards"));
+    setText("team-sum", f.workers.length ? plural(f.workers.length, "provider") : "");
+    if (m.provider) {
+      var li = el("li"), head = el("div", "tc-head");
+      head.appendChild(el("b", "", m.provider));
+      head.appendChild(el("span", "tc-role", "Marshal"));
+      var c = el("span"); chip(c, m.inUse ? "in use" : "idle", m.inUse ? "ok" : ""); head.appendChild(c);
+      li.appendChild(head);
+      li.appendChild(el("p", "muted", [m.model, m.effort && m.effort + " effort"].filter(Boolean).join(" · ")));
+      if (m.doing) li.appendChild(el("p", "", cap(m.doing)));
+      var rows = [];
+      if (m.limit5hPct >= 0) rows.push({ family: m.model, window: "5h", percentLeft: m.limit5hPct });
+      if (m.weeklyPct >= 0) rows.push({ family: m.model, window: "weekly", percentLeft: m.weeklyPct });
+      if (rows.length) li.appendChild(limitRows(rows, m.provider));
+      else li.appendChild(el("p", "muted", "Limits: not reported by the CLI"));
+      if (m.contextPct >= 0) {
+        var cl = el("ul", "limits"), ci = el("li");
+        ci.appendChild(el("span", "what", "context used"));
+        ci.appendChild(el("span", "num", m.contextPct + "%" + (m.contextWindow ? " of " + compact(m.contextWindow) : "")));
+        ci.appendChild(newBar("Marshal context used", m.contextPct, m.contextPct >= 85 ? "bad" : m.contextPct >= 65 ? "warn" : ""));
+        cl.appendChild(ci); li.appendChild(cl);
+      }
+      var bound = m.chatBound || f.chat.bound;
+      li.appendChild(el("p", bound ? "muted" : "reason", bound ? "Chat bound" + (f.chat.restarts ? " · " + plural(f.chat.restarts, "restart") : "") : "⚠ Chat not bound"));
+      ul.appendChild(li);
+    }
     f.workers.forEach(function (w) {
-      var li = el("li");
-      li.appendChild(el("b", "", (w.glyph ? w.glyph + " " : "") + w.provider));
-      var b = el("div", "bar " + toneClass(leftTone(w.leftPct)));
-      b.setAttribute("role", "progressbar");
-      b.setAttribute("aria-label", w.provider + " limit left");
-      b.setAttribute("aria-valuemin", "0"); b.setAttribute("aria-valuemax", "100");
-      var fill = el("span");
-      b.appendChild(fill);
-      if (w.leftPct >= 0) { fill.style.width = Math.min(100, w.leftPct) + "%"; b.setAttribute("aria-valuenow", String(w.leftPct)); }
-      else b.setAttribute("aria-valuetext", "unknown");
-      li.appendChild(b);
-      var right = el("span", "");
-      right.appendChild(el("span", "chip " + toneClass(w.tagTone), w.tag || (w.leftPct >= 0 ? w.leftPct + "% left" : "")));
-      right.appendChild(el("span", "dim", " " + [w.leftPct >= 0 ? w.leftPct + "% left" : "limit unknown", w.detail].filter(Boolean).join(" · ")));
-      li.appendChild(right);
-      if (w.reason) li.appendChild(el("span", "reason", "⚠ " + w.reason));
+      var li = el("li"), head = el("div", "tc-head");
+      head.appendChild(el("b", "", (w.glyph ? w.glyph + " " : "") + w.provider));
+      head.appendChild(el("span", "tc-role", "Worker"));
+      var c = el("span"); chip(c, w.tag || (w.signedIn ? "signed in" : w.installed ? "not signed in" : "not installed"), w.tagTone); head.appendChild(c);
+      li.appendChild(head);
+      var state = [w.detail, !w.installed ? "not installed" : !w.signedIn ? "not signed in" : ""].filter(Boolean).join(" · ");
+      if (state) li.appendChild(el("p", "muted", state));
+      var pl = limitsOf[w.provider];
+      if (pl && pl.state) {
+        var dp = el("p");
+        dp.appendChild(el("b", "", cap(pl.state)));
+        var why = [pl.model && "runs " + pl.model, pl.reason].filter(Boolean).join(" · ");
+        if (why) dp.appendChild(document.createTextNode(": " + why));
+        li.appendChild(dp);
+      }
+      if (pl && pl.rows && pl.rows.length) li.appendChild(limitRows(pl.rows, w.provider));
+      else li.appendChild(el("p", "muted", "Limits: not reported yet"));
+      if (w.reason) li.appendChild(el("p", "reason", "⚠ " + w.reason));
       ul.appendChild(li);
     });
-  }
-
-  function renderInbox(f) {
-    var i = f.inbox, n = Math.max(i.count, i.lines.length);
-    setText("i-count", n ? "· " + n + " waiting" : "");
-    var ul = clear($("i-rows"));
-    i.lines.forEach(function (l) { ul.appendChild(el("li", "", l)); });
-    show("i-empty", i.lines.length === 0);
-    setText("i-next", i.next ? "next ask: " + i.next : "");
-  }
-
-  function renderRequests(f) {
-    show("p-requests", f.requests.length > 0);
-    var tb = clear($("rq-rows"));
-    f.requests.forEach(function (r) {
-      var tr = el("tr");
-      tr.appendChild(el("td", "num", hm(r.sent)));
-      tr.appendChild(el("td", "", r.what));
-      var td = el("td");
-      td.appendChild(el("span", "chip " + toneClass(r.tone || (r.answer === "pending" ? "warn" : "")), r.answer || "–"));
-      tr.appendChild(td);
-      tr.appendChild(el("td", "num", r.latencySec ? dur(r.latencySec) : "–"));
-      tb.appendChild(tr);
-    });
-  }
-
-  function renderActivity(f) {
-    var on = f.activity.length > 0 || !!f.top.run;
-    show("p-activity", on);
-    var ol = clear($("a-rows"));
-    f.activity.forEach(function (e) {
+    if (!ul.firstChild) {
+      var e = el("li", "empty");
+      e.appendChild(el("b", "", "No provider reported yet"));
+      e.appendChild(el("span", "", "The team appears once the Board has checked which providers are installed and signed in."));
+      ul.appendChild(e);
+    }
+    var dl = clear($("tm-defaults"));
+    kv(dl, "Lane caps", f.lanes.limits ? f.lanes.limits.replace(/^limit /, "") : "");
+    f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });
+    show("tm-rules", !!dl.firstChild);
+    var r = f.ready;
+    show("tm-ready", r.checks.length > 0);
+    setText("r-count", r.total ? "· " + r.ready + " of " + r.total + " ready" : "");
+    var cl2 = clear($("r-checks"));
+    var marks = { ok: ["✓ ok", "ok"], warn: ["! check", "warn"], bad: ["✗ fix", "bad"] };
+    r.checks.forEach(function (c) {
+      var mk = marks[c.mark] || ["·", ""];
       var li = el("li");
-      li.appendChild(el("time", "", hm(e.at)));
-      li.appendChild(el("span", "kind " + toneClass(e.tone), e.kind));
-      li.appendChild(el("span", toneClass(e.tone === "muted" ? "muted" : ""), e.text));
-      li.appendChild(el("span", "count", e.count > 1 ? "×" + e.count + (e.last ? " · " + hm(e.last) : "") : ""));
-      ol.appendChild(li);
+      var ch = el("span"); chip(ch, mk[0], mk[1]); li.appendChild(ch);
+      li.appendChild(el("b", "", c.label));
+      li.appendChild(el("span", "", c.text));
+      li.appendChild(el("span", "muted", c.tag));
+      if (c.hint) li.appendChild(el("span", "hint", c.hint));
+      cl2.appendChild(li);
     });
-    show("a-empty", f.activity.length === 0);
-    setText("a-sum", f.activity.length ? "· " + f.activity[0].text : "");
+    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Check again from the terminal Board." : "");
   }
 
+  // ---- Activity ------------------------------------------------------------------
+  var tab = "all";
+  function renderActivity(f) {
+    // Requests that expired or were refused are told in Activity too, in
+    // plain words.
+    var settled = f.requests.filter(function (r) { return r.answer === "expired" || r.answer === "decline"; }).map(function (r) {
+      return { at: r.sent, kind: "request", tone: "warn", count: 0,
+        text: "The request to " + plainText(r.what) + (r.answer === "expired" ? " expired before it was answered" : " was refused") };
+    });
+    var all = f.activity.concat(settled).sort(function (a, b) { return (parse(b.at) || 0) - (parse(a.at) || 0); });
+    if (changed("activity", all)) {
+      var box = clear($("act-groups")), group = null, key = "";
+      all.forEach(function (e) {
+        var d = parse(e.at);
+        var k = d ? when(e.at).replace(/\d\d:\d\d$/, "") + pad(d.getHours()) + ":00" : "Earlier";
+        if (k !== key) {
+          key = k;
+          var g = el("section", "group");
+          g.appendChild(el("h3", "", k === "Earlier" ? k : "From " + k));
+          group = el("ol", "events");
+          g.appendChild(group);
+          box.appendChild(g);
+        }
+        group.appendChild(eventRow(e));
+      });
+      show("act-empty", all.length === 0);
+    }
+    if (changed("steps", [f.steps.items, f.steps.model])) {
+      setText("st-model", f.steps.model ? "Model: " + f.steps.model : "");
+      var ol = clear($("st-rows"));
+      f.steps.items.forEach(function (x) {
+        ol.appendChild(eventRow({ at: x.at, kind: x.kind, text: x.text, tone: "info" }));
+      });
+      show("st-empty", f.steps.items.length === 0);
+    }
+    setText("st-quiet", f.steps.quietSec ? "Last tool call " + dur(f.steps.quietSec + since()) + " ago" : "");
+    if (changed("requests", f.requests)) {
+      var tb = clear($("rq-rows"));
+      f.requests.forEach(function (r) {
+        var tr = el("tr");
+        tr.appendChild(el("td", "num", hm(r.sent)));
+        tr.appendChild(el("td", "", plainText(r.what)));
+        var td = el("td"), c = el("span");
+        var words = { allow: "allowed", decline: "refused", expired: "expired before it was answered", pending: "waiting for an answer" };
+        chip(c, words[r.answer] || r.answer || "–", r.tone || (r.answer === "pending" || r.answer === "expired" ? "warn" : ""));
+        td.appendChild(c);
+        tr.appendChild(td);
+        tr.appendChild(el("td", "num", r.latencySec ? dur(r.latencySec) : "–"));
+        tb.appendChild(tr);
+      });
+      show("rq-empty", f.requests.length === 0);
+      $("rq-rows").closest(".tablewrap").hidden = f.requests.length === 0;
+    }
+    var c = f.chat, notes = [];
+    if (c.answered) notes.push(plural(c.answered, "request") + " answered");
+    if (c.resent) notes.push(c.resent + " resent");
+    if (c.restarts) notes.push(plural(c.restarts, "chat restart") + (c.reboundAt ? ", rebound " + hm(c.reboundAt) : ""));
+    setText("rq-chat", notes.join(" · "));
+  }
+  function selectTab(name, focus) {
+    tab = name;
+    [["all", "tab-all", "tp-all"], ["steps", "tab-steps", "tp-steps"], ["req", "tab-req", "tp-req"]].forEach(function (x) {
+      var on = x[0] === name;
+      $(x[1]).setAttribute("aria-selected", String(on));
+      $(x[1]).tabIndex = on ? 0 : -1;
+      $(x[2]).hidden = !on;
+      if (on && focus) $(x[1]).focus();
+    });
+  }
+
+  // ---- Settings ------------------------------------------------------------------
+  function renderSettings(f) {
+    var r = f.ready;
+    var s = f.system || {};
+    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, f.plan.tokens, f.v, s])) return;
+    var dl = clear($("set-facts"));
+    kv(dl, "Version", (f.top.version || "unknown") + (s.updateAvailable ? " · " + s.updateAvailable + " is available (F10 or /update in the terminal)" : ""),
+      s.updateAvailable ? "tone-warn" : "");
+    var pct = function (n, what) { return n >= 0 ? n + "% " + what : what + " unknown"; };
+    var host = [pct(s.cpuPct, "CPU"), pct(s.memPct, "memory used"), pct(s.diskPct, "disk used") + (s.lowDisk ? " (low on space)" : ""),
+      s.tempC >= 0 ? s.tempC + " °C" : ""].filter(Boolean).join(" · ");
+    kv(dl, "Host load", host);
+    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; lane cap " + s.thermalCap + " asked for" : "") : "off", s.thermalGuard ? "tone-warn" : "");
+    if (s.notice) kv(dl, "Host note", s.notice);
+    kv(dl, "MCP", s.mcpFailed ? "failed in this session · F6 in the terminal shows why" : "working", s.mcpFailed ? "tone-bad" : "");
+    var approval = "";
+    r.defaults.forEach(function (d) { if (d.name === "approval") approval = d.value; });
+    kv(dl, "Approval mode", approval || "not reported to this page yet");
+    kv(dl, "Project", f.top.project || "–");
+    kv(dl, "Run", f.top.run || "no run");
+    // Telemetry is known once the Board probed this computer (the checks
+    // and the defaults come with it).
+    var probed = r.checks.length > 0 || r.defaults.length > 0;
+    kv(dl, "Usage counts (telemetry)", probed ? (r.telemetryOn ? "on · marshal telemetry disable turns it off" : "off") : "not checked yet · marshal telemetry status");
+    if (f.plan.tokens) kv(dl, "Tokens this run", compact(f.plan.tokens));
+    kv(dl, "This page", "private link for this computer only · frame format " + f.v);
+  }
+
+  // ---- render ------------------------------------------------------------------
   function render(f) {
     if (!f) return;
-    renderTop(f); renderNow(f); renderCard(f); renderReady(f); renderPlan(f); renderLanes(f);
-    renderTasks(f); renderSteps(f); renderMarshal(f); renderWorkers(f); renderInbox(f);
-    renderRequests(f); renderActivity(f);
+    renderTop(f); renderCard(f); renderHome(f); renderWork(f); renderArchitecture(f);
+    renderTeam(f); renderActivity(f); renderSettings(f);
   }
-
-  // pending is set while an action is on its way: the buttons wait.
-  var pending = false;
 
   function feedback(kind, text) {
     var fb = $("feedback");
@@ -548,10 +1063,10 @@
     if (pending) return Promise.resolve();
     if (!frame || !frame.act) { feedback("bad", "Not connected to the Board yet."); return Promise.resolve(); }
     var name = body.action === "say" ? "say" : body.key;
-    var token = frame.act.tokens[name];
-    if (!token) { feedback("bad", "Refused: that button is not on the Board now."); return Promise.resolve(); }
+    var tok = frame.act.tokens[name];
+    if (!tok) { feedback("bad", "Refused: that button is not on the Board now."); return Promise.resolve(); }
     body.card = frame.act.card;
-    body.token = token;
+    body.token = tok;
     pending = true;
     render(frame);
     feedback("wait", (body.action === "say" ? "Sending…" : label + "…"));
@@ -596,23 +1111,16 @@
     act({ action: "say", text: text }, "Send").then(function (ok) { if (ok) box.value = ""; });
   }
 
-  // Details start closed on a phone and open on a wide screen; after that
-  // they stay as the owner left them.
-  function openDetails() {
-    var wide = window.matchMedia && window.matchMedia("(min-width: 861px)").matches;
-    Array.prototype.forEach.call(document.querySelectorAll("details.pane"), function (d) { d.open = !!wide; });
-  }
-
   function tick() {
     var now = new Date();
     var c = $("t-clock");
-    c.textContent = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+    c.textContent = pad(now.getHours()) + ":" + pad(now.getMinutes());
     c.setAttribute("datetime", now.toISOString());
     tickLanes();
   }
 
   function live(state, text) {
-    chip($("t-live"), text, state === "live" ? "ok" : state === "down" ? "bad" : "warn", state === "down");
+    chip($("t-live"), text, state === "live" ? "ok" : state === "down" ? "bad" : "warn");
     document.body.classList.toggle("is-down", state === "down");
   }
 
@@ -653,7 +1161,7 @@
     live("wait", retry ? "reconnecting…" : "connecting…");
     var ctrl = typeof AbortController === "function" ? new AbortController() : null;
     var watchdog = null, ended = false;
-    function arm() {
+    function armWatch() {
       // Heartbeats come every 15 s: a stream silent for 45 s is dead.
       clearTimeout(watchdog);
       watchdog = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
@@ -677,11 +1185,11 @@
       }
       if (!r.ok || !r.body) { again("The Board answered " + r.status + "."); return; }
       var reader = r.body.getReader(), dec = new TextDecoder(), buf = "";
-      arm();
+      armWatch();
       function pump() {
         return reader.read().then(function (res) {
           if (res.done) { again("The Board closed the connection."); return; }
-          arm();
+          armWatch();
           buf += dec.decode(res.value, { stream: true }).replace(/\r\n?/g, "\n");
           var i;
           while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -698,9 +1206,27 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    $("docs-link").href = docsURL;
+    applyRoute(false);
+    window.addEventListener("hashchange", function () { applyRoute(true); });
+    // The pill leads to what waits: the card's main button on Home.
+    $("you-pill").addEventListener("click", function () {
+      setTimeout(function () {
+        var p = $("primary");
+        if (!$("card").hidden && !p.hidden) p.focus();
+      }, 0);
+    });
+    ["all", "steps", "req"].forEach(function (name, i, all) {
+      var id = { all: "tab-all", steps: "tab-steps", req: "tab-req" }[name];
+      $(id).addEventListener("click", function () { selectTab(name, false); });
+      $(id).addEventListener("keydown", function (e) {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        e.preventDefault();
+        selectTab(all[(i + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length], true);
+      });
+    });
     tick();
     setInterval(tick, 1000);
-    openDetails();
     $("say-send").addEventListener("click", send);
     $("say-text").addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
