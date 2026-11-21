@@ -5271,8 +5271,8 @@
     },
     {
       "path": "internal/cli/command_help_extreme.go",
-      "sha256": "20e01f81d3d01eb861e5a52b3dbb06e7d82722eeeefd12bd9bc8614f38769f9e",
-      "bytes": 756
+      "sha256": "4af2787c58389597f94d2c6ad2ada82846550bf0dc4ff6bbd2acf5d3ebdad969",
+      "bytes": 574
     },
     {
       "path": "internal/cli/constitution.go",
@@ -5421,33 +5421,13 @@
     },
     {
       "path": "internal/cli/memory_cli.go",
-      "sha256": "c04204392649eb5f83f8035d6412639af3a2fada6e838862f93970d06b5fad37",
-      "bytes": 7936
+      "sha256": "fb0aec968e158603a5b05804deeee895b479717486d08dcac93c7fd12e55521b",
+      "bytes": 7854
     },
     {
       "path": "internal/cli/memory_cli_test.go",
       "sha256": "acea895aebe465ba50c12d9533f40a0a7e96caf677dfadd0e35a014332c18846",
       "bytes": 5312
-    },
-    {
-      "path": "internal/cli/memory_legacy_default.go",
-      "sha256": "a771c5559494d140dedb0e566ec59fd544a1b9197ccdec485102f1881af9058e",
-      "bytes": 419
-    },
-    {
-      "path": "internal/cli/memory_legacy_default_test.go",
-      "sha256": "605190986974d32c8c6ecca220560cfbca0cb62a1af1dec9a914dca044f60e0d",
-      "bytes": 850
-    },
-    {
-      "path": "internal/cli/memory_legacy_extreme.go",
-      "sha256": "565ef89a566830165530a426eac37f62435138bab92da9885dba0e50af2918c1",
-      "bytes": 2003
-    },
-    {
-      "path": "internal/cli/memory_legacy_extreme_test.go",
-      "sha256": "8ead9c0b4188d72b73272129db417a29b4ac293504915757454cb20de5f0cfa4",
-      "bytes": 7273
     },
     {
       "path": "internal/cli/native_oneshot.go",
@@ -10760,34 +10740,14 @@
       "bytes": 12514
     },
     {
-      "path": "internal/store/legacy_memory_extreme.go",
-      "sha256": "7d554d139a74c776742d6f3c85f9d6095144794d996a3841b0a48283c9a2f8e3",
-      "bytes": 27440
+      "path": "internal/store/legacy_memory_origin_extreme.go",
+      "sha256": "6e1ec468290447b8d1aaa92e0ba9996b5da52e027bb2a37cfc3d8a45b5d657ea",
+      "bytes": 2043
     },
     {
-      "path": "internal/store/legacy_memory_extreme_test.go",
-      "sha256": "53f17d4390c7065f77749ec070ad84eafb49a116c6d44fc6f596b4bfd412bd8e",
-      "bytes": 15429
-    },
-    {
-      "path": "internal/store/legacy_memory_links_other_extreme.go",
-      "sha256": "d815a592c67f9dc998e82eda97b624ca03c5b0f529506e83fb8ae8755d58f52d",
-      "bytes": 182
-    },
-    {
-      "path": "internal/store/legacy_memory_links_unix_extreme.go",
-      "sha256": "4c033da25019e948863706a1c75826c8b0d27ea4b08a06109f3d220f79592487",
-      "bytes": 282
-    },
-    {
-      "path": "internal/store/legacy_memory_publish_linux_extreme.go",
-      "sha256": "2fbc7c947025eabddefcb907e42cfade7eaf990877367901a4f923748ed3de9a",
-      "bytes": 229
-    },
-    {
-      "path": "internal/store/legacy_memory_publish_other_extreme.go",
-      "sha256": "d8760efa68fa7bcba4c960b0c7520c978532c233c6635218e34dc6d7833302b4",
-      "bytes": 188
+      "path": "internal/store/legacy_memory_origin_extreme_test.go",
+      "sha256": "19280660fecba45c5bd55a3ab913d140f43b99007ff1fbf7852ed30904fe9f40",
+      "bytes": 1811
     },
     {
       "path": "internal/store/m10_events_test.go",
@@ -17331,8 +17291,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d3d61df152f2dcebaf11c8750b49d14cc3fbd1fde38a0fc2a7e42c345c707f33",
-      "bytes": 457546
+      "sha256": "765d5b00fb325616d6f5d1bbc4ef1cb23069375060574b1f3feec9b4921fa3bd",
+      "bytes": 448087
     },
     {
       "path": "tools/extreme/prq/main_default.go",
