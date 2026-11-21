@@ -67,5 +67,6 @@ func RenderSideHits(b vm.Board, cols, rows int, th Theme) ([]string, []Hit) {
 		keyBar(c, rows-2, keysOr(b, splitKeys))
 	}
 	side(c, b, 0, cols, 1, max(0, rows-4))
+	sideCard(c, b, 0, cols, 2, max(0, rows-5))
 	return c.lines(th), c.hits
 }

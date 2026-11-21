@@ -1,0 +1,31 @@
+  MARSHAL v0.3.5   project marshal-work   YOUR TURN          ✳ claude · opus-5.5 · high  m   19:31  |
+ NOW  marshal claude Opus · watching … │ work 8 running · 4 queued   from you nothing · next ask: fi|
+                                                                                                    |
+╭─╭─ CONFIRM REQUIREMENTS · 7 of 8 ────────────────────────────────────────────────── esc later ─╮─╮|
+│ │ the Marshal filled these from the code and memory · 1 blank: it asks them one at a time      │ │|
+│ │                                                                                              │ │|
+│ │ a  scope            the review page and its history panel; nothing in the runtime  · goal    │ │|
+╰─│ b  don't touch      internal/marshal, the store schema  · memory                             │─╯|
+╭─│ c  branches         one branch per task, merged by the Marshal  · AGENTS.md                  │─╮|
+│ │ d  done when        history pages load in under 200 ms with 10k revisions and the            │ │|
+│ │                     regression matrix passes on Linux and macOS  · goal                      │ │|
+│ │ e  must still pass  go test ./... and the review browser tests  · Makefile                   │ │|
+│ │ f  may change       review.html, review.go, codec.go  · code                                 │ │|
+│ │ g  deps · network   no new dependencies; no network in tests  · memory                       │ │|
+│ │ h  budget           —  · (to ask)                                                            │ │|
+│ │                                                                                              │ │|
+│ │  ⏎  confirm all    e  edit a line                                                            │ │|
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │|
+│                                                                                                  │|
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+╭─ TASKS · 5 of 12 merged ──────────────────────────────────────────────────── ⏎ open · r restart ─╮|
+│   ID   TITLE                         FILES         WRITER  REVIEW  STATE                         │|
+│   T01  stale target refusal message  review.go     claude  agy     ✓ merged                      │|
+│   T02  digest-bound review requests  codec.go      agy     claude  ◎ in review                   │|
+│   T03  sub-view external links       review.html   claude  agy     › building                    │|
+│   T05  request panel overlap         review.html   claude  agy     › building                    │|
+│   T12  regression matrix sign-off    matrix.md     claude  agy     · waits T03                   │|
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯|
+                                                                                                    |
+  s  say   ⏎  open   a  architecture   r  restart task   m  model   l  limits   p  pause all   F11  |
+                                                                                                    |

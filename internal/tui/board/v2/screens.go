@@ -676,12 +676,37 @@ func screenDecision(c *canvas, b vm.Board) {
 	if c.h > 1 {
 		nowStrip(c, 1, b.NowLine)
 	}
-	nodeRows := (len(d.Nodes) + 3) / 4
-	h := 5*nodeRows + 7
 	w := min(104, c.w-4)
-	h = min(h, c.h-4)
-	x0, y0 := (c.w-w)/2, 3
-	p := c.box(x0, y0, w, h, or(d.Title, "Your turn"), "esc later", cWarn, cWarn, cModal)
+	decisionCard(c, d, (c.w-w)/2, 3, w, c.h-4, true)
+}
+
+// decisionCard draws the decision card at x0, y0, w wide and at most maxH
+// tall: its title, the summary, the architecture sketch (when sketch is set
+// and the card has nodes), the content lines, the review link and the
+// actions as chips, the first one accented.
+func decisionCard(c *canvas, d *vm.Decision, x0, y0, w, maxH int, sketch bool) {
+	nodes := d.Nodes
+	if !sketch {
+		nodes = nil
+	}
+	nodeRows := (len(nodes) + 3) / 4
+	h := 5*nodeRows + 7
+	var rows []cardRow
+	if len(d.Lines) > 0 {
+		// Rows 1 (summary) and 2 (blank) come first; the lines, a blank row
+		// and the action row follow, with the link rows only when there is
+		// a link to show.
+		fixed := 6
+		if d.Link != "" || d.SelfApproval != "" {
+			fixed += 2
+		}
+		rows = layoutLines(d.Lines, w, max(1, maxH-fixed-5*nodeRows))
+		h = 5*nodeRows + fixed + len(rows)
+	}
+	h = min(h, maxH)
+	corner := or(d.Corner, "esc later")
+	title := cut(or(d.Title, "Your turn"), max(1, w-width(corner)-9))
+	p := c.box(x0, y0, w, h, title, corner, cWarn, cWarn, cModal)
 	M := cModal
 	sum := []seg{{or(d.Summary, dash), st{bg: M}}}
 	if d.ChangedNote != "" {
@@ -690,7 +715,7 @@ func screenDecision(c *canvas, b vm.Board) {
 	p.segs(2, 1, sum)
 	col := func(i int) int { return 3 + 25*(i%4) }
 	row := func(i int) int { return 3 + 5*(i/4) }
-	for i, n := range d.Nodes {
+	for i, n := range nodes {
 		if i >= 8 {
 			break
 		}
@@ -709,7 +734,7 @@ func screenDecision(c *canvas, b vm.Board) {
 	}
 	for _, l := range d.Links {
 		a, z := min(l.From, l.To), max(l.From, l.To)
-		if a < 0 || z >= len(d.Nodes) || z >= 8 {
+		if a < 0 || z >= len(nodes) || z >= 8 {
 			continue
 		}
 		ls := st{fg: cDim, bg: M}
@@ -735,6 +760,21 @@ func screenDecision(c *canvas, b vm.Board) {
 		}
 	}
 	ly := 2 + 5*nodeRows
+	ay := ly + 3
+	if len(d.Lines) > 0 {
+		top := 3 + 5*nodeRows
+		for i, r := range rows {
+			p.segs(r.x, top+i, r.segs)
+			if r.ref >= 0 {
+				p.hit(1, top+i, p.w-1, HitLine, r.ref, d.Lines[r.ref].Key)
+			}
+		}
+		ly = top + len(rows) + 1
+		ay = ly
+		if d.Link != "" || d.SelfApproval != "" {
+			ay = ly + 2
+		}
+	}
 	if d.NoDisplay && d.Link != "" {
 		p.segs(2, ly, []seg{{"No display here, so open this on the machine:  ", st{fg: cDim, bg: M}}, {d.Link, st{fg: cAcc, bg: M}}})
 	} else if d.Link != "" {
@@ -751,12 +791,125 @@ func screenDecision(c *canvas, b vm.Board) {
 		}
 		bx := x
 		if i == 0 {
-			x = p.segs(x, ly+3, []seg{chip(label, cAcc, "")})
+			x = p.segs(x, ay, []seg{chip(label, cAcc, "")})
 		} else {
-			x = p.segs(x, ly+3, []seg{button(label)})
+			x = p.segs(x, ay, []seg{button(label)})
 		}
-		p.hit(bx, ly+3, x, HitAction, i, a.Key)
+		p.hit(bx, ay, x, HitAction, i, a.Key)
 	}
+}
+
+// cardRow is one laid-out row of a card's content lines: its pieces from
+// box column x, and the line it belongs to when a click on it reaches
+// something (-1 for none).
+type cardRow struct {
+	x    int
+	segs []seg
+	ref  int
+}
+
+// layoutLines lays a card's content lines out for a card w wide in at most
+// budget rows. A line's text wraps under itself after its key and label;
+// its note follows dim on the text's last row when it fits there, else on
+// a row of its own. When that does not fit the budget, notes that do not
+// fit after the text are left out, and then each text keeps to one row.
+func layoutLines(ls []vm.CardLine, w, budget int) []cardRow {
+	M := cModal
+	labelW := 0
+	keyed := false
+	for _, l := range ls {
+		labelW = max(labelW, width(l.Label))
+		if l.Key != "" {
+			keyed = true
+		}
+	}
+	textX := 2
+	if keyed {
+		textX += 3
+	}
+	if labelW > 0 {
+		textX += labelW + 2
+	}
+	avail := max(4, w-textX-3)
+	var out []cardRow
+	for pass, ps := range []struct {
+		textRows int
+		noteRow  bool
+	}{{3, true}, {3, false}, {1, false}} {
+		out = out[:0]
+		for i, l := range ls {
+			ref := -1
+			if l.Ref != "" {
+				ref = i
+			}
+			ts := st{bg: M}
+			switch l.Tone {
+			case vm.ToneMuted:
+				ts.fg = cFaint
+			case vm.ToneNone:
+			default:
+				ts.fg = tone(l.Tone)
+			}
+			parts := wrapText(l.Text, avail)
+			if len(parts) > ps.textRows {
+				rest := strings.Join(parts[ps.textRows-1:], " ")
+				parts = append(parts[:ps.textRows-1], cut(rest, avail))
+			}
+			for k, part := range parts {
+				var segs []seg
+				if k == 0 {
+					if l.Key != "" {
+						segs = append(segs, seg{fit(l.Key, 3), st{bg: M, b: true}})
+					}
+					if labelW > 0 {
+						segs = append(segs, seg{fit(l.Label, labelW+2), st{fg: cDim, bg: M}})
+					}
+				} else {
+					segs = append(segs, seg{strings.Repeat(" ", textX-2), st{bg: M}})
+				}
+				segs = append(segs, seg{part, ts})
+				out = append(out, cardRow{x: 2, segs: segs, ref: ref})
+			}
+			if l.Note == "" {
+				continue
+			}
+			last := &out[len(out)-1]
+			if width(parts[len(parts)-1])+2+width(l.Note) <= avail {
+				last.segs = append(last.segs, seg{"  " + l.Note, st{fg: cDim, bg: M}})
+			} else if ps.noteRow {
+				out = append(out, cardRow{x: textX, segs: []seg{{cut(l.Note, avail), st{fg: cDim, bg: M}}}, ref: ref})
+			}
+		}
+		if len(out) <= budget || pass == 2 {
+			break
+		}
+	}
+	if len(out) > budget {
+		out = out[:budget]
+	}
+	return out
+}
+
+// wrapText breaks s into rows of at most n cells at spaces; a word longer
+// than a row is cut.
+func wrapText(s string, n int) []string {
+	var rows []string
+	line := ""
+	for _, word := range strings.Fields(s) {
+		switch {
+		case line == "":
+			line = cut(word, n)
+		case width(line)+1+width(word) <= n:
+			line += " " + word
+		default:
+			rows = append(rows, line)
+			line = cut(word, n)
+		}
+	}
+	if line != "" || len(rows) == 0 {
+		rows = append(rows, line)
+	}
+	return rows
 }
 
 var pausedKeys = keys("⏎", "move", "w", "wait", "d", "details", "x", "stop run", "space", "actions")
@@ -902,6 +1055,10 @@ func screenSplit(c *canvas, b vm.Board, lines []string) {
 }
 
 // side is the compact Board: a NOW line and the panes, x..x+w, from row y.
+//
+// A card that needs the owner is drawn here too, as beside no chat: the
+// decision card over the dimmed compact Board, the paused card in place of
+// the lanes.
 func side(c *canvas, b vm.Board, x, w, y, h int) {
 	if h <= 0 {
 		return
@@ -913,7 +1070,22 @@ func side(c *canvas, b vm.Board, x, w, y, h int) {
 		bg, fg = cYouW, cWarn
 	}
 	c.segsClip(x, y, []seg{{" NOW ", st{fg: cAcc, bg: cNow, b: true}}, {" " + or(n.Work, dash) + " ", sInk}, {" from you " + or(n.FromYou, dash) + " ", st{fg: fg, bg: bg, b: true}}}, x+w)
+	if b.Decision == nil && b.Paused != nil {
+		stack(c, []slot{pausedPane(b), compactWorkers(b), activityPane(b, "Activity", true)}, x, y+1, w, h-1)
+		return
+	}
 	stack(c, []slot{compactPlan(b), compactLanes(b), compactWorkers(b), activityPane(b, "Activity", true)}, x, y+1, w, h-1)
+}
+
+// sideCard draws the decision card over the compact Board of a Board pane
+// beside the chat, x..x+w from row y, h rows; the sketch is drawn only when
+// it fits.
+func sideCard(c *canvas, b vm.Board, x, w, y, h int) {
+	if b.Decision == nil || h < 3 || w < 20 {
+		return
+	}
+	c.dimRect(x, y, w, h)
+	decisionCard(c, b.Decision, x+1, y+1, w-2, h-1, w-2 >= 104)
 }
 
 func compactPlan(b vm.Board) slot {

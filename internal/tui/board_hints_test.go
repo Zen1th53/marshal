@@ -53,8 +53,13 @@ func v2CardButtons(t *testing.T, w *Workspace, cols, rows int) ([]string, string
 	slices.SortFunc(hits, func(a, b boardHit) int { return a.x0 - b.x0 })
 	var keys []string
 	for _, h := range hits {
-		if h.kind == hitV2Key && h.row < rows-2 {
+		switch {
+		case h.row >= rows-2:
+		case h.kind == hitV2Key:
 			keys = append(keys, h.id)
+		case h.kind == hitGuard:
+			// An owner card's chip is the classic card's own region.
+			keys = append(keys, string(h.action))
 		}
 	}
 	return keys, StripANSI(strings.Join(lines, "\n"))
@@ -129,7 +134,7 @@ func TestBoardHintsFollowState(t *testing.T) {
 			w := runHintWorkspace(t, "T-017")
 			w.guard.alert = &guardAlert{at: time.Now(), paths: []string{"x.py"}, wasDirty: map[string]bool{}}
 			return w
-		}, []string{"guard.undo", "guard.keep"}, true, nil},
+		}, []string{"guard.undo", "guard.keep"}, true, []string{"u", "K"}},
 		{"7 stuck", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-023") }, []string{"task.retry", "task.model", "task.inspect"}, true, nil},
 		{"8 queued", func(t *testing.T) *Workspace { return runHintWorkspace(t, "T-033") }, []string{"task.model", "task.inspect"}, true, nil},
 		{"9 inbox", func(t *testing.T) *Workspace {

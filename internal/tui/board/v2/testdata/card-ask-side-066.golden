@@ -1,0 +1,30 @@
+  MARSHAL v0.3.5   project marshal-work   YOUR TURN        19:31  |
+ NOW  8 running · 4 queued  from you nothing · next ask: final rev|
+╭─ PLAN ─────────────────────────────────────────────────────────╮|
+│╭─ MARSHAL ASKS · Which database should the hist… ─ esc later ─╮│|
+││ your answer goes to the Marshal chat as your own message     ││|
+╰│                                                              │╯|
+╭│ Which database should the history pages read from? The       │╮|
+││ project has both a SQLite file under data/ and a Postgres    ││|
+││ URL in .env.example; the plan differs for each.              ││|
+││                                                              ││|
+││  ⏎  SQLite    p  Postgres    b  both, behind a flag          ││|
+│╰──────────────────────────────────────────────────────────────╯│|
+│ ⣾ agy-2     T06 history paging                              9s │|
+│ ◎ agy-3     review T01 (by claude-2)                        2s │|
+│ ⣾ agy-4     T09 dashed-change styles                     1m40s │|
+│                                                                │|
+╰────────────────────────────────────────────────────────────────╯|
+╭─ WORKERS · providers ──────────────────────────────────────────╮|
+│ ✳ claude  ██████░░░░  4 lanes · sonnet                         │|
+│ ◆ agy     ███████░░░  4 lanes · gemini-3.8                     │|
+│ ⬡ codex   █░░░░░░░░░  spare · wk 11%                           │|
+╰────────────────────────────────────────────────────────────────╯|
+╭─ ACTIVITY ─────────────────────────────────────────────────────╮|
+│ 19:30  merge   T08 merged after agy review                     │|
+│ 19:28  review  T02 review on claude-4                          │|
+│ 19:22  signal  agy-4 slow heartbeat ×3                         │|
+╰────────────────────────────────────────────────────────────────╯|
+                                                                  |
+  Alt+←  chat   Alt+→  Board   F11  full chat   m  Marshal model  |
+                                                                  |
