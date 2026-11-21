@@ -10,13 +10,13 @@
 | Enter will: open the composer to tell the Marshal what to change.                 | | ################........  7 of 12 merged   ||
 |             The run asks: create and approve an amended plan that removes or      | | 6 lanes running . no other stops           ||
 |             replaces the cancelled task, then /marshal use-plan                   | |                                            ||
-|                                                                                   | |                                            ||
-|  Enter  tell the Marshal what to change    d  raw error    x  stop the run        | |                                            ||
-|                                                                                   | |                                            ||
-|                                                                                   | |                                            ||
-|                                                                                   | |                                            ||
-|                                                                                   | |                                            ||
-+-----------------------------------------------------------------------------------+ +--------------------------------------------+|
+|                                                                                   | +--------------------------------------------+|
+|  Enter  tell the Marshal what to change    d  raw error    x  stop the run        |                                               |
+|                                                                                   |                                               |
++-----------------------------------------------------------------------------------+                                               |
+                                                                                                                                    |
+                                                                                                                                    |
+                                                                                                                                    |
                                                                                                                                     |
   Enter  move   w  wait   d  details   x  stop run   space  actions                                                                 |
                                                                                                                                     |
