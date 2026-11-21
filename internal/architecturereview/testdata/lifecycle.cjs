@@ -21,6 +21,25 @@ for(const [id,status] of [['current','existing'],['added','new'],['edited','chan
 assert.ok(part('edited').children.some(n=>n.className==='change-outline'));
 assert.ok(part('added').children.some(n=>n.textContent==='built'));
 assert.ok(part('edited').children.some(n=>n.textContent==='differs from the architecture'));
+// Focus: a part and its direct neighbours stay bright; the panel lists links.
+run("openPart('current')");
+assert.ok(get('diagram').className.split(' ').includes('focusing'));
+assert.ok(part('current').className.split(' ').includes('lit'));assert.ok(part('edited').className.split(' ').includes('lit'));
+assert.ok(!part('untouched').className.split(' ').includes('lit'));
+assert.ok(get('incoming').children.length>=3);assert.ok(get('outgoing').children.length>=2);
+run('closeEditor()');assert.ok(!get('diagram').className.split(' ').includes('focusing'));
+// Advanced view routing: a part without sub-parts opens a derived code level
+// only in Advanced view; unknown or stale segments fall back to the top.
+assert.equal(run("hashFor(['a','~x/y'])"),'#/a/~x%2Fy');
+assert.equal(run("advanced=false;path=['added'];draw();path.length"),0);assert.equal(run('view'),'architecture');
+assert.equal(run("advanced=true;path=['added'];draw();view"),'code:added');
+assert.equal(get('crumbs').hidden,false);assert.ok(run("shown()!==base()&&shown().layouts['code:added']!==undefined"));
+assert.equal(run("path=['nope'];draw();path.length"),0);
+assert.equal(run("path=['added','~a','~b'];draw();path.join('/')"),'added/~a');
+assert.equal(run("advanced=false;path=[];derivedView=null;draw();view"),'architecture');assert.equal(get('crumbs').hidden,true);
+// Search highlights matching parts across drawings.
+get('search').value='changed';get('search').oninput();assert.ok(part('edited').className.split(' ').includes('match'));
+get('search').value='';get('search').oninput();assert.ok(!part('edited').className.split(' ').includes('match'));
 run("openElement('component','edited')");
 assert.ok(get('change-detail').children[0].children.some(row=>row.children.some(n=>n.textContent==='Before')));
 assert.ok(get('change-detail').children[0].children.some(row=>row.children.some(n=>n.textContent==='After')));

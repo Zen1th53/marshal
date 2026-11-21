@@ -126,17 +126,45 @@ func TestPageArchitectureLifecycle(t *testing.T) {
 }
 
 func TestPageArchitectureChangeStyles(t *testing.T) {
+	// Change kinds stay legible: current is solid neutral, this goal's
+	// additions are solid accent (never dashed noise), removals fade and are
+	// struck through, changes carry an accent outline. Each also has a text
+	// tag, so meaning never rests on colour alone.
 	for _, want := range []string{
-		`.node.new rect,.node.removed rect{stroke-dasharray:7 5}`,
-		`.node.changed .change-outline{fill:none;stroke:#e8ae6c;stroke-dasharray:5 4`,
+		`.edge.new .edge-line{stroke:var(--accent)`,
+		`.edge.changed .edge-casing{display:inline}`,
+		`.node.changed .change-outline{fill:none;stroke:var(--amber)`,
 		`.node.removed,.edge.removed{opacity:.45}`,
 		`text-decoration:line-through`,
-		`.edge.new .edge-line,.edge.changed .edge-line,.edge.removed .edge-line{stroke-dasharray:7 5}`,
+		`t(status==='new'?'tag_new':'tag_removed')`,
 		`id="history-open" aria-expanded="false" aria-controls="history-panel"`,
 		`id="only-changes" type="checkbox"`,
 	} {
 		if !strings.Contains(reviewHTML, want) {
 			t.Errorf("review.html does not contain %q", want)
+		}
+	}
+	if strings.Contains(reviewHTML, "stroke-dasharray:7 5") {
+		t.Error("review.html still dashes changed lines")
+	}
+}
+
+// The viewer navigates without libraries: viewBox camera, wheel and pinch
+// zoom, drag pan, keyboard, minimap, focus, search and bundled connections.
+func TestPageViewerContract(t *testing.T) {
+	for _, want := range []string{
+		`id="zoom-in"`, `id="zoom-out"`, `id="fit"`, `id="zoom-actual"`, `id="minimap"`, `id="search"`, `id="tip"`,
+		`$('diagram').onwheel=`, `pinch=`, `requestAnimationFrame`, `prefers-reduced-motion`, `--bg:#0c121c`, `--accent:#7db1ff`,
+		`case'0':fit(true)`, `case'ArrowLeft'`, `bundle-count`, `#diagram.focusing .node:not(.lit)`, `id="incoming"`, `id="outgoing"`, `id="covers"`, `id="advanced"`, `history.pushState`, `globalThis.onpopstate`, `/api/codeview`, `prefers-reduced-motion`, `class:'port'`,
+	} {
+		if !strings.Contains(reviewHTML, want) {
+			t.Errorf("review.html does not contain %q", want)
+		}
+	}
+	page := strings.ReplaceAll(reviewHTML, "http://www.w3.org/2000/svg", "")
+	for _, banned := range []string{"<script src", "<link", "@import", "http://", "https://", "url(http"} {
+		if strings.Contains(page, banned) {
+			t.Errorf("review.html loads an external resource: %q", banned)
 		}
 	}
 }

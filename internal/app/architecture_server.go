@@ -156,6 +156,7 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 	config.ReadOnly = hooks.currentContract
 	r.configureArchitectureHistory(&config)
 	config.Builders = r.architectureBuilders()
+	config.CodeRoot = r.ProjectRoot()
 	language, err := r.ApprovedMarshalLanguage()
 	if err != nil {
 		return nil, err
