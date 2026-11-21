@@ -2,11 +2,15 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/chattransport"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
@@ -145,34 +149,130 @@ func TestWebSayWithoutChat(t *testing.T) {
 	}
 }
 
-// The page's action goes through the input loop when there is one, and an
-// action the loop never reached is not run later.
+// The page's action goes through the input loop when there is one; a
+// command the key starts off the loop (the retry and the resume) is waited
+// for, so "done" means it ran. An action the loop never reached is not run
+// later.
 func TestWebActRunsOnTheInputLoop(t *testing.T) {
 	w, ran := webPausedWorkspace(t, leasePause)
 	card := webboard.CardID(webCard(t, w))
-	w.uiEvents = make(chan func(), 1)
-	done := make(chan webboard.Result, 1)
-	go func() { done <- w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "⏎"}) }()
-	fn := <-w.uiEvents
-	fn()
-	if res := <-done; res.Status != "done" || len(*ran) != 2 {
-		t.Fatalf("loop: %+v ran %q", res, *ran)
+	w.uiEvents = make(chan func(), 4)
+	stop := make(chan struct{})
+	loop := make(chan struct{})
+	go func() {
+		defer close(loop)
+		for {
+			select {
+			case fn := <-w.uiEvents:
+				fn()
+			case <-stop:
+				return
+			}
+		}
+	}()
+	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "⏎"})
+	if res.Status != "done" || res.Text != "ok" || w.commandBusy.Load() {
+		t.Fatalf("loop: %+v busy=%v", res, w.commandBusy.Load())
 	}
+	if want := []string{"/marshal retry T03 fresh-session", "/marshal resume"}; !slices.Equal(*ran, want) {
+		t.Fatalf("ran %q, want %q", *ran, want)
+	}
+	close(stop)
+	<-loop
 
 	orig := webActWait
 	t.Cleanup(func() { webActWait = orig })
 	webActWait = 0
 	*ran = nil
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "⏎"})
+	res = w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "⏎"})
 	if res.Status != "refused" {
 		t.Fatalf("busy loop: %+v", res)
 	}
-	select {
-	case fn := <-w.uiEvents:
-		fn()
-	default:
+	for len(w.uiEvents) > 0 {
+		(<-w.uiEvents)()
 	}
 	if len(*ran) != 0 {
 		t.Fatalf("a timed-out action ran later: %q", *ran)
+	}
+}
+
+// A command that fails is "refused" with the Board's own reason, not
+// "done", and writes no "From the web" line for a thing that did not happen.
+func TestWebActFailedCommandIsRefused(t *testing.T) {
+	w, _ := webPausedWorkspace(t, leasePause)
+	boardStopHandle = func(_ *Workspace, _ context.Context, cmd string) (string, error) {
+		return "", errors.New("the run store is locked")
+	}
+	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "x", Confirmed: true})
+	if res.Status != "refused" || !strings.Contains(res.Text, "Could not stop the run") {
+		t.Fatalf("result %+v", res)
+	}
+	if webNoteHas(w, "From the web") {
+		t.Fatalf("activity %+v", w.noteList())
+	}
+}
+
+// fakeChat is a native Marshal chat that records the turns it is sent.
+type fakeChat struct {
+	chattransport.Transport
+	sent chan string
+}
+
+func (c *fakeChat) Send(_ context.Context, t chattransport.Turn) error {
+	c.sent <- t.Text
+	return nil
+}
+
+// A message from the web goes the way the Board's s composer sends it: to
+// the Marshal chat as the owner's words, never run as a command, even when
+// it starts with "/".
+func TestWebSayReachesTheMarshalChat(t *testing.T) {
+	w, ran := webPausedWorkspace(t, leasePause)
+	c := &fakeChat{sent: make(chan string, 1)}
+	w.chat.mu.Lock()
+	w.chat.tr = c
+	w.chat.mu.Unlock()
+	t.Cleanup(func() { w.chat.mu.Lock(); w.chat.tr = nil; w.chat.mu.Unlock() })
+	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "say", Card: webboard.CardID(webCard(t, w)), Text: "/marshal stop"})
+	if res.Status != "sent" {
+		t.Fatalf("say: %+v", res)
+	}
+	select {
+	case got := <-c.sent:
+		if got != "/marshal stop" {
+			t.Fatalf("the chat got %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the message never reached the chat")
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("the message ran as a command: %q", *ran)
+	}
+	if echo := w.sayEchoList(); len(echo) == 0 || echo[0].Text != "/marshal stop" || echo[0].Runtime {
+		t.Fatalf("echo %+v", echo)
+	}
+	if !webNoteHas(w, "From the web: a message to the Marshal (sent)") {
+		t.Fatalf("activity %+v", w.noteList())
+	}
+}
+
+// The inbox's allow is two presses, as in the terminal: a opens the
+// confirmation (the page gets a Confirm step), Enter decides.
+func TestWebActInboxAllowIsTwoSteps(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	defer v2Cards.Delete(w)
+	w.permissions.mu.Lock()
+	w.permissions.inbox = []permission.Request{{Kind: "network", Object: "proxy.golang.org", Reason: "go mod download", RunID: "R-1", TaskID: "T03"}}
+	w.permissions.mu.Unlock()
+	f := webCard(t, w)
+	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "a"})
+	if res.Status != "done" || res.Confirm == nil || !w.inboxView.Confirming() {
+		t.Fatalf("a: %+v confirming=%v", res, w.inboxView.Confirming())
+	}
+	// Esc cancels the confirmation, as in the terminal.
+	res = w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "esc"})
+	if res.Status != "done" || w.inboxView.Confirming() {
+		t.Fatalf("esc: %+v confirming=%v", res, w.inboxView.Confirming())
 	}
 }

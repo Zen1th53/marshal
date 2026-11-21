@@ -39,7 +39,8 @@ type Action struct {
 
 // Result is what happened, for the page to say.
 type Result struct {
-	// Status is "done", "sent", "queued" or "refused"; "stale" means the
+	// Status is "done", "started" (a command the key started is still
+	// running), "sent", "queued" or "refused"; "stale" means the
 	// card changed on the Board (the page gets 409 and looks again).
 	Status string `json:"status"`
 	// Text is the Board's own answer in plain words.
@@ -94,17 +95,23 @@ func cardDigest(v any) string {
 }
 
 // CardID names the card f shows: its kind and a digest of what it says, so
-// a card whose content changed is a different card. Volatile text (a reset
-// clock, a task's progress) is left out, so a card does not change under
-// the owner's finger every minute. With no card it is the screen.
+// a card whose content changed is a different card: everything the owner
+// decides on (what the buttons say, what the main one will do, the lines and
+// parts shown) is in it. Only text that moves by itself is left out (the
+// reset note, a task's progress and what of it is kept, the room left on
+// other providers, the other lanes), so a card does not change under the
+// owner's finger while nothing about the choice changed. With no card it is
+// the screen.
 func CardID(f Frame) string {
 	switch {
 	case f.Decision != nil:
 		d := f.Decision
 		return "decision:" + cardDigest(struct {
-			Kind, Title, Summary, Self string
-			Actions                    []Key
-		}{d.Kind, d.Title, d.Summary, d.SelfApproval, d.Actions})
+			Kind, Title, Corner, Summary, Changed, Self string
+			Nodes                                       []Node
+			Lines                                       []CardLine
+			Actions                                     []Key
+		}{d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions})
 	case f.Paused != nil:
 		p := f.Paused
 		titles := make([]string, 0, len(p.Tasks))
@@ -112,10 +119,10 @@ func CardID(f Frame) string {
 			titles = append(titles, t.Title)
 		}
 		return "paused:" + cardDigest(struct {
-			Kind, Title, Cause string
-			Tasks              []string
-			Actions            []string
-		}{p.Kind, p.Title, p.Cause, titles, actionKeys(p.Actions)})
+			Kind, Title, Cause, Will string
+			Tasks                    []string
+			Actions                  []Key
+		}{p.Kind, p.Title, p.Cause, p.Will, titles, p.Actions})
 	}
 	return "screen:" + f.Screen
 }

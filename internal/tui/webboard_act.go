@@ -27,15 +27,28 @@ import (
 // answers for the Marshal: the architecture's Accept stays in its own
 // review page, and a self-approval stays refused as in the terminal.
 
-// webActWait is how long an action waits for the input loop; a test seam.
-var webActWait = 10 * time.Second
+// webActWait is how long an action waits for the input loop, and
+// webCommandWait how long it then waits for a command the key started (the
+// paused card's retry, reassign and resume run off the loop); test seams.
+var (
+	webActWait     = 10 * time.Second
+	webCommandWait = 15 * time.Second
+)
+
+// webActed is what an action did on the loop: the result, and whether the
+// key started a command off the loop that the page should wait for.
+type webActed struct {
+	res     webboard.Result
+	started bool
+	seq     uint64 // the output sequence after the key
+}
 
 // webBoardAct is the server's Sink: it runs a on the input loop and waits
 // for the answer. An action the loop did not reach in time never runs
 // later: whichever side claims it first decides.
 func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard.Result {
 	var claimed atomic.Bool
-	done := make(chan webboard.Result, 1)
+	done := make(chan webActed, 1)
 	run := func() {
 		if !claimed.CompareAndSwap(false, true) {
 			return
@@ -49,41 +62,83 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 			return webboard.Result{Status: "refused", Text: "The Board is busy; nothing was done. Try again."}
 		}
 	}
+	var r webActed
 	select {
-	case r := <-done:
-		return r
+	case r = <-done:
 	case <-wait.Done():
 		if claimed.CompareAndSwap(false, true) {
 			return webboard.Result{Status: "refused", Text: "The Board is busy; nothing was done. Try again."}
 		}
-		return <-done
+		r = <-done
 	}
+	if !r.started {
+		return r.res
+	}
+	return w.webCommandResult(ctx, r)
+}
+
+// webCommandResult waits, off the loop, for the command a key started and
+// answers with its result: "done" with the Board's answer, "refused" when
+// it failed, or "started" when it is still running.
+func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.Result {
+	wait, cancel := context.WithTimeout(ctx, webCommandWait)
+	defer cancel()
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	for w.commandBusy.Load() {
+		select {
+		case <-wait.Done():
+			return webboard.Result{Status: "started", Text: "Started: the Board is running it now; Activity shows how it went."}
+		case <-tick.C:
+		}
+	}
+	res := webboard.Result{Status: "done", Text: r.res.Text}
+	if w.outputSeq.Load() != r.seq {
+		w.mu.RLock()
+		text, isErr := w.answer, w.answerIsError
+		w.mu.RUnlock()
+		res.Text = text
+		if isErr {
+			res.Status = "refused"
+		}
+	}
+	return res
 }
 
 // webAct is one action on the input loop: the page must have acted on the
 // card the Board shows now.
-func (w *Workspace) webAct(a webboard.Action) webboard.Result {
+func (w *Workspace) webAct(a webboard.Action) webActed {
+	res, started, seq := w.webActNow(a)
+	return webActed{res: res, started: started, seq: seq}
+}
+
+// webActNow runs a on the loop; started is set when the key started a
+// command off the loop, seq is the output sequence after the key.
+func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started bool, seq uint64) {
 	b := w.webBoardFrame()
 	f := webboard.FromBoard(b)
 	if webboard.CardID(f) != a.Card {
-		return webboard.Result{Status: "stale", Text: "The Board changed since this page showed it; look again."}
+		return webboard.Result{Status: "stale", Text: "The Board changed since this page showed it; look again."}, false, 0
 	}
 	switch a.Kind {
 	case "say":
-		return w.webSay(a.Text)
+		return w.webSay(a.Text), false, 0
 	case "key":
 	default:
-		return refused("Unknown action.")
+		return refused("Unknown action."), false, 0
 	}
 	if !slices.Contains(webboard.ActionKeys(f), a.Key) {
-		return refused("That button is not on the Board now.")
+		return refused("That button is not on the Board now."), false, 0
 	}
 	label, title := webActionLabel(f, a.Key), webCardTitle(f)
 	switch {
 	case a.Key == "q":
-		return refused("Quit only from the terminal Board.")
+		return refused("Quit only from the terminal Board."), false, 0
 	case f.Paused != nil && a.Key == "x" && !a.Confirmed:
-		return refused("Press Stop the run again to confirm.")
+		return refused("Press Stop the run again to confirm."), false, 0
+	}
+	if w.commandBusy.Load() {
+		return refused("A command is still running on the Board; try again when it finishes."), false, 0
 	}
 	before := w.outputSeq.Load()
 	took := false
@@ -97,13 +152,13 @@ func (w *Workspace) webAct(a webboard.Action) webboard.Result {
 	if !took {
 		ev, ok := v2KeyEvent(a.Key)
 		if !ok {
-			return refused("That button works only in the terminal Board.")
+			return refused("That button works only in the terminal Board."), false, 0
 		}
 		if a.Text != "" {
 			// A hard gate's confirmation reads the canonical id: typed
 			// into the confirmation as the terminal does, then Enter.
 			if !w.inboxView.Confirming() || !w.inboxView.WantsText() || ev.Type != KeyEnter {
-				return refused("Nothing on the Board asks for typed text now.")
+				return refused("Nothing on the Board asks for typed text now."), false, 0
 			}
 			for _, r := range a.Text {
 				w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: r})
@@ -112,13 +167,21 @@ func (w *Workspace) webAct(a webboard.Action) webboard.Result {
 		took = w.handleV2CardKey(ev)
 	}
 	if !took {
-		return refused("The Board did not take that button now (is a view open over it?). Nothing was done.")
+		return refused("The Board did not take that button now (is a view open over it?). Nothing was done."), false, 0
 	}
 	res := webboard.Result{Status: "done"}
-	if w.outputSeq.Load() != before {
+	started = w.commandBusy.Load()
+	seq = w.outputSeq.Load()
+	if seq != before {
 		w.mu.RLock()
-		res.Text = w.answer
+		text, isErr := w.answer, w.answerIsError
 		w.mu.RUnlock()
+		res.Text = text
+		// The raw error is shown as an error on purpose; any other error
+		// answer means the key did not do what the button says.
+		if isErr && a.Key != "d" {
+			return refused(text), false, 0
+		}
 	}
 	switch {
 	case w.inboxView.Confirming():
@@ -136,7 +199,7 @@ func (w *Workspace) webAct(a webboard.Action) webboard.Result {
 		line += " (" + title + ")"
 	}
 	w.RecordActivity(line + ".")
-	return res
+	return res, started, seq
 }
 
 func refused(text string) webboard.Result {

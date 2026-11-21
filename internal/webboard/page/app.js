@@ -518,7 +518,7 @@
         if (x.code === 409) { confirmStep = null; feedback("bad", "Refused: " + (text || "the Board changed.")); return false; }
         if (x.code !== 200 || res.status === "refused") { feedback("bad", "Refused: " + (text || "the Board answered " + x.code + ".")); return false; }
         confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card } : null;
-        var word = res.status === "sent" ? "Sent" : res.status === "queued" ? "Queued" : "Done";
+        var word = res.status === "sent" ? "Sent" : res.status === "queued" ? "Queued" : res.status === "started" ? "Started" : "Done";
         feedback("ok", !text ? word + "." : text.indexOf(word) === 0 ? text : word + ": " + text);
         if (res.link) {
           $("review").hidden = false;

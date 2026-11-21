@@ -86,7 +86,7 @@ async function shot(name) {
 }
 async function open(u) {
   await send("Page.navigate", { url: u });
-  await until(`document.readyState === "complete" && document.getElementById("t-live").textContent === "live"`, "the page to go live");
+  await until(`document.readyState === "complete" && (document.getElementById("t-live") || {}).textContent === "live"`, "the page to go live");
 }
 
 let failed = false;
@@ -114,11 +114,16 @@ try {
   check(await evaluate(`document.getElementById("say-text").placeholder === "Tell the Marshal…"`), "the Tell the Marshal box");
   await shot("20-paused.png");
 
+  // A phone opens the page at its own width: the details start closed.
   await size(390, 844, true);
-  await sleep(300);
+  await open(url);
+  await until(`document.getElementById("primary").textContent !== ""`, "the primary button at phone width");
   check(await evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "phone: no sideways scroll");
+  check(await evaluate(`document.querySelectorAll("details.pane[open]").length === 0`), "phone: every Details section is closed");
   await shot("20-phone.png");
   await size(1280, 900);
+  await open(url);
+  await until(`document.getElementById("primary").textContent !== ""`, "the primary button");
 
   // Stop takes two clicks: the first only arms it.
   await evaluate(`Array.from(document.querySelectorAll("#secondary button")).find(b => b.textContent === "Stop the run").click()`);

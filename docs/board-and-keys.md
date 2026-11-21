@@ -314,7 +314,7 @@ Only what the terminal Board offers on screen right now. Each button presses the
 
 Not offered on the page: quitting, copying a link to the terminal's clipboard, opening a terminal view, and editing in the terminal.
 
-After each click the page says what happened: **Done** (with the Board's own answer), **Sent** or **Queued**, or **Refused** with the plain reason (for example "The Board changed since this page showed it; look again", or "No Marshal chat is open"). Every action writes the Activity line the terminal key writes, plus "From the web: …".
+After each click the page says what happened: **Done** (with the Board's own answer; when the button runs commands, such as a retry and a resume, the page waits for them, up to 15 seconds, and says **Started** if they are still running), **Sent** or **Queued**, or **Refused** with the plain reason (a command that failed is refused with its error) (for example "The Board changed since this page showed it; look again", or "No Marshal chat is open"). Every action writes the Activity line the terminal key writes, plus "From the web: …".
 
 A button works once and only for the card the page shows: if the card changed, or the same click arrives twice, it is refused and the page shows the Board as it is now. Nothing is loaded from the internet, and the page shows only what the terminal Board shows: never prompts, the chat transcript, file contents or secrets.
 

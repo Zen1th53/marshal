@@ -86,10 +86,12 @@ from the page. What shipped, and where it differs from the first design:
   headers, no cookie.
 - **Action token** (the CSRF token of the first design): every frame carries
   `act: {card, tokens, sayMax}`, minted by the server, not read from `vm`.
-  `card` is `CardID`: `decision:`/`paused:` plus a digest of what the card
-  says (kind, title, cause or summary, the task titles, the action keys;
-  not the reset clock or a task's progress, so a ticking card is not a new
-  card), or `screen:<screen>` with no card. `tokens` holds one token per key
+  `card` is `CardID`: `decision:`/`paused:` plus a digest of everything the
+  owner decides on (kind, title, cause or summary, what the main button will
+  do, the buttons' keys and labels, the decision's lines, parts and notes,
+  the paused task titles; not the reset note, a task's progress or what of it
+  is kept, the room on other providers or the other lanes, so a ticking card
+  is not a new card, while a card whose button now does something else is), or `screen:<screen>` with no card. `tokens` holds one token per key
   the card shows (plus `esc` on a decision) and `say`:
   `HMAC-SHA256(server key, card || action count || key)`. The action count
   goes up on every accepted action, so each token works once: a replay, or a
@@ -117,7 +119,13 @@ from the page. What shipped, and where it differs from the first design:
   It does not go through `handleTerminalKey` or `v2CardKey`, whose result
   depends on what the terminal last painted and on its composer.
   The handler's own result is the answer: a key the Board did not take is
-  "refused", the text is the footer answer the key set, and a key that armed
+  "refused", the text is the footer answer the key set, and an answer the
+  Board flags as an error is "refused" (except `d`, whose raw error is
+  flagged on purpose). A key that started commands off the loop (the paused
+  card's retry, reassign, resume run on the command lane) is waited for off
+  the loop, up to 15 s, and answered with the commands' own result ("done",
+  or "refused" with the error), or "started" while they still run; while a
+  command already runs, a key is refused. A key that armed
   a second step (the inbox's confirmation, the plan's armed reply) returns a
   `confirm` step, which the page shows as a **Confirm …** button (with a text
   field when the hard gate reads its canonical id) and a **Cancel** (`esc`).

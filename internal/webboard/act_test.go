@@ -262,6 +262,26 @@ func TestActStaleCard(t *testing.T) {
 	}
 }
 
+// What the main button does is part of the card: when only its label and
+// what it will do change (the tasks now go to codex), an old click is
+// refused rather than doing the new thing.
+func TestActStaleWhenTheButtonChanged(t *testing.T) {
+	s, src, log := startActing(t, fixturePaused())
+	f := boardFrame(t, s)
+	b := fixturePaused()
+	p := *b.Paused
+	p.Will = "move T06 and T09 to codex in fresh sessions, keep commits."
+	p.Actions = append([]vm.Key{{Key: "⏎", Label: "move to codex"}}, p.Actions[1:]...)
+	b.Paused = &p
+	src.set(b)
+	if r, _ := post(t, s, keyBody(t, f, "⏎"), nil); r.StatusCode != http.StatusConflict {
+		t.Fatalf("changed button: %d", r.StatusCode)
+	}
+	if n := len(log.taken()); n != 0 {
+		t.Fatalf("sink took %d", n)
+	}
+}
+
 // The sink's own "the card changed" is a 409 too.
 func TestActSinkStale(t *testing.T) {
 	s, _, log := startActing(t, fixtureDecision())
