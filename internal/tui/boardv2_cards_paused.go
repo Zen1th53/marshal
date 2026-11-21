@@ -28,6 +28,7 @@ const (
 	pauseInterrupted = "interrupted"
 	pauseStalled     = "stalled"
 	pauseStopped     = "stopped"
+	pauseNewPlan     = "new_plan"
 	pauseOther       = "other"
 )
 
@@ -81,19 +82,21 @@ var pauseTitles = map[string]string{
 	pauseInterrupted: "operation interrupted",
 	pauseStalled:     "run stalled",
 	pauseStopped:     "run stopped",
+	pauseNewPlan:     "needs a new plan",
 	pauseOther:       "needs your choice",
 }
 
 // v2PauseNow is the stop waiting for the owner's one choice now, or false.
-// A pause that needs a new plan (use_plan) is not one choice and stays in
-// the inbox's stop entry.
+// A pause that needs a new plan (use_plan) offers that choice: Enter opens
+// the composer to tell the Marshal what to change, as the inbox's stop
+// entry does (actOnStop), and the card says what the run asks for.
 func (w *Workspace) v2PauseNow(now time.Time) (v2Pause, bool) {
 	p := w.marshalPanel()
 	if p == nil {
 		return v2Pause{}, false
 	}
 	stop, ok := w.stopVisual(p).stopNotice()
-	if !ok || stop.action == marshal.PauseUsePlan {
+	if !ok {
 		return v2Pause{}, false
 	}
 	run := p.run
@@ -137,6 +140,9 @@ func (w *Workspace) v2PauseNow(now time.Time) (v2Pause, bool) {
 	if z.detail == "" {
 		z.detail = stop.reason
 	}
+	if stop.action == marshal.PauseUsePlan {
+		z.cause = pauseNewPlan
+	}
 	c := vm.Paused{Kind: z.cause, Title: "Paused · " + pauseTitles[z.cause], Cause: stop.reason}
 	qs, _ := w.usageQuotas()
 	switch z.cause {
@@ -152,6 +158,12 @@ func (w *Workspace) v2PauseNow(now time.Time) (v2Pause, bool) {
 	case pauseOrphan, pauseTimeout, pauseLease:
 		if len(z.tasks) > 0 {
 			z.enter = w.retryFresh(z, "start "+taskList(z.tasks)+" again in a fresh session, keeping its branch and commits, and resume the run")
+		}
+	case pauseNewPlan:
+		c.Will = "open the composer to tell the Marshal what to change."
+		if next := strings.TrimSpace(stop.next); next != "" && !strings.HasPrefix(next, "Press Enter") {
+			// The run's own words, wrapped to the card's left column.
+			c.Will += "\n" + strings.Join(wrapWords("The run asks: "+cleanBoard(next), 68), "\n")
 		}
 	}
 	if c.Will == "" {

@@ -427,9 +427,15 @@ func (w *Workspace) handleGateKey(event KeyEvent, p *MarshalPanel) bool {
 	}
 	// y is the Board's architecture/gate key: with nothing waiting it says why
 	// rather than falling through to open the composer with "to the Marshal › y".
-	if w.planning.Load() || w.archSnapshotNow().Status.Accepted {
+	snap := w.archSnapshotNow()
+	switch {
+	case snap.Status.Accepted:
 		w.memoryAnswer("Nothing to open: the architecture is already accepted (8 shows it).", false)
-	} else {
+	case snap.Status.OwnerAccepted:
+		w.memoryAnswer("Nothing to open: you accepted the architecture; it is applied when the Marshal allows it or Marshal starts again.", false)
+	case w.planning.Load() && !(snap.Loaded && snap.Status.Exists):
+		w.memoryAnswer("Nothing to open: the architecture is already accepted (8 shows it).", false)
+	default:
 		w.memoryAnswer("Nothing to open yet: the Marshal has not sent an architecture.", false)
 	}
 	return true

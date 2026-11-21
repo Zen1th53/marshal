@@ -374,7 +374,7 @@ func nextAsk(in flowIn) string {
 		switch m := in.milestone; {
 		case m != nil && m.Step < stageArch:
 			return "architecture review"
-		case m != nil && m.Step == stageArch && !m.OwnerTurn:
+		case m != nil && m.Step == stageArch && !m.OwnerTurn && !m.Applying:
 			return "architecture review"
 		case m != nil, in.planning:
 			return "plan approval"

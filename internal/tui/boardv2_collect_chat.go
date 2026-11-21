@@ -6,12 +6,14 @@ import (
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
-// collectV2Chat fills the Marshal chat state (Chat, Requests, Marshal.ChatBound/InputClear) of the Board v2 view model. A field left at its zero
+// collectV2Chat fills the Marshal chat state (Chat, Requests, Marshal.ChatBound/InputClear/InputKnown) of the Board v2 view model. A field left at its zero
 // value renders as "not known yet".
 //
 // It reads only what the Board already holds: the chat window's state, the
-// live lease, the last input-box observation delivery made, and the record
-// of requests the Board sent. It never captures the pane.
+// live lease, the last input-box observation (the chat window's monitor
+// reads it from the capture it already takes every tick, and delivery from
+// its own), and the record of requests the Board sent. It never captures
+// the pane: an input not looked at yet is unknown and shows as nothing.
 func (w *Workspace) collectV2Chat(b *vm.Board) {
 	w.tmuxMu.Lock()
 	pane, state := "", ""
@@ -33,7 +35,7 @@ func (w *Workspace) collectV2Chat(b *vm.Board) {
 
 	c := &w.chatBinding
 	c.mu.Lock()
-	chat := vm.Chat{Bound: bound, Restarts: c.restarts, ReboundAt: c.reboundAt, Resent: c.resent, InputClear: inputClear, Answered: c.answered}
+	chat := vm.Chat{Bound: bound, Restarts: c.restarts, ReboundAt: c.reboundAt, Resent: c.resent, InputClear: inputClear, InputKnown: inputKnown, Answered: c.answered}
 	restarting := c.restarts > 0 && c.restartAt.After(c.reboundAt) && !bound
 	blocked := c.blocked
 	requests := make([]vm.Request, 0, len(c.requests))
@@ -70,6 +72,7 @@ func (w *Workspace) collectV2Chat(b *vm.Board) {
 	b.Requests = requests
 	b.Marshal.ChatBound = bound
 	b.Marshal.InputClear = chat.InputClear
+	b.Marshal.InputKnown = inputKnown
 }
 
 // requestTone colours a request's answer.

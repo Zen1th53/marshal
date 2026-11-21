@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.5
+
+### Added
+- Board v2, the new control centre: titled panes on one grid, with readiness, planning, command centre, decision card, paused card, Marshal chat strip and split screens; two columns from 120 columns, stacked below. `MARSHAL_BOARD=classic` keeps the classic Board for one release.
+- Readiness checks name their reason (agy not signed in; the Marshal's provider is marked "in use"); the paused card recovers a run with one key; the Space palette lists the eight core actions first.
+- Every owner card is a Board v2 decision card (no classic fallback); Esc defers a waiting decision.
+- Marshal steps pane, fed by a bounded step log `.marshal/marshal/steps.jsonl` (kind and a few words per Marshal tool call, never prompt or submitted text).
+- Readiness: `y`/`t`/`?` answer the usage counts notice; `g` opens agy in a tmux window to sign in, and the Board checks agy again when it closes.
+
+### Changed
+- The Marshal chat pane is titled MARSHAL CHAT and keeps the title against the provider's own title sequences.
+- Repeated activity is folded into one line.
+- The MCP tool list sent with every Marshal turn is smaller.
+- Every key the Board draws acts as labelled; a card's key bar shows the card's keys; the `f` faster-model hint and the `p`, `l`, `v` default hints are removed.
+- Panes take their content height; the chat input state is read from the chat monitor ("input clear"), unknown until looked at.
+
+### Fixed
+- Decisions sent to a Claude Code Marshal no longer stay unsent as `[Pasted text #N]` and expire; a restarted Board submits its predecessor's paste, and owner text is never submitted.
+- A resumed or restarted Marshal chat is bound to the run again; open requests carry over.
+- The telemetry client registers again once when the server no longer knows the installation.
+- An owner's browser Accept of the architecture covers that exact contract (id, revision, digest, reviewed inventory, expected version) across Marshal chat restarts; the Board reads the same accepted record as the Marshal; a stuck Accept is applied when the runtime opens (`PROJECT_CONTRACT_OWNER_ACCEPTANCE_APPLIED`, or `..._NOT_APPLIED` with the reason).
+
 ## 0.3.4
 
 ### Changed

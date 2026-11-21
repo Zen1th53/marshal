@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -103,6 +104,35 @@ func (r *Runtime) commitBrokerProjectContractPermission(ctx context.Context, req
 		r.recordArchitectureCommit(ctx, r.ProjectRoot(), "", "accepted", "")
 	}
 	return true, err
+}
+
+// ReconcileOwnerAcceptedProjectContract applies a project contract the owner
+// already accepted in the browser that never became active (the Marshal's
+// allow was lost to a chat restart, or refused before identical
+// resubmissions were recognised). Only the owner's recorded browser Accept of
+// that exact revision and digest authorizes it; a different digest is never
+// applied. It runs when the owner runtime opens and is recorded as a
+// PROJECT_CONTRACT_OWNER_ACCEPTANCE_APPLIED event.
+func (r *Runtime) ReconcileOwnerAcceptedProjectContract(ctx context.Context) (bool, error) {
+	if r == nil || r.store == nil {
+		return false, nil
+	}
+	// Nothing to do on almost every open: decide that from the storage ID
+	// alone, before the project identity is read.
+	if waiting, err := r.store.HasUnconsumedBrowserAcceptance(ctx, r.ProjectID()); err != nil || !waiting {
+		return false, err
+	}
+	_, applied, err := r.store.ApplyOwnerAcceptedProjectContract(ctx, r.ProjectContractBinding(), r.projectContractOwnerAudience, time.Now().UTC(), "owner browser acceptance recorded but not applied; applied when the runtime opened")
+	if err == nil && applied {
+		r.recordArchitectureCommit(ctx, r.ProjectRoot(), "", "accepted", "")
+	}
+	if err != nil {
+		// Nothing was applied; the owner cannot act on a refusal nobody
+		// sees, so the reason is kept.
+		now := time.Now().UTC()
+		_ = r.store.AppendEvent(ctx, nil, model.Event{ID: fmt.Sprintf("project-contract-owner-accept-not-applied-%d", now.UnixNano()), Type: "PROJECT_CONTRACT_OWNER_ACCEPTANCE_NOT_APPLIED", ProjectID: r.ProjectID(), Timestamp: now, Data: map[string]any{"error": err.Error()}})
+	}
+	return applied, err
 }
 
 // RecordProjectContractOperatorInstruction binds the owner's browser Accept to

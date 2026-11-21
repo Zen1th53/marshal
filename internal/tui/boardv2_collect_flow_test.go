@@ -210,6 +210,15 @@ func TestFlowFromYouDerivation(t *testing.T) {
 			t.Fatalf("from you = %q %v", got, ok)
 		}
 	})
+	t.Run("architecture accepted by the owner, not applied yet", func(t *testing.T) {
+		in := flowIn{now: flowNow, goalGiven: true, milestone: &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageArch, Now: "applying the architecture you accepted", Applying: true}}}
+		if got, ok := fromYou(in); got != "nothing · next ask: plan approval" || !ok {
+			t.Fatalf("from you = %q %v", got, ok)
+		}
+		if st := stageStates(flowStages(in, taskCounts{})); !strings.Contains(st, "*arch") {
+			t.Fatalf("stages = %s", st)
+		}
+	})
 }
 
 func stageStates(st []vm.Stage) string {
@@ -358,19 +367,23 @@ func TestFlowTasks(t *testing.T) {
 // shows.
 func TestStepsFromBrokerCalls(t *testing.T) {
 	var s marshalSteps
+	note := func(lease, provider, method string, raw json.RawMessage, at time.Time) {
+		kind, text := stepOf(method, raw, nil)
+		s.record(lease, provider, kind, text, at)
+	}
 	t0 := flowNow.Add(-10 * time.Minute)
-	s.note("L1", "claude-code", "project_contract_context", json.RawMessage(`{}`), t0)
-	s.note("L1", "claude-code", "project_contract_context", json.RawMessage(`{"read_id":"r","page":2}`), t0.Add(time.Minute))
-	s.note("L1", "claude-code", "project_contract_submit", json.RawMessage(`{"submission_id":"s","proposal":{"secret":"prompt text"}}`), t0.Add(2*time.Minute))
-	s.note("L1", "claude-code", "submit", json.RawMessage(`{"submission_id":"s2","proposal":{"action":"reassign","task_id":"T03","reason":"do not show this"}}`), t0.Add(3*time.Minute))
-	s.note("L1", "claude-code", "receipt", json.RawMessage(`{"submission_id":"s2"}`), t0.Add(4*time.Minute))
+	note("L1", "claude-code", "project_contract_context", json.RawMessage(`{}`), t0)
+	note("L1", "claude-code", "project_contract_context", json.RawMessage(`{"read_id":"r","page":2}`), t0.Add(time.Minute))
+	note("L1", "claude-code", "project_contract_submit", json.RawMessage(`{"submission_id":"s","proposal":{"secret":"prompt text"}}`), t0.Add(2*time.Minute))
+	note("L1", "claude-code", "submit", json.RawMessage(`{"submission_id":"s2","proposal":{"action":"reassign","task_id":"T03","reason":"do not show this"}}`), t0.Add(3*time.Minute))
+	note("L1", "claude-code", "receipt", json.RawMessage(`{"submission_id":"s2"}`), t0.Add(4*time.Minute))
 	items, last, provider := s.snapshot()
 	got := stepsView(items, last, marshalModelLabel(provider, "opus-5.5"), flowNow)
 	var lines []string
 	for _, st := range got.Items {
 		lines = append(lines, st.Kind+" "+st.Text)
 	}
-	want := []string{"assign move a task to another worker T03", "draft architecture submitted for your review", "read project contract context ×2", "start session on claude"}
+	want := []string{"assign move a task to another worker T03", "submit architecture", "read architecture context ×2", "start session on claude"}
 	if strings.Join(lines, "|") != strings.Join(want, "|") {
 		t.Fatalf("steps\n got %q\nwant %q", lines, want)
 	}
@@ -382,7 +395,7 @@ func TestStepsFromBrokerCalls(t *testing.T) {
 			t.Fatalf("step %q carries submitted text", l)
 		}
 	}
-	s.note("L2", "codex", "memory_receipt", nil, flowNow)
+	note("L2", "codex", "memory_receipt", nil, flowNow)
 	items, _, _ = s.snapshot()
 	if items[0].Kind != "start" || items[0].Text != "session on codex" {
 		t.Fatalf("new lease: %+v", items[0])

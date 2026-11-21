@@ -28,3 +28,8 @@ func (r *Runtime) commitBrokerProjectContractPermission(context.Context, permiss
 func (r *Runtime) RecordProjectContractOperatorInstruction(context.Context, string, string, string, string, time.Time) (OperatorInstructionBinding, bool, error) {
 	return OperatorInstructionBinding{}, false, model.ErrPolicyDenied
 }
+
+// Community has no project contract to reconcile.
+func (r *Runtime) ReconcileOwnerAcceptedProjectContract(context.Context) (bool, error) {
+	return false, nil
+}

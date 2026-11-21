@@ -857,6 +857,22 @@ func CaptureVisiblePane(ctx context.Context, target string) (string, error) {
 	return string(out), nil
 }
 
+// CaptureVisiblePaneStyled is CaptureVisiblePane with the cells' colours and
+// attributes kept as escape sequences (capture-pane -e), for a caller that
+// tells dimmed placeholder text from typed text. It is the same one
+// capture-pane call.
+func CaptureVisiblePaneStyled(ctx context.Context, target string) (string, error) {
+	target, err := resolvePane(ctx, target)
+	if err != nil {
+		return "", err
+	}
+	out, err := RunCommand(ctx, "capture-pane", "-p", "-e", "-t", target)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // PipePaneOutput sends everything the pane writes to its terminal to the
 // standard input of shellCommand, which tmux runs with /bin/sh. It replaces
 // any pipe the pane already has. The output stream carries the escape

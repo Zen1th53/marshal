@@ -514,6 +514,9 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	}
 	if ownerLock != nil {
 		_ = rt.ReconcileStartup(ctx)
+		// A browser Accept the Marshal never applied (a chat restart lost
+		// its allow) is applied now, by the owner's exact acceptance only.
+		_, _ = rt.ReconcileOwnerAcceptedProjectContract(ctx)
 		loopCtx, cancel := context.WithCancel(context.Background())
 		rt.harnessReverifyCancel = cancel
 		rt.startHarnessReverifyLoop(loopCtx)

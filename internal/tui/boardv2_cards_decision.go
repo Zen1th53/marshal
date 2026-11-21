@@ -173,13 +173,16 @@ func (w *Workspace) selfApprovalLine(g ownerGate, now time.Time) string {
 	return "The Marshal tried to accept this for you at " + at.In(now.Location()).Format("15:04") + ". Refused: only you can accept."
 }
 
-// v2DecisionNow is the decision waiting for the owner now, architecture
-// first (a plan is approved against an accepted architecture), then a
-// drafted plan, then the inbox's first pending decision. A decision the
-// owner put off with Esc is not shown until another one waits.
+// v2DecisionNow is the decision waiting for the owner now: an open owner
+// card first, in the order the classic Board takes their keys (the guard's
+// alert, "what next?", the Marshal's question, the requirements, the
+// change; boardv2_cards_owner.go), then the architecture (a plan is
+// approved against an accepted architecture), then a drafted plan, then the
+// inbox's first pending decision. A decision the owner put off with Esc is
+// not shown until another one waits.
 func (w *Workspace) v2DecisionNow(now time.Time) (v2Decision, bool) {
 	p := w.marshalPanel()
-	var found []v2Decision
+	found := w.v2OwnerCards()
 	for _, g := range w.ownerGates(p) {
 		switch g.kind {
 		case decisionArchitecture:
@@ -193,14 +196,36 @@ func (w *Workspace) v2DecisionNow(now time.Time) (v2Decision, bool) {
 	}
 	s := w.v2CardState()
 	s.mu.Lock()
-	dismissed := s.dismissed
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	// A put-off decision that no longer waits is forgotten, so the same
+	// key waiting again later shows again.
+	open := map[string]bool{}
 	for _, d := range found {
-		if d.key != dismissed {
+		open[d.key] = true
+	}
+	for k := range s.dismissed {
+		if !open[k] {
+			delete(s.dismissed, k)
+		}
+	}
+	for _, d := range found {
+		if !s.dismissed[d.key] {
 			return d, true
 		}
 	}
 	return v2Decision{}, false
+}
+
+// dismissV2Card puts the decision key off ("later") while it waits.
+func (w *Workspace) dismissV2Card(key string) {
+	s := w.v2CardState()
+	s.mu.Lock()
+	if s.dismissed == nil {
+		s.dismissed = map[string]bool{}
+	}
+	s.dismissed[key] = true
+	s.mu.Unlock()
+	w.requestRepaint()
 }
 
 // architectureDecision is the "Accept architecture" card for gate g.

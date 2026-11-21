@@ -319,9 +319,12 @@ func chatStrip(c *canvas, x0, y, w int, b vm.Board, compact bool) {
 		if mk.Effort != "" {
 			model += " · " + mk.Effort
 		}
-		in := "  input clear"
-		if !b.Chat.InputClear {
+		in := ""
+		if b.Chat.InputKnown {
 			in = "  input waiting"
+			if b.Chat.InputClear {
+				in = "  input clear"
+			}
 		}
 		c.segsClip(x0, y, []seg{chip("MARSHAL CHAT", cAcc, ""), {" " + model + "  ", s(cInk, true)}, bound, {in, s(cDim, false)}}, end)
 		return
@@ -333,11 +336,14 @@ func chatStrip(c *canvas, x0, y, w int, b vm.Board, compact bool) {
 	c.segsClip(x0, y, []seg{chip("MARSHAL CHAT", cAcc, ""), {" ", s(cInk, false)}, {model, s(cInk, true)},
 		{"  │ ", s(cRule, false)}, {"bound to run ", s(cDim, false)}, bound, {"  │ ", s(cRule, false)},
 		{"stage ", s(cDim, false)}, {or(b.Chat.Stage, dash), s(cVio, false)}}, end)
-	in := "input clear"
-	if !b.Chat.InputClear {
-		in = "input waiting"
+	right := fmt.Sprintf("%d requests answered ", b.Chat.Answered)
+	if b.Chat.InputKnown {
+		in := "input waiting"
+		if b.Chat.InputClear {
+			in = "input clear"
+		}
+		right = fmt.Sprintf("%d requests answered · %s ", b.Chat.Answered, in)
 	}
-	right := fmt.Sprintf("%d requests answered · %s ", b.Chat.Answered, in)
 	if rx := x0 + w - width(right) - 1; rx > x0+60 {
 		c.putClip(rx, y, right, s(cDim, false), end)
 	}

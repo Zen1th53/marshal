@@ -719,9 +719,10 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	case docked && ui.task != "":
 		// A docked inspector shows the selected task without being opened.
 		lines = paintBoardInspector(l, th, ui.inspector(b, ui.task), v.render, v.hit)
-	case w.v2Fits(cols, rows) && !v2Defers(v):
-		// The Board v2 screens draw the home and run views
-		// (boardv2_paint.go); MARSHAL_BOARD=classic keeps the classic ones.
+	case w.v2Fits(cols, rows):
+		// The Board v2 screens draw the home and run views and every
+		// owner card (boardv2_paint.go); MARSHAL_BOARD=classic keeps the
+		// classic ones.
 		ui.insp, ui.inspFor = nil, ""
 		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
 		v2KeyRow = len(lines) - 2
@@ -890,6 +891,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	// cards: Enter applies the change, k keeps the current goal; other keys
 	// fall through.
 	if w.handleChangeKey(event) {
+		return true
+	}
+	// The v2 readiness screen's own cards (Usage counts, the agy sign-in)
+	// take their keys while drawn, before y reaches the gates.
+	if empty && !w.anyBodyView() && ui.inspect == "" && w.handleV2ReadyKey(context.Background(), event) {
 		return true
 	}
 	// An owner gate's armed reply takes the next key: Enter sends it,

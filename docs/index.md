@@ -45,7 +45,7 @@ Once inside the Board:
 
 - [Installation](installation.md) — System requirements, `install.sh`, building from source, and setup verification.
 - [Getting Started](getting-started.md) — End-to-end walkthrough from opening a project to a completed run.
-- [The Board and Keys](board-and-keys.md) — Screen layout, focus switching, shortcuts, and `NEEDS YOU` gates.
+- [The Board and Keys](board-and-keys.md) — Board v2 screens and panes, decision and paused cards, shortcuts and the action palette.
 - [Providers](providers.md) — Configuring Claude Code, Codex, OpenCode, and Antigravity, plus harness verification.
 - [How a Run Works](how-it-works.md) — Planning, workers, cross-provider review, independent verification, and closing to `main`.
 - [Memory and MCP](memory-and-mcp.md) — Using the MCP server, memory commands, and candidate review.

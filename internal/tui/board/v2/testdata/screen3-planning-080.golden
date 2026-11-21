@@ -14,9 +14,9 @@
 │                                                                              │|
 │                                                                              │|
 │                                                                              │|
-│ after 10 quiet minutes:   f   continue this step on a faster model           │|
+│                                                                              │|
 │                                                                              │|
 ╰──────────────────────────────────────────────────────────────────────────────╯|
                                                                                 |
-  F11  Marshal chat   s  say   a  architecture   f  faster model   space  action|
+  F11  Marshal chat   s  say   a  architecture   space  actions   ?  help       |
                                                                                 |

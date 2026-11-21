@@ -14,8 +14,9 @@ import (
 // thing, so handleBoardMouse acts on it exactly as on the classic Board: a
 // lane or task row selects and then opens, an inbox line selects its request
 // or arms its gate's reply, a provider row on the readiness checklist arms
-// its verify, the hint bar runs its action, and a card button presses the
-// key it names.
+// its verify, the hint bar runs its action, a card button presses the key
+// it names, and an owner card's button or line runs the classic card's own
+// click action.
 
 // hitV2Key is a button of a v2 card, the readiness checklist or the card's
 // own key bar: a click presses the key it names (id), through the same
@@ -39,7 +40,17 @@ func v2BoardHit(b vm.Board, h boardv2.Hit, hintIDs []string, empty bool) (boardH
 		}
 		out.kind, out.id = hitV2Key, h.Key
 	case boardv2.HitAction, boardv2.HitReady:
+		// An owner card's chip runs the classic card's click action
+		// (boardv2_cards_owner.go); any other button presses its key.
+		if d := b.Decision; h.Kind == boardv2.HitAction && d != nil && at(len(d.Refs)) && d.Refs[h.Index] != "" {
+			return v2OwnerHit(out, d.Refs[h.Index])
+		}
 		out.kind, out.id = hitV2Key, h.Key
+	case boardv2.HitLine:
+		if b.Decision == nil || !at(len(b.Decision.Lines)) {
+			return out, false
+		}
+		return v2OwnerHit(out, b.Decision.Lines[h.Index].Ref)
 	case boardv2.HitCheck:
 		if !empty || !at(len(b.Ready.Checks)) {
 			return out, false

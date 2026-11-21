@@ -1,0 +1,31 @@
+  MARSHAL v0.3.5   project marshal-work / run review-fixes   YOUR TURN   ✳ claude · opus-5.5 · high  m   8 workers  inbox 1  19:31  |
+ NOW  marshal claude Opus · watching reviews    │ work 8 running · 4 queued           from you nothing · next ask: final review     |
+                                                                                                                                    |
+╭─ PLAN · 12 t╭─ GUARD · the Marshal changed project files ────────────────────────────────────────────── esc later ─╮── m switch ─╮|
+│ ✓ goal → ✓ r│ only workers may change them; undo is recommended                                                    │gh    in use │|
+│ throughput ▁│                                                                                                      │t: final     │|
+│ ████████████│ internal/review/review.go                                                                            │of 200k      │|
+╰─────────────│ internal/review/history.go                                                                           │eekly 71%    │|
+╭─ LANES · fro│ web/review.html                                                                                      │put clear    │|
+│    LANE     │                                                                                                      │─────────────╯|
+│  ⣾ claude-1 │  u  undo (recommended)    K  keep                                                                    │─────────────╮|
+│  ⣾ claude-2 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯  sonnet     │|
+│  ⣾ claude-3    sonnet-5.5   T07 legend keyboard focus     editing       6m    12s │ │ ◆ agy     ███████░░░   4 lanes  gemini-3.8 │|
+│  ◎ claude-4    sonnet-5.5   review T02 (by agy-1)         reviewing     2m     3s │ │ ⬡ codex   █░░░░░░░░░   spare    wk 11%     │|
+│  ⣾ agy-1       gemini-3.8   T04 codec round-trip test     tests         9m     6s │ ╰────────────────────────────────────────────╯|
+│  ⣾ agy-2       gemini-3.8   T06 history paging            editing       8m     9s │ ╭─ INBOX ────────────────────────── i opens ─╮|
+│  ◎ agy-3       gemini-3.8   review T01 (by claude-2)      reviewing     3m     2s │ │ Nothing waits for you.                     │|
+│  ⣾ agy-4       gemini-3.8   T09 dashed-change styles      editing       7m  1m40s │ │ Next: final review before merge.           │|
+│                                                                                   │ ╰────────────────────────────────────────────╯|
+╰───────────────────────────────────────────────────────────────────────────────────╯ ╭─ ACTIVITY · grouped ───────────────────────╮|
+╭─ TASKS · 5 of 12 merged ───────────────────────────────────── ⏎ open · r restart ─╮ │ 19:30  merge   T08 merged after agy review │|
+│   ID   TITLE                         FILES         WRITER  REVIEW  STATE          │ │ 19:28  review  T02 review on claude-4      │|
+│   T01  stale target refusal message  review.go     claude  agy     ✓ merged       │ │ 19:22  signal  agy-4 slow heartbeat     ×3 │|
+│   T02  digest-bound review requests  codec.go      agy     claude  ◎ in review    │ │ 18:52  plan    12 tasks · 8 workers        │|
+│   T03  sub-view external links       review.html   claude  agy     › building     │ │ 18:44  arch    rev 1 accepted in browser   │|
+│   T05  request panel overlap         review.html   claude  agy     › building     │ │ 18:41  memory  old chat memory skipped  ×6 │|
+│   T12  regression matrix sign-off    matrix.md     claude  agy     · waits T03    │ │                                            │|
+╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯|
+                                                                                                                                    |
+  s  say   ⏎  open   a  architecture   r  restart task   m  model   F11  chat   space  actions   ?  help                            |
+                                                                                                                                    |

@@ -218,11 +218,15 @@ func (w *Workspace) readNativePlanningMCP(ctx context.Context, l *proposalMCPLea
 			// accepted in the browser yet is the normal middle of intake,
 			// not a failure: say what is missing and what to do. It is
 			// data only and mints no planning proof.
+			next := marshalArchitectureNextStep
+			if owner, found, err := w.store.ReadOwnerAcceptedProjectContract(ownerCtx, w.runtime.ProjectContractBinding()); err == nil && found {
+				next = fmt.Sprintf(marshalArchitectureOwnerAcceptedStep, owner.Submission.Contract.ID, owner.Submission.Contract.Revision, owner.Digest)
+			}
 			return boundedProjectContractJSON(struct {
 				app.ProjectPlanningInspection
 				Missing string `json:"missing"`
 				Next    string `json:"next"`
-			}{view.ProjectPlanningInspection, "architecture", marshalArchitectureNextStep})
+			}{view.ProjectPlanningInspection, "architecture", next})
 		}
 		if err != nil {
 			return nil, err
@@ -455,6 +459,11 @@ func (w *Workspace) prepareUnleasedNativePlanningLaunch(ctx context.Context, pro
 // marshalArchitectureNextStep tells the Marshal what to do while the
 // architecture waits for the owner's browser Accept.
 const marshalArchitectureNextStep = `The architecture is not accepted yet, so there is no project context to read. Carry on with the intake: submit the architecture with marshal_project_contract_submit if it is not submitted yet (every component needs a non-empty responsibility, every dependency needs a contract.connections entry whose carries says what flows over it, and every goal success criterion and confirmed requirement must be covered in at least one component's covers list; copy the full text of goal criteria, confirmed goal scope/constraints/do-not-do, and filled confirmed requirements card lines without their captions). It opens in the browser when the person presses y on the Board, and they accept it there. Call marshal_project_contract_context again after the runtime tells you the architecture was accepted.`
+
+// marshalArchitectureOwnerAcceptedStep is the next step when the owner
+// already accepted this exact contract in the browser and only its
+// application is missing.
+const marshalArchitectureOwnerAcceptedStep = `The owner already accepted the architecture in the browser (contract %s, revision %d, digest %s), but it is not applied yet. Do not submit it again and do not ask the owner to accept it again: answer the pending project-contract Decision for exactly this contract with allow. If no Decision is pending, it is applied when Marshal starts again. Call marshal_project_contract_context again after that.`
 
 // architectureAwaitsAccept reports whether the only reason the planning
 // context is unavailable is the architecture: the active Goal is confirmed

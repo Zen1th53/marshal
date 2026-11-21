@@ -115,7 +115,10 @@ func (s *Store) ReadPendingProjectContract(ctx context.Context, project projectc
 		return PendingProjectContract{}, false, nil
 	}
 	var instructed int
-	err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM extreme_project_contract_instructions WHERE project_id=? AND launch_id=? AND contract_id=? AND revision=? AND contract_digest=? AND expected_version=?`, project.StorageID, found.launch, c.ID, c.Revision, digest, sub.ExpectedVersion).Scan(&instructed)
+	// The owner's browser Accept covers the exact contract, not the launch
+	// that carried it (any other instruction stays with its launch): an identical resubmission after a chat restart is already
+	// accepted by the owner and does not ask again (consumeProjectContractInstructionTx).
+	err = s.db.QueryRowContext(ctx, `SELECT count(*) FROM extreme_project_contract_instructions WHERE project_id=? AND (launch_id=? OR substr(instruction_ref,1,8)='browser:') AND contract_id=? AND revision=? AND contract_digest=? AND inventory_digest=? AND expected_version=?`, project.StorageID, found.launch, c.ID, c.Revision, digest, c.ReviewedInventoryDigest, sub.ExpectedVersion).Scan(&instructed)
 	if err != nil && !noSuchTable(err) {
 		return PendingProjectContract{}, false, err
 	}

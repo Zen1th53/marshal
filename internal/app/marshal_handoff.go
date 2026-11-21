@@ -43,13 +43,16 @@ type MarshalGoalHandoff struct {
 	AcceptedArchitecture  string
 	OpenDecisions         []string
 
-	HasActiveRun          bool
-	RunState              marshal.RunState
-	RunDone               int
-	RunTotal              int
-	HasPlanDraft          bool
-	ArchitectureAccepted  bool
-	ArchitecturePending   bool
+	HasActiveRun         bool
+	RunState             marshal.RunState
+	RunDone              int
+	RunTotal             int
+	HasPlanDraft         bool
+	ArchitectureAccepted bool
+	ArchitecturePending  bool
+	// ArchitectureApplying: the owner accepted the architecture in the
+	// browser, but its project contract is not active yet.
+	ArchitectureApplying  bool
 	DesignApproved        bool
 	DesignInProgress      bool
 	RequirementsConfirmed bool
@@ -294,6 +297,14 @@ func (r *Runtime) fillHandoffArchitecture(ctx context.Context, h *MarshalGoalHan
 			if h.AcceptedArchitecture == "" {
 				h.AcceptedArchitecture = r.describeBrowserArchitecture(ctx, status.Revision, true)
 			}
+		} else if status.OwnerAccepted && !h.ArchitectureAccepted {
+			// The owner's part is done; the project contract is not
+			// active yet. It is not accepted, and not the owner's turn.
+			h.ArchitectureApplying = true
+			if h.AcceptedArchitecture == "" {
+				h.AcceptedArchitecture = fmt.Sprintf("accepted by the owner in the browser (rev %d), not applied yet", status.Revision)
+			}
+			h.OpenDecisions = append(h.OpenDecisions, fmt.Sprintf("the owner accepted browser architecture rev %d; allow the pending project-contract Decision for exactly that contract to apply it", status.Revision))
 		} else {
 			h.ArchitecturePending = true
 			if h.AcceptedArchitecture == "" {
@@ -405,6 +416,8 @@ func DeriveMarshalHandoffPhase(h *MarshalGoalHandoff) {
 		h.Phase = "architecture accepted; ready to draft and approve the plan"
 	case h.ArchitecturePending:
 		h.Phase = "architecture submitted, awaiting owner Accept in the browser"
+	case h.ArchitectureApplying:
+		h.Phase = "architecture accepted by the owner in the browser; not applied yet"
 	case h.DesignApproved:
 		h.Phase = "design approved; ready to prepare architecture for browser review"
 	case h.DesignInProgress:
@@ -435,6 +448,9 @@ type PlanningMilestone struct {
 	Now string
 	// OwnerTurn is set when the step waits for the owner, not the Marshal.
 	OwnerTurn bool
+	// Applying is set while the architecture the owner accepted is not
+	// applied yet: the owner's next ask is the plan, not the architecture.
+	Applying bool
 }
 
 // MarshalPlanningMilestone derives the planning milestone from the same
@@ -453,6 +469,8 @@ func MarshalPlanningMilestone(h MarshalGoalHandoff) (PlanningMilestone, bool) {
 		return PlanningMilestone{Step: 4, Now: "planning the tasks"}, true
 	case h.ArchitecturePending:
 		return PlanningMilestone{Step: 3, Now: "the architecture is ready for you to accept in the browser", OwnerTurn: true}, true
+	case h.ArchitectureApplying:
+		return PlanningMilestone{Step: 3, Now: "applying the architecture you accepted", Applying: true}, true
 	case h.DesignApproved:
 		return PlanningMilestone{Step: 3, Now: "drafting the architecture"}, true
 	case h.DesignInProgress:

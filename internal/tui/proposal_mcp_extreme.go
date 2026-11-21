@@ -305,13 +305,32 @@ func (w *Workspace) validateProposalLease(l *proposalMCPLease) error {
 	}
 	return nil
 }
+
+// handleProposalMCP serves one broker call of the live Marshal and notes it
+// on the Marshal's steps (boardv2_steps.go) once the broker's mutex is
+// released, whatever it answers. A call on a lease that is not live is
+// refused and noted nowhere.
 func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, error) {
+	out, live, err := w.serveProposalMCP(ctx, l, method, raw)
+	if live {
+		w.noteBrokerStep(l.id, l.provider, method, raw, out, err)
+	}
+	return out, err
+}
+
+func (w *Workspace) serveProposalMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, bool, error) {
 	w.proposalMCP.mu.Lock()
 	defer w.proposalMCP.mu.Unlock()
 	if err := w.validateProposalLease(l); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	w.marshalSteps.note(l.id, l.provider, method, raw, time.Now())
+	out, err := w.serveLiveProposalMCP(ctx, l, method, raw)
+	return out, true, err
+}
+
+// serveLiveProposalMCP is a broker call on a validated live lease. Caller
+// holds proposalMCP.mu.
+func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, error) {
 	if strings.HasPrefix(method, "project_contract_") {
 		return w.projectContractMCP(ctx, l, method, raw)
 	}

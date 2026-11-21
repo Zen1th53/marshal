@@ -16,6 +16,8 @@ import (
 // The requirements card waits for the person: the header's inbox counts it,
 // and the call to action no longer asks for a goal the Marshal already has.
 func TestRequirementsCardIsCountedAndHidesTheCallToAction(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w := reqBoard(t)
 	defer w.Close()
 	text := frameText(w, 120, 40)
@@ -66,6 +68,8 @@ func TestFirstUseCallToActionHidesOnceAGoalIsGiven(t *testing.T) {
 // a Marshal question and the "what next?" card counts three and shows all
 // three, beside the chat as at full width.
 func TestInboxListsEveryEntryTheHeaderCounts(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	for _, docked := range []bool{true, false} {
 		w := emptyBoardWorkspace(t)
 		w.dock.docked.Store(docked)

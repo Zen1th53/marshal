@@ -75,6 +75,8 @@ func TestConfirmedRequirementsCardNeverReopens(t *testing.T) {
 // A stopped run leads the inbox, so Enter is its "try again": no open card
 // below it takes Enter, and their buttons do not claim the key.
 func TestStoppedRunTakesEnterBeforeOpenCards(t *testing.T) {
+	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
+	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _, tr := boardWithNativeChat(t)
 	w.mu.Lock()
 	w.state.Marshal = &MarshalPanel{RunID: "run", Note: "stopped: worker exited 2", Stopped: true}

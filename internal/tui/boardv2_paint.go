@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -78,6 +77,12 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 	var hintIDs []string
 	if b.Decision == nil && b.Paused == nil {
 		b.Keys, hintIDs = v.v2HintKeys()
+	} else {
+		b.Keys = w.v2CardBar(v, b)
+	}
+	// The key bar lists only keys that act now, even none.
+	if b.Keys == nil {
+		b.Keys = []vm.Key{}
 	}
 	w.setV2CardShown(b.Screen)
 	t := v2Theme(th)
@@ -86,7 +91,9 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 	if mode == layout.Split {
 		lines, hits = boardv2.RenderSideHits(b, cols, rows, t)
 	} else {
-		lines, hits = boardv2.RenderChatHits(b, cols, rows, t, nil)
+		// The readiness cards' keys act only where the render drew them
+		// (boardv2_ready_keys.go).
+		lines, hits = w.renderV2Ready(b, cols, rows, t)
 	}
 	if v.status == "" && empty && v.armed != "" {
 		// The first-use card says this beside the armed provider; the
@@ -169,20 +176,6 @@ func (w *Workspace) v2Fits(cols, rows int) bool {
 	return cols >= layout.MinCols
 }
 
-// v2Defers reports whether an owner card is open that the v2 screens do not
-// draw yet, so the classic Board shows it and a decision is never hidden:
-// an ask card, the requirements card, a change card, the "what next?" card,
-// the guard's alert, and a pause that needs a new plan (the paused card is
-// one choice; use_plan is not). Decisions (the architecture and plan gates,
-// the inbox) and the other stops are the v2 decision and paused cards.
-func v2Defers(v boardVisual) bool {
-	if v.ask != nil || v.req != nil || v.change != nil || v.next != nil || v.guard != nil {
-		return true
-	}
-	stop, ok := v.stopNotice()
-	return ok && stop.action == marshal.PauseUsePlan
-}
-
 // setV2CardShown records which v2 screen the last paint drew, so the card
 // keys act only while their card is on screen (handleBoardKey).
 func (w *Workspace) setV2CardShown(s vm.Screen) {
@@ -190,6 +183,7 @@ func (w *Workspace) setV2CardShown(s vm.Screen) {
 	c.mu.Lock()
 	c.shown = s
 	c.mu.Unlock()
+	w.noteV2Ready(false, false)
 }
 
 // v2CardShown is the card the last paint drew: ScreenDecision,

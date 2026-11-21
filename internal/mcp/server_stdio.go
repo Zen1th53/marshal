@@ -180,6 +180,7 @@ func (s *Server) handleStdioRequest(ctx context.Context, req jsonRPCRequest) jso
 			}
 		}
 		res, err := s.callTool(knowledgeRequestContext(ctx, req.ID), caller, params.Name, params.Arguments)
+		s.noteMarshalStep(params.Name, err)
 		if err != nil {
 			resp.Error = toolError(params.Name, err)
 			return resp

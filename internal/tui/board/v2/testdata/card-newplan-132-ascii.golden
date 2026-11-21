@@ -1,0 +1,22 @@
+  MARSHAL v0.3.5   project marshal-work   PAUSED                                    * claude . opus-5.5 . high  m   inbox 1  20:05  |
+ NOW  marshal waiting on your choice            | work 6 running . 2 paused           from you press Enter to move 2 tasks to claude|
+                                                                                                                                    |
++- PAUSED . needs a new plan -------------------------------------------------------+ +- PROVIDERS --------------------------------+|
+| T06 was cancelled; the plan still depends on it.                                  | | * claude    #####.....   ready    52%      ||
+|                                                                                   | | + agy       ..........   out      21:10    ||
+|   TASK                         PROGRESS                    KEPT                   | | o codex     #.........   low      10%      ||
+|   T06 history paging          stopped mid-task            branch                  | +--------------------------------------------+|
+|                                                                                   | +- RUN --------------------------------------+|
+| Enter will: open the composer to tell the Marshal what to change.                 | | ################........  7 of 12 merged   ||
+|             The run asks: create and approve an amended plan that removes or      | | 6 lanes running . no other stops           ||
+|             replaces the cancelled task, then /marshal use-plan                   | |                                            ||
+|                                                                                   | +--------------------------------------------+|
+|  Enter  tell the Marshal what to change    d  raw error    x  stop the run        |                                               |
+|                                                                                   |                                               |
++-----------------------------------------------------------------------------------+                                               |
+                                                                                                                                    |
+                                                                                                                                    |
+                                                                                                                                    |
+                                                                                                                                    |
+  Enter  move   w  wait   d  details   x  stop run   space  actions                                                                 |
+                                                                                                                                    |

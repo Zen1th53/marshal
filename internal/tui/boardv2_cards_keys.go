@@ -12,8 +12,9 @@ import (
 // Every key runs an operation the Board already has: opening the review in
 // the browser (openArchitectureReview), the plan gate's armed reply
 // (sendGate), the inbox's own decision keys (handleBoardInboxKey), the stop
-// commands the inbox's stop entry runs (actOnStop) and the quota card's
-// auto-resume (armQuotaResume). Nothing here accepts an architecture.
+// commands the inbox's stop entry runs (actOnStop), the quota card's
+// auto-resume (armQuotaResume) and the classic owner cards' own key
+// handlers (handleV2OwnerKey). Nothing here accepts an architecture.
 
 // handleV2CardKey is a key while a Board v2 card is shown; it reports
 // whether a card took it.
@@ -30,6 +31,9 @@ func (w *Workspace) handleV2CardKey(event KeyEvent) bool {
 
 // handleV2DecisionKey is the decision card's keys.
 func (w *Workspace) handleV2DecisionKey(event KeyEvent, d v2Decision) bool {
+	if ownerCardKind(d.kind) {
+		return w.handleV2OwnerKey(event, d)
+	}
 	ctx := w.workers.context()
 	s := w.v2CardState()
 	if d.kind == decisionPlan {
@@ -49,12 +53,9 @@ func (w *Workspace) handleV2DecisionKey(event KeyEvent, d v2Decision) bool {
 		return w.handleBoardInboxKey(ctx, event)
 	}
 	if event.Type == KeyEsc {
-		// "later": the card steps aside until another decision waits; the
-		// inbox still lists this one.
-		s.mu.Lock()
-		s.dismissed = d.key
-		s.mu.Unlock()
-		w.requestRepaint()
+		// "later": the card steps aside while it waits and the next
+		// decision shows; the inbox still lists this one.
+		w.dismissV2Card(d.key)
 		return true
 	}
 	switch d.kind {

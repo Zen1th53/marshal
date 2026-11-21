@@ -26,7 +26,7 @@ func stagesBuild() []vm.Stage {
 
 func marshalClaude(effort string) vm.Marshal {
 	return vm.Marshal{Provider: "claude", Model: "opus-5.5", Effort: effort, InUse: true, Doing: "watching reviews · next: final",
-		ContextPct: 41, ContextUsed: 82000, ContextWindow: 200000, Limit5hPct: 58, WeeklyPct: 71, ChatBound: true, InputClear: true}
+		ContextPct: 41, ContextUsed: 82000, ContextWindow: 200000, Limit5hPct: 58, WeeklyPct: 71, ChatBound: true, InputClear: true, InputKnown: true}
 }
 
 func fixtureRunning() vm.Board {
@@ -118,7 +118,7 @@ func fixturePlanning() vm.Board {
 			{Sent: at(18, 42), What: "parallel limit 8", Answer: "allow", Latency: 5 * sec, Tone: vm.ToneOK},
 			{Sent: at(18, 41), What: "memory import", Answer: "decline", Latency: 4 * sec},
 		},
-		Chat: vm.Chat{Bound: true, Restarts: 1, ReboundAt: at(18, 41), Resent: 2, InputClear: true},
+		Chat: vm.Chat{Bound: true, Restarts: 1, ReboundAt: at(18, 41), Resent: 2, InputClear: true, InputKnown: true},
 	}
 }
 
@@ -135,7 +135,7 @@ func fixtureDecision() vm.Board {
 			{From: 6, To: 7, Changed: true}, {From: 3, To: 7, Changed: true}},
 		Link: "http://127.0.0.1:37667/?token=7964…462b", NoDisplay: true,
 		SelfApproval: "The Marshal tried to accept this for you at 18:40. Refused: only you can accept.",
-		Actions:      kv("a", "open in browser", "c", "copy link", "⏎", "accept here", "k", "comment"),
+		Actions:      kv("a", "open in browser", "c", "copy link", "k", "comment"),
 	}
 	return b
 }
@@ -168,7 +168,7 @@ func fixtureChat() vm.Board {
 		Screen:  vm.ScreenChat,
 		Top:     vm.TopBar{Version: "v0.3.5", Project: "marshal-work", State: "PLANNING", StateTone: vm.ToneVio, Clock: at(18, 47)},
 		Marshal: marshalClaude("medium"),
-		Chat:    vm.Chat{Bound: true, InputClear: true, Answered: 3, Stage: "tasks · 6m"},
+		Chat:    vm.Chat{Bound: true, InputClear: true, InputKnown: true, Answered: 3, Stage: "tasks · 6m"},
 	}
 }
 
@@ -178,7 +178,7 @@ func fixtureSplit() vm.Board {
 	b.Top.Workers = 0
 	b.Marshal = marshalClaude("medium")
 	b.NowLine = vm.NowLine{Work: "8 running · 5/12 merged", FromYou: "nothing", FromYouOK: true}
-	b.Chat = vm.Chat{Bound: true, InputClear: true}
+	b.Chat = vm.Chat{Bound: true, InputClear: true, InputKnown: true}
 	short := []string{"T03 sub-view links", "T05 request panel", "T07 legend focus", "review T02", "T04 codec test", "T06 history paging", "review T01", "T09 dashed styles"}
 	for i := range b.Lanes.Items {
 		b.Lanes.Items[i].Task = short[i]
