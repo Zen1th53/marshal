@@ -121,9 +121,23 @@ func TestLimitRowsAgyPerFamily(t *testing.T) {
 		t.Fatalf("argon row = %+v; it is the Gemini model's tightest window", argon)
 	}
 	for _, w := range buildV2Workers(in) {
-		if w.Provider == "agy" && (w.Tag == "at limit" || w.LeftPct != 99) {
-			t.Fatalf("agy worker row = %+v", w)
+		if w.Provider == "agy" && (w.Tag == "at limit" || w.LeftPct != 99 || strings.Contains(w.Detail, "wk") || w.TagTone == vm.ToneWarn) {
+			t.Fatalf("agy worker row = %+v; the spent family is not its workers' weekly figure", w)
 		}
+	}
+	in.Probed = true
+	in.Probe.Installed = in.Installed
+	found := false
+	for _, c := range buildV2Ready(in).Checks {
+		if c.Label == "Workers" && strings.HasPrefix(c.Text, "agy") {
+			found = true
+			if c.Mark != "ok" || strings.Contains(c.Text, "weekly 0%") {
+				t.Fatalf("agy readiness check = %+v", c)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no agy readiness check")
 	}
 }
 
@@ -209,5 +223,21 @@ func TestModelLeftInPerFamily(t *testing.T) {
 	}
 	if _, ok := modelLeftIn(qs, "claude", "claude-opus-5-5"); ok {
 		t.Fatal("claude's limit is not reported")
+	}
+}
+
+// agy's limits report asked for authentication: agy is not signed in, not
+// at a limit, and no sign-in URL reaches the Board.
+func TestLimitsAgyNotSignedIn(t *testing.T) {
+	in := liveLimitsIn("gemini-4-argon-high")
+	in.Quotas["agy"] = usage.Quota{Provider: "agy", Reason: usage.ReasonNotSignedIn, Offer: []usage.ModelGroup{{Name: "Gemini 4", Offered: true}}}
+	l := limitsFor(t, buildV2Limits(in), "agy")
+	if l.State != vm.LimitNotSignedIn || !strings.Contains(l.Reason, "not signed in") || len(l.Rows) != 1 || l.Rows[0].Source != "not signed in" || l.Rows[0].PercentLeft != -1 {
+		t.Fatalf("agy = %+v", l)
+	}
+	for _, w := range buildV2Workers(in) {
+		if w.Provider == "agy" && w.Tag != "not signed in" {
+			t.Fatalf("agy worker row = %+v", w)
+		}
 	}
 }

@@ -328,6 +328,12 @@ func (in v2MarshalIn) provider(name string) v2Provider {
 		p.State, p.Reason = "not signed in", reason
 		return p
 	}
+	if q.Reason == usage.ReasonNotSignedIn && !live {
+		// agy's limits report asked for authentication: signed out, not
+		// at a limit. Only the plain reason is shown, never its sign-in URL.
+		p.State, p.Reason = "not signed in", notSignedInReason(name)
+		return p
+	}
 	p.SignedIn = live || in.SignedIn[name] || (listed && !st.VerifiedAt.IsZero()) ||
 		(hasQuota && q.Known && !q.Stale) || anyOffered(q)
 	switch {
@@ -397,7 +403,7 @@ func buildV2Workers(in v2MarshalIn) []vm.Worker {
 			row.Tag, row.TagTone = "checking", vm.ToneMuted
 		}
 		if p.State != "limit" && p.Installed {
-			if wk, _ := windowLeft(in.Quotas[name], "wk"); wk >= 0 && wk <= 30 {
+			if wk, _ := windowLeft(modelQuota(in.Quotas[name], p.ModelID), "wk"); wk >= 0 && wk <= 30 {
 				row.Detail = fmt.Sprintf("wk %d%%", wk)
 				if row.TagTone == vm.ToneOK || row.TagTone == vm.ToneMuted {
 					row.TagTone = vm.ToneWarn
@@ -462,7 +468,7 @@ func buildV2Ready(in v2MarshalIn) vm.Readiness {
 		if n := limits[name]; n > 0 {
 			head += fmt.Sprintf(" · up to %d at once", n)
 		}
-		wk, wkWin := windowLeft(in.Quotas[name], "wk")
+		wk, wkWin := windowLeft(modelQuota(in.Quotas[name], p.ModelID), "wk")
 		switch {
 		case p.State == "not signed in":
 			add(vm.Check{Mark: "warn", Label: "Workers", Text: name + " is installed but not signed in", Tag: "action", Hint: signInHint(name)})

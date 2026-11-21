@@ -28,28 +28,44 @@ func KindName(kind string) string {
 	return kind
 }
 
+// ReasonNotSignedIn is the reason of a provider whose limits report asked
+// for authentication instead (agy prints a sign-in URL and waits). Only
+// this constant is kept, never what the CLI printed.
+const ReasonNotSignedIn = "not signed in"
+
+// agyAsksToSignIn reports whether agy's output is a sign-in prompt.
+func agyAsksToSignIn(out []byte) bool {
+	s := strings.ToLower(string(out))
+	return strings.Contains(s, "authentication required") || strings.Contains(s, "please sign in") || strings.Contains(s, "not signed in")
+}
+
 // FamilyCovers reports whether a family window applies to model id: the
-// family's name, or each of its " and " parts, is the id's leading words
+// family's name, or one of its " and " parts, is the id's leading words
 // ("Claude and GPT" covers claude-opus-5-5-high and gpt-oss-120b; "Gemini"
 // covers every gemini-*; "Gemini 4 Argon" covers gemini-4-argon-high).
-func FamilyCovers(family, model string) bool {
+func FamilyCovers(family, model string) bool { return familyMatch(family, model) > 0 }
+
+// familyMatch is how many characters of model the family names (its longest
+// covering part); 0 when it does not cover model.
+func familyMatch(family, model string) int {
 	m := strings.ToLower(strings.TrimSpace(model))
 	if i := strings.LastIndex(m, "/"); i >= 0 {
 		m = m[i+1:]
 	}
 	if m == "" {
-		return false
+		return 0
 	}
+	best := 0
 	for _, part := range strings.Split(strings.ToLower(family), " and ") {
 		slug := strings.Join(strings.Fields(part), "-")
 		if slug == "" {
 			continue
 		}
-		if m == slug || strings.HasPrefix(m, slug+"-") || strings.HasPrefix(m, slug+".") {
-			return true
+		if (m == slug || strings.HasPrefix(m, slug+"-") || strings.HasPrefix(m, slug+".")) && len(slug) > best {
+			best = len(slug)
 		}
 	}
-	return false
+	return best
 }
 
 // grouped reports whether the quota's windows are per family.
@@ -64,19 +80,30 @@ func (q Quota) grouped() bool {
 
 // ModelWindows is the windows that limit model: every window of a provider
 // whose limits are not per family; of one whose limits are, the windows of
-// the families that cover model. matched is false when the quota is per
-// family and no family covers model (or model is ""): the windows then say
-// nothing about it.
+// the most specific family that covers model. agy runs a Gemini 4 Argon
+// model on its own "Gemini 4 Argon" group when that group is reported, any
+// other gemini-* model on "Gemini", claude-* and gpt-* on "Claude and GPT".
+// matched is false when the quota is per family and no family covers model
+// (or model is ""): the windows then say nothing about it.
 func (q Quota) ModelWindows(model string) (wins []Window, matched bool) {
 	if !q.grouped() {
 		return append([]Window(nil), q.Windows...), true
 	}
+	best := 0
 	for _, w := range q.Windows {
-		if f, _ := SplitLabel(w.Label); f != "" && FamilyCovers(f, model) {
+		if f, _ := SplitLabel(w.Label); f != "" {
+			best = max(best, familyMatch(f, model))
+		}
+	}
+	if best == 0 {
+		return nil, false
+	}
+	for _, w := range q.Windows {
+		if f, _ := SplitLabel(w.Label); f != "" && familyMatch(f, model) == best {
 			wins = append(wins, w)
 		}
 	}
-	return wins, len(wins) > 0
+	return wins, true
 }
 
 // ModelBinding is the known window closest to its limit among the windows
@@ -123,6 +150,8 @@ func (q Quota) Source() string {
 			return "agy models"
 		}
 		return SourceNotReported
+	case ReasonNotSignedIn:
+		return "not signed in"
 	case ReasonStale:
 		return "last report too old"
 	case ReasonReset:

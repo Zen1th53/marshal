@@ -44,6 +44,9 @@ func limitRows(q usage.Quota, read bool) []vm.LimitRow {
 	if !read {
 		return []vm.LimitRow{{PercentLeft: -1, Source: usage.SourceNotChecked}}
 	}
+	if q.Reason == usage.ReasonNotSignedIn {
+		return []vm.LimitRow{{PercentLeft: -1, Source: q.Source()}}
+	}
 	var rows []vm.LimitRow
 	for _, win := range q.Windows {
 		family, kind := usage.SplitLabel(win.Label)
@@ -87,12 +90,15 @@ func markDrivingRows(l *vm.ProviderLimits, p v2Provider, q usage.Quota) {
 	if p.Left < 0 {
 		return
 	}
-	applies := func(row vm.LimitRow) bool {
-		if row.Family == "" || p.ModelID == "" {
-			return true
-		}
-		return usage.FamilyCovers(row.Family, p.ModelID)
+	// The rows that limit the model, by the rule dispatch applies; every row
+	// when no row can be placed for it.
+	limiting := map[string]bool{}
+	wins, matched := q.ModelWindows(p.ModelID)
+	for _, w := range wins {
+		family, kind := usage.SplitLabel(w.Label)
+		limiting[family+"|"+usage.KindName(kind)] = true
 	}
+	applies := func(row vm.LimitRow) bool { return !matched || limiting[row.Family+"|"+row.Window] }
 	switch {
 	case p.State == "limit" && p.Left == 0:
 		family, kind := usage.SplitLabel(p.Window.Label)
@@ -127,4 +133,16 @@ func modelBinding(q usage.Quota, model string) (usage.Window, bool) {
 		return win, true
 	}
 	return q.Binding()
+}
+
+// modelQuota is q with only the windows that limit model, when its model
+// binding can be placed (the rule modelBinding applies); q otherwise. The
+// Workers row's "wk N%" and the readiness check read it, so a spent family
+// the workers do not run is not shown as their weekly figure.
+func modelQuota(q usage.Quota, model string) usage.Quota {
+	if _, ok := q.ModelBinding(model); !ok {
+		return q
+	}
+	q.Windows, _ = q.ModelWindows(model)
+	return q
 }

@@ -45,7 +45,9 @@ var agyUsageLister = func(ctx context.Context) ([]byte, error) {
 	}
 	cmd := exec.CommandContext(ctx, path, "-p", "/usage")
 	cmd.Env = append(os.Environ(), "NO_COLOR=1", "TERM=dumb", "CI=1")
-	return cmd.Output()
+	// Both streams: a signed-out agy asks for authentication on either and
+	// then waits until the bound; what it printed is still returned.
+	return cmd.CombinedOutput()
 }
 
 // parseAgyUsage reads agy's /usage records into windows labelled by group
@@ -186,8 +188,14 @@ func readAgy(now time.Time, seenFile string) Quota {
 	}
 	q.AsOf = now
 	// The figures agy itself reports, when it answers: every family's
-	// 5-hour and weekly percent left and reset time.
-	if windows := agyUsageWindows(now); len(windows) > 0 {
+	// 5-hour and weekly percent left and reset time. A signed-out agy has
+	// none: it is not signed in, never at its limit.
+	windows, signedOut := agyUsageWindows(now)
+	if signedOut {
+		q.Reason = ReasonNotSignedIn
+		return q
+	}
+	if len(windows) > 0 {
 		q.Windows = windows
 		for _, w := range windows {
 			if w.Known() {
@@ -200,26 +208,30 @@ func readAgy(now time.Time, seenFile string) Quota {
 
 var agyUsage struct {
 	sync.Mutex
-	at      time.Time
-	windows []Window
+	at        time.Time
+	windows   []Window
+	signedOut bool
 }
 
-func agyUsageWindows(now time.Time) []Window {
+// agyUsageWindows is agy's /usage figures, and whether agy asked for
+// authentication instead. The output itself is never kept: a sign-in prompt
+// carries an OAuth URL with a state token.
+func agyUsageWindows(now time.Time) ([]Window, bool) {
 	agyUsage.Lock()
 	defer agyUsage.Unlock()
 	if !agyUsage.at.IsZero() && now.Sub(agyUsage.at) < agyOfferEvery {
-		return slices.Clone(agyUsage.windows)
+		return slices.Clone(agyUsage.windows), agyUsage.signedOut
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	agyUsage.at = now
 	out, err := agyUsageLister(ctx)
-	if err != nil {
-		agyUsage.windows = nil
-		return nil
+	agyUsage.windows, agyUsage.signedOut = nil, agyAsksToSignIn(out)
+	if err != nil || agyUsage.signedOut {
+		return nil, agyUsage.signedOut
 	}
 	agyUsage.windows = parseAgyUsage(out, now)
-	return slices.Clone(agyUsage.windows)
+	return slices.Clone(agyUsage.windows), false
 }
 
 // OfferedNone reports whether a provider with a model offer can run nothing.
@@ -241,6 +253,6 @@ func resetAgyOffer() {
 	agyOffer.at, agyOffer.groups, agyOffer.err = time.Time{}, nil, false
 	agyOffer.Unlock()
 	agyUsage.Lock()
-	agyUsage.at, agyUsage.windows = time.Time{}, nil
+	agyUsage.at, agyUsage.windows, agyUsage.signedOut = time.Time{}, nil, false
 	agyUsage.Unlock()
 }
