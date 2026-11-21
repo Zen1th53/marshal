@@ -78,8 +78,22 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 	var hintIDs []string
 	if b.Decision == nil && b.Paused == nil {
 		b.Keys, hintIDs = v.v2HintKeys()
+	} else {
+		b.Keys = w.v2CardBar(v, b)
+	}
+	// The key bar lists only keys that act now, even none; the compact
+	// Board beside the chat draws no readiness cards (boardv2_ready_keys.go).
+	full := mode != layout.Split
+	if full {
+		b.Keys = v2ReadyBar(b)
+	}
+	if b.Keys == nil {
+		b.Keys = []vm.Key{}
 	}
 	w.setV2CardShown(b.Screen)
+	if full {
+		w.noteV2ReadyPaint(b)
+	}
 	t := v2Theme(th)
 	var lines []string
 	var hits []boardv2.Hit
@@ -190,6 +204,7 @@ func (w *Workspace) setV2CardShown(s vm.Screen) {
 	c.mu.Lock()
 	c.shown = s
 	c.mu.Unlock()
+	w.noteV2Ready(false, false)
 }
 
 // v2CardShown is the card the last paint drew: ScreenDecision,

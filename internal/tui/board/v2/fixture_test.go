@@ -135,7 +135,7 @@ func fixtureDecision() vm.Board {
 			{From: 6, To: 7, Changed: true}, {From: 3, To: 7, Changed: true}},
 		Link: "http://127.0.0.1:37667/?token=7964…462b", NoDisplay: true,
 		SelfApproval: "The Marshal tried to accept this for you at 18:40. Refused: only you can accept.",
-		Actions:      kv("a", "open in browser", "c", "copy link", "⏎", "accept here", "k", "comment"),
+		Actions:      kv("a", "open in browser", "c", "copy link", "k", "comment"),
 	}
 	return b
 }

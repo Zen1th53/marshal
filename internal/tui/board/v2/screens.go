@@ -107,7 +107,9 @@ func columns(c *canvas, bd body, left, right []slot) {
 }
 
 func keysOr(b vm.Board, def []vm.Key) []vm.Key {
-	if len(b.Keys) > 0 {
+	// A Board that set its keys (the live Board, from the keys that act in
+	// its state) keeps them, even none; nil draws the design's own.
+	if b.Keys != nil {
 		return b.Keys
 	}
 	return def
@@ -345,7 +347,7 @@ func workerGlyph(wk vm.Worker) string { return or(wk.Glyph, glyph(wk.Provider)) 
 func workersPane(b vm.Board) slot {
 	n := len(b.Workers)
 	return slot{want: max(n, 1) + 2, min: 3, prio: 2, draw: func(c *canvas, x, y, w, h int) {
-		p := c.box(x, y, w, h, "Workers · providers", "v re-check", "", "", "")
+		p := c.box(x, y, w, h, "Workers · providers", "", "", "", "")
 		if n == 0 {
 			p.put(2, 1, dash, sFaint)
 			return
@@ -418,7 +420,7 @@ func activityPane(b vm.Board, title string, compact bool) slot {
 
 // ---------------------------------------------------------------- screens
 
-var runningKeys = keys("s", "say", "⏎", "open", "a", "architecture", "r", "restart task", "m", "model", "l", "limits", "p", "pause all", "F11", "chat", "space", "actions", "?", "help")
+var runningKeys = keys("s", "say", "⏎", "open", "a", "architecture", "r", "restart task", "m", "model", "F11", "chat", "space", "actions", "?", "help")
 
 func screenRunning(c *canvas, b vm.Board) {
 	bd := chrome(c, b, keysOr(b, runningKeys))
@@ -551,7 +553,7 @@ func screenReady(c *canvas, b vm.Board) {
 	columns(c, bd, []slot{readinessPane(b)}, right)
 }
 
-var planningKeys = keys("F11", "Marshal chat", "s", "say", "a", "architecture", "f", "faster model", "space", "actions", "?", "help")
+var planningKeys = keys("F11", "Marshal chat", "s", "say", "a", "architecture", "space", "actions", "?", "help")
 
 func stepsPane(b vm.Board) slot {
 	n := len(b.Steps.Items)
@@ -574,7 +576,6 @@ func stepsPane(b vm.Board) slot {
 			}
 			p.segs(2, 1+i, []seg{{clock(s.At), sFaint}, {"  " + ljust(s.Kind, 7), sAcc}, {"  " + s.Text, sInk}})
 		}
-		p.segs(2, h-3, []seg{{"after 10 quiet minutes:  ", sDim}, {" f ", st{fg: cInk, bg: cKey, b: true}}, {"  continue this step on a faster model", sDim}})
 	}}
 }
 

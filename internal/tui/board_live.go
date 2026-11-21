@@ -892,6 +892,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	if w.handleChangeKey(event) {
 		return true
 	}
+	// The v2 readiness screen's own cards (Usage counts, the agy sign-in)
+	// take their keys while drawn, before y reaches the gates.
+	if empty && !w.anyBodyView() && ui.inspect == "" && w.handleV2ReadyKey(context.Background(), event) {
+		return true
+	}
 	// An owner gate's armed reply takes the next key: Enter sends it,
 	// anything else cancels. y arms the first gate still waiting.
 	if w.handleGateKey(event, w.state.Marshal) {

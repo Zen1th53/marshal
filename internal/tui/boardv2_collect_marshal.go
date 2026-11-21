@@ -27,6 +27,7 @@ func (w *Workspace) collectV2Marshal(b *vm.Board) {
 	b.Marshal = buildV2Marshal(in)
 	b.Workers = buildV2Workers(in)
 	b.Ready = buildV2Ready(in)
+	w.addV2ReadyActions(&b.Ready)
 }
 
 // v2MarshalIn is everything the builders read, gathered from memory.

@@ -8,7 +8,7 @@
 +-----------------------------------------------------------------------------------+ | limit   ######....  5h 58% . weekly 71%    ||
 +- LANES . from worker heartbeats -------------- limit claude 4 . agy 4 . total 12 -+ | chat    bound to this run . input clear    ||
 |    LANE        MODEL        TASK                          STEP        TIME SIGNAL | +--------------------------------------------+|
-|  * claude-1    sonnet-5.5   T03 sub-view external links   tests        14m     8s | +- WORKERS . providers --------- v re-check -+|
+|  * claude-1    sonnet-5.5   T03 sub-view external links   tests        14m     8s | +- WORKERS . providers ----------------------+|
 |  * claude-2    sonnet-5.5   T05 request panel overlap     editing      11m     4s | | * claude  ######....   4 lanes  sonnet     ||
 |  * claude-3    sonnet-5.5   T07 legend keyboard focus     editing       6m    12s | | + agy     #######...   4 lanes  gemini-3.8 ||
 |  o claude-4    sonnet-5.5   review T02 (by agy-1)         reviewing     2m     3s | | o codex   #.........   spare    wk 11%     ||
@@ -27,5 +27,5 @@
 |   T12  regression matrix sign-off    matrix.md     claude  agy     . waits T03    | |                                            ||
 +-----------------------------------------------------------------------------------+ +--------------------------------------------+|
                                                                                                                                     |
-  s  say   Enter  open   a  architecture   r  restart task   m  model   l  limits   p  pause all   F11  chat   space  actions   ?  h|
+  s  say   Enter  open   a  architecture   r  restart task   m  model   F11  chat   space  actions   ?  help                        |
                                                                                                                                     |

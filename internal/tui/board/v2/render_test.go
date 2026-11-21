@@ -52,6 +52,14 @@ var deliberate = map[int]map[int]string{
 	// The Run bar: the design draws 3 active cells for one active task of 12
 	// in 24 cells, which no whole number of tasks gives; v2 draws 2.
 	5: {12: "run bar rounds to whole tasks"},
+	// Keys the Board does not act on in that state are not drawn: on a
+	// run p starts a message and l focuses the lanes (pause and limits stay
+	// in the Space palette); v re-checks only on the readiness screen; no
+	// path switches the Marshal to a faster model mid-step, so f is not
+	// offered; and only the browser accepts an architecture.
+	1: {10: "no v re-check on the Workers pane", 29: "no l limits, p pause all"},
+	3: {16: "no f faster model hint", 20: "no f faster model"},
+	4: {16: "no f faster model hint", 18: "no ⏎ accept here", 20: "no f faster model"},
 }
 
 // TestScreensMatchDesign renders each fixture at 132 columns in truecolor
