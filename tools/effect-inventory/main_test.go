@@ -41,7 +41,11 @@ func TestHostGitCommitCommandIsADiscoveredGitProgram(t *testing.T) {
 	}
 }
 
-func TestCurrentPrivateInventory(t *testing.T) {
+// currentInventoryReport discovers the effect sites of this tree and checks
+// them against sites.csv: every site annotated, no stale row, every source
+// hash current. It fails the test on any drift and returns the report.
+func currentInventoryReport(t *testing.T) (string, string) {
+	t.Helper()
 	root := filepath.Join("..", "..")
 	sites, err := discover(root)
 	if err != nil {
@@ -60,20 +64,41 @@ func TestCurrentPrivateInventory(t *testing.T) {
 	if err := report(&output, sites, table); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Print(output.String())
+	return root, output.String()
+}
+
+// TestCurrentInventory is the gate every tree runs, public or private: the
+// discovered effect sites must match sites.csv exactly. It never skips.
+func TestCurrentInventory(t *testing.T) {
+	_, output := currentInventoryReport(t)
+	fmt.Print(output)
+}
+
+// requirePrivateQualification, when set to 1, makes a missing private
+// qualification report a failure instead of a skip. The private repository's
+// CI sets it; the public source release does not ship the report.
+const requirePrivateQualification = "MARSHAL_REQUIRE_PRIVATE_QUALIFICATION"
+
+// TestCurrentPrivateInventory checks the private qualification report against
+// the live inventory (counts and percentages, exact lines). The report is a
+// maintainer document the public source release does not ship, so there it
+// skips; the inventory itself is gated by TestCurrentInventory either way.
+func TestCurrentPrivateInventory(t *testing.T) {
+	root, output := currentInventoryReport(t)
 	// The scanner intentionally includes both editions' source. New private
 	// controls must update the live private audit, without rewriting historical
 	// public release claims. Require counts as well as percentages.
 	notes, err := os.ReadFile(filepath.Join(root, "docs", "extreme-qualification-2026-10-11.md"))
 	if errors.Is(err, os.ErrNotExist) {
-		// The qualification report is a maintainer document that the public
-		// source release does not ship; the inventory itself is still checked.
-		t.Skip("qualification report not present in this source release")
+		if os.Getenv(requirePrivateQualification) == "1" {
+			t.Fatalf("%s=1 but docs/extreme-qualification-2026-10-11.md is missing", requirePrivateQualification)
+		}
+		t.Skip("qualification report not present in this source release; the inventory gate is TestCurrentInventory")
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if !strings.Contains(string(notes), line) {
 			t.Errorf("current private qualification does not contain exact inventory line %q", line)
 		}
