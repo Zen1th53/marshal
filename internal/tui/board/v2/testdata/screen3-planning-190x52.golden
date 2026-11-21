@@ -14,7 +14,7 @@
 │                                                                                                                                             │ │ re-sent   2 open requests                  │|
 │                                                                                                                                             │ │ input     clear                            │|
 │                                                                                                                                             │ │ model     claude Opus 5.5                  │|
-│ after 10 quiet minutes:   f   continue this step on a faster model                                                                          │ │ context   41% used                         │|
+│                                                                                                                                             │ │ context   41% used                         │|
 │                                                                                                                                             │ │                                            │|
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯|
                                                                                                                                                                                               |
@@ -48,5 +48,5 @@
                                                                                                                                                                                               |
                                                                                                                                                                                               |
                                                                                                                                                                                               |
-  F11  Marshal chat   s  say   a  architecture   f  faster model   space  actions   ?  help                                                                                                   |
+  F11  Marshal chat   s  say   a  architecture   space  actions   ?  help                                                                                                                     |
                                                                                                                                                                                               |

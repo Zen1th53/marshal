@@ -14,9 +14,9 @@
 │                                          │  │ MCP tools          │   │ revisions          │   ┆ digests            ┆   ┆ 18 regressions     ┆   │e-sent   2 open requests                  │|
 │                                          │  ╰────────────────────╯   ╰────────────────────╯   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯   │nput     clear                            │|
 │                                          │ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │odel     claude Opus 5.5                  │|
-│ after 10 quiet minutes:   f   continue th│ ⚠ The Marshal tried to accept this for you at 18:40. Refused: only you can accept.                   │ontext   41% used                         │|
+│                                          │ ⚠ The Marshal tried to accept this for you at 18:40. Refused: only you can accept.                   │ontext   41% used                         │|
 │                                          │                                                                                                      │                                          │|
-╰──────────────────────────────────────────│  a  open in browser    c  copy link    ⏎  accept here    k  comment                                  │──────────────────────────────────────────╯|
+╰──────────────────────────────────────────│  a  open in browser    c  copy link    k  comment                                                    │──────────────────────────────────────────╯|
                                            ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯                                           |
                                                                                                                                                                                               |
                                                                                                                                                                                               |
@@ -48,5 +48,5 @@
                                                                                                                                                                                               |
                                                                                                                                                                                               |
                                                                                                                                                                                               |
-  F11  Marshal chat   s  say   a  architecture   f  faster model   space  actions   ?  help                                                                                                   |
+  F11  Marshal chat   s  say   a  architecture   space  actions   ?  help                                                                                                                     |
                                                                                                                                                                                               |
