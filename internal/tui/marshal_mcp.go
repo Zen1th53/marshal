@@ -134,7 +134,7 @@ func configureOpenCodeMCP(dir *briefingDir, root string, env []string, role, tas
 	}
 	newEnvEntry := "OPENCODE_CONFIG_CONTENT=" + string(data)
 
-	updatedEnv := make([]string, 0, len(env)+2)
+	updatedEnv := make([]string, 0, len(env))
 	found := false
 	for _, e := range env {
 		if strings.HasPrefix(e, "OPENCODE_CONFIG_CONTENT=") {

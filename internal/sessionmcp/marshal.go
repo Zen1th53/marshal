@@ -62,7 +62,7 @@ func ConfigureMarshal(provider, root string, args, env []string) ([]string, []st
 		return append(args, "--mcp-config", path), env, cleanup, nil
 	case "agy", "antigravity":
 		data, _ := json.Marshal(append([]string{binary}, serverArgs...))
-		out := make([]string, 0, len(env)+1)
+		out := make([]string, 0, len(env))
 		for _, item := range env {
 			if !strings.HasPrefix(item, "MARSHAL_KNOWLEDGE_MCP=") {
 				out = append(out, item)

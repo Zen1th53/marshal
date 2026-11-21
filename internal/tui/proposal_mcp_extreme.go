@@ -155,7 +155,7 @@ func (w *Workspace) prepareProposalMCP(provider, root string, args, env []string
 	w.proposalMCP.leases[dir] = lease
 	w.proposalMCP.mu.Unlock()
 	dir.revokeProposal = func() { w.revokeProposalLease(lease) }
-	filtered := make([]string, 0, len(env)+1)
+	filtered := make([]string, 0, len(env))
 	for _, e := range env {
 		if !strings.HasPrefix(e, "MARSHAL_PROPOSAL_MCP_CONFIG=") {
 			filtered = append(filtered, e)
