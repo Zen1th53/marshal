@@ -1073,9 +1073,9 @@ func (c command) a2a(ctx context.Context, args []string) error {
 			fmt.Fprintln(c.stderr, "WARNING: Running A2A server in insecure mode on loopback (authentication disabled)")
 			srv, err = a2a.NewInsecureServer(runtime, *listen)
 		} else {
-			layout, err := app.Bootstrap(ctx, c.root)
-			if err != nil {
-				return err
+			layout, bootErr := app.Bootstrap(ctx, c.root)
+			if bootErr != nil {
+				return bootErr
 			}
 			authMgr := auth.NewManager(layout.RuntimeDir)
 			srv, err = a2a.NewServerWithAuth(runtime, authMgr)
