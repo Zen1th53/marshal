@@ -445,7 +445,9 @@ type SignedArchitectureEnrollment struct {
 	Signature []byte
 }
 
-func architectureSignedBytes(domain string, value any) ([]byte, error) {
+// ArchitectureSignedBytes is the domain-separated payload an architecture
+// enrollment, challenge or receipt signature covers.
+func ArchitectureSignedBytes(domain string, value any) ([]byte, error) {
 	b, err := json.Marshal(value)
 	return append([]byte(domain+"\x00"), b...), err
 }
@@ -460,7 +462,7 @@ func (e SignedArchitectureEnrollment) Verify(pinned ed25519.PublicKey) error {
 		(g.Policy == "private_extreme" && (len(g.CommandIssuer) != ed25519.PublicKeySize || bytes.Equal(g.Issuer, g.CommandIssuer))) {
 		return model.ErrPolicyDenied
 	}
-	b, err := architectureSignedBytes("marshal.architecture.enrollment.v1", g)
+	b, err := ArchitectureSignedBytes("marshal.architecture.enrollment.v1", g)
 	if err != nil || !ed25519.Verify(pinned, b, e.Signature) {
 		return model.ErrPolicyDenied
 	}
@@ -515,11 +517,11 @@ func BindArchitectureChallenge(c *ArchitectureOwnerChallenge) {
 	b.ReceiptDigest = ""
 	b.EnvelopeDigest = ""
 	b.Origin = ""
-	raw, _ := architectureSignedBytes("marshal.architecture.selection.v1", b)
+	raw, _ := ArchitectureSignedBytes("marshal.architecture.selection.v1", b)
 	h := sha256.Sum256(raw)
 	c.Binding.EnvelopeDigest = hex.EncodeToString(h[:])
 	c.Binding.ReceiptDigest = ""
-	raw, _ = architectureSignedBytes("marshal.architecture.challenge.v1", *c)
+	raw, _ = ArchitectureSignedBytes("marshal.architecture.challenge.v1", *c)
 	h = sha256.Sum256(raw)
 	c.Binding.ReceiptDigest = hex.EncodeToString(h[:])
 }
@@ -541,7 +543,7 @@ func (r SignedArchitectureReceipt) Verify(g ArchitectureTargetGeneration, now ti
 	if a.Origin == "owner_command" {
 		key = g.CommandIssuer
 	}
-	b, err := architectureSignedBytes("marshal.architecture.receipt.v1", c)
+	b, err := ArchitectureSignedBytes("marshal.architecture.receipt.v1", c)
 	if err != nil || len(key) != ed25519.PublicKeySize || !ed25519.Verify(ed25519.PublicKey(key), b, r.Signature) {
 		return model.ErrPolicyDenied
 	}

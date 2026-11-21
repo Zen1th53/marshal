@@ -255,11 +255,7 @@ func (s *Store) GetCheckpointRollbacks(ctx context.Context, checkpointID string)
 	return list, rows.Err()
 }
 
-type cpScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanCheckpoint(scanner cpScanner) (model.HandoffCheckpoint, error) {
+func scanCheckpoint(scanner rowScanner) (model.HandoffCheckpoint, error) {
 	var cp model.HandoffCheckpoint
 	var slotsJSON, claimsJSON, evJSON, budgetJSON, blockersJSON, snapJSON, createdStr string
 

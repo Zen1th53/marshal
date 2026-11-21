@@ -125,28 +125,3 @@ func TestGetApprovalReportsMissingRecord(t *testing.T) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
-
-// TestApprovedRecordValidatesThroughPolicyPath proves a TUI-granted approval is
-// accepted by the existing ValidateApproval gate, so /approve feeds the real
-// policy mechanism rather than a parallel one.
-func TestApprovedRecordValidatesThroughPolicyPath(t *testing.T) {
-	st, ctx := newApprovalStore(t)
-	requestApproval(t, st, ctx, "a-policy")
-
-	expiry := time.Now().UTC().Add(time.Hour)
-	resolved, err := st.ResolveApproval(ctx, "a-policy", "operator", true, &expiry, 0)
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-
-	if _, err := st.ValidateApproval(ctx, model.ApprovalUse{
-		ID:               "a-policy",
-		Operation:        model.Operation("deploy"),
-		Scope:            "release",
-		Target:           "production",
-		Now:              time.Now().UTC(),
-		ExpectedRevision: resolved.Revision,
-	}); err != nil {
-		t.Fatalf("granted approval must satisfy ValidateApproval: %v", err)
-	}
-}

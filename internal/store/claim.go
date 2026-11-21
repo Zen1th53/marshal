@@ -145,33 +145,6 @@ func (s *Store) ListClaimsByGoal(ctx context.Context, goalID string, goalRevisio
 	return claims, rows.Err()
 }
 
-// ListClaimsByScope returns all claims for a given scope.
-func (s *Store) ListClaimsByScope(ctx context.Context, scope string) ([]model.Claim, error) {
-	query := `
-		SELECT claim_id, goal_id, goal_revision, subject, normalized_text, scope,
-		       criticality, state, predecessor_id, supersedes_id, author_provenance_json,
-		       supporting_evidence_json, contradicting_evidence_json, source_clusters_json,
-		       binding_json, state_reason, created_at, updated_at, evaluated_at
-		FROM claims WHERE scope = ?
-		ORDER BY created_at ASC
-	`
-	rows, err := s.db.QueryContext(ctx, query, scope)
-	if err != nil {
-		return nil, fmt.Errorf("list claims by scope: %w", err)
-	}
-	defer rows.Close()
-
-	var claims []model.Claim
-	for rows.Next() {
-		claim, err := scanClaim(rows)
-		if err != nil {
-			return nil, err
-		}
-		claims = append(claims, claim)
-	}
-	return claims, rows.Err()
-}
-
 // RecordClaimTransition persists an immutable transition entry.
 func (s *Store) RecordClaimTransition(ctx context.Context, trans model.ClaimTransition) error {
 	if err := trans.Validate(); err != nil {
@@ -252,11 +225,7 @@ func (s *Store) GetClaimTransitions(ctx context.Context, claimID string) ([]mode
 	return transitions, rows.Err()
 }
 
-type claimScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanClaim(scanner claimScanner) (model.Claim, error) {
+func scanClaim(scanner rowScanner) (model.Claim, error) {
 	var c model.Claim
 	var critStr, stateStr, authorJSON, suppJSON, contraJSON, clustJSON, bindJSON string
 	var createdStr, updatedStr, evalStr string

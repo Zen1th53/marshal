@@ -41,7 +41,7 @@ func demoMemoryOverview(now time.Time) store.MemoryOverview {
 			{CallerID: "agy-1", TaskID: "T-019", QueryDigest: "77e1d0c9b8a7f6e5", OutcomeStatus: "served", DeniedCount: 1, CreatedAt: now.Add(-2 * time.Minute)},
 			{CallerID: "marshal", RunID: "R-7f3a", QueryDigest: "0c0ffee15bad1dea", OutcomeStatus: "served", CreatedAt: now.Add(-6 * time.Minute)},
 		}},
-		MCPTools:  store.MemoryMCPTools{ToolCalls: map[string]int{"memory_recall": 1943, "memory_remember": 140, "events_list": 612, "run_digest": 233, "memory_restore_preview": 9}, CandidatesCount: 140, ProposalsCount: 443},
+		MCPTools:  store.MemoryMCPTools{CandidatesCount: 140, ProposalsCount: 443},
 		Snapshots: store.MemorySnapshots{TotalSnapshots: 12, NewestSnapshot: at(41 * time.Minute)},
 	}
 }
