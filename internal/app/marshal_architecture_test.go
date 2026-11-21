@@ -306,3 +306,23 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 		t.Fatal("ambiguous component identifiers accepted")
 	}
 }
+
+// A request about code-derived elements may be answered, but never changes the
+// architecture, even as a change request.
+func TestMarshalArchitectureFeedbackDerivedCodeNeverChangesArchitecture(t *testing.T) {
+	derived := map[string]any{"part": "collector", "elements": []any{map[string]any{"kind": "file", "path": "collector/run.go"}}, "breadcrumb": []any{"collector", "run.go"}, "note": "derived from code, not reviewed"}
+	proposal := architectureTestProposal()
+	envelope := map[string]any{"architecture": proposal, "selection": architectureTestSelection(proposal), "request": "Rename what run.go does", "request_type": "change", "derived": derived}
+	answer := map[string]any{"status": "answered", "reply": "It starts the collector.", "questions": []string{}, "architecture": proposal}
+	cli, _ := architectureTestCLI(t, string(architectureTestJSON(t, answer)))
+	if _, err := cli.ArchitectureFeedback(requiredMarshalTestContext(t, cli), architectureTestJSON(t, envelope)); err != nil {
+		t.Fatalf("an unchanged answer about derived code was refused: %v", err)
+	}
+	revised := architectureTestProposal()
+	revised["components"].([]any)[0].(map[string]any)["name"] = "Packet observer"
+	change := map[string]any{"status": "proposed_change", "reply": "Renamed.", "questions": []string{}, "architecture": revised}
+	cli, _ = architectureTestCLI(t, string(architectureTestJSON(t, change)))
+	if _, err := cli.ArchitectureFeedback(requiredMarshalTestContext(t, cli), architectureTestJSON(t, envelope)); err == nil {
+		t.Fatal("a derived code request changed the architecture")
+	}
+}

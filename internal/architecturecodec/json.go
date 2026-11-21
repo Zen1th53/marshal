@@ -333,7 +333,8 @@ func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, 
 			return nil, errors.New("architecture feedback entry is invalid")
 		}
 		resolved, ok := entry["resolved"].(bool)
-		if !ok || approved && !resolved {
+		// A question about derived code never takes part in acceptance.
+		if !ok || approved && !resolved && entry["derived"] == nil {
 			return nil, errors.New("architecture still has unresolved feedback")
 		}
 	}

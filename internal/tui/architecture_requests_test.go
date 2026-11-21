@@ -71,3 +71,22 @@ func TestForwardedRequestTimesOutWithAPlainReason(t *testing.T) {
 		t.Fatal("timeout reason must be plain")
 	}
 }
+
+func TestArchitectureRequestMessageForDerivedCodeForbidsAChange(t *testing.T) {
+	msg := architectureRequestMessage(app.ArchitectureRequest{
+		ID: "req-8", Type: "change", Text: "Split this file", Revision: json.Number("3"),
+		Source:      json.RawMessage(`{"id":"site","revision":2,"digest":"d2"}`),
+		Anchor:      json.RawMessage(`{"kind":"component","id":"login"}`),
+		Components:  json.RawMessage(`[{"id":"login"}]`),
+		Connections: json.RawMessage(`[]`),
+		Derived:     json.RawMessage(`{"part":"login","elements":[{"kind":"file","path":"login/form.go"}],"note":"derived from code, not reviewed"}`),
+	})
+	for _, want := range []string{"Question about code", "derived from code, not reviewed", `"path":"login/form.go"`, "Never answer proposed_change", "submit no project contract revision"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message lacks %q:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "For proposed_change first submit") {
+		t.Error("a derived request must not invite a contract revision")
+	}
+}

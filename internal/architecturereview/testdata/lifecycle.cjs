@@ -76,6 +76,63 @@ assert.ok(part('untouched'));
 (async()=>{
 run(`state.architecture.components.find(c=>c.id==='edited').parent=undefined;delete state.history;state.approved=false;state.revision=17;state.base_revision=3;state.architecture.source_contract={id:'project',revision:4,digest:'d'};$('only-changes').checked=false;draw()`);
 assert.equal(get('revision-bar').textContent,'rev 3 → 4 · proposed');
+// Click to open: one click on a part with sub-parts opens it (breadcrumb and
+// #path follow) and shows that part's panel inside; a leaf click focuses; a pan
+// drag that starts on a part never opens it; Back returns to the top.
+const tick=()=>new Promise(r=>setTimeout(r,0)),pushed=[];context.setTimeout=setTimeout;context.history.pushState=(_s,_t,url)=>pushed.push(url);
+run(`state.architecture.components.push({id:'inner',name:'Inner part',parent:'untouched',responsibility:'Inside'});state.layouts['sub:untouched']={version:'sub-v',width:400,height:200,nodes:[{id:'inner',x:20,y:20,width:200,height:80}],edges:[]};advanced=false;path=[];draw()`);
+assert.ok(part('untouched').className.split(' ').includes('drillable'));assert.ok(!part('current').className.split(' ').includes('drillable'));
+part('untouched').onpointerenter({clientX:1,clientY:1});assert.ok(get('tip').children.some(n=>String(n.textContent).includes('Click to open')));
+const d=get('diagram'),onPart={closest:()=>null};
+d.onpointerdown({pointerId:7,pointerType:'mouse',button:0,clientX:100,clientY:100,target:onPart});d.onpointermove({pointerId:7,clientX:150,clientY:110});d.onpointerup({pointerId:7});
+part('untouched').onclick({detail:1});await tick();await tick();
+assert.equal(run('path.length'),0,'a pan drag must not open the part');
+part('current').onclick({detail:1});await tick();
+assert.equal(run('path.length'),0);assert.ok(get('diagram').className.split(' ').includes('focusing'));assert.equal(run('target.id'),'current');
+run('closeEditor()');
+part('untouched').onclick({detail:1});await tick();await tick();
+assert.equal(run("path.join('/')"),'untouched');assert.equal(run('view'),'sub:untouched');assert.equal(pushed.at(-1),'#/untouched');
+assert.equal(get('crumbs').hidden,false);assert.ok(part('inner'));
+assert.equal(get('editor').hidden,false);assert.equal(get('target-title').textContent,'Unconnected part');
+assert.equal(run('target.diagram_id'),'architecture');assert.equal(get('open-sub').hidden,true);
+context.location={hash:'#/'};context.onpopstate();await tick();await tick();
+assert.equal(run('path.length'),0);assert.equal(get('crumbs').hidden,true);assert.ok(part('untouched'));
+// Keyboard: Enter opens a part with an inside, Space only focuses it.
+part('untouched').onkeydown({key:' ',target:part('untouched'),preventDefault(){}});await tick();assert.equal(run('path.length'),0);assert.equal(run('target.id'),'untouched');
+part('untouched').onkeydown({key:'Enter',target:part('untouched'),preventDefault(){}});await tick();await tick();assert.equal(run("path.join('/')"),'untouched');
+run(`closeEditor();path=[];delete state.layouts['sub:untouched'];state.architecture.components=state.architecture.components.filter(c=>c.id!=='inner');draw()`);
+// Derived levels: Shift-click marks a file, the request names its path and
+// binds to the enclosing reviewed part; area selection marks several files.
+{
+const code={kind:'files',dir:'pkg',part:'added',architecture:{components:[{id:'file-1',name:'a.go',responsibility:'File pkg/a.go',files:['pkg/a.go']},{id:'file-2',name:'b.go',responsibility:'File pkg/b.go',files:['pkg/b.go']}],connections:[{id:'use-1',source:'file-1',target:'file-2',label:'uses X',protocol:''}]},layout:{version:'derived-v1',width:600,height:200,nodes:[{id:'file-1',x:20,y:20,width:160,height:72},{id:'file-2',x:300,y:20,width:160,height:72}],edges:[{id:'use-1',source:'file-1',target:'file-2',points:[[180,56],[300,56]]}]}};
+context.code=code;run(`advanced=true;path=['added'];derivedView={key:'code:added',data:code,snapshot:codeSnapshot('code:added',code)};draw()`);
+assert.equal(run('view'),'code:added');assert.equal(get('area').disabled,false);
+part('file-1').onclick({detail:1,shiftKey:true});
+assert.equal(get('editor').hidden,false);assert.equal(get('decl-row').hidden,false);assert.ok(get('selection-meta').textContent.includes('a.go'));
+const posts=[];context.fetch=async(url,opt)=>{const body=JSON.parse(opt.body);posts.push(body);const next=JSON.parse(JSON.stringify(run('state')));next.comments.push({id:'c'+posts.length,target:body.target,...(body.derived?{derived:{part:'added',elements:body.derived.items.map(i=>({kind:i.to?'connection':'file',...i})),breadcrumb:['added','pkg','a.go'],note:'derived from code, not reviewed'}}:{}),request_type:body.request_type,comment:body.comment,status:'queued',resolved:false});return {ok:true,json:async()=>next};};
+get('request-text').value='Why does a.go use b.go?';get('decl-name').value='Serve';await get('submit').onclick();
+const sent=posts.at(-1);
+assert.deepEqual(sent.derived,{part:'added',items:[{path:'pkg/a.go'}],name:'Serve'});
+assert.equal(sent.target.kind,'component');assert.equal(sent.target.id,'added');assert.equal(sent.target.diagram_id,'architecture');
+assert.ok(part('file-1').children.some(n=>n.className==='feedback-dot'),'open derived request shows a dot on the file');
+assert.ok(!part('file-2').children.some(n=>n.className==='feedback-dot'));
+assert.ok(run("acceptBlocker()!==t('accept_wait_reply')&&acceptBlocker()!==t('accept_open_request')"),'an open derived request never blocks Accept');
+run('closeEditor()');run(`state.comments=state.comments.map(c=>({...c,status:'answered',resolved:true}));target={kind:'area',diagram_id:view,layout_version:'derived-v1',rect:{x:0,y:0,width:600,height:200},component_ids:['file-1','file-2'],connection_ids:['use-1']};openEditor()`);
+get('request-text').value='Explain these files';await get('submit').onclick();
+assert.deepEqual(posts.at(-1).derived,{part:'added',items:[{path:'pkg/a.go'},{path:'pkg/b.go'},{path:'pkg/a.go',to:'pkg/b.go'}]});
+run('renderHistory()');assert.ok(JSON.stringify(get('history-list').children.at(-1).children).includes('pkg/a.go'));
+// A reviewed part opened into its derived level keeps a reviewed panel: no
+// derived fields, the builder picker allowed, and a plain request on the part.
+run(`closeEditor();state.comments=[];path=[];derivedView=null;draw()`);
+const prevFetch=context.fetch;context.fetch=async(url,opt)=>String(url).startsWith('/api/codeview')?{ok:true,json:async()=>({...code,part:'current'})}:prevFetch(url,opt);
+part('current').onclick({detail:1});for(let i=0;i<6;i++)await tick();
+assert.equal(run('view'),'code:current');assert.equal(get('editor').hidden,false);assert.equal(run('target.id'),'current');assert.equal(run('target.diagram_id'),'architecture');
+assert.equal(get('decl-row').hidden,true);assert.ok(!get('selection-meta').textContent.includes('Derived'));
+get('request-text').value='Is this part still needed?';await get('submit').onclick();
+assert.equal(posts.at(-1).derived,undefined);assert.equal(posts.at(-1).target.id,'current');assert.equal(posts.at(-1).target.diagram_id,'architecture');
+context.fetch=prevFetch;
+run(`closeEditor();state.comments=[];advanced=false;path=[];derivedView=null;draw()`);
+}
 // The part panel names the contract revision too, never the review-state counter.
 run("target={kind:'component',id:'edited'};openEditor()");assert.equal(get('selection-meta').textContent,'Revision 4 · edited');run('closeEditor()');
 // The whole connection carries its full label as a tooltip; the caption may be cut.

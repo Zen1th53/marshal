@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 )
 
 // demoFixtures are the drawings the fixture demo serves, in port order.
@@ -52,7 +53,12 @@ func TestArchitectureDemo(t *testing.T) {
 	}
 	for i, fixture := range demoFixtures() {
 		r, err := New(Config{Context: t.Context(), Project: "demo", ArchitectureID: "architecture-demo", StateDir: filepath.Join(t.TempDir(), fixture.name), Proposal: fixture.raw, CodeRoot: root,
-			Feedback: func(_ context.Context, e json.RawMessage) (json.RawMessage, error) {
+			Feedback: func(ctx context.Context, e json.RawMessage) (json.RawMessage, error) {
+				// A short pause keeps the open request and its dot visible.
+				select {
+				case <-time.After(10 * time.Second):
+				case <-ctx.Done():
+				}
 				return resultFixture(e, "answered", false), nil
 			}})
 		if err != nil {
