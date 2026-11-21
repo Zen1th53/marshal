@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "a1e99de5be96ed6c1c7b92a605f911655e81ba35a8934ea361872634b8a30d63",
-      "bytes": 27303
+      "sha256": "12249c128e1d4657b2a2adf4f65faae7c863e4b53eaf99cb94229b60d5a3f2bf",
+      "bytes": 27922
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -2721,8 +2721,8 @@
     },
     {
       "path": "internal/app/marshal_lane_admission_extreme_test.go",
-      "sha256": "1b585800b97cd10c878927bd5a1dac7761051121149845ba204ab57970f8fccc",
-      "bytes": 7319
+      "sha256": "6b6da74da711aca217b33938b456c66c306d0f1c382446de158ace6b96b12bfb",
+      "bytes": 10091
     },
     {
       "path": "internal/app/marshal_lane_rework_extreme_test.go",
@@ -6691,8 +6691,8 @@
     },
     {
       "path": "internal/execution/provider_switch_extreme.go",
-      "sha256": "f14e6cd84eddb344fa61f8efcda1ba736ea6b130fc7f9593a0c40ea1f6f2f17e",
-      "bytes": 6386
+      "sha256": "b0a7996de7ce2f7c319232289cbfefb3e34bec9f273ed91682a7b4a2c1a20030",
+      "bytes": 6740
     },
     {
       "path": "internal/execution/provider_switch_extreme_test.go",
@@ -6733,6 +6733,11 @@
       "path": "internal/execution/reaper_test.go",
       "sha256": "db501552f9507b62467bb6cc38fda0fda89cb3662be0fb9a4331719e6e85b9c8",
       "bytes": 2965
+    },
+    {
+      "path": "internal/execution/reassign_lane_base_extreme_test.go",
+      "sha256": "dc8ab23c01dc9ae02e35d3202d66825014b9da5a540216d7cb99370624f07fe8",
+      "bytes": 9703
     },
     {
       "path": "internal/execution/reconcile_files.go",
@@ -6901,8 +6906,8 @@
     },
     {
       "path": "internal/execution/task_lane_extreme.go",
-      "sha256": "7ee0242e61d1e7c11a26ccfbc45480b09b886f1c0bdd19280a127a590c0fd29c",
-      "bytes": 28868
+      "sha256": "7ece745ae8ed33ddea7dc5aaceb61c32445419b8637d68ca793260afe85c7576",
+      "bytes": 29153
     },
     {
       "path": "internal/execution/task_lane_extreme_test.go",
@@ -13686,8 +13691,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "97aa3935cf761ce7ddfbe579e7575debe49df0a689b93ac16f2ce32937d7a396",
-      "bytes": 79446
+      "sha256": "cebcf7a514c79071c586a4294639ba172ddb9c799779cfb68230ca4f6073d0e0",
+      "bytes": 80285
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -14463,6 +14468,11 @@
       "path": "internal/tui/marshal_redraft_test.go",
       "sha256": "9d05597d8584b0860c4531ce0ce7a987dea7e1b3442ce9c3d701f99833cd8e07",
       "bytes": 2755
+    },
+    {
+      "path": "internal/tui/marshal_resume_refusal_test.go",
+      "sha256": "1959d42a7eeedbb6453bf65d01ba7fedcc90563a93c8dab08201560885fef3c1",
+      "bytes": 1214
     },
     {
       "path": "internal/tui/marshal_run_authority.go",
@@ -16933,6 +16943,11 @@
       "path": "release/RELEASE_NOTES_0.3.6.md",
       "sha256": "f9b4a9163f433c3d463d4c40e93c778804d69125a426fd0e1227ed8e70262ece",
       "bytes": 1882
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.3.7.md",
+      "sha256": "1152b045008c4b5e0f1d6fe6c6a318d9e966757820439811a120bd9ac6732a0d",
+      "bytes": 1562
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",

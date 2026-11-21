@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -177,5 +178,72 @@ func TestExtremeOrphanLaneRefusalSaysTheAttemptWasInterrupted(t *testing.T) {
 				t.Fatalf("pause detail lost the raw refusal: %q", run.Pause.Detail)
 			}
 		})
+	}
+}
+
+// A lane refused because its durable binding conflicts (production: rv06
+// reassigned to another worker, "durable task lane binding differs") cannot
+// go away by itself, so it is not retried: the task escalates once, the run's
+// lifecycle operation is cleared and Execute returns paused for the person
+// instead of holding the Marshal busy. Retried by the operator, it runs.
+func TestExtremeLaneBindingConflictEscalatesAndReleasesTheRun(t *testing.T) {
+	s, _, _ := parallelWaitFixture(t, 2)
+	var mu sync.Mutex
+	launches := map[string]int{}
+	refuse := true
+	s.Drivers["worker"] = driver.Governed{Provider: "test", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		id := req.Task.PlanTaskID
+		mu.Lock()
+		launches[id]++
+		blocked := id == "b" && refuse
+		mu.Unlock()
+		if blocked {
+			return nil, fmt.Errorf("worker failed: %w: durable task lane binding differs", execution.ErrRunConflict)
+		}
+		return nil, os.WriteFile(filepath.Join(req.Worktree, id+".txt"), []byte("done\n"), 0600)
+	}}
+	brief := func(marshal.Task, BriefContext) string { return "brief" }
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	run, _ := s.Execute(ctx, "par", brief, nil)
+	for i := 0; i < 4 && run.Pause == nil && ctx.Err() == nil; i++ {
+		run, _ = s.Execute(ctx, "par", brief, nil)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("Execute did not return after the lane refusal: the Marshal stayed busy")
+	}
+	run, _, err := s.load(t.Context(), "par")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := run.Tasks[taskIndex(run, "b")]
+	if b.State != marshal.Escalated || !strings.Contains(b.EscalationReason, "durable task lane binding differs") {
+		t.Fatalf("refused task ended %s (%q), want escalated with the refusal", b.State, b.EscalationReason)
+	}
+	if run.Operation != nil {
+		t.Fatalf("the refused launch left its lifecycle operation set: %+v", run.Operation)
+	}
+	if run.Pause == nil || run.Pause.Action != marshal.PauseRetryTask || run.Pause.TaskID != "b" {
+		t.Fatalf("run was not paused for the operator's retry: %s %+v", run.State, run.Pause)
+	}
+	mu.Lock()
+	if launches["b"] != 1 {
+		mu.Unlock()
+		t.Fatalf("a binding conflict was launched %d times, want 1 (not retried by itself)", launches["b"])
+	}
+	refuse = false
+	mu.Unlock()
+	if err = s.RetryTask(t.Context(), "par", "b", true); err != nil {
+		t.Fatalf("an escalated binding conflict cannot be retried: %v", err)
+	}
+	run, err = s.Execute(ctx, "par", brief, nil)
+	for i := 0; err == nil && i < 4 && run.Tasks[taskIndex(run, "b")].State != marshal.Merged; i++ {
+		run, err = s.Execute(ctx, "par", brief, nil)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task := run.Tasks[taskIndex(run, "b")]; task.State != marshal.Merged {
+		t.Fatalf("retried task ended %s", task.State)
 	}
 }

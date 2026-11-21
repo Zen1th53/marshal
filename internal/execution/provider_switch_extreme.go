@@ -90,7 +90,12 @@ func (e *Engine) rebindTaskLaneProviderSwitch(ctx context.Context, parentID stri
 			return nil, fmt.Errorf("%w: the task's current attempt is %s", ErrRunBlocked, lane.State)
 		}
 		if fallback {
-			if lane.ParentRunID != parentID || lane.LaneTaskID != taskID || lane.BaseCommit != base || lane.ParentBinding != taskLaneBinding(parent, task, base) {
+			// The failed lane must carry the task's own current binding, over
+			// the base it ran on. This failover retires that binding below, so
+			// the replacement attempt may open from a newer base (a task with
+			// dependencies restarts from the integration head), as after a
+			// reassignment; OpenTaskLaneRework admits it only as switched.
+			if lane.ParentRunID != parentID || lane.LaneTaskID != taskID || lane.BaseCommit == "" || lane.ParentBinding != taskLaneBinding(parent, task, lane.BaseCommit) {
 				return nil, fmt.Errorf("%w: failover lane binding differs", ErrRunConflict)
 			}
 			authorityRun, authorityTask = lane, lane.Tasks[taskID]
