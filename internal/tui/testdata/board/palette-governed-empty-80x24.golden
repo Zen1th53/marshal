@@ -1,4 +1,4 @@
-╭─ ACTIONS  type to search all 171 ────────────────────────────────────╮|
+╭─ ACTIONS  type to search all 172 ────────────────────────────────────╮|
 │ > _                                                                  │|
 ├──────────────────────────────────────────────────────────────────────┤|
 │ ▶ s       say to the Marshal                                         │|
@@ -9,5 +9,5 @@
 │   Ctrl+X  stop all workers                                           │|
 │   l       limits and workers                                         │|
 │   ?       help                                                       │|
-│   ── 163 more · type a word, e.g. "retry", "budget", "telemetry"     │|
+│   ── 164 more · type a word, e.g. "retry", "budget", "telemetry"     │|
 ╰─ Enter run · ↑↓ choose · type to filter · Esc close ─────────────────╯|

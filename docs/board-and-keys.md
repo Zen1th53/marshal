@@ -192,7 +192,7 @@ The key bar at the bottom shows the keys for what is on screen. These keys work 
 | `a` | Open the current architecture in your browser (also `/marshal architecture`). |
 | `y` | Reply to a waiting gate; on the architecture gate it opens the review in the browser. |
 | `r` | Restart (retry) the stuck task under the keyboard; confirm with `Enter`. |
-| `w` | Choose the model that runs the highlighted task. |
+| `w` | Choose the model that runs the highlighted task. With no task highlighted: open the Board in your browser (the Web Board, below; also `/marshal web`). |
 | `v` | On the readiness screen and in the Providers view: check the next provider that has not been checked; `Enter` runs the check. |
 | `Space` or `Ctrl+K` | Open the action palette. |
 | `/` | Type a command, such as `/marshal settings`. |
@@ -207,14 +207,14 @@ A letter that is not a Board key starts a message to the Marshal (`to the Marsha
 `Space` opens the palette with the eight core actions first:
 
 ```text
-╭─ ACTIONS  type to search all 57 ─────────────────────────────────────────╮
+╭─ ACTIONS  type to search all 58 ─────────────────────────────────────────╮
 │ > _                                                                      │
 ├──────────────────────────────────────────────────────────────────────────┤
 │ ▶ s       say to the Marshal           p       pause everything          │
 │   a       open the architecture        Ctrl+X  stop all workers          │
 │   r       restart a task               l       limits and workers        │
 │   m       change model or provider     ?       help                      │
-│   ── 49 more · type a word, e.g. "retry", "budget", "telemetry"          │
+│   ── 50 more · type a word, e.g. "retry", "budget", "telemetry"          │
 ╰─ Enter run · ↑↓ choose · type to filter · Esc close ─────────────────────╯
 ```
 
@@ -279,6 +279,17 @@ A left click selects and opens; it never decides on its own.
 - A provider row on the readiness list: arms its check.
 - A card button or a key in the key bar: presses that key.
 - An inbox line: selects its request, or arms the gate's reply (a second click sends it).
+
+---
+
+## The Board in your browser (Web Board)
+
+The Web Board shows the same Board as a web page: the top bar, the NOW line, Plan, Lanes, Tasks, Workers, Inbox, Activity, the Marshal pane, Marshal steps, Requests, the readiness checklist, and the decision and paused cards. It updates live (at most four times a second) and works at phone width, so you can watch a run from a phone through your own remote desktop to this computer.
+
+- Open it with `w` when no task is highlighted (during a run, `l` first moves the keyboard to the lanes), the palette entry **Open the Board in the browser**, or `/marshal web`. Where there is a display it opens in your browser; the Board's footer shows the link either way, so on a machine with no display you open the link in a browser on that computer.
+- It runs inside the open Board and stops when the Board closes. It listens on `127.0.0.1` only, at a random port, and never on the network.
+- The link carries a private, random token (`http://127.0.0.1:PORT/?t=…`). The page takes the token out of the address bar and the history at once, keeps it for that browser tab only (a reload still works), and sends it with each request for the Board's data. No cookie is used. Without the link the page shows no data; a link from an earlier Board no longer works. Do not share the link: anyone on this computer who has it can read the Board.
+- It is **read-only**. To answer a decision, accept, or choose on a paused card, use the terminal Board; the web card names the key to press there. Nothing is loaded from the internet, and it shows only what the terminal Board shows: never prompts, the chat transcript, file contents or secrets. The architecture review link is not shown on it.
 
 ---
 

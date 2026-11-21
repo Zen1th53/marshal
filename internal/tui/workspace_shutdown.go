@@ -132,6 +132,7 @@ func (w *Workspace) Close() {
 	w.stopNativeChat()
 	w.closeProposalMCP()
 	w.closeLocalServers()
+	w.closeWebBoard()
 	w.workers.stop()
 	w.marshalStop()
 	w.cancelCommand()

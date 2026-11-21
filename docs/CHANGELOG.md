@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.6
+
+### Added
+- Web Board: a read-only, live, local (127.0.0.1, token, Host check) web page of the Board; `w`, the palette entry or `/marshal web`.
+- Architecture review Advanced view: nested sub-architectures at any depth with breadcrumb and Back, edge ports, and code-derived levels marked "not reviewed".
+
+### Changed
+- Architecture review: zoom/pan/minimap, role-named bands, bundled directed curves, labels on hover, focus panel, search.
+
 ## 0.3.5
 
 ### Added
