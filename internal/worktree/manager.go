@@ -134,7 +134,13 @@ func (m *Manager) Inspect(ctx context.Context, path string) (model.WorktreeState
 	if err != nil {
 		return model.WorktreeState{}, err
 	}
-	if !pathWithin(m.root, canonical) {
+	// Compare like with like: the root may be spelled through a symlinked
+	// ancestor (macOS /var -> /private/var) while the worktree is resolved.
+	runtimeRoot, err := canonicalPath(m.root)
+	if err != nil {
+		return model.WorktreeState{}, err
+	}
+	if !pathWithin(runtimeRoot, canonical) {
 		return model.WorktreeState{}, fmt.Errorf("%w: worktree lies outside runtime root", model.ErrConflict)
 	}
 	root, err := m.git(ctx, canonical, "rev-parse", "--show-toplevel")

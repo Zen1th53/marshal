@@ -14,7 +14,7 @@ import (
 
 func TestWorktreeGCLifecycle(t *testing.T) {
 	repo := testgit.New(t)
-	root := filepath.Join(t.TempDir(), "worktrees")
+	root := filepath.Join(testgit.Canonical(t, t.TempDir()), "worktrees")
 	wm := New(repo.Path(), root)
 	ctx := context.Background()
 
