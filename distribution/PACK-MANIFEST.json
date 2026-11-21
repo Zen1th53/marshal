@@ -516,8 +516,8 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "d76f9195601fbcc30701296924df7ff9f90859c9482a0c59b8db57a4facb49ee",
-      "bytes": 28331
+      "sha256": "329f0cd972aec495809c5014573685b29fc9905a0db526e8d2a2f0909ef57e2e",
+      "bytes": 28445
     },
     {
       "path": "docs/configuration.md",
@@ -566,8 +566,8 @@
     },
     {
       "path": "docs/design/web-board.md",
-      "sha256": "252dc05d9a4a1d0c22bb95247e9ed9da77b66fa6be21b8ce95b009894aae5d2f",
-      "bytes": 6506
+      "sha256": "d48ea2e979a0f46e01718c66468d9b89b0f022cca35b5782aa523a4c91740f4e",
+      "bytes": 7077
     },
     {
       "path": "docs/faq.md",
@@ -16296,8 +16296,8 @@
     },
     {
       "path": "internal/tui/webboard_test.go",
-      "sha256": "93ba90ce1e5cc5a654f7a11ec4563fc03faa86e1631f6136d962583fa5737965",
-      "bytes": 6119
+      "sha256": "acab90c7e6ed09fded39dcbebc2cfdb5d6026ec6975e0b7dee395446fb8b80d8",
+      "bytes": 5742
     },
     {
       "path": "internal/tui/workspace.go",
@@ -16636,8 +16636,8 @@
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "54242fc741f6f4022a1523f847f9f0e5e89c52300cf13c5639671333118cd3ae",
-      "bytes": 18861
+      "sha256": "ff7c18faa9264fa9cb1f32776db7d7f3861b771048319bbbb0bd1afd4d946cd3",
+      "bytes": 21469
     },
     {
       "path": "internal/webboard/page/index.html",
@@ -16646,13 +16646,13 @@
     },
     {
       "path": "internal/webboard/server.go",
-      "sha256": "abca988f084eb13764690fae4ae13777341ad451053dc348a19b4400aae76645",
-      "bytes": 11772
+      "sha256": "35a95d4d6f43fd2734fcc672bf864c207a30787af7352fe6e4fa451ab410e5d7",
+      "bytes": 11002
     },
     {
       "path": "internal/webboard/server_test.go",
-      "sha256": "ef8155c75fce3dbddb739f544e4e5ae9d90020502d43bf02c4ee026719d5ebff",
-      "bytes": 12872
+      "sha256": "f66e46eea84333626f8202767dad89c841dd7e8129cbe251691856304a02c4f5",
+      "bytes": 13118
     },
     {
       "path": "internal/worker/cell_start_default.go",
@@ -17461,8 +17461,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "480c3bc664b4816251474e534000299799845f527e0bdc033b99935071d78358",
-      "bytes": 490504
+      "sha256": "4dfe0c9dc436244a21dc73578114af28f8682d60c7f552de8f684b8453d46d55",
+      "bytes": 490602
     },
     {
       "path": "tools/extreme/prq/main_default.go",

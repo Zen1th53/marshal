@@ -4,7 +4,23 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var frame = null, frameAt = 0, lastOK = null;
-  var es = null, retry = 0, retryTimer = null;
+  var retry = 0, retryTimer = null;
+
+  // The link's token (?t=…) is read once, taken out of the address bar and
+  // the history at once, and kept for this tab only, so a reload still
+  // works. It goes to the server as a bearer header; no cookie is used.
+  var tokenKey = "marshal-board-token";
+  var token = (function () {
+    var t = null;
+    try { t = new URLSearchParams(location.search).get("t"); } catch (e) { t = null; }
+    if (t) {
+      try { history.replaceState(null, "", "/"); } catch (e) { /* keep going */ }
+      try { sessionStorage.setItem(tokenKey, t); } catch (e) { /* in memory only */ }
+      return t;
+    }
+    try { return sessionStorage.getItem(tokenKey); } catch (e) { return null; }
+  })();
+  function auth() { return { "Authorization": "Bearer " + token }; }
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -40,7 +56,10 @@
     if (n >= 1e3) return Math.round(n / 1e3) + "k";
     return String(n);
   }
-  function since() { return frame ? (performance.now() - frameAt) / 1000 : 0; }
+  // since is how long ago the frame came; it stops while disconnected, so
+  // the lanes' clocks do not run on data that is no longer live.
+  var downAt = 0;
+  function since() { return frame ? ((downAt || performance.now()) - frameAt) / 1000 : 0; }
   function keyItem(k) {
     var li = el("li");
     li.appendChild(el("kbd", "", k.key));
@@ -374,39 +393,84 @@
   }
 
   function disconnected(why) {
+    if (!downAt) downAt = performance.now();
     var o = $("offline");
     o.hidden = false;
     o.textContent = "Disconnected from the Marshal Board. " + why + (lastOK ? " What you see is from " + pad(lastOK.getHours()) + ":" + pad(lastOK.getMinutes()) + ":" + pad(lastOK.getSeconds()) + "." : "");
     live("down", "disconnected");
   }
 
+  function onFrame(data) {
+    var f;
+    try { f = JSON.parse(data); } catch (e) { return; }
+    if (!f || f.v !== 1) { disconnected("This page does not read this Board's format; reload it."); return; }
+    frame = f; frameAt = performance.now(); lastOK = new Date(); retry = 0; downAt = 0;
+    $("offline").hidden = true;
+    live("live", "live");
+    render(f);
+  }
+
+  // onBlock reads one Server-Sent Event: "event:" and "data:" lines; a
+  // line starting with ":" is a heartbeat.
+  function onBlock(block) {
+    var event = "message", data = [];
+    block.split("\n").forEach(function (line) {
+      if (line.indexOf("event:") === 0) event = line.slice(6).trim();
+      else if (line.indexOf("data:") === 0) data.push(line.slice(5).replace(/^ /, ""));
+    });
+    if (event === "board" && data.length) onFrame(data.join("\n"));
+  }
+
+  // connect reads /api/events with fetch, since EventSource cannot send the
+  // bearer header, and reconnects with backoff when the stream ends.
   function connect() {
     retryTimer = null;
+    if (!token) { disconnected("Open the link the Board printed (/marshal web)."); return; }
     live("wait", retry ? "reconnecting…" : "connecting…");
-    es = new EventSource("/api/events");
-    es.addEventListener("board", function (ev) {
-      var f;
-      try { f = JSON.parse(ev.data); } catch (e) { return; }
-      if (!f || f.v !== 1) { disconnected("This page does not read this Board's format; reload it."); return; }
-      frame = f; frameAt = performance.now(); lastOK = new Date(); retry = 0;
-      $("offline").hidden = true;
-      live("live", "live");
-      render(f);
-    });
-    es.onerror = function () {
-      es.close(); es = null;
+    var ctrl = typeof AbortController === "function" ? new AbortController() : null;
+    var watchdog = null, ended = false;
+    function arm() {
+      // Heartbeats come every 15 s: a stream silent for 45 s is dead.
+      clearTimeout(watchdog);
+      watchdog = setTimeout(function () { if (ctrl) ctrl.abort(); }, 45000);
+    }
+    function again(why) {
+      if (ended) return;
+      ended = true;
+      clearTimeout(watchdog);
       var wait = Math.min(30, Math.pow(2, retry)); retry++;
-      // A refused session means the Board closed or restarted: the link
-      // it prints now is a new one.
-      fetch("/api/board", { credentials: "same-origin", cache: "no-store" }).then(function (r) {
-        if (r.status === 403) { disconnected("This link has expired: run /marshal web in the Board for a new one."); return; }
-        disconnected("Retrying in " + wait + "s.");
-        retryTimer = setTimeout(connect, wait * 1000);
-      }, function () {
-        disconnected("The Board is not answering (closed?). Retrying in " + wait + "s.");
-        retryTimer = setTimeout(connect, wait * 1000);
-      });
-    };
+      disconnected(why + " Retrying in " + wait + "s.");
+      retryTimer = setTimeout(connect, wait * 1000);
+    }
+    var opts = { headers: auth(), cache: "no-store", credentials: "omit" };
+    if (ctrl) opts.signal = ctrl.signal;
+    fetch("/api/events", opts).then(function (r) {
+      if (r.status === 401) {
+        // The Board closed or restarted: the link it prints now is new.
+        ended = true;
+        disconnected("This link has expired: run /marshal web in the Board for a new one.");
+        return;
+      }
+      if (!r.ok || !r.body) { again("The Board answered " + r.status + "."); return; }
+      var reader = r.body.getReader(), dec = new TextDecoder(), buf = "";
+      arm();
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) { again("The Board closed the connection."); return; }
+          arm();
+          buf += dec.decode(res.value, { stream: true }).replace(/\r\n?/g, "\n");
+          var i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            onBlock(buf.slice(0, i));
+            buf = buf.slice(i + 2);
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function () {
+      again("The Board is not answering (closed?).");
+    });
   }
 
   document.addEventListener("DOMContentLoaded", function () {

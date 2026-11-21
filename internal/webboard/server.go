@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,12 +48,10 @@ type Server struct {
 	// URL is the link the owner opens once: it carries the token.
 	URL string
 
-	addr    string // 127.0.0.1:PORT
-	port    string
-	token   string
-	session string
-	cookie  string
-	source  Source
+	addr   string // 127.0.0.1:PORT
+	port   string
+	token  string
+	source Source
 
 	listener net.Listener
 	http     *http.Server
@@ -103,10 +102,6 @@ func start(addr, token string, source Source) (*Server, error) {
 			return nil, err
 		}
 	}
-	session, err := randomToken(32)
-	if err != nil {
-		return nil, err
-	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("web board: listen: %w", err)
@@ -114,8 +109,7 @@ func start(addr, token string, source Source) (*Server, error) {
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
-		addr: "127.0.0.1:" + port, port: port, token: token, session: session,
-		cookie: "marshal_board_" + port, source: source, listener: ln,
+		addr: "127.0.0.1:" + port, port: port, token: token, source: source, listener: ln,
 		ctx: ctx, cancel: cancel, done: make(chan struct{}), subs: map[chan struct{}]struct{}{},
 	}
 	s.URL = "http://" + s.addr + "/?t=" + token
@@ -160,13 +154,13 @@ func (s *Server) Close() {
 	})
 }
 
-func (s *Server) tokenMatches(v string) bool {
-	return len(v) == len(s.token) && subtle.ConstantTimeCompare([]byte(v), []byte(s.token)) == 1
-}
-
-func (s *Server) hasSession(q *http.Request) bool {
-	c, err := q.Cookie(s.cookie)
-	return err == nil && len(c.Value) == len(s.session) && subtle.ConstantTimeCompare([]byte(c.Value), []byte(s.session)) == 1
+// authorized reports whether the request carries the link's token as
+// "Authorization: Bearer <token>". The page reads the token from its own
+// address once and sends it on every API call; no cookie is ever set, so no
+// other page on this computer can ride on one.
+func (s *Server) authorized(q *http.Request) bool {
+	v, ok := strings.CutPrefix(q.Header.Get("Authorization"), "Bearer ")
+	return ok && len(v) == len(s.token) && subtle.ConstantTimeCompare([]byte(v), []byte(s.token)) == 1
 }
 
 // hostAllowed is the DNS-rebinding guard: the Host header must name this
@@ -175,13 +169,12 @@ func (s *Server) hostAllowed(host string) bool {
 	return host == "127.0.0.1:"+s.port || host == "localhost:"+s.port
 }
 
-var assets = map[string]string{
-	"/app.js":  "text/javascript; charset=utf-8",
-	"/app.css": "text/css; charset=utf-8",
+// static is the page: it holds no Board data, so it needs no token.
+var static = map[string]struct{ name, contentType string }{
+	"/":        {"page/index.html", "text/html; charset=utf-8"},
+	"/app.js":  {"page/app.js", "text/javascript; charset=utf-8"},
+	"/app.css": {"page/app.css", "text/css; charset=utf-8"},
 }
-
-// enterPage replaces the tokened address with the Board's.
-const enterPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/"><title>Marshal Board</title></head><body><p><a href="/">Open the Marshal Board</a></p></body></html>`
 
 func deny(w http.ResponseWriter, status int, text string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -209,44 +202,30 @@ func (s *Server) Handler() http.Handler {
 			deny(w, http.StatusMethodNotAllowed, "The Web Board is read-only.")
 			return
 		}
-		if q.URL.Path == "/" && q.URL.Query().Has("t") {
-			if !s.tokenMatches(q.URL.Query().Get("t")) {
-				deny(w, http.StatusForbidden, "This link is not valid. Run /marshal web in the Board for the current one.")
-				return
-			}
-			http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: s.session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-			// Drop the token from the address bar. A page that moves on by
-			// itself rather than a 303: a Strict cookie is not sent on a
-			// redirect that a link on another site started, but it is on
-			// this page's own navigation.
-			h.Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(enterPage))
+		if f, ok := static[q.URL.Path]; ok {
+			s.serveFile(w, f.name, f.contentType)
 			return
 		}
-		if !s.hasSession(q) {
-			deny(w, http.StatusForbidden, "Open the link the Board printed (/marshal web).")
-			return
-		}
-		switch q.URL.Path {
-		case "/":
-			s.serveFile(w, "page/index.html", "text/html; charset=utf-8")
-		case "/api/board":
-			body, _, err := s.frame()
-			if err != nil {
-				deny(w, http.StatusServiceUnavailable, "The Board frame could not be built.")
-				return
-			}
-			h.Set("Content-Type", "application/json; charset=utf-8")
-			_, _ = w.Write(body)
-		case "/api/events":
-			s.serveEvents(w, q)
-		default:
-			if ct, ok := assets[q.URL.Path]; ok {
-				s.serveFile(w, "page"+q.URL.Path, ct)
-				return
-			}
+		if q.URL.Path != "/api/board" && q.URL.Path != "/api/events" {
 			deny(w, http.StatusNotFound, "Not found.")
+			return
 		}
+		if !s.authorized(q) {
+			h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
+			deny(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+			return
+		}
+		if q.URL.Path == "/api/events" {
+			s.serveEvents(w, q)
+			return
+		}
+		body, _, err := s.frame()
+		if err != nil {
+			deny(w, http.StatusServiceUnavailable, "The Board frame could not be built.")
+			return
+		}
+		h.Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(body)
 	})
 }
 

@@ -288,7 +288,7 @@ The Web Board shows the same Board as a web page: the top bar, the NOW line, Pla
 
 - Open it with `w` when no task is highlighted (during a run, `l` first moves the keyboard to the lanes), the palette entry **Open the Board in the browser**, or `/marshal web`. Where there is a display it opens in your browser; the Board's footer shows the link either way, so on a machine with no display you open the link in a browser on that computer.
 - It runs inside the open Board and stops when the Board closes. It listens on `127.0.0.1` only, at a random port, and never on the network.
-- The link carries a private, random token (`http://127.0.0.1:PORT/?t=…`). Opening it once gives that browser a session cookie and removes the token from the address bar. Without the link the page refuses; a link from an earlier Board no longer works. Do not share the link: anyone on this computer who has it can read the Board.
+- The link carries a private, random token (`http://127.0.0.1:PORT/?t=…`). The page takes the token out of the address bar and the history at once, keeps it for that browser tab only (a reload still works), and sends it with each request for the Board's data. No cookie is used. Without the link the page shows no data; a link from an earlier Board no longer works. Do not share the link: anyone on this computer who has it can read the Board.
 - It is **read-only**. To answer a decision, accept, or choose on a paused card, use the terminal Board; the web card names the key to press there. Nothing is loaded from the internet, and it shows only what the terminal Board shows: never prompts, the chat transcript, file contents or secrets. The architecture review link is not shown on it.
 
 ---

@@ -33,7 +33,9 @@ func startTest(t *testing.T, src Source) *Server {
 // noRedirect is a client that shows redirects instead of following them.
 var noRedirect = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Timeout: 5 * time.Second}
 
-func get(t *testing.T, s *Server, method, path, host string, cookie *http.Cookie) *http.Response {
+// get sends method path with Host host ("" for the server's own) and, when
+// bearer is set, "Authorization: Bearer <bearer>".
+func get(t *testing.T, s *Server, method, path, host, bearer string) *http.Response {
 	t.Helper()
 	q, err := http.NewRequest(method, "http://"+s.Addr()+path, nil)
 	if err != nil {
@@ -42,8 +44,8 @@ func get(t *testing.T, s *Server, method, path, host string, cookie *http.Cookie
 	if host != "" {
 		q.Host = host
 	}
-	if cookie != nil {
-		q.AddCookie(cookie)
+	if bearer != "" {
+		q.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	r, err := noRedirect.Do(q)
 	if err != nil {
@@ -53,24 +55,8 @@ func get(t *testing.T, s *Server, method, path, host string, cookie *http.Cookie
 	return r
 }
 
-// login exchanges the link's token for the session cookie.
-func login(t *testing.T, s *Server) *http.Cookie {
-	t.Helper()
-	u, _ := url.Parse(s.URL)
-	r := get(t, s, "GET", "/?"+u.RawQuery, "", nil)
-	body, _ := io.ReadAll(r.Body)
-	if r.StatusCode != http.StatusOK || !strings.Contains(string(body), `http-equiv="refresh" content="0;url=/"`) || strings.Contains(string(body), s.token) {
-		t.Fatalf("token exchange: %d %s", r.StatusCode, body)
-	}
-	for _, c := range r.Cookies() {
-		if c.Name == s.cookie {
-			return c
-		}
-	}
-	t.Fatalf("no session cookie: %v", r.Header["Set-Cookie"])
-	return nil
-}
-
+// checkHeaders checks the headers every response carries, and that no
+// response sets a cookie or a CORS header.
 func checkHeaders(t *testing.T, what string, r *http.Response) {
 	t.Helper()
 	want := map[string]string{
@@ -90,6 +76,9 @@ func checkHeaders(t *testing.T, what string, r *http.Response) {
 			t.Errorf("%s: CORS header %s", what, k)
 		}
 	}
+	if c := r.Header.Values("Set-Cookie"); len(c) != 0 {
+		t.Errorf("%s: sets a cookie %q", what, c)
+	}
 }
 
 func TestStartBindsLoopbackWithStrongToken(t *testing.T) {
@@ -102,12 +91,12 @@ func TestStartBindsLoopbackWithStrongToken(t *testing.T) {
 	if err != nil || u.Host != s.Addr() || u.Path != "/" {
 		t.Fatalf("url %q", s.URL)
 	}
-	if tok := u.Query().Get("t"); !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(tok) {
+	if tok := u.Query().Get("t"); tok != s.token || !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(tok) {
 		t.Fatalf("token %q is not 256 random bits", tok)
 	}
 	other := startTest(t, nil)
-	if other.token == s.token || other.session == s.session || other.cookie == s.cookie {
-		t.Fatal("two Boards share a token, a session or a cookie name")
+	if other.token == s.token {
+		t.Fatal("two Boards share a token")
 	}
 	for _, addr := range []string{"0.0.0.0:0", ":0", "[::]:0", "192.168.1.2:0", "localhost:0"} {
 		if s, err := start(addr, "", fixtureRunning); err == nil {
@@ -117,15 +106,14 @@ func TestStartBindsLoopbackWithStrongToken(t *testing.T) {
 	}
 }
 
-// DNS rebinding: a request naming any other host is refused, even with a
-// valid session.
+// DNS rebinding: a request naming any other host is refused, even with the
+// right token.
 func TestWrongHostIsRefused(t *testing.T) {
 	s := startTest(t, nil)
-	c := login(t, s)
 	_, port, _ := net.SplitHostPort(s.Addr())
 	for _, host := range []string{"evil.example:" + port, "evil.example", "127.0.0.1", "localhost", "127.0.0.1:1", "localhost:1", "127.0.0.2:" + port, "[::1]:" + port, "LOCALHOST:" + port, "127.0.0.1:" + port + ".evil.example"} {
-		for _, path := range []string{"/", "/api/board", "/api/events", "/app.js", "/?t=" + s.token} {
-			r := get(t, s, "GET", path, host, c)
+		for _, path := range []string{"/", "/api/board", "/api/events", "/app.js", "/app.css", "/?t=" + s.token} {
+			r := get(t, s, "GET", path, host, s.token)
 			if r.StatusCode != http.StatusMisdirectedRequest {
 				t.Errorf("Host %q %s: %d, want 421", host, path, r.StatusCode)
 			}
@@ -133,77 +121,98 @@ func TestWrongHostIsRefused(t *testing.T) {
 		}
 	}
 	for _, host := range []string{"127.0.0.1:" + port, "localhost:" + port} {
-		if r := get(t, s, "GET", "/api/board", host, c); r.StatusCode != http.StatusOK {
+		if r := get(t, s, "GET", "/api/board", host, s.token); r.StatusCode != http.StatusOK {
 			t.Errorf("Host %q: %d, want 200", host, r.StatusCode)
 		}
 	}
 }
 
-func TestTokenAndSession(t *testing.T) {
+// The page is static and served without the token; it holds no Board data.
+// The API needs the token as a bearer header, never in the query, and no
+// response sets a cookie.
+func TestBearerToken(t *testing.T) {
 	s := startTest(t, nil)
-	for _, path := range []string{"/", "/api/board", "/api/events", "/app.js", "/app.css"} {
-		r := get(t, s, "GET", path, "", nil)
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("%s without a session: %d", path, r.StatusCode)
+	for _, path := range []string{"/", "/?t=" + s.token, "/?t=wrong", "/app.js", "/app.css"} {
+		r := get(t, s, "GET", path, "", "")
+		body, _ := io.ReadAll(r.Body)
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("%s: %d, want 200 without a token", path, r.StatusCode)
 		}
-		checkHeaders(t, "no session", r)
-	}
-	for _, bad := range []string{"", "x", strings.Repeat("A", 43), s.token[:42], s.token + "0", strings.ToUpper(s.token)} {
-		r := get(t, s, "GET", "/?t="+url.QueryEscape(bad), "", nil)
-		if r.StatusCode != http.StatusForbidden || len(r.Cookies()) != 0 {
-			t.Errorf("token %q: %d %v", bad, r.StatusCode, r.Cookies())
+		checkHeaders(t, path, r)
+		for _, data := range []string{s.token, "marshal-work", "review-fixes", "T03", "claude-1", "sonnet-5.5"} {
+			if strings.Contains(string(body), data) {
+				t.Errorf("%s carries %q: the page must hold no Board data", path, data)
+			}
 		}
 	}
-	// The token is no cookie value and no session.
-	if r := get(t, s, "GET", "/api/board", "", &http.Cookie{Name: s.cookie, Value: s.token}); r.StatusCode != http.StatusForbidden {
-		t.Errorf("token as cookie: %d", r.StatusCode)
+	if r := get(t, s, "GET", "/", "", ""); !strings.HasPrefix(r.Header.Get("Content-Type"), "text/html") {
+		t.Errorf("page content type %q", r.Header.Get("Content-Type"))
 	}
-	if r := get(t, s, "GET", "/api/board?t="+s.token, "", nil); r.StatusCode != http.StatusForbidden {
-		t.Errorf("token on an API path: %d", r.StatusCode)
+	for _, path := range []string{"/api/board", "/api/events", "/api/board?t=" + s.token, "/api/events?t=" + s.token} {
+		for _, bad := range []string{"", "x", strings.Repeat("A", 43), s.token[:42], s.token + "0", strings.ToUpper(s.token)} {
+			r := get(t, s, "GET", path, "", bad)
+			if r.StatusCode != http.StatusUnauthorized {
+				t.Errorf("%s with bearer %q: %d, want 401", path, bad, r.StatusCode)
+			}
+			checkHeaders(t, "unauthorized", r)
+		}
 	}
-
-	c := login(t, s)
-	if !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || c.Value == s.token || len(c.Value) != 43 {
-		t.Fatalf("cookie %+v", c)
+	// Not a bearer: the token as a cookie, in another scheme, or bare.
+	for _, h := range []string{"Basic " + s.token, s.token, "bearer " + s.token, "Bearer  " + s.token} {
+		q, _ := http.NewRequest("GET", "http://"+s.Addr()+"/api/board", nil)
+		q.Header.Set("Authorization", h)
+		q.AddCookie(&http.Cookie{Name: "t", Value: s.token})
+		r, err := noRedirect.Do(q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("Authorization %q: %d, want 401", h, r.StatusCode)
+		}
 	}
-	if !strings.Contains(c.Name, strings.Split(s.Addr(), ":")[1]) {
-		t.Errorf("cookie %q is not named for the port", c.Name)
-	}
-	r := get(t, s, "GET", "/", "", c)
-	body, _ := io.ReadAll(r.Body)
-	if r.StatusCode != http.StatusOK || !strings.HasPrefix(r.Header.Get("Content-Type"), "text/html") || !strings.Contains(string(body), "Marshal Board") {
-		t.Fatalf("page: %d %s", r.StatusCode, r.Header.Get("Content-Type"))
-	}
-	checkHeaders(t, "page", r)
-	if strings.Contains(string(body), s.token) || strings.Contains(string(body), s.session) {
-		t.Fatal("the page carries the token or the session")
-	}
-	r = get(t, s, "GET", "/api/board", "", c)
+	r := get(t, s, "GET", "/api/board", "", s.token)
 	var f Frame
-	if err := json.NewDecoder(r.Body).Decode(&f); err != nil || f.V != 1 || f.Screen != "running" {
-		t.Fatalf("board: %v %+v", err, f)
+	if err := json.NewDecoder(r.Body).Decode(&f); err != nil || r.StatusCode != http.StatusOK || f.V != 1 || f.Screen != "running" {
+		t.Fatalf("board: %d %v %+v", r.StatusCode, err, f)
 	}
 	checkHeaders(t, "board", r)
-	if r := get(t, s, "GET", "/api/board", "", &http.Cookie{Name: s.cookie, Value: strings.Repeat("a", 43)}); r.StatusCode != http.StatusForbidden {
-		t.Errorf("wrong session: %d", r.StatusCode)
-	}
-	if r := get(t, s, "GET", "/nothing", "", c); r.StatusCode != http.StatusNotFound {
+	if r := get(t, s, "GET", "/nothing", "", s.token); r.StatusCode != http.StatusNotFound {
 		t.Errorf("unknown path: %d", r.StatusCode)
 	}
 }
 
-// Phase 1 is read-only: every method but GET is refused, with or without a
-// session or a token.
+// The demo's fixed token works the same way.
+func TestDemoToken(t *testing.T) {
+	s, err := start("127.0.0.1:0", "demo", fixtureRunning)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if !strings.HasSuffix(s.URL, "/?t=demo") {
+		t.Fatalf("demo url %q", s.URL)
+	}
+	if r := get(t, s, "GET", "/?t=demo", "", ""); r.StatusCode != http.StatusOK {
+		t.Fatalf("demo page: %d", r.StatusCode)
+	}
+	if r := get(t, s, "GET", "/api/board", "", "demo"); r.StatusCode != http.StatusOK {
+		t.Fatalf("demo board: %d", r.StatusCode)
+	}
+}
+
+// Phase 1 is read-only: every method but GET is refused, with or without
+// the token.
 func TestOnlyGet(t *testing.T) {
 	s := startTest(t, nil)
-	c := login(t, s)
 	for _, m := range []string{"POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "TRACE"} {
 		for _, path := range []string{"/", "/api/board", "/api/events", "/?t=" + s.token} {
-			r := get(t, s, m, path, "", c)
-			if r.StatusCode != http.StatusMethodNotAllowed || r.Header.Get("Allow") != "GET" {
-				t.Errorf("%s %s: %d Allow=%q", m, path, r.StatusCode, r.Header.Get("Allow"))
+			for _, bearer := range []string{"", s.token} {
+				r := get(t, s, m, path, "", bearer)
+				if r.StatusCode != http.StatusMethodNotAllowed || r.Header.Get("Allow") != "GET" {
+					t.Errorf("%s %s: %d Allow=%q", m, path, r.StatusCode, r.Header.Get("Allow"))
+				}
+				checkHeaders(t, m, r)
 			}
-			checkHeaders(t, m, r)
 		}
 	}
 }
@@ -282,10 +291,10 @@ func nextBoard(t *testing.T, ch <-chan sseEvent, within time.Duration) (sseEvent
 	}
 }
 
-func openStream(t *testing.T, s *Server, c *http.Cookie) (*http.Response, chan sseEvent) {
+func openStream(t *testing.T, s *Server, bearer string) (*http.Response, chan sseEvent) {
 	t.Helper()
 	q, _ := http.NewRequest("GET", "http://"+s.Addr()+"/api/events", nil)
-	q.AddCookie(c)
+	q.Header.Set("Authorization", "Bearer "+bearer)
 	r, err := (&http.Client{}).Do(q)
 	if err != nil {
 		t.Fatal(err)
@@ -316,8 +325,7 @@ func TestEventsPushChangesThrottled(t *testing.T) {
 		return out
 	}
 	s := startTest(t, src)
-	c := login(t, s)
-	_, ch := openStream(t, s, c)
+	_, ch := openStream(t, s, s.token)
 	first, ok := nextBoard(t, ch, 2*time.Second)
 	if !ok {
 		t.Fatal("no first frame")
@@ -392,8 +400,7 @@ beat:
 // Close ends open streams and stops the listener.
 func TestCloseEndsStreams(t *testing.T) {
 	s := startTest(t, nil)
-	c := login(t, s)
-	_, ch := openStream(t, s, c)
+	_, ch := openStream(t, s, s.token)
 	if _, ok := nextBoard(t, ch, 2*time.Second); !ok {
 		t.Fatal("no first frame")
 	}
@@ -415,8 +422,7 @@ func TestCloseEndsStreams(t *testing.T) {
 // A panicking source fails a frame; it never takes the Board down.
 func TestSourcePanicIsAFailedFrame(t *testing.T) {
 	s := startTest(t, func() vm.Board { panic("boom") })
-	c := login(t, s)
-	if r := get(t, s, "GET", "/api/board", "", c); r.StatusCode != http.StatusServiceUnavailable {
+	if r := get(t, s, "GET", "/api/board", "", s.token); r.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("panicking source: %d", r.StatusCode)
 	}
 }

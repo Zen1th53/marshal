@@ -128,15 +128,11 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 		}
 	}
 
-	jar := &cookieJar{}
-	client := &http.Client{Jar: jar, Timeout: 5 * time.Second}
-	r, err := client.Get(link)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.Body.Close()
+	// The page reads the link's token and sends it as a bearer header.
 	u, _ := url.Parse(link)
-	r, err = client.Get("http://" + u.Host + "/api/board")
+	q, _ := http.NewRequest("GET", "http://"+u.Host+"/api/board", nil)
+	q.Header.Set("Authorization", "Bearer "+u.Query().Get("t"))
+	r, err := (&http.Client{Timeout: 5 * time.Second}).Do(q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,22 +207,4 @@ func TestMarshalWebCommand(t *testing.T) {
 		}
 	}
 	t.Fatal("the palette has no web.open row")
-}
-
-// cookieJar keeps the cookies of one host, as the browser does.
-type cookieJar struct {
-	mu      sync.Mutex
-	cookies []*http.Cookie
-}
-
-func (j *cookieJar) SetCookies(_ *url.URL, cs []*http.Cookie) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.cookies = append(j.cookies, cs...)
-}
-
-func (j *cookieJar) Cookies(*url.URL) []*http.Cookie {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	return append([]*http.Cookie(nil), j.cookies...)
 }
