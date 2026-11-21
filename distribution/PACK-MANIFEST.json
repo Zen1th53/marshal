@@ -16191,8 +16191,8 @@
     },
     {
       "path": "internal/tui/pty_interaction_test.go",
-      "sha256": "e65ce8a3b33d0f292b632a32f7478c9dc7dd056f6e9f919e5df04f430aed53a2",
-      "bytes": 14195
+      "sha256": "76e8ef0b8c510bfa4ab18bf56ea02f9cfe22cceb909054999afb7f89401780ec",
+      "bytes": 14270
     },
     {
       "path": "internal/tui/pty_patience_race_test.go",
@@ -16796,12 +16796,12 @@
     },
     {
       "path": "internal/tui/testdata/board/palette-governed-search-retry-132x40.golden",
-      "sha256": "53928b2c8ce5f3fa5113132823a6be30158803d5f91bae58e85d797f68cffccb",
+      "sha256": "2e6197294ecbc4f1d7bd167c90d7fa7dcbfbfe16c58e28885c65b9998ccfe946",
       "bytes": 693
     },
     {
       "path": "internal/tui/testdata/board/palette-search-retry-132x40.golden",
-      "sha256": "061c4928a42b5239776ef51f2e066783c7542cd9f9d6e6f41ffa4fc9cfbdea63",
+      "sha256": "13e181d89ad40f1f1ddf603542f70dccae78541c975ca554909820fac9e96948",
       "bytes": 695
     },
     {

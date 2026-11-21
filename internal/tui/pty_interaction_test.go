@@ -385,8 +385,9 @@ func TestPTYMarshalCompletionSelectionAndFinishedGoal(t *testing.T) {
 	s.send("\x15")
 	s.send("/marshal ")
 	time.Sleep(300 * time.Millisecond)
-	// chat is first; ten Tabs reach settings in the declared order.
-	s.send(strings.Repeat("\t", 10))
+	// chat is first; eleven Tabs reach settings in the declared order
+	// (marshalSubcommands: chat, architecture, web, ..., model, settings).
+	s.send(strings.Repeat("\t", 11))
 	s.send("\r")
 	time.Sleep(400 * time.Millisecond)
 	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal settings" {
