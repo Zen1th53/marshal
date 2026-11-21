@@ -229,7 +229,7 @@ func (w *Workspace) decideMarshalPicker(ctx context.Context) bool {
 	if savedIdx >= 0 && cands[savedIdx].out {
 		reason = saved + " is out of limit"
 		if u := cands[savedIdx].until; !u.IsZero() {
-			reason += " until " + u.In(now.Location()).Format("15:04")
+			reason += " until " + resetClock(u, now)
 		}
 		reason += ". "
 	}
@@ -430,7 +430,7 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 		case c.out:
 			figure = "out of limit"
 			if !c.until.IsZero() {
-				figure += " until " + c.until.In(v.now.Location()).Format("15:04")
+				figure += " until " + resetClock(c.until, v.now)
 			}
 			colour = "failed"
 		case !c.known && c.offer != "":

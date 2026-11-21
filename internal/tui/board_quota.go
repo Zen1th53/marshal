@@ -265,7 +265,7 @@ func (v boardVisual) quotaEntry(x, row, w int) []string {
 	if v.quotaArmed {
 		resuming := "Resuming when a limit frees up"
 		if until := v.board.Run.PauseUntil; !until.IsZero() {
-			resuming += " (about " + until.In(v.now.Location()).Format("15:04") + ")"
+			resuming += " (about " + resetClock(until, v.now) + ")"
 		}
 		second += v.fg("waiting", resuming)
 		at += VisibleLen(resuming)

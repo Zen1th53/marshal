@@ -26,6 +26,7 @@ func (w *Workspace) collectV2Marshal(b *vm.Board) {
 	in := w.v2MarshalInput(now)
 	b.Marshal = buildV2Marshal(in)
 	b.Workers = buildV2Workers(in)
+	b.Limits = buildV2Limits(in)
 	b.Ready = buildV2Ready(in)
 	w.addV2ReadyActions(&b.Ready)
 }
@@ -288,6 +289,9 @@ type v2Provider struct {
 	Window usage.Window
 	Lanes  int
 	Model  string
+	// ModelID is the model id its workers run ("" unknown): the binding
+	// window is that model's tightest, as dispatch reads it.
+	ModelID string
 }
 
 func (in v2MarshalIn) provider(name string) v2Provider {
@@ -300,10 +304,11 @@ func (in v2MarshalIn) provider(name string) v2Provider {
 		p.Installed, p.InstalledKnown = installed[name], true
 	}
 	q, hasQuota := in.Quotas[name]
-	if win, ok := q.Binding(); ok {
+	st, listed := in.Providers[name]
+	p.ModelID = in.workerModelID(name)
+	if win, ok := modelBinding(q, p.ModelID); ok {
 		p.Left, p.Window = usageLeft(win), win
 	}
-	st, listed := in.Providers[name]
 	p.Model = v2ModelName(name, firstNonEmpty(st.Model, q.Model))
 	live := in.Chat.Live && in.Chat.Provider == name
 	if live {
@@ -332,6 +337,9 @@ func (in v2MarshalIn) provider(name string) v2Provider {
 	case p.Left == 0 || q.OfferedNone():
 		p.State, p.Until = "limit", p.Window.ResetsAt
 		p.Reason = name + " has no quota left"
+		if family, _ := usage.SplitLabel(p.Window.Label); family != "" && p.Left == 0 {
+			p.Reason += " for " + family
+		}
 		if !p.Window.ResetsAt.IsZero() {
 			p.Reason += " until " + providerUntil(p.Window.ResetsAt, in.Now)
 		}
@@ -381,7 +389,7 @@ func buildV2Workers(in v2MarshalIn) []vm.Worker {
 		case p.State == "limit":
 			row.Tag, row.TagTone = "at limit", vm.ToneBad
 			if !p.Until.IsZero() {
-				row.Detail = "until " + p.Until.In(in.Now.Location()).Format("15:04")
+				row.Detail = "until " + resetClock(p.Until, in.Now)
 			}
 		case p.State == "unchecked":
 			row.Tag, row.TagTone = "not checked", vm.ToneWarn
@@ -465,7 +473,7 @@ func buildV2Ready(in v2MarshalIn) vm.Readiness {
 		case wk >= 0 && wk <= 30:
 			text := fmt.Sprintf("%s signed in · weekly %d%%", name, wk)
 			if !wkWin.ResetsAt.IsZero() {
-				text += " · resets " + wkWin.ResetsAt.In(in.Now.Location()).Format("2 Jan")
+				text += " · resets " + resetClock(wkWin.ResetsAt, in.Now)
 			}
 			add(vm.Check{Mark: "warn", Label: "Workers", Text: text, Tag: "low"})
 		default:

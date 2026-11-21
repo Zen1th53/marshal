@@ -40,13 +40,14 @@ func windowName(label string) string {
 }
 
 // resetClock is when a window resets in the owner's words: the time of day
-// within a day ("14:32"), the date further out ("21 Nov").
+// when that is today ("14:32"), the date and the time on any other day
+// ("Nov 26 09:32"), so a reset days away never reads as today's clock.
 func resetClock(at, now time.Time) string {
 	at = at.In(now.Location())
-	if at.Sub(now) < 24*time.Hour {
+	if y, m, d := at.Date(); y == now.Year() && m == now.Month() && d == now.Day() {
 		return at.Format("15:04")
 	}
-	return at.Format("2 Jan")
+	return at.Format("Jan 2 15:04")
 }
 
 // lowWindowText is one low window as the note and the vitals row say it:
