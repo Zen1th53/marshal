@@ -13166,8 +13166,8 @@
     },
     {
       "path": "internal/tui/board/v2/canvas.go",
-      "sha256": "08df24babd0e924a64402370cb4beae9e6d6f6295267bd1f0cfd9b2eb6175f9f",
-      "bytes": 11715
+      "sha256": "e1222df3006be8ce3c40d634b5dfada6300b03585ac637245a25e100ffdb31d1",
+      "bytes": 13575
     },
     {
       "path": "internal/tui/board/v2/cards_test.go",
@@ -13201,8 +13201,8 @@
     },
     {
       "path": "internal/tui/board/v2/parts.go",
-      "sha256": "d37dc338a40878f72836c2604295eec496633f92de57a26ed0beccca02198d82",
-      "bytes": 9158
+      "sha256": "568bb5e7d157a2f515929bb9bcac61a324d3a7d4204b122312eb7133dd5741cc",
+      "bytes": 12343
     },
     {
       "path": "internal/tui/board/v2/render.go",
@@ -13216,13 +13216,13 @@
     },
     {
       "path": "internal/tui/board/v2/screens.go",
-      "sha256": "5e5580832d8a3709b0e3318c9dab967ec60519e6ab9a86a0f15a38a204b955a9",
-      "bytes": 32449
+      "sha256": "7dd382e5242cb96dd4bfca1843bd6ebfbc948ddf6c480002cf2a08e438b0f41c",
+      "bytes": 32964
     },
     {
       "path": "internal/tui/board/v2/testdata/card-ask-100.golden",
-      "sha256": "abfad112ae6b4427046e1a6e4e9b254188f273b061a93578a12aaf95cb718183",
-      "bytes": 4069
+      "sha256": "1b350d6406b3150e86c00ac44f2c0f99b70cb82b4bfb9bd556b7c5ee49ab38c4",
+      "bytes": 4070
     },
     {
       "path": "internal/tui/board/v2/testdata/card-ask-132-ascii.golden",
@@ -13236,13 +13236,13 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/card-ask-side-066.golden",
-      "sha256": "8c65b4894223481ccc5537bf32e86a06071e0c5f2edf3f64d1f3b64a225ee49a",
-      "bytes": 3088
+      "sha256": "c8948067dbf3e082f12f2030965fa696623e3d0bc8ee1752be61d50e1b0b97cc",
+      "bytes": 3090
     },
     {
       "path": "internal/tui/board/v2/testdata/card-change-100.golden",
-      "sha256": "3a6471cc1e337b2d4906fdcb9310a0d2fdd93eae32e04c4c0545687fd6dc388d",
-      "bytes": 4115
+      "sha256": "fdd5a71a76d44282d4af0dee89ab8b484b3049aff39d1f55aecd428cbd13c2df",
+      "bytes": 4116
     },
     {
       "path": "internal/tui/board/v2/testdata/card-change-132-ascii.golden",
@@ -13256,8 +13256,8 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/card-guard-100.golden",
-      "sha256": "61a9d7a3953c57547c6e736d15bbc8d973458ad283866e8e867383f07d9ef422",
-      "bytes": 4117
+      "sha256": "3ee438b915b850c261a8d91b79441ce2a35c1d2d3641d1260a091cbca3330f11",
+      "bytes": 4118
     },
     {
       "path": "internal/tui/board/v2/testdata/card-guard-132-ascii.golden",
@@ -13271,8 +13271,8 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/card-newplan-100.golden",
-      "sha256": "1a2a45ada2577af4ffb8d6e94b4dce2e0892c682c6972d0b99e7e235ae7954a2",
-      "bytes": 3052
+      "sha256": "2cfdd19317c333dee3eb5c99b6ed146122053488afe8e5da5234370e4476a31c",
+      "bytes": 3056
     },
     {
       "path": "internal/tui/board/v2/testdata/card-newplan-132-ascii.golden",
@@ -13286,8 +13286,8 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/card-next-100.golden",
-      "sha256": "120bc9fa1d156c9d840711f3a6a522d211c57dae3921f7d07937740beb34e445",
-      "bytes": 4178
+      "sha256": "7cd4ecc4a7a9bee6d88da589c00c6596c4df4a0e8fbb756fb743084f3c08231f",
+      "bytes": 4179
     },
     {
       "path": "internal/tui/board/v2/testdata/card-next-132-ascii.golden",
@@ -13301,8 +13301,8 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/card-requirements-100.golden",
-      "sha256": "81ce63597cb08008d74252d29e16deb7454164421f6172cc81675245da1549a1",
-      "bytes": 4167
+      "sha256": "ca7a7e610f8d2e32ad29ba690fe4e25956600a7f2aa40e4453aee7c4d155988c",
+      "bytes": 4168
     },
     {
       "path": "internal/tui/board/v2/testdata/card-requirements-132-ascii.golden",
@@ -13316,13 +13316,13 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/screen1-running-080.golden",
-      "sha256": "2195f6c2be3f04ce325f2baaad3654f51d765f2c83609ad71f1b341025f9663e",
-      "bytes": 3418
+      "sha256": "3b1ffb74f9d6d2f9c486f75650b65104ebce41246dabcb00b78e1bbc18d2342a",
+      "bytes": 3411
     },
     {
       "path": "internal/tui/board/v2/testdata/screen1-running-100.golden",
-      "sha256": "09f1605318af6b620bc54071cb82aa5fecf6cb6621938b679a8c348cc1895563",
-      "bytes": 4288
+      "sha256": "177a45261088ca4600fc0d28199003224a31267511826ff1d5cd1d2d9d0084a3",
+      "bytes": 4289
     },
     {
       "path": "internal/tui/board/v2/testdata/screen1-running-132-ascii.golden",
@@ -13341,17 +13341,17 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/screen2-ready-080.golden",
-      "sha256": "40abd1d2244ace512a4e040549d148db650a00ddef9f9f76a1b8428b8e1a8ec2",
-      "bytes": 2119
+      "sha256": "c8a06dd973bb91dea7a878e252577f70e72ddcc3538b931a983e08e7c63644da",
+      "bytes": 2118
     },
     {
       "path": "internal/tui/board/v2/testdata/screen2-ready-100.golden",
-      "sha256": "f212b50803fda527be99c91801b4d3c62ee1e6f84c47d2db8bef93c3c430b0eb",
+      "sha256": "a16802bcb9fdfb7c19d6c8e64320e8b3d52c19f30e128a0ec1896aa51076d866",
       "bytes": 2645
     },
     {
       "path": "internal/tui/board/v2/testdata/screen2-ready-132-ascii.golden",
-      "sha256": "7752ecc7eecf5643db662bee2fce45fee12025d95c173033792b8f93a2b827ce",
+      "sha256": "e7b4e10f46057d3c73ccc6734b5b99ddb1f5e285dca521b980971e6a2827b705",
       "bytes": 2948
     },
     {
@@ -13366,8 +13366,8 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/screen3-planning-080.golden",
-      "sha256": "96ea9768f5ef9439f4549b26509d95a1f12e349aa437c0805053a2024037bdd4",
-      "bytes": 2425
+      "sha256": "95aa3f5a3f8641a69bb74681fd263ef4bb58fa3a2c09c00e657b6615aeb1149e",
+      "bytes": 2426
     },
     {
       "path": "internal/tui/board/v2/testdata/screen3-planning-100.golden",
@@ -13391,13 +13391,13 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/screen4-decision-080.golden",
-      "sha256": "844a055a0726726b814f0aa5de8ca5a6d5cb7892aeea351b1d6a3dac4dec2dd9",
-      "bytes": 2780
+      "sha256": "ad6ff700af16719842c4d8310aa7b1e24809337c542a327d7bc7f58d33ec0eef",
+      "bytes": 2783
     },
     {
       "path": "internal/tui/board/v2/testdata/screen4-decision-100.golden",
-      "sha256": "30851aa3faf403474c2ffdbbf23282fb6237b37f1eb62796ba8c74e291b6e61f",
-      "bytes": 3464
+      "sha256": "14d40218de140ec7d5806f6db273428188c6d128d9cbba0be082293161de964b",
+      "bytes": 3465
     },
     {
       "path": "internal/tui/board/v2/testdata/screen4-decision-132-ascii.golden",
@@ -13416,13 +13416,13 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/screen5-paused-080.golden",
-      "sha256": "2bed0e72bc4adcbc191535add724fd9cdd668bea4310836c4ba3c1bc91ae091e",
-      "bytes": 1849
+      "sha256": "1dbf405e777bdfc762338aef9a3c954d5c5932067b751e1c7d50bc6a7d1c1572",
+      "bytes": 1843
     },
     {
       "path": "internal/tui/board/v2/testdata/screen5-paused-100.golden",
-      "sha256": "90548ccf4cd3a1325110b2d79528b0e1d9ef42d59bb979935f9d0e3441d0c089",
-      "bytes": 2309
+      "sha256": "a450f312ce5b2db4763164bfd1cbb4ad8038bc7127d3ca968c9b716a6b98aaef",
+      "bytes": 2313
     },
     {
       "path": "internal/tui/board/v2/testdata/screen5-paused-132-ascii.golden",
@@ -13466,8 +13466,8 @@
     },
     {
       "path": "internal/tui/board/v2/testdata/screen7-split-080.golden",
-      "sha256": "12bb4e436ea901a70fa14f6ce799b1a330e8be260e2e48ac13c0760a3b5f9b34",
-      "bytes": 3628
+      "sha256": "5c2b860f63a55528c3552b61c22a8c880dde4ccb85db4d49bcfed7bfc172f011",
+      "bytes": 3629
     },
     {
       "path": "internal/tui/board/v2/testdata/screen7-split-100.golden",
@@ -13488,6 +13488,11 @@
       "path": "internal/tui/board/v2/testdata/screen7-split-190x52.golden",
       "sha256": "a14a209c43c2a4027011663a753bc32fe702efaf0809590221b5c77419a12c47",
       "bytes": 12588
+    },
+    {
+      "path": "internal/tui/board/v2/topbar_test.go",
+      "sha256": "f410911a0083890b011fbd67c0f49898e01e441a34bb6023859d76d13640aa4d",
+      "bytes": 5135
     },
     {
       "path": "internal/tui/board/vm/vm.go",
