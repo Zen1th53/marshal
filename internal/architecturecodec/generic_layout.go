@@ -10,18 +10,33 @@ import (
 // the left, every connection gets its own ports and channel tracks, long and
 // backward connections pass through reserved slots, so no line runs under a
 // box and no two lines share a segment.
+//
+// The drawing is compact so it reads at fit: each column is as wide as its
+// longest part name, ports and slots are tight, and the tracks of one gap
+// share a bounded band (the browser draws connections as curves through the
+// slots, so tracks only keep the stored geometry unambiguous).
 const (
-	nodeWidth   = 180.0
-	nodeHeight  = 88.0
-	portPitch   = 24.0 // minimum vertical distance between ports on one side
-	slotHeight  = 28.0 // a reserved slot for a line crossing a column
-	rowGap      = 48.0
-	margin      = 80.0
-	trackPitch  = 14.0
-	labelRoom   = 96.0 // horizontal room kept for captions on both sides of the tracks
-	loopReach   = 22.0
-	captionLift = 7.0
+	minNodeWidth = 150.0
+	maxNodeWidth = 260.0
+	nameAdvance  = 8.6 // horizontal room per rune of a part name
+	namePadding  = 36.0
+	nodeHeight   = 60.0
+	portPitch    = 12.0 // minimum vertical distance between ports on one side
+	slotHeight   = 12.0 // a reserved slot for a line crossing a column
+	rowGap       = 32.0
+	slotGap      = 6.0 // vertical gap next to a slot
+	margin       = 72.0
+	trackPitch   = 14.0
+	trackBand    = 64.0 // most horizontal room the tracks of one gap take
+	labelRoom    = 40.0 // horizontal room kept for captions on both sides of the tracks
+	loopReach    = 22.0
+	captionLift  = 7.0
 )
+
+// nameWidth is the box width a part name needs on one line, bounded.
+func nameWidth(name string) float64 {
+	return math.Min(maxNodeWidth, math.Max(minNodeWidth, math.Ceil(namePadding+nameAdvance*float64(len([]rune(name))))))
+}
 
 type layoutItem struct {
 	id       string // component id, or "" for a slot
@@ -78,16 +93,21 @@ func GenericLayouts(proposal json.RawMessage) (map[string]Layout, error) {
 		view, from, to, _ := DrawnBetween(parents, source, target)
 		conns[view] = append(conns[view], layoutConn{id, from, to, caption})
 	}
+	names := map[string]string{}
+	for _, value := range a["components"].([]any) {
+		c := value.(map[string]any)
+		names[c["id"].(string)] = c["name"].(string)
+	}
 	views := map[string]Layout{}
 	for _, view := range order {
-		views[view] = layeredView(members[view], conns[view])
+		views[view] = layeredView(members[view], conns[view], names)
 	}
 	return views, nil
 }
 
 // layeredView draws one level: ids in declaration order and the connections
 // between them.
-func layeredView(ids []string, conns []layoutConn) Layout {
+func layeredView(ids []string, conns []layoutConn, names map[string]string) Layout {
 	index := map[string]int{}
 	for i, id := range ids {
 		index[id] = i
@@ -286,6 +306,23 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 		items[i].height = math.Max(nodeHeight, portPitch*float64(n+1))
 	}
 
+	gapBetween := func(a, b int) float64 {
+		if items[a].isSlot || items[b].isSlot {
+			return slotGap
+		}
+		return rowGap
+	}
+	// Each column is as wide as its longest name.
+	colWidth := make([]float64, layers)
+	for n, id := range ids {
+		colWidth[layer[n]] = math.Max(colWidth[layer[n]], nameWidth(names[id]))
+	}
+	for l := range colWidth {
+		if colWidth[l] == 0 {
+			colWidth[l] = minNodeWidth
+		}
+	}
+
 	// 6. Vertical placement: pull towards neighbours, keep order and gaps.
 	// place fits the column to the desired centres in the least-squares sense
 	// while keeping order and gaps (pool-adjacent-violators on top-offset).
@@ -294,7 +331,7 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 		sort.Slice(col, func(i, j int) bool { return items[col[i]].order < items[col[j]].order })
 		offset := make([]float64, len(col))
 		for k := 1; k < len(col); k++ {
-			offset[k] = offset[k-1] + items[col[k-1]].height + rowGap
+			offset[k] = offset[k-1] + items[col[k-1]].height + gapBetween(col[k-1], col[k])
 		}
 		type block struct {
 			sum   float64
@@ -324,9 +361,12 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 		y := 0.0
 		col := append([]int(nil), columns[l]...)
 		sort.Slice(col, func(i, j int) bool { return items[col[i]].order < items[col[j]].order })
-		for _, it := range col {
+		for k, it := range col {
+			if k > 0 {
+				y += gapBetween(col[k-1], it)
+			}
 			desired[it] = y + items[it].height/2
-			y += items[it].height + rowGap
+			y += items[it].height
 		}
 		place(l, desired)
 	}
@@ -413,7 +453,7 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 	x := margin
 	for l := 0; l < layers; l++ {
 		columnX[l] = x
-		x += nodeWidth
+		x += colWidth[l]
 		if l == layers-1 {
 			break
 		}
@@ -442,9 +482,13 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 			}
 			return a.from < b.from
 		})
-		width := 2*labelRoom + trackPitch*float64(max(len(bends)-1, 0))
+		pitch := trackPitch
+		if len(bends) > 1 {
+			pitch = math.Min(trackPitch, trackBand/float64(len(bends)-1))
+		}
+		width := 2*labelRoom + pitch*float64(max(len(bends)-1, 0))
 		for k, h := range bends {
-			trackX[[2]int{h.edge, l}] = x + labelRoom + trackPitch*float64(k)
+			trackX[[2]int{h.edge, l}] = x + labelRoom + pitch*float64(k)
 		}
 		x += width
 	}
@@ -456,22 +500,22 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 	height += margin
 
 	// 8. Lines and captions.
-	view := Layout{Version: "generic-v2", Width: width, Height: height, Nodes: []Node{}, Edges: []Edge{}}
+	view := Layout{Version: "generic-v3", Width: width, Height: height, Nodes: []Node{}, Edges: []Edge{}}
 	for n := range ids {
 		it := items[nodeItem[n]]
-		view.Nodes = append(view.Nodes, Node{ID: it.id, X: columnX[it.layer], Y: it.y, Width: nodeWidth, Height: it.height})
+		view.Nodes = append(view.Nodes, Node{ID: it.id, X: columnX[it.layer], Y: it.y, Width: colWidth[it.layer], Height: it.height})
 	}
 	for e, ch := range chains {
 		c := conns[e]
 		var points [][2]float64
 		if len(ch.items) == 1 {
 			it := items[ch.items[0]]
-			left, top := columnX[it.layer], it.y
+			left, top, w := columnX[it.layer], it.y, colWidth[it.layer]
 			py := portY[[2]int{e, 0}]
-			points = [][2]float64{{left + nodeWidth, py}, {left + nodeWidth + loopReach, py}, {left + nodeWidth + loopReach, top - loopReach}, {left + nodeWidth/2, top - loopReach}, {left + nodeWidth/2, top}}
+			points = [][2]float64{{left + w, py}, {left + w + loopReach, py}, {left + w + loopReach, top - loopReach}, {left + w/2, top - loopReach}, {left + w/2, top}}
 		} else {
 			first := items[ch.items[0]]
-			points = append(points, [2]float64{columnX[first.layer] + nodeWidth, pointY(e, 0)})
+			points = append(points, [2]float64{columnX[first.layer] + colWidth[first.layer], pointY(e, 0)})
 			for k := 0; k+1 < len(ch.items); k++ {
 				l := items[ch.items[k]].layer
 				from, to := pointY(e, k), pointY(e, k+1)
@@ -481,7 +525,7 @@ func layeredView(ids []string, conns []layoutConn) Layout {
 				}
 				points = append(points, [2]float64{columnX[l+1], to})
 				if k+1 < len(ch.items)-1 {
-					points = append(points, [2]float64{columnX[l+1] + nodeWidth, to}) // through a slot
+					points = append(points, [2]float64{columnX[l+1] + colWidth[l+1], to}) // through a slot
 				}
 			}
 			if ch.backward {
