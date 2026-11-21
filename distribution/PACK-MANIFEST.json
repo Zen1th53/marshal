@@ -13306,18 +13306,18 @@
     },
     {
       "path": "internal/tui/boardv2_collect_limits.go",
-      "sha256": "621b9953711a0b29d7d089d2ab69a63b14feb2580277cd051c673d4d80f066ef",
-      "bytes": 4541
+      "sha256": "c5d250620253218fe4a428010a530ecb6e291911d2172719cb793fcb09500b49",
+      "bytes": 5355
     },
     {
       "path": "internal/tui/boardv2_collect_limits_test.go",
-      "sha256": "f89fa3f275f8e44f0498ec6d10a11735bbe958ef3b9009517b150c452750f56a",
-      "bytes": 8198
+      "sha256": "6445bb976ec8a77616c97e7e182b1ab7451eb0b1a67a3c03c72b54eeee778faa",
+      "bytes": 9436
     },
     {
       "path": "internal/tui/boardv2_collect_marshal.go",
-      "sha256": "d6adcb086ae2ea89e8b84276114316dfca8b4136780ea79d7c3725b3d0743971",
-      "bytes": 19464
+      "sha256": "3c721875ce93a824c1cefd33485d8ebc8aacfd6358fc76ed7404e5cd59965036",
+      "bytes": 19777
     },
     {
       "path": "internal/tui/boardv2_collect_marshal_test.go",
@@ -16276,8 +16276,13 @@
     },
     {
       "path": "internal/usage/agy.go",
-      "sha256": "1987768d9b536bbacc79a6c089be52b4570a8d815d8ae02aa89e6399db03c7a8",
-      "bytes": 6781
+      "sha256": "43055d50f891673e25c384ea22aabfedb0bf86c7add316746652a9109ae69d5f",
+      "bytes": 7429
+    },
+    {
+      "path": "internal/usage/agy_groups_test.go",
+      "sha256": "d8ddd8f79d7771a6d8cbe98d16e9f985c88735f79774c1c48b574ec3f7f77224",
+      "bytes": 3784
     },
     {
       "path": "internal/usage/claude.go",
@@ -16306,8 +16311,8 @@
     },
     {
       "path": "internal/usage/family.go",
-      "sha256": "061f83832b03779e96f928f7a800c1644cef0ce5b4fe793278fd6a123a56cb22",
-      "bytes": 4057
+      "sha256": "eb01196133f01e7568e5b2372794322138b76463303f2af9193a4546e24e792b",
+      "bytes": 5246
     },
     {
       "path": "internal/usage/family_test.go",
@@ -17426,8 +17431,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "515e721946dfdcaf760bef861e9126554569e30f8e9fe4fd88a002a68d849605",
-      "bytes": 462690
+      "sha256": "7830cb56dabe149b259bebbd18280c980529e936319d7b820a90d2c09df3401d",
+      "bytes": 462785
     },
     {
       "path": "tools/extreme/prq/main_default.go",
