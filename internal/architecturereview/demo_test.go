@@ -44,8 +44,13 @@ func TestArchitectureDemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	const token = "demo-token-0123456789abcdef"
+	// The derived code levels of the Advanced view read this repository.
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, fixture := range demoFixtures() {
-		r, err := New(Config{Context: t.Context(), Project: "demo", ArchitectureID: "architecture-demo", StateDir: filepath.Join(t.TempDir(), fixture.name), Proposal: fixture.raw})
+		r, err := New(Config{Context: t.Context(), Project: "demo", ArchitectureID: "architecture-demo", StateDir: filepath.Join(t.TempDir(), fixture.name), Proposal: fixture.raw, CodeRoot: root})
 		if err != nil {
 			t.Fatalf("%s: %v", fixture.name, err)
 		}

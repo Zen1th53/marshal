@@ -38,6 +38,10 @@ type Config struct {
 	ReadOnly    bool
 	History     func(context.Context, int64) (json.RawMessage, error)
 	Conformance func(context.Context) (json.RawMessage, error)
+	// CodeRoot, when set, is the absolute project root the browser's
+	// Advanced view reads to derive a read-only code level for a part that
+	// declares no sub-parts. Derived levels are never stored or accepted.
+	CodeRoot string
 }
 
 // BuilderOption is one provider the owner may pick for a part, as the
@@ -62,6 +66,12 @@ type Review struct {
 	designAt     time.Time
 	designValue  map[string]any
 	designDigest string
+	codeViews    map[string]codeViewEntry
+}
+
+type codeViewEntry struct {
+	at   time.Time
+	view *CodeView
 }
 
 // Wait blocks until every background feedback worker has finished and written
@@ -1079,4 +1089,56 @@ func writePrivate(path string, value any) error {
 	}
 	defer directory.Close()
 	return directory.Sync()
+}
+
+// CodeView derives the read-only code level of one part of the current
+// architecture (dir opens one of its packages). Parts with declared sub-parts
+// have a reviewed sub-architecture instead. Results are cached 30 seconds.
+func (r *Review) CodeView(ctx context.Context, part, dir string) (*CodeView, error) {
+	r.mu.Lock()
+	architecture, _ := r.state["architecture"].(map[string]any)
+	var paths []string
+	found, parent := false, false
+	for _, value := range architecture["components"].([]any) {
+		c := value.(map[string]any)
+		if c["parent"] == part {
+			parent = true
+		}
+		if c["id"] != part {
+			continue
+		}
+		found = true
+		files, _ := c["files"].([]any)
+		for _, f := range files {
+			if text, ok := f.(string); ok {
+				paths = append(paths, text)
+			}
+		}
+	}
+	key := part + "\n" + dir
+	if entry, ok := r.codeViews[key]; ok && time.Since(entry.at) < 30*time.Second {
+		r.mu.Unlock()
+		return entry.view, nil
+	}
+	r.mu.Unlock()
+	if !found {
+		return nil, errors.New("no such part")
+	}
+	if parent {
+		return nil, errors.New("this part has a reviewed sub-architecture")
+	}
+	if r.config.CodeRoot == "" {
+		return &CodeView{Derived: true, Part: part, Kind: "empty", Architecture: map[string]any{"title": part, "purpose": "Derived from code, not reviewed", "components": []any{}, "connections": []any{}}}, nil
+	}
+	view, err := DeriveCodeView(ctx, r.config.CodeRoot, part, paths, dir)
+	if err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	if r.codeViews == nil || len(r.codeViews) > 256 {
+		r.codeViews = map[string]codeViewEntry{}
+	}
+	r.codeViews[key] = codeViewEntry{time.Now(), view}
+	r.mu.Unlock()
+	return view, nil
 }

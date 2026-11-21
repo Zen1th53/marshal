@@ -20,11 +20,11 @@ const (
 	maxNodeWidth = 260.0
 	nameAdvance  = 8.6 // horizontal room per rune of a part name
 	namePadding  = 36.0
-	nodeHeight   = 60.0
+	nodeHeight   = 72.0
 	portPitch    = 12.0 // minimum vertical distance between ports on one side
 	slotHeight   = 12.0 // a reserved slot for a line crossing a column
-	rowGap       = 32.0
-	slotGap      = 6.0 // vertical gap next to a slot
+	rowGap       = 56.0
+	slotGap      = 10.0 // vertical gap next to a slot
 	margin       = 72.0
 	trackPitch   = 14.0
 	trackBand    = 64.0 // most horizontal room the tracks of one gap take
@@ -269,7 +269,73 @@ func layeredView(ids []string, conns []layoutConn, names map[string]string) Layo
 			items[it].order = k
 		}
 	}
-	for round := 0; round < 12; round++ {
+	// crossings counts line crossings between neighbouring columns.
+	crossings := func() int {
+		total := 0
+		for l := 0; l+1 < layers; l++ {
+			var segs [][2]int
+			for _, it := range columns[l] {
+				for _, n := range neighbours(it, 1) {
+					segs = append(segs, [2]int{items[it].order, items[n].order})
+				}
+			}
+			for i := range segs {
+				for j := i + 1; j < len(segs); j++ {
+					a, b := segs[i], segs[j]
+					if (a[0] < b[0] && a[1] > b[1]) || (a[0] > b[0] && a[1] < b[1]) {
+						total++
+					}
+				}
+			}
+		}
+		return total
+	}
+	saveOrder := func() []int {
+		orders := make([]int, len(items))
+		for i := range items {
+			orders[i] = items[i].order
+		}
+		return orders
+	}
+	restoreOrder := func(orders []int) {
+		for i := range items {
+			items[i].order = orders[i]
+		}
+		for _, col := range columns {
+			sort.SliceStable(col, func(i, j int) bool { return items[col[i]].order < items[col[j]].order })
+		}
+	}
+	// transpose swaps neighbours in a column while that removes crossings.
+	pairCross := func(u, v int) int {
+		count := 0
+		for _, side := range []int{-1, 1} {
+			for _, a := range neighbours(u, side) {
+				for _, b := range neighbours(v, side) {
+					if items[a].order > items[b].order {
+						count++
+					}
+				}
+			}
+		}
+		return count
+	}
+	transpose := func() {
+		for improved, pass := true, 0; improved && pass < 8; pass++ {
+			improved = false
+			for _, col := range columns {
+				for k := 0; k+1 < len(col); k++ {
+					u, v := col[k], col[k+1]
+					if pairCross(u, v) > pairCross(v, u) {
+						col[k], col[k+1] = v, u
+						items[u].order, items[v].order = k+1, k
+						improved = true
+					}
+				}
+			}
+		}
+	}
+	best, bestOrder := crossings(), saveOrder()
+	for round := 0; round < 16; round++ {
 		if round%2 == 0 {
 			for l := 1; l < layers; l++ {
 				sweep(l, -1)
@@ -279,7 +345,12 @@ func layeredView(ids []string, conns []layoutConn, names map[string]string) Layo
 				sweep(l, 1)
 			}
 		}
+		transpose()
+		if c := crossings(); c < best {
+			best, bestOrder = c, saveOrder()
+		}
 	}
+	restoreOrder(bestOrder)
 
 	// 5. Ports: a node side carries one port per touching line.
 	type port struct {

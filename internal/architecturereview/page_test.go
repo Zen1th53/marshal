@@ -154,8 +154,8 @@ func TestPageArchitectureChangeStyles(t *testing.T) {
 func TestPageViewerContract(t *testing.T) {
 	for _, want := range []string{
 		`id="zoom-in"`, `id="zoom-out"`, `id="fit"`, `id="zoom-actual"`, `id="minimap"`, `id="search"`, `id="tip"`,
-		`$('diagram').onwheel=`, `pinch=`, `requestAnimationFrame`, `prefers-reduced-motion`, `prefers-color-scheme:light`,
-		`case'0':fit(true)`, `case'ArrowLeft'`, `bundle-count`, `#diagram.focusing .node:not(.lit)`, `id="incoming"`, `id="outgoing"`, `id="covers"`,
+		`$('diagram').onwheel=`, `pinch=`, `requestAnimationFrame`, `prefers-reduced-motion`, `--bg:#0c121c`, `--accent:#7db1ff`,
+		`case'0':fit(true)`, `case'ArrowLeft'`, `bundle-count`, `#diagram.focusing .node:not(.lit)`, `id="incoming"`, `id="outgoing"`, `id="covers"`, `id="advanced"`, `history.pushState`, `globalThis.onpopstate`, `/api/codeview`, `prefers-reduced-motion`, `class:'port'`,
 	} {
 		if !strings.Contains(reviewHTML, want) {
 			t.Errorf("review.html does not contain %q", want)
