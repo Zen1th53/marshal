@@ -12,8 +12,8 @@ import (
 // The Web Board is the Board in a local browser: read-only, on 127.0.0.1
 // only, behind a private link (internal/webboard). The open Board process
 // hosts it, because it has the data; it starts on demand (w on the Board
-// with no task highlighted, W, the palette, /marshal web) and stops when
-// the Board closes.
+// with no task highlighted, the palette, /marshal web) and stops when the
+// Board closes.
 
 // webBoards holds each workspace's running Web Board.
 var webBoards sync.Map // *Workspace -> *webBoardState
@@ -83,11 +83,9 @@ func (w *Workspace) webBoardServer() (*webboard.Server, error) {
 
 // closeWebBoard stops the Web Board and refuses a new one; Close calls it.
 func (w *Workspace) closeWebBoard() {
-	v, ok := webBoards.Load(w)
-	if !ok {
-		return
-	}
-	s := v.(*webBoardState)
+	// Marked closed even when it never started, so a late key or command
+	// during shutdown cannot start one that nothing stops.
+	s := w.webBoard()
 	s.mu.Lock()
 	s.closed = true
 	srv := s.server

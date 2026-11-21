@@ -158,7 +158,9 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 	}
 }
 
-// W opens the Web Board; with no display the answer is the link to copy.
+// w with no task highlighted, pressed through the terminal's own key path,
+// opens the Web Board and types nothing; with no display the answer is the
+// link to open.
 func TestWebBoardKeyWithoutDisplay(t *testing.T) {
 	t.Setenv("MARSHAL_BOARD", "")
 	opened := webBoardSeams(t)
@@ -168,8 +170,10 @@ func TestWebBoardKeyWithoutDisplay(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.endOpening()
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'W'}) {
-		t.Fatal("W was not taken")
+	w.frameLines(120, 40)
+	w.handleTerminalKey(context.Background(), KeyEvent{Type: KeyRune, Rune: 'w'})
+	if got := w.composer.Text(); got != "" {
+		t.Fatalf("w was typed: %q", got)
 	}
 	w.mu.RLock()
 	answer := w.answer
@@ -181,6 +185,32 @@ func TestWebBoardKeyWithoutDisplay(t *testing.T) {
 	if len(opened()) != 0 {
 		t.Fatal("a browser was opened with no display")
 	}
+}
+
+// /marshal web runs through the command handler the composer and the
+// palette use; with more words it is a goal, not the Web Board.
+func TestMarshalWebCommand(t *testing.T) {
+	t.Setenv("MARSHAL_BOARD", "")
+	webBoardSeams(t)
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	resp, err := w.cmd.Handle(context.Background(), "/marshal web")
+	if err != nil || webLink.FindString(resp) == "" {
+		t.Fatalf("/marshal web: %q %v", resp, err)
+	}
+	resp, _ = w.cmd.Handle(context.Background(), "/marshal web app for the shop")
+	if webLink.FindString(resp) != "" {
+		t.Fatalf("a goal starting with web opened the Web Board: %q", resp)
+	}
+	for _, a := range w.palette.refresh() {
+		if a.ID == "web.open" {
+			if a.Command != "/marshal web" || a.Title != "Open the Board in the browser" || a.Disabled {
+				t.Fatalf("palette row %+v", a)
+			}
+			return
+		}
+	}
+	t.Fatal("the palette has no web.open row")
 }
 
 // cookieJar keeps the cookies of one host, as the browser does.

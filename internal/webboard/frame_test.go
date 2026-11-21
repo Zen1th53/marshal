@@ -69,12 +69,15 @@ func TestEncodeEmptyBoard(t *testing.T) {
 // The architecture review link carries its private token, the owner's
 // Accept: it never reaches the browser, nor do the collectors' refs.
 func TestFrameCarriesNoTokenOrRefs(t *testing.T) {
-	body, err := Encode(fixtureDecision())
+	b := fixtureDecision()
+	b.Activity = append(b.Activity, vm.Event{Kind: "arch", Text: "opened http://127.0.0.1:37667/?token=7964deadbeef462b"})
+	b.Decision.Lines = append(b.Decision.Lines, vm.CardLine{Text: "see http://localhost:37667/?x=1&t=7964deadbeef462b now"})
+	body, err := Encode(b)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(body)
-	for _, bad := range []string{"token=", "7964deadbeef", "37667", "secret-ref"} {
+	for _, bad := range []string{"token=7", "t=7", "7964deadbeef", "secret-ref"} {
 		if strings.Contains(s, bad) {
 			t.Errorf("frame carries %q: %s", bad, s)
 		}

@@ -61,6 +61,7 @@ type Server struct {
 	done     chan struct{}
 
 	frameMu   sync.Mutex
+	closed    bool
 	lastBuilt time.Time
 	lastKey   []byte
 	lastBody  []byte
@@ -152,6 +153,10 @@ func (s *Server) Close() {
 		_ = s.http.Shutdown(ctx)
 		_ = s.listener.Close()
 		<-s.done
+		// Wait for a frame build in flight: no Source call runs after Close.
+		s.frameMu.Lock()
+		s.closed = true
+		s.frameMu.Unlock()
 	})
 }
 
@@ -261,6 +266,9 @@ func (s *Server) serveFile(w http.ResponseWriter, name, contentType string) {
 func (s *Server) frame() ([]byte, uint64, error) {
 	s.frameMu.Lock()
 	defer s.frameMu.Unlock()
+	if s.closed {
+		return nil, 0, errors.New("web board: closed")
+	}
 	if s.lastBody != nil && time.Since(s.lastBuilt) < frameEvery {
 		return s.lastBody, s.seq, nil
 	}

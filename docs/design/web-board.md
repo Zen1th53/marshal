@@ -13,7 +13,7 @@ What ships:
   seconds), the HTTP server, and the page (`page/index.html`, `app.css`,
   `app.js`, embedded with `go:embed`; vanilla, no build step).
 - `internal/tui/webboard.go`: the open Board hosts the server, started on
-  demand (`W`, `w` with no task highlighted, the palette entry "Open the
+  demand (`w` with no task highlighted, the palette entry "Open the
   Board in the browser", `/marshal web`) and stopped by `Workspace.Close`.
   Frames are built by `webBoardFrame` (`boardV2()` plus the screen choice
   `paintV2` makes) on the server's goroutines, never on the input loop and

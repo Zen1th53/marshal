@@ -226,7 +226,7 @@ func (w *Workspace) marshalFailurePanel(runID, provider string, run marshal.Run,
 
 var marshalSubcommands = []string{"chat", "architecture", "web", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
 
-var allMarshalSubcommands = []string{"chat", "architecture", "web", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
+var allMarshalSubcommands = []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
 
 // marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
 func marshalTypoSuggestion(word string) string {
@@ -309,10 +309,11 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "architecture":
 		return w.marshalArchitecture(ctx, strings.Join(args[1:], " "), "")
 	case "web":
-		if len(args) != 1 {
-			return "", errors.New("usage: /marshal web")
+		// Only the bare word: "/marshal web app for X" is a goal.
+		if len(args) == 1 {
+			return w.marshalWeb()
 		}
-		return w.marshalWeb()
+		return w.marshalStart(ctx, strings.Join(args, " "))
 	case "chat":
 		if len(args) != 1 {
 			return "", errors.New("usage: /marshal chat")

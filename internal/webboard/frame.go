@@ -10,6 +10,7 @@ package webboard
 
 import (
 	"encoding/json"
+	"regexp"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -373,9 +374,18 @@ func FromBoard(b vm.Board) Frame {
 	return f
 }
 
-// Encode is b as JSON in the version 1 frame format.
+// tokenParam is a private link's key in free text ("?token=…", "&t=…"),
+// as JSON writes it (& is \u0026).
+var tokenParam = regexp.MustCompile(`((?:[?&]|\\u0026)(?:token|t)=)[A-Za-z0-9_.~%-]+`)
+
+// Encode is b as JSON in the version 1 frame format. A private link's key
+// that free text carries (an Activity line, a card line) is cut out.
 func Encode(b vm.Board) ([]byte, error) {
-	return json.Marshal(FromBoard(b))
+	body, err := json.Marshal(FromBoard(b))
+	if err != nil {
+		return nil, err
+	}
+	return tokenParam.ReplaceAll(body, []byte("${1}…")), nil
 }
 
 // changeKey is the frame with the clocks cleared: two frames with the same
