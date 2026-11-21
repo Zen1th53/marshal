@@ -67,18 +67,3 @@ func isDangerousKey(key string) bool {
 	}
 	return false
 }
-
-// SanitizeProcessArgs scans command line arguments and flags for exposed secrets.
-func SanitizeProcessArgs(args []string) []string {
-	sanitized := make([]string, len(args))
-	for i, arg := range args {
-		lower := strings.ToLower(arg)
-		if strings.Contains(lower, "token=") || strings.Contains(lower, "password=") || strings.Contains(lower, "secret=") || strings.Contains(lower, "key=") {
-			parts := strings.SplitN(arg, "=", 2)
-			sanitized[i] = parts[0] + "=[REDACTED]"
-		} else {
-			sanitized[i] = RedactSecrets(arg)
-		}
-	}
-	return sanitized
-}

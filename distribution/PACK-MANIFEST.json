@@ -3306,8 +3306,8 @@
     },
     {
       "path": "internal/app/network_egress_test.go",
-      "sha256": "fa4c8de16e3a7c09a9f66cb9bfcd97858518925d3d04efd7ece5d518f088d341",
-      "bytes": 7616
+      "sha256": "84576b6c43e9ac1d9344a829bacdb34359db671aa91225094499c92835021c73",
+      "bytes": 4315
     },
     {
       "path": "internal/app/opencode_bootstrap_default.go",
@@ -3421,8 +3421,8 @@
     },
     {
       "path": "internal/app/policy_runtime.go",
-      "sha256": "b2a1ce92234ee69bb06a6a1d4b99be7cc6d1c9ff4eeaa135e96208820d722047",
-      "bytes": 5696
+      "sha256": "bbbd67ace6036db85da528263a381b6b317d8fee07724ca4856d6028c1425509",
+      "bytes": 4723
     },
     {
       "path": "internal/app/policy_runtime_a06_test.go",
@@ -6506,8 +6506,8 @@
     },
     {
       "path": "internal/execution/chaos_stress_test.go",
-      "sha256": "9420d924d279df3701ff169f044d9a473184814ef787812775111c0eade076d1",
-      "bytes": 26385
+      "sha256": "bf41227b21558d681252f6150534b093c1cb2ffec2ac687e930638171babac6a",
+      "bytes": 25712
     },
     {
       "path": "internal/execution/checkpoint.go",
@@ -6531,13 +6531,13 @@
     },
     {
       "path": "internal/execution/credentials.go",
-      "sha256": "653ac7eda05a20c82c5cb5d71e62a8d823f4eead29934a5d2451d90fbbc1e048",
-      "bytes": 2039
+      "sha256": "178d28b050fb3bb0da865506803f5f6e007e5b0b96e37541ac5b24147f44749d",
+      "bytes": 1492
     },
     {
       "path": "internal/execution/credentials_test.go",
-      "sha256": "682c6342380fe2e74f52306f9b23702c41be5113f7ee9929026764789e0e3c2b",
-      "bytes": 2500
+      "sha256": "5258119a5ebc5f142a51c7b71c4dc19bff8ab509122260e377b631728f4c4bf4",
+      "bytes": 1662
     },
     {
       "path": "internal/execution/effect_boundary_test.go",
@@ -6651,13 +6651,13 @@
     },
     {
       "path": "internal/execution/provenance.go",
-      "sha256": "f26f501bdf30ade35f910546577d39059a31bf78cc6130489887143f8f6e521f",
-      "bytes": 5363
+      "sha256": "7b1729b81475551be152197b1f281c118a4e429202ce0a6dda69b02ade5b9b51",
+      "bytes": 1012
     },
     {
       "path": "internal/execution/provenance_test.go",
-      "sha256": "85e817175a931e72c084b0d428501962da587aad1a55712c9956278772437213",
-      "bytes": 3253
+      "sha256": "84ea05f1601034153003abc0d2596637725a57dd62fa6f7cdd20f3dc4b7fea45",
+      "bytes": 827
     },
     {
       "path": "internal/execution/provider_failover_default.go",
@@ -6926,13 +6926,13 @@
     },
     {
       "path": "internal/execution/tool_hardening.go",
-      "sha256": "1c4a161052183bd98ed7bffc8d11b15bcb03d165a48f0f0fa2862796925c0c3e",
-      "bytes": 3718
+      "sha256": "bbcdb09dadc9e9319dbd21c901c430c1f32e056000945544a9e3f976f0e12729",
+      "bytes": 608
     },
     {
       "path": "internal/execution/tool_hardening_test.go",
-      "sha256": "80465abf61fad8191328497ac18c56e71c16fe423026c4fb2a4bc35f1b56478e",
-      "bytes": 2983
+      "sha256": "238bf1ad56c08d738e5bf92322ceb8a0c81140e76210f6c4af0fc1c4acdade75",
+      "bytes": 847
     },
     {
       "path": "internal/execution/tree_digest.go",
@@ -7621,13 +7621,13 @@
     },
     {
       "path": "internal/marshal/domain.go",
-      "sha256": "101208a5e304017a2b44b3eb8c1b39e57efca2fe250dcdd3a25bfab289621c11",
-      "bytes": 25082
+      "sha256": "813fd777818fc199392d9a0cef0013e4fa97df4c5e8de450ea2d2e7361329e71",
+      "bytes": 21628
     },
     {
       "path": "internal/marshal/domain_test.go",
-      "sha256": "5b20d5979ed3bf17718377a76c79f07f8d53c787bde2751b5f61d7cf3623c927",
-      "bytes": 9085
+      "sha256": "48bf07ef7e90d597015f2a524be5a8bb3807bd4d096a8cd365baef857bcadedb",
+      "bytes": 7065
     },
     {
       "path": "internal/marshal/driver/agy_permissions_test.go",
@@ -17391,8 +17391,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "515e721946dfdcaf760bef861e9126554569e30f8e9fe4fd88a002a68d849605",
-      "bytes": 462690
+      "sha256": "affc7aa80dadd79e506861ee082056b38bf404b3622f257fbbdfd3134d0099fb",
+      "bytes": 461437
     },
     {
       "path": "tools/extreme/prq/main_default.go",
