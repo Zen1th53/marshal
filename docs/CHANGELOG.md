@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.7
+
+### Added
+- Architecture review: one click opens a part's sub-architecture; marking and asking about any element (package, file, declaration, connection) on every level, including code-derived levels, with server-side path validation; derived requests never change the contract or block Accept.
+
+### Fixed
+- Reassigned and failed-over tasks with dependencies open their next lane from the current integration head (the retired binding no longer pins the old base); foreign bindings and plain reworks at another base stay refused.
+- `/marshal resume` names `/resume` while the run waits on an operator pause.
+
 ## Unreleased
 
 ### Added
