@@ -129,6 +129,17 @@ from the page. What shipped, and where it differs from the first design:
   a second step (the inbox's confirmation, the plan's armed reply) returns a
   `confirm` step, which the page shows as a **Confirm …** button (with a text
   field when the hard gate reads its canonical id) and a **Cancel** (`esc`).
+- **With no card**: the frame's `keys` (the terminal key bar is never sent)
+  carry the screen's own buttons, and `CardID` is `screen:<screen>:` plus a
+  digest of them, so they get tokens like a card's keys: `r` "retry <task>"
+  while `retryTarget` finds a task (noted on the input loop at each paint,
+  `noteWebRetry`, since the frame is built off the loop and the task under
+  the keyboard is loop state), and `ctrl+x` "stop all workers" while a run
+  is on the Board. On the loop, `r` re-runs `retryTarget` (the task must be
+  the one the button named), arms it (`armRetry`) and presses Enter
+  (`handleRetryKey`: `retryAndContinue`); `ctrl+x` runs `/stop all` as the
+  key does (`runCommand`, the priority lane), and the page waits for its
+  answer. Both need the page's second click (`confirmed`).
 - **Two-step stop**: `x` on the paused card is one key in the terminal; the
   page asks for a second click and sends `confirmed: true`, which the sink
   requires.

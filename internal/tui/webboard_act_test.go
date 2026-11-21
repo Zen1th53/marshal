@@ -276,3 +276,36 @@ func TestWebActInboxAllowIsTwoSteps(t *testing.T) {
 		t.Fatalf("esc: %+v confirming=%v", res, w.inboxView.Confirming())
 	}
 }
+
+// With no card on screen, "Stop all workers" is Ctrl+X: /stop all, run the
+// way the key runs it, after the page's second click; never the Marshal.
+func TestWebActStopAllWorkersIsCtrlX(t *testing.T) {
+	w := NewWorkspace(nil, "project", "session")
+	w.screen = NewScreen(nil)
+	t.Cleanup(w.Close)
+	t.Cleanup(func() { v2Cards.Delete(w) })
+	run := marshal.Run{State: marshal.Dispatching, PlanID: "PLAN-1", Settings: marshal.Settings{ReworkLimit: 2},
+		Tasks: []marshal.Task{{PlanTaskID: "T03", Title: "sub-view links", Worker: "codex", State: marshal.Dispatched}}}
+	w.setMarshalPanel(newMarshalPanel("R-9", "codex", run, "running"))
+	f := webboard.FromBoard(w.webBoardFrame())
+	if f.Decision != nil || f.Paused != nil {
+		t.Fatalf("a card is shown: %+v %+v", f.Decision, f.Paused)
+	}
+	if got := webboard.ActionKeys(f); !slices.Equal(got, []string{"ctrl+x"}) {
+		t.Fatalf("screen keys %q (no stuck task: no retry)", got)
+	}
+	card := webboard.CardID(f)
+	if res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "ctrl+x"}); res.Status != "refused" || w.GetUIState().LastCommand == "/stop all" {
+		t.Fatalf("unconfirmed: %+v", res)
+	}
+	if res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "r", Confirmed: true}); res.Status != "refused" {
+		t.Fatalf("retry with none offered: %+v", res)
+	}
+	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "ctrl+x", Confirmed: true})
+	if res.Status == "stale" || w.GetUIState().LastCommand != "/stop all" {
+		t.Fatalf("stop all: %+v last command %q", res, w.GetUIState().LastCommand)
+	}
+	if res.Status == "done" && !webNoteHas(w, "From the web: stop all workers") {
+		t.Fatalf("activity %+v", w.noteList())
+	}
+}

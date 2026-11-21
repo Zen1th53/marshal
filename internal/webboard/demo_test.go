@@ -53,7 +53,16 @@ type demo struct {
 
 func newDemo(name string) *demo {
 	b, _ := fixture(name)
+	withScreenKeys(&b)
 	return &demo{began: time.Now(), base: b}
+}
+
+// withScreenKeys gives a running Board the screen's own buttons, as the
+// Board offers them: retry a stuck task and stop all workers.
+func withScreenKeys(b *vm.Board) {
+	if b.Decision == nil && b.Paused == nil && b.Top.Run != "" {
+		b.Keys = kv("r", "retry T12", "ctrl+x", "stop all workers")
+	}
 }
 
 func (d *demo) source() vm.Board {
@@ -105,6 +114,17 @@ func (d *demo) act(_ context.Context, a Action) Result {
 		ks, title = d.base.Decision.Actions, d.base.Decision.Title
 	case d.base.Paused != nil:
 		ks, title = d.base.Paused.Actions, d.base.Paused.Title
+	default:
+		for _, k := range d.base.Keys {
+			if k.Key == a.Key {
+				note("From the web: " + k.Label + ".")
+			}
+		}
+		if a.Key == "r" {
+			d.base.Keys = kv("ctrl+x", "stop all workers")
+			return Result{Status: "done", Text: "T12 starts again in a fresh session. The run continues."}
+		}
+		return Result{Status: "done", Text: "Stopped all workers; the Marshal keeps running."}
 	}
 	label := a.Key
 	for _, k := range ks {
@@ -124,6 +144,7 @@ func (d *demo) act(_ context.Context, a Action) Result {
 		if d.base.Paused != nil {
 			r.Activity = fixtureRunning().Activity
 		}
+		withScreenKeys(&r)
 		d.base = r
 		if a.Key == "x" {
 			return Result{Status: "done", Text: "Stopped. The run and its work are kept; /marshal resume continues it."}

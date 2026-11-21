@@ -103,6 +103,18 @@ try {
     check(await evaluate(`document.getElementById("card").hidden`), "running: no card");
     check(await evaluate(`document.getElementById("now").textContent.startsWith("The Marshal:")`), "running: one sentence of what is happening");
     await shot("20-running.png");
+    // With no card: Retry <task> (the Board's r) and Stop all workers
+    // (Ctrl+X), each two clicks.
+    const controls = await evaluate(`Array.from(document.querySelectorAll("#controls button")).map(b => b.textContent)`);
+    check(JSON.stringify(controls) === JSON.stringify(["Retry T12", "Stop all workers"]), `running: controls ${JSON.stringify(controls)}`);
+    await evaluate(`document.querySelector("#controls button").click()`);
+    await sleep(200);
+    check(await evaluate(`document.querySelector("#controls button").textContent === "Click again to retry T12"`), "retry: the first click arms it");
+    await evaluate(`document.querySelector("#controls button").click()`);
+    await until(`/^Done/.test(document.getElementById("feedback").textContent)`, "Done after Retry");
+    check(true, "retry: " + (await evaluate(`document.getElementById("feedback").textContent`)));
+    await until(`Array.from(document.querySelectorAll("#controls button")).map(b => b.textContent).join() === "Stop all workers"`, "the retry button to go");
+    await shot("20-running-retried.png");
   }
   await size(1280, 900);
   await open(url);

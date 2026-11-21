@@ -293,6 +293,7 @@ The Web Board is the Board as a simple web page. It updates live (at most four t
 ### What the page shows
 
 - At the top, one sentence of what is happening now and one **From you** line.
+- With no card, during a run: **Retry <task>** when the Board's `r` would retry a stuck task, and **Stop all workers**.
 - When the Board waits for you, the card: its title, the cause in one line, what the main button will do, one big button with the card's main action (for example **Retry T03 in a fresh session**, **Move to claude**, **Continue the run**) and at most two text buttons (for example **Wait until 21:10**, **Stop the run**).
 - One box, **Tell the Marshal…**, with **Send**.
 - Everything else (the card in full, Plan, Lanes, Tasks, Workers, the Marshal, Inbox, Activity, Marshal steps, Requests, readiness) under **Details** sections: closed on a phone, open on a wide screen.
@@ -310,6 +311,8 @@ Only what the terminal Board offers on screen right now. Each button presses the
 | A decision card's buttons | its keys: the plan's reply and the inbox's allow or deny ask for a second click (**Confirm …**), as `Enter` does after the first key in the terminal; a hard gate asks you to type its id |
 | **Open in browser** on the architecture card | `a`: the review opens on this computer, and the page shows the review link. The architecture is accepted only in its own review page, never from the Board |
 | **Comment** | moves you to the **Tell the Marshal…** box |
+| **Retry T03** with no card shown (two clicks), offered only while `r` would retry a stuck task: the task in the inspector, or the one highlighted in Tasks | `r` then `Enter`: the task starts again in a fresh session and the run continues |
+| **Stop all workers** with no card shown, during a run (two clicks) | `Ctrl+X` (`/stop all`): every worker stops, never the Marshal |
 | **Tell the Marshal…** + **Send** (at most 2000 characters) | `s` on the Board: the message goes to the Marshal chat as yours, never as a command, even when it starts with `/` |
 
 Not offered on the page: quitting, copying a link to the terminal's clipboard, opening a terminal view, and editing in the terminal.

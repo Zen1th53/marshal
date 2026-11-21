@@ -126,10 +126,40 @@
 
   var armedStop = null, confirmStep = null;
 
+  // renderControls is the screen's own buttons when no card is shown: Retry
+  // <task> while the Board's r would retry one, and Stop all workers
+  // (Ctrl+X). Both take a second click before anything is sent.
+  var armedControl = null;
+  function renderControls(f) {
+    var box = clear($("controls"));
+    var keys = !f.decision && !f.paused && f.act ? (f.keys || []) : [];
+    box.hidden = keys.length === 0;
+    keys.forEach(function (k) {
+      if (!f.act.tokens[k.key]) return;
+      var id = f.act.card + "|" + k.key, armed = armedControl === id;
+      var retry = k.key === "r";
+      var text = armed ? "Click again to " + k.label : cap(k.label);
+      var b = button(retry ? "primary" + (armed ? " danger" : "") : "linkbtn" + (armed ? " danger" : ""), text, function () {
+        if (!armed) {
+          armedControl = id;
+          feedback("wait", retry ? "Retrying starts the task again in a fresh session, keeping its branch. Click again to retry." :
+            "This stops every worker; the Marshal keeps running. Click again to stop them.");
+          render(frame);
+          setTimeout(function () { if (armedControl === id) { armedControl = null; render(frame); } }, 6000);
+          return;
+        }
+        armedControl = null;
+        act({ action: "key", key: k.key, confirmed: true }, cap(k.label));
+      });
+      box.appendChild(b);
+    });
+  }
+
   function renderCard(f) {
     var card = $("card"), d = f.decision, p = f.paused;
     var cardID = f.act ? f.act.card : "";
     if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
+    renderControls(f);
     if (!d && !p) { card.hidden = true; $("d-card").hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");

@@ -124,7 +124,7 @@ func CardID(f Frame) string {
 			Actions                  []Key
 		}{p.Kind, p.Title, p.Cause, p.Will, titles, p.Actions})
 	}
-	return "screen:" + f.Screen
+	return "screen:" + f.Screen + ":" + cardDigest(f.Keys)
 }
 
 func actionKeys(ks []Key) []string {
@@ -136,7 +136,8 @@ func actionKeys(ks []Key) []string {
 }
 
 // ActionKeys are the keys the page may send for f's card: the card's
-// buttons, and esc ("later") on a decision.
+// buttons, and esc ("later") on a decision; with no card, the screen's
+// buttons in f.Keys.
 func ActionKeys(f Frame) []string {
 	switch {
 	case f.Decision != nil:
@@ -144,7 +145,9 @@ func ActionKeys(f Frame) []string {
 	case f.Paused != nil:
 		return actionKeys(f.Paused.Actions)
 	}
-	return nil
+	// With no card, the screen's own buttons the Board put in the key list
+	// (retry the stuck task, stop all workers).
+	return actionKeys(f.Keys)
 }
 
 // actToken is the token for action on card at epoch.

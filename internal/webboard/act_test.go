@@ -282,6 +282,36 @@ func TestActStaleWhenTheButtonChanged(t *testing.T) {
 	}
 }
 
+// With no card, the screen's own buttons (retry the stuck task, stop all
+// workers) get tokens like a card's keys, and the screen's id changes with
+// them, so a click on "retry T03" is refused once r would retry another
+// task.
+func TestActScreenKeys(t *testing.T) {
+	b := fixtureRunning()
+	b.Keys = kv("r", "retry T03", "ctrl+x", "stop all workers")
+	s, src, log := startActing(t, b)
+	f := boardFrame(t, s)
+	if f.Act.Tokens["r"] == "" || f.Act.Tokens["ctrl+x"] == "" || f.Act.Tokens["say"] == "" || len(f.Act.Tokens) != 3 {
+		t.Fatalf("tokens %v", f.Act.Tokens)
+	}
+	b2 := b
+	b2.Keys = kv("r", "retry T05", "ctrl+x", "stop all workers")
+	src.set(b2)
+	if r, _ := post(t, s, keyBody(t, f, "r"), nil); r.StatusCode != http.StatusConflict {
+		t.Fatalf("retry of another task: %d", r.StatusCode)
+	}
+	time.Sleep(frameEvery + 50*time.Millisecond) // past the cached frame
+	g := boardFrame(t, s)
+	body, _ := json.Marshal(map[string]any{"action": "key", "card": g.Act.Card, "key": "ctrl+x", "token": g.Act.Tokens["ctrl+x"], "confirmed": true})
+	if r, _ := post(t, s, body, nil); r.StatusCode != http.StatusOK {
+		t.Fatalf("stop all: %d", r.StatusCode)
+	}
+	got := log.taken()
+	if len(got) != 1 || got[0].Key != "ctrl+x" || !got[0].Confirmed {
+		t.Fatalf("sink %+v", got)
+	}
+}
+
 // The sink's own "the card changed" is a 409 too.
 func TestActSinkStale(t *testing.T) {
 	s, _, log := startActing(t, fixtureDecision())
@@ -298,7 +328,7 @@ func TestActSinkStale(t *testing.T) {
 func TestActSay(t *testing.T) {
 	s, _, log := startActing(t, fixtureRunning())
 	f := boardFrame(t, s)
-	if f.Act == nil || f.Act.Card != "screen:running" || len(f.Act.Tokens) != 1 {
+	if f.Act == nil || !strings.HasPrefix(f.Act.Card, "screen:running:") || len(f.Act.Tokens) != 1 {
 		t.Fatalf("running screen: only say, got %+v", f.Act)
 	}
 	say := func(f Frame, text string) (*http.Response, Result) {

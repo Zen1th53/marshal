@@ -40,7 +40,10 @@ var (
 type webActed struct {
 	res     webboard.Result
 	started bool
-	seq     uint64 // the output sequence after the key
+	// output is set when the key started a command whose answer comes
+	// later on the loop (Ctrl+X's /stop all runs on the priority lane).
+	output bool
+	seq    uint64 // the output sequence after the key
 }
 
 // webBoardAct is the server's Sink: it runs a on the input loop and waits
@@ -85,7 +88,7 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 	defer cancel()
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
-	for w.commandBusy.Load() {
+	for w.commandBusy.Load() || (r.output && w.outputSeq.Load() == r.seq) {
 		select {
 		case <-wait.Done():
 			return webboard.Result{Status: "started", Text: "Started: the Board is running it now; Activity shows how it went."}
@@ -108,6 +111,9 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 // webAct is one action on the input loop: the page must have acted on the
 // card the Board shows now.
 func (w *Workspace) webAct(a webboard.Action) webActed {
+	if a.Kind == "key" && (a.Key == webKeyRetry || a.Key == webKeyStopAll) {
+		return w.webScreenAct(a)
+	}
 	res, started, seq := w.webActNow(a)
 	return webActed{res: res, started: started, seq: seq}
 }
@@ -214,6 +220,8 @@ func webActionLabel(f webboard.Frame, key string) string {
 		ks = f.Decision.Actions
 	case f.Paused != nil:
 		ks = f.Paused.Actions
+	default:
+		ks = f.Keys
 	}
 	for _, k := range ks {
 		if k.Key == key {
@@ -300,4 +308,110 @@ func (w *Workspace) webSay(text string) webboard.Result {
 	}
 	w.RecordActivity("From the web: a message to the Marshal (" + res.Status + ").")
 	return res
+}
+
+// The two Board keys the page offers when no card is shown: r (retry the
+// stuck task under the keyboard) and Ctrl+X (stop all workers, never the
+// Marshal). They go in the frame's key list (webScreenKeys), so they get
+// action tokens like a card's keys, and the page asks for a second click
+// on both.
+const (
+	webKeyRetry   = "r"
+	webKeyStopAll = "ctrl+x"
+)
+
+// webScreenKeys are the screen's own buttons for the page, when no card is
+// shown: Retry <task> while r has a stuck task to retry (as the key bar
+// offers r), and Stop all workers while a run is on the Board.
+func (w *Workspace) webScreenKeys() []vm.Key {
+	var keys []vm.Key
+	if id := w.webRetryShown(); id != "" {
+		keys = append(keys, vm.Key{Key: webKeyRetry, Label: "retry " + cleanBoard(id)})
+	}
+	if w.marshalPanel() != nil {
+		keys = append(keys, vm.Key{Key: webKeyStopAll, Label: "stop all workers"})
+	}
+	return keys
+}
+
+// noteWebRetry records, on the input loop, the task r would retry now, so
+// the page's frame (built off the loop) can offer it without reading the
+// Board's keyboard state from another goroutine. The paint calls it.
+func (w *Workspace) noteWebRetry() {
+	s, ok := webBoards.Load(w)
+	if !ok {
+		return
+	}
+	id, why := retryTarget(w)
+	if why != "" {
+		id = ""
+	}
+	st := s.(*webBoardState)
+	st.mu.Lock()
+	st.retry = id
+	st.mu.Unlock()
+}
+
+func (w *Workspace) webRetryShown() string {
+	s, ok := webBoards.Load(w)
+	if !ok {
+		return ""
+	}
+	st := s.(*webBoardState)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.retry
+}
+
+// webScreenAct is r or Ctrl+X from the page, through the keys' own
+// handlers: r arms the retry of the task retryTarget names and Enter runs
+// it (handleRetryKey: retryAndContinue); Ctrl+X runs /stop all as the key
+// does. Both need the page's second click.
+func (w *Workspace) webScreenAct(a webboard.Action) webActed {
+	out := func(r webboard.Result) webActed { return webActed{res: r} }
+	b := w.webBoardFrame()
+	f := webboard.FromBoard(b)
+	if webboard.CardID(f) != a.Card {
+		return out(webboard.Result{Status: "stale", Text: "The Board changed since this page showed it; look again."})
+	}
+	if !slices.Contains(webboard.ActionKeys(f), a.Key) {
+		return out(refused("That button is not on the Board now."))
+	}
+	label := webActionLabel(f, a.Key)
+	if !a.Confirmed {
+		return out(refused("Press " + label + " again to confirm."))
+	}
+	if w.commandBusy.Load() {
+		return out(refused("A command is still running on the Board; try again when it finishes."))
+	}
+	before := w.outputSeq.Load()
+	r := webActed{res: webboard.Result{Status: "done"}}
+	switch a.Key {
+	case webKeyRetry:
+		id, why := retryTarget(w)
+		if why != "" {
+			return out(refused(why))
+		}
+		if "retry "+cleanBoard(id) != label {
+			return out(webboard.Result{Status: "stale", Text: "The task to retry changed; look again."})
+		}
+		w.armRetry(id)
+		w.handleRetryKey(KeyEvent{Type: KeyEnter})
+		r.started = w.commandBusy.Load()
+	case webKeyStopAll:
+		w.runCommand(w.workers.context(), "/stop all")
+		r.output = w.uiEvents != nil && w.outputSeq.Load() == before
+	}
+	r.seq = w.outputSeq.Load()
+	if r.seq != before {
+		w.mu.RLock()
+		text, isErr := w.answer, w.answerIsError
+		w.mu.RUnlock()
+		if isErr {
+			return out(refused(text))
+		}
+		r.res.Text = text
+	}
+	w.RecordActivity("From the web: " + label + ".")
+	return r
 }

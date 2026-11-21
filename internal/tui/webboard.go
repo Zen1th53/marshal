@@ -24,6 +24,9 @@ type webBoardState struct {
 	mu     sync.Mutex
 	server *webboard.Server
 	closed bool
+	// retry is the task r would retry, noted on the input loop at each
+	// paint (noteWebRetry), "" for none.
+	retry string
 }
 
 // webBoardStart and webBoardOpen are the server and the browser opener;
@@ -62,8 +65,13 @@ func (w *Workspace) webBoardFrame() vm.Board {
 	if b.Now.IsZero() {
 		b.Now = boardNow()
 	}
-	// The key bar is the terminal's; the page names the keys of a card.
+	// The key bar is the terminal's. With no card the page gets the
+	// screen's own buttons it may press instead (webScreenKeys); a card
+	// brings its own.
 	b.Keys = nil
+	if b.Decision == nil && b.Paused == nil {
+		b.Keys = w.webScreenKeys()
+	}
 	return b
 }
 
