@@ -109,7 +109,7 @@ context.code=code;run(`advanced=true;path=['added'];derivedView={key:'code:added
 assert.equal(run('view'),'code:added');assert.equal(get('area').disabled,false);
 part('file-1').onclick({detail:1,shiftKey:true});
 assert.equal(get('editor').hidden,false);assert.equal(get('decl-row').hidden,false);assert.ok(get('selection-meta').textContent.includes('a.go'));
-const posts=[];context.fetch=async(url,opt)=>{const body=JSON.parse(opt.body);posts.push(body);const next=JSON.parse(JSON.stringify(run('state')));next.comments.push({id:'c'+posts.length,target:body.target,derived:{part:'added',elements:body.derived.items.map(i=>({kind:i.to?'connection':'file',...i})),breadcrumb:['added','pkg','a.go'],note:'derived from code, not reviewed'},request_type:body.request_type,comment:body.comment,status:'queued',resolved:false});return {ok:true,json:async()=>next};};
+const posts=[];context.fetch=async(url,opt)=>{const body=JSON.parse(opt.body);posts.push(body);const next=JSON.parse(JSON.stringify(run('state')));next.comments.push({id:'c'+posts.length,target:body.target,...(body.derived?{derived:{part:'added',elements:body.derived.items.map(i=>({kind:i.to?'connection':'file',...i})),breadcrumb:['added','pkg','a.go'],note:'derived from code, not reviewed'}}:{}),request_type:body.request_type,comment:body.comment,status:'queued',resolved:false});return {ok:true,json:async()=>next};};
 get('request-text').value='Why does a.go use b.go?';get('decl-name').value='Serve';await get('submit').onclick();
 const sent=posts.at(-1);
 assert.deepEqual(sent.derived,{part:'added',items:[{path:'pkg/a.go'}],name:'Serve'});
@@ -121,6 +121,16 @@ run('closeEditor()');run(`state.comments=state.comments.map(c=>({...c,status:'an
 get('request-text').value='Explain these files';await get('submit').onclick();
 assert.deepEqual(posts.at(-1).derived,{part:'added',items:[{path:'pkg/a.go'},{path:'pkg/b.go'},{path:'pkg/a.go',to:'pkg/b.go'}]});
 run('renderHistory()');assert.ok(JSON.stringify(get('history-list').children.at(-1).children).includes('pkg/a.go'));
+// A reviewed part opened into its derived level keeps a reviewed panel: no
+// derived fields, the builder picker allowed, and a plain request on the part.
+run(`closeEditor();state.comments=[];path=[];derivedView=null;draw()`);
+const prevFetch=context.fetch;context.fetch=async(url,opt)=>String(url).startsWith('/api/codeview')?{ok:true,json:async()=>({...code,part:'current'})}:prevFetch(url,opt);
+part('current').onclick({detail:1});for(let i=0;i<6;i++)await tick();
+assert.equal(run('view'),'code:current');assert.equal(get('editor').hidden,false);assert.equal(run('target.id'),'current');assert.equal(run('target.diagram_id'),'architecture');
+assert.equal(get('decl-row').hidden,true);assert.ok(!get('selection-meta').textContent.includes('Derived'));
+get('request-text').value='Is this part still needed?';await get('submit').onclick();
+assert.equal(posts.at(-1).derived,undefined);assert.equal(posts.at(-1).target.id,'current');assert.equal(posts.at(-1).target.diagram_id,'architecture');
+context.fetch=prevFetch;
 run(`closeEditor();state.comments=[];advanced=false;path=[];derivedView=null;draw()`);
 }
 // The part panel names the contract revision too, never the review-state counter.

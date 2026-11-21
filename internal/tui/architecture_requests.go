@@ -94,13 +94,26 @@ func architectureRequestMessage(req app.ArchitectureRequest) string {
 	if req.Type == "change" {
 		kind = "Change request"
 	}
+	derived := len(req.Derived) > 0
+	if derived {
+		kind = "Question about code (" + req.Type + "; derived from code, not reviewed: answer it, change nothing)"
+	}
 	fmt.Fprintf(&b, "%s from the owner on the architecture page, revision %s.\n\n", kind, req.Revision)
 	fmt.Fprintf(&b, "Owner's words: %q\n\n", req.Text)
-	selection, _ := json.Marshal(map[string]json.RawMessage{
+	exact := map[string]json.RawMessage{
 		"source_contract": req.Source, "anchor": req.Anchor,
 		"components": req.Components, "connections": req.Connections,
-	})
+	}
+	if derived {
+		exact["derived"] = req.Derived
+	}
+	selection, _ := json.Marshal(exact)
 	fmt.Fprintf(&b, "Exact selection (only these parts are meant):\n```json\n%s\n```\n\n", selection)
+	if derived {
+		b.WriteString("The derived field names the exact code elements (kind, repository path, declaration name) inside the selected part. They are not part of the reviewed contract. ")
+		b.WriteString("Answer with marshal_architecture_request_answer and this request_id: status answered (a reply) or needs_clarification (questions). Never answer proposed_change and submit no project contract revision for it; if a change is needed, say in the reply what you would change and ask the owner to request it in the chat.\n")
+		return b.String()
+	}
 	b.WriteString("Answer with marshal_architecture_request_answer and this request_id: status answered (a reply), needs_clarification (questions), or proposed_change. ")
 	b.WriteString("For proposed_change first submit the revised project contract with marshal_project_contract_submit, changing only the selected parts; ")
 	b.WriteString("adding or removing parts, changing other parts or moving a dependency is refused on the page, so for those say so in the reply and ask the owner to request it in the chat.\n")

@@ -1356,13 +1356,13 @@
     },
     {
       "path": "internal/app/architecture_contract_requests.go",
-      "sha256": "af892ae576aee5650ec3fea95a82be469cbe421350719a8fa9f499d31d71820a",
-      "bytes": 4082
+      "sha256": "62d71908f3a401e4eb2c76c40a549f8f2d4c9eb4cea9dd6749526f0d72701b5c",
+      "bytes": 4895
     },
     {
       "path": "internal/app/architecture_contract_requests_test.go",
-      "sha256": "97041e5671d94952cb747039d7af431e82f654a7b82a683cbd3d64e32d22389f",
-      "bytes": 4932
+      "sha256": "583b2410420a2b5807111e497dfc5fa33ea739ccb232cb3e398d9091cd929b63",
+      "bytes": 6574
     },
     {
       "path": "internal/app/architecture_contract_review.go",
@@ -4851,8 +4851,8 @@
     },
     {
       "path": "internal/architecturereview/review.html",
-      "sha256": "cdef8764f7872709083d670f5e70cf54e81b2ad0d909ac78a0046b264c81ac1c",
-      "bytes": 92047
+      "sha256": "82f756e720f560adc073fc56f04ed8db9c9a9a9523e14cbb8079f2c0ef671515",
+      "bytes": 92053
     },
     {
       "path": "internal/architecturereview/review_browser_test.go",
@@ -4871,8 +4871,8 @@
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.cjs",
-      "sha256": "c78c12404e6c9fcc1feabf25b98b7a1b4f971ee34a75e49669a88cb7cbc042e5",
-      "bytes": 15924
+      "sha256": "d9f5b353c952cec47b1f6d63eb755739012e2de0ff7666032456e8174ef61e7b",
+      "bytes": 16967
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.json",
@@ -12171,8 +12171,8 @@
     },
     {
       "path": "internal/tui/architecture_requests.go",
-      "sha256": "87656a7d4783bbfd1a0d169214b539f1f1453b836f7ff6c529954eb7e180dae2",
-      "bytes": 4070
+      "sha256": "d57b295476a1c12bb7cd3395201b938233458d8adf2d31b799d4825148d3c5f4",
+      "bytes": 4849
     },
     {
       "path": "internal/tui/architecture_requests_extreme.go",
@@ -12186,8 +12186,8 @@
     },
     {
       "path": "internal/tui/architecture_requests_test.go",
-      "sha256": "e26557369f7f28cb6a602e026c280b89a080d1989261ca64fa2582ce2d772f7b",
-      "bytes": 2414
+      "sha256": "813ac51a0d8a8f0302b5bdc2cc22677468e19daadd85006786d77b8b7d258ac6",
+      "bytes": 3438
     },
     {
       "path": "internal/tui/auth_nontmux_helpers_test.go",
