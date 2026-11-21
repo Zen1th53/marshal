@@ -77,6 +77,12 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 	var hintIDs []string
 	if b.Decision == nil && b.Paused == nil {
 		b.Keys, hintIDs = v.v2HintKeys()
+	} else {
+		b.Keys = w.v2CardBar(v, b)
+	}
+	// The key bar lists only keys that act now, even none.
+	if b.Keys == nil {
+		b.Keys = []vm.Key{}
 	}
 	w.setV2CardShown(b.Screen)
 	t := v2Theme(th)
@@ -85,7 +91,9 @@ func (w *Workspace) paintV2(th *Theme, v boardVisual, empty bool, mode layout.Mo
 	if mode == layout.Split {
 		lines, hits = boardv2.RenderSideHits(b, cols, rows, t)
 	} else {
-		lines, hits = boardv2.RenderChatHits(b, cols, rows, t, nil)
+		// The readiness cards' keys act only where the render drew them
+		// (boardv2_ready_keys.go).
+		lines, hits = w.renderV2Ready(b, cols, rows, t)
 	}
 	if v.status == "" && empty && v.armed != "" {
 		// The first-use card says this beside the armed provider; the
@@ -175,6 +183,7 @@ func (w *Workspace) setV2CardShown(s vm.Screen) {
 	c.mu.Lock()
 	c.shown = s
 	c.mu.Unlock()
+	w.noteV2Ready(false, false)
 }
 
 // v2CardShown is the card the last paint drew: ScreenDecision,

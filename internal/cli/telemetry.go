@@ -66,17 +66,13 @@ func (c *command) telemetry(ctx context.Context, args []string) error {
 	}
 	changed := false
 	if args[0] != "status" {
-		st, changed, err = store.SetTelemetryEnabled(ctx, args[0] == "enable")
+		// The Board's Usage counts card turns it off through the same call.
+		st, changed, err = cloud.SetTelemetry(ctx, dir, args[0] == "enable", Version)
 		if err != nil {
 			return err
 		}
 	}
 	cfg := cloud.LoadConfig()
-	if changed && st.TelemetryDisabled && cfg.Enabled() {
-		if client, err := cloud.NewClient(cfg.Endpoint, cloudClientVersion(Version)); err == nil {
-			client.SendOptOut(ctx, st)
-		}
-	}
 	status := "enabled"
 	switch {
 	case st.TelemetryDisabled:
