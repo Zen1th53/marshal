@@ -340,6 +340,82 @@ func cut(s string, n int) string {
 // fit pads or cuts s to exactly n cells.
 func fit(s string, n int) string { return ljust(cut(s, n), n) }
 
+// txt is s as the canvas draws it: in ASCII mode a glyph may take more than
+// one cell ("…" is "...", "⏎" is "Enter"), so text is measured and cut in
+// the form it is drawn in.
+func (c *canvas) txt(s string) string {
+	if c.unicode {
+		return s
+	}
+	return ascii(s)
+}
+
+// tw is the cells s takes on the canvas.
+func (c *canvas) tw(s string) int { return width(c.txt(s)) }
+
+func (c *canvas) ellipsis() string {
+	if c.unicode {
+		return "…"
+	}
+	return "..."
+}
+
+// cut is cut for the canvas: s in at most n cells, ending in the canvas's
+// ellipsis when it is cut.
+func (c *canvas) cut(s string, n int) string {
+	s = c.txt(s)
+	if n <= 0 {
+		return ""
+	}
+	if width(s) <= n {
+		return s
+	}
+	r, e := []rune(s), c.ellipsis()
+	if n <= width(e) {
+		return string(r[:n])
+	}
+	return string(r[:n-width(e)]) + e
+}
+
+// cutWords is cut that ends the text at a word when the last word kept
+// would be broken, dropping a separator left dangling: "nothing · next
+// ask: final review" in 20 cells reads "nothing · next…".
+func (c *canvas) cutWords(s string, n int) string {
+	s = c.txt(s)
+	if n <= 0 {
+		return ""
+	}
+	if width(s) <= n {
+		return s
+	}
+	e := c.ellipsis()
+	keep := n - width(e)
+	if keep <= 0 {
+		return c.cut(s, n)
+	}
+	r := []rune(s)
+	if r[keep] != ' ' {
+		i := strings.LastIndexByte(string(r[:keep]), ' ')
+		if i < 0 || utf8.RuneCountInString(string(r[:keep])[:i]) < keep/2 {
+			return string(r[:keep]) + e
+		}
+		r = []rune(string(r[:keep])[:i])
+	} else {
+		r = r[:keep]
+	}
+	t := strings.TrimRight(string(r), " ")
+	for _, sep := range []string{" ·", " .", " -", " —", ":", ","} {
+		t = strings.TrimRight(strings.TrimSuffix(t, sep), " ")
+	}
+	if t == "" {
+		return c.cut(s, n)
+	}
+	return t + e
+}
+
+// fitWords pads or cuts s to exactly n cells, as cutWords cuts.
+func (c *canvas) fitWords(s string, n int) string { return ljust(c.cutWords(s, n), n) }
+
 // asciiMap is how a glyph reads with no Unicode.
 var asciiMap = map[rune]string{
 	'╭': "+", '╮': "+", '╰': "+", '╯': "+", '─': "-", '│': "|", '┄': "-", '┆': ":",
