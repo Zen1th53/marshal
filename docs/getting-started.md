@@ -72,11 +72,11 @@ The Board then shows the **readiness** screen, with `READY` in the top bar:
 
 Go through the rows marked `!`:
 
-- **A provider that is not signed in** (here agy): open any terminal, run `agy` once and sign in, then come back and press `v` to check it again. For Claude Code run `claude` and sign in; for Codex run `codex login`; for OpenCode run `opencode auth login`.
+- **A provider that is not signed in** (here agy): press `g` to open agy in a new tmux window and sign in there (or run `agy` in any terminal); when you close it, press `Enter` to check it again. For Claude Code run `claude` and sign in; for Codex run `codex login`; for OpenCode run `opencode auth login`.
 - **A provider that is not checked yet**: press `v`, then `Enter`. The check costs one model call.
 - **Repo** with changes: workers start from the last commit, so commit what they should see.
 
-On a first open, a **USAGE COUNTS** card beside the list says that anonymous install and version counts go to marshal.blackhat.uz, and never code, prompts or file names. To turn them off, run `marshal telemetry disable` in a terminal. [Exactly what is sent →](telemetry.md)
+On a first open, a **USAGE COUNTS** card beside the list says that anonymous install and version counts go to marshal.blackhat.uz, and never code, prompts or file names. Press `y` to keep them on, `t` to turn them off, or `?` to see what is sent; `marshal telemetry disable` turns them off later. [Exactly what is sent →](telemetry.md)
 
 At least one provider has to be ready. With two or more, a different provider reviews each task.
 

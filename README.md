@@ -181,7 +181,7 @@ on the right. The Board is a control centre of titled panes:
 ╭─ PLAN · 12 tasks · 18 requirements ────────────────────── accepted rev 1 · 18:52 ─╮ ╭─ MARSHAL ─────────────────────── m switch ─╮
 │ ✓ goal → ✓ reqs → ✓ design → ✓ arch → ✓ tasks →  build 5/12  → review → merge     │ │ ✳ claude  opus-5.5 · effort high    in use │
 ╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
-╭─ LANES · from worker heartbeats ────────────── limit claude 4 · agy 4 · total 12 ─╮ ╭─ WORKERS · providers ───────── v re-check ─╮
+╭─ LANES · from worker heartbeats ────────────── limit claude 4 · agy 4 · total 12 ─╮ ╭─ WORKERS · providers ──────────────────────╮
 │  ⣾ claude-1    sonnet-5.5   T03 sub-view external links   tests        14m     8s │ │ ✳ claude  ██████░░░░   4 lanes  sonnet     │
 │  ◎ agy-3       gemini-3.8   review T01 (by claude-2)      reviewing     3m     2s │ │ ◆ agy     ███████░░░   4 lanes  gemini-3.8 │
 ╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
@@ -203,7 +203,7 @@ on the right. The Board is a control centre of titled panes:
   `a`; when no browser can open, the card shows the link), plan and inbox decisions, and the
   **paused** card that says what stopped, what is kept, and what `Enter` does to continue.
 - **MARSHAL CHAT** strip: the docked chat's title shows its model, whether it is bound to this
-  run, and whether its input is clear.
+  run, and whether its input is clear (`input clear` / `input waiting`).
 
 | Key | Action |
 |---|---|

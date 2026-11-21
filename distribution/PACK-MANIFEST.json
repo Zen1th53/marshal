@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "88a0e794805e20e4d03552ae0add89db2afb98edff1b29505be3e1c1995ea6b2",
-      "bytes": 18584
+      "sha256": "76bc32a6b134590ce1801ba970dcc9e09dc9e36970efd1ad84fa5dff26d22106",
+      "bytes": 18642
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -516,8 +516,8 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "58b378a553bfa120f92a1c4874da6614c65f262f73a20caf290568286a72e7e4",
-      "bytes": 25991
+      "sha256": "1b29afb6c75f62f7df6d3c9b783fd56e2387727308bb8e560dca6b708bc1ecf8",
+      "bytes": 26622
     },
     {
       "path": "docs/configuration.md",
@@ -571,8 +571,8 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "ea994ece89b1d5699cf7ad232518c44aee6f0e21bf9ca9f2e997948d5e2b8d2b",
-      "bytes": 11714
+      "sha256": "c9ef819d28493a840c53006578ea816165760d43c59f346944d7eb6bb40986fb",
+      "bytes": 11826
     },
     {
       "path": "docs/how-it-works.md",
@@ -656,8 +656,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "992b1a58af02258c28a49557c6cda4941f647a8231fa9c3def32cc83e29219db",
-      "bytes": 9953
+      "sha256": "2255f4e7facc9b99f0989dc84a3aa377f2be3086636f4b6b7878e66bbdf70b31",
+      "bytes": 10068
     },
     {
       "path": "docs/upgrading.md",

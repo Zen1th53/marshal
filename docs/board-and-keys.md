@@ -44,10 +44,10 @@ The first open (after you choose **Who plans?**) shows what is ready:
 ```
 
 - **READINESS** lists the Marshal, each installed worker provider (signed in, not signed in, not checked yet, at its limit, or low on its weekly limit), the platform, the repository and the browser. A row that needs you says how to fix it on the line below.
-- **USAGE COUNTS** appears beside it on a first open while anonymous telemetry is on and you have not been told about it yet. It says what is sent; [Telemetry](telemetry.md) has the details, and `marshal telemetry disable` turns it off.
+- **USAGE COUNTS** appears beside it on a first open while anonymous telemetry is on and you have not been told about it yet. It says what is sent ([Telemetry](telemetry.md) has the details): `y` keeps the counts on, `t` turns them off (the same as `marshal telemetry disable`), `?` shows what is sent. The card goes away after `y` or `t`.
 - **DEFAULTS · this project** shows how many workers each provider may run, the failover order, who reviews, and who approves what.
 
-Keys here: `s` say what to build, `⏎` open the Marshal chat, `v` check the next provider that has not been checked (one model call; `Enter` runs it, any other key cancels), `m` choose the Marshal, `Space` actions, `?` help. Clicking a provider row arms its check.
+Keys here: `s` say what to build, `⏎` open the Marshal chat, `v` check the next provider that has not been checked (one model call; `Enter` runs it, any other key cancels), `m` choose the Marshal, `Space` actions, `?` help. Clicking a provider row arms its check. When agy is installed but not signed in, `g` opens it in a new tmux window in the project so you can sign in; when you close that window the Board arms its check, and `Enter` runs it.
 
 ### Planning
 
@@ -69,8 +69,7 @@ After you say the goal, the Board shows the Marshal's work before a run exists:
 - **REQUESTS TO THE MARSHAL**: what the Board sent the Marshal and its answer (allow, decline) with the time it took.
 - **CHAT · Marshal**: whether the chat is bound to this run, how often it restarted and was rebound, how many open requests were sent again, whether its input box is clear, its model and how much context it has used.
 
-> [!NOTE]
-> The Marshal steps pane shows "after 10 quiet minutes: `f` continue this step on a faster model". In this release that key does not switch the model; press `m` to choose another Marshal model.
+The Marshal steps pane lists the Marshal's recent tool calls, one short line each (read the context, checked the architecture, recalled memory, ...), and how long it has been quiet. To run the Marshal on another model, press `m`.
 
 ### Running
 
@@ -80,7 +79,7 @@ After you say the goal, the Board shows the Marshal's work before a run exists:
 │ ███████████████████████████████░░░░░░░░░░░░░░   done 5 · active 6 · eta 45m       │ │ context ████░░░░░░  41% · 82k of 200k      │
 ╰───────────────────────────────────────────────────────────────────────────────────╯ │ chat    bound to this run · input clear    │
 ╭─ LANES · from worker heartbeats ────────────── limit claude 4 · agy 4 · total 12 ─╮ ╰────────────────────────────────────────────╯
-│    LANE        MODEL        TASK                          STEP        TIME SIGNAL │ ╭─ WORKERS · providers ───────── v re-check ─╮
+│    LANE        MODEL        TASK                          STEP        TIME SIGNAL │ ╭─ WORKERS · providers ──────────────────────╮
 │  ⣾ claude-1    sonnet-5.5   T03 sub-view external links   tests        14m     8s │ │ ✳ claude  ██████░░░░   4 lanes  sonnet     │
 │  ◎ claude-4    sonnet-5.5   review T02 (by agy-1)         reviewing     2m     3s │ │ ⬡ codex   █░░░░░░░░░   spare    wk 11%     │
 ╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
@@ -101,7 +100,7 @@ Left column:
 
 Right column:
 
-- **MARSHAL**: the Marshal's provider, model and effort, what it is doing, its context use and limit, and whether its chat is bound to this run with a clear input.
+- **MARSHAL**: the Marshal's provider, model and effort, what it is doing, its context use and limit, and whether its chat is bound to this run, with `input clear` or `input waiting` once the Board has looked at the chat input.
 - **WORKERS**: each provider's limit, how many lanes it runs, or `spare`, `at limit`, `not installed`.
 - **INBOX**: what waits for you, or "Nothing waits for you." with the next ask.
 - **ACTIVITY**: what happened, newest first; repeated lines are folded (`×3`).
@@ -134,7 +133,7 @@ There are three kinds:
 
 `Esc` only steps the card aside: the inbox still lists the decision, and a card opens again when another decision waits.
 
-The requirements, ask, change, "what next?" and guard cards are still drawn by the classic Board when they open. The requirements card takes `Enter` to confirm all answers and `e` to edit one.
+The requirements, ask, change, "what next?" and guard cards are decision cards over the dimmed Board too, with their own keys on the card; `Esc` puts one off while it waits. The requirements card takes `Enter` to confirm all answers and `e` to edit one.
 
 ### Paused card
 
@@ -161,11 +160,11 @@ When work stops and one choice gets it moving again (a provider limit, a provide
 | `d` | Show the raw error. |
 | `x` | Stop the run. The run and its work are kept; `/marshal resume` continues it. |
 
-A pause that needs a new plan is not one choice; it stays in the inbox.
+A pause that needs a new plan is a paused card too: `Enter` opens the composer so you can tell the Marshal what to change.
 
 ### Marshal chat and split view
 
-The docked chat's pane title is the **MARSHAL CHAT** strip: the provider and model, whether the chat is bound to this run (`● live`), the stage, how many requests it answered and whether its input is clear, then `[m] switch`. Everything below the strip is drawn by the provider CLI itself.
+The docked chat's pane title is the **MARSHAL CHAT** strip: the provider and model, whether the chat is bound to this run (`● live`), the stage, how many requests it answered and the input state (`input clear` or `input waiting`; nothing before the Board has looked at it), then `[m] switch`. Everything below the strip is drawn by the provider CLI itself.
 
 Beside the chat the Board draws a compact column (Plan, Lanes, Workers, Activity):
 
@@ -194,7 +193,7 @@ The key bar at the bottom shows the keys for what is on screen. These keys work 
 | `y` | Reply to a waiting gate; on the architecture gate it opens the review in the browser. |
 | `r` | Restart (retry) the stuck task under the keyboard; confirm with `Enter`. |
 | `w` | Choose the model that runs the highlighted task. |
-| `v` | Check the next provider that has not been checked; `Enter` runs the check. |
+| `v` | On the readiness screen and in the Providers view: check the next provider that has not been checked; `Enter` runs the check. |
 | `Space` or `Ctrl+K` | Open the action palette. |
 | `/` | Type a command, such as `/marshal settings`. |
 | `?` | Every key. |

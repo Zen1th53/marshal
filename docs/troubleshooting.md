@@ -207,8 +207,8 @@ The readiness list shows `Workers · agy is installed but not signed in` with th
 
 ### How to Fix It
 
-1. In any terminal, run `agy` once and sign in.
-2. Back on the Board, press `v` and then `Enter` to check it again (one model call). The row turns to `ready`.
+1. On the readiness screen press `g`: agy opens in a new tmux window in the project; sign in there and close it. (Or run `agy` once in any terminal.)
+2. Back on the Board, press `Enter` (or `v` and then `Enter`) to check it again (one model call). The row turns to `ready`.
 3. If a run paused for it, press `Enter` on the paused card to retry, or let the card move the tasks to another provider.
 
 The same applies to the other providers: run `claude` and sign in, run `codex login`, or run `opencode auth login`.
