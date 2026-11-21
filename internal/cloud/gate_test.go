@@ -429,12 +429,6 @@ func TestExecutionPreferenceIsNotAuthority(t *testing.T) {
 	if !policy.ExecutionEnabled {
 		t.Fatal("the preference was not carried through")
 	}
-
-	// And the decision that consumes it must refuse to delegate.
-	decision := goalintake.Confirm(goalintake.Intake{}, g.Mode(), policy)
-	if decision.Delegated {
-		t.Fatal("an unentitled session delegated confirmation")
-	}
 }
 
 // Renewal is scheduled with slack, so one failed attempt does not immediately

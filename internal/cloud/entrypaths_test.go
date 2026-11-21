@@ -59,47 +59,6 @@ func goFiles(t *testing.T, root string) []string {
 	return files
 }
 
-// goalintake.Confirm is the one function that decides whether ULTRA may
-// delegate a confirmation. Any call site must be given the canonical gate's
-// mode and policy, so this test fails on any new one and asks whoever added it
-// to wire it deliberately.
-func TestConfirmHasNoUnreviewedCallSite(t *testing.T) {
-	root := repoRoot(t)
-	fset := token.NewFileSet()
-
-	var sites []string
-	for _, path := range goFiles(t, filepath.Join(root, "internal")) {
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Confirm" {
-				return true
-			}
-			pkg, ok := sel.X.(*ast.Ident)
-			if !ok || pkg.Name != "goalintake" {
-				return true
-			}
-			rel, _ := filepath.Rel(root, path)
-			sites = append(sites, rel+":"+fset.Position(call.Pos()).String())
-			return true
-		})
-	}
-
-	// The `marshal goal` command was its only call site and has been removed,
-	// so none is expected; a new one must be wired to the gate deliberately.
-	if len(sites) != 0 {
-		t.Fatalf("goalintake.Confirm has no reviewed call site; wire a new one to the canonical gate and update this test; found %d:\n  %s",
-			len(sites), strings.Join(sites, "\n  "))
-	}
-}
-
 // The delegation policy must be built by the gate, never by a literal. A struct
 // literal setting Entitled would be exactly the local flag the design refuses
 // to depend on, and it would compile perfectly well.

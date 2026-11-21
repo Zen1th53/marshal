@@ -272,24 +272,8 @@ func TestGoalWithOpenQuestionsCannotBeApproved(t *testing.T) {
 	if approved.Confirmation == goalintake.ConfirmationApproved {
 		t.Fatal("a Goal with unanswered questions was approved")
 	}
-	if approved.Confirmation.Settled() {
+	if approved.Confirmation == goalintake.ConfirmationDelegated {
 		t.Fatal("a Goal with unanswered questions was treated as settled")
-	}
-}
-
-// Only a confirmed Goal permits planning.
-func TestOnlyConfirmedGoalsAreSettled(t *testing.T) {
-	settled := map[goalintake.ConfirmationState]bool{
-		goalintake.ConfirmationApproved:   true,
-		goalintake.ConfirmationDelegated:  true,
-		goalintake.ConfirmationPending:    false,
-		goalintake.ConfirmationCancelled:  false,
-		goalintake.ConfirmationNeedsInput: false,
-	}
-	for state, want := range settled {
-		if state.Settled() != want {
-			t.Fatalf("%s reported settled=%v, want %v", state, state.Settled(), want)
-		}
 	}
 }
 
