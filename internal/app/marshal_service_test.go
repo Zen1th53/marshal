@@ -172,10 +172,22 @@ func marshalUserCloseFixture(t *testing.T, n int) (*MarshalService, string) {
 	return s, repo
 }
 
+// resolvedTempDir is t.TempDir() with symlinks resolved. Production opens a
+// project at its resolved root (project.Discover); on macOS the default TMPDIR
+// is under /var, a symlink to /private/var.
+func resolvedTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, string) {
 	t.Helper()
 	ctx := context.Background()
-	repo := t.TempDir()
+	repo := resolvedTempDir(t)
 	marshalGit(t, repo, "init", "-b", "main")
 	marshalGit(t, repo, "config", "user.name", "Zen1th53")
 	marshalGit(t, repo, "config", "user.email", "test@example.com")
@@ -217,7 +229,7 @@ func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, stri
 		t.Fatal(err)
 	}
 	p := plan.ExecutionPlan{ID: "PLAN-test", ProjectID: projectid.ID(projectID), Goal: plan.GoalBinding{GoalID: "GOAL-test", Revision: 1}, Version: 1, State: plan.StateReady, Mode: plan.ModeStandard, ConstitutionVersion: constitution.Current, Tasks: tasks, Checks: checks, Graph: graph}
-	s := &MarshalService{Store: db, ProjectID: projectID, Repository: repo, Worktrees: filepath.Join(t.TempDir(), "worktrees"), Reviewer: "marshal", Model: marshalFakeModel{draft: MarshalDraft{Plan: p, Tasks: mt}, review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}}
+	s := &MarshalService{Store: db, ProjectID: projectID, Repository: repo, Worktrees: filepath.Join(resolvedTempDir(t), "worktrees"), Reviewer: "marshal", Model: marshalFakeModel{draft: MarshalDraft{Plan: p, Tasks: mt}, review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}}
 	s.GovernedCheck = fixtureCheckRunner
 	s.ApprovalActor = func(context.Context, string, string) (string, error) { return "user", nil }
 	s.GateState = func(context.Context, string, string) (constitution.RuntimeState, error) {

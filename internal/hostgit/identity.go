@@ -86,27 +86,12 @@ func capture(dir string) (repositoryIdentity, error) {
 	return pin, err
 }
 
-// canonicalTree is the spelling a pin is recorded and looked up under: the
-// absolute path with symlinks resolved, as capture records Worktree. Without
-// it a tree reached through a symlinked ancestor (macOS /var -> /private/var,
-// /tmp -> /private/tmp) never matched its own pin.
-func canonicalTree(tree string) (string, error) {
-	absolute, err := filepath.Abs(tree)
-	if err != nil {
-		return "", err
-	}
-	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
-		return resolved, nil
-	}
-	return absolute, nil
-}
-
 func pinPath(repository, tree string) (string, error) {
 	_, metadata, err := repositoryPaths(repository, false)
 	if err != nil {
 		return "", err
 	}
-	absolute, err := canonicalTree(tree)
+	absolute, err := filepath.Abs(tree)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +139,7 @@ func RestoreRepository(repository, tree string) error {
 	if err := json.Unmarshal(data, &pin); err != nil {
 		return err
 	}
-	absolute, err := canonicalTree(tree)
+	absolute, err := filepath.Abs(tree)
 	if err != nil {
 		return err
 	}
@@ -179,7 +164,7 @@ func verify(pin repositoryIdentity) error {
 }
 
 func pinnedPaths(dir string) (string, string, bool, error) {
-	absolute, err := canonicalTree(dir)
+	absolute, err := filepath.Abs(dir)
 	if err != nil {
 		return "", "", false, err
 	}
