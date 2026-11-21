@@ -109,6 +109,8 @@ func withArchitectureLink(w *Workspace) {
 	m := w.marshalSession()
 	m.mu.Lock()
 	m.architecture = &app.ArchitectureReviewSession{URL: fixtureArchitectureLink, Done: make(chan struct{})}
+	// A reopen of the fixture page opens no real browser.
+	m.architectureBrowser = func(context.Context, string) error { return nil }
 	m.mu.Unlock()
 }
 
@@ -161,9 +163,10 @@ func TestDecisionCardArchitectureWithDisplay(t *testing.T) {
 func TestDecisionCardArchitectureWithoutDisplay(t *testing.T) {
 	displaySeams(t, "linux", map[string]string{"TERM": "xterm"})
 	w := architectureWorkspace(t)
+	waitCards(t, w, "the sketch", sketched)
 	withArchitectureLink(w)
-	d := waitCards(t, w, "the sketch", sketched).Decision
-	if !d.NoDisplay || d.Link != fixtureArchitectureLink {
+	d := cardsFrame(w).Decision
+	if d == nil || !d.NoDisplay || d.Link != fixtureArchitectureLink {
 		t.Fatalf("no-display card: %v %q", d.NoDisplay, d.Link)
 	}
 

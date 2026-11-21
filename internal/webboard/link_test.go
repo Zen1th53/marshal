@@ -59,12 +59,13 @@ func TestLinkSecretIsNotAnAPISecret(t *testing.T) {
 // A link works once: spending it gives the page the API secret, and the same
 // link spent again is refused and shuts every page out (the API secret is
 // replaced), since something other than the owner's page used it first.
-// The next Link is a fresh one.
+// Each Link is a fresh one, so two opens (two tabs) each have their own.
 func TestLinkWorksOnceAndASecondUseShutsPagesOut(t *testing.T) {
 	s := startTest(t, nil)
 	secret := linkSecret(t, s)
-	if again := linkSecret(t, s); again != secret {
-		t.Fatal("an unspent link changed")
+	second := linkSecret(t, s)
+	if second == secret {
+		t.Fatal("two opens got the same link")
 	}
 	r := spend(t, s, secret)
 	var got struct {
@@ -76,6 +77,14 @@ func TestLinkWorksOnceAndASecondUseShutsPagesOut(t *testing.T) {
 	checkHeaders(t, "spend", r)
 	if r := get(t, s, "GET", "/api/board", "", got.Session); r.StatusCode != http.StatusOK {
 		t.Fatalf("the page's API secret: %d", r.StatusCode)
+	}
+	// A second tab opened from its own link joins without shutting the
+	// first out.
+	if r := spend(t, s, second); r.StatusCode != http.StatusOK {
+		t.Fatalf("the second tab's link: %d", r.StatusCode)
+	}
+	if r := get(t, s, "GET", "/api/board", "", got.Session); r.StatusCode != http.StatusOK {
+		t.Fatalf("a second tab shut the first out: %d", r.StatusCode)
 	}
 	fresh := linkSecret(t, s)
 	if fresh == secret {

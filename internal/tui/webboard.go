@@ -142,7 +142,7 @@ func (w *Workspace) marshalWeb() (string, error) {
 	}) {
 		return "", errWorkspaceClosing
 	}
-	return "Web Board: opening in your browser (http://" + srv.Addr() + "/, this computer only). Run /marshal web again for a new link.", nil
+	return "Web Board: opening in your browser (http://" + srv.Addr() + "/, this computer only). Each /marshal web opens a new link.", nil
 }
 
 // openWebBoardKey is the Board key: it runs /marshal web and shows its

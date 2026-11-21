@@ -33,11 +33,11 @@ func TestWebActQuotaMoveIsTheKey(t *testing.T) {
 func TestWebActOpensTheArchitectureReview(t *testing.T) {
 	displaySeams(t, "darwin", nil)
 	w := architectureWorkspace(t)
-	withArchitectureLink(w)
 	f := webCard(t, w)
 	if f.Decision == nil || f.Decision.Kind != decisionArchitecture {
 		t.Fatalf("card %+v", f.Decision)
 	}
+	withArchitectureLink(w)
 	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "a"})
 	// The open may fail in a test workspace (no review server); then the
 	// page is told so, and no link is sent.

@@ -52,14 +52,15 @@ type Server struct {
 	// (POST /api/session). tokenMu guards it, since a reused link rotates it.
 	tokenMu sync.Mutex
 	token   string
-	// link is the one-use secret of the link the owner opens (?t=…), ""
-	// once it was spent; Link makes a new one then. spent holds the links
-	// already used, so a second use of one is recognised. A link is seen by
-	// whatever shows it to the owner (the footer, the browser opener's
-	// argv, the browser's history); spending it at once makes those copies
-	// worthless, and a copy used first by anything else leaves the owner's
-	// page refused, which rotates token and shuts that page out too.
-	link  string
+	// links are the one-use secrets of the links handed out and not yet
+	// opened (?t=…): each Link call makes a new one, so two opens are two
+	// links. spent holds the links already used, so a second use of one is
+	// recognised. A link is seen by whatever shows it to the owner (the
+	// footer, the browser opener's argv, the browser's history); spending
+	// it at once makes those copies worthless, and a copy used first by
+	// anything else leaves the owner's page refused, which rotates token and
+	// shuts that page out too.
+	links map[string]bool
 	spent map[string]bool
 	// demo keeps one fixed link that is never spent (the demo only).
 	demo   bool
@@ -134,10 +135,7 @@ func start(addr, token string, source Source, sink Sink) (*Server, error) {
 	s := &Server{
 		addr: "127.0.0.1:" + port, port: port, token: token, source: source, sink: sink, actKey: actKey, listener: ln,
 		ctx: ctx, cancel: cancel, done: make(chan struct{}), subs: map[chan struct{}]struct{}{},
-		spent: map[string]bool{}, demo: demo,
-	}
-	if demo {
-		s.link = token
+		links: map[string]bool{}, spent: map[string]bool{}, demo: demo,
 	}
 	// No Read or WriteTimeout: the event stream is long-lived. Closing the base
 	// context ends every stream.
@@ -180,23 +178,37 @@ func (s *Server) Close() {
 	})
 }
 
-// maxSpentLinks bounds the links remembered as spent.
-const maxSpentLinks = 64
+// maxLinks bounds the links handed out and not yet opened, and the links
+// remembered as spent; the oldest-by-chance is dropped past it.
+const maxLinks = 64
 
-// Link is the link the owner opens: the address with a one-use secret. It
-// is the same link until a page spends it; then the next call makes a new
-// one, so each open of the Web Board shows a fresh link.
+// dropOne removes one entry of m once it holds more than maxLinks.
+func dropOne(m map[string]bool) {
+	if len(m) <= maxLinks {
+		return
+	}
+	for k := range m {
+		delete(m, k)
+		return
+	}
+}
+
+// Link is a new link for the owner to open: the address with a fresh
+// one-use secret, so each open of the Web Board (each browser tab) has its
+// own. The demo's link is its fixed token.
 func (s *Server) Link() (string, error) {
 	s.tokenMu.Lock()
 	defer s.tokenMu.Unlock()
-	if s.link == "" {
-		link, err := randomToken(32)
-		if err != nil {
-			return "", err
-		}
-		s.link = link
+	if s.demo {
+		return "http://" + s.addr + "/?t=" + s.token, nil
 	}
-	return "http://" + s.addr + "/?t=" + s.link, nil
+	link, err := randomToken(32)
+	if err != nil {
+		return "", err
+	}
+	s.links[link] = true
+	dropOne(s.links)
+	return "http://" + s.addr + "/?t=" + link, nil
 }
 
 // bearer is the request's "Authorization: Bearer <value>", "" for none.
@@ -237,16 +249,11 @@ func (s *Server) serveSession(w http.ResponseWriter, q *http.Request) {
 	presented := bearer(q)
 	s.tokenMu.Lock()
 	switch {
-	case equalSecret(presented, s.link):
+	case s.demo && equalSecret(presented, s.token), presented != "" && s.links[presented]:
 		if !s.demo {
-			s.spent[s.link] = true
-			if len(s.spent) > maxSpentLinks {
-				for k := range s.spent {
-					delete(s.spent, k)
-					break
-				}
-			}
-			s.link = ""
+			delete(s.links, presented)
+			s.spent[presented] = true
+			dropOne(s.spent)
 		}
 		token := s.token
 		s.tokenMu.Unlock()
@@ -258,7 +265,7 @@ func (s *Server) serveSession(w http.ResponseWriter, q *http.Request) {
 		}
 		s.tokenMu.Unlock()
 		w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-		refuse(w, http.StatusUnauthorized, "This link was already used by something else, so the Web Board shut every page out. Run /marshal web for a new link.")
+		refuse(w, http.StatusUnauthorized, "This link was already used, so to be safe the Web Board closed every open page. Run /marshal web for a new link.")
 		return
 	}
 	s.tokenMu.Unlock()

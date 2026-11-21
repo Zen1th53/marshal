@@ -121,8 +121,8 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	got := opened()
-	if len(got) != 2 || webLink.FindString(got[0]) != got[0] || got[1] != got[0] {
-		t.Fatalf("opened %v, want one unspent link twice", got)
+	if len(got) != 2 || webLink.FindString(got[0]) != got[0] || webLink.FindString(got[1]) != got[1] || got[1] == got[0] {
+		t.Fatalf("opened %v, want two fresh links", got)
 	}
 	link := got[0]
 	for _, n := range w.noteList() {

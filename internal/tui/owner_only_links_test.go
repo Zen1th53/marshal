@@ -15,7 +15,7 @@ func TestMarshalChatIsDeniedTheOwnersLinksAndPane(t *testing.T) {
 	claude := claudeMarshalStateDenyRules()
 	for _, want := range []string{
 		"Read(./.marshal/architecture/**)", "Edit(./.marshal/architecture/**)",
-		"Bash(tmux:*)", "WebFetch(domain:127.0.0.1)", "WebFetch(domain:localhost)",
+		"Bash(tmux:*)", "WebFetch(domain:127.0.0.1)", "WebFetch(domain:localhost)", "Read(//proc/**)",
 	} {
 		if !slices.Contains(claude, want) {
 			t.Errorf("Claude deny rules lack %q: %q", want, claude)
