@@ -40,7 +40,6 @@ func TestMarshalPickerWordsMatchLaunchPicker(t *testing.T) {
 // the empty Board says the Marshal is planning, not NO RUN YET; once a run
 // is on screen the state ends.
 func TestBoardPlanningAfterAccept(t *testing.T) {
-	// This test is about the classic Board itself.
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.endOpening()
@@ -48,21 +47,18 @@ func TestBoardPlanningAfterAccept(t *testing.T) {
 		lines, _, _ := w.frameLines(160, 40)
 		return StripANSI(strings.Join(lines, "\n"))
 	}
-	if got := frame(); !strings.Contains(got, "NO RUN YET") || strings.Contains(got, planningCard) {
+	if got := frame(); !strings.Contains(got, " READY ") {
 		t.Fatalf("before the Accept:\n%s", got)
 	}
 	w.planning.Store(true) // what browserAccepted sets
 	got := frame()
-	if strings.Contains(got, "NO RUN YET") || !strings.Contains(got, " PLANNING ") || !strings.Contains(got, planningCard) {
+	if strings.Contains(got, " READY ") || !strings.Contains(got, " PLANNING ") {
 		t.Fatalf("after the Accept:\n%s", got)
-	}
-	if strings.Contains(got, firstUseCTA) {
-		t.Errorf("the planning Board still asks what to build:\n%s", got)
 	}
 	if w.planningNow(false, model.GoalContract{}) || w.planning.Load() {
 		t.Fatal("the planning state outlived the run's start")
 	}
-	if got := frame(); !strings.Contains(got, "NO RUN YET") {
+	if got := frame(); !strings.Contains(got, " READY ") {
 		t.Fatalf("after the run started and closed:\n%s", got)
 	}
 }
@@ -104,7 +100,6 @@ func TestProvidersViewListsInstalledProviders(t *testing.T) {
 // shows PLANNING; a cancelled goal, or a goal a closed run already delivered,
 // shows NO RUN YET.
 func TestBoardPlanningFromStoredAccept(t *testing.T) {
-	// This test is about the classic Board itself.
 	frame := func(w *Workspace) string {
 		lines, _, _ := w.frameLines(160, 40)
 		return StripANSI(strings.Join(lines, "\n"))
@@ -122,17 +117,17 @@ func TestBoardPlanningFromStoredAccept(t *testing.T) {
 	if w.planning.Load() {
 		t.Fatal("the test must not lean on the in-memory Accept flag")
 	}
-	if got := frame(w); !strings.Contains(got, " PLANNING ") || !strings.Contains(got, planningCard) || strings.Contains(got, "NO RUN YET") {
+	if got := frame(w); !strings.Contains(got, " PLANNING ") || strings.Contains(got, " READY ") {
 		t.Fatalf("restart over a stored Accept:\n%s", got)
 	}
 	done := "add square(n)"
 	w.closedGoal.Store(&done)
-	if got := frame(w); !strings.Contains(got, "NO RUN YET") {
+	if got := frame(w); !strings.Contains(got, " READY ") {
 		t.Fatalf("a goal a closed run delivered still plans:\n%s", got)
 	}
 	c := fresh(t, model.ConfirmationCancelled)
 	defer c.Close()
-	if got := frame(c); !strings.Contains(got, "NO RUN YET") || strings.Contains(got, " PLANNING ") {
+	if got := frame(c); !strings.Contains(got, " READY ") || strings.Contains(got, " PLANNING ") {
 		t.Fatalf("a cancelled goal still plans:\n%s", got)
 	}
 }

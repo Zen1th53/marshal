@@ -65,7 +65,7 @@ func homePrimaryOf(b vm.Board, retry string) homePrimary {
 		return homePrimary{}
 	case retry != "":
 		return homePrimary{label: "retry " + retry, kind: "retry", task: retry}
-	case b.Ready.TelemetryAsk:
+	case b.Ready.TelemetryAsk && b.NowLine.FromYouOK:
 		return homePrimary{label: "keep them on · t turns them off", kind: "telemetry"}
 	}
 	return homePrimary{}
@@ -234,7 +234,7 @@ func (w *Workspace) paintHome(v boardVisual, cols, rows int) []string {
 	if b.Top.Clock.IsZero() {
 		b.Top.Clock = v.now
 	}
-	return renderHome(v, b, homePrimaryOf(b, w.webRetryShown()), cols, rows)
+	return renderHome(v, b, homePrimaryOf(b, w.homeRetry()), cols, rows)
 }
 
 // renderHome is the home screen of b in cols x rows, p its safe action. It
@@ -346,12 +346,20 @@ func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 	return w.openViewKey(event)
 }
 
+// homeRetry is the stuck task y would retry, "" for none (retryTarget).
+func (w *Workspace) homeRetry() string {
+	if id, why := retryTarget(w); why == "" {
+		return id
+	}
+	return ""
+}
+
 // homeYesReady reports whether y has a safe action to run now.
 func (w *Workspace) homeYesReady() bool {
 	if !w.boardVisible() || w.anyBodyView() {
 		return false
 	}
-	return homePrimaryOf(w.boardV2(), w.webRetryShown()).kind != ""
+	return homePrimaryOf(w.boardV2(), w.homeRetry()).kind != ""
 }
 
 // homeYes is y: the safe action the From-you line names, once. A second y
@@ -364,7 +372,7 @@ func (w *Workspace) homeYes(ctx context.Context) {
 		return
 	}
 	b := w.boardV2()
-	p := homePrimaryOf(b, w.webRetryShown())
+	p := homePrimaryOf(b, w.homeRetry())
 	switch p.kind {
 	case "":
 		switch {

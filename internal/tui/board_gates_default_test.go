@@ -14,7 +14,6 @@ import (
 // A plan being drafted, being approved or a major amendment is no such gate.
 // The governed build keeps this owner plan gate; the shipped build removes it.
 func TestOwnerGateShowsDraftedPlanAwaitingApproval(t *testing.T) {
-	// This test is about the classic Board itself.
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.planSource = fakePlanSource{}

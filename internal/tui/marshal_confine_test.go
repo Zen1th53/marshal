@@ -192,11 +192,8 @@ func TestGuardSaysTheMarshalChangedFiles(t *testing.T) {
 	if len(told) != 1 || !strings.Contains(told[0], "you changed project files") || !strings.Contains(told[0], "recommend undoing them") || !strings.Contains(told[0], "never recommend keeping") {
 		t.Fatalf("told the Marshal %q", told)
 	}
-	text := frameText(w, 120, 40)
-	for _, want := range []string{"the Marshal changed project files: calc.py, test_calc.py", "[u] undo (recommended)", "[K] keep"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("Board misses %q:\n%s", want, text)
-		}
+	if text := frameText(w, 120, 40); !strings.Contains(text, "changed files: keep or undo them — open the web to decide (w)") {
+		t.Errorf("From you does not name the changed files:\n%s", text)
 	}
 }
 

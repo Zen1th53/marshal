@@ -151,24 +151,17 @@ func TestGuardTickDetectsOnceAndTellsOnce(t *testing.T) {
 		t.Fatalf("notes %+v", notes)
 	}
 
-	text := frameText(w, 120, 40)
-	head := strings.Split(text, "\n")[1]
-	if !strings.Contains(head, "NEEDS YOU") || !strings.Contains(head, "inbox 1") {
-		t.Fatalf("header: %q", head)
-	}
-	for _, want := range []string{"project files changed outside a run", "files changed · project files changed outside a run: main.go, test_slugify.py · workers should implement", "[u] undo", "[K] keep"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("Board misses %q:\n%s", want, text)
-		}
+	if text := frameText(w, 120, 40); !strings.Contains(text, "changed files: keep or undo them — open the web to decide (w)") {
+		t.Fatalf("From you does not name the changed files:\n%s", text)
 	}
 
 	// u arms the undo and says what Enter does; Esc cancels it.
-	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
+	key := func(e KeyEvent) bool { return w.handleV2CardKey(e) }
 	if !key(KeyEvent{Type: KeyRune, Rune: 'u'}) {
 		t.Fatal("u was not taken")
 	}
-	if text := frameText(w, 120, 40); !strings.Contains(text, "undo: delete 1 new file, restore 1 to HEAD, nothing else?") || !strings.Contains(text, "[Enter] undo") {
-		t.Fatalf("armed undo:\n%s", text)
+	if _, _, armed, _ := w.guardPaint(); !armed {
+		t.Fatal("u did not arm the undo")
 	}
 	if !key(KeyEvent{Type: KeyEsc}) {
 		t.Fatal("Esc not taken")
@@ -305,7 +298,7 @@ func TestGuardUndoKeysRunIt(t *testing.T) {
 	w.guardSource = func(context.Context) (guardSnapshot, error) {
 		return guardSnapshot{top: top, files: guardFiles("x.py", "??", "1")}, nil
 	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'u'}) || !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'u'}) || !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("keys not taken")
 	}
 	deadline := time.Now().Add(5 * time.Second)

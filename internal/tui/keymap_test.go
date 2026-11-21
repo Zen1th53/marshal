@@ -34,11 +34,8 @@ func TestBoardKeymapClasses(t *testing.T) {
 		want       KeyClass
 	}{
 		{"VIEWS", "1", KeyOpen}, {"VIEWS", "h", KeyOpen}, {"VIEWS", "8", KeyOpen}, {"VIEWS", "b", KeyOpen},
-		{"BOARD", "j", KeyMove}, {"BOARD", "k", KeyMove}, {"BOARD", "↑", KeyMove}, {"BOARD", "↓", KeyMove},
-		{"BOARD", "t", KeyMove}, {"BOARD", "i", KeyMove}, {"BOARD", "l", KeyMove},
-		{"BOARD", "Enter", KeyOpen}, {"BOARD", "Esc", KeyOpen}, {"BOARD", "d", KeyOpen},
-		{"INBOX", "a", KeyConfirm}, {"INBOX", "A", KeyConfirm}, {"INBOX", "d", KeyConfirm}, {"INBOX", "r", KeyConfirm},
-		{"INBOX", "i", KeyOpen}, {"INBOX", "Enter", KeyOpen}, {"INBOX", "x", KeyOpen}, {"INBOX", "hard gate", KeyConfirm},
+		{"HOME", "Enter", KeyOpen}, {"HOME", "y", KeyConfirm}, {"HOME", "w", KeyOpen}, {"HOME", "q", KeyConfirm}, {"HOME", "Esc", KeyOpen},
+		{"BOARD", "d", KeyOpen},
 		{"IN A VIEW", "a", KeyConfirm}, {"IN A VIEW", "r", KeyConfirm}, {"IN A VIEW", "i", KeyOpen},
 		{"IN A VIEW", "PgUp", KeyMove}, {"IN A VIEW", "PgDn", KeyMove},
 		{"IN A VIEW", "v", KeyConfirm}, {"IN A VIEW", "x", KeyConfirm}, {"IN A VIEW", "o", KeyOpen},

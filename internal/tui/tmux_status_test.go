@@ -96,7 +96,6 @@ func TestStatusLineOwnedSessionOnly(t *testing.T) {
 // tmux status line the Board, the picker, the opening and the Blocked screen
 // paint none of their own and keep their layout one row up.
 func TestBoardWithoutVitalsWhenStatusCarriesThem(t *testing.T) {
-	// This test is about the classic Board itself.
 	w := NewWorkspace(nil, "test-proj", "test-session")
 	w.workDir = t.TempDir()
 	w.homeBoard = true

@@ -34,8 +34,8 @@ func TestFirstUseBoardIsTheDefaultScreen(t *testing.T) {
 	// checklist, and say-what-to-build leading the key bar.
 	lines, _, _ := w.frameLinesFull(120, 40)
 	text := StripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(lines0(text), " READY ") || !strings.Contains(text, "READINESS") || !strings.Contains(text, "s  say what to build") {
-		t.Fatalf("no Board v2 ready screen:\n%s", text)
+	if !strings.Contains(lines0(text), " READY ") || !strings.Contains(text, "Now:") || !strings.Contains(text, "⏎ chat") {
+		t.Fatalf("no home screen:\n%s", text)
 	}
 	for _, old := range []string{"Talk to the Marshal: /marshal chat", "Native sessions", "ULTRA ACTIVE"} {
 		if strings.Contains(text, old) {
@@ -138,38 +138,6 @@ func TestFirstUseVerifyKeysAndClick(t *testing.T) {
 	}
 	if !w.handleBoardMouse(context.Background(), KeyEvent{Type: KeyMouse, MouseRow: at.row + 1, MouseColumn: at.x0 + 1}) || w.firstUseArmed() != "agy" {
 		t.Fatalf("click armed %q", w.firstUseArmed())
-	}
-}
-
-// The footer of the first-use Board leads with saying what to build and
-// shows the switch key when the chat is docked.
-func TestFirstUseFooterShowsSwitchHint(t *testing.T) {
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	th := NewTheme(ThemeNoColor, true, false)
-	v := firstUseVisual(th, time.Now())
-	v.docked = true
-	v.hints = w.boardHints(v)
-	footer := StripANSI(v.footer(120))
-	if !strings.HasPrefix(footer, " s say what to build") {
-		t.Fatalf("footer %q does not lead with s say what to build", footer)
-	}
-	for _, want := range []string{"⏎ chat", "m Marshal", "F11 chat"} {
-		if !strings.Contains(footer, want) {
-			t.Fatalf("footer %q lacks %q", footer, want)
-		}
-	}
-	// A run's Board names the switch key too while docked.
-	rw := runHintWorkspace(t, "T-017")
-	defer rw.Close()
-	run := boardVisual{theme: th, now: time.Now(), docked: true}
-	run.hints = rw.boardHints(run)
-	if f := StripANSI(run.footer(160)); !strings.Contains(f, "F11 chat") {
-		t.Fatalf("run footer %q", f)
-	}
-	// A click on F11 chat takes F11's own path.
-	if k, ok := boardAction("marshal.chat"); !ok || k.Run == nil {
-		t.Fatal("F11 chat is no button for F11")
 	}
 }
 

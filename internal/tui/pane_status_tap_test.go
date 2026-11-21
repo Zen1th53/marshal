@@ -114,7 +114,6 @@ func TestPaneTapRedactsTheMessage(t *testing.T) {
 // action, its state beside it, redacted, and a new report re-projects the
 // Board while an unchanged one does not.
 func TestBoardLanesShowReportedWorkerStatus(t *testing.T) {
-	// This test is about the classic Board itself.
 	w, src := boardWorkspace(t)
 	select {
 	case <-w.repaint:

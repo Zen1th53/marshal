@@ -101,9 +101,9 @@ var boardKeymap = []boardKey{
 	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen, ID: "view.architecture", Hint: "architecture", When: func(w *Workspace) bool { return w.archSrc() != nil }, Why: reason("There is no architecture to show in this session.")},
 
 	{Group: "HOME", Keys: "Enter", What: "open the Marshal chat", Press: &KeyEvent{Type: KeyEnter}, Class: KeyOpen, ID: "home.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
-	{Group: "HOME", Keys: "y", What: "do the step From you names (retry, continue, resume, confirm)", Press: pressRune('y'), Class: KeyConfirm, ID: "task.retry", Hint: "yes", Core: true, CoreOrder: 3, CoreKey: "y", CoreLabel: "retry or continue", When: (*Workspace).homeYesReady, Why: reason("Nothing safe to continue now: decisions are made on the Web Board (w).")},
-	{Group: "HOME", Keys: "w", What: "open the Web Board: every card and button", Press: pressRune('w'), Class: KeyOpen, ID: "home.web", Hint: "web", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
-	{Group: "HOME", Keys: "e", What: "requirements: edit a line, then its letter", Press: pressRune('e'), Class: KeyOpen, ID: "home.reqedit", When: func(w *Workspace) bool { return w.currentReq() != nil }, Why: reason("No requirements wait for you.")},
+	{Group: "HOME", Keys: "y", What: "do the safe step From you names", Press: pressRune('y'), Class: KeyConfirm, ID: "task.retry", Hint: "yes", Core: true, CoreOrder: 3, CoreKey: "y", CoreLabel: "retry or continue", When: (*Workspace).homeYesReady, Why: reason("Nothing safe to continue now: decisions are made on the Web Board (w).")},
+	{Group: "HOME", Keys: "w", What: "open the Web Board: every card", Press: pressRune('w'), Class: KeyOpen, ID: "home.web", Hint: "web", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "e", What: "requirements: edit a line", Press: pressRune('e'), Class: KeyOpen, ID: "home.reqedit", When: func(w *Workspace) bool { return w.currentReq() != nil }, Why: reason("No requirements wait for you.")},
 	{Group: "HOME", Keys: "q", What: "quit Marshal", Press: pressRune('q'), Class: KeyConfirm, ID: "home.quit", Hint: "quit"},
 	{Group: "HOME", Keys: "Esc", What: "close a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
 	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
@@ -443,8 +443,8 @@ func (w *Workspace) pressBoardKey(ctx context.Context, event KeyEvent) {
 // it after the keys. Each line names a region handleBoardMouse acts on
 // (board_mouse.go); TestBoardHelpListsMouse keeps the two together.
 var boardMouseHelp = []struct{ Where, What string }{
-	{"view header chip", "open its view"},
-	{"view footer key", "press it; any click closes help"},
+	{"header chip", "in a view: open that view"},
+	{"footer key", "press it; any click closes help"},
 }
 
 // helpLine is one line of the help overlay: its text and, for a key that a

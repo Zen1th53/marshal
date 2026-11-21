@@ -135,57 +135,6 @@ func TestLiveBoardVitalsUsesCachedProviderStatus(t *testing.T) {
 	}
 }
 
-func TestBoardIsTheDefaultScreenForARun(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	lines, _, _ := w.frameLines(120, 40)
-	if len(lines) != 40 {
-		t.Fatalf("Board frame has %d rows", len(lines))
-	}
-	for i, line := range lines {
-		if n := VisibleLen(line); n != 120 {
-			t.Fatalf("row %d is %d cells", i, n)
-		}
-	}
-	got := StripANSI(strings.Join(lines, "\n"))
-	for _, want := range []string{"Marshal", "current run", "running", "TASKS", "LANES", "INBOX", "ACTIVITY", "T-017", "codex-1", "claude-1", "registry.npmjs.org:443", "› running"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Board frame lacks %q:\n%s", want, got)
-		}
-	}
-	if Edition() != "Marshal" && strings.Contains(got, "extreme") {
-		t.Fatal("the default build's Board names the Marshal")
-	}
-
-	resp, err := w.cmd.Handle(t.Context(), "/view classic")
-	if err != nil || !strings.Contains(resp, "classic") {
-		t.Fatalf("/view classic: %q, %v", resp, err)
-	}
-	if w.boardVisible() {
-		t.Fatal("the Board still takes permission requests in the classic view")
-	}
-	got = plainFrame(w, 120, 40)
-	if strings.Contains(got, "TASKS") || strings.Contains(got, "LANES") {
-		t.Fatalf("/view classic still paints the Board:\n%s", got)
-	}
-	if !strings.Contains(got, "R-7f3a") {
-		t.Fatalf("classic screen lost the run:\n%s", got)
-	}
-	w.permissions.mu.Lock()
-	inbox, queued := len(w.permissions.inbox), !w.permissions.queue.Empty()
-	w.permissions.mu.Unlock()
-	if inbox != 0 || !queued {
-		t.Fatal("/view classic left the inbox's request out of the popup queue")
-	}
-
-	if resp, err := w.cmd.Handle(t.Context(), "/view board"); err != nil || resp != "View: Board." {
-		t.Fatalf("/view board: %q, %v", resp, err)
-	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "TASKS") {
-		t.Fatalf("/view board did not bring the Board back:\n%s", got)
-	}
-}
-
 // The real path writes one frame for inspection; run with -board-wired-ans.
 func TestBoardWiredFrameANS(t *testing.T) {
 	if !*writeWiredANS {
@@ -262,7 +211,6 @@ func TestBoardFollowsTheRunIncrementally(t *testing.T) {
 }
 
 func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
-	// This test is about the classic Board itself.
 	w, src := boardWorkspace(t)
 	select {
 	case <-w.repaint:
@@ -273,6 +221,7 @@ func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 		t.Fatalf("initial Board header does not say running:\n%s", got)
 	}
 
+	drainRepaints(w, 50*time.Millisecond) // what the first paint asked for
 	// A user pause changes only the session hold: there are no new decisions
 	// and the tracked workers stay the same.
 	w.marshalSession().holdDispatch(before.RunID)
@@ -283,11 +232,13 @@ func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 	if !paused.Board.Run.UserPaused {
 		t.Fatal("the projected Board did not record the pause hold")
 	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "paused") {
-		t.Fatalf("Board header does not say paused after hold:\n%s", got)
-	}
+	// The repaints are counted before the paint: a paint may itself ask
+	// for one when a collector's background read lands.
 	if n := drainRepaints(w, 50*time.Millisecond); n != 1 {
 		t.Fatalf("a pause hold change asked for %d repaints, want 1", n)
+	}
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "PAUSED") {
+		t.Fatalf("Board header does not say paused after hold:\n%s", got)
 	}
 
 	w.marshalSession().releaseDispatch()
@@ -297,11 +248,11 @@ func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 	if w.marshalPanel().Board.Run.UserPaused {
 		t.Fatal("the projected Board kept the released pause hold")
 	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "running") {
-		t.Fatalf("Board header does not say running after release:\n%s", got)
-	}
 	if n := drainRepaints(w, 50*time.Millisecond); n != 1 {
 		t.Fatalf("a released pause hold asked for %d repaints, want 1", n)
+	}
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "RUNNING") {
+		t.Fatalf("Board header does not say running after release:\n%s", got)
 	}
 }
 
@@ -343,30 +294,6 @@ func TestBoardAnimatesOnlyWhileShown(t *testing.T) {
 	w.setBoardView(false)
 	if !a.Running() {
 		t.Fatal("returning to the Board did not resume the animator")
-	}
-}
-
-// TestBoardTabCyclesPanes: Tab is the next pane and Shift+Tab the one
-// before, never a command completion typed into the composer; with text in
-// the composer Tab still completes it.
-func TestBoardTabCyclesPanes(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	w.frameLines(120, 40)
-	w.boardUI.focus = layout.Tasks
-	for _, want := range []layout.PaneID{layout.Lanes, layout.Inbox, layout.Tasks} {
-		if !w.handleBoardKey(KeyEvent{Type: KeyTab}) || w.boardUI.pane(true) != want {
-			t.Fatalf("Tab: focus %s, want %s", w.boardUI.pane(true), want)
-		}
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyShiftTab}) || w.boardUI.pane(true) != layout.Inbox {
-		t.Fatalf("Shift+Tab: focus %s", w.boardUI.pane(true))
-	}
-	if w.composer.Text() != "" {
-		t.Fatalf("Tab typed %q into the composer", w.composer.Text())
-	}
-	w.composer.SetText("/vi")
-	if w.handleBoardKey(KeyEvent{Type: KeyTab}) {
-		t.Fatal("the Board took Tab while the composer holds text")
 	}
 }
 

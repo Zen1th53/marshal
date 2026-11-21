@@ -37,7 +37,7 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 			listed[f] = true
 		}
 	}
-	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "q", "r", "i", "t", "l", "j", "k", "Tab", "F11", "Esc", "Enter", "?", "/", "space", "Ctrl+K", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
+	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "d", "o", "q", "r", "i", "y", "w", "e", "F11", "Esc", "Enter", "?", "/", "space", "Ctrl+K", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
 		if !listed[want] {
 			t.Errorf("the keymap lacks %q", want)
 		}
@@ -174,8 +174,8 @@ func TestBoardHelpOverlay(t *testing.T) {
 // Every registry row has a unique id, a Why wherever it gates itself, and
 // is reachable by that id.
 func TestBoardActionIDsUnique(t *testing.T) {
-	if len(boardKeymap) != 53 {
-		t.Fatalf("boardKeymap has %d rows, want 53", len(boardKeymap))
+	if len(boardKeymap) != 43 {
+		t.Fatalf("boardKeymap has %d rows, want 43", len(boardKeymap))
 	}
 	seen := map[string]bool{}
 	for _, k := range boardKeymap {
@@ -289,33 +289,6 @@ func TestBoardHelpGoldens(t *testing.T) {
 			frame := overlayBoard(paintBoard(l, th, v.render), l, th, 0, help)
 			checkViewGolden(t, helpGoldenName, tc.name, frame, tc.w)
 		})
-	}
-}
-
-// run.stopped is on exactly when the inbox's Enter would arm the stop: a
-// run whose execution ended (Stopped) counts, as it does for that Enter, and
-// the same run not marked stopped does not.
-func TestBoardStopWaitingFollowsStoppedRuns(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	defer w.Close()
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil // an empty inbox: Enter is the stop's
-	w.permissions.mu.Unlock()
-	set := func(p *MarshalPanel) {
-		w.mu.Lock()
-		w.state.Marshal = p
-		w.mu.Unlock()
-	}
-	set(&MarshalPanel{Note: "stopped: worker exited 2", Stopped: true})
-	if !w.boardStopWaiting() {
-		t.Error("a stopped run with an empty inbox is not waiting")
-	}
-	if ok, why := mustAction(t, "run.stopped").available(w); !ok {
-		t.Errorf("run.stopped is off for a stopped run: %q", why)
-	}
-	set(&MarshalPanel{Note: "stopped: worker exited 2"})
-	if w.boardStopWaiting() {
-		t.Error("a run not marked stopped reads as waiting")
 	}
 }
 

@@ -153,46 +153,6 @@ func TestVitalsASCII(t *testing.T) {
 	}
 }
 
-func TestVitalsOnEveryView(t *testing.T) {
-	// This test is about the classic Board itself.
-	for _, c := range []struct {
-		name string
-		open func(w *Workspace)
-	}{
-		{"host", func(w *Workspace) { w.closeBodyViews(); w.hostView.Store(true) }},
-		{"memory", func(w *Workspace) { w.openMemoryView() }},
-		{"providers", func(w *Workspace) { w.openProviderView() }},
-		{"verify", func(w *Workspace) { w.openVerifyView() }},
-		{"security", func(w *Workspace) { w.openSecurityView() }},
-		{"plan", func(w *Workspace) { w.openPlanView() }},
-		{"arch", func(w *Workspace) { w.openArchView() }},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			w, _ := boardWorkspace(t)
-			c.open(w)
-			lines, _, _ := w.frameLines(120, 40)
-			if row0 := StripANSI(lines[0]); !strings.Contains(row0, "running") {
-				t.Fatalf("row 0 is not the vitals row: %q", row0)
-			}
-			if row1 := StripANSI(lines[1]); !strings.HasPrefix(row1, " Marshal") {
-				t.Fatalf("row 1 is not the header: %q", row1)
-			}
-		})
-	}
-	t.Run("empty", func(t *testing.T) {
-		w := NewWorkspace(nil, "project", "session")
-		w.screen = NewScreen(nil)
-		w.homeBoard = true
-		lines, _, _ := w.frameLines(120, 40)
-		if row0 := StripANSI(lines[0]); !strings.Contains(row0, "running") {
-			t.Fatalf("empty row 0 is not the vitals row: %q", row0)
-		}
-		if row1 := StripANSI(lines[1]); !strings.HasPrefix(row1, " Marshal") {
-			t.Fatalf("empty row 1 is not the header: %q", row1)
-		}
-	})
-}
-
 func TestVitalsOnNonBoardScreens(t *testing.T) {
 	// The diff viewer.
 	wd, _ := boardWorkspace(t)

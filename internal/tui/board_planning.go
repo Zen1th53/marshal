@@ -11,10 +11,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
-// planningCard is the first-use card's one line between the owner's
-// architecture Accept and the run it plans.
-const planningCard = "The Marshal is planning the tasks…"
-
 // planningNow reports whether the Board shows the post-accept planning state:
 // no run exists yet, the goal is not cancelled, and the architecture is
 // accepted. The acceptance is the review's stored state (the follower reads it

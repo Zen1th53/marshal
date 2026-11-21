@@ -16,7 +16,6 @@ import (
 // the launch picker, the vitals row, the chat title and the Providers view:
 // as "35% left", never as the 65% used, and the bar shows what is left.
 func TestLimitsSameQuantityEverywhere(t *testing.T) {
-	// This test is about the classic Board itself.
 	now := vitalsNow
 	codex := usage.Quota{Provider: "codex", Known: true, AsOf: now.Add(-time.Minute),
 		Windows: []usage.Window{{Label: "wk", LeftPercent: 35, ResetsAt: now.Add(2*24*time.Hour + time.Hour)}}}
@@ -33,10 +32,6 @@ func TestLimitsSameQuantityEverywhere(t *testing.T) {
 	vitals, _ := vv.vitalsLine(160)
 	vitals = StripANSI(vitals)
 
-	w := &Workspace{}
-	w.storeUsage([]usage.Quota{codex})
-	title := w.dockTitle(&activeTmuxAgent{provider: "codex"}, 0)
-
 	m := demoProviderPaint(now)
 	// codex is at its limit in the demo, so the Providers row reads claude's.
 	claude := codex
@@ -45,12 +40,12 @@ func TestLimitsSameQuantityEverywhere(t *testing.T) {
 	pl, _ := boardVisual{theme: th, now: now}.providerLines(m, 140)
 	providers := strings.Join(strings.Fields(StripANSI(strings.Join(pl, "\n"))), " ")
 
-	for name, got := range map[string]string{"picker": picker, "vitals": vitals, "title": title} {
+	for name, got := range map[string]string{"picker": picker, "vitals": vitals} {
 		if !strings.Contains(got, "codex") || !strings.Contains(got, "35% left") || strings.Contains(got, "65%") {
 			t.Errorf("%s shows %q, want codex at 35%% left and no 65%%", name, got)
 		}
 	}
-	for name, got := range map[string]string{"vitals": vitals, "title": title} {
+	for name, got := range map[string]string{"vitals": vitals} {
 		if !strings.Contains(got, "▓░░ 35% left") {
 			t.Errorf("%s bar does not show what is left: %q", name, got)
 		}
@@ -64,7 +59,6 @@ func TestLimitsSameQuantityEverywhere(t *testing.T) {
 // wherever it is shown (never "unavailable", which reads as "cannot be
 // used"), and each provider has one glyph, the picker's included.
 func TestLimitsUnknownWordAndGlyphs(t *testing.T) {
-	// This test is about the classic Board itself.
 	th := NewTheme(ThemeNoColor, true, false)
 	pv := boardVisual{theme: th, now: vitalsNow}
 	pv.pick = pickerView{cands: []pickerCand{{provider: "claude"}, {provider: "opencode"}}, sel: 0}
@@ -76,11 +70,7 @@ func TestLimitsUnknownWordAndGlyphs(t *testing.T) {
 	vitals, _ := vv.vitalsLine(160)
 	vitals = StripANSI(vitals)
 
-	w := &Workspace{}
-	w.storeUsage([]usage.Quota{{Provider: "claude", Reason: usage.ReasonNoFile}})
-	title := w.dockTitle(&activeTmuxAgent{provider: "claude"}, 0)
-
-	for name, got := range map[string]string{"picker": picker, "vitals": vitals, "title": title} {
+	for name, got := range map[string]string{"picker": picker, "vitals": vitals} {
 		if !strings.Contains(got, "claude limit unknown") || strings.Contains(got, "unavailable") {
 			t.Errorf("%s shows %q, want claude limit unknown", name, got)
 		}

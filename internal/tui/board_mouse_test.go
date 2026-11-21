@@ -3,13 +3,9 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/Zen1th53/marshal/internal/permission"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
 // cellOf finds text on the painted frame and returns its first cell, one
@@ -50,155 +46,6 @@ func TestBoardMouseActionHit(t *testing.T) {
 	}
 	if !w.boardHelp.Load() {
 		t.Fatal("the help action did not open the help")
-	}
-}
-
-func TestBoardMouseHeaderChipsOpenTheirView(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	for _, c := range []struct {
-		chip string
-		want layout.PaneID
-	}{{"inbox ", layout.Inbox}, {"done", layout.Tasks}} {
-		row, col := cellOf(t, w, 170, 45, c.chip, 0)
-		if row != 2 {
-			t.Fatalf("%q found on row %d, not the header", c.chip, row)
-		}
-		w.boardUI.focus = ""
-		if !click(w, row, col) || w.boardUI.focus != c.want {
-			t.Fatalf("chip %q: focus %q, want %q", c.chip, w.boardUI.focus, c.want)
-		}
-	}
-	// The running count sits on the vitals row (frame row 0); a click on it
-	// focuses the Lanes pane.
-	w.boardUI.focus = ""
-	if row, col := cellOf(t, w, 170, 45, "running", 0); row != 1 {
-		t.Fatalf("running found on row %d, not the vitals row", row)
-	} else if !click(w, row, col) || w.boardUI.focus != layout.Lanes {
-		t.Fatalf("running click: focus %q", w.boardUI.focus)
-	}
-	if w.archSrc() == nil {
-		t.Fatal("the fixture Board has no Architecture view to open")
-	}
-	{
-		// From a body view (opened by key, no header chip), the inbox chip
-		// returns to the Board on the inbox.
-		w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'b'})
-		if !w.archView.Load() {
-			t.Fatal("key b did not open the Architecture view")
-		}
-		row, col := cellOf(t, w, 170, 45, "inbox ", 0)
-		click(w, row, col)
-		if w.archView.Load() || w.boardUI.focus != layout.Inbox {
-			t.Fatalf("the inbox chip left the view open (%v) or focus %s", w.archView.Load(), w.boardUI.focus)
-		}
-	}
-	// The budget and the clock are read-only: no region, no change.
-	row, col := cellOf(t, w, 170, 45, "budget", 0)
-	w.boardUI.focus = layout.Lanes
-	click(w, row, col)
-	if w.boardUI.focus != layout.Lanes {
-		t.Fatal("a click on the budget changed the Board")
-	}
-}
-
-func TestBoardMouseInboxButtonsOpenTheConfirmationOnly(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	pending := func() int { w.permissions.mu.Lock(); defer w.permissions.mu.Unlock(); return len(w.permissions.inbox) }
-	row, col := cellOf(t, w, 120, 40, "[d] deny", 0)
-	if !click(w, row, col+1) {
-		t.Fatal("a click on deny was not taken")
-	}
-	if !w.inboxView.Confirming() || !strings.HasPrefix(w.inboxView.Prompt(), "Enter to confirm d") {
-		t.Fatalf("deny click: confirming %v prompt %q", w.inboxView.Confirming(), w.inboxView.Prompt())
-	}
-	if pending() != 1 {
-		t.Fatal("a click decided the request")
-	}
-	// While the confirmation is open the mouse cannot change it.
-	w.frameLines(120, 40)
-	if r, c := cellOf(t, w, 120, 40, "Enter to confirm d", 0); !click(w, r, c) || !strings.HasPrefix(w.inboxView.Prompt(), "Enter to confirm d") {
-		t.Fatalf("a click during the confirmation changed it: %q", w.inboxView.Prompt())
-	}
-	w.inboxView.Cancel()
-	for _, b := range []struct {
-		label  string
-		action string
-	}{{"[A] allow for run", "A"}, {"[a] allow once", "a"}} {
-		row, col := cellOf(t, w, 120, 40, b.label, 0)
-		click(w, row, col+5)
-		if !w.inboxView.Confirming() || w.inboxView.Prompt() != "Enter to confirm "+b.action {
-			t.Fatalf("%s: prompt %q", b.label, w.inboxView.Prompt())
-		}
-		w.inboxView.Cancel()
-	}
-	row, col = cellOf(t, w, 120, 40, "[i] inspect", 0)
-	click(w, row, col)
-	if !w.inboxView.Inspecting() || w.inboxView.Confirming() {
-		t.Fatal("inspect click did not open the reason")
-	}
-	if pending() != 1 {
-		t.Fatal("a click decided the request")
-	}
-}
-
-func TestBoardMouseTypedGateNeedsTheID(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	w.permissions.mu.Lock()
-	w.permissions.inbox = []permission.Request{{Kind: "unheard-of", TaskID: "T-023", Object: "release push", Scope: "one run", Reason: "push to main", Who: "Marshal"}}
-	w.permissions.mu.Unlock()
-	row, col := cellOf(t, w, 120, 40, "confirm ›", 0)
-	click(w, row, col)
-	if !w.inboxView.Confirming() || !strings.HasPrefix(w.inboxView.Prompt(), "Type ") {
-		t.Fatalf("typed gate click: %q", w.inboxView.Prompt())
-	}
-	if _, ok := w.inboxView.Confirm(); ok {
-		t.Fatal("a typed gate confirmed without its id")
-	}
-}
-
-func TestBoardMouseIgnoresOtherButtonsAndOwnsTheMouseOnlyOnTheBoard(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	row, col := cellOf(t, w, 120, 40, "T-017  ⣾", 0)
-	for _, ev := range []KeyEvent{
-		{Type: KeyMouse, MouseButton: 0, MouseRow: row, MouseColumn: col, MouseRelease: true},
-		{Type: KeyMouse, MouseButton: 2, MouseRow: row, MouseColumn: col},
-		{Type: KeyMouse, MouseButton: 65, MouseRow: row, MouseColumn: col},
-	} {
-		if !w.handleBoardMouse(nil, ev) || w.boardUI.task == "T-017" {
-			t.Fatalf("%+v acted on the task", ev)
-		}
-	}
-	if !w.boardMouseWanted() {
-		t.Fatal("the Board does not ask for the mouse")
-	}
-	w.setBoardView(true)
-	if w.boardMouseWanted() || w.handleBoardMouse(nil, KeyEvent{Type: KeyMouse, MouseRow: row, MouseColumn: col}) {
-		t.Fatal("the classic screen still takes the mouse for the Board")
-	}
-}
-
-// The bytes a terminal sends for a click reach the Board through the same
-// parser and key loop the workspace runs.
-func TestBoardMouseThroughTheKeyLoop(t *testing.T) {
-	// This test is about the classic Board itself.
-	w, _ := boardWorkspace(t)
-	row, col := cellOf(t, w, 120, 40, "T-018  ⣾", 0)
-	ev := ParseKey([]byte(fmt.Sprintf("\x1b[<0;%d;%dM", col, row)))
-	if ev.Type != KeyMouse {
-		t.Fatalf("SGR press parsed as %+v", ev)
-	}
-	if w.handleTerminalKey(t.Context(), ev) {
-		t.Fatal("a click asked the workspace to exit")
-	}
-	if w.boardUI.task != "T-018" || w.boardUI.focus != layout.Tasks {
-		t.Fatalf("the click did not select T-018: %s %s", w.boardUI.task, w.boardUI.focus)
-	}
-	if w.composer.Text() != "" {
-		t.Fatalf("mouse bytes reached the composer: %q", w.composer.Text())
 	}
 }
 

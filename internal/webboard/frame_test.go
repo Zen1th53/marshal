@@ -93,6 +93,10 @@ var excluded = map[string]bool{
 	"Decision.Refs": true, // collector ids
 	"CardLine.Ref":  true,
 	"Inbox.Refs":    true,
+	// The terminal home's own: FromYou already says the chat asked, and
+	// the page is the Web Board.
+	"NowLine.ChatAsked": true,
+	"Board.Web":         true,
 }
 
 // Every vm field is either sent (a wire field of the same name) or listed in

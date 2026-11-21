@@ -3,9 +3,7 @@
 package tui
 
 import (
-	"context"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -29,39 +27,6 @@ func stalledWorkspace(t *testing.T, state marshal.TaskState) *Workspace {
 	w.setMarshalPanel(newMarshalPanel("R-9", "codex", run, "stored run recovered"))
 	t.Cleanup(w.Close)
 	return w
-}
-
-// Finding 75: after a restart the run showed "reviewing · 0/1" with an empty
-// inbox and no action, and only `/marshal retry browser-fixes fresh-session`
-// then `/marshal resume` moved it on. The Board offers that next step as the
-// inbox's stop entry, and Enter runs those same commands.
-func TestStalledRunOffersRetryAndResume(t *testing.T) {
-	// This test is about the classic Board itself.
-	orig := boardStopHandle
-	t.Cleanup(func() { boardStopHandle = orig })
-	var ran []string
-	boardStopHandle = func(_ *Workspace, _ context.Context, cmd string) (string, error) {
-		ran = append(ran, cmd)
-		return "ok", nil
-	}
-	w := stalledWorkspace(t, marshal.Returned)
-	frame := plainFrame(w, 160, 40)
-	if !strings.Contains(frame, "browser-fixes was returned and nothing is working on it") {
-		t.Fatalf("the Board does not say why the run waits:\n%s", frame)
-	}
-	if !w.boardStopWaiting() {
-		t.Fatal("the stop entry is not offered")
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || !w.boardUI.stopArmed {
-		t.Fatal("Enter did not arm the next step")
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("the second Enter was not taken")
-	}
-	want := []string{"/marshal retry browser-fixes fresh-session", "/marshal resume"}
-	if !slices.Equal(ran, want) {
-		t.Fatalf("ran %q, want %q", ran, want)
-	}
 }
 
 // A reassigned task only needs the run resumed: RetryTask refuses it.

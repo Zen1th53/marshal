@@ -233,16 +233,6 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }
 
-// firstUseCTA is the call to action's label.
-const firstUseCTA = "Tell the Marshal what to build"
-
-// workingGoalPrefix and workingGoalFallback are the home card's lead line once
-// an active goal exists before a run starts (requirements, design, architecture).
-const (
-	workingGoalPrefix   = "The Marshal is working on: "
-	workingGoalFallback = "The Marshal is working on your goal"
-)
-
 // wrapWords breaks s into lines of at most w cells at spaces.
 func wrapWords(s string, w int) []string {
 	if w <= 0 {

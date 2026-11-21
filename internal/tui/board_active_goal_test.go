@@ -117,7 +117,6 @@ func TestBoardRefreshPicksUpActiveGoalFromStore(t *testing.T) {
 // precedence over PLANNING in the header while the body still shows the goal
 // being worked on rather than the first-use call to action.
 func TestActiveGoalWithOwnerGateShowsNeedsYou(t *testing.T) {
-	// This test is about the classic Board itself.
 	w := activeGoalBoardWorkspace(t, nil, "session-gate")
 	defer w.Close()
 	w.mu.Lock()

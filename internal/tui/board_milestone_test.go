@@ -15,7 +15,6 @@ import (
 // reads the planning milestone from the goal's records off the paint path, the
 // home card shows it, and a cancelled goal clears it.
 func TestBoardRefreshShowsPlanningMilestone(t *testing.T) {
-	// This test is about the classic Board itself.
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "board-milestone.db"))
 	if err != nil {

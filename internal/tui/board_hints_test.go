@@ -86,67 +86,6 @@ func runHintWorkspace(t *testing.T, task string) *Workspace {
 	return w
 }
 
-// Typing keeps the status on the left and puts "⏎ send  esc cancel" at the
-// right while it fits; when it does not, the status wins.
-func TestBoardHintsBesideStatus(t *testing.T) {
-	// This test is about the classic Board itself.
-	w := runHintWorkspace(t, "T-017")
-	defer w.Close()
-	w.composer.SetText("add a README")
-	_, row := footerIDs(t, w, 170, 45)
-	if !strings.Contains(row, "to the Marshal › add a README") || !strings.HasSuffix(strings.TrimRight(row, " "), "⏎ send  esc cancel") {
-		t.Fatalf("typing footer %q", row)
-	}
-	w.composer.SetText(strings.Repeat("x", 140))
-	ids, row := footerIDs(t, w, 170, 45)
-	if !strings.Contains(row, strings.Repeat("x", 140)) || len(ids) != 1 || ids[0] != "typing.send" {
-		t.Fatalf("long typing footer %v %q", ids, row)
-	}
-	// A command's answer keeps help beside it.
-	w.composer.SetText("")
-	w.setOutput("Nothing to diff yet.", false)
-	ids, row = footerIDs(t, w, 170, 45)
-	if !strings.HasPrefix(row, " Nothing to diff yet.") || !slices.Equal(ids, []string{"help"}) {
-		t.Fatalf("answer footer %v %q", ids, row)
-	}
-}
-
-// TestBoardHintsDropTailFirst: a narrow hint bar keeps the lead actions,
-// "space actions" and "? help": the tail's optional items go first, the
-// labels shorten next, and only then the lead's later items.
-func TestBoardHintsDropTailFirst(t *testing.T) {
-	// This test is about the classic Board itself.
-	for _, task := range []string{"T-017", "T-023", "T-033"} {
-		w := runHintWorkspace(t, task)
-		wide, _ := footerIDs(t, w, 170, 45)
-		narrow, row := footerIDs(t, w, 80, 24)
-		if len(narrow) == 0 || narrow[0] != wide[0] || !slices.Contains(narrow, "palette") || !slices.Contains(narrow, "help") {
-			t.Errorf("%s: 80 columns %v (%q), 170 columns %v", task, narrow, row, wide)
-		}
-		// What is kept stays in the wide bar's order.
-		at := 0
-		for _, id := range narrow {
-			i := slices.Index(wide[at:], id)
-			if i < 0 {
-				t.Errorf("%s: %q out of order: 80 columns %v, 170 columns %v", task, id, narrow, wide)
-				break
-			}
-			at += i + 1
-		}
-		w.Close()
-	}
-	// A stop notice leads and is never hidden by the hints.
-	w := runHintWorkspace(t, "T-017")
-	defer w.Close()
-	p := w.marshalPanel()
-	p.Note = "Approve with /marshal approve-task app-d71a119c"
-	w.setMarshalPanel(p)
-	_, row := footerIDs(t, w, 80, 24)
-	if !strings.Contains(row, "app-d71a119c") {
-		t.Fatalf("the note lost its place: %q", row)
-	}
-}
-
 // TestFitHintsRule: fitHints drops the tail's optional items first, then
 // shortens labels, then the lead's later items; "space actions" and "? help"
 // go only once nothing less important is left.

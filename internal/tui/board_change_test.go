@@ -146,54 +146,6 @@ func changeNoteSeen(w *Workspace, substr string) bool {
 	return false
 }
 
-// The card counts only the tasks that had not started; a task already running
-// is reported as finishing first.
-func TestHoldCardCountsOnlyNotStarted(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	w, _ := changeChatWorkspace(t, []taskSpec{
-		{"a", marshal.Queued},
-		{"b", marshal.Dispatched},
-		{"c", marshal.Returned},
-	})
-	hp, err := parseMarshalProposal(holdProposalLine(`["a","b","c"]`, "switch to OAuth"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.applyHold(hp)
-	card := w.currentChange()
-	if card == nil {
-		t.Fatal("the card did not open")
-	}
-	if card.notStarted != 2 || card.running != 1 {
-		t.Fatalf("counts: notStarted %d running %d", card.notStarted, card.running)
-	}
-	want := "I paused 2 affected tasks. 1 is already running and will finish first."
-	if got := changeHoldHeadline(card.notStarted, card.running); got != want {
-		t.Fatalf("headline %q want %q", got, want)
-	}
-	text := frameText(w, 120, 40)
-	if !strings.Contains(text, "I paused 2 affected tasks") || !strings.Contains(text, "[Enter] apply this change") || !strings.Contains(text, "[k] keep the current goal") {
-		t.Fatalf("the card is not on screen:\n%s", text)
-	}
-
-	// All held tasks already running: N == 0.
-	w2, _ := changeChatWorkspace(t, []taskSpec{{"b", marshal.Dispatched}})
-	hp2, _ := parseMarshalProposal(holdProposalLine(`["b"]`, "r"))
-	w2.applyHold(hp2)
-	c2 := w2.currentChange()
-	if c2 == nil || c2.notStarted != 0 || c2.running != 1 {
-		t.Fatalf("running-only counts: %+v", c2)
-	}
-	if got := changeHoldHeadline(c2.notStarted, c2.running); got != "The affected tasks are already running; they will finish first." {
-		t.Fatalf("running-only headline %q", got)
-	}
-
-	// One not-started task: singular wording.
-	if got := changeHoldHeadline(1, 0); got != "I paused 1 affected task." {
-		t.Fatalf("singular headline %q", got)
-	}
-}
-
 // k sends "keep the current goal", releases the hold without any proposal and
 // closes the card.
 func TestChangeCardKeepReleases(t *testing.T) {
@@ -203,7 +155,7 @@ func TestChangeCardKeepReleases(t *testing.T) {
 	if !w.marshalSession().isHeldFor("run", "a") {
 		t.Fatal("task a was not held")
 	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'k'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'k'}) {
 		t.Fatal("k was not taken by the card")
 	}
 	if w.currentChange() != nil {
@@ -215,31 +167,6 @@ func TestChangeCardKeepReleases(t *testing.T) {
 	chatWaitFor(t, "the keep message", func() bool { return len(tr.sentTurns()) == 1 })
 	if got := tr.sentTurns(); got[0] != "keep the current goal" {
 		t.Fatalf("sent %q, want \"keep the current goal\"", got)
-	}
-}
-
-// Enter sends "apply this change", shows "Applying your change…" and leaves the
-// hold in place until the change is applied.
-func TestChangeCardApplySays(t *testing.T) {
-	w, tr := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
-	hp, _ := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
-	w.applyHold(hp)
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter was not taken by the card")
-	}
-	card := w.currentChange()
-	if card == nil || !card.applying {
-		t.Fatalf("the card is not applying: %+v", card)
-	}
-	if !w.marshalSession().isHeldFor("run", "a") {
-		t.Fatal("apply released the hold before the change was applied")
-	}
-	chatWaitFor(t, "the apply message", func() bool { return len(tr.sentTurns()) == 1 })
-	if got := tr.sentTurns(); got[0] != "apply this change" {
-		t.Fatalf("sent %q, want \"apply this change\"", got)
-	}
-	if text := frameText(w, 120, 40); !strings.Contains(text, "Applying your change…") {
-		t.Fatalf("the card does not show it is applying:\n%s", text)
 	}
 }
 
@@ -286,79 +213,6 @@ func TestBusyAmendTimeoutKeepsCard(t *testing.T) {
 	}
 	if !strings.Contains(w.state.LastOutput, "I couldn't pause the run to apply the change. Press Enter to try again.") {
 		t.Fatalf("no try-again message: %q", w.state.LastOutput)
-	}
-}
-
-// The ask, requirements and change cards can be open together: they render in
-// that order, above the gates, and Enter goes to the topmost one still open.
-// Each answered card closes and leaves the others open.
-func TestChangeCardBesideAskAndRequirements(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	w, tr := changeChatWorkspace(t, []taskSpec{{"a", marshal.Queued}})
-	hp, err := parseMarshalProposal(holdProposalLine(`["a"]`, "switch to OAuth"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.applyHold(hp)
-	rp, err := parseMarshalProposal(reqProposalLine(fullReqCard))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openRequirements(rp)
-	ap, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openAsk(ap)
-	if w.currentChange() == nil || w.currentReq() == nil || w.currentAsk() == nil {
-		t.Fatal("the three cards are not all open")
-	}
-
-	text := frameText(w, 160, 80)
-	ask := strings.Index(text, "question · "+exampleAskQuestion)
-	req := strings.Index(text, "requirements · 8 of 8 filled")
-	change := strings.Index(text, "I paused 1 affected task")
-	if ask < 0 || req < 0 || change < 0 {
-		t.Fatalf("a card is missing (ask %d, requirements %d, change %d):\n%s", ask, req, change, text)
-	}
-	if !(ask < req && req < change) {
-		t.Fatalf("render order is not ask, requirements, change (%d, %d, %d):\n%s", ask, req, change, text)
-	}
-
-	// Enter answers the ask first.
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter was not taken")
-	}
-	chatWaitFor(t, "the ask answer", func() bool { return len(tr.sentTurns()) == 1 })
-	if got := tr.sentTurns()[0]; got != "build on it" {
-		t.Fatalf("first Enter sent %q, want the ask's recommended choice", got)
-	}
-	if w.currentAsk() != nil || w.currentReq() == nil || w.currentChange() == nil {
-		t.Fatal("after the ask, only the ask card should have closed")
-	}
-
-	// Then the requirements card.
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter was not taken")
-	}
-	chatWaitFor(t, "the confirmation", func() bool { return len(tr.sentTurns()) == 2 })
-	if got := tr.sentTurns()[1]; got != "confirm all" {
-		t.Fatalf("second Enter sent %q, want \"confirm all\"", got)
-	}
-	if w.currentReq() != nil || w.currentChange() == nil {
-		t.Fatal("after confirming, the change card should be the one still open")
-	}
-
-	// Then the change card.
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter was not taken")
-	}
-	chatWaitFor(t, "the apply message", func() bool { return len(tr.sentTurns()) == 3 })
-	if got := tr.sentTurns()[2]; got != "apply this change" {
-		t.Fatalf("third Enter sent %q, want \"apply this change\"", got)
-	}
-	if card := w.currentChange(); card == nil || !card.applying {
-		t.Fatalf("the change card is not applying: %+v", card)
 	}
 }
 
@@ -572,83 +426,6 @@ func TestMarshalAmendWithoutOwnerApplyKeepsHold(t *testing.T) {
 	}
 	if text := marshalInboxText(t, w); !strings.Contains(text, "hold kept") {
 		t.Fatalf("the Marshal was not told the hold stays:\n%s", text)
-	}
-}
-
-// The owner's own hold ("until":"release") shows plainly as held with a
-// release key, survives a change being answered, is receipted in the
-// Marshal's inbox, survives a restart, and ends only on release.
-func TestOwnerHoldIsPinnedUntilReleased(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	w, _ := changeChatWorkspace(t, []taskSpec{{"live-voice", marshal.Queued}, {"b", marshal.Queued}})
-	hp, err := parseMarshalProposal(ownerHoldProposalLine(`["live-voice"]`, "Owner: hold live-voice until ready"))
-	if err != nil {
-		t.Fatalf("the owner hold did not parse: %v", err)
-	}
-	w.applyHold(hp)
-	m := w.marshalSession()
-	if !m.isHeldFor("run", "live-voice") {
-		t.Fatal("the owner's hold was not applied")
-	}
-	card := w.currentChange()
-	if card == nil || !card.ownerHold() {
-		t.Fatalf("no held card: %+v", card)
-	}
-	text := frameText(w, 120, 40)
-	if !strings.Contains(text, "live-voice is held until you release it") || !strings.Contains(text, "[x] release the hold") || strings.Contains(text, "apply this change") {
-		t.Fatalf("the held card is not shown plainly:\n%s", text)
-	}
-	if inbox := marshalInboxText(t, w); !strings.Contains(inbox, "hold applied") || !strings.Contains(inbox, "Held: live-voice.") {
-		t.Fatalf("no hold receipt in the Marshal's inbox:\n%s", inbox)
-	}
-	// Enter and k are not the held card's keys: they never release it.
-	w.handleChangeKey(KeyEvent{Type: KeyEnter})
-	w.handleChangeKey(KeyEvent{Type: KeyRune, Rune: 'k'})
-	if !m.isHeldFor("run", "live-voice") {
-		t.Fatal("Enter or k released the owner's hold")
-	}
-
-	// A change arrives and the owner keeps the current goal: the change's
-	// task is released, the owner's hold stays and its card returns.
-	cp, _ := parseMarshalProposal(holdProposalLine(`["b"]`, "switch b"))
-	w.applyHold(cp)
-	if c := w.currentChange(); c == nil || c.ownerHold() {
-		t.Fatalf("the change card did not open: %+v", c)
-	}
-	w.changeKeep()
-	if m.isHeldFor("run", "b") {
-		t.Fatal("keep did not release the change's task")
-	}
-	if !m.isHeldFor("run", "live-voice") {
-		t.Fatal("keep released the owner's hold")
-	}
-	if c := w.currentChange(); c == nil || !c.ownerHold() {
-		t.Fatalf("the held card did not return: %+v", c)
-	}
-
-	// A restart keeps the owner's hold and its card.
-	restarted := &Workspace{workDir: w.workDir}
-	rm := &marshalSession{}
-	restarted.restoreOwnerHolds(rm)
-	if !rm.isHeldFor("run", "live-voice") {
-		t.Fatalf("the owner's hold did not survive a restart (file %q)", rm.holdsFile)
-	}
-	if c := restarted.change.card; c == nil || !c.ownerHold() {
-		t.Fatalf("the held card was not restored: %+v", c)
-	}
-
-	// x releases it, the card closes, and the Marshal is told.
-	if !w.handleChangeKey(KeyEvent{Type: KeyRune, Rune: 'x'}) {
-		t.Fatal("x was not taken by the held card")
-	}
-	if m.isHeldFor("run", "live-voice") || w.currentChange() != nil {
-		t.Fatal("x did not release the hold and close the card")
-	}
-	if inbox := marshalInboxText(t, w); !strings.Contains(inbox, "hold released") {
-		t.Fatalf("no release receipt:\n%s", inbox)
-	}
-	if _, err := os.Stat(rm.holdsFile); !os.IsNotExist(err) {
-		t.Fatalf("the saved hold outlived its release: %v", err)
 	}
 }
 

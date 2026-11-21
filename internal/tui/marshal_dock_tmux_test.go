@@ -198,7 +198,6 @@ func writeDockANS(t *testing.T, ctx context.Context, chat, board, path string) {
 // the chat, F11 typed on an attached client returns it to the Board, and
 // exit gives the chat its window back and stops the reconciler.
 func TestRealTmuxDockThroughTheKeyPath(t *testing.T) {
-	// This test is about the classic Board itself.
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
