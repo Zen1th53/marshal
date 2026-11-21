@@ -20,6 +20,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/api"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/buildversion"
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/legal"
@@ -49,6 +50,7 @@ func init() {
 	// win, and the defaults are kept when no stamp exists.
 	Version, Commit, BuildDate = fillBuildIdentity(Version, Commit, BuildDate, currentVCSStamp())
 	tui.BuildVersion = Version
+	buildversion.Version = Version
 }
 
 const usage = `Usage: marshal [--json] <command> [arguments]
@@ -889,19 +891,7 @@ func (c command) mcp(ctx context.Context, args []string) error {
 			Addr:    *listen,
 			Handler: srv.Handler(),
 		})
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- server.ListenAndServe()
-		}()
-		select {
-		case <-ctx.Done():
-			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = server.Shutdown(shutCtx)
-			return ctx.Err()
-		case err := <-errCh:
-			return err
-		}
+		return serveUntilDone(ctx, server)
 	case "stdio":
 		flags := flag.NewFlagSet("mcp stdio", flag.ContinueOnError)
 		flags.SetOutput(c.stderr)
@@ -1083,9 +1073,9 @@ func (c command) a2a(ctx context.Context, args []string) error {
 			fmt.Fprintln(c.stderr, "WARNING: Running A2A server in insecure mode on loopback (authentication disabled)")
 			srv, err = a2a.NewInsecureServer(runtime, *listen)
 		} else {
-			layout, err := app.Bootstrap(ctx, c.root)
-			if err != nil {
-				return err
+			layout, bootErr := app.Bootstrap(ctx, c.root)
+			if bootErr != nil {
+				return bootErr
 			}
 			authMgr := auth.NewManager(layout.RuntimeDir)
 			srv, err = a2a.NewServerWithAuth(runtime, authMgr)
@@ -1099,19 +1089,7 @@ func (c command) a2a(ctx context.Context, args []string) error {
 			Addr:    *listen,
 			Handler: srv.Handler(),
 		})
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- server.ListenAndServe()
-		}()
-		select {
-		case <-ctx.Done():
-			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = server.Shutdown(shutCtx)
-			return ctx.Err()
-		case err := <-errCh:
-			return err
-		}
+		return serveUntilDone(ctx, server)
 	case "status":
 		return c.print(map[string]any{
 			"status": "unknown", "protocol_version": a2a.ProtocolVersion100, "reason": "no live endpoint probe performed",
@@ -1456,5 +1434,23 @@ func (c command) state(ctx context.Context, args []string) error {
 
 	default:
 		return fmt.Errorf("%w: unknown state subcommand %s (supported: backup, verify-backup, restore)", model.ErrInvalid, sub)
+	}
+}
+
+// serveUntilDone runs server until it fails or ctx ends, then shuts it down
+// with a five-second grace period and returns ctx's error.
+func serveUntilDone(ctx context.Context, server *httpsrv.Server) error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+	select {
+	case <-ctx.Done():
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutCtx)
+		return ctx.Err()
+	case err := <-errCh:
+		return err
 	}
 }

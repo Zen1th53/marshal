@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/buildversion"
 	"github.com/Zen1th53/marshal/internal/learning"
 	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -168,7 +169,7 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 			},
 			"serverInfo": map[string]string{
 				"name":    "marshal-mcp-server",
-				"version": "0.2.0",
+				"version": buildversion.Version,
 			},
 		})
 

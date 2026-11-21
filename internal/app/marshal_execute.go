@@ -140,7 +140,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		// well within this bound. Reaching it means something loops; the run
 		// is handed to the user rather than left to spend its budget.
 		if round > marshalMaxRounds(run) {
-			if err := s.Escalate(ctx, runID, "", marshal.CodeRunStalled, "the run stopped making progress"); err != nil {
+			if err := s.escalateWithDetail(ctx, runID, "", marshal.CodeRunStalled, "the run stopped making progress", stalledRunDetail(run, round)); err != nil {
 				return run, err
 			}
 			return current()
@@ -641,4 +641,17 @@ func marshalMaxRounds(run marshal.Run) int {
 // unknownMarshalCharge is usage the runtime could not measure.
 func unknownMarshalCharge() marshal.Charge {
 	return marshal.Charge{Tokens: marshal.Amount{Known: false}, Money: marshal.Amount{Known: false}}
+}
+
+// stalledRunDetail is the raw cause of a stall: how many rounds ran and the
+// state of every task that had not finished, for the log and the paused
+// card's raw error.
+func stalledRunDetail(run marshal.Run, rounds int) string {
+	var open []string
+	for _, t := range run.Tasks {
+		if t.State != marshal.Merged && t.State != marshal.Cancelled {
+			open = append(open, t.PlanTaskID+" "+string(t.State))
+		}
+	}
+	return fmt.Sprintf("%d rounds without progress; unfinished tasks: %s", rounds, strings.Join(open, ", "))
 }

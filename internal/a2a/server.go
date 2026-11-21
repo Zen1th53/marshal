@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/buildversion"
 	"github.com/Zen1th53/marshal/internal/learning"
 	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -477,7 +478,7 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 	card := map[string]any{
 		"name":            "MARSHAL Runtime Agent",
 		"description":     "Security-first agentic coding runtime and control plane",
-		"version":         "0.2.0",
+		"version":         buildversion.Version,
 		"protocolBinding": "HTTP+JSON",
 		"protocolVersion": WireVersion10,
 		"capabilities": map[string]any{

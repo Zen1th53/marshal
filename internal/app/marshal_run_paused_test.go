@@ -39,7 +39,10 @@ func TestParkPausedTask(t *testing.T) {
 	if task := after.Tasks[0]; task.State != marshal.Queued || len(task.ReturnsByAgent) != 0 {
 		t.Fatalf("parked task: %+v", task)
 	}
-	if after.State == marshal.AwaitingUser {
-		t.Fatal("a parked task paused the Marshal run")
+	// No pause hold of a session waits for the person's resume here, so the
+	// run waits for them instead of dispatching the task again and again:
+	// a stop that says what is paused, not a failure or an escalation.
+	if after.State != marshal.AwaitingUser || after.Pause == nil || after.Pause.Code != marshal.CodeExecutionPaused || after.Pause.ResumeState == "" {
+		t.Fatalf("a parked task without a hold did not wait for the person: %s %+v", after.State, after.Pause)
 	}
 }

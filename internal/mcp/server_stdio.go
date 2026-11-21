@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/buildversion"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/ratelimit"
 )
@@ -142,7 +143,7 @@ func (s *Server) handleStdioRequest(ctx context.Context, req jsonRPCRequest) jso
 			},
 			"serverInfo": map[string]string{
 				"name":    "marshal-mcp-server",
-				"version": "0.2.0",
+				"version": buildversion.Version,
 			},
 		}
 
