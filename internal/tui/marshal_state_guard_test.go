@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	wantClaudeStateDeny = `"deny":["Read(./.marshal/state.db*)","Edit(./.marshal/state.db*)","Read(./.marshal/knowledge/**)","Edit(./.marshal/knowledge/**)","Read(./.marshal/backups/**)","Edit(./.marshal/backups/**)","Bash(sqlite3:*)"]`
+	wantClaudeStateDeny = `"deny":["Read(./.marshal/state.db*)","Edit(./.marshal/state.db*)","Read(./.marshal/knowledge/**)","Edit(./.marshal/knowledge/**)","Read(./.marshal/backups/**)","Edit(./.marshal/backups/**)","Read(./.marshal/architecture/**)","Edit(./.marshal/architecture/**)","Bash(sqlite3:*)","Bash(tmux:*)"]`
 	// wantClaudeStateSettings is the governed edition's Claude Marshal chat
 	// --settings, and every edition's under small-tasks rights.
 	wantClaudeStateSettings = `{"permissions":{` + wantClaudeStateDeny + `}}`
@@ -121,7 +121,7 @@ func TestCodexMarshalProfileDeniesPrivateState(t *testing.T) {
 	for _, entry := range []string{
 		`".marshal/marshal"="write"`, `".marshal/proposals"="write"`,
 		`".marshal/state.db"="none"`, `".marshal/state.db-wal"="none"`, `".marshal/state.db-shm"="none"`,
-		`".marshal/state.db-journal"="none"`, `".marshal/knowledge"="none"`, `".marshal/backups"="none"`,
+		`".marshal/state.db-journal"="none"`, `".marshal/knowledge"="none"`, `".marshal/backups"="none"`, `".marshal/architecture"="none"`,
 	} {
 		if !strings.Contains(filesystem, entry) {
 			t.Fatalf("profile %q lacks %s", filesystem, entry)
@@ -161,6 +161,7 @@ func TestAntigravityMarshalChatDeniesPrivateState(t *testing.T) {
 			"read_file(" + state + "/state.db-journal)", "write_file(" + state + "/state.db-journal)",
 			"read_file(" + state + "/knowledge/)", "write_file(" + state + "/knowledge/)",
 			"read_file(" + state + "/backups/)", "write_file(" + state + "/backups/)",
+			"read_file(" + state + "/architecture/)", "write_file(" + state + "/architecture/)",
 		} {
 			if !slices.Contains(deny, want) {
 				t.Fatalf("missing deny rule %q in %q", want, deny)
