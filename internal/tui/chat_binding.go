@@ -76,6 +76,20 @@ func (w *Workspace) chatRequestSent(id string, req permission.Request, at time.T
 	}
 }
 
+// chatRequestWhat is the plain words of the request the Board sent with
+// id, "" when it sent none.
+func (w *Workspace) chatRequestWhat(id string) string {
+	c := &w.chatBinding
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.requests {
+		if c.requests[i].id == id {
+			return c.requests[i].what
+		}
+	}
+	return ""
+}
+
 func (w *Workspace) chatRequestAnswered(id string, allow bool, at time.Time) {
 	c := &w.chatBinding
 	c.mu.Lock()

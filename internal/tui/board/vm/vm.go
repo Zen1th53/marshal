@@ -90,6 +90,9 @@ type Marshal struct {
 	WeeklyPct     int // -1 unknown; percent left
 	ChatBound     bool
 	InputClear    bool
+	// InputKnown is set once the chat's input box was looked at; until
+	// then the input is shown as nothing, neither clear nor waiting.
+	InputKnown bool
 }
 
 // Stage is one step of the plan pipeline.
@@ -200,6 +203,7 @@ type Chat struct {
 	ReboundAt  time.Time
 	Resent     int
 	InputClear bool
+	InputKnown bool // InputClear means something only when set
 	Answered   int
 	Stage      string
 }

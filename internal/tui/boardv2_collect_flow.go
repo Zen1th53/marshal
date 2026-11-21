@@ -13,7 +13,8 @@ import (
 // value renders as "not known yet".
 //
 // It runs per frame: everything it reads is in memory (the published run
-// panel, the inbox queue, the cards, the notes, the broker's steps, the
+// panel, the inbox queue, the cards, the notes, the Marshal's steps (the
+// step log is read once, then on the chat monitor's tick), the
 // milestone and architecture snapshots the followers keep). It never reads
 // the store or a provider, and it must be called without w.mu held.
 func (w *Workspace) collectV2Flow(b *vm.Board) {
@@ -61,7 +62,7 @@ func (w *Workspace) flowInputs() flowIn {
 		in.archRev, in.archAccepted = snap.Status.Revision, snap.Status.Accepted
 	}
 	in.notes = w.foldedNotes()
-	in.steps, in.lastCall, in.stepsProvider = w.marshalSteps.snapshot()
+	in.steps, in.lastCall, in.stepsProvider = w.stepsLog().snapshot()
 	w.chat.mu.Lock()
 	in.chatProvider, in.chatModel = w.chat.provider, w.chat.model
 	w.chat.mu.Unlock()
