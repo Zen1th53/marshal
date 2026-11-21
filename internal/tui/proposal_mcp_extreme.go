@@ -599,6 +599,12 @@ func (w *Workspace) proposalLaunchID() string {
 	return ""
 }
 
+// chatLaunchBound reports whether launch is the live, validated MCP launch
+// of the tmux Marshal chat now running.
+func (w *Workspace) chatLaunchBound(launch string) bool {
+	return launch != "" && w.proposalLaunchID() == launch
+}
+
 // activateNativeProposalMCP makes the lease prepared for a native chat
 // launch the active Marshal launch, as activateProposalMCP does for the
 // tmux chat.

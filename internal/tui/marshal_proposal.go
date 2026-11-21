@@ -1005,7 +1005,7 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		id := fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
 		who := "Local request (unverified)"
 		if proposal.action == "architecture" && root == w.providerRoot() {
-			if bound := w.boundMarshalArchitectureSource(); bound != "" {
+			if bound := w.boundMarshalChatSession(); bound != "" {
 				id = fmt.Sprintf("runtime:%x", sha256.Sum256([]byte(bound+"\x00"+fingerprint)))
 				who = "Marshal"
 			}

@@ -438,7 +438,18 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 // process. With them, any shell command the Marshal runs reaches MARSHAL's own
 // tmux server and could type into the owner's pane (tmux send-keys). The
 // Marshal acts only through its MCP tools and proposals.
-var marshalChatHiddenEnv = []string{"-u", "TMUX", "-u", "TMUX_PANE"}
+//
+// It also removes the markers of a Claude Code session MARSHAL itself was
+// started from. The Marshal chat is a session of its own, not that session's
+// child: with CLAUDE_CODE_CHILD_SESSION inherited, Claude Code turns transcript
+// saving off, so the chat's conversation ID is never captured and it can bind
+// no owner instruction (the browser Accept is refused). The messaging socket
+// and token would also let the Marshal reach the launching session.
+var marshalChatHiddenEnv = []string{"-u", "TMUX", "-u", "TMUX_PANE",
+	"-u", "CLAUDECODE", "-u", "CLAUDE_CODE_CHILD_SESSION", "-u", "CLAUDE_CODE_SESSION_ID",
+	"-u", "CLAUDE_CODE_SESSION_ATTENDED", "-u", "CLAUDE_CODE_CHILD_NOTES_DIR",
+	"-u", "CLAUDE_CODE_MESSAGING_SOCKET", "-u", "CLAUDE_CODE_MESSAGING_TOKEN",
+	"-u", "CLAUDE_CODE_BRIDGE_SESSION_ID", "-u", "CLAUDE_PID"}
 
 // marshalChatCommand is the argv that starts the Marshal chat CLI without
 // the tmux client variables.

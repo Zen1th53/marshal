@@ -116,9 +116,9 @@ func (w *Workspace) beforeBrowserAccept() func(context.Context, json.RawMessage)
 		if err := json.Unmarshal(state, &sel); err != nil {
 			return errors.New("The Marshal's project summary is not ready yet. Try again in a moment.")
 		}
-		session := w.boundMarshalArchitectureSource()
-		if session == "" {
-			return errors.New("Open the Marshal chat in your terminal, then press Accept again.")
+		session, err := w.boundMarshalArchitectureBinding()
+		if err != nil {
+			return err
 		}
 		// A page built from a pending contract accepts exactly that contract.
 		src := sel.Architecture.Source
