@@ -129,7 +129,7 @@ func architectureReceiptDigest(r SignedArchitectureReceipt) (string, []byte, err
 	return hex.EncodeToString(h[:]), b, err
 }
 func architectureChallengeDigest(c ArchitectureOwnerChallenge) string {
-	b, _ := architectureSignedBytes("marshal.architecture.receipt.v1", c)
+	b, _ := architecturecodec.ArchitectureSignedBytes("marshal.architecture.receipt.v1", c)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
@@ -369,14 +369,6 @@ type ArchitectureTargetGeneration = architecturecodec.ArchitectureTargetGenerati
 type SignedArchitectureEnrollment = architecturecodec.SignedArchitectureEnrollment
 type ArchitectureOwnerChallenge = architecturecodec.ArchitectureOwnerChallenge
 type SignedArchitectureReceipt = architecturecodec.SignedArchitectureReceipt
-
-func BindArchitectureChallenge(c *ArchitectureOwnerChallenge) {
-	architecturecodec.BindArchitectureChallenge(c)
-}
-func architectureSignedBytes(domain string, value any) ([]byte, error) {
-	b, err := json.Marshal(value)
-	return append([]byte(domain+"\x00"), b...), err
-}
 
 // ArchitectureFactAvailable requires a live source and review binding before
 // the canonical fact join. Metadata and historical notes confer no authority.

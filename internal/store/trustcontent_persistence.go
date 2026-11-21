@@ -92,8 +92,6 @@ func (s *Store) TransitionTrustedContentSegment(ctx context.Context, id string, 
 	return nil
 }
 
-type trustedContentScanner interface{ Scan(...any) error }
-
 func getTrustedContentSegment(ctx context.Context, query interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, id string) (trustcontent.Record, error) {

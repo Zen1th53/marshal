@@ -116,7 +116,10 @@ type MarshalService struct {
 	// restart interrupted it (Runtime.closeOrphanProcess05Lane), so its next
 	// attempt can open. Nil when this edition runs no task lanes.
 	process05CloseOrphanLane func(context.Context, marshal.Run, marshal.Task) error
-	now                      func() time.Time
+	// process05ResumePaused resumes the paused root of the run's canonical
+	// execution when the person resumes a CodeExecutionPaused stop.
+	process05ResumePaused func(context.Context, marshal.Run) error
+	now                   func() time.Time
 	// codeEvidence is the Extreme code evidence host (nil when disabled);
 	// Community's field type is empty.
 	codeEvidence codeEvidenceHostField

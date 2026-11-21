@@ -25,7 +25,7 @@ func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService
 	}
 	if parent.State == execution.RunPaused {
 		// The person paused the run: no new lane opens until they resume.
-		return nil, ErrProcess05Paused
+		return nil, fmt.Errorf("%w: execution run %s is paused, so no lane opened for %s", ErrProcess05Paused, parent.RunID, req.Task.PlanTaskID)
 	}
 	if err := r.Execution().Engine().SetTaskLaneParent(ctx, parent.RunID, run.BaseCommit); err != nil {
 		return nil, err

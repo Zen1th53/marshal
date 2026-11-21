@@ -122,12 +122,14 @@ marshal doctor --probe-providers
 # Deep diagnostics (verifies state integrity and repository layout)
 marshal doctor --deep
 
-# Check raw task logs from outside the TUI
+# Check raw task logs from outside the TUI (needs `marshal daemon`, see below)
 marshal logs <TASK-ID>
 
 # Check current project status and active tasks
 marshal status
 ```
+
+`marshal status` and `marshal tasks` read the project directly. `marshal logs`, `marshal events`, `marshal artifacts`, `marshal agents`, `marshal run`, `marshal verify`, `marshal reconcile`, `marshal cancel` and `marshal task show|claim|release|import` work only through Marshal's background service: start it with `marshal daemon` in another terminal in the project first. If Marshal is already open for the project in another window, use that window instead.
 
 ## Governed Workers on macOS or Linux arm64
 

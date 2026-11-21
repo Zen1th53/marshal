@@ -2482,6 +2482,7 @@ func (r *Runtime) Marshal() *MarshalService {
 	service.process05Paused = r.process05Paused
 	service.process05Settle = r.settleProcess05
 	service.process05CloseOrphanLane = r.closeOrphanProcess05Lane
+	service.process05ResumePaused = r.resumePausedProcess05
 	r.bindMarshalProjectKnowledge(service)
 	// Open assigns an instance ID and manages project lifecycle ownership.
 	// Services composed directly over a store have no runtime lifecycle to own.

@@ -8,19 +8,19 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/architecturereview"
+	"github.com/Zen1th53/marshal/internal/browser"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 func (c *command) architecture(ctx context.Context, args []string) error {
@@ -211,8 +211,7 @@ func (c *command) architecture(ctx context.Context, args []string) error {
 		return err
 	}
 	if !*noOpen {
-		browser := exec.CommandContext(ctx, "xdg-open", url)
-		if err := browser.Run(); err != nil {
+		if err := browser.Open(ctx, url); err != nil {
 			fmt.Fprintln(c.stderr, "Open the architecture URL in your browser.")
 		}
 	}
