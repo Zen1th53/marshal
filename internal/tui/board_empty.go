@@ -138,9 +138,37 @@ func (w *Workspace) firstUseChips(now time.Time) []providerChip {
 	return chips
 }
 
-// nextUnverified is the provider v verifies next: the one that leads (the
-// Marshal) when it is not verified yet, because nothing can be planned
-// before it is; otherwise the first installed provider not yet verified.
+// verifyNext is the provider v verifies next, "" for none. Board v2 picks
+// what its readiness checklist shows as "not checked yet", in the
+// checklist's order (v2NextUnchecked); MARSHAL_BOARD=classic picks from the
+// first-use card's chips (nextUnverified).
+func (w *Workspace) verifyNext() string {
+	now := time.Now()
+	if w.boardV2On() {
+		return v2NextUnchecked(w.v2MarshalInput(now))
+	}
+	return nextUnverified(w.firstUseChips(now), w.leadProvider())
+}
+
+// v2NextUnchecked is the first provider the v2 readiness checklist shows as
+// "not checked yet": the Marshal's provider, which it lists first, then each
+// installed worker provider in v2ProviderOrder.
+func v2NextUnchecked(in v2MarshalIn) string {
+	if prov := in.marshalProvider(); prov != "" && in.provider(prov).State == "unchecked" {
+		return prov
+	}
+	for _, name := range v2ProviderOrder {
+		if p := in.provider(name); p.Installed && p.State == "unchecked" {
+			return name
+		}
+	}
+	return ""
+}
+
+// nextUnverified is the provider v verifies next on the classic Board: the
+// one that leads (the Marshal) when it is not verified yet, because nothing
+// can be planned before it is; otherwise the first installed provider not
+// yet verified.
 func nextUnverified(chips []providerChip, lead string) string {
 	for _, c := range chips {
 		if c.name == lead && c.state == "unverified" {
@@ -251,7 +279,7 @@ func (w *Workspace) handleFirstUseKey(ctx context.Context, event KeyEvent) bool 
 	}
 	switch {
 	case event.Type == KeyRune && event.Rune == 'v':
-		w.armFirstUseVerify(nextUnverified(w.firstUseChips(time.Now()), w.leadProvider()))
+		w.armFirstUseVerify(w.verifyNext())
 		return true
 	case event.Type == KeyEnter:
 		w.focusChatFromBoard(ctx)

@@ -680,6 +680,9 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	// Only a v2 paint puts a v2 card on screen; every other paint takes it
 	// off, so its keys stop acting (boardv2_paint.go).
 	w.setV2CardShown("")
+	// Only a v2 paint stops the lane-tail sampler; every other paint may
+	// draw the classic lanes pane, which shows the tails.
+	w.laneTail.v2Painted.Store(false)
 	// v2KeyRow is the Board v2 key bar's row, -1 when v2 did not paint;
 	// like the classic hint bar it stays clickable under an overlay.
 	v2KeyRow := -1
@@ -726,6 +729,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		// owner card (boardv2_paint.go); MARSHAL_BOARD=classic keeps the
 		// classic ones.
 		ui.insp, ui.inspFor = nil, ""
+		w.laneTail.v2Painted.Store(true)
 		lines = w.paintV2(th, v, empty, w.boardLayoutMode(), cols, l.Rows)
 		v2KeyRow = len(lines) - 2
 	case empty:

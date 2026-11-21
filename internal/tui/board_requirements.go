@@ -165,11 +165,16 @@ func reqTextsDigest(texts [8]string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(texts[:], "\x00"))))
 }
 
-// currentReq is the open card, nil for none.
+// currentReq is a copy of the open card, nil for none: a paint or a key
+// reads it without holding w.req.mu while the card changes.
 func (w *Workspace) currentReq() *reqCard {
 	w.req.mu.Lock()
 	defer w.req.mu.Unlock()
-	return w.req.card
+	if w.req.card == nil {
+		return nil
+	}
+	c := *w.req.card
+	return &c
 }
 
 // clearReq closes the open card.

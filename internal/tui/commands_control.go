@@ -50,7 +50,7 @@ func (w *Workspace) plainStatus() string {
 	if title == "" {
 		title = "current run"
 	}
-	word, _ := v.runWord()
+	_, word, _ := v.runWord()
 	fmt.Fprintf(&out, "Run: %q — %s\n", title, word)
 	fmt.Fprintf(&out, "Tasks: %d of %d done · %d running", b.Run.Done, b.Run.Total, b.Run.Running)
 	if count := v.inboxCount(); count > 0 {

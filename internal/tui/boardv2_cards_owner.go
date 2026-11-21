@@ -36,46 +36,52 @@ func ownerCardKind(kind string) bool {
 	return false
 }
 
-// v2OwnerCards is every owner card open now, in the order the classic Board
-// takes their keys: the guard's alert, "what next?", the question, the
-// requirements, the change.
+// ownerCardOrder is the one order of the owner cards, the order the classic
+// Board takes their keys: the guard's alert, "what next?", the question, the
+// requirements, the change. The decision card (v2OwnerCards) and the NOW
+// line's "from you" and the Inbox pane (ownerAsks) both follow it, so they
+// name the same card first.
+var ownerCardOrder = [...]string{decisionGuard, decisionNext, decisionAsk, decisionRequirements, decisionChange}
+
+// ownerCardsOpen is which owner cards are open, by kind.
+type ownerCardsOpen struct{ guard, next, ask, req, change bool }
+
+// kinds is the open cards' kinds in ownerCardOrder.
+func (o ownerCardsOpen) kinds() []string {
+	open := map[string]bool{decisionGuard: o.guard, decisionNext: o.next, decisionAsk: o.ask, decisionRequirements: o.req, decisionChange: o.change}
+	var out []string
+	for _, k := range ownerCardOrder {
+		if open[k] {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// v2OwnerCards is every owner card open now, in ownerCardOrder.
 func (w *Workspace) v2OwnerCards() []v2Decision {
-	var out []v2Decision
 	enter := "⏎"
 	if w.boardStopWaiting() {
 		// A stopped run takes Enter, as on the classic card: the button
 		// is clicked, not keyed.
 		enter = "click"
 	}
-	if a, prefix, armed, undo := w.guardPaint(); a != nil {
-		out = append(out, guardDecision(a, prefix, armed, undo))
-	}
-	if c := w.currentNext(); c != nil {
-		out = append(out, nextDecision(*c))
-	}
-	if c := w.currentAsk(); c != nil {
-		out = append(out, askDecision(*c, enter))
-	}
-	w.req.mu.Lock()
-	var req *reqCard
-	if w.req.card != nil {
-		c := *w.req.card
-		req = &c
-	}
-	w.req.mu.Unlock()
-	if req != nil {
-		out = append(out, requirementsDecision(*req, enter))
-	}
-	w.change.mu.Lock()
-	var change *changeCard
-	if w.change.card != nil {
-		c := *w.change.card
-		c.held = append([]string(nil), c.held...)
-		change = &c
-	}
-	w.change.mu.Unlock()
-	if change != nil {
-		out = append(out, changeDecision(*change, enter))
+	alert, prefix, armed, undo := w.guardPaint()
+	next, ask, req, change := w.currentNext(), w.currentAsk(), w.currentReq(), w.currentChange()
+	var out []v2Decision
+	for _, kind := range (ownerCardsOpen{guard: alert != nil, next: next != nil, ask: ask != nil, req: req != nil, change: change != nil}).kinds() {
+		switch kind {
+		case decisionGuard:
+			out = append(out, guardDecision(alert, prefix, armed, undo))
+		case decisionNext:
+			out = append(out, nextDecision(*next))
+		case decisionAsk:
+			out = append(out, askDecision(*ask, enter))
+		case decisionRequirements:
+			out = append(out, requirementsDecision(*req, enter))
+		case decisionChange:
+			out = append(out, changeDecision(*change, enter))
+		}
 	}
 	return out
 }
