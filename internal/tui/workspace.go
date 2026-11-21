@@ -2317,7 +2317,6 @@ func (w *Workspace) controlSource() *ControlSource {
 			replaceRuntime: func(reopened *app.Runtime) {
 				w.mu.Lock()
 				defer w.mu.Unlock()
-				closeLocalServers(w.runtime)
 				w.runtime = reopened
 				w.beatRuntime.Store(reopened)
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)
