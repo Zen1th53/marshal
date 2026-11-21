@@ -146,7 +146,9 @@ func TestDecisionCardArchitectureWithDisplay(t *testing.T) {
 	if d.NoDisplay || d.Link != "" {
 		t.Fatalf("a desktop got the no-display link: %v %q", d.NoDisplay, d.Link)
 	}
-	if got := keyNames(d.Actions); !slices.Equal(got, []string{"a open in browser", "c copy link", "k comment"}) {
+	// No review page is up yet, so there is no link to copy (no file holds
+	// one).
+	if got := keyNames(d.Actions); !slices.Equal(got, []string{"a open in browser", "k comment"}) {
 		t.Fatalf("actions %q", got)
 	}
 	if d.SelfApproval != "" {
