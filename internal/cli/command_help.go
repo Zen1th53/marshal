@@ -62,7 +62,6 @@ update apply
 architecture serve [--proposal FILE] [--layout FILE] [--provider PROVIDER] [--no-open]
 architecture draft [--request REQUEST] [--output FILE] [--provider PROVIDER]
 architecture feedback [--provider PROVIDER]
-architecture receipt import FILE
 help [COMMAND]
 auth token create --name NAME [--kind=KIND] [--capabilities LIST]
 auth token list

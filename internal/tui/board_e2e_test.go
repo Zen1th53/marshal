@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"runtime/pprof"
 	"strings"
@@ -183,13 +182,7 @@ func seedE2EStore(t *testing.T, w *Workspace, rt *app.Runtime) *e2eStore {
 	// Architecture: the owner's signed acceptance of revision 7.
 	s.exec(t, `INSERT OR IGNORE INTO architecture_target_generations(project_id,generation,enrollment_id,enrollment) VALUES(?,1,'enrol-e2e',x'7b7d')`, s.project)
 	s.exec(t, `INSERT INTO architecture_owner_nonces(nonce,project_id,generation,payload_digest,expires_unix) VALUES('nonce-e2e',?,1,'pd',0)`, s.project)
-	var receipt store.SignedArchitectureReceipt
-	receipt.Challenge.Binding.ArchitectureID, receipt.Challenge.Binding.Revision, receipt.Challenge.Binding.Digest = "ARCH-1", 7, "a3f1c9e2"
-	receipt.Challenge.Message = "accept architecture"
-	raw, err := json.Marshal(receipt)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := []byte(`{"Challenge":{"Binding":{"ArchitectureID":"ARCH-1","Revision":7,"Digest":"a3f1c9e2"},"Message":"accept architecture"}}`)
 	s.exec(t, `INSERT INTO architecture_accepted_revisions(receipt_id,receipt_digest,project_id,generation,nonce,receipt) VALUES('rcpt-e2e','d-rcpt-e2e',?,1,'nonce-e2e',?)`, s.project, raw)
 	s.exec(t, `INSERT INTO architecture_owner_audit(receipt_id,project_id,generation,message_id,session_id,origin,accepted_at) VALUES('rcpt-e2e',?,1,'m','s','owner_command',?)`, s.project, s.start.UTC().Format(time.RFC3339Nano))
 	return s

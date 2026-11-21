@@ -2,18 +2,17 @@ package architecturecodec
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/model"
 	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 const Version = "architecture-review.v1"
@@ -250,14 +249,6 @@ func validateArchitecture(a map[string]any) error {
 	return nil
 }
 
-func ValidateArchitecture(raw json.RawMessage) error {
-	architecture, err := decodeObject(raw)
-	if err != nil {
-		return err
-	}
-	return validateArchitecture(architecture)
-}
-
 // ValidateStoredState returns architecture data without private feedback text.
 // Human acceptance is reported only for an exactly bound operator receipt.
 func ValidateStoredState(raw json.RawMessage, project string) (json.RawMessage, error) {
@@ -427,156 +418,4 @@ func (a ArchitectureAcceptance) Validate(observed ArchitectureTarget, head, tree
 
 func canonicalArchitecturePath(path string) bool {
 	return filepath.IsAbs(path) && filepath.Clean(path) == path
-}
-
-// Generation identity is immutable. The native command key is delegated only
-// by the isolated enrolled issuer, for private targets, during owner setup.
-// Neither key is a bearer token used by review/model/feedback channels.
-type ArchitectureTargetGeneration struct {
-	ArchitectureTarget
-	Generation            int64
-	GitDirectory          string
-	Issuer, CommandIssuer []byte
-	EnrollmentID          string
-}
-
-type SignedArchitectureEnrollment struct {
-	Target    ArchitectureTargetGeneration
-	Signature []byte
-}
-
-// ArchitectureSignedBytes is the domain-separated payload an architecture
-// enrollment, challenge or receipt signature covers.
-func ArchitectureSignedBytes(domain string, value any) ([]byte, error) {
-	b, err := json.Marshal(value)
-	return append([]byte(domain+"\x00"), b...), err
-}
-
-func (e SignedArchitectureEnrollment) Verify(pinned ed25519.PublicKey) error {
-	g := e.Target
-	if len(pinned) != ed25519.PublicKeySize || !bytes.Equal(pinned, g.Issuer) || g.Generation < 1 || g.EnrollmentID == "" ||
-		g.ProjectID == "" || !canonicalArchitecturePath(g.Root) || !canonicalArchitecturePath(g.StorePath) ||
-		g.SourceRoot != g.Root || g.GitDirectory != filepath.Join(g.Root, ".git") || g.Protocol != "architecture-review.v1" ||
-		(g.Policy != "community" && g.Policy != "private_extreme") ||
-		(g.Policy == "community" && len(g.CommandIssuer) != 0) ||
-		(g.Policy == "private_extreme" && (len(g.CommandIssuer) != ed25519.PublicKeySize || bytes.Equal(g.Issuer, g.CommandIssuer))) {
-		return model.ErrPolicyDenied
-	}
-	b, err := ArchitectureSignedBytes("marshal.architecture.enrollment.v1", g)
-	if err != nil || !ed25519.Verify(pinned, b, e.Signature) {
-		return model.ErrPolicyDenied
-	}
-	return nil
-}
-
-type ArchitectureOwnerChallenge struct {
-	Generation                           int64
-	Binding                              ArchitectureAcceptance
-	SourceDirty                          bool
-	Nonce, SessionID, MessageID, Message string
-	ExpiresUnix                          int64
-}
-
-type SignedArchitectureReceipt struct {
-	Challenge ArchitectureOwnerChallenge
-	Signature []byte
-}
-
-// DecodeSignedArchitectureReceipt validates the original JSON without
-// canonicalizing it: number spellings and signed string contents stay intact.
-// Exact field names prevent encoding/json's case-insensitive aliases from
-// silently changing the meaning of an imported signed envelope.
-func DecodeSignedArchitectureReceipt(raw []byte) (SignedArchitectureReceipt, error) {
-	var receipt SignedArchitectureReceipt
-	object, err := decodeObject(raw)
-	if err != nil {
-		return receipt, err
-	}
-	challenge, ok := object["Challenge"].(map[string]any)
-	if !ok || !onlyKeys(object, "Challenge", "Signature") ||
-		!onlyKeys(challenge, "Generation", "Binding", "SourceDirty", "Nonce", "SessionID", "MessageID", "Message", "ExpiresUnix") {
-		return receipt, model.ErrInvalid
-	}
-	binding, ok := challenge["Binding"].(map[string]any)
-	if !ok || !onlyKeys(binding, "SourceDirty", "ProjectID", "Root", "StorePath", "SourceRoot", "Protocol", "Policy",
-		"ArchitectureID", "Revision", "Digest", "LayoutDigest", "UIDigest", "SourceHead", "SourceTree",
-		"ReceiptID", "ReceiptDigest", "EnvelopeDigest", "Origin", "model_self_approval", "operator_instruction_ref") {
-		return receipt, model.ErrInvalid
-	}
-	if err = json.Unmarshal(raw, &receipt); err != nil {
-		return SignedArchitectureReceipt{}, err
-	}
-	return receipt, nil
-}
-
-// BindArchitectureChallenge computes data commitments; it supplies no key or
-// trusted origin. The signature covers all remaining input and selection bytes.
-func BindArchitectureChallenge(c *ArchitectureOwnerChallenge) {
-	b := c.Binding
-	b.ReceiptID = ""
-	b.ReceiptDigest = ""
-	b.EnvelopeDigest = ""
-	b.Origin = ""
-	raw, _ := ArchitectureSignedBytes("marshal.architecture.selection.v1", b)
-	h := sha256.Sum256(raw)
-	c.Binding.EnvelopeDigest = hex.EncodeToString(h[:])
-	c.Binding.ReceiptDigest = ""
-	raw, _ = ArchitectureSignedBytes("marshal.architecture.challenge.v1", *c)
-	h = sha256.Sum256(raw)
-	c.Binding.ReceiptDigest = hex.EncodeToString(h[:])
-}
-
-func (r SignedArchitectureReceipt) Verify(g ArchitectureTargetGeneration, now time.Time) error {
-	c := r.Challenge
-	expected := c
-	BindArchitectureChallenge(&expected)
-	if expected.Binding != c.Binding || c.SourceDirty != c.Binding.SourceDirty {
-		return model.ErrPolicyDenied
-	}
-	a := c.Binding
-	if c.Generation != g.Generation || c.SessionID != g.EnrollmentID || c.MessageID == "" || c.Message == "" || len(c.Message) > 16384 ||
-		!architectureHash.MatchString(c.Nonce) || c.ExpiresUnix <= now.Unix() || c.ExpiresUnix > now.Add(10*time.Minute).Unix() ||
-		a.Validate(g.ArchitectureTarget, a.SourceHead, a.SourceTree) != nil {
-		return model.ErrPolicyDenied
-	}
-	key := g.Issuer
-	if a.Origin == "owner_command" {
-		key = g.CommandIssuer
-	}
-	b, err := ArchitectureSignedBytes("marshal.architecture.receipt.v1", c)
-	if err != nil || len(key) != ed25519.PublicKeySize || !ed25519.Verify(ed25519.PublicKey(key), b, r.Signature) {
-		return model.ErrPolicyDenied
-	}
-	return nil
-}
-
-// ArchitectureFactDigests derives facts only from the exact validated graph.
-// Free prose, memory metadata and alleged graph IDs cannot add a fact here.
-func ArchitectureFactDigests(raw json.RawMessage) ([]string, error) {
-	if err := ValidateArchitecture(raw); err != nil {
-		return nil, err
-	}
-	graph, err := decodeObject(raw)
-	if err != nil {
-		return nil, err
-	}
-	facts := []string{}
-	for _, collection := range []string{"components", "connections", "constraints"} {
-		values, ok := graph[collection].([]any)
-		if !ok {
-			return nil, fmt.Errorf("%w: architecture %s must be an array", model.ErrPolicyDenied, collection)
-		}
-		for _, value := range values {
-			encoded, err := canonicalJSON(value)
-			if err != nil {
-				return nil, err
-			}
-			digest, err := CanonicalDigest(encoded)
-			if err != nil {
-				return nil, err
-			}
-			facts = append(facts, digest)
-		}
-	}
-	return facts, nil
 }

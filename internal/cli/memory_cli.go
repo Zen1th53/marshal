@@ -12,9 +12,6 @@ import (
 )
 
 func (c command) memory(ctx context.Context, args []string) error {
-	if handled, err := c.memoryLegacyMigration(ctx, args); handled {
-		return err
-	}
 	if len(args) == 0 {
 		return fmt.Errorf("%w: memory subcommand required (status, remember, recall, show, list, candidates, promote, tombstone, audit)", model.ErrInvalid)
 	}
