@@ -2756,8 +2756,8 @@
     },
     {
       "path": "internal/app/marshal_model.go",
-      "sha256": "a4b339d7f69296fd88b03a56659c234382a92cf89532a0809e0c952e470a70dd",
-      "bytes": 38166
+      "sha256": "12a435e8ee64e83fae6c7269db592ffa9e65e207c9cb9b399c227e170292d658",
+      "bytes": 38213
     },
     {
       "path": "internal/app/marshal_model_session_linux.go",
