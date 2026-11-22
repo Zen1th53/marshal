@@ -10,10 +10,9 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
-// governedBriefBytes bounds what a Marshal run adds to a Process 05 worker's
-// provider context beyond the canonical constraint header and approved task
-// instructions: the task's approved plan note and why earlier attempts were
-// returned. It matches the other optional worker context blocks.
+// governedBriefBytes bounds the approved plan note and return reasons added
+// to a Process 05 worker's provider context. The accepted architecture slice
+// has its own bound in archconform.TaskBriefLimit.
 const governedBriefBytes = 4096
 
 var errGovernedBriefTooLarge = errors.New("governed worker brief exceeds its bound")
@@ -139,8 +138,16 @@ func (r *Runtime) process05Brief(ctx context.Context, s *MarshalService, runID s
 		return "", err
 	}
 	text, err := renderGovernedBrief(task.PlanTaskID, note, returned)
-	if err != nil || text == "" {
+	if err != nil {
 		return "", err
+	}
+	// Architecture has its own bound (archconform.TaskBriefLimit), so it does
+	// not displace the full approved note or the bounded return reasons.
+	if architecture, required := s.taskArchitecture(ctx, task); required {
+		text += "\n" + architecture
+	}
+	if text == "" {
+		return "", nil
 	}
 	clean, err := r.sanitizeProviderOutput(ctx, []byte(text))
 	if err != nil {

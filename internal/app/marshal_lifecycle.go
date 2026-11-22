@@ -154,8 +154,6 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		}
 		brief = builder(*t, bc)
 	}
-	architecture, _ := s.taskArchitecture(ctx, *t)
-	brief += "\n" + architecture
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil

@@ -29,6 +29,9 @@ type BriefContext struct {
 	// the person asked for, how the tasks fit together, and this task's own
 	// note. They are empty for a run drafted without a pack.
 	Requirements, Index, Note string
+	// ArchitectureContext is the accepted contract slice for this task. Brief
+	// renderers carry it alongside Note, inside their own text or JSON format.
+	ArchitectureContext string
 	// Memory holds bounded project-memory recall relevant to the task.
 	Memory []model.MemoryRecordV2
 	// MemoryContext is the bounded, authorized Extreme worker memory contribution.
@@ -47,6 +50,9 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 
 func (s *MarshalService) briefContextFromTask(ctx context.Context, runID string, run marshal.Run, t marshal.Task, baseResolved bool) (BriefContext, error) {
 	bc := BriefContext{Control: run.TaskControl(t)}
+	if architecture, required := s.taskArchitecture(ctx, t); required {
+		bc.ArchitectureContext = architecture
+	}
 	if run.Pack != nil {
 		bc.Requirements, bc.Index, bc.Note = run.Pack.Requirements, run.Pack.Index, run.Pack.Tasks[t.PlanTaskID]
 	}
