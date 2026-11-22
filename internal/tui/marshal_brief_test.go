@@ -48,8 +48,9 @@ func TestTaskBriefNamesWhyEarlierAttemptsWereReturned(t *testing.T) {
 }
 
 func TestTaskBriefCarriesTheApprovedPlanPack(t *testing.T) {
-	brief := marshalTaskBrief(briefTask(), app.BriefContext{Control: marshal.ControlFree, Requirements: "keep the API stable", Index: "T1 then T2", Note: "the store is shared with T2"})
-	for _, want := range []string{"Task note from the approved plan:\nthe store is shared with T2", "requirements the person approved", "keep the API stable", "T1 then T2"} {
+	architecture := "ARCHITECTURE FOR THIS TASK\napi owns internal/api; api depends on store\n"
+	brief := marshalTaskBrief(briefTask(), app.BriefContext{Control: marshal.ControlFree, Requirements: "keep the API stable", Index: "T1 then T2", Note: "the store is shared with T2", ArchitectureContext: architecture})
+	for _, want := range []string{"Task note from the approved plan:\nthe store is shared with T2", "requirements the person approved", "keep the API stable", "T1 then T2", architecture} {
 		if !strings.Contains(brief, want) {
 			t.Errorf("brief lacks %q:\n%s", want, brief)
 		}

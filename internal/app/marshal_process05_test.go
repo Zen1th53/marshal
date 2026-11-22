@@ -132,7 +132,7 @@ func testMarshalProcess05AndImportsExactCommit(t *testing.T, modelProvider strin
 	s.GovernedCheck = fixtureCheckRunner
 	// Process05 tests supply independent roles for Standard hand-ins and final checks.
 	s.CrossReview, s.VerifierProvider, s.IndependentVerify = fixture.CrossReview, fixture.VerifierProvider, fixture.IndependentVerify
-	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
+	s.Model = marshalFakeModel{review: marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: worker, InstalledVersion: "1.0", ProbeEvidenceID: "process05-probe", ProbedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
@@ -297,7 +297,7 @@ func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 	s.GovernedCheck = fixtureCheckRunner
 	// Process05 tests supply independent roles for Standard hand-ins and final checks.
 	s.CrossReview, s.VerifierProvider, s.IndependentVerify = fixture.CrossReview, fixture.VerifierProvider, fixture.IndependentVerify
-	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
+	s.Model = marshalFakeModel{review: marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: worker, InstalledVersion: "1.0", ProbeEvidenceID: "multi-probe", ProbedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)

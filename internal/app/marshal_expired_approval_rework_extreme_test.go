@@ -305,9 +305,9 @@ func TestExpiredApprovalReworksEngineProcess05RequestedExpiry(t *testing.T) {
 	}
 	s.Gate = marshalTestGate(true)
 	s.GovernedCheck = fixtureCheckRunner
-	s.Model = marshalFakeModel{review: marshal.Review{Reviewer: "marshal-model", Verdict: marshal.VerdictAccept}}
+	s.Model = marshalFakeModel{review: marshal.Review{ArchitectureVerdict: "conforms", Reviewer: "marshal-model", Verdict: marshal.VerdictAccept}}
 	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:grep -q fixed README.md"}}, "review-test", nil
+		return marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:grep -q fixed README.md"}}, "review-test", nil
 	}
 	runFunc := runtime.marshalProcess05Run(s)
 	s.GovernedDrivers[worker] = driver.Governed{Provider: worker, Run: func(ctx context.Context, req driver.Request) ([]marshal.CommandRecord, error) {

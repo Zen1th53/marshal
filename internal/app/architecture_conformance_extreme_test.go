@@ -104,3 +104,45 @@ func TestUndeclaredUseIsReportedButNotReturnedWithoutAnyDeclaredDependency(t *te
 		t.Fatalf("report = %+v", report)
 	}
 }
+
+func TestArchitectureNewUnownedSource(t *testing.T) {
+	r, dir := conformanceRuntime(t, true)
+	s := &MarshalService{runtime: r, Repository: dir}
+	base := gitTest(t, dir, "rev-parse", "HEAD")
+	files := []string{"new/service.go", "docs/example.go", "new/service_test.go", "tests/helper.py", "go.sum"}
+	for _, f := range files {
+		writeRepoFile(t, dir, f, "// example\n")
+	}
+	gitTest(t, dir, "add", "-A")
+	gitTest(t, dir, "commit", "-m", "unowned files")
+	head := gitTest(t, dir, "rev-parse", "HEAD")
+	task := marshal.Task{BaseCommit: base, Components: []string{"api"}}
+	for _, f := range files {
+		err := s.architectureHandIn(t.Context(), task, marshal.HandIn{ResultCommit: head, FilesTouched: []string{f}})
+		if (err != nil) != (f == "new/service.go") {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	// An already present unowned production file stays advisory.
+	task.BaseCommit = head
+	writeRepoFile(t, dir, "new/service.go", "package service\nvar Changed = true\n")
+	gitTest(t, dir, "commit", "-am", "modify existing unowned source")
+	head = gitTest(t, dir, "rev-parse", "HEAD")
+	if err := s.architectureHandIn(t.Context(), task, marshal.HandIn{ResultCommit: head, FilesTouched: []string{"new/service.go"}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTaskArchitectureAcceptedSlice(t *testing.T) {
+	r, dir := conformanceRuntime(t, true)
+	s := &MarshalService{runtime: r, Repository: dir}
+	brief, required := s.taskArchitecture(t.Context(), marshal.Task{Files: []string{"internal/api/h.go"}})
+	for _, want := range []string{"ARCHITECTURE FOR THIS TASK", "HTTP", "internal/api", "store", "Dependencies"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("missing %q: %s", want, brief)
+		}
+	}
+	if !required {
+		t.Fatal("accepted architecture not required")
+	}
+}

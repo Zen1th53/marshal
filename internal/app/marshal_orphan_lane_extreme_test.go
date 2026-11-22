@@ -87,7 +87,7 @@ func TestExtremeInterruptedLaneClosedAfterRestartAndTaskRunsAgain(t *testing.T) 
 	s.Gate = ultraGate{enabled: true}
 	s.GateState = fixture.GateState
 	s.ModelProvider = "review-test"
-	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
+	s.Model = marshalFakeModel{review: marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.GovernedCheck = fixtureCheckRunner
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	s.RecordActivity = func(line string) { activityMu.Lock(); activity = append(activity, line); activityMu.Unlock() }
@@ -96,7 +96,7 @@ func TestExtremeInterruptedLaneClosedAfterRestartAndTaskRunsAgain(t *testing.T) 
 	}
 	s.GovernedDrivers = map[string]driver.Driver{"codex": driver.Governed{Provider: "codex", Run: runtime.marshalProcess05Run(s)}}
 	s.CrossReview = func(_ context.Context, task marshal.Task, _ marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f " + task.PlanTaskID + ".txt"}}, "review-test", nil
+		return marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f " + task.PlanTaskID + ".txt"}}, "review-test", nil
 	}
 	s.Verify = fixture.Verify
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier-test", nil }

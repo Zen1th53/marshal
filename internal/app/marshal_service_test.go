@@ -235,7 +235,7 @@ func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, stri
 	// tests explicitly remove them.
 	s.ModelProvider = "model"
 	s.CrossReview = func(_ context.Context, _ marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "cross-review:other", FreshSession: true, SessionID: "independent-review", EvidenceRefs: []string{"result:" + h.ResultCommit}}, "other", nil
+		return marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "cross-review:other", FreshSession: true, SessionID: "independent-review", EvidenceRefs: []string{"result:" + h.ResultCommit}}, "other", nil
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {

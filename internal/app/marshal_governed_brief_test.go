@@ -162,7 +162,7 @@ func TestMarshalProcess05DeliversApprovedPlanNote(t *testing.T) {
 	s.CrossReview = fixture.CrossReview
 	s.VerifierProvider = fixture.VerifierProvider
 	s.IndependentVerify = fixture.IndependentVerify
-	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
+	s.Model = marshalFakeModel{review: marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: worker, InstalledVersion: "1.0", ProbeEvidenceID: "process05-probe", ProbedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
@@ -207,6 +207,25 @@ func TestMarshalProcess05DeliversApprovedPlanNote(t *testing.T) {
 		t.Fatalf("provider executed %d times, want one", executions.Load())
 	}
 	got, _ := delivered.Load().(string)
+	architecture, required := s.taskArchitecture(ctx, run.Tasks[0])
+	if isExtremeBuild && !required {
+		t.Fatal("Process05 fixture lost its accepted architecture contract")
+	}
+	if required {
+		if strings.Count(got, architecture) != 1 {
+			t.Fatalf("governed worker context must carry the accepted architecture exactly once: %q", got)
+		}
+		bc, err := s.briefContext(ctx, "run", run, run.Tasks[0])
+		if err != nil || bc.ArchitectureContext != architecture {
+			t.Fatalf("structured brief context lost architecture: %+v %v", bc, err)
+		}
+		retry := run.Tasks[0]
+		retry.Worker = "replacement-provider"
+		retryArchitecture, retryRequired := s.taskArchitecture(ctx, retry)
+		if !retryRequired || retryArchitecture != architecture {
+			t.Fatal("provider failover changed the architecture slice for the same task and contract")
+		}
+	}
 	for _, want := range []string{"tasks/fix.md", "tools/e2e/results/v011-e2e-header-provider-dots.md", "Leave alone: every other file."} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("governed worker context lacks %q:\n%s", want, got)

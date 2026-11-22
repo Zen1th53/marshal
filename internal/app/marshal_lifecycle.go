@@ -562,8 +562,14 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if s.Model == nil {
 		return "", errors.New("Marshal model is unavailable")
 	}
-	proposal, err := s.Model.Review(ctx, *t, h, run.TaskControl(*t))
+	reviewTask := *t
+	architecture, architectureRequired := s.taskArchitecture(ctx, *t)
+	reviewTask.ArchitectureContext = architecture
+	proposal, err := s.Model.Review(ctx, reviewTask, h, run.TaskControl(*t))
 	if err != nil {
+		return "", err
+	}
+	if err := checkArchitectureReview(&proposal, architectureRequired); err != nil {
 		return "", err
 	}
 	// Only the runtime may attach an independent review. Model output is a claim.
@@ -589,9 +595,12 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if s.CrossReview == nil {
 			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, errors.New("independent cross-review is unavailable"))
 		}
-		crossReview, provider, reviewErr := s.CrossReview(ctx, *t, h, run.TaskControl(*t))
+		crossReview, provider, reviewErr := s.CrossReview(ctx, reviewTask, h, run.TaskControl(*t))
 		if reviewErr != nil {
 			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, reviewErr)
+		}
+		if err := checkArchitectureReview(&crossReview, architectureRequired); err != nil {
+			return "", err
 		}
 		if (crossReview.Verdict != marshal.VerdictAccept && crossReview.Verdict != marshal.VerdictReturn && crossReview.Verdict != marshal.VerdictReassign && crossReview.Verdict != marshal.VerdictEscalate) || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
 			return "", errors.New("independent cross-review is incomplete")
@@ -617,7 +626,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if err = checkCrossReviewFreshSession(crossReview, crossReviewerProvider, h, crossReviewData); err != nil {
 			return "", err
 		}
-		proposal.Independent = &marshal.IndependentReview{Verdict: crossReview.Verdict, Reviewer: crossReview.Reviewer, Provider: crossReviewerProvider, Reasons: crossReview.Reasons, EvidenceRefs: crossReview.EvidenceRefs, SessionID: crossReview.SessionID, FreshSession: crossReview.FreshSession}
+		proposal.Independent = &marshal.IndependentReview{ArchitectureVerdict: crossReview.ArchitectureVerdict, ArchitectureMismatches: crossReview.ArchitectureMismatches, Verdict: crossReview.Verdict, Reviewer: crossReview.Reviewer, Provider: crossReviewerProvider, Reasons: crossReview.Reasons, EvidenceRefs: crossReview.EvidenceRefs, SessionID: crossReview.SessionID, FreshSession: crossReview.FreshSession}
 	}
 	met, total, failing := marshal.CriteriaMet(*t, h)
 	envelope, state, err := s.gateInputs(ctx, runID, taskID, run, constitution.DomainCompletion)
