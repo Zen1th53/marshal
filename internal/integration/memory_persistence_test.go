@@ -2,8 +2,8 @@ package integration
 
 import (
 	"context"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/authz"
@@ -29,7 +29,7 @@ func TestMemoryPersistsAcrossInterfacesAndRestart(t *testing.T) {
 	var memoryID string
 	var projectID string
 
-	// 1. Write memory through the canonical store, recall through MemoryService.
+	// 1. Record and promote a candidate in the first run.
 	func() {
 		rt, err := app.Open(ctx, repo.Path())
 		if err != nil {
@@ -42,19 +42,25 @@ func TestMemoryPersistsAcrossInterfacesAndRestart(t *testing.T) {
 		}
 		projectID = proj.ID
 
-		now := time.Now().UTC()
-		id, err := model.NewID("MEM-")
+		operator := authz.Principal{ID: "operator", Role: authz.Role{
+			Name: "operator", Authorities: []authz.Authority{authz.AuthorityPolicyAdmin},
+		}}
+		candidate, err := rt.Memory().Remember(ctx, operator, app.RememberRequest{
+			ProjectID: projectID, Kind: model.MemoryKindDecision,
+			Title: "Ollama endpoint", Body: "127.0.0.1:11434",
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		memoryID = id
-		if err := rt.Store().WriteMemoryV2(ctx, model.MemoryRecordV2{
-			ID: id, ProjectID: projectID, Kind: model.MemoryKindDecision,
-			Lifecycle: model.MemoryDurable, Confidence: model.ConfidenceVerified,
-			Authority: model.AuthorityOperator, Title: "Ollama endpoint", Body: "127.0.0.1:11434",
-			Scope: string(model.ScopeProject), ScopeID: projectID,
-			ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
-			Source: model.MemorySource{Kind: "test"},
+		memoryID = candidate.ID
+		before, err := rt.Memory().Recall(ctx, reader, app.RecallRequest{
+			ProjectID: projectID, Query: "Ollama", RunID: "run-one",
+		})
+		if err != nil || len(before.Results) != 0 || before.Receipt.ConsumedBytes != 0 {
+			t.Fatalf("unreviewed candidate delivered: %+v, err=%v", before, err)
+		}
+		if _, err := rt.Memory().Promote(ctx, operator, app.PromoteRequest{
+			ProjectID: projectID, MemoryID: memoryID, ScopeID: projectID,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -75,13 +81,36 @@ func TestMemoryPersistsAcrossInterfacesAndRestart(t *testing.T) {
 		}
 	}()
 
-	// 2. Restart runtime and recall again through the store.
+	// 2. A different agent in a later run receives the promoted body and receipt.
 	func() {
 		rt, err := app.Open(ctx, repo.Path())
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer rt.Close()
+
+		laterAgent := reader
+		laterAgent.ID = "later-agent"
+		response, err := rt.Memory().Recall(ctx, laterAgent, app.RecallRequest{
+			ProjectID: projectID, Query: "Ollama", RunID: "run-two",
+			AllowedScopeIDs: []string{projectID}, ExcludeSessionHistory: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Results) != 1 || response.Results[0].ID != memoryID ||
+			response.Results[0].Lifecycle != model.MemoryDurable ||
+			!strings.Contains(response.Context, "127.0.0.1:11434") || response.Receipt.ConsumedBytes == 0 {
+			t.Fatalf("later agent did not receive promoted memory: %+v", response)
+		}
+		receipt, err := rt.Store().GetRetrievalReceipt(ctx, projectID, response.Receipt.ReceiptID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if receipt.CallerID != laterAgent.ID || receipt.RunID != "run-two" || receipt.ConsumedBytes == 0 ||
+			!strings.Contains(receipt.DecisionsJSON, `"included":true`) {
+			t.Fatalf("delivery receipt = %+v", receipt)
+		}
 
 		rec, err := rt.Store().GetMemoryV2(ctx, projectID, memoryID)
 		if err != nil {
