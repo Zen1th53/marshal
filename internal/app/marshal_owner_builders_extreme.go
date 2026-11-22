@@ -17,6 +17,19 @@ import (
 // validated browser architecture packet (nil when no review exists).
 // It returns the RevisionReason lines for the replacements it made.
 func applyOwnerBuilders(draft *MarshalDraft, packet json.RawMessage) ([]string, error) {
+	lines, _, err := applyOwnerBuildersPinned(draft, packet)
+	return lines, err
+}
+
+// applyOwnerBuildersPinned is applyOwnerBuilders that also returns the tasks
+// whose worker the owner chose: MARSHAL never moves those on its own.
+func applyOwnerBuildersPinned(draft *MarshalDraft, packet json.RawMessage) ([]string, map[string]bool, error) {
+	pinned := map[string]bool{}
+	lines, err := applyOwnerBuilderChoices(draft, packet, pinned)
+	return lines, pinned, err
+}
+
+func applyOwnerBuilderChoices(draft *MarshalDraft, packet json.RawMessage, pinned map[string]bool) ([]string, error) {
 	if len(packet) == 0 {
 		return nil, nil
 	}
@@ -72,6 +85,7 @@ func applyOwnerBuilders(draft *MarshalDraft, packet json.RawMessage) ([]string, 
 				provider = choice
 			}
 			task.Worker = provider
+			pinned[task.PlanTaskID] = true
 			for _, component := range task.Components {
 				if context.Builders[component] == provider {
 					lines = append(lines, fmt.Sprintf("owner builder: task %q uses %s (part %s)", task.PlanTaskID, provider, component))

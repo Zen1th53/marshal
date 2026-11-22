@@ -418,12 +418,17 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 	if tier == marshal.Ultra {
 		tierLine = "- Tier: ULTRA (independent cross-review and verification).\n"
 	}
+	checkerLine := ""
+	if line := app.FinalCheckerBriefing(workers, tier == marshal.Ultra); line != "" {
+		checkerLine = "- " + line + "\n"
+	}
 	return strings.ReplaceAll(protocol+"\nThis run:\n"+
 		tierLine+
 		"- After an earlier-work read grant, MARSHAL reads only the granted project-scoped conversation and delivers it as labelled untrusted data in .marshal/inbox/marshal.md. Read that file with your filesystem read tool when the grant is allowed; it contains the granted source paths and content. Summarise the supplied continuation without asking the operator to locate it or reading raw provider history.\n"+
 		runAuthority.egress+
 		runAuthority.workerModes+
 		"- Workers you may assign tasks to: "+strings.Join(workers, ", ")+".\n"+
+		checkerLine+
 		"- A worker appearing here only means its CLI is installed. Governed work also needs a current verified harness profile and a matching canonical Process 04 route and assignment. If that evidence is missing, the runtime will reject the draft and explain what to verify. Do not claim a task can run until the runtime has accepted its canonical plan.\n"+
 		"- Give each task exactly one success criterion and executable checks that prove that criterion. Process 05 binds checks to that exact criterion.\n"+
 		runAuthority.settings+

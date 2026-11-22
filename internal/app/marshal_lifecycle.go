@@ -91,6 +91,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
+	if err = s.refuseDispatchToReservedChecker(ctx, runID, run, rev, i); err != nil {
+		return MarshalDispatch{}, err
+	}
 	if err = s.executionAdmission(ctx, runID, taskID, run); err != nil {
 		return MarshalDispatch{}, err
 	}
@@ -1076,6 +1079,9 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	if marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
 		return errors.New("cannot reassign to the same harness")
 	}
+	if s.reservedChecker(run, taskID, worker) {
+		return reservedCheckerRefusal(taskID, worker)
+	}
 	previous := t.Worker
 	providerSwitch, err := s.governedProviderSwitch(ctx, run, *t, worker, operatorReason != "")
 	if err != nil {
@@ -1145,7 +1151,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
 	}
-	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
+	hasOtherWorker := s.otherWorkerFor(run, *t) != ""
 	// Zero means no bound (Extreme); Community bounds fresh-session retries.
 	maxFresh := buildMaxFreshSessionRetries()
 	if !hasOtherWorker {

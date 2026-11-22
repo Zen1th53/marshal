@@ -365,10 +365,15 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		} else if waiting {
 			continue
 		}
-		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 && !isProviderFailover(t) {
-			next := s.otherWorker(t.Worker, t.Mode)
+		// Only a worker that used up its returns is moved on here; a task
+		// the operator already moved (its new worker has none) keeps it.
+		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 && t.ReturnsByAgent[t.Worker] > 0 && !isProviderFailover(t) {
+			next := s.otherWorkerFor(run, t)
 			if next == "" {
 				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
+				if s.otherWorker(t.Worker, t.Mode) != "" {
+					reason = fmt.Sprintf("no other worker supports %s mode for reassignment: the only other one is kept free for this run's final check; operator intervention required", t.Mode)
+				}
 				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeNoReassignWorker, reason))
 			}
 			if err := s.Reassign(ctx, runID, t.PlanTaskID, next); err != nil {
@@ -600,13 +605,23 @@ func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {
 
 // otherWorker picks a configured worker other than current, in a stable order.
 func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) string {
+	return s.otherWorkerExcept(current, mode, nil)
+}
+
+// otherWorkerFor is otherWorker for task t of run: it never picks the last
+// provider left that can do the run's final check.
+func (s *MarshalService) otherWorkerFor(run marshal.Run, t marshal.Task) string {
+	return s.otherWorkerExcept(t.Worker, t.Mode, func(name string) bool { return s.reservedChecker(run, t.PlanTaskID, name) })
+}
+
+func (s *MarshalService) otherWorkerExcept(current string, mode marshal.WorkerMode, skip func(string) bool) string {
 	drivers := s.Drivers
 	if mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
 	names := make([]string, 0, len(drivers))
 	for name, d := range drivers {
-		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode {
+		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode && (skip == nil || !skip(name)) {
 			names = append(names, name)
 		}
 	}
