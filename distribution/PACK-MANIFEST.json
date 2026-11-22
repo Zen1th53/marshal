@@ -1691,8 +1691,8 @@
     },
     {
       "path": "internal/app/dispatch_one_provider_extreme_test.go",
-      "sha256": "16fd5a10ec039403b209920264be0b3cd88962e791434ad2206878504c735a27",
-      "bytes": 2387
+      "sha256": "256e7ec6eb06fdd421beb2803058dbceaf08cec4296106839f5f13ac23e9325d",
+      "bytes": 4444
     },
     {
       "path": "internal/app/effect_boundary_test.go",
@@ -12671,8 +12671,8 @@
     },
     {
       "path": "internal/tui/boardv2_collect_flow_test.go",
-      "sha256": "79164e436e5d5c63c7c8c48a107708db4461e9d36b9affb7ffbf2743ffb0b041",
-      "bytes": 21995
+      "sha256": "3ba39eea26b788d502e684cb22de52c8331bf543f07eaa57628b61bb0600f5ed",
+      "bytes": 21993
     },
     {
       "path": "internal/tui/boardv2_collect_limits.go",
@@ -12706,8 +12706,8 @@
     },
     {
       "path": "internal/tui/boardv2_flow.go",
-      "sha256": "c8eb0ef4292d0828aa20b3c8cfc71d40c2488dd858c9bebbe513b323ffded7ad",
-      "bytes": 28104
+      "sha256": "e2f6bf156cd64d13df45716d6a6995af1fa2e0ed86f2f9b1ba4c6ddbc886b9f1",
+      "bytes": 27727
     },
     {
       "path": "internal/tui/boardv2_flow_default.go",
@@ -13641,8 +13641,8 @@
     },
     {
       "path": "internal/tui/marshal_draft_reject_test.go",
-      "sha256": "64b5fea4d29f36f97adf861380a9b1febb97d2ce0c4fc490eb883baca9abdba9",
-      "bytes": 7314
+      "sha256": "b7ebc1178b60480703dda78b18675edf16fabc068284f42f84dec8bea7c9c61c",
+      "bytes": 7313
     },
     {
       "path": "internal/tui/marshal_exit_test.go",
@@ -13781,13 +13781,13 @@
     },
     {
       "path": "internal/tui/marshal_plan_stall.go",
-      "sha256": "fe38374120674a2fc9c4a680773a2686b342a2d67ab4ae8494a2d64330476a14",
-      "bytes": 5189
+      "sha256": "a4cbd66ea000ee58a973080593543b99239b61889a59b5a586f4853b5854ff95",
+      "bytes": 5159
     },
     {
       "path": "internal/tui/marshal_plan_stall_test.go",
-      "sha256": "ffd28639cb654870841e16995b0b4e2f98f58b908ee2db758874fc781031b16b",
-      "bytes": 4556
+      "sha256": "0eba14d87e20ed3beb90617f8308e1572cd9dc943f5382e2acb996ef28fdc8e1",
+      "bytes": 4550
     },
     {
       "path": "internal/tui/marshal_planning_advice.go",
