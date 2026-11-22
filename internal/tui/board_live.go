@@ -927,8 +927,8 @@ func (w *Workspace) actOnStop(ctx context.Context, stop runStop) {
 			}
 		}
 		_ = w.RefreshState(workerCtx)
-		if !w.postUI(workerCtx, func() { w.recordCommandResult(cmd, resp, err); w.commandBusy.Store(false) }) {
-			w.commandBusy.Store(false)
+		if !w.postUI(workerCtx, func() { w.recordCommandResult(cmd, resp, err); w.releaseCommandLane() }) {
+			w.releaseCommandLane()
 		}
 	})
 }

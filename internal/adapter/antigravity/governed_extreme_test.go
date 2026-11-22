@@ -36,7 +36,7 @@ func TestGovernedAntigravityUsesBoundMCPAndExactModel(t *testing.T) {
 		if cmd.Args[0] != "--mode" || cmd.Args[1] != "accept-edits" || cmd.Args[7] != "gemini-3.8-flash-high" {
 			t.Fatal("governed mode/model missing")
 		}
-		if strings.Contains(strings.Join(cmd.Args, " "), "dangerously") || len(cmd.Env) != 0 {
+		if strings.Contains(strings.Join(cmd.Args, " "), "dangerously") || !onlyAllowedEnv(cmd.Env) {
 			t.Fatal("permission bypass or arbitrary environment")
 		}
 		req, e := sessionmcp.SandboxRequest(ctx, model.SandboxRequest{Worktree: root})
@@ -271,7 +271,7 @@ func TestGovernedAntigravityExtremeUnverifiedNewerEditsWithBoundMCP(t *testing.T
 	if executedCommand.Args[0] != "--mode" || executedCommand.Args[1] != "accept-edits" {
 		t.Fatalf("expected governed accept-edits mode, got %v", executedCommand.Args[:2])
 	}
-	if strings.Contains(strings.Join(executedCommand.Args, " "), "dangerously") || len(executedCommand.Env) != 0 {
+	if strings.Contains(strings.Join(executedCommand.Args, " "), "dangerously") || !onlyAllowedEnv(executedCommand.Env) {
 		t.Fatal("permission bypass or arbitrary environment")
 	}
 	if !boundMCP {

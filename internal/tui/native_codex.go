@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 // StartWithNativeCodex opens the native session after terminal ownership has
@@ -609,7 +610,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.Env = append(os.Environ(), briefingEnv...)
+	cmd.Env = append(workerenv.Host(os.Environ()), briefingEnv...)
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start native %s: %w", label, err)
 	}

@@ -665,7 +665,10 @@ func TestCommandSweepCrosscutMarshalApprovedPlanPTY(t *testing.T) {
 			found = true
 			break
 		}
-		if time.Since(lastTry) >= 800*time.Millisecond {
+		// Commands typed while one runs now queue rather than drop, so a
+		// resend is only for a close the run refused while still settling;
+		// resending slowly keeps the bounded queue from filling.
+		if time.Since(lastTry) >= 2*time.Second {
 			s.sendLine("/marshal close")
 			lastTry = time.Now()
 		}
@@ -674,6 +677,10 @@ func TestCommandSweepCrosscutMarshalApprovedPlanPTY(t *testing.T) {
 	if !found {
 		t.Fatalf("expected \"not verified\" on the terminal after %s.\n--- output tail ---\n%s\n--- screen ---\n%s",
 			ptyWait(15*time.Second), tail(s.output(), 3000), s.screenText(40, 160))
+	}
+	// The failed close must leave the durable run and its task in place.
+	if state, err := readProcess05PTYState(s.cmd.Dir); err != nil {
+		t.Fatalf("failed close lost the durable task: %+v %v", state, err)
 	}
 	s.sendLine("/marshal status")
 	deadline = time.Now().Add(ptyWait(8 * time.Second))

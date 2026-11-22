@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 const (
@@ -198,6 +199,12 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	if err != nil {
 		return adapter.Result{}, err
 	}
+	if env == nil {
+		// A nil Env inherits the whole process environment on a host
+		// runner; a host worker keeps only what workerenv allows. A
+		// sandboxed runner builds its own environment and ignores this.
+		env = workerenv.Host(nil)
+	}
 	defer cleanup()
 
 	process, err := c.runner.Run(ctx, adapter.Command{
@@ -240,6 +247,12 @@ func (c *Client) Resume(ctx context.Context, sessionID string, request adapter.R
 	ctx, args, env, cleanup, err := c.prepareInvocation(ctx, request, args, sessionID)
 	if err != nil {
 		return adapter.Result{}, err
+	}
+	if env == nil {
+		// A nil Env inherits the whole process environment on a host
+		// runner; a host worker keeps only what workerenv allows. A
+		// sandboxed runner builds its own environment and ignores this.
+		env = workerenv.Host(nil)
 	}
 	defer cleanup()
 

@@ -106,6 +106,7 @@ func (w *Workspace) Close() {
 	w.closeWebBoard()
 	w.workers.stop()
 	w.marshalStop()
+	w.clearCommandQueue()
 	w.cancelCommand()
 	w.cancelGovernedDispatches()
 	w.workers.wg.Wait()

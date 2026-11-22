@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/sessionmcp"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 type Client struct {
@@ -109,7 +110,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		args = c.contract.RunArgs(args)
 	}
 
-	args, env, cleanup, err := sessionmcp.Configure(ctx, "opencode", args, os.Environ())
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "opencode", args, workerenv.Host(os.Environ()))
 	if err != nil {
 		return adapter.Result{}, err
 	}

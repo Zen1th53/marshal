@@ -315,8 +315,8 @@ func TestExtremeWorkerActualLaunch(t *testing.T) {
 			root := t.TempDir()
 			script := filepath.Join(root, provider)
 			capture := filepath.Join(root, "capture")
-			t.Setenv("MCP_CAPTURE", capture)
-			if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$MCP_CAPTURE\"\nenv >> \"$MCP_CAPTURE\"\nwhile [ \"$#\" -gt 0 ]; do if [ \"$1\" = --mcp-config ]; then shift; cat \"$1\" >> \"$MCP_CAPTURE\"; fi; shift; done\n"), 0700); err != nil {
+			t.Setenv("MARSHAL_TEST_MCP_CAPTURE", capture)
+			if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$MARSHAL_TEST_MCP_CAPTURE\"\nenv >> \"$MARSHAL_TEST_MCP_CAPTURE\"\nwhile [ \"$#\" -gt 0 ]; do if [ \"$1\" = --mcp-config ]; then shift; cat \"$1\" >> \"$MARSHAL_TEST_MCP_CAPTURE\"; fi; shift; done\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			var native driver.Native

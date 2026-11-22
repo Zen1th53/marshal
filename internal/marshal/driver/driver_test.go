@@ -29,10 +29,10 @@ const claudeStream = `{"type":"system","subtype":"init","session_id":"s-1","mode
 const fakeCLI = `#!/bin/sh
 if [ -t 0 ]; then echo "stdin is a terminal" >&2; exit 3; fi
 if head -c 1 | od -An -c | grep -q .; then echo "stdin was not at EOF" >&2; exit 4; fi
-if [ -n "$FAKE_WRITE" ]; then printf 'changed\n' > "$FAKE_WRITE"; fi
-if [ -n "$FAKE_LATE" ]; then (printf 'started\n' > "$FAKE_LATE.started"; sleep 1; printf 'late\n' > "$FAKE_LATE") & fi
-if [ -n "$FAKE_SLEEP" ]; then sleep "$FAKE_SLEEP"; fi
-if [ -n "$FAKE_STREAM" ]; then cat "$FAKE_STREAM"; fi
+if [ -n "$MARSHAL_TEST_FAKE_WRITE" ]; then printf 'changed\n' > "$MARSHAL_TEST_FAKE_WRITE"; fi
+if [ -n "$MARSHAL_TEST_FAKE_LATE" ]; then (printf 'started\n' > "$MARSHAL_TEST_FAKE_LATE.started"; sleep 1; printf 'late\n' > "$MARSHAL_TEST_FAKE_LATE") & fi
+if [ -n "$MARSHAL_TEST_FAKE_SLEEP" ]; then sleep "$MARSHAL_TEST_FAKE_SLEEP"; fi
+if [ -n "$MARSHAL_TEST_FAKE_STREAM" ]; then cat "$MARSHAL_TEST_FAKE_STREAM"; fi
 exit 0
 `
 
@@ -113,7 +113,7 @@ func TestM05DriversRunWithoutTTY(t *testing.T) {
 	for _, d := range []Native{Codex(bin), Claude(bin), Agy(bin), OpenCode(bin)} {
 		t.Run(d.Provider, func(t *testing.T) {
 			task, wt := newTask(t)
-			t.Setenv("FAKE_WRITE", filepath.Join(wt, "real.txt"))
+			t.Setenv("MARSHAL_TEST_FAKE_WRITE", filepath.Join(wt, "real.txt"))
 			out := handIn(t, d, Request{Task: task, Worktree: wt, Brief: "do the task"})
 			if got := out.RuntimeObserved[0].ExitCode; got != 0 {
 				t.Fatalf("worker exit %d, output %q", got, out.RuntimeObserved[0].Output)
@@ -128,8 +128,8 @@ func TestM05DriversRunWithoutTTY(t *testing.T) {
 // Criterion 2: the diff and the files come from git, not from the worker.
 func TestM05HandInFromGitNotWorkerText(t *testing.T) {
 	task, wt := newTask(t)
-	t.Setenv("FAKE_WRITE", filepath.Join(wt, "real.txt"))
-	t.Setenv("FAKE_STREAM", streamFile(t, claudeStream))
+	t.Setenv("MARSHAL_TEST_FAKE_WRITE", filepath.Join(wt, "real.txt"))
+	t.Setenv("MARSHAL_TEST_FAKE_STREAM", streamFile(t, claudeStream))
 	out := handIn(t, Claude(fakeBinary(t)), Request{Task: task, Worktree: wt, Brief: "edit"})
 	if len(out.FilesTouched) != 1 || out.FilesTouched[0] != "real.txt" {
 		t.Fatalf("files touched = %v, want [real.txt]", out.FilesTouched)
@@ -166,7 +166,7 @@ func TestM05GitHooksDisabledDuringAssembly(t *testing.T) {
 		}
 	}
 	run(t, wt, "git", "config", "core.hooksPath", hooks)
-	t.Setenv("FAKE_WRITE", filepath.Join(wt, "real.txt"))
+	t.Setenv("MARSHAL_TEST_FAKE_WRITE", filepath.Join(wt, "real.txt"))
 	_ = handIn(t, Codex(fakeBinary(t)), Request{Task: task, Worktree: wt, Brief: "edit"})
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("git hook ran during assembly: %v", err)
@@ -185,7 +185,7 @@ func TestM05ExternalDiffAndTextconvDisabled(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(wt, ".gitattributes"), []byte("real.txt diff=worker\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("FAKE_WRITE", filepath.Join(wt, "real.txt"))
+	t.Setenv("MARSHAL_TEST_FAKE_WRITE", filepath.Join(wt, "real.txt"))
 	out := handIn(t, Codex(fakeBinary(t)), Request{Task: task, Worktree: wt, Brief: "edit"})
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("external diff or textconv ran: %v", err)
@@ -201,8 +201,8 @@ func TestM05ChecksRerunDespiteClaimedSuccess(t *testing.T) {
 	task, wt := newTask(t)
 	task.Criteria = []string{"ok file exists"}
 	task.Checks = []marshal.Check{{Command: "test -f ok.txt", Criteria: []string{"ok file exists"}}}
-	t.Setenv("FAKE_WRITE", filepath.Join(wt, "real.txt"))
-	t.Setenv("FAKE_STREAM", streamFile(t, claudeStream))
+	t.Setenv("MARSHAL_TEST_FAKE_WRITE", filepath.Join(wt, "real.txt"))
+	t.Setenv("MARSHAL_TEST_FAKE_STREAM", streamFile(t, claudeStream))
 	out := handIn(t, Claude(fakeBinary(t)), Request{Task: task, Worktree: wt, Brief: "edit"})
 	if len(out.CheckResults) != 1 || out.CheckResults[0].Passed {
 		t.Fatalf("check results = %+v, want one failing result", out.CheckResults)
@@ -223,7 +223,7 @@ func TestM05ChecksRerunDespiteClaimedSuccess(t *testing.T) {
 func TestM05WorkerReportedKeptApart(t *testing.T) {
 	task, wt := newTask(t)
 	task.Checks = []marshal.Check{{Command: "true", Criteria: []string{"c"}}}
-	t.Setenv("FAKE_STREAM", streamFile(t, string(fixture(t, "codex-exec.jsonl"))))
+	t.Setenv("MARSHAL_TEST_FAKE_STREAM", streamFile(t, string(fixture(t, "codex-exec.jsonl"))))
 	bin := fakeBinary(t)
 	out := handIn(t, Codex(bin), Request{Task: task, Worktree: wt, Brief: "run"})
 	if len(out.WorkerReported) != 1 || out.WorkerReported[0].Command != "/bin/zsh -lc 'echo ready'" || out.WorkerReported[0].ExitCode != 0 {
@@ -252,9 +252,9 @@ func TestM05CancelStopsWorkerKeepsWorktree(t *testing.T) {
 	task, wt := newTask(t)
 	written := filepath.Join(wt, "real.txt")
 	late := filepath.Join(wt, "late.txt")
-	t.Setenv("FAKE_WRITE", written)
-	t.Setenv("FAKE_LATE", late)
-	t.Setenv("FAKE_SLEEP", "60")
+	t.Setenv("MARSHAL_TEST_FAKE_WRITE", written)
+	t.Setenv("MARSHAL_TEST_FAKE_LATE", late)
+	t.Setenv("MARSHAL_TEST_FAKE_SLEEP", "60")
 	d := Codex(fakeBinary(t))
 	h, err := d.Launch(context.Background(), Request{Task: task, Worktree: wt, Brief: "slow"})
 	if err != nil {
@@ -379,7 +379,7 @@ func TestM05MissingIdentityFailsInsteadOfInventing(t *testing.T) {
 	}
 	t.Setenv("GIT_CONFIG_GLOBAL", empty)
 	t.Setenv("GIT_CONFIG_SYSTEM", empty)
-	t.Setenv("FAKE_WRITE", filepath.Join(wt, "real.txt"))
+	t.Setenv("MARSHAL_TEST_FAKE_WRITE", filepath.Join(wt, "real.txt"))
 	d := Codex(fakeBinary(t))
 	h, err := d.Launch(context.Background(), Request{Task: task, Worktree: wt, Brief: "edit"})
 	if err != nil {

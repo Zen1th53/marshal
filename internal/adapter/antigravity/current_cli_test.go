@@ -17,10 +17,39 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/antigravity"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 func nativeRequest() adapter.Request {
 	return adapter.Request{TaskID: "native-read", Title: "Read-only reply", Worktree: "/isolated/cwd", TrustedContext: "Reply without tools."}
+}
+
+// hostWorkerEnvContract is the environment a host agy worker gets: in the
+// default edition the filtered host environment (never a planted
+// GITHUB_TOKEN or the tmux client variables, but the agy auth variable); in
+// the governed edition the runner's own, unchanged (an empty Env).
+func hostWorkerEnvContract(env []string) bool {
+	if !workerenv.HostFiltered {
+		return len(env) == 0
+	}
+	keys := map[string]bool{}
+	for _, e := range env {
+		k, _, _ := strings.Cut(e, "=")
+		keys[k] = true
+	}
+	return keys["PATH"] && keys["GEMINI_API_KEY"] && !keys["GITHUB_TOKEN"] && !keys["TMUX"]
+}
+
+// onlyAllowedEnv reports whether env holds only variables a host worker may
+// inherit: no arbitrary owner environment reaches agy.
+func onlyAllowedEnv(env []string) bool {
+	for _, e := range env {
+		k, _, _ := strings.Cut(e, "=")
+		if !workerenv.Allowed(k, nil) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestCurrentAntigravityDialectCwdAndPermissions(t *testing.T) {
@@ -33,12 +62,15 @@ func TestCurrentAntigravityDialectCwdAndPermissions(t *testing.T) {
 	req := nativeRequest()
 	req.Effort = "high"
 	req.AllowedOperations = []string{"respond_only"}
+	t.Setenv("GITHUB_TOKEN", "ghp_planted")
+	t.Setenv("TMUX", "/private/tmp/tmux-501/default,1,0")
+	t.Setenv("GEMINI_API_KEY", "gemini-planted")
 	if _, err := client.Run(t.Context(), req); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"--mode", "plan", "--sandbox", "--disable-slash-commands", "--output-format", "json", "--effort", "high", "--new-project", "--print"}
-	if !slices.Equal(command.Args[:len(command.Args)-1], want) || command.Dir != req.Worktree || len(command.Env) != 0 {
-		t.Fatal("native dialect, permissions, process cwd or inherited runner contract changed")
+	if !slices.Equal(command.Args[:len(command.Args)-1], want) || command.Dir != req.Worktree || !hostWorkerEnvContract(command.Env) {
+		t.Fatalf("native dialect, permissions, process cwd or host worker environment changed: env=%d entries", len(command.Env))
 	}
 	for _, forbidden := range []string{"exec", "--json", "--cd", "--resume", "--dangerously-skip-permissions"} {
 		if slices.Contains(command.Args, forbidden) {

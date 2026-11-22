@@ -127,19 +127,62 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 			t.Fatalf("pending private resume changed canonical approval: before=%+v after=%+v %v", before, after, err)
 		}
 	}
-	if !s.waitFor("process 05: approval", 15*time.Second) {
-		t.Fatalf("Process 05 did not reach its approval pause from PTY: %s", tail(s.output(), 3000))
+	// The pause is read from the durable run, not from the screen: the
+	// Board repaints over transient lines, and the approval ID it needs is
+	// the one the store holds.
+	paused := waitProcess05PTYApproval(t, s, project, ptyWait(15*time.Second))
+	if !s.waitFor("process 05: approval", ptyWait(15*time.Second)) {
+		t.Fatalf("Process 05 approval pause was not shown on the terminal: %s", tail(s.output(), 3000))
 	}
-	match := regexp.MustCompile(`process 05: approval ([A-Za-z0-9-]+) required`).FindStringSubmatch(s.output())
-	if len(match) != 2 {
-		t.Fatalf("approval ID not shown: %s", tail(s.output(), 3000))
+	if match := regexp.MustCompile(`process 05: approval ([A-Za-z0-9-]+) required`).FindStringSubmatch(s.output()); len(match) != 2 || match[1] != paused.ApprovalID {
+		t.Fatalf("terminal shows a different approval than the store's %q: %s", paused.ApprovalID, tail(s.output(), 3000))
 	}
 	approvedCount := strings.Count(s.output(), "Task approved. The run continues")
-	s.sendLine("/marshal approve-task " + match[1])
-	if !s.waitForCount("Task approved. The run continues", approvedCount+1, 8*time.Second) {
+	// An approve-task typed while use-plan (or resume) is still finishing
+	// its refresh now queues behind it instead of being dropped.
+	s.sendLine("/marshal approve-task " + paused.ApprovalID)
+	// The approval is acknowledged durably first: deciding it moves the task
+	// out of NEEDS_APPROVAL in the run file.
+	waitProcess05PTYApprovalDecided(t, s, project, paused.ApprovalID, ptyWait(15*time.Second))
+	if !s.waitForCount("Task approved. The run continues", approvedCount+1, ptyWait(15*time.Second)) {
 		t.Fatalf("task approval was not acknowledged: %s", tail(s.output(), 3000))
 	}
 	return s
+}
+
+// waitProcess05PTYApprovalDecided polls the durable run until the approval
+// approvalID no longer holds the task.
+func waitProcess05PTYApprovalDecided(t *testing.T, s *ptySession, project, approvalID string, wait time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(wait)
+	var last process05PTYState
+	var lastErr error
+	for time.Now().Before(deadline) {
+		last, lastErr = readProcess05PTYState(project)
+		if lastErr == nil && (last.TaskState != "NEEDS_APPROVAL" || last.ApprovalID != approvalID) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("task approval was not acknowledged: state=%+v err=%v\n%s", last, lastErr, tail(s.output(), 3000))
+}
+
+// waitProcess05PTYApproval polls the durable Process 05 run until its task
+// waits for an approval, and returns that state.
+func waitProcess05PTYApproval(t *testing.T, s *ptySession, project string, wait time.Duration) process05PTYState {
+	t.Helper()
+	deadline := time.Now().Add(wait)
+	var last process05PTYState
+	var lastErr error
+	for time.Now().Before(deadline) {
+		last, lastErr = readProcess05PTYState(project)
+		if lastErr == nil && last.TaskState == "NEEDS_APPROVAL" && last.ApprovalID != "" {
+			return last
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("Process 05 did not reach its durable approval pause: state=%+v err=%v\n%s", last, lastErr, tail(s.output(), 3000))
+	return last
 }
 
 func TestPTYMarshalLiveProviderCompletesAfterApproval(t *testing.T) {
