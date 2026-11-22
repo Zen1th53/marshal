@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
-
-	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
-	"github.com/Zen1th53/marshal/internal/statepath"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/harness"

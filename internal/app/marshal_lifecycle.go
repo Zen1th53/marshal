@@ -6,13 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/Zen1th53/marshal/internal/statepath"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
