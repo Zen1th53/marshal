@@ -428,7 +428,7 @@ type Review struct {
 	FreshSession bool   `json:"-"`
 }
 
-// IndependentReview keeps the ULTRA cross-review beside the Marshal's
+// IndependentReview keeps every hand-in's cross-review beside the Marshal's
 // recommendation for the same hand-in attempt.
 type IndependentReview struct {
 	Verdict      Verdict

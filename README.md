@@ -135,7 +135,8 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 2. **Build in isolation.** The plan is split into small tasks. Each task names
    its files, acceptance criteria and a check command, and runs in its own Git
    worktree and branch, so parallel workers never overwrite each other.
-3. **No model grades its own work.** Another agent with a fresh context
+3. **Checked before it merges.** Every plan gets an independent review
+   and final check. Another agent with a fresh context
    reviews every hand-in against its criteria: a different provider when one
    is available, otherwise a new session of the same one. An independent
    verifier, also in a session of its own, then runs the checks on the
@@ -212,9 +213,9 @@ full interface, and it opens in your browser as the Board starts:
 | `?` | Every key |
 
 The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
-runs on. The final ULTRA check requires Claude Code installed and not used as a worker in
-that run; if unavailable, the run stops before checking and tells you to install Claude Code
-or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
+runs on. Every plan's final independent check requires Claude Code installed. It runs in a
+fresh session, even if Claude Code also worked on the run. If unavailable, the run stops
+before checking and tells you to install Claude Code or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
 
 ---
 

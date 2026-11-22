@@ -123,12 +123,12 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 	if cause == nil {
 		return nil
 	}
-	if cause.Error() == "independent verifier is unavailable" || cause.Error() == "verification refused" {
+	if cause.Error() == "verification refused" {
 		return cause
 	}
 	pause := marshal.Pause{Reason: cause.Error(), Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume}
 	data := map[string]any{"reason": cause.Error(), "role": "independent-verifier"}
-	if errors.Is(cause, errIndependentVerifierUnavailable) {
+	if errors.Is(cause, errIndependentVerifierUnavailable) || cause.Error() == "independent verifier is unavailable" || cause.Error() == "verifier is unavailable" {
 		// The person must make an independent checker available; the
 		// exclusions stay in the detail and the recorded event.
 		pause.Reason, pause.Detail = "The final check has no checker: each installed AI tool is limited or cannot take this role.", cause.Error()
@@ -186,4 +186,14 @@ func (s *MarshalService) checkVerifierFreshSession(record marshal.VerifierEviden
 		}
 	}
 	return err
+}
+
+// A missing reviewer leaves the hand-in pending until an independent session can review it.
+func (s *MarshalService) pauseUnavailableCrossReviewer(ctx context.Context, runID string, run marshal.Run, revision int64, cause error) error {
+	ctx = context.WithoutCancel(ctx)
+	pauseMarshal(&run, marshal.Pause{Reason: "Independent cross-review is unavailable: " + cause.Error(), Resolutions: []string{"Make a reviewer available, then /marshal resume to retry the hand-in review."}, ResumeState: run.State, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume})
+	if err := s.save(ctx, runID, run, revision); err != nil {
+		return errors.Join(cause, err)
+	}
+	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": cause.Error(), "role": "independent-cross-reviewer"}))
 }

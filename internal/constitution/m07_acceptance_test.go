@@ -11,7 +11,7 @@ func taskCase() (constitution.Envelope, constitution.RuntimeState, constitution.
 	env, state := cleanEnvelope(), cleanState()
 	input := constitution.TaskAcceptance{Mode: marshal.AcceptMarshal, MarshalVerdictAccept: true,
 		Executor: "worker", Reviewer: "marshal", ResultCommit: "abc", EvidenceCommit: "abc",
-		CriteriaTotal: 2, CriteriaMet: 2}
+		CriteriaTotal: 2, CriteriaMet: 2, IndependentReviewDone: true}
 	return env, state, input
 }
 
@@ -43,19 +43,20 @@ func TestM07MarshalExecutorCannotReview(t *testing.T) {
 	}
 }
 
-func TestM07UltraRequiresCrossReview(t *testing.T) {
-	e, s, i := taskCase()
-	s.EntitlementValid = true
-	if v := taskVerdict(e, s, i); !v.Outcome.Permits() {
-		t.Fatalf("standard: %+v", v)
-	}
-	e.Mode = constitution.ModeUltra
-	if v := taskVerdict(e, s, i); !v.Blocked() {
-		t.Fatalf("ultra without review: %+v", v)
-	}
-	i.IndependentReviewDone = true
-	if v := taskVerdict(e, s, i); !v.Outcome.Permits() {
-		t.Fatalf("ultra with review: %+v", v)
+func TestM07EveryTierRequiresCrossReview(t *testing.T) {
+	for _, mode := range []constitution.Mode{constitution.ModeStandard, constitution.ModeUltra} {
+		t.Run(string(mode), func(t *testing.T) {
+			e, s, i := taskCase()
+			e.Mode, s.EntitlementValid = mode, true
+			i.IndependentReviewDone = false
+			if v := taskVerdict(e, s, i); !v.Blocked() {
+				t.Fatalf("without review: %+v", v)
+			}
+			i.IndependentReviewDone = true
+			if v := taskVerdict(e, s, i); !v.Outcome.Permits() {
+				t.Fatalf("with review: %+v", v)
+			}
+		})
 	}
 }
 

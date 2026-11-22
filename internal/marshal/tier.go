@@ -23,10 +23,10 @@ type DispatchPolicy struct {
 // TierPolicy reads the gate when dispatch is about to start.
 func TierPolicy(gate CapabilityGate, settings Settings) DispatchPolicy {
 	if gate == nil || !gate.Capability(CapabilityMarshal) {
-		return DispatchPolicy{Tier: Standard, Concurrency: 1}
+		return DispatchPolicy{Tier: Standard, Concurrency: 1, CrossReviewRequired: true, VerifierRequired: true}
 	}
 	if eg, ok := gate.(interface{ ExecutionEnabled() bool }); ok && !eg.ExecutionEnabled() {
-		return DispatchPolicy{Tier: Standard, Concurrency: 1}
+		return DispatchPolicy{Tier: Standard, Concurrency: 1, CrossReviewRequired: true, VerifierRequired: true}
 	}
 	concurrency := settings.UltraConcurrency
 	if concurrency < 1 {

@@ -581,17 +581,17 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
-	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: tier == marshal.Ultra, VerifierRequired: tier == marshal.Ultra}
+	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: true, VerifierRequired: true}
 	crossReviewerProvider := ""
 	crossReviewAccepted := false
 	crossReviewData := map[string]any{}
 	if policy.CrossReviewRequired {
 		if s.CrossReview == nil {
-			return "", errors.New("cross-review is unavailable")
+			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, errors.New("independent cross-review is unavailable"))
 		}
 		crossReview, provider, reviewErr := s.CrossReview(ctx, *t, h, run.TaskControl(*t))
 		if reviewErr != nil {
-			return "", reviewErr
+			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, reviewErr)
 		}
 		if (crossReview.Verdict != marshal.VerdictAccept && crossReview.Verdict != marshal.VerdictReturn && crossReview.Verdict != marshal.VerdictReassign && crossReview.Verdict != marshal.VerdictEscalate) || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
 			return "", errors.New("independent cross-review is incomplete")
@@ -607,7 +607,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 		crossReviewerProvider = provider
 		if err = marshal.CheckCrossReviewProvider(policy, h.Provider, crossReviewerProvider); err != nil {
-			return "", err
+			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, err)
 		}
 		crossReviewAccepted = crossReview.Verdict == marshal.VerdictAccept
 		crossReviewData["cross_review_verdict"] = string(crossReview.Verdict)
@@ -1359,8 +1359,11 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		run.State = marshal.Verifying
 		run.Pause = nil
 	}
-	if run.State != marshal.Verifying || s.Verify == nil {
+	if run.State != marshal.Verifying {
 		return verification.Blocked, errors.New("run is not ready for verification")
+	}
+	if s.Verify == nil {
+		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable"))
 	}
 	if err = s.requireIndependentVerifier(ctx, run); err != nil {
 		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, err)
@@ -1383,7 +1386,7 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, err)
 	}
 	result := verification.Evaluate(session, binding, s.clock())
-	if run.Tier == marshal.Ultra && result == verification.VerifiedComplete && s.requiredCanonicalVerification == nil {
+	if result == verification.VerifiedComplete && s.requiredCanonicalVerification == nil {
 		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return verification.Blocked, err
 		}
@@ -1467,7 +1470,7 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 		return err
 	}
 	if s.Verify == nil {
-		return closeVerificationStage(errors.New("verifier is unavailable"))
+		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
 	}
 	if err = s.requireIndependentVerifier(ctx, run); err != nil {
 		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
@@ -1509,9 +1512,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
 		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
 	}
-	if run.Tier == marshal.Ultra && s.requiredCanonicalVerification == nil {
+	if s.requiredCanonicalVerification == nil {
 		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
-			return closeVerificationStage(err)
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
 		}
 	}
 	// What moves the target must be exactly the commit that was verified.
@@ -2179,9 +2182,6 @@ func (s *MarshalService) dispatchedTier(ctx context.Context, runID, taskID strin
 }
 
 func (s *MarshalService) requireIndependentVerifier(ctx context.Context, run marshal.Run) error {
-	if run.Tier != marshal.Ultra {
-		return nil
-	}
 	if s.VerifierProvider == nil || s.IndependentVerify == nil || s.ModelProvider == "" {
 		return errors.New("independent verifier is unavailable")
 	}
