@@ -8,7 +8,7 @@ import (
 )
 
 func marshalRunAuthorityInstructions(settings marshal.Settings) marshalRunAuthority {
-	agy := "AGY supports governed tasks when admitted by a current verified profile."
+	agy := "AGY supports governed tasks on private Linux when admitted by a current verified profile."
 	if !app.AGYAssignable() {
 		// A draft that gives agy a governed task is refused on this host,
 		// and a native one by the canonical plan: say so plainly.

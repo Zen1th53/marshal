@@ -481,6 +481,7 @@ func (w *Workspace) marshalDiscardDraft() (string, error) {
 			return "", err
 		}
 	}
+	w.clearDraftRejected()
 	return "Unimported Marshal draft discarded. Use /marshal chat to continue.", nil
 }
 

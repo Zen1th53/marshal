@@ -55,15 +55,23 @@ type flowIn struct {
 	draftRejected *draftRejectMark
 }
 
-// fixingPlan reports whether the refused draft is what the Board shows:
-// while no plan is stored (a superseding draft refused during a run leaves
-// that run's state on the Board, and only the Marshal line says it).
+// fixingPlan reports whether the refused draft is what the Board shows: for
+// the run it was refused on, while that run has no stored plan to run. A
+// superseding draft refused during a run leaves that run on the Board (the
+// refusal is in Activity), so an abandoned replan never hides live work.
 func (in flowIn) fixingPlan() bool {
-	if in.draftRejected == nil {
+	r := in.draftRejected
+	if r == nil {
+		return false
+	}
+	if !in.hasRun {
+		return true
+	}
+	if r.runID != "" && in.panel != nil && in.panel.RunID != "" && r.runID != in.panel.RunID {
 		return false
 	}
 	state := runState(in.run, in.v.board)
-	return !in.hasRun || state == "" || state == marshal.Drafting
+	return state == "" || state == marshal.Drafting
 }
 
 // stageNames are the Plan pipeline's stages as the Board names them.
@@ -191,10 +199,14 @@ func flowNowLine(in flowIn) vm.NowLine {
 // flowDoing is what the Marshal does now, in a few words.
 func flowDoing(in flowIn) string {
 	var doing string
-	if r := in.draftRejected; r != nil {
+	if in.fixingPlan() {
+		r := in.draftRejected
 		doing = "fixing the plan the runtime refused"
 		if in.now.After(r.since) {
 			doing += " · " + goalElapsed(in.now.Sub(r.since))
+		}
+		if in.chatWaiting > 0 {
+			doing = joinDot(doing, countOf(in.chatWaiting, "request")+" to decide")
 		}
 		return doing
 	}
@@ -351,7 +363,7 @@ func ownerAsks(in flowIn) []ownerAsk {
 	if m := in.milestone; !in.hasRun && m != nil && m.OwnerTurn && len(out) == 0 {
 		add(false, m.Now)
 	}
-	if r := in.draftRejected; r.overdue(in.now) {
+	if r := in.draftRejected; in.fixingPlan() && r.overdue(in.now) {
 		// The Marshal was told the reason and has not sent a fix in time:
 		// the owner looks at the chat (Activity has the reason).
 		add(false, "plan refused "+goalElapsed(in.now.Sub(r.since))+" ago, no fix yet: open the Marshal chat")

@@ -3,11 +3,11 @@
 package app
 
 func marshalDraftTaskPolicy() string {
-	agy := " agy also supports governed when requested."
+	workers := "opencode supports governed when requested; agy also supports governed when requested. Assign either worker only with a current verified governed harness profile for the chosen model."
 	if !privateAGYEnabled() {
-		agy = " agy cannot take tasks on this host: do not assign it."
+		workers = "opencode supports governed when requested; agy cannot take tasks on this host: do not assign it. Assign opencode only with a current verified governed harness profile for the chosen model."
 	}
-	return "Every task must use mode governed and have exactly one acceptance criterion. Every executable check must name that criterion verbatim. opencode supports governed when requested;" + agy + " Assign a worker only with a current verified governed harness profile for the chosen model. Use only workers with such a profile. Do not propose native tasks."
+	return "Every task must use mode governed and have exactly one acceptance criterion. Every executable check must name that criterion verbatim. " + workers + " Use only workers with such a profile. Do not propose native tasks."
 }
 
 // draftAssignableWorker reports whether a draft task may name worker in

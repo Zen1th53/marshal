@@ -32,7 +32,12 @@ func demoDraftService(t *testing.T) *MarshalService {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	binding := projectid.Binding{ID: "PROJECT-1a373820568b8f191e75a9671cc9e0a3", Evidence: projectid.Evidence{RootCommit: "dc5f31825fb32deb98c73bd4bd072941ed67879d", RemoteURL: "/tmp/demo/tasklist", CreatedNonce: "3ddb8458725768807dfea1fc73f94f4f"}, RecordedRoot: repo, SchemaVersion: 1}
+	evidence := projectid.Evidence{RootCommit: "3333333333333333333333333333333333333333", RemoteURL: "/tmp/demo/tasklist", CreatedNonce: "44444444444444444444444444444444"}
+	id, err := projectid.Derive(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := projectid.Binding{ID: id, Evidence: evidence, RecordedRoot: repo, SchemaVersion: projectid.BindingSchemaVersion}
 	data, err := json.Marshal(binding)
 	if err != nil {
 		t.Fatal(err)
