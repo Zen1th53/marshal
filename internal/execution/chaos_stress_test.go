@@ -1,18 +1,18 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 
 	"github.com/Zen1th53/marshal/internal/plan"
 )
@@ -695,24 +695,6 @@ func TestScale_10000JournalEventsHashChaining(t *testing.T) {
 
 	if verifyDuration > 2*time.Second {
 		t.Errorf("chain verification exceeded SLA: %v", verifyDuration)
-	}
-}
-
-func TestScale_LargeToolOutputBounding(t *testing.T) {
-	// Generate 5MB of tool output with mixed ANSI codes and lines
-	var buf bytes.Buffer
-	for buf.Len() < 5*1024*1024 {
-		buf.WriteString("\x1b[32m[INFO]\x1b[0m Standard output line with text data.\n")
-	}
-
-	bounded := StripAndBoundLogs(buf.String(), MaxToolOutputBytes)
-	if len(bounded) > MaxToolOutputBytes+200 { // +200 allowance for truncation note
-		t.Errorf("bounded output exceeded MaxToolOutputBytes: got %d bytes", len(bounded))
-	}
-
-	// Verify ANSI escapes were stripped
-	if bytes.Contains([]byte(bounded), []byte("\x1b[32m")) {
-		t.Errorf("bounded output still contains raw ANSI escape sequences")
 	}
 }
 

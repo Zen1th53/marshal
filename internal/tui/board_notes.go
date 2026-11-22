@@ -121,27 +121,3 @@ func noteSummary(text string) string {
 	}
 	return ""
 }
-
-// noteLine is one background message in Activity: when, then its first
-// line, red when it reports a failure, "· click" when there is more.
-func (v boardVisual) noteLine(n boardNote, w int) string {
-	head := v.fg("dim", n.At.In(v.now.Location()).Format("15:04:05")) + " "
-	label, col := "note", "dim"
-	if n.Err {
-		label, col = "error", "failed"
-	}
-	head += v.fg(col, label) + " "
-	text := noteSummary(n.Text)
-	tail := ""
-	if strings.Contains(strings.TrimSpace(n.Text), "\n") || VisibleLen(head)+VisibleLen(text) > w {
-		// More than the line shows: the click shows it whole.
-		tail = v.fg("dim", " · click")
-	}
-	room := max(8, w-VisibleLen(head)-VisibleLen(tail))
-	if n.Err {
-		text = v.fg("failed", v.trunc(text, room))
-	} else {
-		text = v.fg("white", v.trunc(text, room))
-	}
-	return head + text + tail
-}

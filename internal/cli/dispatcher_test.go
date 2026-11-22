@@ -29,27 +29,23 @@ func fullSweepTree() map[string]string {
 	return tree
 }
 
-// Keep this independent of the help catalog: include aliases and all dispatcher branches.
+// Keep this independent of the help catalog: include all dispatcher branches.
 var sweepTree = map[string]string{
-	"telemetry": "status disable enable register", "ultra": "request",
-	"init": "", "doctor": "", "status": "", "agent": "register", "agents": "", "tasks": "",
-	"task": "import show claim release", "run": "", "logs": "", "cancel": "", "adapters": "", "adapter": "probe",
-	"mcp": "serve status stdio", "egm": "status install record", "a2a": "serve status", "events": "", "artifacts": "", "verify": "", "reconcile": "",
-	"memory": "status recall show list candidates promote tombstone audit remember write", "policy": "test", "legal": "audit export",
-	"setup": "status", "update": "check status install apply", "goal": "explain", "plan": "create show approve cancel handoff",
-	"architecture": "serve draft feedback receipt", "architecture receipt": "import",
-	"exec": "start run status approve rollback handoff", "execution": "start run status approve rollback handoff",
-	"review": "start status evaluate attest", "verification": "start status evaluate attest",
-	"learning":     "commit show item history search context invalidate trust fingerprints playbooks replays benchmarks export restore",
-	"optimization": "start show candidates counterfactuals manifests canaries", "help": "why",
-	"constitution": "version invariants decisions violations", "auth": "token", "auth token": "create list revoke",
-	"gc": "worktrees artifacts", "state": "backup verify-backup restore", "daemon": "", "version": "", "tui": "",
+	"telemetry": "status disable enable register",
+	"init":      "", "doctor": "", "status": "", "agent": "register", "agents": "", "tasks": "",
+	"task": "import show claim release", "run": "", "logs": "", "cancel": "", "adapter": "probe",
+	"mcp": "serve status stdio", "egm": "status install record", "events": "", "artifacts": "", "verify": "", "reconcile": "",
+	"memory": "status recall show list candidates promote tombstone audit remember write", "legal": "audit export",
+	"setup": "status", "update": "check status install apply",
+	"architecture": "serve draft feedback",
+	"help":         "", "auth": "token", "auth token": "create list revoke",
+	"state": "backup verify-backup restore", "daemon": "", "version": "", "tui": "",
 }
 
 // Native provider commands pass --help to the provider's own CLI; the
 // dispatcher must not answer it for them.
 func TestDispatcherHelpLeavesNativeProviderHelpToProvider(t *testing.T) {
-	for _, name := range []string{"codex", "claude", "opencode", "agy", "antigravity"} {
+	for _, name := range []string{"codex", "claude", "opencode", "agy"} {
 		for _, flag := range []string{"--help", "-h"} {
 			var out bytes.Buffer
 			if dispatcherHelp([]string{name, flag}, &out) || out.Len() != 0 {
@@ -295,7 +291,7 @@ func TestDispatcherArgumentBoundaries(t *testing.T) {
 func TestHelpCatalogCoversSweepTree(t *testing.T) {
 	// Native provider commands keep a catalog entry for `marshal help`, but
 	// their -h/--help belongs to the provider and is not walked here.
-	expected := map[string]bool{"codex": true, "claude": true, "opencode": true, "agy": true, "antigravity": true}
+	expected := map[string]bool{"codex": true, "claude": true, "opencode": true, "agy": true}
 	for parent, children := range fullSweepTree() {
 		expected[parent] = true
 		for _, child := range strings.Fields(children) {

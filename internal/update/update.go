@@ -197,12 +197,15 @@ func parseVersion(value string) ([3]int, bool) {
 // Processes already running keep the code they started with, which is why the
 // caller is told to restart rather than being told the update is live.
 func (c *Checker) Install(ctx context.Context, release Release) (string, error) {
-	if runtime.GOOS != "linux" {
-		return "", fmt.Errorf("release binaries are built for Linux; this is %s", runtime.GOOS)
+	// Releases publish linux and darwin (macOS) archives, the same set
+	// install.sh selects from.
+	goos := runtime.GOOS
+	if goos != "linux" && goos != "darwin" {
+		return "", fmt.Errorf("release binaries are built for Linux and macOS; this is %s", goos)
 	}
 	arch := runtime.GOARCH
 	if arch != "amd64" && arch != "arm64" {
-		return "", fmt.Errorf("no release binary for %s; MARSHAL publishes linux amd64 and arm64", arch)
+		return "", fmt.Errorf("no release binary for %s; MARSHAL publishes amd64 and arm64", arch)
 	}
 
 	locate := c.Executable
@@ -218,7 +221,7 @@ func (c *Checker) Install(ctx context.Context, release Release) (string, error) 
 	}
 
 	version := strings.TrimPrefix(release.Tag, "v")
-	archive := fmt.Sprintf("marshal_%s_linux_%s.tar.gz", version, arch)
+	archive := fmt.Sprintf("marshal_%s_%s_%s.tar.gz", version, goos, arch)
 	base := fmt.Sprintf("%s/%s/releases/download/%s", strings.TrimSuffix(c.BaseDownload, "/"), Repository, release.Tag)
 
 	payload, err := c.download(ctx, base+"/"+archive, 256<<20)

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
@@ -29,16 +28,6 @@ type runStop struct {
 	code     string
 	verb     string
 	action   marshal.PauseAction
-}
-
-// cardEnterKey is the key an open card's Enter button names: Enter, or
-// "click" while a stopped run leads the inbox and takes Enter itself
-// (boardStopWaiting), so no card below it claims the key.
-func (v boardVisual) cardEnterKey() string {
-	if _, ok := v.stopNotice(); ok && len(v.board.Inbox) == 0 {
-		return "click"
-	}
-	return "Enter"
 }
 
 // stopNotice is the run's stop, if it stopped.
@@ -265,30 +254,6 @@ func stopVerb(action marshal.PauseAction) string {
 	}
 }
 
-// layoutCounts is what the Board's panes hold, for the layout. A run's
-// stop is the inbox's first entry, two rows as a request is. The open cards
-// (what next, changed files, ask, requirements, change) are entries too:
-// without them a Board beside the chat gives the inbox its one-row strip and
-// the card is never seen. The requirements card is tall, so it asks for
-// three entries' rows.
-func (v boardVisual) layoutCounts() layout.Counts {
-	b := v.board
-	// Room for every entry the inbox lists: requests, gates (a sent one
-	// still shows) and the open cards; the tall requirements card takes
-	// two more entries' rows.
-	inbox := len(b.Inbox) + len(v.gates) + v.cardCount() + 2*v.reqCount()
-	for _, g := range v.gates {
-		// A gate's warning line is one more row under its buttons.
-		if g.warning != "" {
-			inbox++
-		}
-	}
-	if _, stopped := v.stopNotice(); stopped {
-		inbox++
-	}
-	return layout.Counts{Lanes: len(b.Lanes) + v.tailWant, Tasks: len(b.Tasks), Inbox: inbox, Activity: len(b.Activity)}
-}
-
 // stateChip is the header's run state in the owner's words.
 func (v boardVisual) stateChip() string {
 	_, word, color := v.runWord()
@@ -416,21 +381,4 @@ func (v boardVisual) stopLine(s runStop) string {
 		return v.fg("waiting", "Press Enter again to "+s.verb+". Any other key cancels.")
 	}
 	return v.fg(color, "▮ "+word) + v.fg("dim", " · ") + s.reason + v.fg("dim", " · Enter: ") + v.bold(s.verb)
-}
-
-// stopEntry is the stop as the inbox's first entry, with one Enter button.
-func (v boardVisual) stopEntry(s runStop, x, row, w int) []string {
-	color, what := "failed", " stopped · "
-	if s.waiting {
-		color, what = "waiting", " waits for you · "
-	}
-	flag := "⚑ "
-	if !v.unicode() {
-		flag = "! "
-	}
-	first := v.fg(color, flag+"run") + v.fg("dim", what) + v.bold(v.fg("white", s.reason))
-	button := "[Enter]"
-	second := "    " + v.bg("rule", button) + " " + s.verb + "   " + v.fg("dim", s.next)
-	v.hit(boardHit{row: row + 1, x0: x + 4, x1: x + min(w, 4+VisibleLen(button)), kind: hitStop})
-	return []string{PadCell(first, w), PadCell(second, w)}
 }

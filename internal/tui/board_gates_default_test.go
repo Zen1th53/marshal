@@ -14,30 +14,18 @@ import (
 // A plan being drafted, being approved or a major amendment is no such gate.
 // The governed build keeps this owner plan gate; the shipped build removes it.
 func TestOwnerGateShowsDraftedPlanAwaitingApproval(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	w.planSource = fakePlanSource{}
 	w.setMarshalPanel(draftingPanel("awaiting plan approval; /marshal approve"))
+	// The Web Board's plan card holds it; the home sends the owner there.
+	if d := w.boardV2().Decision; d == nil || d.Kind != decisionPlan {
+		t.Fatalf("no plan card: %+v", d)
+	}
 	text := frameText(w, 170, 40)
-	head := strings.Split(text, "\n")[1]
-	if !strings.Contains(head, "waiting for you") || strings.Contains(head, "planning") {
-		t.Fatalf("header: %q", head)
+	if !strings.Contains(lines0(text), "YOUR TURN") || !strings.Contains(text, "open the web to decide (w)") {
+		t.Fatalf("the home does not send the owner to the plan:\n%s", text)
 	}
-	for _, want := range []string{"plan · drafted plan waits for your approval · 1 task", "[y] approve the plan", "[7] open the plan"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("Board misses %q:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "INBOX empty") {
-		t.Fatalf("the inbox says nothing waits:\n%s", text)
-	}
-	clickText(t, w, 170, 40, "[7] open the plan")
-	if !w.planView.Load() {
-		t.Fatal("open the plan did not open the Plan view")
-	}
-	w.closePlanView()
 
 	for _, note := range []string{"drafting a plan… codex", "approving plan…", "major amendment proposed · /marshal amend approve or deny"} {
 		w.setMarshalPanel(draftingPanel(note))

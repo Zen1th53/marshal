@@ -11,12 +11,14 @@ import (
 	"github.com/Zen1th53/marshal/internal/sessionmcp"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestGovernedAntigravityUsesBoundMCPAndExactModel(t *testing.T) {
+	skipUnlessGovernedAntigravityHost(t)
 	t.Setenv("MARSHAL_MCP_BINARY", "/bin/true")
 	root := t.TempDir()
 	if err := os.Mkdir(root+"/.agents", 0700); err != nil {
@@ -34,7 +36,7 @@ func TestGovernedAntigravityUsesBoundMCPAndExactModel(t *testing.T) {
 		if cmd.Args[0] != "--mode" || cmd.Args[1] != "accept-edits" || cmd.Args[7] != "gemini-3.8-flash-high" {
 			t.Fatal("governed mode/model missing")
 		}
-		if strings.Contains(strings.Join(cmd.Args, " "), "dangerously") || len(cmd.Env) != 0 {
+		if strings.Contains(strings.Join(cmd.Args, " "), "dangerously") || !onlyAllowedEnv(cmd.Env) {
 			t.Fatal("permission bypass or arbitrary environment")
 		}
 		req, e := sessionmcp.SandboxRequest(ctx, model.SandboxRequest{Worktree: root})
@@ -91,6 +93,7 @@ func TestGovernedAntigravityRefusesUnboundAndMalformedSelectors(t *testing.T) {
 }
 
 func TestGovernedAntigravityProbeHasNoWorkerAuthority(t *testing.T) {
+	skipUnlessGovernedAntigravityHost(t)
 	root := t.TempDir()
 	if err := os.Mkdir(root+"/.agents", 0700); err != nil {
 		t.Fatal(err)
@@ -200,6 +203,7 @@ func TestGovernedAntigravityAcceptsAnyVersionThatPassesTheProbe(t *testing.T) {
 }
 
 func TestGovernedAntigravityExtremeUnverifiedNewerEditsWithBoundMCP(t *testing.T) {
+	skipUnlessGovernedAntigravityHost(t)
 	const newerVersion = "1.5.0"
 	t.Setenv("MARSHAL_MCP_BINARY", "/bin/true")
 	root := t.TempDir()
@@ -267,7 +271,7 @@ func TestGovernedAntigravityExtremeUnverifiedNewerEditsWithBoundMCP(t *testing.T
 	if executedCommand.Args[0] != "--mode" || executedCommand.Args[1] != "accept-edits" {
 		t.Fatalf("expected governed accept-edits mode, got %v", executedCommand.Args[:2])
 	}
-	if strings.Contains(strings.Join(executedCommand.Args, " "), "dangerously") || len(executedCommand.Env) != 0 {
+	if strings.Contains(strings.Join(executedCommand.Args, " "), "dangerously") || !onlyAllowedEnv(executedCommand.Env) {
 		t.Fatal("permission bypass or arbitrary environment")
 	}
 	if !boundMCP {
@@ -299,4 +303,15 @@ func governedRunnerWithVersion(version string, run func(context.Context, adapter
 		}
 		return run(ctx, cmd)
 	}}
+}
+
+// skipUnlessGovernedAntigravityHost skips where governed Antigravity is never
+// constructed: the runtime builds it only on Linux
+// (app/agy_provider_extreme_linux.go), and its sealed MCP paths assume a
+// resolved TMPDIR, which macOS's /var/folders is not.
+func skipUnlessGovernedAntigravityHost(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("governed Antigravity runs only on Linux")
+	}
 }

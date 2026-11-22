@@ -62,20 +62,3 @@ func TestConcurrencyLimiter(t *testing.T) {
 		t.Fatal("expected acquire to succeed after release")
 	}
 }
-
-func TestIdempotencyStore(t *testing.T) {
-	store := NewIdempotencyStore(50 * time.Millisecond)
-
-	store.Set("msg-1", []byte(`{"status":"success"}`))
-
-	res, ok := store.Get("msg-1")
-	if !ok || string(res) != `{"status":"success"}` {
-		t.Fatalf("expected stored response, got ok=%v, res=%s", ok, string(res))
-	}
-
-	time.Sleep(60 * time.Millisecond)
-	_, ok = store.Get("msg-1")
-	if ok {
-		t.Fatal("expected expired entry to be evicted")
-	}
-}

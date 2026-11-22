@@ -34,6 +34,14 @@ import (
 //
 // MARSHAL's MCP server is started by the provider outside its sandbox, so
 // the tools keep their access.
+//
+// The architecture review's directory (.marshal/architecture/) is private
+// state as well: its review state is the owner's Accept record, and the
+// Marshal reads the architecture through its tools only. tmux is denied as a
+// command too: the Board runs in a pane of MARSHAL's tmux server, and a
+// Marshal that reads or types into that pane acts as the owner. Codex's
+// read-only profile already refuses the tmux socket (its sandbox has no
+// network), so only Claude and agy get a command rule.
 
 // marshalPrivateStatePaths are the paths under .marshal/ only MARSHAL's tools
 // read or write. A path ending in "/" is a directory.
@@ -45,6 +53,7 @@ func marshalPrivateStatePaths() []string {
 		"state.db-journal",
 		"knowledge/",
 		"backups/",
+		"architecture/",
 	}
 }
 
@@ -73,8 +82,17 @@ func claudeMarshalStateDenyRules() []string {
 	for _, p := range patterns {
 		rules = append(rules, "Read("+p+")", "Edit("+p+")")
 	}
-	return append(rules, "Bash(sqlite3:*)")
+	return append(rules, claudeMarshalDenyCommands...)
 }
+
+// claudeMarshalDenyCommands are the shell commands the Claude Marshal chat may
+// never run: sqlite3 reads MARSHAL's state database behind its tools, and
+// tmux reads or types into the owner's Board pane. WebFetch of this
+// computer's loopback is denied too: the owner's review page and Web Board
+// listen there, and the Marshal has no business with either. So is reading
+// /proc: a browser the opener started keeps the link it was given in its
+// command line there, readable by any process of the same user.
+var claudeMarshalDenyCommands = []string{"Bash(sqlite3:*)", "Bash(tmux:*)", "WebFetch(domain:127.0.0.1)", "WebFetch(domain:localhost)", "Read(//proc/**)"}
 
 // claudeMarshalStateSettings adds claudeMarshalStateDenyRules to a Claude
 // Code --settings JSON object (empty for none) and returns it, or false when

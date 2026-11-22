@@ -167,8 +167,10 @@ func ownLeftover(d composerDialect, pane, frame string) (ownPaste, bool) {
 		return ownPaste{}, false
 	}
 	// Exact recorded content only: a line-count match ("[Pasted text #5
-	// +2 lines]") could be the owner's own paste of the same length.
-	if d.stripHints(content) == d.stripHints(p.shown) {
+	// +2 lines]") could be the owner's own paste of the same length. Our
+	// own text itself still counts however the provider now wraps or clips
+	// it (a pane resized under a tall input shows other rows of it).
+	if d.stripHints(content) == d.stripHints(p.shown) || ownComposerText(frame, p.text) {
 		return p, true
 	}
 	return ownPaste{}, false
@@ -272,6 +274,12 @@ func chatBusyNearPrompt(frame string) bool {
 	raw := strings.Split(strings.TrimRight(StripANSI(frame), "\n"), "\n")
 	at := -1
 	for i := len(raw) - 1; i >= 0 && at < 0; i-- {
+		// A clipped input's top rule stands where its scrolled-off prompt
+		// row would be; a prompt row above it is the transcript.
+		if above, _ := clippedRule(raw[i]); above {
+			at = i
+			break
+		}
 		body := strings.TrimLeft(raw[i], " │┃║|")
 		for _, m := range promptMarkers {
 			if strings.HasPrefix(body, m) {
@@ -317,9 +325,73 @@ func noteChatInput(pane string, clear bool) {
 func (w *Workspace) observeChatInput(pane, provider, frame string) {
 	if clear, known := chatInputIn(composerDialectFor(provider), frame); known {
 		noteChatInput(pane, clear)
+		noteChatAsked(pane, clear && chatAskedIn(frame))
 		return
 	}
 	forgetChatInput(pane)
+	noteChatAsked(pane, false)
+}
+
+// chatAsked is, per chat pane, whether the monitor's last look saw the
+// Marshal's turn end with a question to the owner while the input sat idle
+// and clear. It is conservative: anything it cannot read is "not asked".
+var chatAsked = struct {
+	mu    sync.Mutex
+	panes map[string]bool
+}{panes: map[string]bool{}}
+
+func noteChatAsked(pane string, asked bool) {
+	chatAsked.mu.Lock()
+	defer chatAsked.mu.Unlock()
+	if asked {
+		chatAsked.panes[pane] = true
+	} else {
+		delete(chatAsked.panes, pane)
+	}
+}
+
+// chatAskedNow reports the last look at pane: the Marshal asked the owner
+// something and waits.
+func chatAskedNow(pane string) bool {
+	chatAsked.mu.Lock()
+	defer chatAsked.mu.Unlock()
+	return chatAsked.panes[pane]
+}
+
+// chatAskedIn reports whether a chat frame shows the Marshal's turn ended
+// with a question to the owner: no turn is running near the prompt, and the
+// last line of text above the input box ends with a question mark or asks
+// for a reply ("Reply 'allow the folder' or 'paste them'"). Box borders,
+// blank lines and the provider's hint rows are skipped; only the last few
+// lines above the prompt are read.
+func chatAskedIn(frame string) bool {
+	if chatBusyNearPrompt(frame) {
+		return false
+	}
+	raw := strings.Split(strings.TrimRight(StripANSI(frame), "\n"), "\n")
+	at := -1
+	for i := len(raw) - 1; i >= 0 && at < 0; i-- {
+		body := strings.TrimLeft(raw[i], " │┃║|")
+		for _, m := range promptMarkers {
+			if strings.HasPrefix(body, m) {
+				at = i
+				break
+			}
+		}
+	}
+	if at < 0 {
+		return false
+	}
+	for i, seen := at-1, 0; i >= 0 && seen < 8; i, seen = i-1, seen+1 {
+		line := strings.TrimSpace(strings.Trim(strings.TrimSpace(raw[i]), "│┃║|"))
+		if line == "" || strings.Trim(line, "─━═╭╮╰╯┌┐└┘+-") == "" {
+			continue
+		}
+		low := strings.ToLower(line)
+		end := strings.TrimRight(line, " \"'”’)*_`")
+		return strings.HasSuffix(end, "?") || strings.HasPrefix(strings.TrimLeft(low, "⏺●•*- "), "reply ")
+	}
+	return false
 }
 
 // forgetChatInput drops pane's observation: its input box is not on screen

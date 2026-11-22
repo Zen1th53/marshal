@@ -203,7 +203,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		if health.Version != "" {
 			b.WriteString(fmt.Sprintf("  Version:       %s\n", health.Version))
 		}
-		b.WriteString(fmt.Sprintf("  App-Server:    %s (%s)\n", health.AppServerStatus, health.AppServerReason))
+		b.WriteString(fmt.Sprintf("  Codex Home:    %s (%s)\n", health.AppServerStatus, health.AppServerReason))
 		b.WriteString(fmt.Sprintf("  Active Model:  %s\n", selectedModel))
 		if len(health.Checks) > 0 {
 			b.WriteString("  Checks:\n")

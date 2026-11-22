@@ -16,7 +16,6 @@ const baseCommandSynopsis = `telemetry status
 telemetry disable
 telemetry enable
 telemetry register
-ultra request
 init
 doctor [--probe-providers] [--deep]
 status
@@ -30,7 +29,6 @@ task release TASK-ID
 run TASK-ID [--adapter ADAPTER] [--model MODEL] [--agent AGENT-ID] [--revision N]
 logs TASK-ID
 cancel TASK-ID
-adapters
 adapter probe NAME
 mcp serve [--listen ADDR] [--insecure]
 mcp status
@@ -38,8 +36,6 @@ mcp stdio [--insecure]
 egm status [--provider PROVIDER]
 egm install --provider PROVIDER
 egm record --stage STAGE --provider PROVIDER --egm-version VERSION --file PATH
-a2a serve [--listen ADDR] [--insecure]
-a2a status
 events
 artifacts
 verify [-- command args...]
@@ -54,7 +50,6 @@ memory tombstone MEM-ID [--dry-run]
 memory audit
 memory remember TITLE BODY [--kind=KIND]
 memory write TITLE BODY [--kind=KIND]
-policy test SUITE-FILE
 legal audit
 legal export --output PATH
 setup
@@ -64,58 +59,13 @@ update check
 update status
 update install
 update apply
-goal REQUEST
-goal explain REQUEST
 architecture serve [--proposal FILE] [--layout FILE] [--provider PROVIDER] [--no-open]
 architecture draft [--request REQUEST] [--output FILE] [--provider PROVIDER]
 architecture feedback [--provider PROVIDER]
-architecture receipt import FILE
-plan create SESSION-ID --file INPUT.json
-plan show PROJECT-ID
-plan approve PROJECT-ID
-plan cancel PROJECT-ID
-plan handoff SESSION-ID PROJECT-ID
-exec start --session SESSION-ID --project PROJECT-ID
-exec run RUN-ID
-exec status RUN-ID
-exec approve APPROVAL-ID [--decider USER] [--reason TEXT]
-exec rollback CHECKPOINT-ID
-exec handoff RUN-ID
-review start SESSION.json
-review status VERIFICATION-ID
-review evaluate VERIFICATION-ID
-review attest VERIFICATION-ID --bundle ENVELOPE.json --provenance TEXT
-learning commit INPUT.json
-learning show MEMORY-COMMIT-ID
-learning item ITEM-ID
-learning history ITEM-ID
-learning search --project ID [--general] [--terms A,B] [--stale]
-learning context --project ID [--general] [--terms A,B] [--constraint TEXT]
-learning invalidate INPUT.json
-learning trust [TASK-CLASS]
-learning fingerprints --project ID
-learning playbooks --project ID
-learning replays [RUN-ID]
-learning benchmarks [NAME]
-learning export --project ID [--general]
-learning restore BUNDLE.json --project ID [--general]
-optimization start INPUT.json
-optimization show CYCLE-ID
-optimization candidates CYCLE-ID
-optimization counterfactuals CYCLE-ID
-optimization manifests CYCLE-ID
-optimization canaries CYCLE-ID
-help [TOPIC]
-help why
-constitution version
-constitution invariants
-constitution decisions SESSION-ID
-constitution violations SESSION-ID
+help [COMMAND]
 auth token create --name NAME [--kind=KIND] [--capabilities LIST]
 auth token list
 auth token revoke --id ID
-gc worktrees [--dry-run] [--ttl DURATION]
-gc artifacts [--dry-run] [--ttl DURATION] [--max-budget BYTES]
 state backup --output PATH
 state verify-backup PATH
 state restore PATH
@@ -132,13 +82,6 @@ var commandHelp = buildCommandHelp()
 func buildCommandHelp() map[string]string {
 	help := map[string]string{}
 	lines := strings.Split(commandSynopsis, "\n")
-	for _, alias := range [][2]string{{"exec", "execution"}, {"review", "verification"}, {"agy", "antigravity"}} {
-		for _, line := range strings.Split(commandSynopsis, "\n") {
-			if line == alias[0] || strings.HasPrefix(line, alias[0]+" ") {
-				lines = append(lines, alias[1]+strings.TrimPrefix(line, alias[0]))
-			}
-		}
-	}
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		n := 0
@@ -190,7 +133,7 @@ func dispatcherHelp(args []string, out io.Writer) bool {
 		}
 		tokens = append(tokens, arg)
 	}
-	// Retain the existing help topics and `help why`; command help is static.
+	// `help COMMAND` is the same static usage as `COMMAND --help`.
 	if len(tokens) > 1 && tokens[0] == "help" {
 		if _, ok := commandHelp[tokens[1]]; ok {
 			requested = true
@@ -204,7 +147,7 @@ func dispatcherHelp(args []string, out io.Writer) bool {
 	// provider's own CLI.
 	if len(tokens) > 0 {
 		switch tokens[0] {
-		case "codex", "claude", "opencode", "agy", "antigravity":
+		case "codex", "claude", "opencode", "agy":
 			return false
 		}
 	}
@@ -229,7 +172,7 @@ func dispatcherHelp(args []string, out io.Writer) bool {
 
 func nativeCommand(name string) bool {
 	switch name {
-	case "codex", "claude", "opencode", "agy", "antigravity":
+	case "codex", "claude", "opencode", "agy":
 		return true
 	}
 	return false

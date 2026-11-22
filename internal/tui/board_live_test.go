@@ -5,7 +5,6 @@ package tui
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,58 +135,6 @@ func TestLiveBoardVitalsUsesCachedProviderStatus(t *testing.T) {
 	}
 }
 
-func TestBoardIsTheDefaultScreenForARun(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	lines, _, _ := w.frameLines(120, 40)
-	if len(lines) != 40 {
-		t.Fatalf("Board frame has %d rows", len(lines))
-	}
-	for i, line := range lines {
-		if n := VisibleLen(line); n != 120 {
-			t.Fatalf("row %d is %d cells", i, n)
-		}
-	}
-	got := StripANSI(strings.Join(lines, "\n"))
-	for _, want := range []string{"Marshal", "current run", "running", "TASKS", "LANES", "INBOX", "ACTIVITY", "T-017", "codex-1", "claude-1", "registry.npmjs.org:443", "› running"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Board frame lacks %q:\n%s", want, got)
-		}
-	}
-	if Edition() != "Marshal" && strings.Contains(got, "extreme") {
-		t.Fatal("the default build's Board names the Marshal")
-	}
-
-	resp, err := w.cmd.Handle(t.Context(), "/view classic")
-	if err != nil || !strings.Contains(resp, "classic") {
-		t.Fatalf("/view classic: %q, %v", resp, err)
-	}
-	if w.boardVisible() {
-		t.Fatal("the Board still takes permission requests in the classic view")
-	}
-	got = plainFrame(w, 120, 40)
-	if strings.Contains(got, "TASKS") || strings.Contains(got, "LANES") {
-		t.Fatalf("/view classic still paints the Board:\n%s", got)
-	}
-	if !strings.Contains(got, "R-7f3a") {
-		t.Fatalf("classic screen lost the run:\n%s", got)
-	}
-	w.permissions.mu.Lock()
-	inbox, queued := len(w.permissions.inbox), !w.permissions.queue.Empty()
-	w.permissions.mu.Unlock()
-	if inbox != 0 || !queued {
-		t.Fatal("/view classic left the inbox's request out of the popup queue")
-	}
-
-	if resp, err := w.cmd.Handle(t.Context(), "/view board"); err != nil || resp != "View: Board." {
-		t.Fatalf("/view board: %q, %v", resp, err)
-	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "TASKS") {
-		t.Fatalf("/view board did not bring the Board back:\n%s", got)
-	}
-}
-
 // The real path writes one frame for inspection; run with -board-wired-ans.
 func TestBoardWiredFrameANS(t *testing.T) {
 	if !*writeWiredANS {
@@ -264,8 +211,6 @@ func TestBoardFollowsTheRunIncrementally(t *testing.T) {
 }
 
 func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, src := boardWorkspace(t)
 	select {
 	case <-w.repaint:
@@ -276,6 +221,7 @@ func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 		t.Fatalf("initial Board header does not say running:\n%s", got)
 	}
 
+	drainRepaints(w, 50*time.Millisecond) // what the first paint asked for
 	// A user pause changes only the session hold: there are no new decisions
 	// and the tracked workers stay the same.
 	w.marshalSession().holdDispatch(before.RunID)
@@ -286,11 +232,13 @@ func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 	if !paused.Board.Run.UserPaused {
 		t.Fatal("the projected Board did not record the pause hold")
 	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "paused") {
-		t.Fatalf("Board header does not say paused after hold:\n%s", got)
-	}
+	// The repaints are counted before the paint: a paint may itself ask
+	// for one when a collector's background read lands.
 	if n := drainRepaints(w, 50*time.Millisecond); n != 1 {
 		t.Fatalf("a pause hold change asked for %d repaints, want 1", n)
+	}
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "PAUSED") {
+		t.Fatalf("Board header does not say paused after hold:\n%s", got)
 	}
 
 	w.marshalSession().releaseDispatch()
@@ -300,11 +248,11 @@ func TestBoardRefreshesHeaderWhenPauseHoldChanges(t *testing.T) {
 	if w.marshalPanel().Board.Run.UserPaused {
 		t.Fatal("the projected Board kept the released pause hold")
 	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "running") {
-		t.Fatalf("Board header does not say running after release:\n%s", got)
-	}
 	if n := drainRepaints(w, 50*time.Millisecond); n != 1 {
 		t.Fatalf("a released pause hold asked for %d repaints, want 1", n)
+	}
+	if got := plainFrame(w, 120, 40); !strings.Contains(got, "RUNNING") {
+		t.Fatalf("Board header does not say running after release:\n%s", got)
 	}
 }
 
@@ -327,73 +275,6 @@ func TestBoardFollowerSleepsWhenNothingMoves(t *testing.T) {
 	}
 }
 
-func TestBoardKeysMoveFocusSelectionAndInspector(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	w.frameLines(120, 40)
-	if got := w.boardUI.pane(true); got != layout.Inbox {
-		t.Fatalf("with a request waiting the Board opens on %s", got)
-	}
-	key := func(r rune) bool { return w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: r}) }
-	if !key('t') || w.boardUI.pane(true) != layout.Tasks {
-		t.Fatal("t did not focus the tasks")
-	}
-	first := w.boardUI.task
-	if !key('j') || w.boardUI.task == first {
-		t.Fatal("j did not move down the tasks")
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyUp}) || w.boardUI.task != first {
-		t.Fatal("up did not move back")
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.boardUI.inspect != first {
-		t.Fatal("Enter did not open the inspector")
-	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "IDENTITY") || !strings.Contains(got, first) {
-		t.Fatalf("inspector not painted:\n%s", got)
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEsc}) || w.boardUI.inspect != "" {
-		t.Fatal("Esc did not close the inspector")
-	}
-	if got := plainFrame(w, 120, 40); strings.Contains(got, "IDENTITY") {
-		t.Fatal("inspector still painted after Esc")
-	}
-	if !key('l') || w.boardUI.pane(true) != layout.Lanes {
-		t.Fatal("l did not focus the lanes")
-	}
-	lane := w.boardUI.lane
-	if !key('j') || w.boardUI.lane == lane {
-		t.Fatal("j did not move down the lanes")
-	}
-	if !key('i') || w.boardUI.pane(true) != layout.Inbox {
-		t.Fatal("i did not focus the inbox")
-	}
-	// Inside the inbox its own keys apply: i inspects the request.
-	if key('i') || key('j') || key('a') {
-		t.Fatal("the Board took a key the inbox owns")
-	}
-	// Esc on the tasks is left to the global keys.
-	key('t')
-	if w.handleBoardKey(KeyEvent{Type: KeyEsc}) {
-		t.Fatal("Esc without an inspector was taken from the global keys")
-	}
-	// Typing belongs to the composer.
-	w.composer.SetText("/vi")
-	task := w.boardUI.task
-	if key('j') || key('t') || w.boardUI.task != task {
-		t.Fatal("the Board took a key while the composer held text")
-	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, " /vi") {
-		t.Fatalf("composer text not shown in the footer:\n%s", got)
-	}
-	w.composer.SetText("")
-	// The classic view hands every key back.
-	w.setBoardView(true)
-	if key('j') || key('t') {
-		t.Fatal("the classic view still routes keys to the Board")
-	}
-}
-
 func TestBoardAnimatesOnlyWhileShown(t *testing.T) {
 	w, _ := boardWorkspace(t)
 	w.startAnimator()
@@ -413,162 +294,6 @@ func TestBoardAnimatesOnlyWhileShown(t *testing.T) {
 	w.setBoardView(false)
 	if !a.Running() {
 		t.Fatal("returning to the Board did not resume the animator")
-	}
-}
-
-// The live inspector keeps one view across paints: e shows every event,
-// Backspace walks up the delegation chain and closes at its top, Enter
-// walks back down, Esc closes.
-func TestBoardInspectorKeysSurviveRepaints(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, src := boardWorkspace(t)
-	p := w.marshalPanel()
-	next := *p
-	next.run.Tasks = append([]marshal.Task(nil), p.run.Tasks...)
-	next.run.Tasks[1].ParentID = "T-017" // T-018 was delegated from T-017
-	evs, _, _, err := w.boardFeed.read(t.Context(), src, p.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	next.Board = w.projectBoard(&next, evs)
-	w.setMarshalPanel(&next)
-	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
-	inspected := func() string {
-		if w.boardUI.insp == nil {
-			return ""
-		}
-		return w.boardUI.insp.TaskID()
-	}
-
-	w.frameLines(120, 40)
-	key(KeyEvent{Type: KeyRune, Rune: 't'})
-	w.boardUI.task = "T-017"
-	if !key(KeyEvent{Type: KeyEnter}) || w.boardUI.inspect != "T-017" {
-		t.Fatal("Enter did not open the inspector")
-	}
-	if got := plainFrame(w, 120, 40); strings.Contains(got, "usage.charged") || !strings.Contains(got, "e all events · Enter T-018 · Esc close") {
-		t.Fatalf("inspector before e:\n%s", got)
-	}
-	if !key(KeyEvent{Type: KeyRune, Rune: 'e'}) {
-		t.Fatal("e was not taken by the inspector")
-	}
-	// Two paints: the toggle is the view's state, not one frame's.
-	plainFrame(w, 120, 40)
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "usage.charged") || !strings.Contains(got, "e state changes") {
-		t.Fatalf("e did not show all events across paints:\n%s", got)
-	}
-	if !key(KeyEvent{Type: KeyEnter}) || inspected() != "T-018" {
-		t.Fatalf("Enter did not walk down to T-018: %q", inspected())
-	}
-	if got := plainFrame(w, 120, 40); !strings.Contains(got, "T-018  candidates") || !strings.Contains(got, "Backspace T-017") {
-		t.Fatalf("inspector on the child:\n%s", got)
-	}
-	if !key(KeyEvent{Type: KeyBackspace}) || inspected() != "T-017" || w.boardUI.inspect == "" {
-		t.Fatalf("Backspace did not walk up to T-017: %q", inspected())
-	}
-	plainFrame(w, 120, 40)
-	if !key(KeyEvent{Type: KeyBackspace}) || w.boardUI.inspect != "" {
-		t.Fatal("Backspace at the top of the chain did not close the inspector")
-	}
-	key(KeyEvent{Type: KeyEnter})
-	if !key(KeyEvent{Type: KeyEsc}) || w.boardUI.inspect != "" {
-		t.Fatal("Esc did not close the inspector")
-	}
-	// Reopening starts fresh: state changes only.
-	key(KeyEvent{Type: KeyEnter})
-	if got := plainFrame(w, 120, 40); strings.Contains(got, "usage.charged") {
-		t.Fatalf("a reopened inspector kept all events:\n%s", got)
-	}
-}
-
-// Enter on a lane shows its worker's tmux pane; without tmux it inspects
-// the lane's task.
-func TestBoardLaneEnterShowsWorkerPane(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	defer w.Close()
-	oldIn, oldFocus := boardInTmux, boardFocusPane
-	defer func() { boardInTmux, boardFocusPane = oldIn, oldFocus }()
-	var mu sync.Mutex
-	var focused []string
-	boardFocusPane = func(_ context.Context, pane string, joined bool) error {
-		mu.Lock()
-		defer mu.Unlock()
-		focused = append(focused, fmt.Sprintf("%s %t", pane, joined))
-		return nil
-	}
-	answer := func() string { w.mu.RLock(); defer w.mu.RUnlock(); return w.state.LastOutput }
-	w.frameLines(120, 40)
-	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'l'})
-	lane := w.boardUI.lane
-	var pane, task string
-	for _, l := range w.marshalPanel().Board.Lanes {
-		if l.Worker == lane {
-			pane, task = l.Pane, l.TaskID
-		}
-	}
-	if pane == "" || task == "" {
-		t.Fatalf("lane %q has no pane or task", lane)
-	}
-
-	boardInTmux = func(*Workspace) bool { return true }
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter on a lane was not taken")
-	}
-	memWaitFor(t, "the pane focus", func() bool { mu.Lock(); defer mu.Unlock(); return len(focused) == 1 })
-	if focused[0] != pane+" false" || w.boardUI.inspect != "" {
-		t.Fatalf("focused %v, inspect %q", focused, w.boardUI.inspect)
-	}
-	memWaitFor(t, "the answer", func() bool { return strings.HasPrefix(answer(), "View: showing "+lane) })
-
-	boardInTmux = func(*Workspace) bool { return false }
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.boardUI.inspect != task {
-		t.Fatalf("Enter without tmux did not inspect %s: %q", task, w.boardUI.inspect)
-	}
-}
-
-// TestBoardTabCyclesPanes: Tab is the next pane and Shift+Tab the one
-// before, never a command completion typed into the composer; with text in
-// the composer Tab still completes it.
-func TestBoardTabCyclesPanes(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	w.frameLines(120, 40)
-	w.boardUI.focus = layout.Tasks
-	for _, want := range []layout.PaneID{layout.Lanes, layout.Inbox, layout.Tasks} {
-		if !w.handleBoardKey(KeyEvent{Type: KeyTab}) || w.boardUI.pane(true) != want {
-			t.Fatalf("Tab: focus %s, want %s", w.boardUI.pane(true), want)
-		}
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyShiftTab}) || w.boardUI.pane(true) != layout.Inbox {
-		t.Fatalf("Shift+Tab: focus %s", w.boardUI.pane(true))
-	}
-	if w.composer.Text() != "" {
-		t.Fatalf("Tab typed %q into the composer", w.composer.Text())
-	}
-	w.composer.SetText("/vi")
-	if w.handleBoardKey(KeyEvent{Type: KeyTab}) {
-		t.Fatal("the Board took Tab while the composer holds text")
-	}
-}
-
-// TestBoardInspectorQCloses: q closes the inspector, as its mockup's bar
-// says, instead of starting a command behind it.
-func TestBoardInspectorQCloses(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	w.frameLines(120, 40)
-	w.boardUI.focus = layout.Tasks
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.boardUI.inspect == "" {
-		t.Fatal("Enter did not open the inspector")
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'q'}) || w.boardUI.inspect != "" {
-		t.Fatal("q did not close the inspector")
-	}
-	if w.composer.Text() != "" {
-		t.Fatalf("q went to the composer: %q", w.composer.Text())
 	}
 }
 
@@ -616,35 +341,6 @@ func TestBoardAnswerSurvivesNoteArrivingWithIt(t *testing.T) {
 	w.recordCommandResult("/view chat native", "Chat view saved as native, but the native chat is not qualified here; the tmux-docked chat stays.", nil)
 	if got := plainFrame(w, 120, 40); !strings.Contains(got, "not qualified here") {
 		t.Fatalf("answer lost to the run note:\n%s", got)
-	}
-}
-
-// TestBoardInspectorDecisionKeys: in the inspector a, A, d and r open the
-// task's waiting decision's confirmation in the inbox, never deciding it;
-// on a task with nothing waiting they answer so and type nothing.
-func TestBoardInspectorDecisionKeys(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	w.frameLines(120, 40)
-	w.boardUI.focus = layout.Tasks
-	w.boardUI.task, w.boardUI.inspect = "T-023", "T-023"
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'd'}) {
-		t.Fatal("d in the inspector was not taken")
-	}
-	if w.boardUI.inspect != "" || w.boardUI.pane(true) != layout.Inbox || !w.inboxView.Confirming() || !strings.HasPrefix(w.inboxView.Prompt(), "Enter to confirm d") {
-		t.Fatalf("d: inspect %q focus %s prompt %q", w.boardUI.inspect, w.boardUI.pane(true), w.inboxView.Prompt())
-	}
-	if n := len(w.boardInbox()); n != 1 {
-		t.Fatal("d decided the request")
-	}
-	w.inboxView.Cancel()
-	w.boardUI.focus = layout.Tasks
-	w.boardUI.task, w.boardUI.inspect = "T-017", "T-017"
-	for _, r := range "aAro" {
-		if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: r}) || w.boardUI.inspect != "T-017" || w.composer.Text() != "" {
-			t.Fatalf("%c on a task with nothing waiting: inspect %q composer %q", r, w.boardUI.inspect, w.composer.Text())
-		}
 	}
 }
 

@@ -19,10 +19,3 @@ func migrateMemoryRestore(ctx context.Context, tx *sql.Tx) error {
  `)
 	return err
 }
-
-// MigrateMemoryRestore exposes the same canonical DDL for isolated provisional
-// worker fixtures. Production must register migrateMemoryRestore in Migrate;
-// neither restore services nor Runtime.Open invoke DDL.
-func MigrateMemoryRestore(ctx context.Context, tx *sql.Tx) error {
-	return migrateMemoryRestore(ctx, tx)
-}

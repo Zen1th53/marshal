@@ -446,7 +446,7 @@ func (w *Workspace) holdNotice(event, text, runID string) {
 	if root == "" {
 		return
 	}
-	view, err := openInboxView(root, "marshal", false)
+	view, err := openMarshalInbox(root)
 	if err != nil {
 		return
 	}
@@ -616,7 +616,7 @@ func (m *marshalSession) heldSet() map[string]bool {
 // timeout.
 func (w *Workspace) handleChangeKey(event KeyEvent) bool {
 	card := w.currentChange()
-	if card == nil || w.anyBodyView() || w.boardUI.inspect != "" {
+	if card == nil || w.anyBodyView() {
 		return false
 	}
 	w.change.mu.Lock()
@@ -906,70 +906,6 @@ func changeIsAre(n int) string {
 // changeButton is one action on the change card.
 type changeButton struct {
 	key, label, id string
-}
-
-// changeEntry is the open change card as the inbox shows it: the headline on
-// one or more rows, then a row of one-key actions. x is the inbox's first
-// cell, row its frame row.
-func (v boardVisual) changeEntry(c changeCard, x, row, w int) []string {
-	flag := "⚑ "
-	if !v.unicode() {
-		flag = "! "
-	}
-	label := "change"
-	if c.ownerHold() {
-		label = "held"
-	}
-	head := v.fg("waiting", flag+label) + v.fg("dim", " · ")
-	prefix := VisibleLen(head)
-	var headline string
-	switch {
-	case c.ownerHold():
-		headline = ownerHoldHeadline(c.held)
-	case c.timedOut:
-		headline = "I couldn't pause the run to apply the change. Press Enter to try again."
-	case c.applying:
-		headline = "Applying your change…"
-	default:
-		headline = changeHoldHeadline(c.notStarted, c.running)
-	}
-	lines := wrapWords(cleanBoard(headline), max(8, w-prefix))
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-	out := []string{PadCell(head+v.bold(v.fg("white", lines[0])), w)}
-	for _, extra := range lines[1:] {
-		out = append(out, PadCell(strings.Repeat(" ", prefix)+v.bold(v.fg("white", extra)), w))
-	}
-	var buttons []changeButton
-	switch {
-	case c.ownerHold():
-		buttons = []changeButton{{"x", "release the hold", "release"}}
-	case c.timedOut:
-		buttons = []changeButton{{"Enter", "try again", "apply"}}
-	case c.applying:
-		return out
-	default:
-		buttons = []changeButton{{"Enter", "apply this change", "apply"}, {"k", "keep the current goal", "keep"}}
-	}
-	crow := row + len(out)
-	line, at := "    ", 4
-	for i, b := range buttons {
-		if i > 0 {
-			line += "  "
-			at += 2
-		}
-		key := b.key
-		if key == "Enter" {
-			key = v.cardEnterKey()
-		}
-		button := v.bg("rule", "["+key+"]") + " " + b.label
-		v.hit(boardHit{row: crow, x0: x + at, x1: x + min(w, at+VisibleLen(button)), kind: hitChange, id: b.id})
-		line += button
-		at += VisibleLen(button)
-	}
-	out = append(out, PadCell(line, w))
-	return out
 }
 
 // changeCount is 1 while a change card is open, for the inbox's counts.

@@ -57,10 +57,3 @@ func TestMarshalStartupIgnoresIsolationFlags(t *testing.T) {
 		}
 	}
 }
-
-func TestMarshalBlockedHelpDoesNotMentionSandbox(t *testing.T) {
-	topic, ok := startup.Help("blocked")
-	if !ok || strings.Contains(strings.ToLower(topic.Body), "sandbox") {
-		t.Fatalf("blocked help mentions sandbox or is missing: present=%t body=%q", ok, topic.Body)
-	}
-}

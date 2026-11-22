@@ -50,8 +50,6 @@ func TestMarshalSelfDecisionKinds(t *testing.T) {
 // The refused attempt shows in the inbox under the architecture gate while
 // that revision waits, and in Activity once; a new revision has no warning.
 func TestRefusedSelfAcceptanceShowsInTheInbox(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
 	c := walkContract()
@@ -59,9 +57,13 @@ func TestRefusedSelfAcceptanceShowsInTheInbox(t *testing.T) {
 	w.refreshGates(t.Context())
 	w.noteRefusedArchitecture(c.ID, 0)
 
-	text := frameText(w, 200, 40)
-	if !strings.Contains(text, "architecture · waits for you in the browser") || !strings.Contains(text, selfAcceptRefusedNote) {
-		t.Fatalf("the inbox does not say the Marshal tried to accept:\n%s", text)
+	// The Web Board's architecture card says it; the terminal's From you
+	// sends the owner there.
+	if d := w.boardV2().Decision; d == nil || d.Kind != decisionArchitecture || d.SelfApproval == "" {
+		t.Fatalf("the architecture card does not say the Marshal tried to accept: %+v", d)
+	}
+	if text := frameText(w, 200, 40); !strings.Contains(text, "open the web to decide (w)") {
+		t.Fatalf("From you does not send the owner to the web:\n%s", text)
 	}
 	if n := w.noteList(); len(n) == 0 || n[0].Text != selfAcceptRefusedNote || n[0].Err {
 		t.Fatalf("Activity misses the refused attempt: %+v", n)

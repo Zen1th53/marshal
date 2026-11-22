@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/architecturereview"
@@ -29,8 +30,8 @@ func TestAcceptedArchitectureOpensWithoutGoalOrModel(t *testing.T) {
 		}
 		if _, err := r.AcquireArchitectureReviewLease(); err == nil {
 			t.Fatal("an accepted view did not keep its lease")
-		} else if owned, ok := err.(*ArchitectureReviewOwnedError); !ok || owned.URL != session.URL {
-			t.Fatalf("the lease advertises a different accepted view: %v", err)
+		} else if _, ok := err.(*ArchitectureReviewOwnedError); !ok || strings.Contains(err.Error(), "token") {
+			t.Fatalf("the lease refusal is not the owned error, or carries a key: %v", err)
 		}
 		if state["current"] != true || state["read_only"] != true || state["approved"] != false {
 			t.Fatalf("inspection state: %+v", state)

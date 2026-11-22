@@ -262,9 +262,9 @@ type CodexHealthReport struct {
 	Available  bool   `json:"available"`
 	BinaryPath string `json:"binary_path"`
 	Version    string `json:"version"`
-	// AppServerStatus is a narrow configuration-boundary observation, not a
-	// claim that a provider turn has executed. Its values remain operator
-	// truthful: CONFIG_FREE, BLOCKED, or UNKNOWN.
+	// AppServerStatus is a narrow observation of whether the Codex home is
+	// free of a user config.toml, not a claim that a provider turn has
+	// executed: CONFIG_FREE, BLOCKED, or UNKNOWN. The JSON name is historical.
 	AppServerStatus string            `json:"app_server_status"`
 	AppServerReason string            `json:"app_server_reason,omitempty"`
 	DefaultModel    string            `json:"default_model"`

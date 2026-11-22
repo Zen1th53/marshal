@@ -96,8 +96,6 @@ func TestStatusLineOwnedSessionOnly(t *testing.T) {
 // tmux status line the Board, the picker, the opening and the Blocked screen
 // paint none of their own and keep their layout one row up.
 func TestBoardWithoutVitalsWhenStatusCarriesThem(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := NewWorkspace(nil, "test-proj", "test-session")
 	w.workDir = t.TempDir()
 	w.homeBoard = true
@@ -108,10 +106,9 @@ func TestBoardWithoutVitalsWhenStatusCarriesThem(t *testing.T) {
 	if len(with) != 40 || len(without) != 40 {
 		t.Fatalf("rows %d/%d", len(with), len(without))
 	}
-	if !strings.Contains(StripANSI(with[0]), "running") {
-		t.Fatalf("the Board's own vitals row is missing: %q", StripANSI(with[0]))
-	}
-	if strings.Contains(StripANSI(without[0]), "running") || StripANSI(without[0]) != StripANSI(with[1]) {
-		t.Fatalf("with the status line the header should be on top:\n%q\n%q", StripANSI(without[0]), StripANSI(with[1]))
+	// The home screen has no vitals row of its own: its header is on top
+	// either way.
+	if top := StripANSI(with[0]); !strings.Contains(top, "MARSHAL") || top != StripANSI(without[0]) {
+		t.Fatalf("the home's header is not on top:\n%q\n%q", top, StripANSI(without[0]))
 	}
 }

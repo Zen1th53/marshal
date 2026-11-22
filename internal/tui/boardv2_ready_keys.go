@@ -12,7 +12,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/tmux"
-	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -57,13 +56,6 @@ func (w *Workspace) noteV2Ready(usage, signIn bool) {
 	s.mu.Lock()
 	s.usage, s.signIn = usage, signIn
 	s.mu.Unlock()
-}
-
-func (w *Workspace) v2ReadyDrawn() (usage, signIn bool) {
-	s := w.v2ReadyState()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.usage, s.signIn
 }
 
 // v2TelemetryWhat is what ? on the Usage counts card says.
@@ -151,97 +143,6 @@ func (w *Workspace) addV2ReadyActions(r *vm.Readiness) {
 	}
 	r.Checks[at].Hint = signInHint("agy") + " · g opens it here"
 	r.Actions = append(r.Actions, vm.Key{Key: "g", Label: "sign in to agy"})
-}
-
-// v2ReadyBar is the key bar of the readiness screen: while the Usage counts
-// card is up, ? says what is sent, so the bar says so too.
-func v2ReadyBar(b vm.Board) []vm.Key {
-	if b.Screen != vm.ScreenReady || !b.Ready.TelemetryAsk {
-		return b.Keys
-	}
-	keys := slices.Clone(b.Keys)
-	for i := range keys {
-		if keys[i].Key == "?" {
-			keys[i].Label = "what is sent"
-		}
-	}
-	return keys
-}
-
-// renderV2Ready renders b full screen and records which readiness keys the
-// render drew: the Usage counts card's buttons (the card goes first when
-// rows are short) and the g button. ? says what is sent, and the key bar
-// says so, only while the card is drawn.
-func (w *Workspace) renderV2Ready(b vm.Board, cols, rows int, t boardv2.Theme) ([]string, []boardv2.Hit) {
-	plain := b.Keys
-	if b.Screen == vm.ScreenReady && b.Ready.TelemetryAsk {
-		b.Keys = v2ReadyBar(b)
-	}
-	lines, hits := boardv2.RenderChatHits(b, cols, rows, t, nil)
-	usage, signIn := v2ReadyDrawnIn(b, lines, hits)
-	if !usage && b.Ready.TelemetryAsk && !slices.Equal(plain, b.Keys) {
-		b.Keys = plain
-		lines, hits = boardv2.RenderChatHits(b, cols, rows, t, nil)
-	}
-	w.noteV2Ready(usage, signIn)
-	return lines, hits
-}
-
-// v2ReadyDrawnIn reports whether a render of the readiness screen drew the
-// Usage counts card's buttons and the g button.
-func v2ReadyDrawnIn(b vm.Board, lines []string, hits []boardv2.Hit) (usage, signIn bool) {
-	if b.Screen != vm.ScreenReady {
-		return false, false
-	}
-	signIn = slices.ContainsFunc(hits, func(h boardv2.Hit) bool { return h.Kind == boardv2.HitReady && h.Key == "g" })
-	if b.Ready.TelemetryAsk {
-		text := StripANSI(strings.Join(lines, "\n"))
-		usage = strings.Contains(text, "t turn off") && strings.Contains(text, "y keep on") && strings.Contains(text, "? what is sent")
-	}
-	return usage, signIn
-}
-
-// v2CardBar is a decision or paused card's key bar: its buttons, esc for
-// "later" on a decision, and the palette and help when they can run, as the
-// hint bar writes them.
-func (w *Workspace) v2CardBar(v boardVisual, b vm.Board) []vm.Key {
-	var keys []vm.Key
-	switch {
-	case b.Decision != nil:
-		keys = append(keys, b.Decision.Actions...)
-		keys = append(keys, vm.Key{Key: "esc", Label: "later"})
-	case b.Paused != nil:
-		keys = append(keys, b.Paused.Actions...)
-	}
-	for _, id := range w.availableHints([]string{"palette", "help"}) {
-		if k, ok := boardAction(id); ok {
-			keys = append(keys, vm.Key{Key: v.hintKey(k.Keys), Label: k.Hint})
-		}
-	}
-	return keys
-}
-
-// handleV2ReadyKey is a key on the readiness screen's own cards; it reports
-// whether one took it. It runs on the Board with no run and nothing open
-// over it, before the gates take y; an armed verify keeps "any other key
-// cancels".
-func (w *Workspace) handleV2ReadyKey(ctx context.Context, event KeyEvent) bool {
-	if !w.boardV2On() || event.Type != KeyRune || w.firstUseArmed() != "" || w.inboxView.Inspecting() || len(w.boardInbox()) > 0 {
-		return false
-	}
-	usage, signIn := w.v2ReadyDrawn()
-	switch {
-	case usage && event.Rune == '?':
-		w.memoryAnswer(v2TelemetryWhat, false)
-		return true
-	case usage && (event.Rune == 'y' || event.Rune == 't'):
-		w.chooseTelemetry(ctx, event.Rune == 'y')
-		return true
-	case signIn && event.Rune == 'g':
-		w.openAgySignIn(ctx)
-		return true
-	}
-	return false
 }
 
 // chooseTelemetry keeps telemetry on (and records the notice shown) or turns

@@ -33,7 +33,7 @@ func fixtureRunning() vm.Board {
 		Screen:  vm.ScreenRunning,
 		Now:     at(19, 31),
 		Top:     vm.TopBar{Version: "v0.3.5", Project: "marshal-work", Run: "review-fixes", State: "RUNNING", StateTone: vm.ToneInfo, Workers: 8, Clock: at(19, 31)},
-		NowLine: vm.NowLine{Marshal: "claude Opus · watching reviews", Work: "8 running · 4 queued", FromYou: "nothing · next ask: final review", FromYouOK: true},
+		NowLine: vm.NowLine{Marshal: "claude Opus · watching reviews", Work: "8 running · 4 queued", FromYou: vm.ChatAskedLine, ChatAsked: true},
 		Marshal: marshalClaude("high"),
 		Plan: vm.Plan{Title: "12 tasks · 18 requirements", Accepted: "accepted rev 1 · 18:52",
 			Stages: []vm.Stage{{Name: "goal", State: "done"}, {Name: "reqs", State: "done"}, {Name: "design", State: "done"}, {Name: "arch", State: "done"},
@@ -55,11 +55,34 @@ func fixtureRunning() vm.Board {
 			{ID: "T03", Title: "sub-view external links", Files: "review.html", Writer: "claude", Reviewer: "agy", State: "building"},
 			{ID: "T05", Title: "request panel overlap", Files: "review.html", Writer: "claude", Reviewer: "agy", State: "building"},
 			{ID: "T12", Title: "regression matrix sign-off", Files: "matrix.md", Writer: "claude", Reviewer: "agy", State: "waiting", Note: "waits T03"},
+			{ID: "T04", Title: "codec round-trip test", Files: "codec_test.go", Writer: "agy", Reviewer: "claude", State: "building", Note: "rework 1"},
+			{ID: "T06", Title: "history paging", Files: "history.go", Writer: "agy", Reviewer: "claude", State: "building"},
+			{ID: "T07", Title: "legend keyboard focus", Files: "legend.js", Writer: "claude", Reviewer: "agy", State: "building"},
+			{ID: "T08", Title: "review page empty state", Files: "review.html", Writer: "claude", Reviewer: "agy", State: "merged"},
+			{ID: "T09", Title: "dashed-change styles", Files: "review.css", Writer: "agy", Reviewer: "claude", State: "building"},
+			{ID: "T10", Title: "request panel copy", Files: "review.html", Writer: "", State: "waiting", Note: "waits T05"},
+			{ID: "T11", Title: "codec error messages", Files: "codec.go", Writer: "", State: "waiting", Note: "queued"},
 		},
 		Workers: []vm.Worker{
 			{Provider: "claude", Glyph: "✳", LeftPct: 58, Tag: "4 lanes", TagTone: vm.ToneOK, Detail: "sonnet", SignedIn: true, Installed: true},
 			{Provider: "agy", Glyph: "◆", LeftPct: 71, Tag: "4 lanes", TagTone: vm.ToneOK, Detail: "gemini-3.8", SignedIn: true, Installed: true},
-			{Provider: "codex", Glyph: "⬡", LeftPct: 11, Tag: "spare", TagTone: vm.ToneWarn, Detail: "wk 11%", SignedIn: true, Installed: true},
+			{Provider: "codex", Glyph: "⬡", LeftPct: 11, Tag: "spare", TagTone: vm.ToneWarn, Detail: "wk 11%", SignedIn: true, Installed: true,
+				Reason: "weekly limit low: kept as the fallback only"},
+		},
+		Limits: []vm.ProviderLimits{
+			{Provider: "claude", Model: "sonnet", State: vm.LimitUsable, Rows: []vm.LimitRow{
+				{Family: "", Window: "5h", PercentLeft: 58, ResetsAt: at(21, 0), ObservedAt: at(19, 29), Source: "claude /usage", Drives: true},
+				{Family: "", Window: "weekly", PercentLeft: 71, ResetsAt: time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC), ObservedAt: at(19, 29), Source: "claude /usage"},
+				{Family: "opus", Window: "weekly", PercentLeft: 83, ResetsAt: time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC), ObservedAt: at(19, 29), Source: "claude /usage"},
+			}},
+			{Provider: "agy", Model: "gemini-3.8", State: vm.LimitUsable, Rows: []vm.LimitRow{
+				{Family: "Gemini 3.8", Window: "5h", PercentLeft: 71, ResetsAt: at(22, 10), ObservedAt: at(19, 24), Source: "agy /usage", Drives: true},
+				{Family: "Gemini 3.8", Window: "weekly", PercentLeft: -1, ObservedAt: at(19, 24), Source: "not reported by the CLI"},
+			}},
+			{Provider: "codex", Model: "gpt-5.5", State: vm.LimitUsable, Reason: "weekly limit 11%: used only when claude and agy are out", Rows: []vm.LimitRow{
+				{Family: "", Window: "5h", PercentLeft: 90, ResetsAt: at(20, 40), ObservedAt: at(19, 10), Source: "codex session log"},
+				{Family: "", Window: "weekly", PercentLeft: 11, ResetsAt: time.Date(2026, 11, 21, 6, 0, 0, 0, time.UTC), ObservedAt: at(19, 10), Source: "codex session log", Drives: true},
+			}},
 		},
 		Inbox: vm.Inbox{Next: "final review before merge.", Refs: []string{"secret-ref"}},
 		Activity: []vm.Event{
@@ -69,6 +92,8 @@ func fixtureRunning() vm.Board {
 			{At: at(18, 52), Kind: "plan", Text: "12 tasks · 8 workers", Tone: vm.ToneInfo},
 			{At: at(18, 44), Kind: "arch", Text: "rev 1 accepted in browser", Tone: vm.ToneOK},
 			{At: at(18, 41), Kind: "memory", Text: "old chat memory skipped", Tone: vm.ToneMuted, Count: 6},
+			{At: at(18, 40), Kind: "note", Text: "Marshal decision requested: decision-8a8d3f0c91b2e4d7a6c5 project-contract hello-uz", Tone: vm.ToneInfo},
+			{At: at(18, 39), Kind: "note", Text: "Marshal decision requested: decision-1f2e3d4c5b6a79880011 memory MEM-IMPORT-3111ee9093dfae48", Tone: vm.ToneInfo, Count: 2},
 		},
 		Steps: vm.Steps{Items: []vm.Step{
 			{At: at(19, 29), Kind: "check", Text: "T02 review verdict: changes requested"},
@@ -79,12 +104,26 @@ func fixtureRunning() vm.Board {
 			{Sent: at(18, 42), What: "parallel limit 8", Answer: "allow", Latency: 5 * sec, Tone: vm.ToneOK},
 		},
 		Chat: vm.Chat{Bound: true, InputClear: true, InputKnown: true},
+		// The probe's readiness stays on the Board during a run.
+		Ready: vm.Readiness{Ready: 1, Total: 1, TelemetryOn: true, Checked: at(18, 30),
+			Checks:   []vm.Check{{Mark: "ok", Label: "Marshal", Text: "claude · Opus 5.5 · signed in", Tag: "in use"}},
+			Defaults: [][2]string{{"workers", "claude 4 · agy 4"}, {"fallback", "codex"}, {"review", "other provider"}, {"approval", "you: architecture · tasks: Marshal, then you"}}},
+		System: vm.System{CPUPct: 64, MemPct: 71, DiskPct: 58, TempC: 83, ThermalGuard: true, ThermalCap: 6,
+			Notice: "host: thermal guard · asked owner: lane cap 12 → 6 (inbox)", UpdateAvailable: "v0.3.9"},
+		MarshalSays: vm.MarshalSays{At: at(19, 27), Text: "T02 came back from review with two changes requested: the digest check " +
+			"runs before the stale-target check, and one test name is wrong. I sent it back to agy-1 with both points.\n\n" +
+			"T12 is stuck on a flaky matrix run. Should I retry it from scratch, or wait for T03 to merge first?"},
 	}
 }
+
+// hostUnknown is a System whose host figures are not known yet, as the
+// collector leaves them before the host watcher's first sample.
+var hostUnknown = vm.System{CPUPct: -1, MemPct: -1, DiskPct: -1, TempC: -1}
 
 func fixtureReady() vm.Board {
 	return vm.Board{
 		Screen:  vm.ScreenReady,
+		System:  hostUnknown,
 		Top:     vm.TopBar{Version: "v0.3.5", Project: "marshal-work", State: "READY", StateTone: vm.ToneOK, Clock: at(18, 22)},
 		NowLine: vm.NowLine{Marshal: "claude Opus · ready", Work: "no run yet", FromYou: "sign in to agy, then ⏎ say the goal"},
 		Marshal: marshalClaude("high"),
@@ -113,6 +152,7 @@ func fixturePlanning() vm.Board {
 	const sec = time.Second
 	return vm.Board{
 		Screen:  vm.ScreenPlanning,
+		System:  hostUnknown,
 		Top:     vm.TopBar{Version: "v0.3.5", Project: "marshal-work", State: "PLANNING", StateTone: vm.ToneVio, Clock: at(18, 47)},
 		NowLine: vm.NowLine{Marshal: "claude Opus · tasks · 6m", Work: "none yet", FromYou: "nothing · plan in ≈ 5m", FromYouOK: true},
 		Marshal: marshalClaude("high"),
@@ -158,6 +198,7 @@ func fixtureDecision() vm.Board {
 func fixturePaused() vm.Board {
 	return vm.Board{
 		Screen:  vm.ScreenPaused,
+		System:  hostUnknown,
 		Top:     vm.TopBar{Version: "v0.3.5", Project: "marshal-work", Run: "review-fixes", State: "2 PAUSED", StateTone: vm.ToneBad, Inbox: 1, Clock: at(20, 5)},
 		NowLine: vm.NowLine{Marshal: "waiting on your choice", Work: "6 running · 2 paused", FromYou: "press ⏎ to move 2 tasks to claude"},
 		Marshal: marshalClaude("high"),
@@ -167,6 +208,8 @@ func fixturePaused() vm.Board {
 			{Provider: "agy", Glyph: "◆", LeftPct: 0, Tag: "out", TagTone: vm.ToneBad, Detail: "21:10"},
 			{Provider: "codex", Glyph: "⬡", LeftPct: 10, Tag: "low", TagTone: vm.ToneWarn, Detail: "10%"},
 		},
+		Limits: []vm.ProviderLimits{{Provider: "agy", Model: "gemini-3.8", State: vm.LimitOut, Reason: "Gemini 5-hour limit used up; no new work until 21:10",
+			Rows: []vm.LimitRow{{Family: "Gemini 3.8", Window: "5h", PercentLeft: 0, ResetsAt: at(21, 10), ObservedAt: at(20, 4), Source: "agy /usage", Drives: true}}}},
 		Paused: &vm.Paused{Kind: "quota", Title: "Paused · agy Gemini 5h limit", Resets: "resets 21:10",
 			Cause: "agy-2 and agy-4 hit the agy Gemini 5-hour limit. Their work is kept.",
 			Tasks: []vm.PausedTask{{Title: "T06 history paging", Progress: "edits done · tests not run", Kept: "branch + 3 commits"},
@@ -177,8 +220,44 @@ func fixturePaused() vm.Board {
 	}
 }
 
+// fixtureFinished is the running Board once the run is done: eleven tasks
+// merged, one cancelled, no lane left.
+func fixtureFinished() vm.Board {
+	b := fixtureRunning()
+	b.Top.State, b.Top.StateTone, b.Top.Workers = "DONE", vm.ToneOK, 0
+	b.NowLine = vm.NowLine{Marshal: "claude Opus · idle", Work: "11 merged · 1 cancelled", FromYou: "nothing", FromYouOK: true}
+	b.Plan.Done, b.Plan.Active, b.Plan.Waiting, b.Plan.ETA = 11, 0, 0, 0
+	for i := range b.Plan.Stages {
+		b.Plan.Stages[i].State, b.Plan.Stages[i].Note = "done", ""
+	}
+	b.Lanes.Items = nil
+	tasks := append([]vm.Task(nil), b.Tasks...)
+	for i := range tasks {
+		tasks[i].State, tasks[i].Note = "merged", ""
+	}
+	tasks[len(tasks)-1].State = "cancelled"
+	b.Tasks = tasks
+	b.MarshalSays = vm.MarshalSays{At: at(21, 2), Text: "All done: 11 tasks merged into the run branch; T11 was cancelled as no longer needed."}
+	return b
+}
+
+// fixtureBareDecision is a decision card whose frame carries nothing it
+// rests on (no summary, lines, parts or note): the page does not offer it.
+func fixtureBareDecision() vm.Board {
+	b := fixtureRunning()
+	b.Screen = vm.ScreenDecision
+	b.Top.State, b.Top.StateTone, b.Top.Inbox = "YOUR TURN", vm.ToneWarn, 1
+	b.NowLine.FromYou, b.NowLine.FromYouOK = "approve the project contract · ⏎", false
+	b.Decision = &vm.Decision{Kind: "project-contract", Title: "Approve the project contract", Actions: kv("⏎", "allow", "x", "deny")}
+	return b
+}
+
 func fixture(name string) (vm.Board, bool) {
 	switch name {
+	case "finished":
+		return fixtureFinished(), true
+	case "bare":
+		return fixtureBareDecision(), true
 	case "", "running":
 		return fixtureRunning(), true
 	case "ready":

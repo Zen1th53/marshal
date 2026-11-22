@@ -9,7 +9,6 @@ This directory contains verified usage examples for the MARSHAL control plane.
 1. [01-codex-task.json](01-codex-task.json) — Task schema for OpenAI Codex provider execution
 2. [02-opencode-ollama-task.json](02-opencode-ollama-task.json) — Task schema for OpenCode + local Ollama execution
 3. [03-mcp-client-config.json](03-mcp-client-config.json) — Model Context Protocol client configuration
-4. [04-a2a-agent-card.json](04-a2a-agent-card.json) — Agent-to-Agent discovery card schema
 
 ---
 

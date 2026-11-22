@@ -44,6 +44,7 @@ type Board struct {
 	Lanes    Lanes
 	Tasks    []Task
 	Workers  []Worker
+	Limits   []ProviderLimits
 	Inbox    Inbox
 	Activity []Event
 	Steps    Steps
@@ -53,6 +54,33 @@ type Board struct {
 	Decision *Decision // non-nil: the decision card is shown over the Board
 	Paused   *Paused   // non-nil: the paused card is shown
 	Keys     []Key
+	System   System
+	Web      Web
+	// MarshalSays is the Marshal chat's last turn to the owner.
+	MarshalSays MarshalSays
+}
+
+// MarshalSays is the final text of the Marshal's last chat turn: assistant
+// prose only, secrets redacted. Answered is set once someone wrote in the
+// chat after it. A zero value: the Marshal has not said anything yet.
+type MarshalSays struct {
+	Text     string
+	At       time.Time
+	Answered bool
+}
+
+// System is the computer and the install the Board runs on: host load, the
+// thermal guard, a newer release, whether MCP works. Figures are -1 when
+// unknown.
+type System struct {
+	CPUPct, MemPct, DiskPct int
+	TempC                   int
+	LowDisk                 bool
+	ThermalGuard            bool   // the thermal rule is active
+	ThermalCap              int    // lane cap the guard asked for while active; 0 none
+	Notice                  string // the host watcher's notice: "host: thermal guard · …"
+	UpdateAvailable         string // tag of a newer release; "" none or not checked
+	MCPFailed               bool   // MCP failed in this session (the reason stays in the terminal, F6)
 }
 
 // TopBar is row 0 on every screen.
@@ -74,6 +102,20 @@ type NowLine struct {
 	Work      string
 	FromYou   string
 	FromYouOK bool // true: nothing needed (green); false: owner action (yellow)
+	// ChatAsked is set when FromYou is the Marshal's question in its chat:
+	// its last turn ended asking the owner something and the chat's input
+	// sits idle, so the answer is typed in the chat, not on a card.
+	ChatAsked bool
+}
+
+// ChatAskedLine is FromYou while the Marshal waits on its question in chat.
+const ChatAskedLine = "the Marshal asked you something in chat"
+
+// Web is the Web Board's state, for the line that says where it is.
+type Web struct {
+	Running   bool // the server is up
+	Opened    bool // the browser was opened on it
+	NoDisplay bool // no display here: the link must be opened by hand (/marshal web)
 }
 
 // Marshal is the Marshal pane and the Marshal segment of the top bar.
@@ -153,6 +195,41 @@ type Worker struct {
 	SignedIn  bool
 	Installed bool
 	Reason    string // plain cause when not usable: "not signed in: run agy once"
+}
+
+// LimitState is whether the dispatcher sends a provider work, as its limits
+// and sign-in say.
+type LimitState string
+
+const (
+	LimitUsable       LimitState = "usable"        // takes work: the model it runs has limit left, or its limit is not reported
+	LimitOut          LimitState = "out"           // the model it runs has no limit left, or the provider reported a limit
+	LimitNotSignedIn  LimitState = "not signed in" // installed, but its CLI is signed out
+	LimitNotChecked   LimitState = "not checked"   // not checked yet, or a check is running
+	LimitNotInstalled LimitState = "not installed" // its CLI is not on PATH
+)
+
+// ProviderLimits is one provider's limits, one row per family and window,
+// and its dispatch state with the rows that decide it.
+type ProviderLimits struct {
+	Provider string
+	Model    string // the model id its workers run, which picks the rows that apply; "" unknown
+	State    LimitState
+	Reason   string // the plain cause of State; "" when usable and nothing to add
+	Rows     []LimitRow
+}
+
+// LimitRow is one limit window as the provider reported it. Nothing is
+// estimated: a limit the provider does not report has PercentLeft -1 and a
+// Source that says so, and draws no bar.
+type LimitRow struct {
+	Family      string    // model family the limit covers ("Claude and GPT"); "" for every model
+	Window      string    // "5h", "weekly" or another length ("90m"); "" when not reported
+	PercentLeft int       // -1 not reported or unknown
+	ResetsAt    time.Time // with its date; zero unknown
+	ObservedAt  time.Time // when the provider wrote the figure; zero unknown
+	Source      string    // "codex session log", "agy /usage", "agy models", "not reported by the CLI", "not checked"
+	Drives      bool      // this row decides State: the tightest window of the model the provider runs, or one at 0%
 }
 
 // Inbox is the Inbox pane.

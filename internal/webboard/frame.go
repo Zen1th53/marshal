@@ -13,8 +13,10 @@ package webboard
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/redaction"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -24,28 +26,77 @@ const Version = 1
 // Frame is one Board frame as the browser reads it. Times are RFC 3339 with
 // their zone ("" when unknown), durations whole seconds (0 when unknown).
 type Frame struct {
-	V        int       `json:"v"`
-	Screen   string    `json:"screen"`
-	Now      string    `json:"now"`
-	Top      TopBar    `json:"top"`
-	NowLine  NowLine   `json:"nowLine"`
-	Marshal  Marshal   `json:"marshal"`
-	Plan     Plan      `json:"plan"`
-	Lanes    Lanes     `json:"lanes"`
-	Tasks    []Task    `json:"tasks"`
-	Workers  []Worker  `json:"workers"`
-	Inbox    Inbox     `json:"inbox"`
-	Activity []Event   `json:"activity"`
-	Steps    Steps     `json:"steps"`
-	Requests []Request `json:"requests"`
-	Chat     Chat      `json:"chat"`
-	Ready    Readiness `json:"ready"`
-	Decision *Decision `json:"decision"`
-	Paused   *Paused   `json:"paused"`
-	Keys     []Key     `json:"keys"`
+	V       int      `json:"v"`
+	Screen  string   `json:"screen"`
+	Now     string   `json:"now"`
+	Top     TopBar   `json:"top"`
+	NowLine NowLine  `json:"nowLine"`
+	Marshal Marshal  `json:"marshal"`
+	Plan    Plan     `json:"plan"`
+	Lanes   Lanes    `json:"lanes"`
+	Tasks   []Task   `json:"tasks"`
+	Workers []Worker `json:"workers"`
+	// Limits is every provider's limit rows and dispatch state; added in
+	// version 1 without a version change (a reader that ignores it is
+	// unaffected).
+	Limits   []ProviderLimits `json:"limits"`
+	Inbox    Inbox            `json:"inbox"`
+	Activity []Event          `json:"activity"`
+	Steps    Steps            `json:"steps"`
+	Requests []Request        `json:"requests"`
+	Chat     Chat             `json:"chat"`
+	Ready    Readiness        `json:"ready"`
+	Decision *Decision        `json:"decision"`
+	Paused   *Paused          `json:"paused"`
+	Keys     []Key            `json:"keys"`
+	System   System           `json:"system"`
+	// MarshalSays is the Marshal's last chat turn to the owner, scrubbed
+	// and capped (marshalSays).
+	MarshalSays MarshalSays `json:"marshalSays"`
 	// Act is the owner actions the page may send now (phase 2); nil on a
 	// read-only server. It is minted by the server, not read from vm.
 	Act *Act `json:"act,omitempty"`
+}
+
+// MarshalSays is the Marshal's last chat turn to the owner: Text is at most
+// SaysMax characters (Truncated when cut), Answered once someone wrote in
+// the chat after it. Whether it asks the owner something is
+// NowLine.ChatAsked, not read from this text.
+type MarshalSays struct {
+	Text      string `json:"text"`
+	At        string `json:"at"`
+	Answered  bool   `json:"answered"`
+	Truncated bool   `json:"truncated"`
+}
+
+// SaysMax is the most of the Marshal's message a frame carries, in
+// characters; the rest is read in the terminal chat.
+const SaysMax = 1200
+
+// marshalSays is m in its wire form: every secret the detectors know
+// redacted (again: the collector did it once), then capped.
+func marshalSays(m vm.MarshalSays) MarshalSays {
+	text := strings.TrimSpace(redaction.RedactAll(m.Text))
+	out := MarshalSays{At: stamp(m.At), Answered: m.Answered}
+	if r := []rune(text); len(r) > SaysMax {
+		text, out.Truncated = strings.TrimSpace(string(r[:SaysMax]))+"…", true
+	}
+	out.Text = text
+	return out
+}
+
+// System is the computer and the install; figures are -1 when unknown.
+type System struct {
+	CPUPct          int    `json:"cpuPct"`
+	MemPct          int    `json:"memPct"`
+	DiskPct         int    `json:"diskPct"`
+	TempC           int    `json:"tempC"`
+	LowDisk         bool   `json:"lowDisk"`
+	ThermalGuard    bool   `json:"thermalGuard"`
+	ThermalCap      int    `json:"thermalCap"`
+	Notice          string `json:"notice"`
+	UpdateAvailable string `json:"updateAvailable"`
+	MCPFailed       bool   `json:"mcpFailed"`
 }
 
 type TopBar struct {
@@ -64,6 +115,9 @@ type NowLine struct {
 	Work      string `json:"work"`
 	FromYou   string `json:"fromYou"`
 	FromYouOK bool   `json:"fromYouOK"`
+	// ChatAsked: FromYou is the Marshal's question in its chat (the one
+	// source of "the Marshal asked you something", vm.NowLine.ChatAsked).
+	ChatAsked bool `json:"chatAsked"`
 }
 
 type Marshal struct {
@@ -141,6 +195,30 @@ type Worker struct {
 	SignedIn  bool   `json:"signedIn"`
 	Installed bool   `json:"installed"`
 	Reason    string `json:"reason"`
+}
+
+// ProviderLimits is one provider's limits. State is "usable", "out", "not
+// signed in", "not checked" or "not installed"; the rows with drives set
+// decide it.
+type ProviderLimits struct {
+	Provider string     `json:"provider"`
+	Model    string     `json:"model"`
+	State    string     `json:"state"`
+	Reason   string     `json:"reason"`
+	Rows     []LimitRow `json:"rows"`
+}
+
+// LimitRow is one limit window. percentLeft is -1 when the provider does not
+// report it (source says why): the page draws no bar for it. resetsAt and
+// observedAt are RFC 3339 with their zone, "" when unknown.
+type LimitRow struct {
+	Family      string `json:"family"`
+	Window      string `json:"window"`
+	PercentLeft int    `json:"percentLeft"`
+	ResetsAt    string `json:"resetsAt"`
+	ObservedAt  string `json:"observedAt"`
+	Source      string `json:"source"`
+	Drives      bool   `json:"drives"`
 }
 
 type Inbox struct {
@@ -296,6 +374,19 @@ func keys(in []vm.Key) []Key {
 	return out
 }
 
+func limits(in []vm.ProviderLimits) []ProviderLimits {
+	out := make([]ProviderLimits, 0, len(in))
+	for _, p := range in {
+		l := ProviderLimits{Provider: p.Provider, Model: p.Model, State: string(p.State), Reason: p.Reason, Rows: make([]LimitRow, 0, len(p.Rows))}
+		for _, r := range p.Rows {
+			l.Rows = append(l.Rows, LimitRow{Family: r.Family, Window: r.Window, PercentLeft: r.PercentLeft, ResetsAt: stamp(r.ResetsAt),
+				ObservedAt: stamp(r.ObservedAt), Source: r.Source, Drives: r.Drives})
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
 // FromBoard is b in its wire form. Every slice is non-nil, so the page reads
 // an empty list, never null.
 func FromBoard(b vm.Board) Frame {
@@ -303,7 +394,7 @@ func FromBoard(b vm.Board) Frame {
 		V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
 		Top: TopBar{Version: b.Top.Version, Project: b.Top.Project, Run: b.Top.Run, State: b.Top.State, StateTone: string(b.Top.StateTone),
 			Workers: b.Top.Workers, Inbox: b.Top.Inbox, Clock: stamp(b.Top.Clock)},
-		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK},
+		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK, ChatAsked: b.NowLine.ChatAsked},
 		Marshal: Marshal{Provider: b.Marshal.Provider, Model: b.Marshal.Model, Effort: b.Marshal.Effort, InUse: b.Marshal.InUse, Doing: b.Marshal.Doing,
 			ContextPct: b.Marshal.ContextPct, ContextUsed: b.Marshal.ContextUsed, ContextWindow: b.Marshal.ContextWindow,
 			Limit5hPct: b.Marshal.Limit5hPct, WeeklyPct: b.Marshal.WeeklyPct, ChatBound: b.Marshal.ChatBound,
@@ -314,6 +405,7 @@ func FromBoard(b vm.Board) Frame {
 		Lanes:    Lanes{Items: []Lane{}, Limits: b.Lanes.Limits},
 		Tasks:    []Task{},
 		Workers:  []Worker{},
+		Limits:   limits(b.Limits),
 		Inbox:    Inbox{Count: b.Inbox.Count, Lines: append([]string{}, b.Inbox.Lines...), Next: b.Inbox.Next},
 		Activity: []Event{},
 		Steps:    Steps{Items: []Step{}, Quiet: secs(b.Steps.Quiet), Model: b.Steps.Model},
@@ -323,6 +415,10 @@ func FromBoard(b vm.Board) Frame {
 		Ready: Readiness{Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
 			TelemetryAsk: b.Ready.TelemetryAsk, Defaults: []Setting{}, Checked: stamp(b.Ready.Checked), Actions: keys(b.Ready.Actions)},
 		Keys: keys(b.Keys),
+		System: System{CPUPct: b.System.CPUPct, MemPct: b.System.MemPct, DiskPct: b.System.DiskPct, TempC: b.System.TempC,
+			LowDisk: b.System.LowDisk, ThermalGuard: b.System.ThermalGuard, ThermalCap: b.System.ThermalCap, Notice: b.System.Notice,
+			UpdateAvailable: b.System.UpdateAvailable, MCPFailed: b.System.MCPFailed},
+		MarshalSays: marshalSays(b.MarshalSays),
 	}
 	for _, s := range b.Plan.Stages {
 		f.Plan.Stages = append(f.Plan.Stages, Stage{Name: s.Name, State: s.State, Note: s.Note})

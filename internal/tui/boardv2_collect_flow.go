@@ -77,7 +77,18 @@ func (w *Workspace) flowInputs() flowIn {
 		in.stepsModel = marshalModelLabel(prov, in.marshalModel)
 	}
 	in.chatBlocked, in.chatWaiting = w.chatDecisions()
+	w.tmuxMu.Lock()
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil && a.paneID != "" {
+		in.chatAsked = chatAskedNow(a.paneID)
+	}
+	w.tmuxMu.Unlock()
+	if !in.chatAsked {
+		in.chatAsked = w.nativeChatAsked()
+	}
 	in.limits, in.globalCap = laneLimits(in.run.Settings)
+	in.draftRejected = w.draftRejectedNow()
+	stallKey, stallReason := stallCondition(in)
+	in.stall = w.stallSince(stallKey, stallReason, in.now)
 	ui := &w.boardUI
 	_, stopped := v.stopNotice()
 	if ui.pane(len(v.board.Inbox) > 0 || stopped) == layout.Lanes {

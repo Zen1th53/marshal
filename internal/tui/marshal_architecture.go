@@ -82,7 +82,10 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 			}) {
 				return "", errors.New("workspace is closing")
 			}
-			return "Architecture view: " + url, nil
+			// The footer names the address without its key: the link is
+			// the owner's Accept, and the architecture card shows it whole
+			// only where no browser can open it.
+			return "Architecture view: " + architectureShownURL(url) + " (opening in your browser)", nil
 		}
 	}
 	if m.architectureStarting {
@@ -117,13 +120,10 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 			m.mu.Unlock()
 			session, err = start(workerCtx, provider, goal)
 		}
-		var existing *app.ArchitectureReviewOwnedError
-		existingURL := ""
-		if errors.As(err, &existing) {
-			existingURL = existing.URL
-			err = open(workerCtx, existingURL)
-		}
-		if err == nil && session == nil && existingURL == "" {
+		// A review another MARSHAL process serves has no link here: its
+		// key is never written where this process could read it, so the
+		// error says to use that window's link.
+		if err == nil && session == nil {
 			err = errors.New("architecture review session was not created")
 		}
 		if err == nil && session != nil {
@@ -155,17 +155,15 @@ func (w *Workspace) marshalArchitecture(ctx context.Context, goal, occurrence st
 		for _, id := range occurrences {
 			w.resolveArchitectureProposal(id, err)
 		}
-		url := existingURL
+		url := ""
 		if session != nil {
 			url = session.URL
-		}
-		if session != nil || existingURL != "" {
 			for _, id := range w.clearDeferredArchitecture() {
 				w.resolveArchitectureProposal(id, err)
 			}
 		}
 		if err != nil {
-			if session == nil && existingURL == "" {
+			if session == nil {
 				// No page was made: say why, and the "Opening…" answer
 				// gives way to it.
 				w.RecordActivity("Architecture view failed: " + err.Error())
@@ -224,6 +222,13 @@ func openArchitectureBrowser(ctx context.Context, url string) error {
 }
 
 func (w *Workspace) boundMarshalArchitectureSource() string {
+	source, _ := w.boundMarshalArchitectureBinding()
+	return source
+}
+
+// boundMarshalChatSession is the provider conversation ID of the live tmux
+// Marshal chat, or "" while none was captured.
+func (w *Workspace) boundMarshalChatSession() string {
 	w.tmuxMu.Lock()
 	defer w.tmuxMu.Unlock()
 	active := w.tmuxActiveWins["marshal-chat"]
@@ -231,4 +236,37 @@ func (w *Workspace) boundMarshalArchitectureSource() string {
 		return ""
 	}
 	return active.sessionID
+}
+
+// boundMarshalArchitectureBinding names the live Marshal chat an owner
+// instruction is bound to, or says why there is none.
+//
+// The chat's provider conversation ID is learned from the provider's own
+// history file, which a launch may never write where MARSHAL reads it (or not
+// yet). Such a chat is still the bound Marshal when it holds the live MCP
+// launch its proposals are admitted under: that launch, the one a pending
+// project contract belongs to, then names it. A chat with neither is not
+// bound, and nothing from it is trusted.
+func (w *Workspace) boundMarshalArchitectureBinding() (string, error) {
+	w.tmuxMu.Lock()
+	active := w.tmuxActiveWins["marshal-chat"]
+	var state, session, launch string
+	chat := active != nil && active.role == "marshal-chat"
+	if chat {
+		state, session, launch = active.state, active.sessionID, active.mcpLaunchID
+	}
+	w.tmuxMu.Unlock()
+	switch {
+	case !chat:
+		return "", errors.New("The Marshal chat is not running. Open it in your terminal, then press Accept again.")
+	case state == "done" || state == "failed":
+		return "", errors.New("The Marshal chat has ended. Start it again in your terminal, then press Accept again.")
+	case session != "":
+		return session, nil
+	case w.chatLaunchBound(launch):
+		return "launch:" + launch, nil
+	case state == "mcp-unavailable":
+		return "", errors.New("The Marshal chat is open but its MARSHAL connection is unavailable. " + chatMCPRepairInstructions + " Then press Accept again.")
+	}
+	return "", errors.New("The Marshal chat is open, but MARSHAL has neither its conversation ID nor a live proposal connection for it, so the Accept cannot reach it. " + chatMCPRepairInstructions + " Then press Accept again.")
 }

@@ -1,6 +1,10 @@
 package cli
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+
+	"github.com/Zen1th53/marshal/internal/constitution"
+)
 
 // defaultVersion, defaultCommit, and defaultBuildDate are the identity a
 // source build carries before -ldflags or VCS stamping supplies anything
@@ -69,3 +73,6 @@ func fillBuildIdentity(version, commit, buildDate string, v vcsStamp) (string, s
 	}
 	return version, v.revision, v.time
 }
+
+// constitutionVersionString is the constitution version `marshal version` reports.
+func constitutionVersionString() string { return constitution.Current.String() }

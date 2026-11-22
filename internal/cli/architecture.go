@@ -196,7 +196,10 @@ func (c *command) architecture(ctx context.Context, args []string) error {
 	}
 	token := hex.EncodeToString(secret)
 	url := "http://" + listener.Addr().String() + "/?token=" + token
-	if err := os.WriteFile(filepath.Join(directory, "url.txt"), []byte(url), 0600); err != nil {
+	// The link carries the Accept key: it goes to this terminal and the
+	// browser only, never to a file another process of this user could read.
+	// A link file an older release left is removed.
+	if err := os.Remove(filepath.Join(directory, "url.txt")); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	server := &http.Server{Handler: review.Handler(token), ReadHeaderTimeout: 5 * time.Second,

@@ -48,7 +48,7 @@ func TestProcess03Through08Lifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	intake = goalintake.Approve(intake)
-	if !intake.Confirmation.Settled() || len(intake.Constraints) == 0 {
+	if intake.Confirmation != goalintake.ConfirmationApproved || len(intake.Constraints) == 0 {
 		t.Fatalf("Process 03 did not retain an approved constrained goal: %+v", intake)
 	}
 	goal := model.GoalContract{

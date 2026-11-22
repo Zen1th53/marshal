@@ -187,3 +187,51 @@ func TestBareCodeVerificationStopReadsPlain(t *testing.T) {
 		})
 	}
 }
+
+// Claude Code is installed and could check the work, but it did this run's
+// tasks: the pause says so plainly instead of asking to install it.
+func TestUnavailableVerifierSaysCheckerDidTheTasks(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	startIntegrityRun(t, s, marshal.Budget{})
+	run, rev, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.State = marshal.Verifying
+	run.Tier = marshal.Ultra
+	run.Tasks[0].Worker = "claude"
+	run.Tasks = append(run.Tasks, marshal.Task{PlanTaskID: "b", Worker: "codex", State: marshal.Merged})
+	if err = s.save(t.Context(), "run", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	for _, p := range []string{"claude", "codex"} {
+		providerHealth.Clear(p)
+		t.Cleanup(func() { providerHealth.Clear(p) })
+		if err := os.WriteFile(filepath.Join(bin, p), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	r := &Runtime{}
+	s.ModelProvider = "claude"
+	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) { return r.independentVerifierProvider(run) }
+	s.IndependentVerify = func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error) {
+		t.Fatal("worker verifier ran")
+		return marshal.VerifierEvidence{}, nil
+	}
+	if _, err = s.VerifyMerged(t.Context(), "run", knownCharge()); err == nil {
+		t.Fatal("missing independent verifier accepted")
+	}
+	paused, err := s.Snapshot(t.Context(), "run")
+	if err != nil || paused.Pause == nil || len(paused.Pause.Resolutions) != 1 {
+		t.Fatalf("no verifier pause: %+v %v", paused, err)
+	}
+	text := paused.Pause.Reason + "\n" + paused.Pause.Resolutions[0]
+	if !strings.Contains(text, "Claude Code") || !strings.Contains(text, "did this run's tasks, so") || !strings.Contains(text, "cannot check them") {
+		t.Fatalf("pause does not say Claude Code did the tasks: %q", text)
+	}
+	if strings.Contains(text, "Install Claude Code") || strings.Contains(text, "wait until its limit passes") {
+		t.Fatalf("pause asks to install a checker that is installed: %q", text)
+	}
+}

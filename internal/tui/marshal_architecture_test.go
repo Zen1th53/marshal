@@ -258,9 +258,9 @@ func TestMarshalArchitectureHeldUntilRequirementsConfirmed(t *testing.T) {
 			t.Fatalf("held architecture was not offered after confirmation: %+v", gates)
 		}
 
-		// Pressing y opens the architecture in the browser and resolves it.
-		if !w.handleGateKey(KeyEvent{Type: KeyRune, Rune: 'y'}, nil) {
-			t.Fatal("y did not open the offered architecture")
+		// The card's a (the Web Board's button) opens the architecture in the browser and resolves it.
+		if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'a'}) {
+			t.Fatal("a did not open the offered architecture")
 		}
 		select {
 		case <-opened:
@@ -329,8 +329,8 @@ func TestMarshalArchitectureHeldUntilRequirementsConfirmed(t *testing.T) {
 		if len(gates) != 1 || gates[0].kind != "architecture" {
 			t.Fatalf("held architecture was not offered after confirmation: %+v", gates)
 		}
-		if !w.handleGateKey(KeyEvent{Type: KeyRune, Rune: 'y'}, nil) {
-			t.Fatal("y did not open the offered architecture")
+		if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'a'}) {
+			t.Fatal("a did not open the offered architecture")
 		}
 		select {
 		case <-opened:

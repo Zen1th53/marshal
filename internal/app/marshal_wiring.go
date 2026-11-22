@@ -95,6 +95,9 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) {
 		return r.independentVerifierProvider(run)
 	}
+	// Planning and failover keep the last of these off worker tasks, so the
+	// final check always has a provider that did none of them.
+	s.CheckerCandidates = finalCheckerCandidates
 	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		provider, err := s.VerifierProvider(ctx, run)
 		if err != nil {

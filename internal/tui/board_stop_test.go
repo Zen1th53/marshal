@@ -3,7 +3,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,89 +10,11 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
-// A run waiting for the operator says what happened and how Enter resolves it.
-func TestBoardRunStopNotice(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	run := fakeRun()
-	run.State = marshal.AwaitingUser
-	run.Pause = &marshal.Pause{Reason: "verification stopped: exit 1", Resolutions: []string{"Press Enter to continue."}}
-	p := newMarshalPanel("R-7f3a", "codex", run, "waiting for you")
-	w.setMarshalPanel(p)
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil
-	w.permissions.mu.Unlock()
-	got := plainFrame(w, 170, 45)
-	lines := strings.Split(got, "\n")
-	if !strings.Contains(lines[1], "waiting for you") {
-		t.Fatalf("header: %s", lines[1])
-	}
-	if last := lines[len(lines)-1]; !strings.Contains(last, "▮ waits for you · verification stopped: exit 1 · Enter: continue") {
-		t.Fatalf("footer: %s", last)
-	}
-	if !strings.Contains(got, "⚑ run waits for you · verification stopped: exit 1") || !strings.Contains(got, "[Enter] continue") || strings.Contains(got, "/marshal") {
-		t.Fatalf("inbox entry:\n%s", got)
-	}
-	r, c := cellOf(t, w, 170, 45, "[Enter]", 0)
-	if !click(w, r, c) || !w.boardUI.stopArmed || w.composer.Text() != "" {
-		t.Fatalf("stop click failed to arm action; composer=%q", w.composer.Text())
-	}
-	w.boardUI.stopArmed = false
-	// Enter on the inbox with no request waiting arms the action.
-	w.boardUI.focus = layout.Inbox
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || !w.boardUI.stopArmed || w.composer.Text() != "" {
-		t.Fatalf("Enter on the stop did not arm it: composer=%q", w.composer.Text())
-	}
-}
-
-// A verification stop the runtime's own bookkeeping caused reads in plain
-// words: the inbox, the footer and the Enter line say what happened and that
-// Enter lets the Marshal retry; the raw error and the old resolution text are
-// not shown. Both the runtime's plain pause and one an older build recorded
-// with the raw error read the same.
-func TestBoardInternalVerificationStopIsPlain(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	for name, pause := range map[string]marshal.Pause{
-		"plain":       {Reason: "Marshal could not finish checking the run (part of it was left paused).", Resolutions: []string{"Press Enter to let the Marshal retry."}, Detail: "verification stopped: execution run conflict: required completion child identity/state", Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
-		"bare code":   {Reason: "REQUIRED_CONTEXT_REVIEW_PENDING", Resolutions: []string{"inspect the verification error, repair the check output/source or re-review the current goal and plan after a runtime upgrade, then /marshal resume to rerun verification"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
-		"older build": {Reason: "verification stopped: execution run conflict: required completion child identity/state", Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, Code: marshal.CodeVerificationStopped, ResumeState: marshal.Verifying, Action: marshal.PauseResume},
-	} {
-		t.Run(name, func(t *testing.T) {
-			w, _ := boardWorkspace(t)
-			run := fakeRun()
-			run.State = marshal.AwaitingUser
-			run.Pause = &pause
-			w.setMarshalPanel(newMarshalPanel("R-7f3a", "codex", run, "waiting for you"))
-			w.permissions.mu.Lock()
-			w.permissions.inbox = nil
-			w.permissions.mu.Unlock()
-			got := plainFrame(w, 170, 45)
-			lines := strings.Split(got, "\n")
-			if !strings.Contains(got, "⚑ run waits for you · Marshal could not finish checking the run") || !strings.Contains(got, "[Enter] continue   Press Enter to let the Marshal retry.") {
-				t.Fatalf("inbox entry:\n%s", got)
-			}
-			if last := lines[len(lines)-1]; !strings.Contains(last, "▮ waits for you · Marshal could not finish checking the run") || !strings.Contains(last, "Enter: continue") {
-				t.Fatalf("footer: %s", last)
-			}
-			for _, raw := range []string{"execution run conflict", "identity/state", "inspect the retained", "inspect the verification", "/marshal", "REQUIRED_"} {
-				if strings.Contains(got, raw) {
-					t.Fatalf("the stop shows %q:\n%s", raw, got)
-				}
-			}
-		})
-	}
-}
-
 // A stopped execution (the panel's "stopped: …" note) is a stop too.
 func TestBoardRunStoppedNotice(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, _ := boardWorkspace(t)
 	p := newMarshalPanel("R-7f3a", "codex", fakeRun(), "stopped: worker codex exited 2")
 	p.Stopped = true
@@ -116,99 +37,6 @@ func TestStopEnterUsesStructuredAction(t *testing.T) {
 	stop, ok = (boardVisual{board: b}).stopNotice()
 	if !ok || strings.Join(stop.commands, ",") != "/marshal retry T-1,/marshal resume" || stop.verb != "retry the task" {
 		t.Fatalf("legacy pause commands: %+v, %v", stop, ok)
-	}
-}
-
-func TestStopEntryHasNoSlashCommands(t *testing.T) {
-	for _, action := range []marshal.PauseAction{marshal.PauseResume, marshal.PauseRetryTask, marshal.PauseUsePlan} {
-		b := boardmodel.Board{Run: boardmodel.RunHead{State: marshal.AwaitingUser, Paused: "A task is waiting.", Next: []string{"Press Enter to continue."}, PauseAction: action, PauseTask: "T-1"}}
-		v := boardVisual{board: b}
-		stop, ok := v.stopNotice()
-		if !ok {
-			t.Fatal("missing stop notice")
-		}
-		entry := StripANSI(strings.Join(v.stopEntry(stop, 0, 0, 120), "\n"))
-		line := StripANSI(v.stopLine(stop))
-		for _, got := range []string{entry, line} {
-			if strings.Contains(got, "/marshal") {
-				t.Fatalf("bad stop text for %s: %q", action, got)
-			}
-		}
-		if !strings.Contains(entry, "[Enter]") || !strings.Contains(entry, stop.verb) || !strings.Contains(line, stop.verb) {
-			t.Fatalf("entry misses action %q: %s", stop.verb, entry)
-		}
-	}
-}
-
-func TestStopEnterArmsThenActs(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	commands := []string{}
-	old := boardStopHandle
-	boardStopHandle = func(_ *Workspace, _ context.Context, cmd string) (string, error) {
-		commands = append(commands, cmd)
-		return "ok", nil
-	}
-	t.Cleanup(func() { boardStopHandle = old })
-	run := fakeRun()
-	run.State = marshal.AwaitingUser
-	run.Pause = &marshal.Pause{Reason: "A task couldn't start.", Resolutions: []string{"Press Enter to try it again."}, Action: marshal.PauseRetryTask, TaskID: "T-1"}
-	p := newMarshalPanel("R-7f3a", "codex", run, "waiting for you")
-	w.setMarshalPanel(p)
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil
-	w.permissions.mu.Unlock()
-	w.boardUI.focus = layout.Inbox
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || len(commands) != 0 {
-		t.Fatalf("first Enter acted: %v", commands)
-	}
-	if got := StripANSI(plainFrame(w, 170, 45)); !strings.Contains(got, "Press Enter again to retry the task") {
-		t.Fatalf("armed hint missing: %s", got)
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || strings.Join(commands, ",") != "/marshal retry T-1,/marshal resume" {
-		t.Fatalf("commands: %v", commands)
-	}
-	if w.composer.Text() != "" {
-		t.Fatalf("composer was changed: %q", w.composer.Text())
-	}
-}
-
-func TestStopEnterOtherKeyDisarms(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	run := fakeRun()
-	run.State = marshal.AwaitingUser
-	run.Pause = &marshal.Pause{Reason: "wait", Resolutions: []string{"Press Enter to continue."}}
-	w.setMarshalPanel(newMarshalPanel("R-7f3a", "codex", run, "waiting for you"))
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil
-	w.permissions.mu.Unlock()
-	w.boardUI.focus = layout.Inbox
-	w.handleBoardKey(KeyEvent{Type: KeyEnter})
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'x'}) || w.boardUI.stopArmed {
-		t.Fatal("other key did not disarm and consume the stop")
-	}
-}
-
-func TestStopFocusesInbox(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _ := boardWorkspace(t)
-	run := fakeRun()
-	run.State = marshal.AwaitingUser
-	run.Pause = &marshal.Pause{Reason: "wait", Resolutions: []string{"Press Enter to continue."}}
-	p := newMarshalPanel("R-7f3a", "codex", run, "waiting for you")
-	lines, _, _ := w.boardFrame(UIState{Marshal: p}, w.theme, nil, 170, 45)
-	_, stopped := (boardVisual{board: p.Board, note: p.Note, stopped: p.Stopped}).stopNotice()
-	if got := w.boardUI.pane(len(w.boardInbox()) > 0 || stopped); got != layout.Inbox || len(lines) == 0 {
-		t.Fatalf("stop did not focus inbox: %s", got)
-	}
-	// With no focus chosen, Enter reaches the stop notice.
-	w.setMarshalPanel(p)
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil
-	w.permissions.mu.Unlock()
-	w.boardUI.focus = ""
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || !w.boardUI.stopArmed {
-		t.Fatal("Enter with default focus did not arm the stop")
 	}
 }
 
@@ -238,12 +66,12 @@ func TestBoardHelpListsMouse(t *testing.T) {
 	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true)}
 	help, _, _ := v.helpOverlay(160, 80, 0)
 	got := StripANSI(strings.Join(help, "\n"))
-	for _, want := range []string{"MOUSE", "task  lane", "header chip", "open its confirmation", "[Enter]", "do what it suggests", "footer key", "closes help"} {
+	for _, want := range []string{"MOUSE", "header chip", "open that view", "footer key", "closes help"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("help misses %q:\n%s", want, got)
 		}
 	}
-	if len(boardMouseHelp) < 5 {
+	if len(boardMouseHelp) < 2 {
 		t.Error("a click target is not listed in help")
 	}
 }

@@ -119,6 +119,13 @@ func formatLocalUntil(t time.Time, now time.Time) string {
 // If all matching providers are in cooldown it waits out a short cooldown and
 // reports errWaitingOnQuota for a long one.
 func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker string, mode marshal.WorkerMode, drivers map[string]driver.Driver, order []string) (string, error) {
+	return s.selectFailoverWorkerFor(ctx, currentWorker, "", mode, drivers, order)
+}
+
+// selectFailoverWorkerFor is selectFailoverWorker with the model the task
+// runs on with currentWorker ("" unknown): each candidate is judged on the
+// limits of the model it would run (failover_model_extreme.go).
+func (s *MarshalService) selectFailoverWorkerFor(ctx context.Context, currentWorker, currentModel string, mode marshal.WorkerMode, drivers map[string]driver.Driver, order []string) (string, error) {
 	if len(order) == 0 {
 		return "", fmt.Errorf("empty failover order")
 	}
@@ -158,8 +165,18 @@ func (s *MarshalService) selectFailoverWorker(ctx context.Context, currentWorker
 			if s.InstalledVersion != nil && s.InstalledVersion(ctx, cand) == "" {
 				continue
 			}
-			// A provider the limits reader reports known-empty is cooling.
-			s.markKnownEmpty(cand, now)
+			// A provider the limits reader reports known-empty is cooling;
+			// with per-model limits, only the model it would run counts.
+			candModel := currentModel
+			if candModel == "" || marshalHarnessName(cand) != marshalHarnessName(currentWorker) {
+				candModel = s.candidateModel(ctx, cand, now)
+			}
+			if s.markKnownEmptyFor(cand, candModel, now) {
+				if until := modelOutUntil(cand, candModel); now.Before(until) && (earliest.IsZero() || until.Before(earliest)) {
+					earliest, earliestReason = until, "no limit left for "+candModel
+				}
+				continue
+			}
 			until, limited := getProviderCooldownUntil(cand)
 			if limited && now.Before(until) {
 				if earliest.IsZero() || until.Before(earliest) {
@@ -297,7 +314,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 
 	nextWorker, err := currentWorker, error(nil)
 	if !sameProvider {
-		nextWorker, err = s.selectFailoverWorker(ctx, currentWorker, t.Mode, drivers, order)
+		nextWorker, err = s.selectFailoverWorker(ctx, currentWorker, t.Mode, drivers, s.checkerFreeOrder(run, t.PlanTaskID, order))
 	}
 	if err != nil {
 		t.State = marshal.Escalated
@@ -309,7 +326,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		}
 		t.EscalationCode = escalationCode(baseCode, t.EscalationReason)
 		run.Operation = nil
-		reason := "No other AI provider can take this task."
+		reason := "No other AI provider can take this task." + s.checkerKeptNote(run, t.PlanTaskID, order)
 		pause := marshal.Pause{Resolutions: []string{"Add or check a provider on the Providers view (press 4), then press Enter to retry."}, Detail: machine, Code: baseCode, Action: marshal.PauseResume}
 		if errors.Is(err, errWaitingOnQuota) {
 			pause.Resolutions = []string{"Press Enter after that time to continue."}
@@ -473,18 +490,26 @@ func (s *MarshalService) saveFailoverDecision(ctx context.Context, runID string,
 func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string, run *marshal.Run, rev int64, index int, brief string) (int64, error) {
 	t := &run.Tasks[index]
 	now := s.clock()
-	// A worker the limits reader reports known-empty is cooling too.
-	s.markKnownEmpty(t.Worker, now)
-	if !isProviderUnavailable(t.Worker, now) {
+	// A worker the limits reader reports known-empty is cooling too; with
+	// per-model limits, only when the model this task runs on is out.
+	taskModel := s.taskModel(ctx, *run, *t, now)
+	modelOut := s.markKnownEmptyFor(t.Worker, taskModel, now)
+	if !modelOut && !isProviderUnavailable(t.Worker, now) {
 		return rev, nil
 	}
 	drivers := s.Drivers
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
-	next, err := s.selectFailoverWorker(ctx, t.Worker, t.Mode, drivers, GetEffectiveFailoverOrder(run.Settings))
+	order := GetEffectiveFailoverOrder(run.Settings)
+	next, err := s.selectFailoverWorkerFor(ctx, t.Worker, taskModel, t.Mode, drivers, s.checkerFreeOrder(*run, t.PlanTaskID, order))
 	if err != nil {
-		if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {
+		if note := s.checkerKeptNote(*run, t.PlanTaskID, order); note != "" {
+			err = fmt.Errorf("%w;%s", err, note)
+		}
+		if modelOut {
+			err = fmt.Errorf("%w; %s has no limit left for %s", err, t.Worker, taskModel)
+		} else if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {
 			err = fmt.Errorf("%w; %s", err, reason)
 		}
 		return rev, err

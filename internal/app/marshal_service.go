@@ -57,14 +57,18 @@ type MarshalService struct {
 	ModelProvider                    string
 	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error)
 	VerifierProvider                 func(context.Context, marshal.Run) (string, error)
-	IndependentVerify                func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error)
-	GateState                        func(context.Context, string, string) (constitution.RuntimeState, error)
-	ApprovalActor                    func(context.Context, string, string) (string, error)
-	Drivers                          map[string]driver.Driver
-	GovernedDrivers                  map[string]driver.Driver
-	Gate                             marshal.CapabilityGate
-	Verify                           func(context.Context, marshal.Run, string) (verification.Session, verification.Binding, error)
-	ProbeWorker                      func(context.Context, string) error
+	// CheckerCandidates lists the providers that could do the final
+	// independent check if they did none of the run's tasks. When set, the
+	// last of them is kept off worker tasks (checker_reserve.go).
+	CheckerCandidates func() []string
+	IndependentVerify func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error)
+	GateState         func(context.Context, string, string) (constitution.RuntimeState, error)
+	ApprovalActor     func(context.Context, string, string) (string, error)
+	Drivers           map[string]driver.Driver
+	GovernedDrivers   map[string]driver.Driver
+	Gate              marshal.CapabilityGate
+	Verify            func(context.Context, marshal.Run, string) (verification.Session, verification.Binding, error)
+	ProbeWorker       func(context.Context, string) error
 	// InstalledVersion reports the installed version of a worker's CLI, for
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string
@@ -76,6 +80,12 @@ type MarshalService struct {
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.
 	QuotaLeft func(provider string) (left int, known bool)
+	// ModelQuotaLeft reports the percent left of the limits that apply to
+	// one model of a provider (agy reports one limit per model family) and
+	// whether it is known. When set and the model a task runs on is known,
+	// admission and failover decide on that model's limits instead of the
+	// provider's worst window (failover_model_extreme.go).
+	ModelQuotaLeft func(provider, model string) (left int, known bool)
 	// HeldTask reports whether the owner's change is holding this plan task:
 	// a task the owner asked to pause while they decide a mid-run change.
 	// dispatchReady skips a held task that has not started yet, so it does

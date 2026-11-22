@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/a2a"
 	"github.com/Zen1th53/marshal/internal/api"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -26,7 +25,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/legal"
 	"github.com/Zen1th53/marshal/internal/mcp"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -57,7 +55,6 @@ const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
   telemetry status | disable | enable | register
-  ultra request
   init
   doctor [--probe-providers] [--deep]
   egm status [--provider X] | install --provider X | record --stage X --provider X --egm-version X --file PATH
@@ -72,45 +69,31 @@ Commands:
   run TASK-ID --adapter ADAPTER [--model MODEL] [--agent AGENT-ID]
   logs TASK-ID
   cancel TASK-ID
-  adapters
   adapter probe NAME
   mcp serve [--listen ADDR] | mcp status
-  a2a serve [--listen ADDR] | a2a status
   events
   artifacts
   verify [-- command args...]
   reconcile --file-state state.json
   memory status | recall | show | list | candidates | promote | tombstone | audit | remember | write
-  permission read <allow|deny|revoke|list> <absolute folder>
-  policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   setup | setup status
   update [install]
-  goal <request> | goal explain <request>
   architecture serve [--proposal FILE] [--layout FILE] [--provider PROVIDER] [--no-open]
   architecture draft [--request REQUEST] [--output FILE] [--provider PROVIDER]
   architecture feedback [--provider PROVIDER]
-  plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
-  exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
-  review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle ENVELOPE.json --provenance TEXT
-  learning commit INPUT.json | show MEMORY-COMMIT-ID | item ITEM-ID | history ITEM-ID | search --project ID | context --project ID | invalidate INPUT.json | trust [TASK-CLASS] | fingerprints --project ID | playbooks --project ID | replays [RUN-ID] | benchmarks [NAME] | export --project ID | restore BUNDLE.json --project ID
-  optimization start INPUT.json | show CYCLE-ID | candidates CYCLE-ID | counterfactuals CYCLE-ID | manifests CYCLE-ID | canaries CYCLE-ID
-  help [TOPIC] | help why
-  constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
+  help [COMMAND]
   tui [SESSION-ID]
   codex [NATIVE-CODEX-ARGUMENTS...]
   claude [NATIVE-CLAUDE-ARGUMENTS...]
   opencode [NATIVE-OPENCODE-ARGUMENTS...]
-  agy [NATIVE-AGY-ARGUMENTS...]      (also: antigravity)
+  agy [NATIVE-AGY-ARGUMENTS...]
   auth token <create|list|revoke>
-  gc worktrees | artifacts
   state backup | verify-backup | restore
-  architecture receipt import FILE
   daemon
   version
 `
 
-const policyTestUsage = "Usage: marshal policy test SUITE-FILE\n"
 const telemetryChildFlag = "--marshal-internal-telemetry-child"
 
 type command struct {
@@ -174,8 +157,6 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	switch args[0] {
 	case "telemetry":
 		err = c.telemetry(ctx, args[1:])
-	case "ultra":
-		err = c.ultra(ctx, args[1:])
 	case "version", "--version", "-version", "-v":
 		versionLine := fmt.Sprintf("Marshal %s (commit: %s, build date: %s, schema: v%d, constitution: %s)",
 			Version, Commit, BuildDate, store.LatestSchemaVersion, constitutionVersionString())
@@ -222,54 +203,27 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.verify(ctx, args[1:])
 	case "reconcile":
 		err = c.reconcile(ctx, args[1:])
-	case "policy":
-		err = c.policy(ctx, args[1:])
-	case "adapters":
-		err = c.adapters(ctx)
 	case "adapter":
 		err = c.adapter(ctx, args[1:])
 	case "mcp":
 		err = c.mcp(ctx, args[1:])
-	case "a2a":
-		err = c.a2a(ctx, args[1:])
 	case "auth":
 		err = c.auth(ctx, args[1:])
 	case "legal":
 		err = c.legal(ctx, args[1:])
-	case "gc":
-		err = c.gc(ctx, args[1:])
 	case "state":
 		err = c.state(ctx, args[1:])
 	case "architecture":
-		if len(args) > 1 && args[1] == "receipt" {
-			err = c.architectureReceipt(ctx, args[1:])
-		} else {
-			err = c.architecture(ctx, args[1:])
-		}
+		err = c.architecture(ctx, args[1:])
 	case "egm":
 		err = c.egm(ctx, args[1:])
 	case "memory":
 		err = c.memory(ctx, args[1:])
-	case "permission":
-		err = c.permission(ctx, args[1:])
 	case "setup":
 		err = c.setup(ctx, args[1:])
-	case "goal":
-		err = c.goal(ctx, args[1:])
-	case "plan":
-		err = c.plan(ctx, args[1:])
-	case "exec", "execution":
-		err = c.exec(ctx, args[1:])
-	case "review", "verification":
-		err = c.review(ctx, args[1:])
-	case "learning":
-		err = c.learning(ctx, args[1:])
-	case "optimization":
-		err = c.optimization(ctx, args[1:])
 	case "help":
-		err = c.help(ctx, args[1:])
-	case "constitution":
-		err = c.constitution(ctx, args[1:])
+		// `marshal help COMMAND` is resolved statically before dispatch.
+		fmt.Fprint(stdout, usage)
 	case "tui":
 		err = c.relaunchSession(c.tui(ctx, args[1:]), args[1:])
 	case "codex":
@@ -278,7 +232,7 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		return c.nativeProvider(ctx, "claude", args[1:])
 	case "opencode":
 		return c.nativeProvider(ctx, "opencode", args[1:])
-	case "agy", "antigravity":
+	case "agy":
 		return c.nativeProvider(ctx, "antigravity", args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
@@ -296,37 +250,6 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		return exitCode(err)
 	}
 	return 0
-}
-
-func (c command) policy(ctx context.Context, args []string) error {
-	if len(args) != 2 || args[0] != "test" || args[1] == "" {
-		return fmt.Errorf("%w: %s", model.ErrInvalid, policyTestUsage[:len(policyTestUsage)-1])
-	}
-	report, err := app.RunPolicyTestFile(ctx, args[1])
-	if err != nil {
-		return err
-	}
-	human := fmt.Sprintf("status=%s policy_digest=%s", report.Status, report.PolicyDigest)
-	for _, result := range report.Cases {
-		human += fmt.Sprintf("\n%s=%s", result.ID, result.Status)
-		if result.Diff != "" {
-			human += " diff=" + result.Diff
-		}
-		if result.Reason != "" {
-			human += " reason=" + string(result.Reason)
-		}
-	}
-	if err := c.print(report, human); err != nil {
-		return err
-	}
-	switch report.Status {
-	case policytest.StatusPass:
-		return nil
-	case policytest.StatusError:
-		return policytest.ErrCaseInvalid
-	default:
-		return policytest.ErrExpectationMismatch
-	}
 }
 
 func (c command) init(ctx context.Context) error {
@@ -779,40 +702,6 @@ func (c command) cancel(ctx context.Context, args []string) error {
 	return c.print(map[string]string{"task_id": taskID, "request_id": requestID}, fmt.Sprintf("cancelled task %s", taskID))
 }
 
-func (c command) adapters(ctx context.Context) error {
-	names := []string{"codex", "agy", "claude", "opencode"}
-	list := make([]map[string]any, 0, len(names))
-	for _, name := range names {
-		binary, err := project.FindBinary(name)
-		entry := map[string]any{"name": name, "available": false, "binary": binary, "version": "", "detail": "CLI missing"}
-		if err == nil {
-			obs := observeAdapterCLI(ctx, name, binary)
-			entry["available"], entry["version"], entry["detail"] = obs.Available, obs.Version, obs.Detail
-			if obs.Pinned != "" {
-				entry["pinned_version"] = obs.Pinned
-			}
-		}
-		list = append(list, entry)
-	}
-	if !c.json {
-		var lines []string
-		lines = append(lines, "=== MARSHAL Provider Adapters ===")
-		for _, a := range list {
-			avail := "UNAVAILABLE"
-			if a["available"].(bool) {
-				avail = "AVAILABLE"
-			}
-			line := fmt.Sprintf("  %-10s %-12s binary=%-40s version=%s", a["name"], avail, a["binary"], a["version"])
-			if d, _ := a["detail"].(string); d != "" {
-				line += " (" + d + ")"
-			}
-			lines = append(lines, line)
-		}
-		return c.print(list, strings.Join(lines, "\n"))
-	}
-	return c.print(list, fmt.Sprintf("%d adapters", len(list)))
-}
-
 func (c command) adapter(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "probe" {
 		return fmt.Errorf("%w: expected adapter probe <name>", model.ErrInvalid)
@@ -1045,60 +934,6 @@ func (c command) mcp(ctx context.Context, args []string) error {
 	}
 }
 
-func (c command) a2a(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("%w: a2a subcommand required (serve|status)", model.ErrInvalid)
-	}
-	switch args[0] {
-	case "serve":
-		flags := flag.NewFlagSet("a2a serve", flag.ContinueOnError)
-		flags.SetOutput(c.stderr)
-		listen := flags.String("listen", "127.0.0.1:8081", "listen address (host:port)")
-		insecure := flags.Bool("insecure", false, "allow unauthenticated execution (loopback only)")
-		if err := flags.Parse(args[1:]); err != nil {
-			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
-		}
-		if *insecure && !isLoopbackAddr(*listen) {
-			return fmt.Errorf("%w: --insecure mode is forbidden on non-loopback address %s", model.ErrInvalid, *listen)
-		}
-
-		runtime, err := app.Open(ctx, c.root)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-
-		var srv *a2a.Server
-		if *insecure {
-			fmt.Fprintln(c.stderr, "WARNING: Running A2A server in insecure mode on loopback (authentication disabled)")
-			srv, err = a2a.NewInsecureServer(runtime, *listen)
-		} else {
-			layout, bootErr := app.Bootstrap(ctx, c.root)
-			if bootErr != nil {
-				return bootErr
-			}
-			authMgr := auth.NewManager(layout.RuntimeDir)
-			srv, err = a2a.NewServerWithAuth(runtime, authMgr)
-		}
-
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(c.stdout, "Starting MARSHAL A2A server on http://%s\n", *listen)
-		server := httpsrv.NewServer(httpsrv.Config{
-			Addr:    *listen,
-			Handler: srv.Handler(),
-		})
-		return serveUntilDone(ctx, server)
-	case "status":
-		return c.print(map[string]any{
-			"status": "unknown", "protocol_version": a2a.ProtocolVersion100, "reason": "no live endpoint probe performed",
-		}, "A2A server status UNKNOWN (no live endpoint probe performed)")
-	default:
-		return fmt.Errorf("%w: unknown a2a subcommand %s", model.ErrInvalid, args[0])
-	}
-}
-
 func (c command) print(value any, human string) error {
 	if !c.json {
 		_, err := fmt.Fprintln(c.stdout, human)
@@ -1309,74 +1144,6 @@ func isLoopbackAddr(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
-}
-
-func (c command) gc(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("%w: gc target required (worktrees|artifacts)", model.ErrInvalid)
-	}
-	target := args[0]
-	switch target {
-	case "worktrees":
-		flags := flag.NewFlagSet("gc worktrees", flag.ContinueOnError)
-		flags.SetOutput(c.stderr)
-		dryRun := flags.Bool("dry-run", false, "simulate garbage collection without deleting files")
-		ttlStr := flags.String("ttl", "24h", "maximum retention duration for stale worktrees")
-		if err := flags.Parse(args[1:]); err != nil {
-			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
-		}
-
-		ttl, err := time.ParseDuration(*ttlStr)
-		if err != nil {
-			return fmt.Errorf("%w: invalid --ttl format: %v", model.ErrInvalid, err)
-		}
-
-		runtime, err := app.Open(ctx, c.root)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-
-		res, err := runtime.GCWorktrees(ctx, *dryRun, ttl)
-		if err != nil {
-			return err
-		}
-
-		return c.print(res, fmt.Sprintf("Inspected: %d, Cleaned: %d, Retained: %d, Skipped Dirty: %d",
-			res.InspectedCount, len(res.CleanedPaths), len(res.RetainedPaths), len(res.SkippedDirty)))
-
-	case "artifacts":
-		flags := flag.NewFlagSet("gc artifacts", flag.ContinueOnError)
-		flags.SetOutput(c.stderr)
-		dryRun := flags.Bool("dry-run", false, "simulate garbage collection without deleting files")
-		ttlStr := flags.String("ttl", "24h", "maximum retention duration for unreferenced artifacts")
-		maxBudget := flags.Int64("max-budget", 0, "maximum disk budget in bytes (0 for unlimited)")
-		if err := flags.Parse(args[1:]); err != nil {
-			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
-		}
-
-		ttl, err := time.ParseDuration(*ttlStr)
-		if err != nil {
-			return fmt.Errorf("%w: invalid --ttl format: %v", model.ErrInvalid, err)
-		}
-
-		runtime, err := app.Open(ctx, c.root)
-		if err != nil {
-			return err
-		}
-		defer runtime.Close()
-
-		res, err := runtime.GCArtifacts(ctx, *dryRun, ttl, *maxBudget)
-		if err != nil {
-			return err
-		}
-
-		return c.print(res, fmt.Sprintf("Total: %d files (%d bytes), Cleaned: %d (%d bytes), Retained: %d (%d bytes), Orphans: %d",
-			res.TotalFiles, res.TotalBytes, len(res.CleanedFiles), res.CleanedBytes, len(res.RetainedFiles), res.RetainedBytes, len(res.OrphanFiles)))
-
-	default:
-		return fmt.Errorf("%w: unknown gc target %s (supported: worktrees, artifacts)", model.ErrInvalid, target)
-	}
 }
 
 func (c command) state(ctx context.Context, args []string) error {

@@ -50,7 +50,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 	waitForTmuxOutput(t, pane, "Marshal")
 	// The header paints before the Board body. Wait for the first-use
 	// readiness pane so the initial Board frame is complete before attaching input.
-	waitForTmuxOutput(t, pane, "READINESS")
+	waitForTmuxOutput(t, pane, "From you:")
 	if err := tmux.NewWindow(ctx, w.tmuxSession, "worker", project, nil, []string{"sleep", "600"}); err != nil {
 		t.Fatal(err)
 	}

@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/store"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
 // The first-use Board is what a project with no run shows: the Board's own
@@ -138,51 +136,6 @@ func (w *Workspace) firstUseChips(now time.Time) []providerChip {
 	return chips
 }
 
-// verifyNext is the provider v verifies next, "" for none. Board v2 picks
-// what its readiness checklist shows as "not checked yet", in the
-// checklist's order (v2NextUnchecked); MARSHAL_BOARD=classic picks from the
-// first-use card's chips (nextUnverified).
-func (w *Workspace) verifyNext() string {
-	now := time.Now()
-	if w.boardV2On() {
-		return v2NextUnchecked(w.v2MarshalInput(now))
-	}
-	return nextUnverified(w.firstUseChips(now), w.leadProvider())
-}
-
-// v2NextUnchecked is the first provider the v2 readiness checklist shows as
-// "not checked yet": the Marshal's provider, which it lists first, then each
-// installed worker provider in v2ProviderOrder.
-func v2NextUnchecked(in v2MarshalIn) string {
-	if prov := in.marshalProvider(); prov != "" && in.provider(prov).State == "unchecked" {
-		return prov
-	}
-	for _, name := range v2ProviderOrder {
-		if p := in.provider(name); p.Installed && p.State == "unchecked" {
-			return name
-		}
-	}
-	return ""
-}
-
-// nextUnverified is the provider v verifies next on the classic Board: the
-// one that leads (the Marshal) when it is not verified yet, because nothing
-// can be planned before it is; otherwise the first installed provider not
-// yet verified.
-func nextUnverified(chips []providerChip, lead string) string {
-	for _, c := range chips {
-		if c.name == lead && c.state == "unverified" {
-			return c.name
-		}
-	}
-	for _, c := range chips {
-		if c.state == "unverified" {
-			return c.name
-		}
-	}
-	return ""
-}
-
 // armFirstUseVerify arms the verify of provider: Enter runs it, any other
 // key cancels. The probe calls the model, so it is never one key alone.
 func (w *Workspace) armFirstUseVerify(provider string) {
@@ -217,77 +170,6 @@ func (w *Workspace) firstUseArmed() string {
 	return w.firstUse.armed
 }
 
-// runFirstUseVerify verifies the armed provider through /harness verify,
-// the path the Providers view takes, off the input loop.
-func (w *Workspace) runFirstUseVerify() {
-	w.firstUse.mu.Lock()
-	provider := w.firstUse.armed
-	w.firstUse.armed = ""
-	if provider == "" || w.firstUse.busy != "" {
-		w.firstUse.mu.Unlock()
-		return
-	}
-	w.firstUse.busy = provider
-	w.firstUse.mu.Unlock()
-	src := w.providerSrc()
-	done := func() {
-		w.firstUse.mu.Lock()
-		w.firstUse.busy = ""
-		w.firstUse.mu.Unlock()
-	}
-	if src == nil {
-		done()
-		w.memoryAnswer("Cannot verify "+provider+" here: this session has no store.", true)
-		return
-	}
-	model := ""
-	for _, p := range w.prov.paint().Snap.Providers {
-		if providerWorker(p.Provider) == provider {
-			model = p.Model
-		}
-	}
-	// The chip says "verifying" while the probe runs; the result is the
-	// chip's new state and one Activity line, never an overlay.
-	if !w.startBackground(context.Background(), func(ctx context.Context) {
-		text, err := src.VerifyHarness(ctx, provider, model)
-		done()
-		w.recordVerifyNote(provider, text, err)
-		w.refreshProviders(ctx)
-		w.requestRepaint()
-	}) {
-		done()
-	}
-}
-
-// handleFirstUseKey is the first-use card's keys: v arms the verify of the
-// next unverified provider and Enter runs an armed verify, any other key
-// cancels it; Enter with nothing armed is the call to action, as m is.
-func (w *Workspace) handleFirstUseKey(ctx context.Context, event KeyEvent) bool {
-	if armed := w.firstUseArmed(); armed != "" {
-		w.firstUse.mu.Lock()
-		w.firstUse.armed = ""
-		w.firstUse.mu.Unlock()
-		if event.Type == KeyEnter {
-			w.firstUse.mu.Lock()
-			w.firstUse.armed = armed
-			w.firstUse.mu.Unlock()
-			w.runFirstUseVerify()
-		} else {
-			w.memoryAnswer("Verify of "+armed+" cancelled", false)
-		}
-		return true
-	}
-	switch {
-	case event.Type == KeyRune && event.Rune == 'v':
-		w.armFirstUseVerify(w.verifyNext())
-		return true
-	case event.Type == KeyEnter:
-		w.focusChatFromBoard(ctx)
-		return true
-	}
-	return false
-}
-
 // focusChatFromBoard is the card's call to action: the keyboard goes to the
 // Marshal chat beside the Board, native or tmux; with no chat yet it says
 // how to start one.
@@ -303,23 +185,6 @@ func (w *Workspace) focusChatFromBoard(ctx context.Context) {
 
 // firstUseStateColor is the theme colour of a provider's readiness.
 var firstUseStateColor = map[string]string{"verified": "merged", "in use": "merged", "unverified": "waiting", "limited": "failed", "not installed": "dim", "checking": "dim", "verifying": "working"}
-
-func (v boardVisual) firstUseGlyph(state string) string {
-	if !v.unicode() {
-		return map[string]string{"verified": "*", "in use": "*", "limited": "x", "not installed": "o", "checking": "o", "verifying": "~"}[state] + map[bool]string{true: "~"}[firstUseStateColor[state] == "waiting"]
-	}
-	switch state {
-	case "verified", "in use":
-		return "●"
-	case "limited":
-		return "×"
-	case "not installed", "checking":
-		return "○"
-	case "verifying":
-		return v.frame.Spinner(true)
-	}
-	return "◐"
-}
 
 // firstUseHeaderLine is the header with no run: the brand and edition, the
 // project, NO RUN YET (or PLANNING once a goal exists or architecture is
@@ -368,225 +233,6 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }
 
-// firstUseCTA is the call to action's label.
-const firstUseCTA = "Tell the Marshal what to build"
-
-// workingGoalPrefix and workingGoalFallback are the home card's lead line once
-// an active goal exists before a run starts (requirements, design, architecture).
-const (
-	workingGoalPrefix   = "The Marshal is working on: "
-	workingGoalFallback = "The Marshal is working on your goal"
-)
-
-// paintFirstUse paints the first-use card in the Board's body: decisions
-// already waiting first, then the call to action, the three steps, the
-// providers and what the operator said to the Marshal. Each block keeps to
-// the width it is given; rows that do not fit are left off the bottom.
-func paintFirstUse(l layout.Layout, th *Theme, v boardVisual) []string {
-	out := make([]string, l.Rows)
-	place := func(id layout.PaneID) {
-		if p, ok := l.Pane(id); ok {
-			lines := v.render(p)
-			for i := 0; i < p.Rect.H && i < len(lines); i++ {
-				out[p.Rect.Y+i] = PadCell(lines[i], l.Cols)
-			}
-		}
-	}
-	place(layout.Vitals)
-	place(layout.Header)
-	place(layout.Footer)
-	body := l.Body
-	if body.H <= 0 {
-		return out
-	}
-	// A tall body gives the card some air above it, as a page would.
-	measure := v
-	measure.hits = nil
-	top := 0
-	if n := len(measure.firstUseBody(body.W, body.H, body.Y)); body.H-n > 8 {
-		top = min(3, (body.H-n)/6)
-	}
-	rows := append(make([]string, top), v.firstUseBody(body.W, body.H-top, body.Y+top)...)
-	for i := 0; i < body.H; i++ {
-		s := ""
-		if i < len(rows) {
-			s = rows[i]
-		}
-		out[body.Y+i] = PadCell(s, l.Cols)
-	}
-	if !v.unicode() {
-		copy(out[body.Y:body.Y+body.H], v.ascii(out[body.Y:body.Y+body.H], l.Cols))
-	}
-	return out
-}
-
-// firstUseBody is the card's lines for a body w cells wide and h rows high
-// whose first row is frame row y (for the click regions).
-func (v boardVisual) firstUseBody(w, h, y int) []string {
-	var out []string
-	add := func(s string) { out = append(out, PadCell(s, w)) }
-	// hit records a click region on the line about to be added, when that
-	// line is inside the body.
-	hit := func(b boardHit) {
-		if len(out) < h {
-			b.row = y + len(out)
-			v.hit(b)
-		}
-	}
-	gap := func() {
-		if len(out) > 0 && len(out) < h {
-			add("")
-		}
-	}
-	pad := "  "
-	if w < 60 {
-		pad = " "
-	}
-	// A decision already waiting comes before anything else.
-	if n := len(v.board.Inbox) + len(v.gates) + v.cardCount(); n > 0 {
-		// The requirements card is tall: count the rows it draws at this
-		// width (its text wraps), not the 2+3*n estimate the shorter
-		// cards use.
-		est := 2 + 3*n
-		if v.req != nil {
-			est = 1 + v.reqRows(*v.req, w, h/2-1) + 3*(n-1)
-		}
-		rows := min(h/2, est)
-		p := layout.Pane{ID: layout.Inbox, Rect: layout.Rect{X: 0, Y: y, W: w, H: rows}, Density: layout.Compact}
-		if w >= layout.FullDensity {
-			p.Density = layout.Full
-		}
-		for _, line := range v.inbox(p) {
-			add(line)
-		}
-		gap()
-	} else {
-		add("")
-	}
-
-	// The call to action: a button that focuses the chat. Once a goal is
-	// given, or the Marshal already filled its requirements, there is
-	// nothing left to ask for: the button goes and the chat keys stay.
-	given := v.goalGiven || v.req != nil || v.planning
-	switch {
-	case v.planning:
-		add(pad + v.fg("working", v.frame.Spinner(true)) + " " + v.bold(v.fg("white", planningCard)))
-	case v.goalGiven:
-		arrow := "▸"
-		if !v.unicode() {
-			arrow = ">"
-		}
-		suffix := ""
-		if !v.goalSince.IsZero() && !v.now.IsZero() {
-			suffix = "  ·  " + goalElapsed(v.now.Sub(v.goalSince))
-		}
-		// Keep the whole line within w cells so the elapsed time stays visible
-		// on narrow terminals instead of being clipped off the right edge.
-		avail := w - len(pad) - 2 - VisibleLen(suffix)
-		headline := workingGoalFallback
-		if v.goalText != "" && avail > len(workingGoalPrefix)+8 {
-			headline = workingGoalPrefix + v.truncWords(v.goalText, avail-len(workingGoalPrefix))
-		} else {
-			headline = v.truncWords(headline, max(1, avail))
-		}
-		line := v.fg("working", arrow) + " " + v.bold(v.fg("white", headline))
-		if suffix != "" {
-			line += v.fg("dim", suffix)
-		}
-		hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(line), kind: hitAction, id: "marshal.chat"})
-		add(pad + line)
-	}
-	// Planning can take many minutes of model thinking: the milestone line
-	// says which step the Marshal is on and for how long, so the owner is
-	// never left with only a spinner.
-	if given {
-		if line := v.milestoneLine(w - len(pad) - 2); line != "" {
-			add(pad + "  " + line)
-		}
-	}
-	if !given {
-		arrow, enter := "▸", "⏎"
-		if !v.unicode() {
-			arrow, enter = ">", "Enter"
-		}
-		label := " " + arrow + " " + firstUseCTA + "   " + enter + " "
-		if VisibleLen(pad+label) > w {
-			label = " " + arrow + " " + firstUseCTA + " "
-		}
-		button := v.bold(v.bg("accent", v.fg("bg", label)))
-		if v.code("accent", true) == "" {
-			button = "[" + strings.TrimSpace(label) + "]"
-		}
-		hit(boardHit{x0: len(pad), x1: len(pad) + VisibleLen(label), kind: hitAction, id: "marshal.chat"})
-		add(pad + button)
-	}
-	how := "Enter or F11: type it in the Marshal chat  ·  s: say it from here"
-	switch {
-	case v.planning:
-		how = "The tasks appear here when the plan is ready  ·  F11: the Marshal chat  ·  s: say something from here"
-	case given:
-		how = "The Marshal has your goal  ·  F11: the Marshal chat  ·  s: say something from here"
-	}
-	for _, line := range wrapWords(how, w-len(pad)-1) {
-		add(pad + " " + v.fg("dim", line))
-	}
-	gap()
-
-	// Providers: readiness of each, and v to verify the next one.
-	summary := "v verifies the next unverified · click one to verify it"
-	if armed := v.armed; armed != "" {
-		summary = v.fg("waiting", "Enter verifies "+armed+" (one model call) · any other key cancels")
-	}
-	add(pad + v.title("PROVIDERS", summary, false, w-len(pad)))
-	line, x := pad, len(pad)
-	flush := func() {
-		if strings.TrimSpace(StripANSI(line)) != "" {
-			add(line)
-		}
-		line, x = pad, len(pad)
-	}
-	for _, c := range v.chips {
-		col := firstUseStateColor[c.state]
-		word := c.state
-		if c.state == "limited" && !c.until.IsZero() {
-			word = "limited until " + c.until.In(v.now.Location()).Format("15:04")
-		}
-		text := v.fg(col, v.firstUseGlyph(c.state)) + " " + v.mark(c.name, "") + v.bold(v.fg("white", c.name)) + " " + v.fg(col, word)
-		n := VisibleLen(text)
-		if x > len(pad) && x+3+n > w {
-			flush()
-		}
-		if x > len(pad) {
-			line += "   "
-			x += 3
-		}
-		if c.state == "unverified" {
-			hit(boardHit{x0: x, x1: x + n, kind: hitVerify, id: c.name})
-		}
-		line += text
-		x += n
-	}
-	flush()
-
-	// What the operator said to the Marshal from here, and what happened
-	// in the background (a verify result, a re-delivery), one line each.
-	if len(v.echo) > 0 || len(v.notes) > 0 {
-		gap()
-		summary := "what you said to the Marshal"
-		if len(v.notes) > 0 {
-			summary = "what you said and what happened · click a note for all of it"
-		}
-		add(pad + v.title("ACTIVITY", summary, false, w-len(pad)))
-		for _, r := range v.activityRows(w - len(pad)) {
-			if r.note != 0 {
-				hit(boardHit{x0: len(pad), x1: w, kind: hitNote, id: strconv.Itoa(r.note)})
-			}
-			add(pad + r.line)
-		}
-	}
-	return out[:min(len(out), h)]
-}
-
 // wrapWords breaks s into lines of at most w cells at spaces.
 func wrapWords(s string, w int) []string {
 	if w <= 0 {
@@ -627,36 +273,6 @@ func (v boardVisual) trunc(s string, w int) string {
 	return string(r) + ellipsis
 }
 
-// truncWords cuts s to at most w cells at a word boundary when one fits,
-// ending with an ellipsis ("." in the ASCII theme).
-func (v boardVisual) truncWords(s string, w int) string {
-	if VisibleLen(s) <= w {
-		return s
-	}
-	if w <= 1 {
-		return v.trunc(s, w)
-	}
-	ellipsis := "…"
-	if !v.unicode() {
-		ellipsis = "."
-	}
-	out := ""
-	for _, word := range strings.Fields(s) {
-		cand := word
-		if out != "" {
-			cand = out + " " + word
-		}
-		if VisibleLen(cand)+1 > w {
-			break
-		}
-		out = cand
-	}
-	if out == "" {
-		return v.trunc(s, w)
-	}
-	return out + ellipsis
-}
-
 // goalElapsed formats how long the Marshal has been working on the active goal
 // in compact plain units ("45s", "12m", "1h20m"), matching host_view.go.
 func goalElapsed(d time.Duration) string {
@@ -674,11 +290,59 @@ func goalElapsed(d time.Duration) string {
 	}
 }
 
-// leadProvider is the provider that leads this project (the Marshal), as a
-// first-use chip names it, or "" before one is chosen.
-func (w *Workspace) leadProvider() string {
-	if w.nativeStartupProvider != "" {
-		return providerWorker(w.nativeStartupProvider)
+// runFirstUseVerify verifies the armed provider through /harness verify,
+// the path the Providers view takes, off the input loop.
+func (w *Workspace) runFirstUseVerify() {
+	w.firstUse.mu.Lock()
+	provider := w.firstUse.armed
+	w.firstUse.armed = ""
+	if provider == "" || w.firstUse.busy != "" {
+		w.firstUse.mu.Unlock()
+		return
 	}
-	return providerWorker(loadDefaultProvider(w.providerRoot()))
+	w.firstUse.busy = provider
+	w.firstUse.mu.Unlock()
+	src := w.providerSrc()
+	done := func() {
+		w.firstUse.mu.Lock()
+		w.firstUse.busy = ""
+		w.firstUse.mu.Unlock()
+	}
+	if src == nil {
+		done()
+		w.memoryAnswer("Cannot verify "+provider+" here: this session has no store.", true)
+		return
+	}
+	model := ""
+	for _, p := range w.prov.paint().Snap.Providers {
+		if providerWorker(p.Provider) == provider {
+			model = p.Model
+		}
+	}
+	// The chip says "verifying" while the probe runs; the result is the
+	// chip's new state and one Activity line, never an overlay.
+	if !w.startBackground(context.Background(), func(ctx context.Context) {
+		text, err := src.VerifyHarness(ctx, provider, model)
+		done()
+		w.recordVerifyNote(provider, text, err)
+		w.refreshProviders(ctx)
+		w.requestRepaint()
+	}) {
+		done()
+	}
+}
+
+// v2NextUnchecked is the first provider the v2 readiness checklist shows as
+// "not checked yet": the Marshal's provider, which it lists first, then each
+// installed worker provider in v2ProviderOrder.
+func v2NextUnchecked(in v2MarshalIn) string {
+	if prov := in.marshalProvider(); prov != "" && in.provider(prov).State == "unchecked" {
+		return prov
+	}
+	for _, name := range v2ProviderOrder {
+		if p := in.provider(name); p.Installed && p.State == "unchecked" {
+			return name
+		}
+	}
+	return ""
 }

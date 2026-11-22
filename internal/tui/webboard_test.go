@@ -42,7 +42,6 @@ var webLink = regexp.MustCompile(`http://127\.0\.0\.1:\d+/\?t=[A-Za-z0-9_-]{43}`
 // writer that takes w.mu without pause would deadlock a frame that took it
 // twice.
 func TestWebBoardFrameWithoutTheWorkspaceLock(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	w := emptyBoardWorkspace(t)
 	w.endOpening()
 	stop := make(chan struct{})
@@ -90,7 +89,6 @@ func TestWebBoardFrameWithoutTheWorkspaceLock(t *testing.T) {
 // /marshal web starts one Web Board, opens it, answers its link, and the
 // Board's Close stops it.
 func TestMarshalWebServesTheBoard(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	opened := webBoardSeams(t)
 	origGOOS := v2GOOS
 	t.Cleanup(func() { v2GOOS = origGOOS })
@@ -107,32 +105,71 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	link := webLink.FindString(resp)
-	if link == "" || !strings.Contains(resp, "keep the link private") {
-		t.Fatalf("answer %q has no Web Board link", resp)
+	// With a display the browser gets the link; the footer names only the
+	// address, so no screen line carries the link's secret.
+	if webLink.FindString(resp) != "" || strings.Contains(resp, "?t=") || !strings.Contains(resp, "opening in your browser") {
+		t.Fatalf("answer %q shows the link or does not say it opens", resp)
 	}
 	again, err := w.marshalWeb()
-	if err != nil || webLink.FindString(again) != link {
-		t.Fatalf("a second /marshal web started another Board: %q %v", again, err)
+	if err != nil || webLink.FindString(again) != "" {
+		t.Fatalf("a second /marshal web: %q %v", again, err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for len(opened()) < 2 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if got := opened(); len(got) != 2 || got[0] != link {
-		t.Fatalf("opened %v, want %s twice", got, link)
+	got := opened()
+	if len(got) != 2 || webLink.FindString(got[0]) != got[0] || webLink.FindString(got[1]) != got[1] || got[1] == got[0] {
+		t.Fatalf("opened %v, want two fresh links", got)
 	}
+	link := got[0]
 	for _, n := range w.noteList() {
 		if strings.Contains(n.Text, "?t=") {
 			t.Fatalf("the private link reached Activity: %q", n.Text)
 		}
 	}
 
-	// The page reads the link's token and sends it as a bearer header.
+	// The page spends the link for its own secret and sends that as a
+	// bearer header; the link's secret itself opens nothing.
 	u, _ := url.Parse(link)
+	client := &http.Client{Timeout: 5 * time.Second}
 	q, _ := http.NewRequest("GET", "http://"+u.Host+"/api/board", nil)
 	q.Header.Set("Authorization", "Bearer "+u.Query().Get("t"))
-	r, err := (&http.Client{Timeout: 5 * time.Second}).Do(q)
+	r, err := client.Do(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("the link's secret read the Board: %d", r.StatusCode)
+	}
+	q, _ = http.NewRequest("POST", "http://"+u.Host+"/api/session", nil)
+	q.Header.Set("Origin", "http://"+u.Host)
+	q.Header.Set("Authorization", "Bearer "+u.Query().Get("t"))
+	r, err = client.Do(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var session struct {
+		Session string `json:"session"`
+	}
+	err = json.NewDecoder(r.Body).Decode(&session)
+	r.Body.Close()
+	if err != nil || r.StatusCode != http.StatusOK || session.Session == "" {
+		t.Fatalf("spend: %d %v", r.StatusCode, err)
+	}
+	if _, err := w.marshalWeb(); err != nil {
+		t.Fatal(err)
+	}
+	for len(opened()) < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := opened(); len(got) != 3 || got[2] == link {
+		t.Fatalf("after the link was spent, /marshal web opened %v, want a fresh link", got)
+	}
+	q, _ = http.NewRequest("GET", "http://"+u.Host+"/api/board", nil)
+	q.Header.Set("Authorization", "Bearer "+session.Session)
+	r, err = client.Do(q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +195,6 @@ func TestMarshalWebServesTheBoard(t *testing.T) {
 // opens the Web Board and types nothing; with no display the answer is the
 // link to open.
 func TestWebBoardKeyWithoutDisplay(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	opened := webBoardSeams(t)
 	origGOOS, origEnv := v2GOOS, v2Getenv
 	t.Cleanup(func() { v2GOOS, v2Getenv = origGOOS, origEnv })
@@ -186,16 +222,18 @@ func TestWebBoardKeyWithoutDisplay(t *testing.T) {
 // /marshal web runs through the command handler the composer and the
 // palette use; with more words it is a goal, not the Web Board.
 func TestMarshalWebCommand(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	webBoardSeams(t)
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
+	opensWeb := func(resp string) bool {
+		return webLink.FindString(resp) != "" || strings.Contains(resp, "Web Board: opening in your browser")
+	}
 	resp, err := w.cmd.Handle(context.Background(), "/marshal web")
-	if err != nil || webLink.FindString(resp) == "" {
+	if err != nil || !opensWeb(resp) {
 		t.Fatalf("/marshal web: %q %v", resp, err)
 	}
 	resp, _ = w.cmd.Handle(context.Background(), "/marshal web app for the shop")
-	if webLink.FindString(resp) != "" {
+	if opensWeb(resp) {
 		t.Fatalf("a goal starting with web opened the Web Board: %q", resp)
 	}
 	for _, a := range w.palette.refresh() {

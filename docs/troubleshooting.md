@@ -103,7 +103,7 @@ To resume where you left off:
    marshal
    ```
 2. Marshal automatically detects the latest unfinished run in `.marshal/state.db` and reloads the Board.
-3. If the run was waiting for you, its card opens again (`YOUR TURN` in the top bar, and *from you* names it). Reply as requested; for the architecture, press **`a`** (or **`y`**) to open it in your browser and accept it there.
+3. If the run was waiting for you, its card opens again on the Web Board (`YOUR TURN` on the Board's top line, and *From you* names it). Reply as requested; for the architecture, press **`a`** to open it in your browser and accept it there.
 4. If workers were stopped while dispatching, Marshal releases stale leases, reschedules incomplete tasks, and resumes execution.
 
 ---
@@ -131,19 +131,27 @@ marshal status
 
 `marshal status` and `marshal tasks` read the project directly. `marshal logs`, `marshal events`, `marshal artifacts`, `marshal agents`, `marshal run`, `marshal verify`, `marshal reconcile`, `marshal cancel` and `marshal task show|claim|release|import` work only through Marshal's background service: start it with `marshal daemon` in another terminal in the project first. If Marshal is already open for the project in another window, use that window instead.
 
+`marshal run` and `marshal task claim` need a registered agent; register one with `marshal agent register --name NAME --role developer` (also through the background service).
+
+`marshal state backup --output PATH` copies the project's state database, `marshal state verify-backup PATH` checks a copy, and `marshal state restore PATH` restores one while Marshal is stopped.
+
+`marshal egm status` reports whether the optional EGM design-review plugin is installed for each provider, and `marshal egm install --provider PROVIDER` prints its install steps; without it Marshal uses its built-in design review.
+
 ## Governed Workers on macOS or Linux arm64
 
 ### Symptom
 
-The run stops with **"This computer cannot run governed workers (…). Governed workers need Linux on amd64."**
+The run stops with **"This computer (…) cannot run governed workers (…). They need Linux amd64; run Marshal there to execute this plan."**
 
 ### Why
 
-Governed workers run inside Linux confinement (bubblewrap and a socket supervisor built for amd64). macOS and Linux arm64 have neither, so every worker would fail the same way. Earlier versions reported this as a network problem, retried and cooled the providers down; it is now named at once.
+The pause names Linux amd64 only when the refusal itself requires it: governed workers in the governed edition run inside Linux confinement (bubblewrap and a socket supervisor built for amd64), which macOS and Linux arm64 do not have, so every worker would fail the same way. Earlier versions reported this as a network problem, retried and cooled the providers down; it is now named at once.
+
+Any other platform refusal reads **"This computer (…) cannot run … workers: Marshal could not start them here (…)"** with the actual cause. Earlier the default edition on macOS stopped this way with "worker terminal transport unavailable on this platform", wrongly worded as a Linux amd64 requirement; Marshal now hosts worker terminals on macOS.
 
 ### How to Fix It
 
-Open the project with Marshal on a Linux amd64 machine (a server, a cloud VM, or an x86_64 VM). Planning, requirements and the architecture review work on any platform.
+For a Linux amd64 requirement, open the project with Marshal on a Linux amd64 machine (a server, a cloud VM, or an x86_64 VM). Planning, requirements and the architecture review work on any platform. For any other cause, update Marshal and press Enter to retry.
 
 ## Marshal Was Updated but Still Behaves the Old Way
 
@@ -165,7 +173,7 @@ Claude Code draws its prompt with a no-break space, so earlier Boards did not re
 
 ### How to Fix It
 
-- **0.3.5 or newer**: nothing to do. If *from you* on the NOW line says `send or clear your unsent text in the Marshal chat`, the input holds text you typed: send it or clear it, and the Board delivers its next request.
+- **0.3.5 or newer**: nothing to do. If *From you* on the Board says `send or clear your unsent text in the Marshal chat`, the input holds text you typed: send it or clear it, and the Board delivers its next request.
 - **Older versions**: press `F11` to go to the chat and press `Enter` to submit the pasted text. If the request already expired, clear the input and press `s` on the Board to ask the Marshal to read its inbox again. Then update Marshal (`F10`, or the installer) to get the fix.
 
 ## The Marshal Chat Restarted and Its Answers Are Refused
@@ -197,7 +205,7 @@ The card shows the review's private link:
 │ No display here, so open this on the machine:  http://127.0.0.1:37667/?token=7964…462b               │
 ```
 
-1. Press `c` on the card to copy the link (it uses your terminal's clipboard, which works over SSH where the terminal supports it). The link is also saved in `.marshal/architecture/review/url.txt` in the project.
+1. Press `c` on the card to copy the link (it uses your terminal's clipboard, which works over SSH where the terminal supports it). The link is kept in memory only, never in a file: it carries the key that accepts the architecture, so nothing else running on the machine can read it from disk.
 2. The address is local to the machine Marshal runs on. Over SSH, forward its port first, for example `ssh -L 37667:127.0.0.1:37667 you@server` with the port from the link, then open the link in your local browser.
 3. Accept the architecture in the browser. The Board moves on by itself.
 
@@ -209,8 +217,8 @@ The readiness list shows `Workers · agy is installed but not signed in` with th
 
 ### How to Fix It
 
-1. On the readiness screen press `g`: agy opens in a new tmux window in the project; sign in there and close it. (Or run `agy` once in any terminal.)
-2. Back on the Board, press `Enter` (or `v` and then `Enter`) to check it again (one model call). The row turns to `ready`.
-3. If a run paused for it, press `Enter` on the paused card to retry, or let the card move the tasks to another provider.
+1. When *From you* says agy is not signed in, press `g`: agy opens in a new tmux window in the project; sign in there and close it. (Or run `agy` once in any terminal.)
+2. Back on the Board, *From you* says `agy is not checked yet`: press `y` to check it again (one model call), or use the Providers view (`4`, `v`, `Enter`). The readiness row turns to `ready`.
+3. If a run paused for it, press `y` to do what the paused card says (retry, or move the tasks to another provider), or use the Web Board's card.
 
 The same applies to the other providers: run `claude` and sign in, run `codex login`, or run `opencode auth login`.

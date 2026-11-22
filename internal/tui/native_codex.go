@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 // StartWithNativeCodex opens the native session after terminal ownership has
@@ -401,6 +402,10 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if channel != injectOff {
+		inboxNote := inboxBriefingNote(root, provider)
+		if len(marshalBrief) > 0 {
+			inboxNote += marshalInboxBriefingNote()
+		}
 		briefing, err := w.crossAgentBriefing(ctx, provider)
 		switch {
 		case err != nil:
@@ -408,7 +413,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		case strings.TrimSpace(briefing) == "":
 			// Nothing to summarize yet, but another agent may still start while
 			// this one runs, so the inbox pointer is delivered on its own.
-			if _, err := deliver(briefingHeader+inboxBriefingNote(root, provider), channel); err != nil {
+			if _, err := deliver(briefingHeader+inboxNote, channel); err != nil {
 				briefingNotes = append(briefingNotes, "Live inbox pointer not delivered: "+err.Error())
 			} else {
 				briefingNotes = append(briefingNotes,
@@ -420,7 +425,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// The agent only benefits from the inbox if the briefing says it
 			// exists, so the pointer travels with the snapshot it will go stale
 			// against.
-			briefing += inboxBriefingNote(root, provider)
+			briefing += inboxNote
 			if note, err := deliver(briefing, channel); err != nil {
 				briefingNotes = append(briefingNotes, "Cross-agent briefing not delivered: "+err.Error())
 			} else {
@@ -605,7 +610,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.Env = append(os.Environ(), briefingEnv...)
+	cmd.Env = append(workerenv.Host(os.Environ()), briefingEnv...)
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start native %s: %w", label, err)
 	}

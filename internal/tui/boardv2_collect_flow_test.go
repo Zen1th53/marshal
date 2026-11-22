@@ -13,7 +13,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	boardv2 "github.com/Zen1th53/marshal/internal/tui/board/v2"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -169,19 +168,6 @@ func TestFlowActivityMixedZonesOrderAndLocalClock(t *testing.T) {
 		if i > 0 && got[i].Last.After(got[i-1].Last) {
 			t.Fatalf("row %d (%v) is newer than row %d (%v)", i, got[i].Last, i-1, got[i-1].Last)
 		}
-	}
-	b := vm.Board{Screen: vm.ScreenRunning, Activity: got}
-	screen := strings.Join(boardv2.Render(b, 132, 40, boardv2.Theme{Color: boardv2.ColorNone, Unicode: true}), "\n")
-	last := -1
-	for _, w := range []string{"11:57  review", "11:56  note", "11:55  note", "11:54  plan", "11:53  error", "11:52  note"} {
-		i := strings.Index(screen, w)
-		if i < 0 || i < last {
-			t.Fatalf("%q missing or out of order:\n%s", w, screen)
-		}
-		last = i
-	}
-	if strings.Contains(screen, "06:5") {
-		t.Fatalf("Activity shows a UTC clock:\n%s", screen)
 	}
 }
 

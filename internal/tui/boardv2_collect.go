@@ -10,5 +10,8 @@ func (w *Workspace) boardV2() vm.Board {
 	w.collectV2Marshal(&b)
 	w.collectV2Chat(&b)
 	w.collectV2Cards(&b)
+	w.collectV2System(&b)
+	w.collectV2MarshalSays(&b)
+	b.Web = w.webState()
 	return b
 }

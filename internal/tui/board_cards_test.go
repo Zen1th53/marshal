@@ -45,7 +45,7 @@ func openReqCard(t *testing.T, w *Workspace, card string) {
 func TestConfirmedRequirementsCardNeverReopens(t *testing.T) {
 	w, _, tr := boardWithNativeChat(t)
 	openReqCard(t, w, fullReqCard)
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("Enter was not taken by the card")
 	}
 	chatWaitFor(t, "the confirmation", func() bool { return len(tr.sentTurns()) == 1 })
@@ -53,7 +53,7 @@ func TestConfirmedRequirementsCardNeverReopens(t *testing.T) {
 	if w.currentReq() != nil {
 		t.Fatal("the confirmed card opened again")
 	}
-	w.handleBoardKey(KeyEvent{Type: KeyEnter})
+	w.handleV2CardKey(KeyEvent{Type: KeyEnter})
 	time.Sleep(50 * time.Millisecond)
 	if got := tr.sentTurns(); len(got) != 1 {
 		t.Fatalf("a later Enter sent %q", got)
@@ -69,50 +69,6 @@ func TestConfirmedRequirementsCardNeverReopens(t *testing.T) {
 	openReqCard(t, w, changed)
 	if w.currentReq() == nil {
 		t.Fatal("a card with a changed line did not open")
-	}
-}
-
-// A stopped run leads the inbox, so Enter is its "try again": no open card
-// below it takes Enter, and their buttons do not claim the key.
-func TestStoppedRunTakesEnterBeforeOpenCards(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w, _, tr := boardWithNativeChat(t)
-	w.mu.Lock()
-	w.state.Marshal = &MarshalPanel{RunID: "run", Note: "stopped: worker exited 2", Stopped: true}
-	w.mu.Unlock()
-	openReqCard(t, w, fullReqCard)
-	ap, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openAsk(ap)
-	if !w.boardStopWaiting() {
-		t.Fatal("the stopped run does not wait for Enter")
-	}
-	text := frameText(w, 160, 50)
-	if strings.Contains(text, "[Enter] confirm all") || strings.Contains(text, "[Enter] build on it") {
-		t.Fatalf("a card below the stop claims Enter:\n%s", text)
-	}
-	if !strings.Contains(text, "[click] build on it") || !strings.Contains(text, "[Enter] try again") {
-		t.Fatalf("the stop and the cards' buttons:\n%s", text)
-	}
-	stopped := boardVisual{theme: NewTheme(ThemeNoColor, true, true), stopped: true, note: "stopped: worker exited 2"}
-	if got := StripANSI(strings.Join(stopped.requirementsEntry(*w.currentReq(), 0, 0, 120, 40), "\n")); !strings.Contains(got, "[click] confirm all") || strings.Contains(got, "[Enter]") {
-		t.Fatalf("the requirements card under the stop:\n%s", got)
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter was not taken")
-	}
-	if !w.boardUI.stopArmed {
-		t.Fatal("Enter did not go to the stopped run")
-	}
-	time.Sleep(50 * time.Millisecond)
-	if got := tr.sentTurns(); len(got) != 0 {
-		t.Fatalf("Enter answered a card below the stop: %q", got)
-	}
-	if w.currentReq() == nil || w.currentAsk() == nil {
-		t.Fatal("a card closed")
 	}
 }
 
@@ -143,7 +99,7 @@ func guardAskBoard(t *testing.T) (*Workspace, *fakeChatTransport, *guardAlert, *
 // files-changed card closes with it and the header no longer counts it.
 func TestAskKeepAnswerResolvesChangedFiles(t *testing.T) {
 	w, tr, _, _ := guardAskBoard(t)
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) {
+	if !w.handleAskKey(KeyEvent{Type: KeyEnter}) {
 		t.Fatal("Enter was not taken")
 	}
 	chatWaitFor(t, "the answer", func() bool { return len(tr.sentTurns()) == 1 })
@@ -165,7 +121,7 @@ func TestAskKeepAnswerResolvesChangedFiles(t *testing.T) {
 // with its keep choice, so neither card outlives the decision.
 func TestGuardKeepAnswersTheMarshalsQuestion(t *testing.T) {
 	w, tr, _, _ := guardAskBoard(t)
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'K'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'K'}) {
 		t.Fatal("K was not taken")
 	}
 	chatWaitFor(t, "the answer", func() bool { return len(tr.sentTurns()) == 1 })
@@ -177,30 +133,6 @@ func TestGuardKeepAnswersTheMarshalsQuestion(t *testing.T) {
 	}
 	if a, _, _, _ := w.guardPaint(); a != nil {
 		t.Fatal("the alert stayed after K")
-	}
-}
-
-// An undo answer leaves the files-changed card open, since nothing is undone
-// yet, and the card says what was answered. The card's own undo then closes
-// nothing twice: the question is already answered.
-func TestAskUndoAnswerUpdatesChangedFiles(t *testing.T) {
-	w, tr, a, _ := guardAskBoard(t)
-	// A click on the choice: the u key is the card's own undo, which the
-	// guard takes first.
-	w.answerAsk(1)
-	chatWaitFor(t, "the answer", func() bool { return len(tr.sentTurns()) == 1 })
-	if got := tr.sentTurns()[0]; got != "Undo through a worker task" {
-		t.Fatalf("sent %q", got)
-	}
-	got, _, _, _ := w.guardPaint()
-	if got == nil || got.answered != "Undo through a worker task" {
-		t.Fatalf("the alert was not updated: %+v", got)
-	}
-	if text := frameText(w, 200, 40); !strings.Contains(text, "you answered “Undo through a worker task”; nothing is undone yet") {
-		t.Fatalf("the card does not say what was answered:\n%s", text)
-	}
-	if w.guardAlertNow() != a {
-		t.Fatal("the alert was replaced")
 	}
 }
 
@@ -259,8 +191,8 @@ func TestArchitectureOpenGivesFeedback(t *testing.T) {
 		defer w.mu.RUnlock()
 		return w.answer == architectureOpened
 	})
-	if !strings.Contains(architectureOpened, filepath.Join(".marshal", "architecture", "review", "url.txt")) {
-		t.Fatalf("the answer does not say where the link is: %q", architectureOpened)
+	if strings.Contains(architectureOpened, "url.txt") || strings.Contains(architectureOpened, "token") {
+		t.Fatalf("the answer points at a link file or carries the key: %q", architectureOpened)
 	}
 	assertArchitectureNotes(t, w, "Architecture view opened in your browser: http://127.0.0.1:12345/")
 }
@@ -281,7 +213,7 @@ func TestArchitectureOpenWithoutBrowserPointsAtLink(t *testing.T) {
 		defer w.mu.RUnlock()
 		return w.answer == architectureNoBrowser && w.answerIsError
 	})
-	assertArchitectureNotes(t, w, "Architecture view: your browser could not be opened. Open the link in "+architectureURLFile)
+	assertArchitectureNotes(t, w, "Architecture view: your browser could not be opened. The architecture card shows the link (http://127.0.0.1:12345/)")
 	// Pressing y again reuses the page and says the same.
 	w.openArchitectureReview()
 	chatWaitFor(t, "the second answer", func() bool {

@@ -4,11 +4,6 @@ package startup
 
 const networkReadySummary = "Outbound access is limited to approved destinations."
 
-// blockedHelpBody is the "Why work can be blocked" help text.
-const blockedHelpBody = "Work is blocked when running it would not be safe or would not be reproducible: " +
-	"no project, no Git, no sandbox to isolate changes, or no policy saying what is permitted. " +
-	"Blocking work does not block MARSHAL. You keep Setup, Doctor, Help, your project history and recovery."
-
 // probeIsolation reports sandbox and network enforcement.
 //
 // Both are reported from what the runtime actually determined, never inferred

@@ -247,36 +247,3 @@ func (w *Workspace) clickQuota(action rune) {
 func (v boardVisual) quotaCardActive() bool {
 	return v.board.Run.State == marshal.AwaitingUser && v.board.Run.PauseKind == "quota"
 }
-
-// quotaEntry is the quota card as the inbox's first entry, two rows: the
-// plain line, then the keys. Armed, the second row says when it resumes.
-func (v boardVisual) quotaEntry(x, row, w int) []string {
-	flag := "⚑ "
-	if !v.unicode() {
-		flag = "! "
-	}
-	first := v.fg("waiting", flag+"limits") + v.fg("dim", " · ") + v.bold(v.fg("white", "All providers are at their limit. Work is saved."))
-	second, at := "    ", 4
-	button := func(label string, action rune) {
-		v.hit(boardHit{row: row + 1, x0: x + at, x1: x + min(w, at+VisibleLen(label)), kind: hitQuota, id: string(action), action: action})
-		second += label
-		at += VisibleLen(label)
-	}
-	if v.quotaArmed {
-		resuming := "Resuming when a limit frees up"
-		if until := v.board.Run.PauseUntil; !until.IsZero() {
-			resuming += " (about " + until.In(v.now.Location()).Format("15:04") + ")"
-		}
-		second += v.fg("waiting", resuming)
-		at += VisibleLen(resuming)
-		second += "  "
-		at += 2
-		button(v.bg("rule", "[s]")+" stop here", 's')
-	} else {
-		button(v.bg("rule", "[r]")+" resume when available", 'r')
-		second += "  "
-		at += 2
-		button(v.bg("rule", "[s]")+" stop here", 's')
-	}
-	return []string{PadCell(first, w), PadCell(second, w)}
-}

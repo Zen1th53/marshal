@@ -45,12 +45,25 @@ const maxStreams = 16
 
 // Server is one running Web Board.
 type Server struct {
-	// URL is the link the owner opens once: it carries the token.
-	URL string
-
-	addr   string // 127.0.0.1:PORT
-	port   string
-	token  string
+	addr string // 127.0.0.1:PORT
+	port string
+	// token is the page's bearer secret for the API. It is never in a link,
+	// on a screen or in a file: a page gets it only by spending a link
+	// (POST /api/session). tokenMu guards it, since a reused link rotates it.
+	tokenMu sync.Mutex
+	token   string
+	// links are the one-use secrets of the links handed out and not yet
+	// opened (?t=…): each Link call makes a new one, so two opens are two
+	// links. spent holds the links already used, so a second use of one is
+	// recognised. A link is seen by whatever shows it to the owner (the
+	// footer, the browser opener's argv, the browser's history); spending
+	// it at once makes those copies worthless, and a copy used first by
+	// anything else leaves the owner's page refused, which rotates token and
+	// shuts that page out too.
+	links map[string]bool
+	spent map[string]bool
+	// demo keeps one fixed link that is never spent (the demo only).
+	demo   bool
 	source Source
 	sink   Sink
 	// actKey signs the action tokens; epoch counts the actions taken, so a
@@ -103,7 +116,8 @@ func start(addr, token string, source Source, sink Sink) (*Server, error) {
 	if err != nil || host != "127.0.0.1" {
 		return nil, fmt.Errorf("web board: %q is not a 127.0.0.1 address", addr)
 	}
-	if token == "" {
+	demo := token != ""
+	if !demo {
 		if token, err = randomToken(32); err != nil {
 			return nil, err
 		}
@@ -121,8 +135,8 @@ func start(addr, token string, source Source, sink Sink) (*Server, error) {
 	s := &Server{
 		addr: "127.0.0.1:" + port, port: port, token: token, source: source, sink: sink, actKey: actKey, listener: ln,
 		ctx: ctx, cancel: cancel, done: make(chan struct{}), subs: map[chan struct{}]struct{}{},
+		links: map[string]bool{}, spent: map[string]bool{}, demo: demo,
 	}
-	s.URL = "http://" + s.addr + "/?t=" + token
 	// No Read or WriteTimeout: the event stream is long-lived. Closing the base
 	// context ends every stream.
 	s.http = &http.Server{
@@ -164,13 +178,99 @@ func (s *Server) Close() {
 	})
 }
 
-// authorized reports whether the request carries the link's token as
-// "Authorization: Bearer <token>". The page reads the token from its own
-// address once and sends it on every API call; no cookie is ever set, so no
-// other page on this computer can ride on one.
+// maxLinks bounds the links handed out and not yet opened, and the links
+// remembered as spent; the oldest-by-chance is dropped past it.
+const maxLinks = 64
+
+// dropOne removes one entry of m once it holds more than maxLinks.
+func dropOne(m map[string]bool) {
+	if len(m) <= maxLinks {
+		return
+	}
+	for k := range m {
+		delete(m, k)
+		return
+	}
+}
+
+// Link is a new link for the owner to open: the address with a fresh
+// one-use secret, so each open of the Web Board (each browser tab) has its
+// own. The demo's link is its fixed token.
+func (s *Server) Link() (string, error) {
+	s.tokenMu.Lock()
+	defer s.tokenMu.Unlock()
+	if s.demo {
+		return "http://" + s.addr + "/?t=" + s.token, nil
+	}
+	link, err := randomToken(32)
+	if err != nil {
+		return "", err
+	}
+	s.links[link] = true
+	dropOne(s.links)
+	return "http://" + s.addr + "/?t=" + link, nil
+}
+
+// bearer is the request's "Authorization: Bearer <value>", "" for none.
+func bearer(q *http.Request) string {
+	v, _ := strings.CutPrefix(q.Header.Get("Authorization"), "Bearer ")
+	if !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
+		return ""
+	}
+	return v
+}
+
+func equalSecret(a, b string) bool {
+	return a != "" && len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// authorized reports whether the request carries the page's API secret as
+// "Authorization: Bearer <token>". A page gets it by spending its link
+// (serveSession) and keeps it for its tab; no cookie is ever set, so no
+// other page on this computer can ride on one. A link's own secret is not
+// accepted here.
 func (s *Server) authorized(q *http.Request) bool {
-	v, ok := strings.CutPrefix(q.Header.Get("Authorization"), "Bearer ")
-	return ok && len(v) == len(s.token) && subtle.ConstantTimeCompare([]byte(v), []byte(s.token)) == 1
+	s.tokenMu.Lock()
+	token := s.token
+	s.tokenMu.Unlock()
+	return equalSecret(bearer(q), token)
+}
+
+// serveSession is POST /api/session: the page spends the link it was opened
+// with (as its bearer) and gets the API secret. A link works once. A link
+// used again means something other than the owner's page used it first:
+// the API secret is replaced, so every page holding it (that one included)
+// is shut out until the owner opens a new link.
+func (s *Server) serveSession(w http.ResponseWriter, q *http.Request) {
+	if !s.originAllowed(q.Header.Get("Origin")) {
+		refuse(w, http.StatusForbidden, "Open the Web Board from its own link.")
+		return
+	}
+	presented := bearer(q)
+	s.tokenMu.Lock()
+	switch {
+	case s.demo && equalSecret(presented, s.token), presented != "" && s.links[presented]:
+		if !s.demo {
+			delete(s.links, presented)
+			s.spent[presented] = true
+			dropOne(s.spent)
+		}
+		token := s.token
+		s.tokenMu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]string{"session": token})
+		return
+	case presented != "" && s.spent[presented]:
+		if fresh, err := randomToken(32); err == nil {
+			s.token = fresh
+		}
+		s.tokenMu.Unlock()
+		w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
+		refuse(w, http.StatusUnauthorized, "This link was already used, so to be safe the Web Board closed every open page. Run /marshal web for a new link.")
+		return
+	}
+	s.tokenMu.Unlock()
+	w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
+	refuse(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
 }
 
 // hostAllowed is the DNS-rebinding guard: the Host header must name this
@@ -206,6 +306,15 @@ func (s *Server) Handler() http.Handler {
 		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		if !s.hostAllowed(q.Host) {
 			deny(w, http.StatusMisdirectedRequest, "This Board answers only at "+s.addr+".")
+			return
+		}
+		if q.URL.Path == "/api/session" {
+			if q.Method != http.MethodPost {
+				h.Set("Allow", http.MethodPost)
+				deny(w, http.StatusMethodNotAllowed, "A link is spent with POST.")
+				return
+			}
+			s.serveSession(w, q)
 			return
 		}
 		if q.URL.Path == "/api/act" {

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/adapter/providers"
@@ -20,13 +21,17 @@ var helpFixtureVersions = map[string]string{"codex": "codex-cli 0.169.0", "claud
 
 func fixtureHelp(t *testing.T, provider string, calls *[]string) func(path ...string) string {
 	t.Helper()
+	// The probe reads sub-helps concurrently, so the record is locked.
+	var mu sync.Mutex
 	return func(path ...string) string {
 		name := "top"
 		if len(path) > 0 {
 			name = strings.Join(path, "-")
 		}
 		if calls != nil {
+			mu.Lock()
 			*calls = append(*calls, name)
+			mu.Unlock()
 		}
 		data, err := os.ReadFile(filepath.Join("testdata", "providerhelp", provider, name+".txt"))
 		if err != nil {

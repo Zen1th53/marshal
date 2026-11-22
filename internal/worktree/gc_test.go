@@ -14,7 +14,7 @@ import (
 
 func TestWorktreeGCLifecycle(t *testing.T) {
 	repo := testgit.New(t)
-	root := filepath.Join(t.TempDir(), "worktrees")
+	root := filepath.Join(testgit.Canonical(t, t.TempDir()), "worktrees")
 	wm := New(repo.Path(), root)
 	ctx := context.Background()
 
@@ -115,7 +115,7 @@ func TestWorktreeGCLifecycle(t *testing.T) {
 
 func TestGCRetainsAgedActiveAndUnknownArtifacts(t *testing.T) {
 	repo := testgit.New(t)
-	wm := New(repo.Path(), filepath.Join(t.TempDir(), "worktrees"))
+	wm := New(repo.Path(), filepath.Join(testgit.Canonical(t, t.TempDir()), "worktrees"))
 	statuses := []model.TaskStatus{model.TaskWorking, model.TaskReview, model.TaskQA, model.TaskSecurityReview, model.TaskReadyToMerge, ""}
 	var paths []string
 	req := GCRequest{TTL: time.Second, DryRun: true, TaskStatuses: map[string]model.TaskStatus{}}

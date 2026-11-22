@@ -49,13 +49,6 @@ const (
 	ConfirmationNeedsInput ConfirmationState = "NEEDS_INPUT"
 )
 
-// Settled reports whether planning may proceed. Only an approved or
-// legitimately delegated Goal qualifies, which is what makes "no planning
-// without a confirmed Goal" enforceable rather than a convention.
-func (s ConfirmationState) Settled() bool {
-	return s == ConfirmationApproved || s == ConfirmationDelegated
-}
-
 // Intake is a canonical Goal candidate together with everything needed to
 // judge it.
 type Intake struct {

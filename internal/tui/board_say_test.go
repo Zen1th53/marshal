@@ -191,18 +191,6 @@ func TestChatNetworkError(t *testing.T) {
 	}
 }
 
-func TestEchoLineQueuedWhy(t *testing.T) {
-	v := boardVisual{now: time.Now(), theme: NewTheme(ThemeDefault, true, true)}
-	plain := StripANSI(v.echoLine(sayEcho{At: v.now, Text: "hi", State: sayQueued}, 100))
-	if !strings.Contains(plain, "queued · chat is busy") {
-		t.Fatalf("default queued line: %q", plain)
-	}
-	waiting := StripANSI(v.echoLine(sayEcho{At: v.now, Text: "hi", State: sayQueued, Why: "waiting for you in the chat"}, 100))
-	if !strings.Contains(waiting, "queued · waiting for you in the chat") {
-		t.Fatalf("waiting queued line: %q", waiting)
-	}
-}
-
 // fakeChatPane starts a provider-like CLI in its own tmux window and makes
 // it the Marshal chat: it prints a "> " prompt, echoes each line it reads as
 // "got:<line>", and for a line "slow" stays busy for a moment with an
@@ -239,8 +227,6 @@ func echoState(w *Workspace, text string) string {
 // message; a message typed while the chat is busy waits, says so in
 // Activity, and goes in once the chat is back at its prompt.
 func TestBoardComposerReachesTheChat(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
@@ -279,10 +265,6 @@ func TestBoardComposerReachesTheChat(t *testing.T) {
 	out, _ := tmux.CapturePane(ctx, pane)
 	if strings.Contains(out, "and add tests") {
 		t.Fatalf("a message was typed into a busy chat:\n%s", out)
-	}
-	lines, _, _ := w.frameLinesFull(120, 40)
-	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "queued · chat is busy") || !strings.Contains(text, "and add tests") {
-		t.Fatalf("Activity does not show the queued message:\n%s", text)
 	}
 	// Back at its prompt, the chat gets it.
 	waitForTmuxOutput(t, pane, "got:and add tests")
@@ -352,8 +334,6 @@ func lastBoardOutput(w *Workspace) string {
 // owner, the Board says what is waiting for whom (instead of "Marshal chat
 // busy") and keeps the queued message until the owner answers in the chat.
 func TestBoardSayShowsProviderTrustAndPermissionPrompts(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
@@ -397,10 +377,6 @@ done`
 	}
 	if !strings.Contains(lastBoardOutput(w), "F11") {
 		t.Fatalf("Board did not tell owner how to open chat: %q", lastBoardOutput(w))
-	}
-	lines, _, _ := w.frameLinesFull(120, 40)
-	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "queued · waiting for you in the chat") {
-		t.Fatalf("Activity does not say queued message waits for owner:\n%s", text)
 	}
 	if out, _ := tmux.CapturePane(ctx, pane); strings.Contains(out, "need-perm") {
 		t.Fatalf("typed into trust prompt:\n%s", out)

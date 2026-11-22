@@ -3,11 +3,12 @@ package marshal
 import (
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/events"
 	"path"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/events"
 )
 
 // Tier selects the run's worker and review policy.
@@ -143,15 +144,6 @@ const (
 	Cancelled  TaskState = "cancelled"
 )
 
-var runMoves = map[RunState][]RunState{
-	Drafting:     {Approved},                                                       // User approves the plan.
-	Approved:     {Dispatching, AwaitingUser, Drafting},                            // Dispatch starts or approval is revisited.
-	Dispatching:  {Reviewing, AwaitingUser, Drafting},                              // Worker results arrive or a change interrupts dispatch.
-	Reviewing:    {Dispatching, Merging, AwaitingUser, Drafting},                   // Review returns work, accepts it, or requests user action.
-	Merging:      {Reviewing, Verifying, AwaitingUser},                             // Conflicts return to review; completed merges are verified.
-	Verifying:    {Closed, AwaitingUser},                                           // Verification permits closure or escalation.
-	AwaitingUser: {Drafting, Approved, Dispatching, Reviewing, Merging, Verifying}, // User resolves an interruption at its prior phase.
-}
 var taskMoves = map[TaskState][]TaskState{
 	Queued:     {Dispatched},                                // A ready task is assigned.
 	Dispatched: {HandedIn, Returned},                        // Work arrives or execution fails.
@@ -162,14 +154,6 @@ var taskMoves = map[TaskState][]TaskState{
 	Escalated:  {Returned, Reassigned, Cancelled},           // Operator can retry, reassign or cancel.
 	Merged:     {},                                          // Integrated work is final for this task.
 	Cancelled:  {},                                          // Cancelled task ends work.
-}
-
-// TransitionRun rejects phase changes outside the run lifecycle.
-func TransitionRun(from, to RunState) error {
-	if !slices.Contains(runMoves[from], to) {
-		return fmt.Errorf("invalid run transition %s -> %s", from, to)
-	}
-	return nil
 }
 
 // TransitionTask rejects moves outside the task lifecycle.
@@ -331,6 +315,15 @@ const (
 	CodeSuspension            = "suspension"
 	CodeHoneypot              = "honeypot"
 	CodeGoverningFilesChanged = "governing_files_changed"
+	// CodeGitIdentity stops dispatch where Git has no user.name or
+	// user.email, so a worker's result could not be committed.
+	CodeGitIdentity = "git_identity"
+	// CodeHandInNotRecorded stops a task whose worker finished but whose
+	// hand-in MARSHAL could not record; re-running the worker cannot help.
+	CodeHandInNotRecorded = "hand_in_not_recorded"
+	// CodeReservedChecker stops a task, before its worker starts, whose
+	// worker is the last provider that can do the run's final check.
+	CodeReservedChecker = "reserved_checker"
 )
 
 // LifecycleOperation is written before an external effect. Its completion
@@ -589,14 +582,6 @@ func CriteriaMet(task Task, h HandIn) (met, total int, failing []string) {
 	return
 }
 
-// CheckReviewer prevents an executor, including a small-tasks Marshal, from reviewing its own work.
-func CheckReviewer(executor, reviewer string) error {
-	if executor == "" || reviewer == "" || executor == reviewer {
-		return errors.New("reviewer must differ from executor")
-	}
-	return nil
-}
-
 // NextAfterReturn retries the original worker through limit returns, then reassigns;
 // the reassigned worker's first failure escalates to the user.
 func NextAfterReturn(task Task, limit int) Verdict {
@@ -612,61 +597,6 @@ func NextAfterReturn(task Task, limit int) Verdict {
 	return VerdictReturn
 }
 
-// Amendment classifies whether a change preserves the approved scope.
-type Amendment string
-
-const (
-	Scoped Amendment = "scoped"
-	Major  Amendment = "major"
-)
-
-// ClassifyAmendment checks changes against each original task's approval scope.
-func ClassifyAmendment(before, after Run) Amendment {
-	if before.GoalBinding != after.GoalBinding || before.Budget != after.Budget || before.ApprovalScopeDigest != after.ApprovalScopeDigest {
-		return Major
-	}
-	old := map[string]Task{}
-	for _, t := range before.Tasks {
-		old[t.PlanTaskID] = t
-	}
-	children := map[string][]Task{}
-	for _, t := range after.Tasks {
-		if _, ok := old[t.PlanTaskID]; ok {
-			children[t.PlanTaskID] = append(children[t.PlanTaskID], t)
-		} else {
-			if t.ParentID == "" {
-				return Major
-			}
-			children[t.ParentID] = append(children[t.ParentID], t)
-		}
-	}
-	for id, p := range old {
-		cs := children[id]
-		if len(cs) == 0 {
-			return Major
-		}
-		files := map[string]bool{}
-		criteria := map[string]bool{}
-		for _, c := range cs {
-			if !subset(c.Files, p.Files) || !subset(c.Criteria, p.Criteria) || c.Mode != p.Mode || c.EffectiveType() != p.EffectiveType() || !sameChecks(c.Checks, p.Checks) {
-				return Major
-			}
-			if c.PlanTaskID == id && !sameSet(c.DependsOn, p.DependsOn) {
-				return Major
-			}
-			for _, f := range c.Files {
-				files[f] = true
-			}
-			for _, x := range c.Criteria {
-				criteria[x] = true
-			}
-		}
-		if !covers(files, p.Files) || !covers(criteria, p.Criteria) {
-			return Major
-		}
-	}
-	return Scoped
-}
 func subset(a, b []string) bool {
 	for _, x := range a {
 		if !slices.Contains(b, x) {
@@ -676,35 +606,6 @@ func subset(a, b []string) bool {
 	return true
 }
 func sameSet[S ~[]string](a, b S) bool { return len(a) == len(b) && subset(a, b) && subset(b, a) }
-func sameChecks(a, b []Check) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for _, x := range a {
-		ok := false
-		for _, y := range b {
-			if x.Command == y.Command && sameSet(x.Criteria, y.Criteria) {
-				ok = true
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func covers(got map[string]bool, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for _, x := range want {
-		if !got[x] {
-			return false
-		}
-	}
-	return true
-}
 
 // CriterionResult is the shared acceptance/report aggregation for approved checks.
 type CriterionResult struct {

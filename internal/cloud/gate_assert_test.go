@@ -16,9 +16,9 @@ func assertNoULTRA(t *testing.T, g *Gate, attack string) {
 	if _, err := g.Bundle(); err == nil {
 		t.Fatalf("%s: ULTRA material was available", attack)
 	}
-	// The decision that actually governs behaviour must refuse to delegate,
-	// even with the local preference switched on.
-	if goalintake.Confirm(goalintake.Intake{}, g.Mode(), g.Policy(true)).Delegated {
-		t.Fatalf("%s: confirmation was delegated", attack)
+	// The delegation policy must not be entitled, even with the local
+	// preference switched on.
+	if g.Policy(true).Entitled {
+		t.Fatalf("%s: delegation policy was entitled", attack)
 	}
 }

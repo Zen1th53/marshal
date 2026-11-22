@@ -19,7 +19,7 @@ and only verified work lands on `main`.**
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="The Marshal Board v2 from launch to a finished run: the Who plans? picker with each provider's limit, the readiness checklist with the Marshal, workers, platform, repository and browser, a goal said from the Board, the planning screen with the Marshal's steps, the Accept architecture card over the dimmed Board with the architecture accepted in the browser, then the running control centre with the top bar and NOW line, the Plan, Lanes and Tasks panes, the Marshal, Workers, Inbox and Activity panes, each task reviewed by a different provider, verified and merged." width="100%">
+  <img src=".github/assets/demo.gif" alt="A real Marshal run on a Mac, sped up: Claude Code is picked as the Marshal, the goal is said from the Board, the Marshal asks one question and fills the requirements card, the requirements are confirmed, the architecture is accepted in the browser, Codex builds four tasks in parallel while Claude Code is kept free for the final check, each task is reviewed and merged, and the run ends DONE with all four on main." width="100%">
   <br>
   <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → readiness → say the goal → planning → <b>Accept architecture</b> card, accept in the browser → lanes build in parallel → each hand-in reviewed by a different provider → verify → merge</sub>
 </p>
@@ -172,51 +172,47 @@ Marshal turns that into a process:
 ## The Board
 
 `marshal` opens a tmux workspace: the Marshal chat docks on the left, the Board
-on the right. The Board is a control centre of titled panes:
+on the right. The terminal Board is one short screen; the **Web Board** is the
+full interface, and it opens in your browser as the Board starts:
 
 ```text
-  MARSHAL v0.3.5   project marshal-work / run review-fixes   RUNNING     ✳ claude · opus-5.5 · high  m   8 workers  inbox 0  19:31
- NOW  marshal claude Opus · watching reviews    │ work 8 running · 4 queued           from you nothing · next ask: final review
+ MARSHAL · marshal-work · RUNNING · 8 workers · 19:31
 
-╭─ PLAN · 12 tasks · 18 requirements ────────────────────── accepted rev 1 · 18:52 ─╮ ╭─ MARSHAL ─────────────────────── m switch ─╮
-│ ✓ goal → ✓ reqs → ✓ design → ✓ arch → ✓ tasks →  build 5/12  → review → merge     │ │ ✳ claude  opus-5.5 · effort high    in use │
-╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
-╭─ LANES · from worker heartbeats ────────────── limit claude 4 · agy 4 · total 12 ─╮ ╭─ WORKERS · providers ──────────────────────╮
-│  ⣾ claude-1    sonnet-5.5   T03 sub-view external links   tests        14m     8s │ │ ✳ claude  ██████░░░░   4 lanes  sonnet     │
-│  ◎ agy-3       gemini-3.8   review T01 (by claude-2)      reviewing     3m     2s │ │ ◆ agy     ███████░░░   4 lanes  gemini-3.8 │
-╰───────────────────────────────────────────────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
-╭─ TASKS · 5 of 12 merged ───────────────────────────────────── ⏎ open · r restart ─╮ ╭─ INBOX ────────────────────────── i opens ─╮
-│   T01  stale target refusal message  review.go     claude  agy     ✓ merged       │ │ Nothing waits for you.                     │
-│   T03  sub-view external links       review.html   claude  agy     › building     │ ╰────────────────────────────────────────────╯
-╰───────────────────────────────────────────────────────────────────────────────────╯ ╭─ ACTIVITY · grouped ───────────────────────╮
+ Now:       8 running · 4 queued (5/12 done)
+ From you:  nothing
+ Web:       opened in your browser (w opens it again)
+ ⏎ chat   w web   s say to the Marshal   q quit
 ```
 
-- **Top bar**: project and run, the state (`READY`, `PLANNING`, `YOUR TURN`, `RUNNING`, `PAUSED` …),
-  and the Marshal segment with its provider, model and effort (`m` changes it).
-- **NOW line**: what the Marshal and the workers are doing, and **from you**: what waits for
-  you, or `nothing` and the next thing you will be asked. It is never empty.
-- **Plan, Lanes, Tasks** on the left: stages and progress, one row per worker from its
-  heartbeats, and every task with its writer, reviewer and state.
-- **Marshal, Workers, Inbox, Activity** on the right: the Marshal's model, context and chat
-  binding, each provider's limit and lanes, what waits for you, and what happened.
-- **Cards** for your decisions: the **Accept architecture** card (open it in the browser with
-  `a`; when no browser can open, the card shows the link), plan and inbox decisions, and the
-  **paused** card that says what stopped, what is kept, and what `Enter` does to continue.
-- **MARSHAL CHAT** strip: the docked chat's title shows its model, whether it is bound to this
-  run, and whether its input is clear (`input clear` / `input waiting`).
+- **Now**: what is happening, in one sentence.
+- **From you**: `nothing`, or the one thing that needs you. A safe step (retry a stuck task,
+  move it and continue, resume, confirm the requirements) is named with its key, `y`. A
+  decision with authority (allow or deny a request, a gate, the architecture, stopping the
+  run) says `open the web to decide (w)`. When the Marshal asked you something in its chat,
+  it says so: `Enter` opens the chat.
+- **Web**: where the Web Board is. Its private link is never on screen: `/marshal web` (or
+  `w` on a computer with no display) shows it. `MARSHAL_WEB_OPEN=0` keeps the browser closed
+  at start.
+- The Web Board shows the plan, lanes, tasks, workers, activity, the Marshal's steps and
+  requests, the readiness checklist and every card with its buttons.
 
 | Key | Action |
 |---|---|
-| `s` | Say something to the Marshal from the Board |
 | `Enter` / `F11` | Open the Marshal chat; `F11` switches between chat and the Board |
+| `y` | Do the safe step **From you** names; a second `y` within 2 s does nothing |
+| `w` | Open the Web Board |
+| `s` | Say something to the Marshal from the Board |
 | `a` | Open the architecture in your browser (where you accept it) |
-| `r` | Restart a stuck task; `Enter` confirms |
 | `m` | Change the Marshal's model or provider |
-| `Space` or `Ctrl+K` | Action palette: say, architecture, restart, model, pause everything (`p`), stop all workers, limits and workers (`l`), help |
+| `Space` or `Ctrl+K` | Action palette |
 | `Ctrl+X` | Stop all workers (never the Marshal) |
+| `q` | Quit |
 | `?` | Every key |
 
-Select a task and press `Enter` to inspect it; press `o` in the inspector to open its worker pane, or `w` to change its model. The final ULTRA check requires Claude Code installed and not used as a worker in that run; if unavailable, the run stops before checking and tells you to install Claude Code or wait for its limit, then press `Enter`. `MARSHAL_BOARD=classic` keeps the classic Board for one release. [All screens and keys →](docs/board-and-keys.md)
+The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
+runs on. The final ULTRA check requires Claude Code installed and not used as a worker in
+that run; if unavailable, the run stops before checking and tells you to install Claude Code
+or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
 
 ---
 

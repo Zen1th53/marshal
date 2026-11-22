@@ -37,7 +37,7 @@ Changes apply to the **next** drafted plan.
 
 ### Provider Limits
 
-How many workers each provider may run at once, and how many may run in total. The Board shows them in **DEFAULTS · this project** on the readiness screen and in the LANES pane title (`limit claude 4 · agy 4 · total 12`).
+How many workers each provider may run at once, and how many may run in total. The Web Board shows them in **DEFAULTS · this project** with the readiness checklist and in the Lanes title (`limit claude 4 · agy 4 · total 12`).
 
 ```text
 /marshal settings claude-limit 4
@@ -107,5 +107,5 @@ marshal --json memory list
 | `MARSHAL_NO_MODIFY_PATH` | `1` stops `install.sh` from adding the install folder to a shell startup file. |
 | `MARSHAL_INSTALL_DEPS` | `0` stops `install.sh` from installing a missing Git or tmux; it only reports them. |
 | `MARSHAL_INSTALL_YES` | `1` answers yes to `install.sh`'s questions (sudo still needs a terminal). |
-| `MARSHAL_BOARD` | `classic` draws the classic Board instead of Board v2, for one release. Unset (the default) is Board v2. Set it before you start `marshal`; if the control centre is already running, `/quit` it first. |
+| `MARSHAL_WEB_OPEN` | `0` keeps the browser closed when the Board starts: the Web Board still starts, and `w` or `/marshal web` opens it. Unset (the default) opens it in your browser where there is a display. |
 | `BOARD_TRUECOLOR` | `1` draws the Board in 24-bit colour, as `COLORTERM=truecolor` or `24bit` does, for a terminal that takes 24-bit colour but does not set `COLORTERM`. |

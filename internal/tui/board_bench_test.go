@@ -103,7 +103,6 @@ var benchViews = []struct {
 	open func(w *Workspace)
 }{
 	{"Board", func(w *Workspace) {}},
-	{"Inspector", func(w *Workspace) { w.boardUI.inspect = "T-004" }},
 	{"Help", func(w *Workspace) { w.openBoardHelp() }},
 	{"Host", func(w *Workspace) { w.closeBodyViews(); w.hostView.Store(true) }},
 	{"Memory", func(w *Workspace) { w.openMemoryView() }},
@@ -117,7 +116,6 @@ var benchViews = []struct {
 // resetBenchView closes whatever benchViews opened.
 func resetBenchView(w *Workspace) {
 	w.closeBodyViews()
-	w.boardUI.inspect = ""
 	w.boardHelp.Store(false)
 }
 

@@ -448,6 +448,15 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/agy", "/antigravity":
 		return h.handleAntigravity(ctx, parts[1:], line)
 
+	case "/task-model":
+		// The model a task runs on: the picker the Board's w opened on a
+		// task row, now that the home screen draws no task list.
+		if len(parts) != 2 {
+			return "", fmt.Errorf("usage: /task-model <task id>")
+		}
+		h.ws.openTaskModelPicker(ctx, parts[1])
+		return "", nil
+
 	case "/view":
 		return h.ws.handleViewCommand(ctx, parts[1:])
 
@@ -787,6 +796,7 @@ func (h *CommandHandler) helpText() string {
   /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
   /view [chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
   /takeover, /take-over    Enable interactive typing in the active worker pane
+  /task-model <task>       Choose the model a task runs on
   /stop all                Stop all worker sessions while keeping MARSHAL active
   <prompt...>              Plain text runs nothing; use provider exec/run/prompt or a quoted prompt
   Unknown provider subcommands run nothing; /<provider> cli passes native arguments

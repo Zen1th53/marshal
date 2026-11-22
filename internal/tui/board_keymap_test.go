@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 )
 
@@ -38,7 +37,7 @@ func TestBoardKeymapListsEveryKey(t *testing.T) {
 			listed[f] = true
 		}
 	}
-	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "A", "d", "o", "q", "r", "i", "t", "l", "j", "k", "Tab", "F11", "Esc", "Enter", "?", "/", "space", "Ctrl+K", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
+	for _, want := range []string{"1", "2", "3", "4", "5", "6", "7", "8", "h", "b", "m", "v", "x", "a", "d", "o", "q", "r", "i", "y", "w", "e", "F11", "Esc", "Enter", "?", "/", "space", "Ctrl+K", "Ctrl+X", "Ctrl+C", "F1", "F7", "F10", "F12"} {
 		if !listed[want] {
 			t.Errorf("the keymap lacks %q", want)
 		}
@@ -130,125 +129,6 @@ func TestBoardHelpHidesWhatCannotRun(t *testing.T) {
 	}
 }
 
-// Every key the keymap sends is bound: each view's keys open it from the
-// Board, each palette view entry opens it from anywhere, and each view's
-// own keys are taken by that view.
-func TestBoardKeymapBound(t *testing.T) {
-	w, _, _ := viewsWorkspace(t)
-	defer w.Close()
-	hw, _, _ := testWatcher(t, nil)
-	w.hostWatch.Store(hw)
-	open := map[string]func() bool{
-		"Host": w.hostView.Load, "Memory": w.memView.Load, "Providers": w.provView.Load, "Verify": w.verView.Load,
-		"Security": w.secView.Load, "Plan": w.planView.Load, "Architecture": w.archView.Load,
-	}
-	anyOpen := func() bool {
-		for _, f := range open {
-			if f() {
-				return true
-			}
-		}
-		return false
-	}
-	for _, k := range boardKeymap {
-		if k.View == "" {
-			continue
-		}
-		events, ok := boardKeyEvents(k.Keys)
-		if !ok {
-			t.Fatalf("view key %q", k.Keys)
-		}
-		for _, e := range events {
-			w.closeBodyViews()
-			if k.View == "Board" {
-				w.openArchView()
-				if !w.handleBoardKey(e) || anyOpen() {
-					t.Errorf("%v did not return to the Board", e)
-				}
-				w.boardUI.inspect = "T-017"
-				if e.Type == KeyRune && (!w.handleBoardKey(e) || w.boardUI.inspect != "") {
-					t.Errorf("%c did not close the inspector", e.Rune)
-				}
-				w.boardUI.inspect = ""
-				continue
-			}
-			if !w.handleBoardKey(e) || !open[k.View]() {
-				t.Errorf("%v did not open the %s view", e, k.View)
-			}
-		}
-	}
-	ctx := t.Context()
-	for _, a := range boardPaletteActions(nil) {
-		if !a.View {
-			continue
-		}
-		w.openPlanView()
-		w.runPaletteAction(ctx, a)
-		name := strings.TrimSuffix(strings.TrimPrefix(a.Title, "Open "), " view")
-		if name == "the Board" {
-			if anyOpen() {
-				t.Errorf("%q left a view open", a.Title)
-			}
-			continue
-		}
-		if !open[name]() {
-			t.Errorf("%q did not open it", a.Title)
-		}
-		for other, f := range open {
-			if other != name && f() {
-				t.Errorf("%q left %s open", a.Title, other)
-			}
-		}
-	}
-	// The views' own keys.
-	for _, c := range []struct {
-		view string
-		keys string
-	}{{"Memory", "a r i PgUp PgDn j k"}, {"Providers", "v j k"}, {"Verify", "x j k"}, {"Security", "a d j k"}, {"Architecture", "o"}, {"Host", "j k"}} {
-		events, _ := boardKeyEvents(c.keys)
-		for _, e := range events {
-			w.closeBodyViews()
-			w.composer.SetText("")
-			for _, k := range boardKeymap {
-				if k.View == c.view {
-					w.runPaletteAction(ctx, boardPaletteActions(nil)[viewIndex(c.view)])
-				}
-			}
-			if !open[c.view]() {
-				t.Fatalf("%s did not open", c.view)
-			}
-			if !w.handleBoardKey(e) {
-				t.Errorf("the %s view does not take %v", c.view, e)
-			}
-		}
-	}
-	w.closeBodyViews()
-	// The Board's own keys.
-	events, _ := boardKeyEvents("t i l j k ↑ ↓")
-	for _, e := range events {
-		w.boardUI.inspect = ""
-		if !w.handleBoardKey(e) {
-			t.Errorf("the Board does not take %v", e)
-		}
-	}
-	w.boardUI.focus = layout.Tasks
-	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'j'})
-	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.boardUI.inspect == "" {
-		t.Error("Enter did not inspect the selected task")
-	}
-	// The inbox's keys, with a request waiting.
-	w.boardUI.inspect = ""
-	w.permissions.inbox = []permission.Request{{Kind: "network", TaskID: "T-023", Object: "registry.npmjs.org:443", Scope: "one run", Reason: "outside manifest", Who: "Marshal"}}
-	events, _ = boardKeyEvents("a A d r i x Enter")
-	for _, e := range events {
-		w.inboxView.Cancel()
-		if !w.handleBoardInboxKey(ctx, e) {
-			t.Errorf("the inbox does not take %v", e)
-		}
-	}
-	w.inboxView.Cancel()
-}
-
 func viewIndex(view string) int {
 	for i, a := range boardPaletteActions(nil) {
 		if a.Title == "Open "+view+" view" {
@@ -294,8 +174,8 @@ func TestBoardHelpOverlay(t *testing.T) {
 // Every registry row has a unique id, a Why wherever it gates itself, and
 // is reachable by that id.
 func TestBoardActionIDsUnique(t *testing.T) {
-	if len(boardKeymap) != 53 {
-		t.Fatalf("boardKeymap has %d rows, want 53", len(boardKeymap))
+	if len(boardKeymap) != 43 {
+		t.Fatalf("boardKeymap has %d rows, want 43", len(boardKeymap))
 	}
 	seen := map[string]bool{}
 	for _, k := range boardKeymap {
@@ -409,33 +289,6 @@ func TestBoardHelpGoldens(t *testing.T) {
 			frame := overlayBoard(paintBoard(l, th, v.render), l, th, 0, help)
 			checkViewGolden(t, helpGoldenName, tc.name, frame, tc.w)
 		})
-	}
-}
-
-// run.stopped is on exactly when the inbox's Enter would arm the stop: a
-// run whose execution ended (Stopped) counts, as it does for that Enter, and
-// the same run not marked stopped does not.
-func TestBoardStopWaitingFollowsStoppedRuns(t *testing.T) {
-	w, _ := boardWorkspace(t)
-	defer w.Close()
-	w.permissions.mu.Lock()
-	w.permissions.inbox = nil // an empty inbox: Enter is the stop's
-	w.permissions.mu.Unlock()
-	set := func(p *MarshalPanel) {
-		w.mu.Lock()
-		w.state.Marshal = p
-		w.mu.Unlock()
-	}
-	set(&MarshalPanel{Note: "stopped: worker exited 2", Stopped: true})
-	if !w.boardStopWaiting() {
-		t.Error("a stopped run with an empty inbox is not waiting")
-	}
-	if ok, why := mustAction(t, "run.stopped").available(w); !ok {
-		t.Errorf("run.stopped is off for a stopped run: %q", why)
-	}
-	set(&MarshalPanel{Note: "stopped: worker exited 2"})
-	if w.boardStopWaiting() {
-		t.Error("a run not marked stopped reads as waiting")
 	}
 }
 

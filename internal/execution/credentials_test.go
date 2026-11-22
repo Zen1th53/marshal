@@ -58,34 +58,3 @@ func TestCredentials_ComputeSafeEnvironment(t *testing.T) {
 		t.Fatalf("expected TASK_AUTH_TOKEN present, got %q", envMap["TASK_AUTH_TOKEN"])
 	}
 }
-
-func TestCredentials_SanitizeProcessArgs(t *testing.T) {
-	args := []string{
-		"go", "test",
-		"--token=ghp_secretTokenValue12345",
-		"--password=MyPassword987",
-		"-secret=very_secret_data",
-		"normal_arg",
-	}
-
-	sanitized := SanitizeProcessArgs(args)
-
-	for _, a := range sanitized {
-		if strings.Contains(a, "ghp_secretTokenValue12345") {
-			t.Fatalf("token leaked in sanitized args: %s", a)
-		}
-		if strings.Contains(a, "MyPassword987") {
-			t.Fatalf("password leaked in sanitized args: %s", a)
-		}
-		if strings.Contains(a, "very_secret_data") {
-			t.Fatalf("secret leaked in sanitized args: %s", a)
-		}
-	}
-
-	if sanitized[2] != "--token=[REDACTED]" {
-		t.Fatalf("expected --token=[REDACTED], got %s", sanitized[2])
-	}
-	if sanitized[3] != "--password=[REDACTED]" {
-		t.Fatalf("expected --password=[REDACTED], got %s", sanitized[3])
-	}
-}

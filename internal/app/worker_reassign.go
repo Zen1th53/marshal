@@ -34,7 +34,8 @@ func nextVerifiedWorker(order []string, failed string, verified func(string) boo
 // reassignDraftWorkers moves every governed draft task whose worker verified
 // rejects to the next verified provider, reporting each move through record
 // before it is made. A task with no verified alternative keeps its worker.
-func reassignDraftWorkers(draft *MarshalDraft, verified func(string) bool, record func(task, from, to string) error) error {
+// A replacement avoid reports for the task is never chosen.
+func reassignDraftWorkers(draft *MarshalDraft, verified func(string) bool, record func(task, from, to string) error, avoid ...func(task, provider string) bool) error {
 	known := map[string]bool{}
 	check := func(provider string) bool {
 		ok, seen := known[provider]
@@ -49,7 +50,14 @@ func reassignDraftWorkers(draft *MarshalDraft, verified func(string) bool, recor
 		if provider == "" || task.Mode != "governed" || check(provider) {
 			continue
 		}
-		replacement := nextVerifiedWorker(workerFallbackOrder, provider, check)
+		replacement := nextVerifiedWorker(workerFallbackOrder, provider, func(candidate string) bool {
+			for _, avoided := range avoid {
+				if avoided(task.PlanTaskID, candidate) {
+					return false
+				}
+			}
+			return check(candidate)
+		})
 		if replacement == "" {
 			continue
 		}
@@ -184,40 +192,49 @@ func reassignProviderName(worker string) string {
 
 var errIndependentVerifierUnavailable = errors.New("marshal: independent verifier unavailable")
 
+// verifierUnavailableError is errIndependentVerifierUnavailable with every
+// exclusion. Busy names the providers excluded only because they did the
+// run's tasks: each could have checked the work had it not done it.
+type verifierUnavailableError struct {
+	excluded []string
+	Busy     []string
+}
+
+func (e *verifierUnavailableError) Error() string {
+	return fmt.Sprintf("%v; no provider differs from every worker and is installed, MCP-capable and not limited; excluded providers: %s", errIndependentVerifierUnavailable, strings.Join(e.excluded, "; "))
+}
+
+func (e *verifierUnavailableError) Unwrap() error { return errIndependentVerifierUnavailable }
+
 // independentVerifierProvider never admits a worker provider, even when all
 // alternatives are absent or cooling down. Keep every exclusion so a paused
 // run tells the operator exactly what must change before verification resumes.
 func (r *Runtime) independentVerifierProvider(run marshal.Run) (string, error) {
 	installed := installedMarshalProviders()
-	var workers, available, excluded []string
+	var workers, available []string
+	unavailable := &verifierUnavailableError{}
 	for _, task := range run.Tasks {
 		workers = append(workers, task.Worker)
 	}
 	for _, provider := range MarshalProviders() {
 		var reasons []string
-		if sameProviderAsWorker(provider, workers...) {
+		worker := sameProviderAsWorker(provider, workers...)
+		if worker {
 			reasons = append(reasons, "worker provider")
 		}
-		if !slices.Contains(installed, provider) {
-			reasons = append(reasons, "not installed")
-		}
-		if !sessionmcp.MarshalProvider(provider) {
-			reasons = append(reasons, "Marshal MCP unavailable")
-		}
-		if reason, limited := r.providerLimited(provider); limited {
-			reasons = append(reasons, "limited: "+reason)
-		}
-		if reason := requiredVerifierAttributionGap(provider); reason != "" {
-			reasons = append(reasons, reason)
+		gaps := r.finalCheckerGaps(provider, installed, true)
+		reasons = append(reasons, gaps...)
+		if worker && len(gaps) == 0 {
+			unavailable.Busy = append(unavailable.Busy, provider)
 		}
 		if len(reasons) != 0 {
-			excluded = append(excluded, provider+": "+strings.Join(reasons, ", "))
+			unavailable.excluded = append(unavailable.excluded, provider+": "+strings.Join(reasons, ", "))
 		} else {
 			available = append(available, provider)
 		}
 	}
 	if len(available) == 0 {
-		return "", fmt.Errorf("%w; no provider differs from every worker and is installed, MCP-capable and not limited; excluded providers: %s", errIndependentVerifierUnavailable, strings.Join(excluded, "; "))
+		return "", unavailable
 	}
 	provider, _ := pickIndependentProvider(available, workers)
 	return provider, nil

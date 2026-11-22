@@ -7,45 +7,12 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // taskModelWhy is the one sentence the registry's task.model row and w's own
 // "no task" answer both show, so they cannot drift.
 const taskModelWhy = "Highlight a task first (t, then j/k)."
-
-// taskUnderKeyboard is the task w acts on: the one in the inspector, or the
-// selected task while the Tasks pane has the focus. ok is false otherwise. It
-// reads only in-memory state, so the registry's When may call it on the paint
-// path.
-func taskUnderKeyboard(w *Workspace) (string, bool) {
-	ui := &w.boardUI
-	if !w.boardVisible() || w.anyBodyView() {
-		return "", false
-	}
-	p := w.marshalPanel()
-	if p == nil {
-		return "", false
-	}
-	_, stopped := w.stopVisual(p).stopNotice()
-	var id string
-	switch {
-	case ui.inspect != "":
-		id = ui.inspect
-	case ui.pane(len(w.boardInbox()) > 0 || stopped) == layout.Tasks:
-		id = ui.task
-	default:
-		return "", false
-	}
-	if id == "" {
-		return "", false
-	}
-	if _, ok := taskRow(p.Board, id); !ok {
-		return "", false
-	}
-	return id, true
-}
 
 // boardTaskCandidates reads the four worker drivers' limits when the task-model
 // picker opens, in driver order, over every installed one. Tests replace it to

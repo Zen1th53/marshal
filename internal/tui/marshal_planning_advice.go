@@ -11,7 +11,7 @@ func writeMarshalPlanningAdvice(root, runID string, warnings []string) error {
 	if len(warnings) == 0 {
 		return nil
 	}
-	view, err := openInboxView(root, "marshal", false)
+	view, err := openMarshalInbox(root)
 	if err != nil {
 		return err
 	}

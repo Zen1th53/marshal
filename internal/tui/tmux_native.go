@@ -438,7 +438,18 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 // process. With them, any shell command the Marshal runs reaches MARSHAL's own
 // tmux server and could type into the owner's pane (tmux send-keys). The
 // Marshal acts only through its MCP tools and proposals.
-var marshalChatHiddenEnv = []string{"-u", "TMUX", "-u", "TMUX_PANE"}
+//
+// It also removes the markers of a Claude Code session MARSHAL itself was
+// started from. The Marshal chat is a session of its own, not that session's
+// child: with CLAUDE_CODE_CHILD_SESSION inherited, Claude Code turns transcript
+// saving off, so the chat's conversation ID is never captured and it can bind
+// no owner instruction (the browser Accept is refused). The messaging socket
+// and token would also let the Marshal reach the launching session.
+var marshalChatHiddenEnv = []string{"-u", "TMUX", "-u", "TMUX_PANE",
+	"-u", "CLAUDECODE", "-u", "CLAUDE_CODE_CHILD_SESSION", "-u", "CLAUDE_CODE_SESSION_ID",
+	"-u", "CLAUDE_CODE_SESSION_ATTENDED", "-u", "CLAUDE_CODE_CHILD_NOTES_DIR",
+	"-u", "CLAUDE_CODE_MESSAGING_SOCKET", "-u", "CLAUDE_CODE_MESSAGING_TOKEN",
+	"-u", "CLAUDE_CODE_BRIDGE_SESSION_ID", "-u", "CLAUDE_PID"}
 
 // marshalChatCommand is the argv that starts the Marshal chat CLI without
 // the tmux client variables.
@@ -1898,7 +1909,9 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 	if service == nil {
 		var err error
 		if service, _, _, err = w.marshalService(ctx, runID); err != nil {
-			w.marshalDraftRejected(m, runID, provider, "draft validation failed", err)
+			// The runtime could not open the Marshal service: not a draft
+			// error, so the Marshal is not told to fix its draft.
+			w.marshalDraftRejected(m, runID, provider, "draft import unavailable", err)
 			return false
 		}
 		m.mu.Lock()
@@ -1950,6 +1963,7 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
+	w.clearDraftRejected()
 	// The chat binding names the run a restarted workspace recovers. A
 	// superseding run left it on the replaced run, which then took the panel
 	// and the approval questions after every restart.
@@ -1971,8 +1985,7 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 		}
 	}
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
-	w.RecordActivity(planReadyActivity(len(run.Tasks)))
-	w.queueMarshalPlanApproval()
+	w.RecordActivity(w.afterPlanImported(runID, len(run.Tasks)))
 	return true
 }
 
@@ -2443,6 +2456,7 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		w.tmuxMu.Unlock()
 		if bound {
 			w.observeAuthenticatedMarshalProposals(tr)
+			w.noteMarshalSaid(tr)
 		}
 		// Earlier or unbound conversations are never imported by this consumer.
 		if bound && (historyAuthorized == nil || historyAuthorized(watch.dir)) {
@@ -2526,11 +2540,14 @@ func tmuxPaneSize(pane *string) workerterminal.Size {
 	}
 }
 
-// marshalDraftRejected retains consumed producer bytes and reports only a
-// finite validation stage. Native draft contents and errors remain private.
+// marshalDraftRejected retains consumed producer bytes and reports a finite
+// stage with a runtime-written reason. Draft contents stay private: a
+// validation refusal is described only by app.DraftRejectionReason (a field
+// path and a fixed rule). The Marshal is woken with the reason and the Board
+// shows the refusal until a draft is imported.
 func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, stage string, cause ...error) {
 	switch stage {
-	case "draft validation failed", "plan pack transfer failed", "plan pack validation failed", "canonical Process 04 evidence unavailable":
+	case "draft validation failed", "plan pack transfer failed", "plan pack validation failed", "canonical Process 04 evidence unavailable", "draft import unavailable":
 	default:
 		return
 	}
@@ -2549,23 +2566,37 @@ func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, sta
 	}
 	// The exact runtime reason is what lets the Marshal correct and
 	// republish the draft. Draft validation errors can quote untrusted draft
-	// content, so only runtime-side reasons are repeated.
-	if stage != "draft validation failed" {
-		for _, err := range cause {
-			if err != nil {
-				note += " Reason: " + RedactContent(err.Error(), nil)
-				break
-			}
+	// content, so that stage repeats only the safe reason the runtime built
+	// (a field path and a fixed rule); the other stages are runtime-side.
+	// Only the validation reason, built from field positions and fixed
+	// rules, goes into the chat notice; a runtime-side reason can name pack
+	// files or task ids, so the notice points at the inbox note for it.
+	reason, told := "", ""
+	for _, err := range cause {
+		if err == nil {
+			continue
 		}
+		if stage == "draft validation failed" {
+			reason = app.DraftRejectionReason(err)
+			told = reason
+		} else {
+			reason = RedactContent(err.Error(), nil)
+		}
+		break
+	}
+	if reason != "" {
+		note += " Reason: " + reason
 	}
 	note += " The draft watcher remains active: publish a corrected draft to import it."
+	w.markDraftRejected(runID, stage, told, time.Now())
 	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, note))
 	w.RecordActivity(note)
-	if view, err := openInboxView(w.workDir, "marshal", false); err == nil {
+	if view, err := openMarshalInbox(w.workDir); err == nil {
 		if view.write(fmt.Sprintf("## runtime · %s · draft rejected\n\n%s\nRun: %s\n", time.Now().UTC().Format(time.RFC3339), note, runID)) == nil {
 			_ = view.trim()
 		}
 	}
+	w.tellMarshalDraftRejected(draftRejectNotice(told))
 }
 
 // draftSupersedesRun reports whether a published draft must become a fresh

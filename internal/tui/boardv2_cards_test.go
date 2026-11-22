@@ -4,13 +4,12 @@ package tui
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
@@ -98,14 +97,21 @@ func architectureWorkspace(t *testing.T) *Workspace {
 	v2ContractSource = func(*Workspace, context.Context) (projectcontext.Contract, projectcontext.Contract, bool, error) {
 		return pending, accepted, true, nil
 	}
-	dir := filepath.Join(w.workDir, filepath.Dir(architectureURLFile))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(w.workDir, architectureURLFile), []byte("http://127.0.0.1:37667/?token=7964abcd462b\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	return w
+}
+
+// fixtureArchitectureLink is the review link withArchitectureLink gives w.
+const fixtureArchitectureLink = "http://127.0.0.1:37667/?token=7964abcd462b"
+
+// withArchitectureLink gives w a live review session with a fixture link:
+// the link is held by the session only, never read from a file.
+func withArchitectureLink(w *Workspace) {
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.architecture = &app.ArchitectureReviewSession{URL: fixtureArchitectureLink, Done: make(chan struct{})}
+	// A reopen of the fixture page opens no real browser.
+	m.architectureBrowser = func(context.Context, string) error { return nil }
+	m.mu.Unlock()
 }
 
 func sketched(b vm.Board) bool { return b.Decision != nil && len(b.Decision.Nodes) > 0 }
@@ -140,7 +146,9 @@ func TestDecisionCardArchitectureWithDisplay(t *testing.T) {
 	if d.NoDisplay || d.Link != "" {
 		t.Fatalf("a desktop got the no-display link: %v %q", d.NoDisplay, d.Link)
 	}
-	if got := keyNames(d.Actions); !slices.Equal(got, []string{"a open in browser", "c copy link", "k comment"}) {
+	// No review page is up yet, so there is no link to copy (no file holds
+	// one).
+	if got := keyNames(d.Actions); !slices.Equal(got, []string{"a open in browser", "k comment"}) {
 		t.Fatalf("actions %q", got)
 	}
 	if d.SelfApproval != "" {
@@ -157,8 +165,10 @@ func TestDecisionCardArchitectureWithDisplay(t *testing.T) {
 func TestDecisionCardArchitectureWithoutDisplay(t *testing.T) {
 	displaySeams(t, "linux", map[string]string{"TERM": "xterm"})
 	w := architectureWorkspace(t)
-	d := waitCards(t, w, "the sketch", sketched).Decision
-	if !d.NoDisplay || d.Link != "http://127.0.0.1:37667/?token=7964abcd462b" {
+	waitCards(t, w, "the sketch", sketched)
+	withArchitectureLink(w)
+	d := cardsFrame(w).Decision
+	if d == nil || !d.NoDisplay || d.Link != fixtureArchitectureLink {
 		t.Fatalf("no-display card: %v %q", d.NoDisplay, d.Link)
 	}
 
@@ -279,7 +289,7 @@ func TestPausedCardQuotaWithTwoTasks(t *testing.T) {
 		return b.Paused != nil && len(b.Paused.Tasks) == 2 && strings.Contains(b.Paused.Tasks[1].Kept, "commit")
 	})
 	z := b.Paused
-	if z.Kind != "quota" || z.Title != "Paused · agy Gemini 5h limit" || z.Resets != reset.Format("15:04") {
+	if z.Kind != "quota" || z.Title != "Paused · agy Gemini 5h limit" || z.Resets != resetClock(reset, time.Now()) {
 		t.Fatalf("title %q %q resets %q", z.Kind, z.Title, z.Resets)
 	}
 	if z.Cause != "T06 and T09 hit the agy Gemini 5h limit. Their work is kept." {
@@ -295,7 +305,7 @@ func TestPausedCardQuotaWithTwoTasks(t *testing.T) {
 	if z.Will != "move T06 and T09 to claude in fresh sessions, keep commits, and resume the run." {
 		t.Fatalf("will %q", z.Will)
 	}
-	if got := keyNames(z.Actions); !slices.Equal(got, []string{"⏎ move to claude", "w wait until " + reset.Format("15:04"), "d raw error", "x stop the run"}) {
+	if got := keyNames(z.Actions); !slices.Equal(got, []string{"⏎ move to claude", "w wait until " + resetClock(reset, time.Now()), "d raw error", "x stop the run"}) {
 		t.Fatalf("actions %q", got)
 	}
 	if b.Decision != nil {
@@ -425,6 +435,58 @@ func TestPausedCardEnterDispatchesPerCause(t *testing.T) {
 			t.Fatalf("Enter ran %q, want %q", *ran, want)
 		}
 	})
+}
+
+// On the home screen y does what the paused card's Enter does, once: the
+// From-you line names it, Enter itself only opens the chat, and a second y
+// within homeYesQuiet runs nothing more.
+func TestHomeYesIsThePausedCardsEnter(t *testing.T) {
+	ran := recordStopCommands(t)
+	w := pausedWorkspace(t, "codex", marshal.Pause{Reason: "codex stopped answering.", Detail: "infra retry: worker operation timed out", Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: "T03"})
+	if z := cardsFrame(w).Paused; z == nil {
+		t.Fatal("no paused card")
+	}
+	lines, _, _ := w.frameLinesFull(120, 40)
+	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "— y ") {
+		t.Fatalf("From you does not name y:\n%s", text)
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyEnter})
+	if len(*ran) != 0 {
+		t.Fatalf("Enter ran %q", *ran)
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	if want := []string{"/marshal retry T03 fresh-session", "/marshal resume"}; !slices.Equal(*ran, want) {
+		t.Fatalf("y ran %q, want %q once", *ran, want)
+	}
+}
+
+// With no card, y retries the stuck task From you names, through the same
+// retry the Web Board's Retry runs.
+func TestHomeYesRetriesTheStuckTask(t *testing.T) {
+	orig := boardRetry
+	t.Cleanup(func() { boardRetry = orig })
+	var calls []string
+	boardRetry = func(_ *Workspace, _ context.Context, id string) (string, error) {
+		calls = append(calls, id)
+		return id + " starts again in a fresh session.", nil
+	}
+	w, _ := boardWorkspace(t)
+	defer w.Close()
+	w.permissions.inbox = nil
+	in := w.homeIn()
+	if in.retry == "" {
+		t.Skip("the fixture run has no stuck task without a decision")
+	}
+	lines, _, _ := w.frameLinesFull(120, 40)
+	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, in.retry+" is stuck — y retry "+in.retry) && !strings.Contains(text, "— y ") {
+		t.Fatalf("From you does not name the retry:\n%s", text)
+	}
+	w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'})
+	w.commandWG.Wait()
+	if !slices.Equal(calls, []string{in.retry}) {
+		t.Fatalf("retried %q, want %q", calls, in.retry)
+	}
 }
 
 // sketchContract counts what a first draft covers: every part is new.

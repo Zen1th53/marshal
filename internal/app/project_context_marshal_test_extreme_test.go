@@ -37,8 +37,14 @@ func requiredMarshalTestContext(t *testing.T, m *MarshalCLI) context.Context {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// selected is resolved, so compare it with the resolved temp root (on
+	// macOS the default TMPDIR /var/folders is a symlink into /private).
+	temp, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	info, err := os.Lstat(selected)
-	if err != nil || !info.Mode().IsRegular() || !strings.HasPrefix(selected, filepath.Clean(os.TempDir())+string(os.PathSeparator)) {
+	if err != nil || !info.Mode().IsRegular() || !strings.HasPrefix(selected, filepath.Clean(temp)+string(os.PathSeparator)) {
 		t.Fatal("command fixture must own its executable before Runtime construction")
 	}
 	bin := t.TempDir()

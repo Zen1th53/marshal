@@ -44,23 +44,6 @@ func quietFor(d time.Duration) string {
 	return strings.TrimSuffix(hostAgo(d), " ago")
 }
 
-// laneBeat is a heartbeat lane's last-action cell: what the worker last
-// said, if anything, and how long ago its process last beat. A lost lane
-// says that no worker is running its task.
-func (v boardVisual) laneBeat(l model.Lane, act string) string {
-	if l.Beat.IsZero() {
-		return act
-	}
-	beat := "last signal " + hostAgo(v.now.Sub(l.Beat))
-	if l.State == model.LaneLost {
-		beat = "no worker is running this task · " + beat
-	}
-	if act == "" {
-		return beat
-	}
-	return beat + " · " + act
-}
-
 // quietNote is the run's note as the footer says it. A note that the run
 // is running, left from when it started, is replaced while no worker runs
 // it: what happened, and how to move the run on.

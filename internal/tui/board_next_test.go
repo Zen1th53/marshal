@@ -23,7 +23,6 @@ func closedPanel(runID string, state marshal.RunState, done, total int, limit, t
 // card with n, does not re-open it.
 func TestNextCardOnClose(t *testing.T) {
 	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w := emptyBoardWorkspace(t)
 	prev := closedPanel("RUN-1", marshal.Verifying, 4, 4, 0, 0)
 	cur := closedPanel("RUN-1", marshal.Closed, 4, 4, 0, 0)
@@ -35,22 +34,9 @@ func TestNextCardOnClose(t *testing.T) {
 	if c.RunID != "RUN-1" || c.Done != 4 || c.Total != 4 || c.HasBudget {
 		t.Fatalf("card built wrong: %+v", c)
 	}
-	// The card leads the first-use inbox and the header says NEEDS YOU.
-	text := frameText(w, 120, 40)
-	// Row 0 is the vitals row; the Board header is row 1.
-	head := strings.SplitN(text, "\n", 3)[1]
-	if !strings.Contains(head, "NEEDS YOU") {
-		t.Fatalf("header does not say NEEDS YOU: %q", head)
-	}
-	for _, want := range []string{
-		"done · Done: 4 of 4 tasks verified and merged.",
-		"[n] new goal",
-		"[d] details",
-		"[q] quit",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the card misses %q:\n%s", want, text)
-		}
+	// The home's From you names the card and sends the owner to the web.
+	if text := frameText(w, 120, 40); !strings.Contains(text, "the run is done: choose what is next — open the web to decide (w)") {
+		t.Fatalf("From you does not name the card:\n%s", text)
 	}
 	// The owner closes the card with n; a re-publish of the closed run does
 	// not re-open it.
@@ -88,7 +74,7 @@ func TestNextCardKeys(t *testing.T) {
 		t.Fatal("the card did not open")
 	}
 	// d opens the Verify view; the card stays.
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'd'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'd'}) {
 		t.Fatal("d was not taken by the card")
 	}
 	if !w.verView.Load() {
@@ -98,7 +84,7 @@ func TestNextCardKeys(t *testing.T) {
 		t.Fatal("the card closed when d opened the view")
 	}
 	// n focuses the chat and closes the card.
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'n'}) {
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'n'}) {
 		t.Fatal("n was not taken by the card")
 	}
 	if w.currentNext() != nil {
@@ -146,38 +132,5 @@ func TestNextCardFromHead(t *testing.T) {
 	// No ceiling: no budget.
 	if c := newNextCard(boardmodel.RunHead{Done: 1, Total: 1}); c.HasBudget {
 		t.Fatalf("budget shown with no ceiling: %+v", c)
-	}
-}
-
-// With an ask card also open, the "what next?" card renders above it and
-// takes n first; Enter still reaches the ask card, which stays open until then.
-func TestNextCardBeforeAskCard(t *testing.T) {
-	// The classic inbox card; the v2 card is boardv2_cards_owner_test.go.
-	t.Setenv("MARSHAL_BOARD", "classic")
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	ap, err := parseMarshalProposal(askProposalLine(exampleAskQuestion, exampleAskChoices))
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.openAsk(ap)
-	w.noteRunClosed(closedPanel("RUN-1", marshal.Verifying, 4, 4, 0, 0), closedPanel("RUN-1", marshal.Closed, 4, 4, 0, 0))
-	if w.currentNext() == nil || w.currentAsk() == nil {
-		t.Fatal("both cards should be open")
-	}
-	text := frameText(w, 160, 60)
-	next := strings.Index(text, "[n] new goal")
-	ask := strings.Index(text, "question · "+exampleAskQuestion)
-	if next < 0 || ask < 0 || next > ask {
-		t.Fatalf("the next card should render above the ask card (next %d, ask %d):\n%s", next, ask, text)
-	}
-	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'n'}) {
-		t.Fatal("n was not taken")
-	}
-	if w.currentNext() != nil {
-		t.Fatal("n did not close the next card")
-	}
-	if w.currentAsk() == nil {
-		t.Fatal("n closed the ask card")
 	}
 }

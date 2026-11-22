@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/sessionmcp"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 )
 
 type Client struct {
@@ -275,7 +276,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	// fixed external-sandbox option. Native sessions use a separate launcher.
 	args = append(args, "--dangerously-bypass-approvals-and-sandbox", "-")
 
-	args, env, cleanup, err := sessionmcp.Configure(ctx, "codex", args, os.Environ())
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "codex", args, workerenv.Host(os.Environ()))
 	if err != nil {
 		return adapter.Result{}, err
 	}

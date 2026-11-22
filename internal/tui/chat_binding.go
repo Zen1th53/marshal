@@ -40,7 +40,7 @@ const chatRequestLimit = 20
 // delivery is retried.
 const (
 	chatQueuedOwnerInput = "Marshal decision queued: chat input is not empty or ready. Send or clear your unsent text in the chat pane to unblock delivery."
-	chatQueuedUnsent     = "Marshal decision queued: the chat has not taken the pasted request yet. MARSHAL keeps pressing Enter for it."
+	chatQueuedUnsent     = "Marshal decision queued: the chat has not taken the pasted request yet. MARSHAL presses Enter for it whenever it can read the chat's input; if it stays there, open the chat (F11) and press Enter."
 )
 
 func (w *Workspace) chatRestarted() {

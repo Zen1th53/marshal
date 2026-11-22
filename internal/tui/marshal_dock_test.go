@@ -276,7 +276,7 @@ func TestMarshalDockMouseWhenUndocked(t *testing.T) {
 }
 
 func TestMarshalDockNarrowWindowKeepsChatDocked(t *testing.T) {
-	for _, tc := range []struct{ cols, chat int }{{113, 56}, {112, 55}, {106, 49}, {97, 40}, {96, 47}, {80, 39}, {40, 19}, {2, 1}} {
+	for _, tc := range []struct{ cols, chat int }{{113, 52}, {112, 51}, {106, 45}, {97, 48}, {96, 47}, {80, 39}, {40, 19}, {2, 1}} {
 		if got := dockWidth(tc.cols); got != tc.chat {
 			t.Fatalf("dockWidth(%d) = %d, want %d", tc.cols, got, tc.chat)
 		}
@@ -294,12 +294,6 @@ func TestMarshalDockNarrowWindowKeepsChatDocked(t *testing.T) {
 	if w.boardLayoutMode() != layout.Split {
 		t.Fatal("narrow dock did not put the Board in split mode")
 	}
-	// The Board's 40 columns are below its split minimum: it paints its
-	// compact form, and no pane overlaps.
-	l := layout.Compute(80-39-1, 30, w.boardLayoutMode())
-	if _, ok := l.Pane(layout.Inbox); !ok {
-		t.Fatalf("compact Board lost its inbox: %+v", l.Panes)
-	}
 }
 
 // codexWindow is a Codex quota window 42% used (58% left), resetting in ~4d.
@@ -307,46 +301,11 @@ func codexWindow(now time.Time) usage.Window {
 	return usage.Window{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(98 * time.Hour)}
 }
 
-func TestMarshalDockTitleShowsLimit(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
-	f := newDockFake(t, 120)
-	w, chat := dockWorkspace(t)
-	f.pane(chat.paneID, "@1", 120)
-	chat.provider = "codex"
-	now := time.Now()
-	w.storeUsage([]usage.Quota{{
-		Provider: "codex", Known: true, AsOf: now,
-		Windows: []usage.Window{codexWindow(now)},
-	}})
-	if err := w.reconcileDock(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	mustContain(t, f.take(),
-		"set-option -p -t %7 @marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    [m] switch ")
-
-	// The reading turns unknown: the title says so within the same reconcile.
-	w.storeUsage([]usage.Quota{{Provider: "codex", Reason: usage.ReasonStale}})
-	if err := w.reconcileDock(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	log := f.take()
-	mustContain(t, log, "⬡ codex limit unknown")
-	// A title-only change joins, binds or restyles nothing.
-	mustNotContain(t, log, "join-pane", "bind-key", "pane-border-status")
-
-	// An identical reconcile writes no title: reconcileDock is idempotent.
-	if err := w.reconcileDock(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	mustNotContain(t, f.take(), "@marshal_dock_title")
-}
-
 // TestMarshalDockTitleV2Strip: with Board v2 (MARSHAL_BOARD unset) the
 // reconcile titles the docked chat with the MARSHAL CHAT strip built from
 // the v2 view model, fitted to the chat's width at 132 columns; the classic
 // limit title is not used, and an unchanged strip writes no title again.
 func TestMarshalDockTitleV2Strip(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "")
 	f := newDockFake(t, 132)
 	w, chat := dockWorkspace(t)
 	f.pane(chat.paneID, "@1", 132)
@@ -371,72 +330,6 @@ func TestMarshalDockTitleV2Strip(t *testing.T) {
 	mustNotContain(t, f.take(), "@marshal_dock_title")
 }
 
-func TestDockTitleFits(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
-	w := &Workspace{}
-	chat := &activeTmuxAgent{provider: "codex"}
-	now := time.Now()
-	w.storeUsage([]usage.Quota{{
-		Provider: "codex", Known: true, AsOf: now,
-		Windows: []usage.Window{codexWindow(now)},
-	}})
-	for _, tc := range []struct {
-		width int
-		want  string
-	}{
-		{120, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    [m] switch  F11 Board "},
-		{45, " MARSHAL · ⬡ codex 58% left    [m] switch "},
-		{20, " ⬡ 58% left    [m] "},
-	} {
-		if got := w.dockTitle(chat, tc.width); got != tc.want {
-			t.Fatalf("width %d:\n got %q\nwant %q", tc.width, got, tc.want)
-		}
-	}
-}
-
-// TestDockTitleModelAndLimit is the chat's title row at the two window widths
-// the plan names: the Marshal model (from the chat's --model, else the
-// provider's own last reading), its live limit and [m] flush right. At 100
-// columns the model name is shortened before any part of the limit goes, and
-// the percent left and [m] always stay.
-func TestDockTitleModelAndLimit(t *testing.T) {
-	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-	codex := []usage.Quota{{Provider: "codex", Known: true, AsOf: now, Model: "gpt-6.1-sol",
-		Windows: []usage.Window{{Label: "wk", LeftPercent: 29, ResetsAt: now.Add(50 * time.Hour)}}}}
-	claude := []usage.Quota{{Provider: "claude", Known: true, AsOf: now,
-		Windows: []usage.Window{{Label: "wk", LeftPercent: 58, ResetsAt: now.Add(98 * time.Hour)}}}}
-	for _, tc := range []struct {
-		name, provider string
-		args           []string
-		qs             []usage.Quota
-		windowCols     int
-		want           string
-	}{
-		{"codex 160", "codex", nil, codex, 160, " MARSHAL · ⬡ GPT-6.1-Sol ▓░░ 29% left ·2d             [m] switch  F11 Board "},
-		{"codex 100", "codex", nil, codex, 100, " MARSHAL · ⬡ 6.1-Sol 29% left       [m] "},
-		{"claude arg 160", "claude", []string{"--model", "claude-opus-5-5"}, claude, 160, " MARSHAL · ✳ Claude Opus 5.5 ▓▓░ 58% left ·4d         [m] switch  F11 Board "},
-		{"claude arg 100", "claude", []string{"--model=claude-opus-5-5"}, claude, 100, " MARSHAL · ✳ Opus 5.5 58% left      [m] "},
-		{"unknown model 100", "claude", nil, claude, 100, " MARSHAL · ✳ claude 58% left        [m] "},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			chatW := dockWidth(tc.windowCols)
-			got, at := dockTitleFor(tc.provider, tc.args, tc.qs, true, true, chatW, true, now)
-			if got != tc.want {
-				t.Errorf("got  %q\nwant %q", got, tc.want)
-			}
-			if n := VisibleLen(got); n != chatW-3 {
-				t.Errorf("width %d, want %d", n, chatW-3)
-			}
-			if at < 0 || !strings.HasPrefix(string([]rune(got)[at:]), "[m]") {
-				t.Errorf("[m] at %d in %q", at, got)
-			}
-			if !strings.Contains(got, "% left") {
-				t.Errorf("limit dropped: %q", got)
-			}
-		})
-	}
-}
-
 func TestModelDisplayName(t *testing.T) {
 	for id, want := range map[string][2]string{
 		"gpt-6.1-sol":                {"GPT-6.1-Sol", "6.1-Sol"},
@@ -452,76 +345,6 @@ func TestModelDisplayName(t *testing.T) {
 			t.Errorf("%q: got %q/%q, want %q/%q", id, long, short, want[0], want[1])
 		}
 	}
-}
-
-func TestDockTitleCases(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
-	now := time.Now()
-	codexKnown := func(stale bool) usage.Quota {
-		return usage.Quota{Provider: "codex", Known: true, Stale: stale, AsOf: now,
-			Windows: []usage.Window{codexWindow(now)}}
-	}
-	for _, tc := range []struct {
-		name     string
-		provider string
-		ascii    bool
-		qs       []usage.Quota
-		read     bool
-		want     string
-	}{
-		{"known", "codex", false, []usage.Quota{codexKnown(false)}, true, " MARSHAL · ⬡ codex ▓▓░ 58% left ·4d    [m] switch  F11 Board "},
-		{"known stale", "codex", false, []usage.Quota{codexKnown(true)}, true, " MARSHAL · ⬡ codex ▓▓░ ~58% left ·4d    [m] switch  F11 Board "},
-		{"unknown", "agy", false, []usage.Quota{{Provider: "agy", Reason: usage.NotExposed}}, true, " MARSHAL · ◆ agy limit unknown    [m] switch  F11 Board "},
-		{"not read yet", "claude", false, nil, false, " MARSHAL · ✳ claude    [m] switch  F11 Board "},
-		{"no glyph", "", false, nil, false, " MARSHAL · chat    [m] switch  F11 Board "},
-		{"ascii", "codex", true, []usage.Quota{codexKnown(false)}, true, " MARSHAL . cx codex ==- 58% left .4d    [m] switch  F11 Board "},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			w := &Workspace{}
-			if tc.ascii {
-				w.theme = NewTheme(ThemeNoColor, false, false)
-			}
-			if tc.read {
-				w.storeUsage(tc.qs)
-			}
-			chat := &activeTmuxAgent{provider: tc.provider}
-			if got := w.dockTitle(chat, 0); got != tc.want {
-				t.Fatalf("got %q\nwant %q", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestUsageReadKicksDock(t *testing.T) {
-	t.Setenv("MARSHAL_BOARD", "classic") // these check the classic dock title
-	f := newDockFake(t, 120)
-	w, chat := dockWorkspace(t)
-	f.pane(chat.paneID, "@1", 120)
-	chat.provider = "codex"
-	now := time.Now()
-	reads := 0
-	w.usage.every = 5 * time.Millisecond
-	w.usage.readFn = func(time.Time) []usage.Quota {
-		reads++
-		left := 58.0
-		if reads%2 == 0 {
-			left = 18.0
-		}
-		return []usage.Quota{{Provider: "codex", Known: true, AsOf: now,
-			Windows: []usage.Window{{Label: "wk", LeftPercent: left, ResetsAt: now.Add(98 * time.Hour)}}}}
-	}
-	// The Board must be visible for startUsage to read.
-	w.screen = NewScreen(nil)
-	w.homeBoard = true
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	w.startDock(ctx)
-	waitDockLog(t, f, "join-pane")
-	w.startUsage(ctx)
-	// Two different readings reach the title without any key press.
-	waitDockLog(t, f,
-		"@marshal_dock_title  MARSHAL · ⬡ codex ▓▓░ 58% left",
-		"@marshal_dock_title  MARSHAL · ⬡ codex ▓░░ 18% left")
 }
 
 func TestMarshalDockRejoinsRecreatedChat(t *testing.T) {

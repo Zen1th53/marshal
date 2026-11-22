@@ -25,7 +25,7 @@ import (
 // machine, and the checksums that archive must match.
 func releaseServer(t *testing.T, tag string, binary []byte, corruptChecksum bool) *httptest.Server {
 	t.Helper()
-	archiveName := fmt.Sprintf("marshal_%s_linux_%s.tar.gz", tag[1:], runtimeArch())
+	archiveName := fmt.Sprintf("marshal_%s_%s_%s.tar.gz", tag[1:], runtime.GOOS, runtimeArch())
 
 	var packed bytes.Buffer
 	zip := gzip.NewWriter(&packed)
@@ -119,7 +119,12 @@ func TestAvailableReportsThePublishedRelease(t *testing.T) {
 }
 
 func TestInstallReplacesTheBinaryAfterVerifying(t *testing.T) {
-	dir := t.TempDir()
+	// Install reports the resolved binary; on macOS the default TMPDIR under
+	// /var is a symlink to /private/var.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	target := filepath.Join(dir, "marshal")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
@@ -202,7 +207,7 @@ func TestDisabledHonoursTheEnvironment(t *testing.T) {
 // optionally stops sending partway, the way a slow or dropped link behaves.
 func slowReleaseServer(t *testing.T, tag string, binary []byte, pause time.Duration, stallAfter int) *httptest.Server {
 	t.Helper()
-	archiveName := fmt.Sprintf("marshal_%s_linux_%s.tar.gz", tag[1:], runtimeArch())
+	archiveName := fmt.Sprintf("marshal_%s_%s_%s.tar.gz", tag[1:], runtime.GOOS, runtimeArch())
 	var packed bytes.Buffer
 	zip := gzip.NewWriter(&packed)
 	writer := tar.NewWriter(zip)

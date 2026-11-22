@@ -15,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/processgroup"
+	"github.com/Zen1th53/marshal/internal/workerenv"
 	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
@@ -140,14 +141,14 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 		}
 		req.Model = selected
 	}
-	return n.launch(ctx, req, cleanWorkerEnv(os.Environ()))
+	return n.launch(ctx, req, cleanWorkerEnv(workerenv.Host(os.Environ())))
 }
 
 // LaunchSession runs an interactive native session with the same supervisor as
 // task workers. The caller supplies settings; the driver owns execution.
 func LaunchSession(ctx context.Context, provider, binary, root string, args, env []string) (*Handle, error) {
 	n := Native{Provider: provider, Binary: binary, Args: func(Request) []string { return args }, Parse: parseNone}
-	return n.launch(workerterminal.WithInteractive(ctx), Request{Worktree: root}, append(os.Environ(), env...))
+	return n.launch(workerterminal.WithInteractive(ctx), Request{Worktree: root}, append(workerenv.Host(os.Environ()), env...))
 }
 
 func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle, error) {

@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/projectid"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/projectid"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
@@ -19,7 +20,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
-	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 type fakeGovernedCodexAdapter struct {
@@ -310,175 +310,6 @@ func TestProcess05PlanRunUsesDurableCanonicalTaskForCodex(t *testing.T) {
 	}
 	if fake.runs != 1 || !strings.HasPrefix(fake.lastReq.TaskID, "TASK-P05-") {
 		t.Fatalf("Process 05 did not invoke Codex with its durable canonical task: err=%v state=%s tasks=%#v runs=%d request=%#v", err, executed.State, executed.Tasks, fake.runs, fake.lastReq)
-	}
-}
-
-// TestProcess05CodexAppServerLiveApprovalE2E is deliberately opt-in: it uses
-// the operator's installed Codex account and creates an isolated temporary
-// repository. Unlike the adapter smoke test, it proves the canonical Process
-// 04 handoff, Process 05 run, exact native approval, same-turn continuation,
-// durable evidence, and Process 06 handoff path together.
-func TestProcess05CodexAppServerLiveApprovalE2E(t *testing.T) {
-	if os.Getenv("MARSHAL_CODEX_APP_SERVER_P05_E2E") != "1" {
-		t.Skip("set MARSHAL_CODEX_APP_SERVER_P05_E2E=1 to run real governed Codex app-server Process 05 E2E")
-	}
-	if os.Getenv("MARSHAL_CODEX_APP_SERVER_ALLOW_HOST_CONFIG") != "1" {
-		t.Skip("real local app-server E2E currently requires the explicit temporary host-config override")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-	repo := runtimeRepo(t)
-	if _, err := Bootstrap(ctx, repo.Path()); err != nil {
-		t.Fatal(err)
-	}
-	runtime, err := Open(ctx, repo.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer runtime.Close()
-	goal := planGoal()
-	goal.SuccessCriteria = []string{"marker file exists"}
-	goal.DesiredOutcome = "A governed marker file exists in the isolated task worktree."
-	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	capacity := goalintake.UnknownCapacity("codex", true)
-	_, err = runtime.Plans().Create(ctx, CreatePlanRequest{
-		SessionID: goal.SessionID, ProjectID: runtimePlanProject,
-		Tasks: []plan.Task{{
-			ID: "live-app-server-task", Mutating: true, Paths: []string{"marshal_appserver_e2e_marker.txt"}, Criteria: []string{"marker file exists"},
-			Title: "Use the normal Codex tool workflow to create marshal_appserver_e2e_marker.txt containing exactly MARSHAL_APP_SERVER_E2E. Do not modify any other file.",
-		}},
-		Candidates:        []goalintake.Candidate{{Provider: "codex", Model: "gpt-5.6-terra", Capacity: capacity, Governance: constitution.GovernanceVerified}},
-		HarnessCandidates: []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: "codex", InstalledVersion: "live", SupportedModels: []string{"gpt-5.6-terra"}, DefaultModel: "gpt-5.6-terra", ProbeEvidenceID: "EVID-live-codex", ProbedAt: now}, InstalledVersion: "live", Provider: "codex", Capacity: capacity}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := runtime.Plans().Approve(ctx, runtimePlanProject); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := runtime.RegisterAgent(ctx, RegisterAgentRequest{Name: "live governed codex", Role: model.RoleDeveloper, ModelProvider: "codex"}); err != nil {
-		t.Fatal(err)
-	}
-	run, err := runtime.Execution().StartRun(ctx, goal.SessionID, runtimePlanProject)
-	if err != nil {
-		t.Fatal(err)
-	}
-	paused, err := runtime.Execution().ExecuteRun(ctx, run.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The Process 04 mutating-task approval is a separate canonical gate. It
-	// must be decided before the provider is launched; never mistake it for a
-	// native app-server tool approval or bypass it to make this E2E shorter.
-	for _, task := range paused.Tasks {
-		if task.State == execution.TaskNeedsApproval && task.NativeTurn == nil && task.ApprovalID != "" {
-			if err := runtime.Execution().Approve(ctx, task.ApprovalID, "live-e2e-operator", "approved Process 04 task gate"); err != nil {
-				t.Fatal(err)
-			}
-			paused, err = runtime.Execution().ExecuteRun(ctx, run.RunID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			break
-		}
-	}
-	deadline := time.Now().Add(90 * time.Second)
-	decidedNativeApprovals := make(map[string]struct{})
-	var completed execution.ExecutionRun
-	for time.Now().Before(deadline) {
-		completed, err = runtime.Execution().GetRun(ctx, run.RunID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if completed.State == execution.RunDonePendingVerification || completed.State.IsTerminal() {
-			break
-		}
-		if completed.State == execution.RunNeedsApproval {
-			for _, task := range completed.Tasks {
-				if task.State != execution.TaskNeedsApproval || task.ApprovalID == "" || task.NativeTurn == nil {
-					continue
-				}
-				if task.NativeTurn.ThreadID == "" || task.NativeTurn.TurnID == "" || task.NativeTurn.ConstraintDigest == "" || task.NativeTurn.Worktree == "" {
-					t.Fatalf("incomplete durable native binding: %#v", task.NativeTurn)
-				}
-				if _, decided := decidedNativeApprovals[task.ApprovalID]; decided {
-					continue
-				}
-				// A native approval is policy-dependent and a single turn may
-				// request more than one exact action. Each decision below enters
-				// the canonical approval manager and is bounded so a changed model
-				// behavior cannot silently gain unbounded approvals in this E2E.
-				if len(decidedNativeApprovals) >= 12 {
-					t.Fatalf("native turn requested more than twelve independently reviewed approvals")
-				}
-				approvalCtx, approvalCancel := context.WithTimeout(ctx, 20*time.Second)
-				err := runtime.Execution().Approve(approvalCtx, task.ApprovalID, "live-e2e-operator", "reviewed exact native request")
-				approvalCancel()
-				if err != nil {
-					t.Fatal(err)
-				}
-				decidedNativeApprovals[task.ApprovalID] = struct{}{}
-			}
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	if completed.State != execution.RunDonePendingVerification {
-		taskStates := make(map[string]string, len(completed.Tasks))
-		for id, task := range completed.Tasks {
-			taskStates[id] = fmt.Sprintf("state=%s native=%t approval=%t", task.State, task.NativeTurn != nil, task.ApprovalID != "")
-		}
-		t.Fatalf("native approval continuation did not complete Process 05: state=%s phase=%s tasks=%v decided_native_approvals=%d failures=%#v", completed.State, completed.CurrentPhase, taskStates, len(decidedNativeApprovals), completed.Failures)
-	}
-	if len(completed.Evidence) == 0 {
-		t.Fatal("completed native turn produced no Process 05 evidence")
-	}
-	completedTask, ok := completed.Tasks["live-app-server-task"]
-	if !ok || completedTask.WorktreePath == "" {
-		t.Fatalf("completed native task has no canonical worktree binding: %#v", completed.Tasks)
-	}
-	// Process 05 deliberately executes in a task worktree. Reading the parent
-	// repository here would test an unstated merge operation rather than the
-	// exact isolated workspace that the native turn and its evidence bind.
-	marker, err := os.ReadFile(filepath.Join(completedTask.WorktreePath, "marshal_appserver_e2e_marker.txt"))
-	if err != nil || string(marker) != "MARSHAL_APP_SERVER_E2E" {
-		t.Fatalf("real Codex turn did not produce the independently readable bounded output: marker=%q err=%v task=%#v evidence=%#v", marker, err, completedTask, runtime.Execution().Engine().EvidenceOracle().ListEvidenceForRun(run.RunID))
-	}
-	bundle, err := runtime.Execution().AssembleHandoffBundle(ctx, run.RunID)
-	if err != nil || bundle.RunID != run.RunID || len(bundle.EvidenceBundle) == 0 {
-		t.Fatalf("Process 06 handoff lacks native evidence: bundle=%#v err=%v", bundle, err)
-	}
-	// Process 06 receives its binding from the durable Process 05 run, then
-	// evaluates a fresh, independently-read marker observation.  The provider
-	// terminal event above is not treated as self-verifying evidence.
-	binding, err := runtime.Verification().BindingForRun(ctx, run.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	verifiedAt := time.Now().UTC()
-	verificationSession := verification.Session{
-		ID:      "verify-live-codex-" + run.RunID,
-		Version: 1,
-		Binding: binding,
-		Criteria: []verification.Criterion{{
-			ID: "marker-created", Mandatory: true, ClaimIDs: []string{"marker-readback"},
-		}},
-		Claims: []verification.Claim{{
-			ID: "marker-readback", CriterionID: "marker-created", SemanticScope: []string{"marshal_appserver_e2e_marker.txt"}, EvidenceIDs: []string{"independent-marker-readback"},
-		}},
-		Evidence: []verification.Evidence{{
-			ID: "independent-marker-readback", ClaimID: "marker-readback", Status: verification.StatusPass, ContentDigest: "marker:" + string(marker), TreeDigest: binding.TreeDigest, EnvironmentDigest: binding.EnvironmentDigest, ClusterID: "independent-local-readback", Attempts: 1, Passes: 1,
-		}},
-		RequiredChecks: map[string]verification.Status{"independent-marker-readback": verification.StatusPass}, CreatedAt: verifiedAt, UpdatedAt: verifiedAt,
-	}
-	if _, err := runtime.Verification().Start(ctx, verificationSession); err != nil {
-		t.Fatal(err)
-	}
-	verified, err := runtime.Verification().Evaluate(ctx, verificationSession.ID)
-	if err != nil || verified.State != verification.VerifiedComplete {
-		t.Fatalf("Process 06 verification=%+v err=%v", verified, err)
 	}
 }
 

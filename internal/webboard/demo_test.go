@@ -16,7 +16,8 @@ import (
 //	MARSHAL_WEBBOARD_DEMO=running go test ./internal/webboard -run TestDemo -v -timeout 0
 //
 // then open http://127.0.0.1:8765/?t=demo (screens: running, ready,
-// planning, decision, paused; MARSHAL_WEBBOARD_DEMO_ADDR changes the
+// planning, decision, paused, finished, bare (a decision the page does not
+// offer); MARSHAL_WEBBOARD_DEMO_ADDR changes the
 // address). The lanes tick and a merge lands every 20 seconds, so the live
 // updates can be seen; Ctrl+C stops it. Actions go to a fake sink: the
 // card's first button clears the card (the run goes on), a message is
@@ -24,7 +25,7 @@ import (
 func TestDemo(t *testing.T) {
 	name := os.Getenv("MARSHAL_WEBBOARD_DEMO")
 	if name == "" {
-		t.Skip("set MARSHAL_WEBBOARD_DEMO=running|ready|planning|decision|paused to serve the demo")
+		t.Skip("set MARSHAL_WEBBOARD_DEMO=running|ready|planning|decision|paused|finished|bare to serve the demo")
 	}
 	if _, ok := fixture(name); !ok {
 		t.Fatalf("no fixture %q", name)
@@ -39,7 +40,8 @@ func TestDemo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	t.Logf("Web Board demo (%s): %s", name, s.URL)
+	link, _ := s.Link()
+	t.Logf("Web Board demo (%s): %s", name, link)
 	select {}
 }
 
@@ -60,7 +62,7 @@ func newDemo(name string) *demo {
 // withScreenKeys gives a running Board the screen's own buttons, as the
 // Board offers them: retry a stuck task and stop all workers.
 func withScreenKeys(b *vm.Board) {
-	if b.Decision == nil && b.Paused == nil && b.Top.Run != "" {
+	if b.Decision == nil && b.Paused == nil && b.Top.Run != "" && b.Top.State != "DONE" {
 		b.Keys = kv("r", "retry T12", "ctrl+x", "stop all workers")
 	}
 }
@@ -85,7 +87,7 @@ func (d *demo) source() vm.Board {
 		}
 	}
 	b.Lanes.Items = lanes
-	if b.Plan.Total > 0 {
+	if b.Plan.Total > 0 && b.Top.State != "DONE" {
 		merged := int(run / (20 * time.Second))
 		b.Plan.Done = min(b.Plan.Total, b.Plan.Done+merged)
 		b.Plan.Throughput = append(append([]int(nil), b.Plan.Throughput...), merged%4+4)

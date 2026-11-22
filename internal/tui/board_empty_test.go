@@ -4,7 +4,6 @@ package tui
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,81 +18,6 @@ import (
 func firstUseVisual(th *Theme, now time.Time) boardVisual {
 	return boardVisual{
 		now: now, theme: th, edition: "Marshal", empty: true, marshalLeads: true, project: "demo", focus: layout.Tasks,
-		chips: []providerChip{
-			{name: "codex", state: "verified", model: "gpt-5"},
-			{name: "claude", state: "unverified"},
-			{name: "agy", state: "limited", until: now.Add(40 * time.Minute)},
-			{name: "opencode", state: "not installed"},
-		},
-		echo: []sayEcho{{id: 1, At: now.Add(-20 * time.Second), Text: "build a todo app with a REST API and tests", State: sayQueued}},
-	}
-}
-
-// TestFirstUseBoardGolden is the Board of a fresh project at the three
-// sizes the design names, at the docked half of a 170-column window, and in
-// the ASCII theme.
-func TestFirstUseBoardGolden(t *testing.T) {
-	now := time.Date(2026, 11, 8, 14, 2, 31, 0, time.UTC)
-	for _, tc := range []struct {
-		name       string
-		cols, rows int
-		mode       layout.Mode
-		docked     bool
-		unicode    bool
-	}{
-		{"first-use-home-080x24", 80, 24, layout.Home, false, true},
-		{"first-use-home-120x40", 120, 40, layout.Home, false, true},
-		{"first-use-home-170x45", 170, 45, layout.Home, false, true},
-		{"first-use-split-085x45", 85, 45, layout.Split, true, true},
-		{"first-use-ascii-080x24", 80, 24, layout.Home, false, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			th := NewTheme(ThemeNoColor, tc.unicode, false)
-			v := firstUseVisual(th, now)
-			v.docked = tc.docked
-			// What boardHints gives this card (rule 4 and the tail), fixed
-			// here so the golden does not read the host's PATH;
-			// TestBoardHintsFollowState checks the live list.
-			v.hints = []string{"say.build", "firstuse.chat", "firstuse.verify", "marshal.pick", "palette", "help"}
-			if tc.docked {
-				v.hints = slices.Insert(v.hints, 5, "marshal.chat")
-			}
-			var hits []boardHit
-			v.hits = &hits
-			l := layout.ComputeFor(tc.cols, tc.rows, tc.mode, v.layoutCounts())
-			frame := paintFirstUse(l, th, v)
-			if len(frame) != tc.rows {
-				t.Fatalf("%d rows", len(frame))
-			}
-			for y, line := range frame {
-				if w := VisibleLen(line); w != tc.cols {
-					t.Fatalf("row %d: %d cells: %q", y, w, line)
-				}
-			}
-			text := StripANSI(strings.Join(frame, "\n"))
-			for _, want := range []string{"Marshal", "demo", "NO RUN", "Tell the Marshal what to build", "PROVIDERS", "codex", "claude"} {
-				if !strings.Contains(text, want) {
-					t.Fatalf("missing %q:\n%s", want, text)
-				}
-			}
-			if !tc.unicode && strings.ContainsFunc(text, func(r rune) bool { return r > 127 }) {
-				t.Fatalf("ASCII theme drew a non-ASCII cell:\n%s", text)
-			}
-			// The call to action is a button for the chat, and the
-			// unverified provider is a button that arms its verify.
-			var cta, verify bool
-			for _, h := range hits {
-				cta = cta || h.kind == hitAction && h.id == "marshal.chat" && strings.Contains(StripANSI(frame[h.row]), "Tell the Marshal")
-				verify = verify || h.kind == hitVerify && h.id == "claude"
-				if h.row < 0 || h.row >= tc.rows {
-					t.Fatalf("click region off the frame: %+v", h)
-				}
-			}
-			if !cta || !verify {
-				t.Fatalf("click regions: cta %v verify %v in %+v", cta, verify, hits)
-			}
-			checkGolden(t, tc.name, frame)
-		})
 	}
 }
 
@@ -110,8 +34,8 @@ func TestFirstUseBoardIsTheDefaultScreen(t *testing.T) {
 	// checklist, and say-what-to-build leading the key bar.
 	lines, _, _ := w.frameLinesFull(120, 40)
 	text := StripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(lines0(text), " READY ") || !strings.Contains(text, "READINESS") || !strings.Contains(text, "s  say what to build") {
-		t.Fatalf("no Board v2 ready screen:\n%s", text)
+	if !strings.Contains(lines0(text), " READY ") || !strings.Contains(text, "Now:") || !strings.Contains(text, "⏎ chat") {
+		t.Fatalf("no home screen:\n%s", text)
 	}
 	for _, old := range []string{"Talk to the Marshal: /marshal chat", "Native sessions", "ULTRA ACTIVE"} {
 		if strings.Contains(text, old) {
@@ -150,105 +74,6 @@ func (f *fakeVerifySource) RouteTask(context.Context, string, string) (string, e
 	return "", nil
 }
 
-// v arms the verify of the next unverified provider, Enter runs it and any
-// other key cancels; a click on an unverified provider arms that one. A
-// verify is never one key: the probe calls the model.
-func TestFirstUseVerifyKeysAndClick(t *testing.T) {
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	now := time.Now()
-	src := &fakeVerifySource{verified: make(chan string, 4), providers: []store.ProviderStatus{{Provider: "codex", VerifiedAt: now, ExpiresAt: now.Add(time.Hour)}}}
-	w.provSource = src
-	lookPath = func(string) (string, error) { return "/bin/true", nil }
-	defer func() { lookPath = execLookPath }()
-	w.loadFirstUse(context.Background())
-	chips := w.firstUseChips(now)
-	if chips[0].state != "verified" || chips[1].state != "unverified" {
-		t.Fatalf("chips %+v", chips)
-	}
-	key := func(e KeyEvent) bool { return w.handleBoardKey(e) }
-
-	if !key(KeyEvent{Type: KeyRune, Rune: 'v'}) || w.firstUseArmed() != "claude" {
-		t.Fatalf("v armed %q", w.firstUseArmed())
-	}
-	lines, _, _ := w.frameLinesFull(120, 40)
-	if !strings.Contains(StripANSI(strings.Join(lines, "\n")), "Enter verifies claude") {
-		t.Fatal("the armed verify does not say Enter runs it")
-	}
-	if !key(KeyEvent{Type: KeyRune, Rune: 'x'}) || w.firstUseArmed() != "" {
-		t.Fatal("another key did not cancel the armed verify")
-	}
-	select {
-	case p := <-src.verified:
-		t.Fatalf("cancelled verify ran for %s", p)
-	default:
-	}
-	key(KeyEvent{Type: KeyRune, Rune: 'v'})
-	if !key(KeyEvent{Type: KeyEnter}) {
-		t.Fatal("Enter did not run the armed verify")
-	}
-	select {
-	case p := <-src.verified:
-		if p != "claude" {
-			t.Fatalf("verified %s", p)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("verify did not run")
-	}
-
-	// A click on agy's readiness row arms agy. The checklist lists each
-	// installed provider once the off-paint probe has run.
-	w.refreshV2Marshal(context.Background(), w.v2ProbeInput(w.v2LiveChat()))
-	lines, _, _ = w.frameLinesFull(120, 40)
-	if text := StripANSI(strings.Join(lines, "\n")); !strings.Contains(text, "READINESS") || !strings.Contains(text, "agy") {
-		t.Fatalf("the readiness checklist does not list agy:\n%s", text)
-	}
-	var at boardHit
-	for _, h := range w.boardHits.hits {
-		if h.kind == hitVerify && h.id == "agy" {
-			at = h
-		}
-	}
-	if at.kind == "" {
-		t.Fatalf("no click region for agy: %+v", w.boardHits.hits)
-	}
-	if !w.handleBoardMouse(context.Background(), KeyEvent{Type: KeyMouse, MouseRow: at.row + 1, MouseColumn: at.x0 + 1}) || w.firstUseArmed() != "agy" {
-		t.Fatalf("click armed %q", w.firstUseArmed())
-	}
-}
-
-// The footer of the first-use Board leads with saying what to build and
-// shows the switch key when the chat is docked.
-func TestFirstUseFooterShowsSwitchHint(t *testing.T) {
-	w := emptyBoardWorkspace(t)
-	defer w.Close()
-	th := NewTheme(ThemeNoColor, true, false)
-	v := firstUseVisual(th, time.Now())
-	v.docked = true
-	v.hints = w.boardHints(v)
-	footer := StripANSI(v.footer(120))
-	if !strings.HasPrefix(footer, " s say what to build") {
-		t.Fatalf("footer %q does not lead with s say what to build", footer)
-	}
-	for _, want := range []string{"⏎ chat", "m Marshal", "F11 chat"} {
-		if !strings.Contains(footer, want) {
-			t.Fatalf("footer %q lacks %q", footer, want)
-		}
-	}
-	// A run's Board names the switch key too while docked.
-	rw := runHintWorkspace(t, "T-017")
-	defer rw.Close()
-	run := boardVisual{theme: th, now: time.Now(), docked: true}
-	run.hints = rw.boardHints(run)
-	if f := StripANSI(run.footer(160)); !strings.Contains(f, "F11 chat") {
-		t.Fatalf("run footer %q", f)
-	}
-	// A click on F11 chat takes F11's own path.
-	if k, ok := boardAction("marshal.chat"); !ok || k.Run == nil {
-		t.Fatal("F11 chat is no button for F11")
-	}
-}
-
 // TestPTYFreshProjectOpensOnTheBoard launches the real binary in a fresh
 // project, as `marshal init` then `marshal` leave it: the first screen is
 // Board v2's ready screen, never the classic screen, and s then typing
@@ -260,11 +85,10 @@ func TestPTYFreshProjectOpensOnTheBoard(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	project := initProject(t, bin)
 	s := startBoardTUIInProject(t, 40, 140, bin, project, "tui")
-	// Board v2's ready screen: the readiness checklist with the Marshal's
-	// row, and say-what-to-build on the key bar.
-	s.mustSee("READINESS")
+	// The home screen: From you, the Marshal on its line, and the key bar.
+	s.mustSee("From you:")
 	s.mustSee("Marshal")
-	s.mustSee("say what to build")
+	s.mustSee("⏎ chat")
 	s.mustNotSee("Native sessions")
 	s.send("s")
 	s.mustSee("to the Marshal ›")

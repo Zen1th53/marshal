@@ -107,7 +107,7 @@ func TestPaletteCoreActionsRegistry(t *testing.T) {
 	want := []struct{ key, label string }{
 		{"s", "say to the Marshal"},
 		{"a", "open the architecture"},
-		{"r", "restart a task"},
+		{"y", "retry or continue"},
 		{"m", "change model or provider"},
 		{"p", "pause everything"},
 		{"Ctrl+X", "stop all workers"},

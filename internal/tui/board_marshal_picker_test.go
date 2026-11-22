@@ -39,7 +39,9 @@ func TestMarshalPickerRowsAndKeys(t *testing.T) {
 	w, _ := boardWorkspace(t)
 	defer w.Close()
 	w.marshalSession().provider = "codex"
-	out := time.Date(time.Now().Year(), 1, 1, 15, 40, 0, 0, time.Local)
+	// Today: a reset later today reads as its clock alone.
+	today := time.Now()
+	out := time.Date(today.Year(), today.Month(), today.Day(), 15, 40, 0, 0, time.Local)
 	seedMarshalCandidates(t, []pickerCand{
 		{provider: "codex", left: 42, known: true, busy: true},
 		{provider: "claude", known: false},

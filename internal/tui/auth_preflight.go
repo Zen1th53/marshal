@@ -361,8 +361,8 @@ func isUnsupportedLoginStatusOutput(text string) bool {
 }
 
 func mergeAuthProbeEnv(base, overrides []string) []string {
-	merged := make([]string, 0, len(base)+len(overrides)+1)
-	index := make(map[string]int, len(base)+len(overrides)+1)
+	merged := make([]string, 0, len(base))
+	index := make(map[string]int, len(base))
 	put := func(entry string) {
 		eq := strings.IndexByte(entry, '=')
 		if eq <= 0 {

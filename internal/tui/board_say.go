@@ -165,6 +165,9 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 		w.chat.view.SetThinking(true)
 	}
 	w.chat.mu.Unlock()
+	if !runtime {
+		w.markMarshalAnswered()
+	}
 	// Once taken, a message belongs to the workspace, not to the caller:
 	// a caller that hands over a short-lived context (a background task
 	// that ends as soon as the message is queued) must not stop it from
@@ -1078,6 +1081,12 @@ func chatPromptIdle(frame string) bool {
 	at := -1
 	var rest string
 	for i := len(raw) - 1; i >= 0 && at < 0; i-- {
+		if above, _ := clippedRule(raw[i]); above {
+			// An input too tall for the pane (its prompt row scrolled
+			// away) holds text: never idle, whatever prompt row an
+			// earlier turn left higher up.
+			return false
+		}
 		body := strings.TrimLeft(StripANSI(raw[i]), " │┃║|")
 		for _, m := range promptMarkers {
 			if after, ok := strings.CutPrefix(body, m); ok && (after == "" || after[0] == ' ' || strings.HasPrefix(after, " ")) {
@@ -1221,40 +1230,4 @@ func atoiSGR(s string) int {
 		return -1
 	}
 	return n
-}
-
-// echoLine is one message in Activity: when, to whom, what and where it is.
-func (v boardVisual) echoLine(e sayEcho, w int) string {
-	state := e.State
-	col := map[string]string{saySending: "working", sayQueued: "waiting", saySent: "merged", sayFailed: "failed"}[state]
-	switch state {
-	case sayQueued:
-		if e.Why != "" {
-			state = "queued · " + e.Why
-		} else {
-			state = "queued · chat is busy"
-		}
-	case saySent:
-		state = "sent to chat"
-	case sayFailed:
-		if e.Why != "" {
-			state = "not sent · " + e.Why
-		}
-	}
-	from := "you"
-	if e.Runtime {
-		from = "runtime"
-	}
-	to := from + " → marshal"
-	if !v.unicode() {
-		to = from + " -> marshal"
-	}
-	head := v.fg("dim", e.At.In(v.now.Location()).Format("15:04:05")) + " " + v.fg("accent", to) + " "
-	tail := " " + v.fg(col, "· "+state)
-	room := w - VisibleLen(head) - VisibleLen(tail) - 2
-	open, shut := "“", "”"
-	if !v.unicode() {
-		open, shut = "\"", "\""
-	}
-	return head + open + v.trunc(cleanBoard(e.Text), max(8, room)) + shut + tail
 }

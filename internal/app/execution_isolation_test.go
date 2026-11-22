@@ -62,9 +62,6 @@ func TestGovernedPlanRunUsesPreparedProviderRunner(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = runtime.Close() })
-			streamStarts := 0
-			runtime.codexAppServerNew = func(string, string) codexAppServerClient { streamStarts++; return nil }
-			runtime.claudeStreamNew = func(string, string) claudeStreamClient { streamStarts++; return nil }
 			requiredTestAcceptedProjectContract(t, runtime)
 			goal := planGoal()
 			goal.ProjectID = requiredProcess05TestProjectID(runtime, goal.ProjectID)
@@ -104,8 +101,8 @@ func TestGovernedPlanRunUsesPreparedProviderRunner(t *testing.T) {
 				}
 				executed, err = runtime.Execution().ExecuteRun(ctx, run.RunID)
 			}
-			if err != nil || runner.runs != 1 || streamStarts != 0 {
-				t.Fatalf("state=%s runner runs=%d stream starts=%d err=%v", executed.State, runner.runs, streamStarts, err)
+			if err != nil || runner.runs != 1 {
+				t.Fatalf("state=%s runner runs=%d err=%v", executed.State, runner.runs, err)
 			}
 			assertGovernedProviderEvidence(t, executed)
 			for _, task := range executed.Tasks {

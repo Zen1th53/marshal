@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -13,9 +14,12 @@ import (
 // a private link (internal/webboard): it shows the Board and lets the owner
 // press the buttons of the card on screen and write to the Marshal
 // (webboard_act.go). The open Board process
-// hosts it, because it has the data; it starts on demand (w on the Board
-// with no task highlighted, the palette, /marshal web) and stops when the
-// Board closes.
+// hosts it, because it has the data. It is the full interface: the
+// terminal home shows only what is happening, the one thing needed from the
+// owner and where the Web Board is (board_home.go). It starts with the Board
+// (autoStartWebBoard), and opens in the browser where there is a display;
+// w, the palette and /marshal web reach it again. It stops when the Board
+// closes.
 
 // webBoards holds each workspace's running Web Board.
 var webBoards sync.Map // *Workspace -> *webBoardState
@@ -27,6 +31,8 @@ type webBoardState struct {
 	// retry is the task r would retry, noted on the input loop at each
 	// paint (noteWebRetry), "" for none.
 	retry string
+	// opened is set once the browser was opened on it.
+	opened bool
 }
 
 // webBoardStart and webBoardOpen are the server and the browser opener;
@@ -35,6 +41,65 @@ var (
 	webBoardStart = webboard.Start
 	webBoardOpen  = openArchitectureBrowser
 )
+
+// webOpenAtStart reports whether the Board opens the browser on the Web
+// Board when it starts: yes, unless MARSHAL_WEB_OPEN=0 (the Web Board still
+// starts; w opens it).
+func webOpenAtStart() bool {
+	return strings.TrimSpace(v2Getenv("MARSHAL_WEB_OPEN")) != "0"
+}
+
+// autoStartWebBoard starts the Web Board as the Board opens and, where
+// there is a display, opens it in the browser. With no display the home
+// screen's Web line says so and /marshal web (or w) shows the link. It runs
+// off the input loop (Run starts it in the background); the link is never
+// written anywhere.
+func (w *Workspace) autoStartWebBoard(ctx context.Context) {
+	srv, err := w.webBoardServer()
+	if err != nil {
+		return
+	}
+	w.requestRepaint()
+	if headlessDisplay() || !webOpenAtStart() {
+		return
+	}
+	// A fresh one-use link: the page spends it as it opens, so the copy in
+	// the opener's argv or the browser's history is worthless after.
+	url, err := srv.Link()
+	if err != nil {
+		return
+	}
+	if err := webBoardOpen(ctx, url); err != nil {
+		return
+	}
+	w.noteWebOpened()
+}
+
+// noteWebOpened records that the browser was opened on the Web Board.
+func (w *Workspace) noteWebOpened() {
+	s := w.webBoard()
+	s.mu.Lock()
+	s.opened = true
+	s.mu.Unlock()
+	w.requestRepaint()
+}
+
+// webState is the Web Board's state for the view model's Web line. It
+// never starts the server and holds no link.
+func (w *Workspace) webState() vm.Web {
+	s := w.webBoard()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	running := false
+	if s.server != nil {
+		select {
+		case <-s.server.Done():
+		default:
+			running = true
+		}
+	}
+	return vm.Web{Running: running, Opened: running && s.opened, NoDisplay: headlessDisplay()}
+}
 
 // webBoardSink is the owner actions' sink for w, set in init: the action
 // path reaches the commands the Board runs, which reach /marshal web, so a
@@ -114,33 +179,74 @@ func (w *Workspace) closeWebBoard() {
 }
 
 // marshalWeb is /marshal web: it starts the Web Board if needed, opens it in
-// the browser where there is a display, and answers with its link. The link
-// is the owner's: it goes to the footer only, never to Activity (which the
-// Web Board itself shows) or to the Marshal.
+// the browser where there is a display, and answers. The link can act for
+// the owner, so it is shown only where it has to be: in the footer when no
+// browser can be opened, never in Activity (which the Web Board itself
+// shows), a file, the home screen or the Marshal. Each link works once (the
+// page spends it for its own secret), so a copy left in the footer, the
+// browser opener's argv or the browser's history is worthless once the
+// owner's page opened; each /marshal web brings a fresh one.
 func (w *Workspace) marshalWeb() (string, error) {
 	srv, err := w.webBoardServer()
 	if err != nil {
 		return "", err
 	}
+	url, err := srv.Link()
+	if err != nil {
+		return "", err
+	}
 	// The link comes first, so a narrow footer still shows it whole.
-	const what = " · Web Board: this computer only; keep the link private, it can act for you"
+	const what = " · Web Board: this computer only; the link works once and can act for you, keep it private"
 	if headlessDisplay() {
-		return srv.URL + what + " · no display here: open the link in a browser on this computer", nil
+		return url + what + " · no display here: open the link in a browser on this computer", nil
 	}
-	url := srv.URL
-	if !w.startBackground(w.workers.context(), func(ctx context.Context) {
-		if err := webBoardOpen(ctx, url); err != nil {
-			w.setOutput("Your browser could not be opened: /marshal web shows the Web Board's link to open.", true)
-		}
-	}) {
-		return "", errWorkspaceClosing
+	if err := w.openWebBrowser(url, url+what); err != nil {
+		return "", err
 	}
-	return url + what + " · opening in your browser", nil
+	return "Web Board: opening in your browser (http://" + srv.Addr() + "/, this computer only). Each /marshal web opens a new link.", nil
 }
 
-// openWebBoardKey is the Board key: it runs /marshal web and shows its
-// answer.
+// openWebBrowser opens the one-use link url in the browser off the input
+// loop. When the browser cannot be opened, fallback (the link with its
+// warning, or "" to keep the link off screen) goes to the footer.
+func (w *Workspace) openWebBrowser(url, fallback string) error {
+	if !w.startBackground(w.workers.context(), func(ctx context.Context) {
+		if err := webBoardOpen(ctx, url); err != nil {
+			if fallback != "" {
+				w.setOutput("Your browser could not be opened. Open this link in a browser on this computer: "+fallback, true)
+			} else {
+				w.setOutput("Your browser could not be opened: /marshal web shows the Web Board's link to open.", true)
+			}
+			return
+		}
+		w.noteWebOpened()
+	}) {
+		return errWorkspaceClosing
+	}
+	return nil
+}
+
+// openWebBoardKey is the Board's w: it opens the Web Board in the browser
+// on a fresh one-use link. The private link is shown only where there is
+// no display to open (/marshal web's answer), never otherwise: the home
+// screen's Web line says where the Web Board is without it.
 func (w *Workspace) openWebBoardKey() {
-	resp, err := w.marshalWeb()
-	w.recordCommandResult("/marshal web", resp, err)
+	if headlessDisplay() {
+		resp, err := w.marshalWeb()
+		w.recordCommandResult("/marshal web", resp, err)
+		return
+	}
+	srv, err := w.webBoardServer()
+	var url string
+	if err == nil {
+		url, err = srv.Link()
+	}
+	if err == nil {
+		err = w.openWebBrowser(url, "")
+	}
+	if err != nil {
+		w.recordCommandResult("/marshal web", "", err)
+		return
+	}
+	w.setOutput("Web Board: opening in your browser.", false)
 }

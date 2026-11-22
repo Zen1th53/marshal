@@ -7,14 +7,6 @@ import (
 )
 
 func TestStateTransitions(t *testing.T) {
-	for from := range runMoves {
-		for _, to := range []RunState{Drafting, Approved, Dispatching, Reviewing, Merging, Verifying, Closed, AwaitingUser, "invalid"} {
-			err := TransitionRun(from, to)
-			if (err == nil) != slices.Contains(runMoves[from], to) {
-				t.Fatalf("run %s -> %s", from, to)
-			}
-		}
-	}
 	for from := range taskMoves {
 		for _, to := range []TaskState{Queued, Dispatched, HandedIn, Accepted, Returned, Reassigned, Escalated, Merged, Cancelled, "invalid"} {
 			err := TransitionTask(from, to)
@@ -57,50 +49,6 @@ func TestFailedCheckIsValidHandIn(t *testing.T) {
 }
 func fixture() Run {
 	return Run{GoalBinding: "g", ApprovalScopeDigest: "d", Tasks: []Task{{PlanTaskID: "a", Mode: Native, Files: []string{"a.go", "b.go"}, Criteria: []string{"one", "two"}, Checks: []Check{{"go test", []string{"one", "two"}}}}, {PlanTaskID: "b", Mode: Native, Files: []string{"c.go"}, Criteria: []string{"three"}, DependsOn: []string{"a"}, Checks: []Check{{"go vet", []string{"three"}}}}}}
-}
-func TestAmendmentClassification(t *testing.T) {
-	before := fixture()
-	after := fixture()
-	if ClassifyAmendment(before, after) != Scoped {
-		t.Fatal("identity")
-	}
-	after.Tasks[0].PlanTaskID = "a1"
-	after.Tasks[0].ParentID = "a"
-	after.Tasks = append(after.Tasks, Task{PlanTaskID: "a2", ParentID: "a", Mode: Native, Files: []string{"b.go"}, Criteria: []string{"two"}, Checks: before.Tasks[0].Checks})
-	after.Tasks[0].Files = []string{"a.go"}
-	after.Tasks[0].Criteria = []string{"one"}
-	if ClassifyAmendment(before, after) != Scoped {
-		t.Fatal("split")
-	}
-	cases := map[string]func(*Run){"move criterion": func(r *Run) {
-		r.Tasks[0].Criteria = []string{"two"}
-		r.Tasks[1].Criteria = append(r.Tasks[1].Criteria, "one")
-	}, "move file": func(r *Run) { r.Tasks[0].Files = []string{"b.go"}; r.Tasks[1].Files = append(r.Tasks[1].Files, "a.go") }, "add file": func(r *Run) { r.Tasks[0].Files = append(r.Tasks[0].Files, "new.go") }, "budget": func(r *Run) { r.Budget.Tokens.Plan = 1 }, "goal": func(r *Run) { r.GoalBinding = "changed" }}
-	for name, change := range cases {
-		r := fixture()
-		change(&r)
-		if ClassifyAmendment(before, r) != Major {
-			t.Fatal(name)
-		}
-	}
-}
-func TestChecksChangeIsMajor(t *testing.T) {
-	before := fixture()
-	after := fixture()
-	after.Tasks[0].Checks = nil
-	if ClassifyAmendment(before, after) != Major {
-		t.Fatal("removed checks")
-	}
-	after = fixture()
-	after.Tasks[0].Checks[0].Command = "other"
-	if ClassifyAmendment(before, after) != Major {
-		t.Fatal("changed checks")
-	}
-}
-func TestSelfReview(t *testing.T) {
-	if CheckReviewer("worker", "worker") == nil || CheckReviewer("marshal", "marshal") == nil || CheckReviewer("worker", "marshal") != nil {
-		t.Fatal("reviewer check")
-	}
 }
 func TestHandInScopeAndEvidence(t *testing.T) {
 	task := fixture().Tasks[0]

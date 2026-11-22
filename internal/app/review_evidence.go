@@ -134,7 +134,15 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 		// The person must make an independent checker available; the
 		// exclusions stay in the detail and the recorded event.
 		pause.Reason, pause.Detail = "The final check has no independent checker: each installed AI tool is doing this run's tasks, is limited, or cannot take this role.", cause.Error()
-		pause.Resolutions = []string{independentCheckerResolution()}
+		var unavailable *verifierUnavailableError
+		var busy []string
+		if errors.As(cause, &unavailable) {
+			busy = unavailable.Busy
+		}
+		if len(busy) > 0 {
+			pause.Reason = "The final check has no independent checker: " + busyCheckers(busy) + "."
+		}
+		pause.Resolutions = []string{independentCheckerResolution(busy)}
 		data["summary"] = pause.Reason
 	} else if reason, next, ok := plainContextVerificationStop(cause); ok {
 		// A bare refusal code reads as a plain sentence; the code stays in
@@ -151,10 +159,41 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, data))
 }
 
+// busyCheckers says that the providers in busy did this run's tasks and so
+// cannot check them, e.g. "Claude Code did this run's tasks, so it cannot
+// check them".
+func busyCheckers(busy []string) string {
+	names := make([]string, 0, len(busy))
+	for _, provider := range busy {
+		names = append(names, checkerName(provider))
+	}
+	pronoun := "it"
+	if len(names) > 1 {
+		pronoun = "they"
+	}
+	list := strings.Join(names, " and ")
+	if len(names) > 2 {
+		list = strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	}
+	return fmt.Sprintf("%s did this run's tasks, so %s cannot check them", list, pronoun)
+}
+
 // independentCheckerResolution says what makes an independent checker
 // available. In the shipped edition only Claude Code can be the final
-// checker, because only its answer names the model that gave it.
-func independentCheckerResolution() string {
+// checker, because only its answer names the model that gave it. busy names
+// the providers that could check the work but did this run's tasks: waiting
+// or retrying cannot help them, so the text says so plainly.
+func independentCheckerResolution(busy []string) string {
+	if len(busy) > 0 {
+		keep := checkerName(busy[0])
+		if len(busy) > 1 {
+			keep = "one of them"
+		}
+		if requiredVerifierAttributionGap("codex") != "" {
+			return busyCheckers(busy) + ", and no other AI tool here can do the final check. Start this work again as a new run: MARSHAL keeps " + keep + " off the new plan's tasks so it can do the final check."
+		}
+		return busyCheckers(busy) + ". Install an AI tool that did none of them, then press Enter to let the Marshal retry, or start this work again as a new run: MARSHAL keeps " + keep + " off the new plan's tasks so it can do the final check."
+	}
 	if requiredVerifierAttributionGap("codex") != "" {
 		return "Install Claude Code or wait until its limit passes; it must not be doing this run's tasks. Then press Enter to let the Marshal retry."
 	}

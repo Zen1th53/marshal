@@ -322,8 +322,7 @@ func (w *Workspace) inspectPlanTask() {
 		w.memoryAnswer("Plan: "+cleanBoard(sel)+" is not on the Board's run; nothing to inspect", false)
 		return
 	}
-	w.closePlanView()
-	w.boardUI.task, w.boardUI.inspect = sel, sel
+	w.memoryAnswer("Plan: "+cleanBoard(sel)+"'s details are on the Web Board: w opens it.", false)
 }
 
 // paintPlan paints the Plan view through the workspace's state.

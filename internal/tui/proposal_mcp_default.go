@@ -18,6 +18,9 @@ func (w *Workspace) revokeProposalMCP(*activeTmuxAgent)   {}
 // retireProposalMCPForResume: this edition has no live proposal lease.
 func (w *Workspace) retireProposalMCPForResume(*activeTmuxAgent) {}
 func (w *Workspace) closeProposalMCP()                           {}
+
+// chatLaunchBound: this edition has no live proposal launch.
+func (w *Workspace) chatLaunchBound(string) bool { return false }
 func (w *Workspace) bindProposalMCPRequest(req permission.Request) (permission.Request, error) {
 	return req, nil
 }

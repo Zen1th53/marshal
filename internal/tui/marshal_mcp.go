@@ -134,7 +134,7 @@ func configureOpenCodeMCP(dir *briefingDir, root string, env []string, role, tas
 	}
 	newEnvEntry := "OPENCODE_CONFIG_CONTENT=" + string(data)
 
-	updatedEnv := make([]string, 0, len(env)+2)
+	updatedEnv := make([]string, 0, len(env))
 	found := false
 	for _, e := range env {
 		if strings.HasPrefix(e, "OPENCODE_CONFIG_CONTENT=") {
@@ -651,8 +651,9 @@ func antigravityMarshalStateDeny(roots []string) []string {
 }
 
 // antigravityMarshalDenyCommands are the commands the agy Marshal chat may
-// never run: sqlite3 reads MARSHAL's state database behind its tools.
-var antigravityMarshalDenyCommands = []string{"command(sqlite3)"}
+// never run: sqlite3 reads MARSHAL's state database behind its tools, and
+// tmux reads or types into the owner's Board pane.
+var antigravityMarshalDenyCommands = []string{"command(sqlite3)", "command(tmux)"}
 
 func antigravityRootPaths(root string) []string {
 	if strings.TrimSpace(root) == "" {

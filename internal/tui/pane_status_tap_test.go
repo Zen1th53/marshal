@@ -114,8 +114,6 @@ func TestPaneTapRedactsTheMessage(t *testing.T) {
 // action, its state beside it, redacted, and a new report re-projects the
 // Board while an unchanged one does not.
 func TestBoardLanesShowReportedWorkerStatus(t *testing.T) {
-	// This test is about the classic Board itself.
-	t.Setenv("MARSHAL_BOARD", "classic")
 	w, src := boardWorkspace(t)
 	select {
 	case <-w.repaint:
@@ -146,13 +144,17 @@ func TestBoardLanesShowReportedWorkerStatus(t *testing.T) {
 	if lane.Status != "blocked" || !strings.HasPrefix(lane.Last, "blocked (permission) · waiting to run curl") {
 		t.Fatalf("lane %+v", lane)
 	}
-	frame := plainFrame(w, 170, 45)
-	if strings.Contains(frame, secret) {
+	if frame := plainFrame(w, 170, 45); strings.Contains(frame, secret) {
 		t.Fatal("a secret reached the frame")
 	}
-	// The lane row is one line: the report is cut to the column, never wrapped.
-	if !strings.Contains(frame, "blocked (permission") {
-		t.Fatalf("reported status not on the Board:\n%s", frame)
+	// The lanes are the Web Board's: its frame carries the report, never
+	// the secret.
+	var steps []string
+	for _, l := range w.boardV2().Lanes.Items {
+		steps = append(steps, l.Step+" "+l.Task)
+	}
+	if web := strings.Join(steps, "\n"); strings.Contains(web, secret) {
+		t.Fatalf("a secret reached the Web Board's lanes:\n%s", web)
 	}
 	// The same report again: nothing to publish, nothing repainted.
 	drainRepaints(w, 20*time.Millisecond)

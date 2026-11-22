@@ -117,13 +117,6 @@ func (v boardVisual) hit(h boardHit) {
 	}
 }
 
-// unhit drops the regions recorded on a row a later line replaced.
-func (v boardVisual) unhit(row int) {
-	if v.hits != nil {
-		*v.hits = slices.DeleteFunc(*v.hits, func(h boardHit) bool { return h.row == row })
-	}
-}
-
 // boardMouseWanted reports whether the Board reads the mouse: while it is
 // on screen with nothing over it that takes the mouse itself. The palette is
 // drawn over the Board and its rows are clickable, so it does not turn the
@@ -215,10 +208,6 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 	case hitTask:
 		if !slices.ContainsFunc(p.Board.Tasks, func(t boardmodel.TaskRow) bool { return t.ID == h.id }) {
 			return true
-		}
-		if focus == layout.Tasks && ui.task == h.id {
-			// A click on the selected task inspects it, as Enter does.
-			ui.inspect = h.id
 		}
 		ui.focus, ui.task = layout.Tasks, h.id
 	case hitLane:
@@ -340,7 +329,6 @@ var boardChipViews = map[string]rune{"health": '4', "host": 'h'}
 func (w *Workspace) openChip(name string) {
 	ui := &w.boardUI
 	if r, ok := boardChipViews[name]; ok {
-		ui.inspect = ""
 		if !w.switchBodyView(KeyEvent{Type: KeyRune, Rune: r}) {
 			w.setOutput("That view has nothing to read in this session.", false)
 		}
@@ -358,7 +346,6 @@ func (w *Workspace) openChip(name string) {
 		return
 	}
 	w.closeBodyViews()
-	ui.inspect = ""
 	ui.focus = pane
 }
 

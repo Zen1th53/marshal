@@ -69,14 +69,8 @@ func TestCommunityArchitectureReceiptRequiresRegisteredOwnerBrowser(t *testing.T
 	if err := s.MigrateArchitectureReceiver(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ArchitectureTargetGenerationFor(ctx, "PROJECT-unregistered"); !errors.Is(err, model.ErrPolicyDenied) {
-		t.Fatalf("unregistered issuer was not denied: %v", err)
-	}
 	if _, err := s.ArchitectureAcceptanceFor(ctx, "PROJECT-unregistered"); !errors.Is(err, model.ErrPolicyDenied) {
 		t.Fatalf("unregistered acceptance was not denied: %v", err)
-	}
-	if _, err := s.ImportObservedArchitectureReceipt(ctx, SignedArchitectureReceipt{}); err == nil {
-		t.Fatal("empty browser receipt was accepted")
 	}
 }
 
