@@ -283,6 +283,9 @@ type Workspace struct {
 	// replaces its delivery to the Marshal chat in tests.
 	draftReject draftRejectState
 	draftTell   func(text string)
+	// stall times a run on the Board that does not move
+	// (marshal_plan_stall.go).
+	stall stallWatch
 	// answer is the last answer to something the operator did (a command,
 	// a key, a click), the only text the Board's ANSWER overlay and footer
 	// show; background messages never change it. Guarded by mu, numbered

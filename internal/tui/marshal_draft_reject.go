@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -89,20 +88,7 @@ func draftRejectNotice(reason string) string {
 }
 
 // tellMarshalDraftRejected wakes the Marshal with the refusal through the
-// runtime notice path, off the caller's locks and on the workspace's own
-// context (a short caller context ended the delivery before the chat got
-// it, see tellMarshalRunClosed). Without an open chat the inbox note waits
-// for the Marshal's next turn.
+// runtime notice path (tellMarshal, marshal_plan_stall.go).
 func (w *Workspace) tellMarshalDraftRejected(text string) {
-	if w.draftTell != nil {
-		w.draftTell(text)
-		return
-	}
-	if w.sayPane() == "" && !w.nativeChatActive() {
-		return
-	}
-	ctx := w.workers.context()
-	w.startBackground(ctx, func(context.Context) {
-		w.noticeToMarshal(ctx, text)
-	})
+	w.tellMarshal(text)
 }

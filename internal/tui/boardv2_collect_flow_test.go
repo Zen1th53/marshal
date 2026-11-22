@@ -244,13 +244,13 @@ func TestFlowFromYouDerivation(t *testing.T) {
 	})
 	t.Run("planning, Marshal's turn", func(t *testing.T) {
 		in := flowIn{now: flowNow, goalGiven: true, milestone: &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageTasks, Now: "planning the tasks"}}}
-		if got, ok := fromYou(in); got != "nothing · next ask: plan approval" || !ok {
+		if got, ok := fromYou(in); got != "nothing · next ask: "+planNextAsk() || !ok {
 			t.Fatalf("from you = %q %v", got, ok)
 		}
 	})
 	t.Run("architecture accepted by the owner, not applied yet", func(t *testing.T) {
 		in := flowIn{now: flowNow, goalGiven: true, milestone: &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageArch, Now: "applying the architecture you accepted", Applying: true}}}
-		if got, ok := fromYou(in); got != "nothing · next ask: plan approval" || !ok {
+		if got, ok := fromYou(in); got != "nothing · next ask: "+planNextAsk() || !ok {
 			t.Fatalf("from you = %q %v", got, ok)
 		}
 		if st := stageStates(flowStages(in, taskCounts{})); !strings.Contains(st, "*arch") {

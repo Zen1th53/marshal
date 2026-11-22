@@ -699,8 +699,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.mu.Unlock()
 	w.clearDraftRejected()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
-	w.queueMarshalPlanApproval()
-	return result + "\n" + planReadyActivity(len(run.Tasks)), nil
+	return result + "\n" + w.afterPlanImported(runID, len(run.Tasks)), nil
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {

@@ -1985,8 +1985,7 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 		}
 	}
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
-	w.RecordActivity(planReadyActivity(len(run.Tasks)))
-	w.queueMarshalPlanApproval()
+	w.RecordActivity(w.afterPlanImported(runID, len(run.Tasks)))
 	return true
 }
 

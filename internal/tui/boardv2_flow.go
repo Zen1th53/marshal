@@ -53,6 +53,9 @@ type flowIn struct {
 	// draftRejected is the Marshal's plan draft the runtime refused and no
 	// imported draft has replaced yet; nil for none.
 	draftRejected *draftRejectMark
+	// stall is how the run on the Board does not move, and since when
+	// (marshal_plan_stall.go); nil while it moves.
+	stall *planStall
 }
 
 // fixingPlan reports whether the refused draft is what the Board shows: for
@@ -140,6 +143,9 @@ func flowState(in flowIn) (string, vm.Tone) {
 			return "YOUR TURN", vm.ToneWarn
 		}
 		return "FIXING PLAN", vm.ToneWarn
+	}
+	if in.stall.overdue(in.now) {
+		return "YOUR TURN", vm.ToneWarn
 	}
 	if !in.hasRun {
 		switch {
@@ -368,6 +374,11 @@ func ownerAsks(in flowIn) []ownerAsk {
 		// the owner looks at the chat (Activity has the reason).
 		add(false, "plan refused "+goalElapsed(in.now.Sub(r.since))+" ago, no fix yet: open the Marshal chat")
 	}
+	if s := in.stall; s.overdue(in.now) && len(out) == 0 {
+		// Nothing else waits for the owner and the run has not moved:
+		// say why instead of a silent "queued".
+		add(false, stallAsk(s, in.now))
+	}
 	return out
 }
 
@@ -422,6 +433,10 @@ func fromYou(in flowIn) (string, bool) {
 // expected: the architecture and the plan while planning, task acceptance
 // when the owner accepts tasks, and the final review before merge unless
 // the owner already authorized the close.
+//
+// In this edition the Marshal approves the plan itself, so the plan is
+// never the owner's next ask: the Board named "plan approval" while the
+// owner had nothing to approve and the Marshal had not approved it.
 func nextAsk(in flowIn) string {
 	if !in.hasRun {
 		switch m := in.milestone; {
@@ -430,6 +445,9 @@ func nextAsk(in flowIn) string {
 		case m != nil && m.Step == stageArch && !m.OwnerTurn && !m.Applying:
 			return "architecture review"
 		case m != nil, in.planning:
+			if editionExtreme {
+				return "final review before merge"
+			}
 			return "plan approval"
 		case in.goalGiven:
 			return "architecture review"
@@ -439,8 +457,11 @@ func nextAsk(in flowIn) string {
 	switch runState(in.run, in.v.board) {
 	case marshal.Drafting, "":
 		// No stored plan yet (a panel before the first import, for example
-		// after a refused draft): the plan is what the owner approves next.
-		return "plan approval"
+		// after a refused draft), or a plan not approved yet: the plan is
+		// what the owner approves next, where the owner approves plans.
+		if !editionExtreme {
+			return "plan approval"
+		}
 	case marshal.Closed:
 		return ""
 	}
