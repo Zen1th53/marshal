@@ -71,7 +71,9 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	// Every role runs in a session of its own. The ULTRA cross-reviewer and
 	// the verifier are started fresh, never resumed from the Marshal's or a
 	// worker's conversation, so none of them judges work it saw being made.
-	// Verification requires a provider different from every worker provider.
+	// That fresh session is what makes them independent: a provider that did
+	// none of the work is preferred, and otherwise the worker's own provider
+	// reviews or verifies in a new session, recorded as such.
 	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, string, error) {
 		// In the private edition a reviewer that reports its own quota or
 		// rate limit is skipped and the next independent provider reviews.
@@ -81,8 +83,11 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 			if err != nil {
 				return marshal.Review{}, provider, err
 			}
-			review, err := s.knowledgeRoleCLI(provider, s.Repository).Review(ctx, task, handin, control)
+			cli := s.knowledgeRoleCLI(provider, s.Repository)
+			fresh := cli.ConversationID == ""
+			review, err := cli.Review(ctx, task, handin, control)
 			review.Reviewer = "cross-review:" + provider
+			review.SessionID, review.FreshSession = cli.ConversationID, fresh
 			if err != nil && r.retryRoleAfterLimit(ctx, "cross-review", provider, err, tried) {
 				tried = append(tried, provider)
 				continue
@@ -95,9 +100,6 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) {
 		return r.independentVerifierProvider(run)
 	}
-	// Planning and failover keep the last of these off worker tasks, so the
-	// final check always has a provider that did none of them.
-	s.CheckerCandidates = finalCheckerCandidates
 	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		provider, err := s.VerifierProvider(ctx, run)
 		if err != nil {
@@ -454,11 +456,12 @@ func (s *MarshalService) knowledgeRoleCLI(provider, root string) *MarshalCLI {
 
 // crossReviewProvider picks the provider for an independent cross-review.
 // tried holds the worker's provider and any provider skipped for its limit.
-// The private edition never falls back to one of them.
+// Another provider is preferred; when none is left the worker's own
+// provider reviews in a fresh session of its own, which the review records.
 func crossReviewProvider(installed, tried []string, marshalProvider, taskID string) (string, error) {
-	provider, sameProvider := pickIndependentProvider(installed, tried, marshalProvider)
-	if sameProvider && independentCrossReviewRequired {
-		return provider, fmt.Errorf("cross-review: no provider other than %s is available to review task %s", strings.Join(tried, ", "), taskID)
+	provider, _ := pickIndependentProvider(installed, tried, marshalProvider)
+	if provider == "" {
+		return "", fmt.Errorf("cross-review: no provider is available to review task %s", taskID)
 	}
 	return provider, nil
 }

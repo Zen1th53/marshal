@@ -87,6 +87,45 @@ func TestRequiredVerifierPicksAProviderThatReportsItsModel(t *testing.T) {
 	}
 }
 
+// The Mac demo's shape on the required path: Claude Code did the run's task
+// and is the only provider whose answer names its model. It checks the work
+// in a fresh session of its own and the final check completes; it is not
+// refused for having done the task.
+func TestRequiredVerifierWorkerProviderChecksInFreshSession(t *testing.T) {
+	r, ctx, s, id, run, head, root := integrationSourceFixtureForWorker(t, "claude", nil, func(req *CreatePlanRequest) {
+		req.Checks = map[string][]string{"fix": {"test -f README.md"}}
+	})
+	if run.Tasks[0].Worker != "claude" {
+		t.Fatalf("fixture worker %q", run.Tasks[0].Worker)
+	}
+	s.GovernedCheck = r.runGovernedCheck
+	s.runtime = r
+	_, codexLog, claudeLog := fakeVerifierCLIs(t)
+	session, binding, err := r.verifyRequiredMarshalIntegration(ctx, s, id, run, head)
+	if err != nil || session.State != verification.VerifiedComplete || binding.RunID != root.RunID {
+		t.Fatalf("final check by the worker's provider did not complete: %v %v", session.State, err)
+	}
+	if ranFake(codexLog) || !ranFake(claudeLog) {
+		t.Fatalf("verifier: codex ran %v, claude ran %v", ranFake(codexLog), ranFake(claudeLog))
+	}
+}
+
+// The sessions the runtime observed for the workers are read from the
+// runtime proof; a verifier session among them is a reused one.
+func TestWorkerSessionsFromRuntimeProof(t *testing.T) {
+	proof := &verification.RuntimeProof{ProviderObservations: []verification.RuntimeProviderObservationProof{
+		{Observation: []byte(`{"provider":"claude","run_id":"r","task_id":"a","attempt":1,"session_id":"worker-session","thread_id":"worker-thread","timing_basis":"x","usage":{}}`)},
+		{Observation: []byte(`{"provider":"claude","run_id":"r","task_id":"b","attempt":1,"session_id":"worker-session","timing_basis":"x","usage":{}}`)},
+	}}
+	got := workerSessions(proof)
+	if strings.Join(got, ",") != "worker-session,worker-thread" {
+		t.Fatalf("worker sessions = %v", got)
+	}
+	if workerSessions(nil) != nil {
+		t.Fatal("sessions without a proof")
+	}
+}
+
 // When no installed independent provider can name its model, the run stops
 // before any check or model turn and says which provider it needs.
 func TestRequiredVerifierWithoutAttributableProviderStopsBeforeTurn(t *testing.T) {

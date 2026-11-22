@@ -38,9 +38,9 @@ Once approved, tasks are dispatched to assigned worker agents (such as Claude Co
 
 ## 3. Cross-Provider Review (Reviewing Phase)
 
-To prevent models from overlooking their own mistakes, Marshal enforces **cross-provider review**:
+To prevent models from overlooking their own mistakes, every hand-in is reviewed by **another agent with a fresh context**:
 
-- **No Self-Grading**: A worker's hand-in is never reviewed by the same provider that wrote the code. If Codex implemented a task, Claude Code or Antigravity conducts the review.
+- **No Self-Grading**: The reviewer runs in a session of its own, started clean: it shares no conversation with the worker and never resumes the worker's session. A provider other than the worker's is preferred (if Codex implemented a task, Claude Code or Antigravity reviews it). When no other provider is available, the worker's own provider reviews in a new session, and the review records that fallback and its session.
 - **Criteria Verification**: The reviewer inspects the Git diff against the plan's acceptance criteria, checking code quality, missing edge cases, and adherence to project invariants.
 - **Rework Loop**: If the reviewer finds defects or unmet criteria, the task is marked `returned` (`r`) and sent back to the worker with specific review comments. If criteria are met, the task is marked `accepted`.
 
@@ -51,7 +51,8 @@ To prevent models from overlooking their own mistakes, Marshal enforces **cross-
 After the tasks finish, Marshal prepares for integration:
 
 - **Final check**: An independent check evaluates the integrated solution and reruns its checks.
-- **Claude Code requirement**: The final ULTRA check requires Claude Code installed and not used as a worker in that run. If unavailable, the run stops before the check and tells you to install Claude Code or wait for its limit, then continue with `y` (or the Web Board's button).
+- **A fresh session, not necessarily another provider**: The checker runs in a new agent session with no shared conversation and no worker's session resumed. Marshal prefers a provider that did none of the run's tasks; when none can take the role, a provider that did tasks checks them in a fresh session, and the evidence records that session and the fallback. A checker that reuses a worker's session is refused.
+- **Claude Code requirement**: The checker must also be installed, reach Marshal's tools, not be limited, and name the model that answered. Today that is Claude Code, even when it did some of the run's tasks. If it is unavailable, the run stops before the check and tells you to install Claude Code or wait for its limit, then continue with `y` (or the Web Board's button).
 - **Objective Proof**: Completion is based on real execution status, process exit codes, and test outputs, not on model self-assertions.
 
 ---

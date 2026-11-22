@@ -35,50 +35,59 @@ func verifierProviderFixture(t *testing.T, installed ...string) (*Runtime, *Mars
 	return r, s
 }
 
-func TestVerifierProviderExcludesAllWorkersAndLimits(t *testing.T) {
-	r, s := verifierProviderFixture(t, "claude", "codex", "agy", "opencode")
+// The final check excludes only providers that cannot take the role: not
+// installed, no Marshal MCP, limited, or unable to name the model that
+// answered. Doing the run's tasks does not exclude a provider; one that did
+// none of them is preferred when one is eligible.
+func TestVerifierProviderExcludesOnlyIneligibleProviders(t *testing.T) {
+	r, _ := verifierProviderFixture(t, "claude", "codex", "agy", "opencode")
 	for _, p := range []string{"claude", "codex", "agy", "opencode"} {
 		providerHealth.Clear(p)
 		t.Cleanup(func() { providerHealth.Clear(p) })
 	}
 	run := marshal.Run{Tasks: []marshal.Task{{Worker: "claude-code"}, {Worker: "antigravity"}}}
 	providerHealth.Mark("codex", "quota exhausted", time.Now().Add(time.Hour))
-	p, err := s.VerifierProvider(t.Context(), run)
+	providerHealth.Mark("claude", "quota exhausted", time.Now().Add(time.Hour))
+	// agy and opencode stay limited: this test is about the other two.
+	providerHealth.Mark("agy", "rate limit", time.Now().Add(time.Hour))
+	providerHealth.Mark("opencode", "rate limit", time.Now().Add(time.Hour))
+	p, _, err := r.independentVerifierChoice(run)
 	if err == nil || p != "" {
-		t.Fatalf("unavailable independent verifier selected: %q %v", p, err)
+		t.Fatalf("limited verifier selected: %q %v", p, err)
 	}
-	for _, want := range []string{"claude", "worker", "codex", "quota exhausted", "agy"} {
+	for _, want := range []string{"claude", "codex", "quota exhausted", "agy"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("exclusions missing %q: %v", want, err)
 		}
 	}
-	if privateAGYEnabled() && !strings.Contains(err.Error(), "opencode") {
-		t.Errorf("missing MCP exclusion: %v", err)
+	if strings.Contains(err.Error(), "worker provider") {
+		t.Errorf("a worker's provider is excluded for doing the tasks: %v", err)
+	}
+	// Claude Code did tasks; with its limit gone it checks them in a fresh
+	// session, unless Codex (which did none) can take the role.
+	r.clearProviderLimit("claude")
+	p, worker, err := r.independentVerifierChoice(run)
+	if err != nil || p != "claude" || !worker {
+		t.Fatalf("worker-provider fallback: %q worker=%v %v", p, worker, err)
 	}
 	r.clearProviderLimit("codex")
-	p, err = s.VerifierProvider(t.Context(), run)
+	p, worker, err = r.independentVerifierChoice(run)
 	if gap := requiredVerifierAttributionGap("codex"); gap != "" {
-		// The shipped final check needs a verifier that names its model;
-		// Codex does not, so clearing its limit leaves no verifier.
-		if err == nil || p != "" || !strings.Contains(err.Error(), gap) {
-			t.Fatalf("unattributable Codex selected: %q %v", p, err)
+		if err != nil || p != "claude" || !worker {
+			t.Fatalf("unattributable Codex displaced Claude Code: %q %v", p, err)
 		}
-	} else if err != nil || p != "codex" {
-		t.Fatalf("successful harness verify did not restore independent Codex: %q %v", p, err)
-	}
-	run.Tasks = append(run.Tasks, marshal.Task{Worker: "codex"})
-	if p, err = s.VerifierProvider(t.Context(), run); err == nil || p != "" {
-		t.Fatalf("fell back to a worker: %q %v", p, err)
+	} else if err != nil || p != "codex" || worker {
+		t.Fatalf("a provider that did none of the tasks was not preferred: %q worker=%v %v", p, worker, err)
 	}
 }
 
 func TestVerifierProviderNamesUninstalledProviders(t *testing.T) {
-	_, s := verifierProviderFixture(t, "claude")
+	_, s := verifierProviderFixture(t)
 	p, err := s.VerifierProvider(t.Context(), marshal.Run{Tasks: []marshal.Task{{Worker: "claude"}}})
-	if p != "" || err == nil {
-		t.Fatalf("worker fallback: %q %v", p, err)
+	if p != "" || !errors.Is(err, errIndependentVerifierUnavailable) {
+		t.Fatalf("verifier without an installed provider: %q %v", p, err)
 	}
-	for _, want := range []string{"codex", "not installed", "claude", "worker", "agy"} {
+	for _, want := range []string{"codex", "not installed", "claude", "agy"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("exclusions missing %q: %v", want, err)
 		}
@@ -188,19 +197,31 @@ func TestBareCodeVerificationStopReadsPlain(t *testing.T) {
 	}
 }
 
-// Claude Code is installed and could check the work, but it did this run's
-// tasks: the pause says so plainly instead of asking to install it.
-func TestUnavailableVerifierSaysCheckerDidTheTasks(t *testing.T) {
-	s, _ := marshalFixture(t, 1)
+func verifyingRunOn(t *testing.T, workers ...string) *MarshalService {
+	t.Helper()
+	// An ULTRA run whose tasks are accepted and merged, ready for the
+	// final check; the workers are then named as the providers given.
+	s, _ := marshalFixture(t, len(workers))
+	s.Gate = marshalTestGate(true)
+	s.ModelProvider = "test"
+	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
+		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"diff"}}, "other", nil
+	}
 	startIntegrityRun(t, s, marshal.Budget{})
+	for i := range workers {
+		id := string(rune('a' + i))
+		acceptIntegrityTask(t, s, id)
+		if err := s.Merge(t.Context(), "run", id); err != nil {
+			t.Fatal(err)
+		}
+	}
 	run, rev, err := s.load(t.Context(), "run")
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.State = marshal.Verifying
-	run.Tier = marshal.Ultra
-	run.Tasks[0].Worker = "claude"
-	run.Tasks = append(run.Tasks, marshal.Task{PlanTaskID: "b", Worker: "codex", State: marshal.Merged})
+	for i, w := range workers {
+		run.Tasks[i].Worker = w
+	}
 	if err = s.save(t.Context(), "run", run, rev); err != nil {
 		t.Fatal(err)
 	}
@@ -212,26 +233,115 @@ func TestUnavailableVerifierSaysCheckerDidTheTasks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("PATH", bin)
-	r := &Runtime{}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
 	s.ModelProvider = "claude"
+	return s
+}
+
+// The Mac demo: Claude Code and Codex did the run's tasks and only Claude
+// Code can do the final check. It checks them in a fresh session of its
+// own, the check passes, and the evidence records the fresh session and the
+// worker-provider fallback. The pause "Claude Code did this run's tasks, so
+// it cannot check them" no longer occurs.
+func TestFinalCheckByWorkerProviderInFreshSessionPasses(t *testing.T) {
+	s := verifyingRunOn(t, "claude", "codex")
+	r := &Runtime{}
 	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) { return r.independentVerifierProvider(run) }
-	s.IndependentVerify = func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error) {
-		t.Fatal("worker verifier ran")
-		return marshal.VerifierEvidence{}, nil
+	var verifier string
+	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
+		provider, err := s.VerifierProvider(ctx, run)
+		if err != nil {
+			return marshal.VerifierEvidence{}, err
+		}
+		verifier = provider
+		return marshal.VerifierEvidence{Reviewer: "verifier:" + provider, Provider: provider, SessionID: "fresh-verifier-session", FreshSession: true, Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
-	if _, err = s.VerifyMerged(t.Context(), "run", knownCharge()); err == nil {
-		t.Fatal("missing independent verifier accepted")
+	result, err := s.VerifyMerged(t.Context(), "run", knownCharge())
+	if err != nil || result != verification.VerifiedComplete {
+		t.Fatalf("final check by Claude Code in a fresh session: %s %v", result, err)
 	}
-	paused, err := s.Snapshot(t.Context(), "run")
-	if err != nil || paused.Pause == nil || len(paused.Pause.Resolutions) != 1 {
-		t.Fatalf("no verifier pause: %+v %v", paused, err)
+	// Where Codex names its model too (Community), the first eligible
+	// provider, Codex, checks instead; it also did tasks.
+	if want := map[bool]string{true: "claude", false: "codex"}[requiredVerifierAttributionGap("codex") != ""]; verifier != want {
+		t.Fatalf("verifier %q, want %s", verifier, want)
 	}
-	text := paused.Pause.Reason + "\n" + paused.Pause.Resolutions[0]
-	if !strings.Contains(text, "Claude Code") || !strings.Contains(text, "did this run's tasks, so") || !strings.Contains(text, "cannot check them") {
-		t.Fatalf("pause does not say Claude Code did the tasks: %q", text)
+	decisions, err := s.Store.MarshalDecisions(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(text, "Install Claude Code") || strings.Contains(text, "wait until its limit passes") {
-		t.Fatalf("pause asks to install a checker that is installed: %q", text)
+	recorded := false
+	for _, ev := range decisions {
+		if ev.Type == events.EventTypeMarshalVerifierRecorded && ev.Data["verifier_same_provider_fallback"] == true && ev.Data["verifier_fresh_session"] == true && ev.Data["verification_error"] == nil {
+			recorded = true
+		}
+		if ev.Type == events.EventTypeMarshalEscalated && strings.Contains(fmt.Sprint(ev.Data["summary"]), "cannot check them") {
+			t.Fatalf("the old pause occurred: %v", ev.Data)
+		}
+	}
+	if !recorded {
+		t.Fatal("verifier evidence does not record the fresh session and the fallback")
+	}
+}
+
+// A verifier that reuses a worker's session, or of a worker's provider
+// without a fresh session of its own, is refused.
+func TestFinalCheckRefusesVerifierReusingWorkerSession(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		record marshal.VerifierEvidence
+		want   string
+	}{
+		{"resumed session", marshal.VerifierEvidence{SessionID: "resumed", FreshSession: false}, "did not run in a fresh session"},
+		{"no session id", marshal.VerifierEvidence{FreshSession: true}, "did not run in a fresh session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := verifyingRunOn(t, "claude")
+			s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "claude", nil }
+			s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
+				record := tc.record
+				record.Reviewer, record.Provider, record.Commit, record.Verdict, record.InputDigest = "verifier:claude", "claude", head, "pass", verifierInputDigest(run, head, session)
+				return record, nil
+			}
+			if result, err := s.VerifyMerged(t.Context(), "run", knownCharge()); err == nil || result == verification.VerifiedComplete || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("verifier without a fresh session accepted: %s %v", result, err)
+			}
+		})
+	}
+	// The session check itself: a worker's observed session is refused for
+	// any provider, as is the Marshal's own conversation.
+	s := &MarshalService{Model: &MarshalCLI{ConversationID: "marshal-session"}}
+	data := map[string]any{}
+	if err := s.checkVerifierFreshSession(marshal.VerifierEvidence{Provider: "codex", SessionID: "worker-session", FreshSession: true}, []string{"claude"}, []string{"worker-session"}, data); err == nil || !strings.Contains(err.Error(), "reused a worker's session") {
+		t.Fatalf("worker session reuse accepted: %v", err)
+	}
+	if err := s.checkVerifierFreshSession(marshal.VerifierEvidence{Provider: "codex", SessionID: "marshal-session", FreshSession: true}, []string{"claude"}, nil, data); err == nil || !strings.Contains(err.Error(), "the Marshal's session") {
+		t.Fatalf("Marshal session reuse accepted: %v", err)
+	}
+	if err := s.checkVerifierFreshSession(marshal.VerifierEvidence{Provider: "claude", SessionID: "new", FreshSession: true}, []string{"claude"}, []string{"worker-session"}, data); err != nil || data["verifier_same_provider_fallback"] != true {
+		t.Fatalf("fresh worker-provider verifier refused: %v %v", err, data)
+	}
+}
+
+// A cross-review by the worker's own provider is accepted only from a fresh
+// session distinct from the worker's, and records the fallback.
+func TestCrossReviewByWorkerProviderNeedsFreshSession(t *testing.T) {
+	h := marshal.HandIn{Worker: "claude", Provider: "claude", RuntimeObserved: []marshal.CommandRecord{{Command: "process05 provider-observation EV-1", Output: `{"provider":"claude","run_id":"r","task_id":"a","attempt":1,"session_id":"worker-session","timing_basis":"x","usage":{}}` + "\nRuntime lifecycle observation; paid inference intervals are not recorded."}}}
+	if got := handInWorkerSessions(h); len(got) != 1 || got[0] != "worker-session" {
+		t.Fatalf("worker sessions: %v", got)
+	}
+	data := map[string]any{}
+	if err := checkCrossReviewFreshSession(marshal.Review{SessionID: "worker-session", FreshSession: true}, "claude", h, data); err == nil {
+		t.Fatal("cross-review in the worker's session accepted")
+	}
+	if err := checkCrossReviewFreshSession(marshal.Review{SessionID: "resumed"}, "claude", h, data); err == nil {
+		t.Fatal("cross-review without a fresh session accepted")
+	}
+	data = map[string]any{}
+	if err := checkCrossReviewFreshSession(marshal.Review{SessionID: "new", FreshSession: true}, "claude", h, data); err != nil || data["cross_review_same_provider_fallback"] != true || data["cross_review_session_id"] != "new" {
+		t.Fatalf("fresh same-provider cross-review: %v %v", err, data)
+	}
+	data = map[string]any{}
+	if err := checkCrossReviewFreshSession(marshal.Review{}, "codex", h, data); err != nil || data["cross_review_same_provider_fallback"] != nil {
+		t.Fatalf("other-provider cross-review: %v %v", err, data)
 	}
 }

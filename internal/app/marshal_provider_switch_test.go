@@ -84,22 +84,18 @@ func TestMarshalOperatorProviderSwitchIsRecordedAndRuntimeCannotSwitch(t *testin
 	}
 }
 
-// A cross-review never falls back to the worker's provider (or one skipped
-// for its limit) in the private edition.
-func TestCrossReviewProviderIsNeverTheWorkers(t *testing.T) {
+// A cross-review prefers a provider other than the worker's (and one skipped
+// for its limit); with none left, the worker's own provider reviews in a
+// fresh session of its own, in either edition.
+func TestCrossReviewProviderPrefersAnotherProvider(t *testing.T) {
 	if p, err := crossReviewProvider([]string{"claude", "codex", "agy"}, []string{"claude"}, "claude", "a"); err != nil || p == "claude" {
 		t.Fatalf("cross-review provider %q %v", p, err)
 	}
 	if p, err := crossReviewProvider([]string{"claude", "codex", "agy"}, []string{"claude", "codex"}, "claude", "a"); err != nil || p != "agy" {
 		t.Fatalf("cross-review skipped provider: %q %v", p, err)
 	}
-	p, err := crossReviewProvider([]string{"claude", "codex"}, []string{"claude", "codex"}, "claude", "a")
-	if independentCrossReviewRequired {
-		if err == nil {
-			t.Fatalf("the worker's provider %q reviewed its own hand-in", p)
-		}
-	} else if err != nil {
-		t.Fatalf("Community single-provider fallback refused: %v", err)
+	if p, err := crossReviewProvider([]string{"claude", "codex"}, []string{"claude", "codex"}, "claude", "a"); err != nil || p != "claude" {
+		t.Fatalf("fresh-session fallback to the worker's provider: %q %v", p, err)
 	}
 }
 

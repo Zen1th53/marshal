@@ -9,7 +9,7 @@ import (
 )
 
 // demoStallPanel is the live Mac demo's run: four independent governed
-// tasks, all on codex (Claude Code kept free as the final checker), queued.
+// tasks, all on codex, queued.
 func demoStallPanel(state marshal.RunState) *MarshalPanel {
 	run := marshal.Run{State: state, PlanID: "PLAN-demo", Settings: marshal.DefaultSettings()}
 	for _, id := range []string{"done-cmd", "due-dates", "color-table", "export-json"} {

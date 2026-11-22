@@ -57,18 +57,14 @@ type MarshalService struct {
 	ModelProvider                    string
 	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error)
 	VerifierProvider                 func(context.Context, marshal.Run) (string, error)
-	// CheckerCandidates lists the providers that could do the final
-	// independent check if they did none of the run's tasks. When set, the
-	// last of them is kept off worker tasks (checker_reserve.go).
-	CheckerCandidates func() []string
-	IndependentVerify func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error)
-	GateState         func(context.Context, string, string) (constitution.RuntimeState, error)
-	ApprovalActor     func(context.Context, string, string) (string, error)
-	Drivers           map[string]driver.Driver
-	GovernedDrivers   map[string]driver.Driver
-	Gate              marshal.CapabilityGate
-	Verify            func(context.Context, marshal.Run, string) (verification.Session, verification.Binding, error)
-	ProbeWorker       func(context.Context, string) error
+	IndependentVerify                func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error)
+	GateState                        func(context.Context, string, string) (constitution.RuntimeState, error)
+	ApprovalActor                    func(context.Context, string, string) (string, error)
+	Drivers                          map[string]driver.Driver
+	GovernedDrivers                  map[string]driver.Driver
+	Gate                             marshal.CapabilityGate
+	Verify                           func(context.Context, marshal.Run, string) (verification.Session, verification.Binding, error)
+	ProbeWorker                      func(context.Context, string) error
 	// InstalledVersion reports the installed version of a worker's CLI, for
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string

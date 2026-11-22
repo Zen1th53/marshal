@@ -1152,7 +1152,7 @@ func TestUltraSameProviderCrossReviewRecordsFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.CrossReview = func(_ context.Context, _ marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check:test -f a.txt"}}, h.Worker, nil
+		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check:test -f a.txt"}}, h.Worker, nil
 	}
 	if _, err := s.Review(ctx, "run", "a", knownCharge()); err != nil {
 		t.Fatal(err)

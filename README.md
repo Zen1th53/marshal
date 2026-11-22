@@ -19,7 +19,7 @@ and only verified work lands on `main`.**
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="A real Marshal run on a Mac, sped up: Claude Code is picked as the Marshal, the goal is said from the Board, the Marshal asks one question and fills the requirements card, the requirements are confirmed, the architecture is accepted in the browser, Codex builds four tasks in parallel while Claude Code is kept free for the final check, each task is reviewed and merged, and the run ends DONE with all four on main." width="100%">
+  <img src=".github/assets/demo.gif" alt="A real Marshal run on a Mac, sped up: Claude Code is picked as the Marshal, the goal is said from the Board, the Marshal asks one question and fills the requirements card, the requirements are confirmed, the architecture is accepted in the browser, Codex builds four tasks in parallel, each task is reviewed and merged, Claude Code does the final check, and the run ends DONE with all four on main." width="100%">
   <br>
   <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → readiness → say the goal → planning → <b>Accept architecture</b> card, accept in the browser → lanes build in parallel → each hand-in reviewed by a different provider → verify → merge</sub>
 </p>
@@ -123,7 +123,7 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
     (codex)    (claude)   (opencode)
         └──────────┼──────────┘
                    ▼
-     review by a different provider  ──▶  independent verifier runs the checks
+     review in a fresh agent session ──▶  independent verifier runs the checks
                    │
                    ▼
             merged and closed to main
@@ -135,9 +135,11 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 2. **Build in isolation.** The plan is split into small tasks. Each task names
    its files, acceptance criteria and a check command, and runs in its own Git
    worktree and branch, so parallel workers never overwrite each other.
-3. **No model grades its own work.** A different provider reviews every
-   hand-in against its criteria. An independent verifier then runs the checks
-   on the integrated result.
+3. **No model grades its own work.** Another agent with a fresh context
+   reviews every hand-in against its criteria: a different provider when one
+   is available, otherwise a new session of the same one. An independent
+   verifier, also in a session of its own, then runs the checks on the
+   integrated result.
 4. **Only verified work lands.** Accepted tasks merge, and the run closes to
    `main` with a record of who did what and which checks passed.
 

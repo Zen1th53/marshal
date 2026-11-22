@@ -703,7 +703,7 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	s.ModelProvider = "test"
 	s.CrossReview = func(_ context.Context, t marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
 		ref := "check:test -f " + t.PlanTaskID + ".txt"
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{ref}}, "test", nil
+		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{ref}}, "test", nil
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "test", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {

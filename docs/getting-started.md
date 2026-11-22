@@ -72,7 +72,7 @@ The readiness checklist (the Marshal's provider, the workers, the platform, the 
 
 On a first open, *From you* says that anonymous usage counts are on (install and version counts to marshal.blackhat.uz, never code, prompts or file names). Press `y` to keep them on or `t` to turn them off; `marshal telemetry disable` turns them off later. [Exactly what is sent →](telemetry.md)
 
-At least one provider has to be ready. With two or more, a different provider reviews each task.
+At least one provider has to be ready. With two or more, a different provider reviews each task; with one, it reviews in a fresh session of its own.
 
 ---
 
@@ -125,8 +125,8 @@ What happens on its own:
 
 1. **Dispatch**: each task runs in a separate Git worktree, so workers never overwrite each other's changes.
 2. **Execution**: the worker implements the changes and hands them in.
-3. **Cross-provider review**: a different provider checks the diff against the task's criteria. If it finds problems, the task goes back for rework.
-4. **Final check**: an independent check reruns the checks on the integrated result. This final ULTRA check needs Claude Code installed and unused as a worker in that run. Otherwise the run stops before the check and asks you to install Claude Code or wait for its limit, then press `Enter`.
+3. **Review**: another agent with a fresh context (a different provider when one is available) checks the diff against the task's criteria. If it finds problems, the task goes back for rework.
+4. **Final check**: an independent check, in a fresh session of its own, reruns the checks on the integrated result. This final ULTRA check needs Claude Code installed; Claude Code may also have done some of the run's tasks. Otherwise the run stops before the check and asks you to install Claude Code or wait for its limit, then press `Enter`.
 
 To look closer, open the Web Board (`w`). If a task gets stuck, *From you* names it: `y` retries it in a fresh session (the Web Board's **Retry** does the same). `/task-model T03` changes the model a task runs on. `Ctrl+X` stops all workers.
 

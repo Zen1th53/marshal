@@ -127,7 +127,7 @@ func TestExtremeInvalidCollectionRetriesBeforeReview(t *testing.T) {
 	}}
 	s.CrossReview = func(_ context.Context, task marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
 		reviews.Add(1)
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f " + task.PlanTaskID + ".txt"}}, "test", nil
+		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f " + task.PlanTaskID + ".txt"}}, "test", nil
 	}
 	if _, err := s.StartPlanning(ctx, "invalid-collection", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)

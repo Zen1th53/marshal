@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"slices"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -37,7 +38,13 @@ func (s *MarshalService) acceptedCrossReviewPayloads(ctx context.Context, runID 
 			return nil, err
 		}
 		h := handin.Value
-		if h.ResultCommit == "" || h.ResultCommit != task.ResultCommit || h.Provider == "" || sameProviderAsWorker(independent.Provider, h.Provider, h.Worker, task.Worker) {
+		if h.ResultCommit == "" || h.ResultCommit != task.ResultCommit || h.Provider == "" {
+			continue
+		}
+		// A review by the worker's own provider counts only when it ran in
+		// a fresh session of its own, distinct from the worker's.
+		sameProvider := sameProviderAsWorker(independent.Provider, h.Provider, h.Worker, task.Worker)
+		if sameProvider && (!independent.FreshSession || independent.SessionID == "" || slices.Contains(handInWorkerSessions(h), independent.SessionID)) {
 			continue
 		}
 		refs, err := resolveReviewReferences(marshal.Review{EvidenceRefs: independent.EvidenceRefs}, h)
@@ -54,7 +61,10 @@ func (s *MarshalService) acceptedCrossReviewPayloads(ctx context.Context, runID 
 			Reviewer         string          `json:"reviewer"`
 			Verdict          marshal.Verdict `json:"verdict"`
 			EvidenceRefs     []string        `json:"evidence_refs"`
-		}{runID, task.PlanTaskID, attempt, h.ResultCommit, h.Provider, independent.Provider, independent.Reviewer, independent.Verdict, refs})
+			ReviewerSession  string          `json:"reviewer_session_id,omitempty"`
+			FreshSession     bool            `json:"reviewer_fresh_session,omitempty"`
+			SameProvider     bool            `json:"same_provider_fresh_session,omitempty"`
+		}{runID, task.PlanTaskID, attempt, h.ResultCommit, h.Provider, independent.Provider, independent.Reviewer, independent.Verdict, refs, independent.SessionID, independent.FreshSession, sameProvider})
 		if err != nil {
 			return nil, err
 		}

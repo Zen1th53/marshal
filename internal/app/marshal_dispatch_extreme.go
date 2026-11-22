@@ -341,7 +341,3 @@ func retireWorkerReturns(t *marshal.Task, worker string) {
 // governedProviderSwitchAllowed reports whether the operator may switch a
 // governed Process 05 task to another provider within its plan version.
 const governedProviderSwitchAllowed = true
-
-// independentCrossReviewRequired refuses a cross-review by the worker's own
-// provider instead of falling back to it.
-const independentCrossReviewRequired = true
