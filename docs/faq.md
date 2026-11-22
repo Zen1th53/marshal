@@ -26,17 +26,15 @@ run it inside **WSL2** — the Linux binary installs and runs there as usual.
 There is no native Windows build: the TUI requires tmux, which has no native
 Windows build.
 
-Governed workers (the sandboxed workers that write code) need **Linux on
-amd64**: their confinement uses Linux bubblewrap and a socket supervisor built
-for amd64. On macOS and on Linux arm64 Marshal still sets up the project,
-gathers requirements, reviews the design and architecture and plans the run;
-when a governed task would start it stops with "This computer cannot run
-governed workers" instead of retrying. To run the plan, open the project with
-Marshal on a Linux amd64 machine.
+In the standard release, workers run on your host in Git worktrees on Linux
+and macOS (amd64 and arm64). Antigravity (`agy`) workers run on Linux only.
+Builds compiled with `-tags governed` use Linux bubblewrap and an amd64 socket
+supervisor; their workers need Linux amd64. On macOS or Linux arm64 those
+builds can plan and review, but stop when a governed task would start.
 
 ## Is it production-ready?
 
-It is young (v0.2). The run loop ([how a run works](how-it-works.md)) is tested end to end on fresh
+It is young (v0.4.0). The run loop ([how a run works](how-it-works.md)) is tested end to end on fresh
 projects with real providers. Expect rough edges, read what you accept, and
 [open an issue](https://github.com/Zen1th53/marshal/issues) when something
 breaks.

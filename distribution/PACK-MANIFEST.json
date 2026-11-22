@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "23ddf1196729ed5c080f27582dd3aae8d6d433edc882e25bcfb122691f300335",
-      "bytes": 15427
+      "sha256": "0cb97850512b617230a34ffa0348d1c127b3b77efaa6610601a28430924ec9c4",
+      "bytes": 15534
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -506,13 +506,13 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "1eab8797c42d0c42fea95fb29bda316f5b0a76dcee97c26252cff05d5dc894d9",
-      "bytes": 13322
+      "sha256": "b5665af034dcc7e9c4f6b923886ff2027e82b16a54cc0cb793bee95a463dcc16",
+      "bytes": 13557
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "68a9426caf462a434c7dc7305b6cf0aebbeb65f0518d0b71feeba90e257112f4",
-      "bytes": 5753
+      "sha256": "73a2b39692d83d4f7195c3f125a212453cb4dc850b5930782d4f9f8e91bd2c5c",
+      "bytes": 5757
     },
     {
       "path": "docs/design/board-v2/screen1.ans",
@@ -561,18 +561,18 @@
     },
     {
       "path": "docs/faq.md",
-      "sha256": "48e5d5b3e025545fa3fb39025e1b3d16c8c6a87bfbbfcca1275e723db01ad854",
-      "bytes": 1976
+      "sha256": "af3fe4200cd3589fff234ac03058ebace003758b3493ba12f251b6e4de199598",
+      "bytes": 1866
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "ec595d4dc1221ba6b78b0958e9df81989f3e9fa5b952fcdce88a82da7e329abb",
-      "bytes": 9204
+      "sha256": "b62a7f25bc17ea8249f5a5f58a4c7eeb002b0b3de4467123211848ce5c1b46de",
+      "bytes": 9199
     },
     {
       "path": "docs/how-it-works.md",
-      "sha256": "0a31ce2ae6db3d8f9d402752f07e7afadf227f7d457423f87ee31857db3d40d5",
-      "bytes": 8454
+      "sha256": "b7db974a6f81ca4b72a7c68e2b40d853c3aa38e25d00345b8d42d7ccd66cbc88",
+      "bytes": 8513
     },
     {
       "path": "docs/index.md",
@@ -581,8 +581,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "ddffff7002ac6629067ced6de9481f90c322a124d847d57290948807748c4c17",
-      "bytes": 4926
+      "sha256": "723c57889c468c42756fe9f73a5022d656de749d95fbbc2f74adf0f165154db8",
+      "bytes": 4986
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -626,13 +626,13 @@
     },
     {
       "path": "docs/memory-and-mcp.md",
-      "sha256": "2cb9c8169628b8eb688d5a744db3ce71471eff527a2243f1cd3964c9fcc705db",
-      "bytes": 3392
+      "sha256": "49fd7872155b837eb6ceaf60367121bc5c7edde5d24c23a87c861826319e5489",
+      "bytes": 3545
     },
     {
       "path": "docs/providers.md",
-      "sha256": "54aca0a5e26e987a37c0a51c6050d8f0f3295b5616b39baf48651fc0dde11540",
-      "bytes": 7320
+      "sha256": "cab6c76af9a12642b1708639316a22b34692c35ab6949f9a1dc0fec5a54dafe6",
+      "bytes": 7646
     },
     {
       "path": "docs/requirements.txt",
@@ -646,13 +646,13 @@
     },
     {
       "path": "docs/telemetry.md",
-      "sha256": "312a75b3fade1a81bf00870b90cf8c49983dba6b91a72d8f2be0e2bd39fee87a",
-      "bytes": 5321
+      "sha256": "6e59b624936a5b091b14f364e6e48b0ebf092c2d8b4d439fb91003a7e082d76a",
+      "bytes": 5350
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "1a58fbe00d554763ee7d356ce52da6f01551a2144dc9db75a59fcb9154908b71",
-      "bytes": 11951
+      "sha256": "83abbea0dd1b05836d3aed0d5a18b2366d5f4978d172e1b8f80601186ae685d0",
+      "bytes": 11872
     },
     {
       "path": "docs/upgrading.md",

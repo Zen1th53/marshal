@@ -56,7 +56,7 @@ The first-run **Marshal picker** owns the keyboard until you answer it, even whe
 
 ### The action palette
 
-`Space` opens the palette with the eight core actions first: say to the Marshal (`s`), open the architecture (`a`), retry or continue (`y`), change model or provider (`m`), pause everything (`p`, the same as `/pause all`; `/resume` continues), stop all workers (`Ctrl+X`), limits and workers (`l`, the Providers view) and help (`?`). Type a word to search the rest. An action that cannot run now shows why. The inbox's allow and deny are on the Web Board, not in the palette.
+`Space` opens the palette with the eight core actions first: say to the Marshal (`s`), open the architecture (`a`), retry or continue (`y`), change model or provider (`m`), pause everything (`p`, the same as `/pause all`; `/resume all` continues), stop all workers (`Ctrl+X`), limits and workers (`l`, the Providers view) and help (`?`). Type a word to search the rest. An action that cannot run now shows why. The inbox's allow and deny are on the Web Board, not in the palette.
 
 ### Views
 
@@ -106,7 +106,7 @@ Only what the Board offers right now. Each button presses the card's key through
 |---|---|
 | The paused card's big button | `Enter` on the card: it runs exactly what the card says, for example `/marshal retry T03 fresh-session` then `/marshal resume`, `/marshal reassign T06 claude` then `/marshal resume`, `/marshal resume`, or waits for the limit reset |
 | **Wait until …** | `w` on the paused card |
-| **Raw error** | `d`: the answer shows on the page |
+| **Raw error** (omitted when the card has more than three actions) | `d`: the answer shows on the page |
 | **Stop the run** (two clicks: the first only asks) | `x` on the paused card (`/marshal stop`; the run and its work are kept) |
 | A decision card's buttons | its keys: the plan's reply and the inbox's allow or deny ask for a second click (**Confirm …**), as `Enter` does after the first key in the terminal; a hard gate asks you to type its id |
 | **Open in browser** on the architecture card | `a`: the review opens on this computer, and the page shows the review link. The architecture is accepted only in its own review page, never from the Board |
@@ -127,7 +127,7 @@ A button works once and only for the card the page shows: if the card changed, o
 ## Narrow terminals and ASCII mode
 
 - **Size**: the home screen draws at any size; below about 40 × 10 its lower lines go. Beside the chat the Board gets half the window, and at least 60 columns while the chat can keep 40. The views need 80 columns on their own (60 beside the chat) and 12 rows; smaller, a view says the Board needs more space.
-- **Colour**: truecolor when the terminal says so (`COLORTERM=truecolor`), 256 colours otherwise. `marshal tui --theme monochrome` or `--theme high-contrast` chooses another theme; `NO_COLOR` or `marshal tui --no-color` turns colour off.
+- **Colour**: truecolor when the terminal says so (`COLORTERM=truecolor`), 256 colours otherwise. `marshal tui --theme monochrome` draws the home screen in monochrome; `--theme high-contrast` styles overlays such as the palette, diff viewer and composer, while the home screen uses its usual colours; `NO_COLOR` or `marshal tui --no-color` turns colour off.
 - **ASCII**: a locale that is not UTF-8 (for example `LC_ALL=C`), or `--no-color`, draws the home screen in ASCII:
 
 ```text
@@ -147,7 +147,7 @@ The project has one living architecture. For its baseline, the Marshal describes
 
 Press **`a`** on the Board, or use **`/marshal architecture`**, to open the current architecture at any time. On the Web Board's Accept architecture card, **Open in browser** opens the proposal waiting for your acceptance. The browser header shows `rev N → N+1 · proposed` while waiting and `rev N · current` after acceptance.
 
-Solid borders show current parts. Dashed borders and edges show additions connected to the current architecture. Changed parts have a dashed accent outline and a “changed” tag; open a part or connection to see its before and after fields. Removed parts are faded and struck through. Use **Only this goal’s changes** to focus on the proposal while keeping connected existing parts as context.
+Thin grey borders and edges show current parts. Bold blue solid borders and edges show additions, with a “new” tag on parts. Changed parts have a solid amber outline and a “changed” tag; changed connections have an amber highlight. Open a part or connection to see its before and after fields. Removed parts are faded and struck through. Use **Only this goal’s changes** to focus on the proposal while keeping connected existing parts as context.
 
 Comment on the drawing, choose builders if available, and select **Accept architecture** when ready. The Marshal then plans the work and continues the run. **History** lists revisions with their date, goal, run, and who accepted them. Select a revision to inspect its drawing and changes against the preceding revision; return to the latest architecture to comment or accept.
 

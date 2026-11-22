@@ -222,21 +222,22 @@ or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
 
 - Linux or macOS (amd64 or Apple Silicon/arm64). On Windows, use WSL2: run
   the installer inside your WSL2 Linux distribution.
-- Governed workers (sandboxed, socket-confined) run on **Linux amd64** only.
-  On macOS and Linux arm64 Marshal plans, reviews and shows the architecture,
-  and says plainly that it cannot run the governed workers there.
+- In the standard release, workers run on your host in Git worktrees on Linux
+  and macOS (amd64/arm64); Antigravity (`agy`) workers run on Linux only.
+  Sandboxed, socket-confined workers require `-tags governed` and Linux amd64.
 - Git and tmux 3.3a or newer
 - At least one provider CLI, installed and signed in:
   `claude` (Claude Code), `codex` (OpenAI Codex), `opencode` (OpenCode) or
   `agy` (Antigravity). Two or more providers enable cross-provider review.
 
-Check your setup with `marshal doctor`, or press `v` on the Board.
+Check your setup with `marshal doctor`. To verify a provider with a model call,
+open the Providers view (`4`), then press `v` and `Enter`.
 
 Build from source instead:
 
 ```bash
 git clone https://github.com/Zen1th53/marshal.git && cd marshal
-go build -o marshal ./cmd/marshal && install -Dm755 marshal ~/.local/bin/marshal
+go build -o marshal ./cmd/marshal && mkdir -p ~/.local/bin && install -m 755 marshal ~/.local/bin/marshal
 ```
 
 > [!WARNING]
