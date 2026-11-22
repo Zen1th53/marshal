@@ -31,7 +31,12 @@ func TestRequiredCloseOrchestrationActualHostChecksReviewsJournalAndTarget(t *te
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
-	service := r.Marshal()
+	service, err := r.MarshalWired(MarshalWiring{Provider: "claude", Approver: func(context.Context, string, string) (string, error) { return "explicit-host-fixture-consent", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This host fixture imports hand-ins directly; it has no native worker scan.
+	service.HandInGuard = nil
 	service.Verify = service.verifyByChecks
 	service.GateState = service.observedGateState
 	service.GovernedCheck = func(ctx context.Context, _, _, _, dir, command string) marshal.CommandRecord {

@@ -173,6 +173,8 @@ func TestExtremeDecideCannotSkipReviewAndVerifier(t *testing.T) {
 	s, _ := marshalFixture(t, 1)
 	s.Gate = cloud.Authorize(ctx, cloud.Config{}, t.TempDir(), "test").Gate
 	s.ModelProvider = "model"
+	s.CrossReview = nil
+	s.IndependentVerify = nil
 	s.ApprovalActor = func(context.Context, string, string) (string, error) { return "marshal-extreme", nil }
 	if _, err := s.StartPlanning(ctx, "run", "write", marshal.Budget{}); err != nil {
 		t.Fatal(err)
@@ -189,6 +191,9 @@ func TestExtremeDecideCannotSkipReviewAndVerifier(t *testing.T) {
 	}
 	if _, err = s.Review(ctx, "run", "a", knownCharge()); err == nil {
 		t.Fatal("ULTRA review without cross-review passed")
+	}
+	if _, err := s.Resume(ctx, "run"); err != nil {
+		t.Fatal(err)
 	}
 	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
 		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f a.txt"}}, "other", nil

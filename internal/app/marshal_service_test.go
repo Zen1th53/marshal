@@ -230,6 +230,17 @@ func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, stri
 	}
 	p := plan.ExecutionPlan{ID: "PLAN-test", ProjectID: projectid.ID(projectID), Goal: plan.GoalBinding{GoalID: "GOAL-test", Revision: 1}, Version: 1, State: plan.StateReady, Mode: plan.ModeStandard, ConstitutionVersion: constitution.Current, Tasks: tasks, Checks: checks, Graph: graph}
 	s := &MarshalService{Store: db, ProjectID: projectID, Repository: repo, Worktrees: filepath.Join(resolvedTempDir(t), "worktrees"), Reviewer: "marshal", Model: marshalFakeModel{draft: MarshalDraft{Plan: p, Tasks: mt}, review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}}
+
+	// Fixture roles mirror production wiring for every tier; role-availability
+	// tests explicitly remove them.
+	s.ModelProvider = "model"
+	s.CrossReview = func(_ context.Context, _ marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
+		return marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "cross-review:other", FreshSession: true, SessionID: "independent-review", EvidenceRefs: []string{"result:" + h.ResultCommit}}, "other", nil
+	}
+	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier", nil }
+	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
+		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+	}
 	s.GovernedCheck = fixtureCheckRunner
 	s.ApprovalActor = func(context.Context, string, string) (string, error) { return "user", nil }
 	s.GateState = func(context.Context, string, string) (constitution.RuntimeState, error) {
@@ -1045,6 +1056,8 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 	ctx := context.Background()
 	s, _ := marshalFixture(t, 1)
 	s.Gate = marshalTestGate(true)
+	s.CrossReview = nil
+	s.IndependentVerify = nil
 	s.ModelProvider = "model"
 	if _, err := s.StartPlanning(ctx, "run", "write", marshal.Budget{}); err != nil {
 		t.Fatal(err)
@@ -1061,6 +1074,9 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 	}
 	if _, err = s.Review(ctx, "run", "a", knownCharge()); err == nil {
 		t.Fatal("ULTRA review without cross-review passed")
+	}
+	if _, err := s.Resume(ctx, "run"); err != nil {
+		t.Fatal(err)
 	}
 	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
 		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f a.txt"}}, "other", nil

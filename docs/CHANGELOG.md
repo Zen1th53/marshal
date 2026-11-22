@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Require an independent cross-review of every hand-in and a final independent check for every plan, Standard and ULTRA, in both editions; pause when no reviewer or verifier is available.
 - Workers receive their accepted architecture slice; every hand-in requires architecture conformance and explicit reviewer verdicts, with new unowned source files returned (default edition).
 
 ## 0.4.0

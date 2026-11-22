@@ -52,9 +52,9 @@ and you follow and steer it all from a local Web Board.**
   and every hand-in is checked against it: code outside its parts or using an undeclared dependency
   goes back with the exact places.
 - **Checked before it merges.** Every hand-in is reviewed by the Marshal and its task's checks run
-  before it merges. On ULTRA plans each hand-in also gets an independent review, and a final check
-  reruns the checks on the integrated result: by another provider when one is free, otherwise by
-  a fresh session of the same one.
+  before it merges. On every plan, Standard and ULTRA, each hand-in also gets an independent
+  review, and a final independent check reruns the checks on the integrated result: by another
+  provider when one is free, otherwise by a fresh session of the same one.
 - **A Web Board as the cockpit.** A local page (127.0.0.1, opened with a one-use link) shows Home,
   Work, Architecture, Team, Activity and Settings, and asks you only when a decision is yours.
 - **Limits you can see.** Each provider's limits per model group and window, with reset times;
@@ -164,7 +164,8 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 2. **Build in isolation.** The plan is split into small tasks. Each task names
    its files, acceptance criteria and a check command, and runs in its own Git
    worktree and branch, so parallel workers never overwrite each other.
-3. **No model grades its own work.** Another agent with a fresh context
+3. **Checked before it merges.** Every plan gets an independent review
+   and final check. Another agent with a fresh context
    reviews every hand-in against its criteria: a different provider when one
    is available, otherwise a new session of the same one. An independent
    verifier, also in a session of its own, then runs the checks on the
@@ -247,9 +248,9 @@ full interface, and it opens in your browser as the Board starts:
 | `?` | Every key |
 
 The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
-runs on. The final ULTRA check needs Claude Code installed and not at its limit; it runs in a
-fresh session of its own, even when Claude Code also built tasks in that run.
-[All screens and keys →](docs/board-and-keys.md)
+runs on. Every plan's final independent check requires Claude Code installed. It runs in a
+fresh session, even if Claude Code also worked on the run. If unavailable, the run stops
+before checking and tells you to install Claude Code or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
 
 ---
 

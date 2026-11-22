@@ -15,18 +15,16 @@ import (
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
-func TestMarshalWiredUltraHasIndependentVerifier(t *testing.T) {
-	if len(installedMarshalProviders()) < 2 {
-		t.Skip("needs two installed provider CLIs for an independent verifier")
+func TestMarshalWiredEveryTierHasIndependentRoles(t *testing.T) {
+	// A single available provider must wire both independent roles for either tier.
+	_, service := verifierProviderFixture(t, "claude")
+	for _, tier := range []marshal.Tier{marshal.Standard, marshal.Ultra} {
+		if err := service.requireIndependentVerifier(t.Context(), marshal.Run{Tier: tier}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	fixture, _ := marshalFixture(t, 1)
-	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
-	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := service.requireIndependentVerifier(t.Context(), marshal.Run{Tier: marshal.Ultra}); err != nil {
-		t.Fatal(err)
+	if service.CrossReview == nil {
+		t.Fatal("independent cross-review is not wired")
 	}
 	if service.IndependentVerify == nil {
 		t.Fatal("independent verifier is not wired")

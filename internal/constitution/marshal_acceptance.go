@@ -26,7 +26,7 @@ func EvaluateTaskAcceptance(registry *Registry, envelope Envelope, state Runtime
 	state.AcceptanceCriteriaTotal, state.AcceptanceCriteriaMet = input.CriteriaTotal, input.CriteriaMet
 	state.EvidencePresent = input.EvidenceCommit != ""
 	state.EvidenceFresh = input.ResultCommit != "" && input.EvidenceCommit == input.ResultCommit
-	state.IndependentReviewRequired = envelope.Mode == ModeUltra
+	state.IndependentReviewRequired = true
 	state.IndependentReviewDone = input.IndependentReviewDone
 	state.ApprovalActor = ""
 	if input.Mode == marshal.AcceptUser {

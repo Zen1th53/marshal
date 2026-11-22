@@ -68,7 +68,7 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	}
 	s.InstalledVersion = installedCLIVersion
 	s.HandInGuard = r.guardHoneypotHandIn
-	// Every role runs in a session of its own. The ULTRA cross-reviewer and
+	// Every role runs in a session of its own. The cross-reviewer and
 	// the verifier are started fresh, never resumed from the Marshal's or a
 	// worker's conversation, so none of them judges work it saw being made.
 	// That fresh session is what makes them independent: a provider that did
