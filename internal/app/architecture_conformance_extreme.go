@@ -23,7 +23,7 @@ const architectureFindingLimit = 8
 // architectureHandInEdition checks the files a hand-in changed against the
 // accepted project contract: a task writes only inside its parts (and the
 // parts inside them), and code uses another part only through a declared
-// dependency. A file that belongs to no part does not return the task. With
+// dependency. A newly added production source file with no owning part returns the task. With
 // no accepted contract there is nothing to check.
 func (s *MarshalService) architectureHandInEdition(ctx context.Context, t marshal.Task, h marshal.HandIn) error {
 	accepted, err := s.runtime.store.ReadAcceptedProjectContract(ctx, s.runtime.ProjectContractBinding())
@@ -42,7 +42,25 @@ func (s *MarshalService) architectureHandInEdition(ctx context.Context, t marsha
 	// marshal_architecture_conformance instead of returning tasks.
 	declares := m.DeclaresDependencies()
 	var blocking []string
+	base := t.BaseCommit
+	if base == "" {
+		base = h.BaseCommit
+	}
+	added := map[string]bool{}
+	if base != "" {
+		names, diffErr := gitMarshal(ctx, s.Repository, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--diff-filter=A", "--name-only", "-z", base, h.ResultCommit)
+		if diffErr != nil {
+			return fmt.Errorf("architecture: cannot determine newly added files: %w", diffErr)
+		}
+		for _, name := range strings.Split(names, "\x00") {
+			added[name] = true
+		}
+	}
+
 	for _, f := range archconform.Check(m, h.FilesTouched, parts, archconform.GoModule(gomod), read) {
+		if f.Kind == "unowned" && added[f.File] && architectureProductionSource(f.File) {
+			blocking = append(blocking, f.String()+"; place it inside a declared owning part, or ask the Marshal to revise the architecture")
+		}
 		if f.Kind == "outside_task" || (f.Kind == "undeclared_dependency" && declares) {
 			blocking = append(blocking, f.String())
 		}
@@ -246,4 +264,21 @@ func pathExt(p string) string {
 		return ""
 	}
 	return p[i:]
+}
+
+// Tests, fixtures and documentation are advisory when unowned. Source extensions
+// match the conformance scanner; test naming conventions are excluded.
+func architectureProductionSource(file string) bool {
+	lower := strings.ToLower(file)
+	for _, segment := range strings.Split(lower, "/") {
+		switch segment {
+		case "docs", "test", "tests", "testdata", "__tests__", "fixtures":
+			return false
+		}
+	}
+	name := lower[strings.LastIndex(lower, "/")+1:]
+	if strings.HasSuffix(name, "_test.go") || strings.HasPrefix(name, "test_") || strings.HasSuffix(name, "_test.py") || strings.Contains(name, ".test.") || strings.Contains(name, ".spec.") {
+		return false
+	}
+	return conformanceCode[pathExt(lower)]
 }

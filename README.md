@@ -147,7 +147,7 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 
 ---
 
-## Why Marshal
+## What you get
 
 Coding agents are good at writing code and bad at knowing when they are wrong.
 With one agent, the same model plans, writes, tests and approves its own work.
@@ -158,6 +158,7 @@ Marshal turns that into a process:
 
 - **One conversation, a whole team.** You talk to one Marshal. It plans,
   dispatches and checks; you make the decisions that matter.
+- **Architecture carried into the work.** Each worker gets its part of the accepted architecture, and every hand-in is checked against it (default edition).
 - **Cross-provider review.** Claude reviews Codex, Codex reviews Claude.
   No model reviews its own work.
 - **A separate worktree per task.** A worktree and branch per task, a declared
