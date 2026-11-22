@@ -71,8 +71,8 @@
     },
     {
       "path": ".github/assets/demo.gif",
-      "sha256": "9bbdfdd09545c668da66d433a1c98b3dbcb81276bfaae26034bd812f3265d0f8",
-      "bytes": 815987
+      "sha256": "a00c69f233a5191471e8bc11c7878256979ad1bf25aea8a578efadf14aa79017",
+      "bytes": 3128388
     },
     {
       "path": ".github/dependabot.yml",
@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "28a7dc9dec37bd5c41c0497b325cbc2bbee4607b6897fcce88659e4e903de14b",
-      "bytes": 15460
+      "sha256": "4029fd332666d8d85e298dbe5bee2624a33fd545a5e25c36b432fef5b975672a",
+      "bytes": 15308
     },
     {
       "path": "RUNTIME-VERSION.yaml",
