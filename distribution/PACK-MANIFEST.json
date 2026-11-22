@@ -12006,8 +12006,8 @@
     },
     {
       "path": "internal/tui/auth_preflight.go",
-      "sha256": "289458e1ae621e2a1cff89d9f59de87c4e83c875926fc88d78a6bdd62329dd5d",
-      "bytes": 24297
+      "sha256": "eb4d9d801804d857ae1937ca423f7dc3185e87a471c0fbfa2ba230fac673d660",
+      "bytes": 25045
     },
     {
       "path": "internal/tui/auth_preflight_test.go",
@@ -14981,8 +14981,8 @@
     },
     {
       "path": "internal/tui/runtime_macos_regression_test.go",
-      "sha256": "12d8e9280c9be24257fb721ae1461a37c83990c86b9ac7363b0940f6a977d014",
-      "bytes": 1956
+      "sha256": "52b03402f88b3fba86bc632a854bc53e248d8bfb88654aa16f530b80b79260a2",
+      "bytes": 3988
     },
     {
       "path": "internal/tui/runtime_recovery_extreme_test.go",
