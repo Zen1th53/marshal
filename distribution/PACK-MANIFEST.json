@@ -2985,6 +2985,11 @@
       "bytes": 1998
     },
     {
+      "path": "internal/app/marshal_review_restart_test.go",
+      "sha256": "8eea066fb7a6fec9afce2b97f887b3fa553054fc9cb2e44ce5c444c7ecd3cf60",
+      "bytes": 2420
+    },
+    {
       "path": "internal/app/marshal_reword_extreme_test.go",
       "sha256": "9621c6f6246d6e1c6c69d745f8d9f179b0d9867d83d33e288ae936df1905e3e9",
       "bytes": 3797
@@ -13176,8 +13181,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "e9e219554a19effd5c20707afed170ac84863ed477fe1c76df86768f28040b72",
-      "bytes": 80443
+      "sha256": "c2581d366f82290427d3b67a44fde0314fc6f76195836d317bbc4742548387c4",
+      "bytes": 81262
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -13911,8 +13916,8 @@
     },
     {
       "path": "internal/tui/marshal_plan_stall.go",
-      "sha256": "a4cbd66ea000ee58a973080593543b99239b61889a59b5a586f4853b5854ff95",
-      "bytes": 5159
+      "sha256": "c6cb9fef9a4cec9904191ec0dc211171535338d5b177402a102ad58e97dc9f47",
+      "bytes": 5414
     },
     {
       "path": "internal/tui/marshal_plan_stall_test.go",
@@ -14003,6 +14008,11 @@
       "path": "internal/tui/marshal_resume_refusal_test.go",
       "sha256": "1959d42a7eeedbb6453bf65d01ba7fedcc90563a93c8dab08201560885fef3c1",
       "bytes": 1214
+    },
+    {
+      "path": "internal/tui/marshal_review_restart_test.go",
+      "sha256": "d34f2b5c69725e56305285e89162b53d6c08cc38a08b93ffc81671af9788db4f",
+      "bytes": 3561
     },
     {
       "path": "internal/tui/marshal_run_authority.go",
