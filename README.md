@@ -48,6 +48,9 @@ and you follow and steer it all from a local Web Board.**
   confirm, then proposes the project's architecture, which only you can accept in the browser.
 - **Parallel workers.** Codex, Claude Code and the others build separate tasks at the same time,
   each in its own Git worktree and branch.
+- **Architecture carried into the work.** Each worker is told its part of the accepted architecture,
+  and every hand-in is checked against it: code outside its parts or using an undeclared dependency
+  goes back with the exact places.
 - **Checked before it merges.** Every hand-in is reviewed by the Marshal and its task's checks run
   before it merges. On ULTRA plans each hand-in also gets an independent review, and a final check
   reruns the checks on the integrated result: by another provider when one is free, otherwise by
@@ -184,8 +187,8 @@ Marshal turns that into a process:
 
 - **One conversation, a whole team.** You talk to one Marshal. It plans,
   dispatches and checks; you make the decisions that matter.
-- **Cross-provider review.** Claude reviews Codex, Codex reviews Claude.
-  No model reviews its own work.
+- **Independent review.** Another provider reviews the work when one is free;
+  otherwise a fresh session of the same one, which never sees the worker's conversation.
 - **A separate worktree per task.** A worktree and branch per task, a declared
   file scope, and a hand-in with commit digests and check results.
 - **Live and honest state.** The Board shows tasks, lanes, decisions and

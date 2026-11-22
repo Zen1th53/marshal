@@ -1546,6 +1546,9 @@ func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 	if bc.Note != "" {
 		b.WriteString("Task note from the approved plan:\n" + bc.Note + "\n")
 	}
+	if bc.ArchitectureContext != "" {
+		b.WriteString(bc.ArchitectureContext + "\n")
+	}
 	if strings.TrimSpace(t.Instructions) != "" {
 		b.WriteString("Instructions:\n" + strings.TrimSpace(t.Instructions) + "\n")
 	}

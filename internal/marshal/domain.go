@@ -204,6 +204,7 @@ type WorkerSelection struct {
 }
 
 type Task struct {
+	ArchitectureContext string `json:",omitempty"`
 	failoverTask
 	WorkerSelection  *WorkerSelection `json:",omitempty"`
 	Type             TaskType         `json:",omitempty"`
@@ -416,11 +417,13 @@ const (
 
 // Review records a reviewer's recommendation and supporting evidence.
 type Review struct {
-	Verdict      Verdict
-	Reviewer     string
-	Reasons      []string
-	EvidenceRefs []string
-	Independent  *IndependentReview
+	ArchitectureVerdict    string   `json:",omitempty"`
+	ArchitectureMismatches []string `json:",omitempty"`
+	Verdict                Verdict
+	Reviewer               string
+	Reasons                []string
+	EvidenceRefs           []string
+	Independent            *IndependentReview
 	// SessionID and FreshSession are set by the runtime, never by a
 	// model's answer: the session the cross-reviewer ran in, and whether the
 	// runtime started it clean. They reach the record through Independent.
@@ -431,11 +434,13 @@ type Review struct {
 // IndependentReview keeps the ULTRA cross-review beside the Marshal's
 // recommendation for the same hand-in attempt.
 type IndependentReview struct {
-	Verdict      Verdict
-	Reviewer     string
-	Provider     string
-	Reasons      []string
-	EvidenceRefs []string
+	ArchitectureVerdict    string   `json:",omitempty"`
+	ArchitectureMismatches []string `json:",omitempty"`
+	Verdict                Verdict
+	Reviewer               string
+	Provider               string
+	Reasons                []string
+	EvidenceRefs           []string
 	// SessionID is the reviewer's own session; FreshSession records that
 	// the runtime started it clean, with no worker's session resumed.
 	SessionID    string `json:",omitempty"`

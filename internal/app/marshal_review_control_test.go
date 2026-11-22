@@ -22,7 +22,7 @@ func reviewPrompt(t *testing.T, control marshal.Control) string {
 		t.Fatal(err)
 	}
 	cli := &MarshalCLI{Provider: "claude", Binary: binary, Dir: dir}
-	task := marshal.Task{PlanTaskID: "a", Instructions: "wrap the handler", Criteria: []string{"output exists"}, Files: []string{"output.txt"}}
+	task := marshal.Task{ArchitectureContext: "ARCHITECTURE FOR THIS TASK: api owns internal/api; api depends on store", PlanTaskID: "a", Instructions: "wrap the handler", Criteria: []string{"output exists"}, Files: []string{"output.txt"}}
 	handin := marshal.HandIn{
 		FilesTouched:    []string{"output.txt"},
 		RuntimeObserved: []marshal.CommandRecord{{Command: "worker CLI", Output: `{"result":"output written"}`}},
@@ -56,6 +56,15 @@ func TestMarshalReviewBriefNamesHandInAndAcceptanceBasis(t *testing.T) {
 			if !strings.Contains(prompt, want) {
 				t.Errorf("%s brief missing %q: %s", control, want, prompt)
 			}
+		}
+	}
+}
+
+func TestArchitectureReviewerPromptIncludesSlice(t *testing.T) {
+	prompt := reviewPrompt(t, marshal.ControlFree)
+	for _, want := range []string{"ARCHITECTURE FOR THIS TASK", "api depends on store", "ArchitectureVerdict", "ArchitectureMismatches", "incomplete", "mismatch requires return", "file:part"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("missing %q", want)
 		}
 	}
 }

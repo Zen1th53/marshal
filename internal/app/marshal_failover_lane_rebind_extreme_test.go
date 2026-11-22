@@ -123,7 +123,7 @@ func TestFailoverRebindsLane(t *testing.T) {
 	s.Gate = ultraGate{enabled: true}
 	s.GateState = fixture.GateState
 	s.ModelProvider = "review-test"
-	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
+	s.Model = marshalFakeModel{review: marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.GovernedCheck = fixtureCheckRunner
 	s.InstalledVersion = func(context.Context, string) string { return fixtureVersion }
 	s.GovernedDrivers = map[string]driver.Driver{}
@@ -143,7 +143,7 @@ func TestFailoverRebindsLane(t *testing.T) {
 	}
 	s.CrossReview = func(_ context.Context, task marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
 		reviews.Add(1)
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:grep -q fixed README.md"}}, "review-test", nil
+		return marshal.Review{ArchitectureVerdict: "conforms", Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:grep -q fixed README.md"}}, "review-test", nil
 	}
 	s.Verify = fixture.Verify
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier-test", nil }

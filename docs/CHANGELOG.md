@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Workers receive their accepted architecture slice; every hand-in requires architecture conformance and explicit reviewer verdicts, with new unowned source files returned (default edition).
+
 ## 0.4.0
 
 ### Changed

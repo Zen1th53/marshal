@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
@@ -13,4 +15,26 @@ func (s *MarshalService) architectureHandIn(ctx context.Context, t marshal.Task,
 		return nil
 	}
 	return s.architectureHandInEdition(ctx, t, h)
+}
+
+// checkArchitectureReview refuses incomplete reviews and converts mismatches to returns.
+func checkArchitectureReview(r *marshal.Review, required bool) error {
+	if !required {
+		return nil
+	}
+	if len(r.ArchitectureMismatches) > 0 {
+		for _, mismatch := range r.ArchitectureMismatches {
+			if !strings.Contains(mismatch, ":") {
+				return errors.New("architecture review incomplete: mismatches require file:part")
+			}
+		}
+		r.ArchitectureVerdict = "mismatches"
+		r.Verdict = marshal.VerdictReturn
+		r.Reasons = append(r.Reasons, r.ArchitectureMismatches...)
+		return nil
+	}
+	if r.ArchitectureVerdict != "conforms" {
+		return errors.New("architecture review incomplete: state conforms or list ArchitectureMismatches with file:part")
+	}
+	return nil
 }
