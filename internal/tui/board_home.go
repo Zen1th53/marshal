@@ -99,6 +99,9 @@ func cardEnterLabel(keys []vm.Key) string {
 
 // homeNow is the Now line: one sentence of what is happening.
 func homeNow(b vm.Board) string {
+	if b.LastRun {
+		return b.NowLine.Work + " · tell the Marshal a new goal"
+	}
 	if b.Top.Run != "" {
 		s := firstSet(b.NowLine.Work, "nothing running")
 		if pl := b.Plan; pl.Total > 0 {

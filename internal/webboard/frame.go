@@ -26,6 +26,7 @@ const Version = 1
 // Frame is one Board frame as the browser reads it. Times are RFC 3339 with
 // their zone ("" when unknown), durations whole seconds (0 when unknown).
 type Frame struct {
+	LastRun bool     `json:"lastRun"`
 	V       int      `json:"v"`
 	Screen  string   `json:"screen"`
 	Now     string   `json:"now"`
@@ -391,7 +392,7 @@ func limits(in []vm.ProviderLimits) []ProviderLimits {
 // an empty list, never null.
 func FromBoard(b vm.Board) Frame {
 	f := Frame{
-		V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
+		LastRun: b.LastRun, V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
 		Top: TopBar{Version: b.Top.Version, Project: b.Top.Project, Run: b.Top.Run, State: b.Top.State, StateTone: string(b.Top.StateTone),
 			Workers: b.Top.Workers, Inbox: b.Top.Inbox, Clock: stamp(b.Top.Clock)},
 		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK, ChatAsked: b.NowLine.ChatAsked},
