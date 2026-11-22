@@ -356,6 +356,13 @@ func initProject(t *testing.T, bin string) string {
 	}
 
 	run("git", "init", "-q", ".")
+	// A real owner's repository has a Git identity. The environment above
+	// covers only these setup commands; MARSHAL itself, started later
+	// without it, stops a file-writing task before its worker starts when
+	// `git config` finds no user.name or user.email (handin_identity.go),
+	// and CI runners have no global identity.
+	run("git", "config", "user.name", "conformance")
+	run("git", "config", "user.email", "conformance@example.invalid")
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("conformance\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
