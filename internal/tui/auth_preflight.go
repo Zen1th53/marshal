@@ -334,6 +334,12 @@ func defaultAuthPreflight(ctx context.Context, provider, binary string, env []st
 		})
 		return nil
 	}
+	// A failed status command can mean inaccessible credentials, configuration,
+	// or sandbox trouble. Only explicit authentication evidence means signed out.
+	if !detectProviderAuthFailure("codex", text) {
+		RecordAuthPreflightObservation(AuthObservation{Provider: "codex", Status: "ERROR", Reason: strings.TrimSpace(text), Source: "codex login status", ObservedAt: now})
+		return nil
+	}
 	RecordAuthPreflightObservation(AuthObservation{
 		Provider:   "codex",
 		Canonical:  "codex",
@@ -859,4 +865,17 @@ func (w *Workspace) monitorTaskAuthAndState(ctx context.Context, agent *activeTm
 	w.monitorTaskState(ctx, agent, h)
 	cancelAuth()
 	authWG.Wait()
+}
+
+// Chat panes contain arbitrary tool output, including other providers' login
+// errors. Confirm Codex's own status in its launch environment before attributing
+// any such text to the running Marshal.
+func confirmedChatAuthFailure(ctx context.Context, provider, binary string, env []string, text string) bool {
+	if !detectProviderAuthFailure(provider, text) {
+		return false
+	}
+	if canonicalAuthProvider(provider) != "codex" {
+		return true
+	}
+	return errors.Is(defaultAuthPreflight(ctx, provider, binary, env), ErrProviderNotSignedIn)
 }

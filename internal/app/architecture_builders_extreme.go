@@ -31,8 +31,8 @@ func (r *Runtime) architectureBuilders() func(context.Context) []architecturerev
 				option.Reason = "not installed"
 			} else if _, limited := r.providerLimited(provider); limited {
 				option.Reason = "at its limit right now"
-			} else if r.workerIneligibilityReason(ctx, provider) != "" {
-				option.Reason = "not checked on this machine yet"
+			} else if reason := r.nativeBuilderUnavailable(ctx, provider); reason != "" {
+				option.Reason = reason
 			} else {
 				option.Available = true
 				option.Limit = builderLimitText(quotas, provider)
@@ -75,4 +75,17 @@ func builderLimitText(quotas []usage.Quota, provider string) string {
 		return text
 	}
 	return "limit unknown"
+}
+
+// Native builder selection precedes governed harness qualification. A missing
+// harness profile says nothing about whether the owner's CLI is usable.
+func (r *Runtime) nativeBuilderUnavailable(ctx context.Context, provider string) string {
+	if provider != "codex" {
+		return ""
+	}
+	obs := r.getOrProbeAuth(ctx, provider, true, "", time.Now().UTC(), trackerFor(r))
+	if obs.Status == AuthStatusNotSignedIn {
+		return obs.Reason
+	}
+	return ""
 }

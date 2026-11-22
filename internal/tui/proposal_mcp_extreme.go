@@ -44,6 +44,8 @@ type proposalMCPPredecessor struct {
 const proposalMCPRebindWindow = 10 * time.Minute
 
 type proposalMCPLease struct {
+	recoveryRefusals             map[string]bool
+	designReviews                map[string]*designReviewJob
 	planning                     *nativePlanningLeaseRead
 	id, owner, provider, session string
 	dir                          *briefingDir
@@ -169,6 +171,7 @@ func (w *Workspace) prepareProposalMCP(provider, root string, args, env []string
 	}
 	return args, env, dir, nil
 }
+
 // proposalMCPListenOptions is how the broker for provider's Marshal chat
 // listens. Codex starts Marshal's stdio MCP child inside the chat's own
 // sandbox, which refuses connect(2) on every Unix socket ("proposalmcp:
@@ -231,6 +234,9 @@ func (w *Workspace) revokeProposalLease(l *proposalMCPLease) {
 		return
 	}
 	l.planning = nil
+	for _, job := range l.designReviews {
+		job.cancel()
+	}
 	l.revoked = true
 	l.active = false
 	if w.proposalMCP.active == l {
@@ -331,6 +337,9 @@ func (w *Workspace) serveProposalMCP(ctx context.Context, l *proposalMCPLease, m
 // serveLiveProposalMCP is a broker call on a validated live lease. Caller
 // holds proposalMCP.mu.
 func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, error) {
+	if method == "design_review" {
+		return w.designReviewMCP(l, raw)
+	}
 	if strings.HasPrefix(method, "project_contract_") {
 		return w.projectContractMCP(ctx, l, method, raw)
 	}
@@ -522,6 +531,7 @@ func (w *Workspace) settledProposalMCP(req permission.Request) bool {
 	p, err := w.store.MCPProposal(context.Background(), w.projectID, req.SourceOccurrence)
 	return err == nil && p.State != "admitted" && p.State != "answer_accepted"
 }
+
 // errProposalSettled refuses a second decision on a live MCP proposal whose
 // application already started or ended: a duplicate delivery of the same
 // proposal. The first decision owns the outcome and its Activity line.
@@ -657,4 +667,6 @@ func (w *Workspace) revokeNativeProposalMCP(dir *briefingDir) {
 
 // antigravityWorkspaceMCP reports whether this agy session has MARSHAL's MCP
 // server attached through the workspace file it created.
-func antigravityWorkspaceMCPReady(dir *briefingDir) bool { return dir != nil && dir.workspaceMCPAttached }
+func antigravityWorkspaceMCPReady(dir *briefingDir) bool {
+	return dir != nil && dir.workspaceMCPAttached
+}

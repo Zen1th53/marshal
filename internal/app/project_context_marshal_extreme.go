@@ -55,6 +55,12 @@ func (m *MarshalCLI) validateRequiredMarshalModelEnvelope(prompt, schema string)
 // turns cannot bypass the accepted context boundary. These model turns retain
 // their existing read-only modes and convey no worker execution authority.
 func (m *MarshalCLI) prepareRequiredMarshalModelTurn(ctx context.Context, prompt string) (context.Context, string, func() error, error) {
+	if m != nil && m.designReview && m.runtime != nil {
+		// This role only critiques a supplied draft before owner acceptance.
+		// No QUALIFIED receipt is created, so it cannot certify plan execution.
+		m.requiredTurnPreparation = &requiredMarshalTurnPreparation{runtime: m.runtime, cli: m, workspace: m.Dir}
+		return ctx, prompt, func() error { return m.validateRequiredMarshalBinary() }, nil
+	}
 	if m != nil && m.requiredArchitectureTarget != nil {
 		return m.prepareRequiredArchitectureMarshalTurn(ctx, prompt, m.requiredArchitectureTarget)
 	}

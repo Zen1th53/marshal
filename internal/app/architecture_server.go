@@ -188,6 +188,10 @@ func (r *Runtime) startArchitectureReview(ctx context.Context, cli *MarshalCLI, 
 		if err := replaceSupersededContractReview(directory, seed); err != nil {
 			return nil, err
 		}
+		config.InitialRevision, err = nextContractReviewRevision(directory)
+		if err != nil {
+			return nil, err
+		}
 	}
 	info, err := os.Lstat(file)
 	if err == nil {
