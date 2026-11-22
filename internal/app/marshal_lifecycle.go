@@ -2190,7 +2190,8 @@ func (s *MarshalService) requireIndependentVerifier(ctx context.Context, run mar
 	if err != nil {
 		return err
 	}
-	// The wired selector requires a fresh session and a non-worker provider.
+	// The wired selector starts the verifier in a fresh session, preferring a
+	// provider that did none of the tasks.
 	if provider == "" {
 		return errors.New("independent verifier is unavailable")
 	}
