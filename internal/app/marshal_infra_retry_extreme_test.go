@@ -302,7 +302,32 @@ func TestExtremePlatformRefusalStopsWithoutRetryOrCooldown(t *testing.T) {
 	if task.State != marshal.Escalated || task.InfraRetries != 1 {
 		t.Fatalf("task %s after %d attempts; want escalated after the first", task.State, task.InfraRetries)
 	}
-	if run.Pause == nil || !strings.Contains(run.Pause.Reason, "cannot run") || !strings.Contains(run.Pause.Reason, "Linux") || strings.Contains(run.Pause.Reason, "network") {
-		t.Fatalf("pause does not name the platform: %+v", run.Pause)
+	if run.Pause == nil || !strings.Contains(run.Pause.Reason, "cannot run") || !strings.Contains(run.Pause.Reason, "worker terminal transport unavailable") || strings.Contains(run.Pause.Reason, "network") {
+		t.Fatalf("pause does not name the platform cause: %+v", run.Pause)
+	}
+	// The terminal transport is not a governed-confinement requirement, so
+	// the pause must not send the owner to Linux amd64 for it.
+	// The computer's own name (for example "Linux amd64" on a Linux
+	// runner) is not a requirement; only "They need ..." would be one.
+	if strings.Contains(run.Pause.Reason, "They need") || strings.Contains(run.Pause.Reason, "Governed workers need") || strings.Contains(strings.Join(run.Pause.Resolutions, " "), "amd64") {
+		t.Fatalf("pause claims a Linux amd64 requirement the cause does not have: %+v", run.Pause)
+	}
+}
+
+// Only a refusal that names its Linux requirement is worded as one.
+func TestPlatformRefusalClaimsLinuxOnlyWhenTheCauseDoes(t *testing.T) {
+	cases := []struct{ reason, want, resolution string }{
+		{"socket confinement requires Linux amd64", "They need Linux amd64", "on a Linux amd64 machine"},
+		{"private cell held start requires Linux supervision", "They need Linux;", "on a Linux machine"},
+		{"worker terminal transport unavailable on this platform", "Marshal could not start them here", "Update Marshal"},
+	}
+	for _, c := range cases {
+		plain, resolution := platformRefusal("macOS arm64", "governed", c.reason)
+		if !strings.Contains(plain, c.want) || !strings.Contains(plain, c.reason) || !strings.Contains(plain, "macOS arm64") || !strings.Contains(resolution, c.resolution) {
+			t.Fatalf("%q: plain=%q resolution=%q", c.reason, plain, resolution)
+		}
+		if c.want == "Marshal could not start them here" && strings.Contains(plain, "need Linux") {
+			t.Fatalf("%q: claims a Linux requirement: %q", c.reason, plain)
+		}
 	}
 }

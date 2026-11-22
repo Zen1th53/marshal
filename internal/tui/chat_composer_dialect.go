@@ -167,8 +167,10 @@ func ownLeftover(d composerDialect, pane, frame string) (ownPaste, bool) {
 		return ownPaste{}, false
 	}
 	// Exact recorded content only: a line-count match ("[Pasted text #5
-	// +2 lines]") could be the owner's own paste of the same length.
-	if d.stripHints(content) == d.stripHints(p.shown) {
+	// +2 lines]") could be the owner's own paste of the same length. Our
+	// own text itself still counts however the provider now wraps or clips
+	// it (a pane resized under a tall input shows other rows of it).
+	if d.stripHints(content) == d.stripHints(p.shown) || ownComposerText(frame, p.text) {
 		return p, true
 	}
 	return ownPaste{}, false
@@ -272,6 +274,12 @@ func chatBusyNearPrompt(frame string) bool {
 	raw := strings.Split(strings.TrimRight(StripANSI(frame), "\n"), "\n")
 	at := -1
 	for i := len(raw) - 1; i >= 0 && at < 0; i-- {
+		// A clipped input's top rule stands where its scrolled-off prompt
+		// row would be; a prompt row above it is the transcript.
+		if above, _ := clippedRule(raw[i]); above {
+			at = i
+			break
+		}
 		body := strings.TrimLeft(raw[i], " │┃║|")
 		for _, m := range promptMarkers {
 			if strings.HasPrefix(body, m) {

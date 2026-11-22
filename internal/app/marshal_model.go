@@ -393,7 +393,8 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		return MarshalDraft{}, errors.New("Marshal model has no project binding")
 	}
 	workers := m.availableWorkers()
-	if len(workers) == 0 {
+	offered := m.assignableWorkers()
+	if len(offered) == 0 {
 		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	if requestsGovernedWork(goal) {
@@ -404,7 +405,11 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		m.AllowNativeException = false
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". "+MarshalTaskDecomposition+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	checker := FinalCheckerBriefing(offered, false)
+	if checker != "" {
+		checker += " "
+	}
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(offered, ", ")+". "+checker+MarshalTaskDecomposition+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -440,7 +445,7 @@ func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) 
 	if target >= 0 {
 		preamble = "Return the amended target task and any new tasks needed. The runtime preserves every other existing task unchanged. "
 	}
-	err = m.turn(ctx, preamble+"Use only workers "+strings.Join(workers, ", ")+". Preserve each existing task mode and type unless the operator requests a change. Copy each existing task's criteria, checks and check criteria verbatim unless the operator asks to change them; each check criterion must be the exact text of one of its task's criteria. Declare type change, inspection or verification for new tasks. "+newTaskModes+" "+MarshalTaskDecomposition+MarshalCheckContract+"Amendment packet: "+string(input), marshalDraftSchema, &proposal)
+	err = m.turn(ctx, preamble+"Use only workers "+strings.Join(m.assignableWorkers(), ", ")+". Preserve each existing task mode and type unless the operator requests a change. Copy each existing task's criteria, checks and check criteria verbatim unless the operator asks to change them; each check criterion must be the exact text of one of its task's criteria. Declare type change, inspection or verification for new tasks. "+newTaskModes+" "+MarshalTaskDecomposition+MarshalCheckContract+"Amendment packet: "+string(input), marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -504,8 +509,12 @@ type marshalProposedCheck struct {
 // MarshalWorkers lists the worker CLIs a Marshal of the given provider may
 // assign tasks to.
 func MarshalWorkers(provider string) []string {
-	return (&MarshalCLI{Provider: provider}).availableWorkers()
+	return (&MarshalCLI{Provider: provider}).assignableWorkers()
 }
+
+// AGYAssignable reports whether the Marshal may give a task to agy in this
+// edition on this host.
+func AGYAssignable() bool { return draftAssignableWorker("agy") }
 
 // marshalDraftFence unwraps one Markdown code fence only when the whole
 // trimmed reply is that fence. Prose around it, multiple fences, an
@@ -550,12 +559,12 @@ func (s *MarshalService) DraftFromProposal(data []byte, provider string) (Marsha
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&proposal); err != nil {
-		return MarshalDraft{}, fmt.Errorf("invalid Marshal draft JSON: %w", err)
+		return MarshalDraft{}, decodeDraftRejection(err)
 	}
 	if fenced {
 		var extra json.RawMessage
 		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-			return MarshalDraft{}, fmt.Errorf("invalid Marshal draft JSON: trailing data after fenced block")
+			return MarshalDraft{}, rejectDraft(errors.New("invalid Marshal draft JSON: trailing data after fenced block"), "draft", "text follows the fenced JSON block")
 		}
 	}
 	m := &MarshalCLI{Provider: provider, ProjectID: string(s.CanonicalPlanProjectID())}
@@ -572,9 +581,29 @@ func (m *MarshalCLI) availableWorkers() []string {
 	return workers
 }
 
+// assignableWorkers are the installed workers a draft may name in this
+// edition: the ones the Marshal is offered. A worker that is installed but
+// can take no task here (agy outside private Linux in the default edition)
+// is left out, so the Marshal is never told to use a worker the runtime then
+// refuses. Admission (materialize) still checks the installed list, so a
+// draft that names such a worker gets the specific refusal.
+func (m *MarshalCLI) assignableWorkers() []string {
+	var out []string
+	for _, worker := range m.availableWorkers() {
+		if draftAssignableWorker(worker) {
+			out = append(out, worker)
+		}
+	}
+	return out
+}
+
 func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, version int64, workers []string) (MarshalDraft, error) {
 	if len(proposal.Tasks) == 0 || !projectid.ID(m.ProjectID).Valid() {
-		return MarshalDraft{}, errors.New("invalid Marshal proposal or project")
+		err := errors.New("invalid Marshal proposal or project")
+		if len(proposal.Tasks) == 0 {
+			return MarshalDraft{}, rejectDraft(err, "tasks", "at least one task is required")
+		}
+		return MarshalDraft{}, rejectDraft(err, "project", "the runtime has no valid project identity for this draft (not a draft error)")
 	}
 	if planID == "" {
 		var err error
@@ -593,18 +622,34 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		}
 	}
 	draft := MarshalDraft{Plan: p}
-	for _, item := range proposal.Tasks {
+	for i, item := range proposal.Tasks {
+		at := func(field string) string { return fmt.Sprintf("tasks[%d].%s", i, field) }
 		allowed := false
 		for _, worker := range workers {
 			allowed = allowed || item.Worker == worker
 		}
 		if !allowed || item.ID == "" || item.Title == "" || len(item.Criteria) == 0 || len(item.Paths) == 0 || len(item.Checks) == 0 {
-			return MarshalDraft{}, fmt.Errorf("invalid proposed task %q", item.ID)
+			err := fmt.Errorf("invalid proposed task %q", item.ID)
+			switch {
+			case !allowed && knownWorkerName(item.Worker) != "":
+				return MarshalDraft{}, rejectDraft(err, at("worker"), "%s is not installed here; use one of: %s", item.Worker, strings.Join(workers, ", "))
+			case !allowed:
+				return MarshalDraft{}, rejectDraft(err, at("worker"), "not an installed worker; use one of: %s", strings.Join(workers, ", "))
+			case item.ID == "":
+				return MarshalDraft{}, rejectDraft(err, at("id"), "required")
+			case item.Title == "":
+				return MarshalDraft{}, rejectDraft(err, at("title"), "required")
+			case len(item.Criteria) == 0:
+				return MarshalDraft{}, rejectDraft(err, at("criteria"), "required: give the task its success criterion")
+			case len(item.Paths) == 0:
+				return MarshalDraft{}, rejectDraft(err, at("paths"), "required: name the files the task changes")
+			}
+			return MarshalDraft{}, rejectDraft(err, at("checks"), "required: give at least one executable check")
 		}
 		componentSeen := make(map[string]bool, len(item.Components))
-		for _, id := range item.Components {
+		for j, id := range item.Components {
 			if !marshalIdentifier(id) || componentSeen[id] {
-				return MarshalDraft{}, fmt.Errorf("invalid architecture part %q in task %q", id, item.ID)
+				return MarshalDraft{}, rejectDraft(fmt.Errorf("invalid architecture part %q in task %q", id, item.ID), at(fmt.Sprintf("components[%d]", j)), "not an architecture part identifier, or repeated")
 			}
 			componentSeen[id] = true
 		}
@@ -616,24 +661,30 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 			}
 		}
 		if mode != marshal.Native && mode != marshal.Governed {
-			return MarshalDraft{}, fmt.Errorf("invalid task mode %q", mode)
+			return MarshalDraft{}, rejectDraft(fmt.Errorf("invalid task mode %q", mode), at("mode"), "must be native or governed")
 		}
 		if mode == marshal.Governed && item.Worker != "codex" && item.Worker != "claude" && item.Worker != "opencode" && !(item.Worker == "agy" && privateAGYEnabled()) {
-			return MarshalDraft{}, fmt.Errorf("worker %s does not support governed mode", item.Worker)
+			rule := "worker %s does not support governed mode on this host"
+			if !draftAssignableWorker(item.Worker) {
+				rule += "; it cannot take tasks here, so give this task to another worker"
+			} else {
+				rule += "; use mode native or another worker"
+			}
+			return MarshalDraft{}, rejectDraft(fmt.Errorf("worker %s does not support governed mode", item.Worker), at("mode"), rule, item.Worker)
 		}
 		if mode == marshal.Native && m != nil && slices.Contains(m.AllowedModes, marshal.Governed) && !m.AllowNativeException {
-			return MarshalDraft{}, fmt.Errorf("task %s uses native mode in governed plan without explicit exception", item.ID)
+			return MarshalDraft{}, rejectDraft(fmt.Errorf("task %s uses native mode in governed plan without explicit exception", item.ID), at("mode"), "native mode in a governed plan needs an explicit exception in the goal")
 		}
 		kind := item.Type
 		if kind == "" {
 			kind = marshal.TaskChange
 		}
 		if kind != marshal.TaskChange && kind != marshal.TaskInspection && kind != marshal.TaskVerification {
-			return MarshalDraft{}, errors.New("invalid task type")
+			return MarshalDraft{}, rejectDraft(errors.New("invalid task type"), at("type"), "must be change, inspection or verification")
 		}
 		control := marshal.Control(item.Control)
 		if control != "" && control != marshal.ControlStrict && control != marshal.ControlFree {
-			return MarshalDraft{}, fmt.Errorf("task %s: control must be strict or free", item.ID)
+			return MarshalDraft{}, rejectDraft(fmt.Errorf("task %s: control must be strict or free", item.ID), at("control"), "must be strict or free")
 		}
 		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Type: string(kind), Mutating: true, Weight: 1, Instructions: item.Instructions, Control: item.Control, ExpectedOutput: item.ExpectedOutput})
 		task := marshal.Task{Type: kind, PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Components: append([]string(nil), item.Components...), Instructions: item.Instructions, Control: control, ExpectedOutput: item.ExpectedOutput}
@@ -645,11 +696,11 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 	}
 	graph, err := plan.BuildGraph(draft.Plan.Tasks)
 	if err != nil {
-		return MarshalDraft{}, err
+		return MarshalDraft{}, placeDraftViolation(err, proposal)
 	}
 	draft.Plan.Graph = graph
 	if err := validateDraft(draft); err != nil {
-		return MarshalDraft{}, err
+		return MarshalDraft{}, placeDraftViolation(err, proposal)
 	}
 	return draft, nil
 }

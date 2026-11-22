@@ -576,7 +576,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				if err := e.persistRun(ctx, &run); err != nil {
 					return &run, err
 				}
-				return &run, fmt.Errorf("run failed: one or more tasks failed")
+				return &run, runFailedError(run)
 			}
 
 			if allComplete {
@@ -927,6 +927,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					if err != nil {
 						t.State = TaskFailed
 						t.LastFailureReason = err.Error()
+						run.Failures = append(run.Failures, handInFailure(t.TaskID, t.LastFailureReason))
 					} else {
 						t.ResultCommit = commit
 					}
@@ -935,6 +936,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					if err != nil {
 						t.State = TaskFailed
 						t.LastFailureReason = err.Error()
+						run.Failures = append(run.Failures, handInFailure(t.TaskID, t.LastFailureReason))
 					} else {
 						// Invalidate stale evidence for modified files
 						e.oracle.InvalidateByFiles(run.RunID, modifiedFiles, fmt.Sprintf("Task %s mutation", t.TaskID), time.Now().UTC())

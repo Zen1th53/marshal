@@ -280,6 +280,14 @@ type Workspace struct {
 	guard       guardState
 	guardSource guardSource
 	guardTell   func(text string)
+	// draftReject is the Marshal draft the runtime refused last and not yet
+	// replaced by an imported one (marshal_draft_reject.go); draftTell
+	// replaces its delivery to the Marshal chat in tests.
+	draftReject draftRejectState
+	draftTell   func(text string)
+	// stall times a run on the Board that does not move
+	// (marshal_plan_stall.go).
+	stall stallWatch
 	// answer is the last answer to something the operator did (a command,
 	// a key, a click), the only text the Board's ANSWER overlay and footer
 	// show; background messages never change it. Guarded by mu, numbered

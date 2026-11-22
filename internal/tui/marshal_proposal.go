@@ -391,21 +391,22 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 
 // A draft may be written before its observer imports it. Keep its proposal
 // pending until the runtime has a plan identity and version to display and bind.
-func (w *Workspace) queueMarshalPlanApproval() {
+// It reports whether an approval of the imported plan was queued.
+func (w *Workspace) queueMarshalPlanApproval() bool {
 	w.permissions.mu.Lock()
 	pending := w.permissions.planApprovalPending
 	proposalRunID := w.permissions.planApprovalRunID
 	occurrence := w.permissions.planApprovalOccurrence
 	w.permissions.mu.Unlock()
 	if !pending {
-		return
+		return false
 	}
 	m := w.marshalSession()
 	m.mu.Lock()
 	service, runID, amendment := m.service, m.runID, m.pending
 	m.mu.Unlock()
 	if service == nil || runID == "" || (proposalRunID != "" && proposalRunID != runID) {
-		return
+		return false
 	}
 	p := marshalProposal{action: "approve", occurrence: occurrence}
 	if amendment != nil {
@@ -423,13 +424,14 @@ func (w *Workspace) queueMarshalPlanApproval() {
 			}
 			w.RecordActivity("Ignored Marshal proposal: " + err.Error())
 		}
-		return
+		return false
 	}
 	w.permissions.mu.Lock()
 	if w.permissions.planApprovalOccurrence == occurrence && w.permissions.planApprovalRunID == proposalRunID {
 		w.permissions.planApprovalPending = false
 	}
 	w.permissions.mu.Unlock()
+	return true
 }
 
 // Bind run actions to the exact stored plan and result state being displayed.
@@ -796,7 +798,7 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 	if w.runtime == nil {
 		return
 	}
-	view, e := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
+	view, e := openMarshalInbox(w.runtime.ProjectRoot())
 	if e == nil {
 		e = view.write(text)
 	}
@@ -1005,7 +1007,7 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		id := fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
 		who := "Local request (unverified)"
 		if proposal.action == "architecture" && root == w.providerRoot() {
-			if bound := w.boundMarshalArchitectureSource(); bound != "" {
+			if bound := w.boundMarshalChatSession(); bound != "" {
 				id = fmt.Sprintf("runtime:%x", sha256.Sum256([]byte(bound+"\x00"+fingerprint)))
 				who = "Marshal"
 			}

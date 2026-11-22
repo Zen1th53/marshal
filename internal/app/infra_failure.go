@@ -94,7 +94,8 @@ func infraFailurePhrase(provider, kind string) string {
 }
 
 // platformUnsupported is the failure kind of a worker this computer cannot
-// run at all (governed workers need Linux amd64 confinement).
+// run at all (governed confinement needs Linux amd64; other refusals name
+// their own cause).
 const platformUnsupported = "platform cannot run this worker"
 
 func plainInfraKind(kind string) string {

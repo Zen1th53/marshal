@@ -45,7 +45,7 @@ func (r *Runtime) PrepareNativeMarshalDraft(ctx context.Context, sessionID strin
 	if err != nil {
 		return MarshalDraft{}, err
 	}
-	ownerLines, err := applyOwnerBuilders(&draft, packet)
+	ownerLines, pinned, err := applyOwnerBuildersPinned(&draft, packet)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -53,7 +53,7 @@ func (r *Runtime) PrepareNativeMarshalDraft(ctx context.Context, sessionID strin
 		Assessment: assessment, Tasks: draft.Plan.Tasks, Mode: mode,
 		Scope: append([]string(nil), goal.Scope...), Checks: draft.Plan.Checks,
 		TaskProviders: make(map[string]string, len(draft.Tasks))}
-	reassignments, err := r.prepareWorkerReassignments(ctx, &draft)
+	reassignments, err := r.prepareWorkerReassignments(ctx, &draft, pinned)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -147,27 +147,64 @@ func (d WorkerReassignment) String() string {
 	return fmt.Sprintf("task %q worker reassigned: requested provider=%q model=%q; selected provider=%q model=%q; reason=%q", d.Task, d.RequestedProvider, d.RequestedModel, d.SelectedProvider, d.SelectedModel, d.Reason)
 }
 
-func (r *Runtime) prepareWorkerReassignments(ctx context.Context, draft *MarshalDraft) ([]WorkerReassignment, error) {
+// A task the Marshal gave to the last provider able to do the run's final
+// check also moves, to another verified provider, with that reason; one the
+// owner pinned there stays, and dispatch stops it for the owner.
+func (r *Runtime) prepareWorkerReassignments(ctx context.Context, draft *MarshalDraft, pinned map[string]bool) ([]WorkerReassignment, error) {
 	var decisions []WorkerReassignment
 	// Own the task slice: a failed preparation must not mutate the caller's draft.
 	draft.Tasks = append([]marshal.Task(nil), draft.Tasks...)
-	err := reassignDraftWorkers(draft, func(provider string) bool { return r.currentVerifiedWorker(ctx, provider) }, func(task, from, to string) error {
+	original := append([]marshal.Task(nil), draft.Tasks...)
+	verified := func(provider string) bool { return r.currentVerifiedWorker(ctx, provider) }
+	record := func(task, from, to, reason string) error {
 		profile, err := r.store.GetHarnessProfile(ctx, marshalHarnessName(to))
 		if err != nil {
 			return err
 		}
-		reason := r.workerIneligibilityReason(ctx, from)
 		requested := from
-		for _, original := range draft.Tasks {
-			if original.PlanTaskID == task {
-				requested = original.Worker
+		for _, task0 := range original {
+			if task0.PlanTaskID == task {
+				requested = task0.Worker
 				break
 			}
 		}
 		decisions = append(decisions, WorkerReassignment{Task: task, RequestedProvider: requested, RequestedModel: draft.Plan.Routes[task].Model, SelectedProvider: to, SelectedModel: profile.DefaultModel, Reason: reason})
 		return nil
-	})
+	}
+	candidates := finalCheckerCandidates()
+	err := reassignDraftWorkers(draft, verified, func(task, from, to string) error {
+		return record(task, from, to, r.workerIneligibilityReason(ctx, from))
+	}, func(task, provider string) bool { return takesLastChecker(candidates, draft.Tasks, task, provider) })
+	if err != nil {
+		return decisions, err
+	}
+	err = keepCheckerOffDraft(draft, candidates, pinned, verified, record)
 	return decisions, err
+}
+
+// keepCheckerOffDraft moves each task the Marshal gave to the last provider
+// able to do the final check onto the first verified provider, in
+// workerFallbackOrder, that leaves one free; record reports each move before
+// it is made. A task pinned by the owner, or with no such provider, stays.
+func keepCheckerOffDraft(draft *MarshalDraft, candidates []string, pinned map[string]bool, verified func(string) bool, record func(task, from, to, reason string) error) error {
+	for i, task := range draft.Tasks {
+		if pinned[task.PlanTaskID] || !takesLastChecker(candidates, draft.Tasks, task.PlanTaskID, task.Worker) {
+			continue
+		}
+		from := reassignProviderName(task.Worker)
+		for _, to := range workerFallbackOrder {
+			if to == from || !verified(to) || takesLastChecker(candidates, draft.Tasks, task.PlanTaskID, to) {
+				continue
+			}
+			reason := checkerName(from) + " is kept free for the final check, which must come from an AI tool that did none of the tasks"
+			if err := record(task.PlanTaskID, from, to, reason); err != nil {
+				return err
+			}
+			draft.Tasks[i].Worker = to
+			break
+		}
+	}
+	return nil
 }
 
 func assessmentFromGoal(saved map[string]string) (goalintake.Assessment, error) {

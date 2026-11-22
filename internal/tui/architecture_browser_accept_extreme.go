@@ -80,7 +80,7 @@ func (w *Workspace) askMarshalForProjectSummary() bool {
 // browserAcceptNudge wakes an idle Marshal after a recorded browser Accept.
 // It is not an acceptance and carries no binding: the instruction itself is
 // only in the inbox, and no chat text accepts anything.
-const browserAcceptNudge = marshalNotePrefix + "The owner accepted the architecture in the browser. Check your inbox."
+const browserAcceptNudge = marshalNotePrefix + "The owner accepted the architecture in the browser. Read " + marshalInboxFile + " now."
 
 // wakeMarshalAfterAccept sends the nudge through the same path the ask card
 // uses for its answer, only when a Marshal chat is open; otherwise the inbox
@@ -116,9 +116,9 @@ func (w *Workspace) beforeBrowserAccept() func(context.Context, json.RawMessage)
 		if err := json.Unmarshal(state, &sel); err != nil {
 			return errors.New("The Marshal's project summary is not ready yet. Try again in a moment.")
 		}
-		session := w.boundMarshalArchitectureSource()
-		if session == "" {
-			return errors.New("Open the Marshal chat in your terminal, then press Accept again.")
+		session, err := w.boundMarshalArchitectureBinding()
+		if err != nil {
+			return err
 		}
 		// A page built from a pending contract accepts exactly that contract.
 		src := sel.Architecture.Source
