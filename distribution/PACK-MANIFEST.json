@@ -75,6 +75,26 @@
       "bytes": 3128388
     },
     {
+      "path": ".github/assets/web-architecture.png",
+      "sha256": "c08e8ffa5dae4ce17106b79be1cc8ef549ba6ff7430892e165810e16a9ce49a6",
+      "bytes": 65642
+    },
+    {
+      "path": ".github/assets/web-phone.png",
+      "sha256": "0baa08234009b2186aaab3e15691b7047cd1a516c5c7b5e90283535bead39996",
+      "bytes": 248072
+    },
+    {
+      "path": ".github/assets/web-team.png",
+      "sha256": "e2e54b1bdcd86ffe90f5963feda996d62565d10c9e39f59426af8c5a0b81c28f",
+      "bytes": 411184
+    },
+    {
+      "path": ".github/assets/web-work.png",
+      "sha256": "1661074ca5db9c2ffe6e62b2b27694d7665697058b1da44a56e75c12ac121118",
+      "bytes": 310659
+    },
+    {
       "path": ".github/dependabot.yml",
       "sha256": "8e8b2d746134ff04ce6943f21e56f352afae1d1abd329c6c5555dcfbacc037b0",
       "bytes": 207
@@ -146,8 +166,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "0cb97850512b617230a34ffa0348d1c127b3b77efaa6610601a28430924ec9c4",
-      "bytes": 15534
+      "sha256": "27b68ee201a76935882ddd1f8fb024459d5a5241ba1bd5717d90a46456427f1a",
+      "bytes": 18121
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -566,8 +586,8 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "b62a7f25bc17ea8249f5a5f58a4c7eeb002b0b3de4467123211848ce5c1b46de",
-      "bytes": 9199
+      "sha256": "80cab32e2e205e200c2a55c0e75bdea8c1a780ea94e95cd116c2a5d700f0fa0e",
+      "bytes": 9193
     },
     {
       "path": "docs/how-it-works.md",
@@ -576,8 +596,8 @@
     },
     {
       "path": "docs/index.md",
-      "sha256": "79d3c4919a9ea414f85e85fa4f0431641059107177a616f3eb88cba471ee78a7",
-      "bytes": 4184
+      "sha256": "01f1774d936d95d97dd076abd3159a6785d0cf487dee0f3a96fdf7b5b52c3862",
+      "bytes": 4264
     },
     {
       "path": "docs/installation.md",
