@@ -27,7 +27,7 @@ and you follow and steer it all from a local Web Board.**
 <table>
   <tr>
     <td width="40%"><img src=".github/assets/web-team.png" alt="The Team section: each provider's role, model and limits per model group and window, such as codex 84% of its 5-hour window left and agy's Claude and GPT group at 0% until Nov 26." width="100%"><br><sub><b>Team</b>: who does what, and each provider's limits per model group and window.</sub></td>
-    <td width="40%"><img src=".github/assets/web-architecture.png" alt="The architecture review page: the proposed parts (cli, store, format, export, task) grouped by area with their links, a minimap and the Accept architecture button." width="100%"><br><sub><b>Architecture</b>: the Marshal proposes, only you accept.</sub></td>
+    <td width="40%"><img src=".github/assets/web-architecture.png" alt="The architecture review page: the proposed parts (cli, store, format, export, task) grouped by area with their links, and the Accept architecture button." width="100%"><br><sub><b>Architecture</b>: the Marshal proposes, only you accept.</sub></td>
     <td width="20%"><img src=".github/assets/web-phone.png" alt="The Work section on a narrow screen with bottom navigation: Home, Work, Arch, Team, Activity." width="100%"><br><sub>Narrow screens get their own layout.</sub></td>
   </tr>
 </table>
