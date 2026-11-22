@@ -166,8 +166,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "4600e4d4c71068344f8977c06275e88f57add6889d76b016289eb9891c0f575d",
-      "bytes": 18588
+      "sha256": "9cc7475787ddf688b4c4c5621dcbb02c70e5c3cbdbb75e68bc26974ef1ff1720",
+      "bytes": 18924
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -646,8 +646,8 @@
     },
     {
       "path": "docs/memory-and-mcp.md",
-      "sha256": "49fd7872155b837eb6ceaf60367121bc5c7edde5d24c23a87c861826319e5489",
-      "bytes": 3545
+      "sha256": "16f82bc64edd26cfa9978768469d7a064fd699659474e1cd0951a36a03bd8a6d",
+      "bytes": 4037
     },
     {
       "path": "docs/providers.md",
@@ -7256,8 +7256,8 @@
     },
     {
       "path": "internal/integration/memory_persistence_test.go",
-      "sha256": "4bb3e1e13d3502b25390ccb4f6a15535bbe1f800b67d75012e936a9cd624c45e",
-      "bytes": 2682
+      "sha256": "241c07a31e93b8308941d55e13fd77fe1d5078e43c241067c11410aced2932df",
+      "bytes": 3885
     },
     {
       "path": "internal/integration/opencode_real_test.go",

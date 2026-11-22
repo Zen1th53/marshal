@@ -48,9 +48,10 @@ and you follow and steer it all from a local Web Board.**
   confirm, then proposes the project's architecture, which only you can accept in the browser.
 - **Parallel workers.** Codex, Claude Code and the others build separate tasks at the same time,
   each in its own Git worktree and branch.
-- **Architecture carried into the work.** Each worker is told its part of the accepted architecture,
-  and every hand-in is checked against it: code outside its parts or using an undeclared dependency
-  goes back with the exact places.
+- **Architecture carried into the work.** In the default edition, workers receive their parts of
+  the accepted architecture. Hand-ins go back with file locations for code outside those parts,
+  new source outside every part, or undeclared Go imports when the architecture declares dependencies.
+  Edits to existing unowned files are flagged, not returned.
 - **Checked before it merges.** Every hand-in is reviewed by the Marshal and its task's checks run
   before it merges. On every plan, Standard and ULTRA, each hand-in also gets an independent
   review, and a final independent check reruns the checks on the integrated result: by another
@@ -194,8 +195,10 @@ Marshal turns that into a process:
   file scope, and a hand-in with commit digests and check results.
 - **Live and honest state.** The Board shows tasks, lanes, decisions and
   activity as they happen. Nothing is marked done without its check.
-- **Shared memory.** What one agent learns about your project is recorded and
-  reviewed, and every later agent can use it (local MCP server included).
+- **Shared memory.** Design artifacts, session imports, task outcomes and explicit memory notes are recorded
+  and reviewed (kept or rejected). Later workers receive relevant durable or verified records
+  within their scope, freshness and context limits; raw session history is excluded. Recall is also
+  available through the local MCP server (`marshal mcp serve`).
 - **Your tools, your accounts.** Marshal drives the official CLIs you already
   have. It is a single Go binary with state in `.marshal/` inside your repo.
 

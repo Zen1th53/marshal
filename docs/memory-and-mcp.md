@@ -50,15 +50,17 @@ marshal auth token revoke --id <token-id>
 
 ## Project Memory System
 
-During runs, agents learn important project facts, architectural constraints, and recurring conventions. Marshal stores this knowledge in `.marshal/state.db`.
+Marshal records design artifacts, imported sessions, task outcomes and explicit memory notes in
+`.marshal/state.db`. Recording a candidate does not make it available to later workers.
 
 ### The Candidate-Review Workflow
 
-To prevent AI agents from polluting memory with incorrect assumptions or temporary debug notes, Marshal uses a **candidate-review model**:
+1. **Candidate ingestion**: Design artifacts, imported sessions, task outcomes and proposed notes enter memory as candidates.
+2. **Review**: Candidates can be kept (promoted to durable memory) or rejected. In the default edition, the Marshal can retain notes through its bound live MCP session; those notes can be recalled without a separate operator promotion.
+3. **Recall**: Later workers receive relevant durable or verified records, subject to project, scope, ACL, freshness and context budgets. Worker context excludes raw session history. MCP recall and `project_context` use the memory service; `project_context` searches using the current goal or project purpose and architecture when no query is supplied. The default edition also allows recall of candidates retained through live MCP; other candidates remain inactive.
 
-1. **Candidate Ingestion**: When an agent suggests new knowledge or records an architectural decision, Marshal writes it as an unverified **candidate** (`MemoryCandidate`).
-2. **Operator Review**: Candidates do not enter active recall until reviewed by a human operator.
-3. **Promotion**: Once promoted, the memory becomes active, searchable, and recallable by future Marshal runs.
+Retrieval receipts store a query digest rather than the raw query text. An empty
+`query_text` therefore does not mean the caller searched with an empty query.
 
 ### Reviewing Memory in the Board (TUI)
 
