@@ -21,7 +21,9 @@ import (
 
 // v2CardState is one workspace's card cache and the card keys' own state.
 type v2CardState struct {
-	mu sync.Mutex
+	mu             sync.Mutex
+	milestoneKey   string
+	milestoneSince time.Time
 	// sketchKey is the gate key the sketch was read for; sketch is nil
 	// while it is read or when no contract could be read.
 	sketchKey     string

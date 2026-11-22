@@ -169,9 +169,13 @@ func (w *Workspace) selfApprovalLine(g ownerGate, now time.Time) string {
 func (w *Workspace) v2DecisionNow(now time.Time) (v2Decision, bool) {
 	p := w.marshalPanel()
 	found := w.v2OwnerCards()
+	chatAsked := w.boardChatAsked()
 	for _, g := range w.ownerGates(p) {
 		switch g.kind {
 		case decisionArchitecture:
+			if chatAsked {
+				continue
+			}
 			found = append(found, w.architectureDecision(g, now))
 		case decisionPlan:
 			found = append(found, w.planDecision(g))

@@ -275,7 +275,8 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 	refused := w.gates.refusedArch
 	w.gates.mu.Unlock()
 	var out []ownerGate
-	if c := contract; c != nil {
+	answering := w.archSnapshotNow().Status.Answering
+	if c := contract; c != nil && !answering {
 		g := ownerGate{
 			key:     fmt.Sprintf("architecture:%s:%d:%s", c.ID, c.Revision, c.Digest),
 			kind:    "architecture",
@@ -288,7 +289,7 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 			g.warning = selfAcceptRefusedNote
 		}
 		out = append(out, g)
-	} else if deferred != nil {
+	} else if deferred != nil && !answering {
 		g := ownerGate{
 			key:     "architecture:deferred",
 			kind:    "architecture",
