@@ -113,7 +113,7 @@ Next, the Marshal decomposes the architecture into discrete, small tasks. Each t
 - Scope of files to create or modify.
 - Concrete check criteria (e.g. `go test -v ./...` or `npm test`).
 
-With the default settings the Marshal approves the plan itself and starts the workers; there is no plan approval popup. Press `7` to read the plan once the run exists. You can stop the workers at any time with `Ctrl+X`.
+In the shipped build the Marshal approves the plan itself and starts the workers; there is no plan approval popup. Press `7` to read the plan once the run exists. You can stop the workers at any time with `Ctrl+X`.
 
 ---
 

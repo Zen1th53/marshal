@@ -32,7 +32,7 @@ Changes apply to the **next** drafted plan.
 | `control` | `free`, `strict` | `free` | How closely workers adhere to instructions. `free`: workers decide implementation details within assigned files. `strict`: workers follow drafted steps strictly. |
 | `acceptance-mode` | `marshal`, `user`, `marshal-then-user` | `marshal` | Who authorizes task acceptance. `marshal` (default): the Marshal reviews and accepts. `user`: you accept every task. `marshal-then-user`: the Marshal reviews first, then you confirm. |
 | `execution-rights` | `none`, `read-only`, `small-tasks` | `read-only` | What the Marshal itself may do directly rather than dispatching to worker lanes. The default `read-only` means the Marshal never creates, edits or deletes project files itself. |
-| `rework-limit` | Positive integer | `2` | Maximum retry attempts for a returned task before reassigning to a different provider or escalating to the operator. |
+| `rework-limit` | Non-negative integer | `2` | Maximum retry attempts for a returned task before reassigning to a different provider or escalating to the operator. |
 | `ultra-concurrency` | Positive integer | `4` | Maximum number of worker tasks allowed to run simultaneously. |
 
 ### Provider Limits

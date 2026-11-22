@@ -39,7 +39,7 @@ means nothing is sent:
 {
   "installation_id": "inst-xxxxxxxxxxxxxxxx",
   "public_key": "b3zH1Qc9ukE2y0rW...",
-  "client_version": "0.2.4",
+  "client_version": "0.4.0",
   "os": "linux",
   "arch": "amd64"
 }
@@ -60,7 +60,7 @@ over HTTPS, a batched array:
   {
     "kind": "app_start",
     "installation_id": "inst-xxxxxxxxxxxxxxxx",
-    "client_version": "0.2.4",
+    "client_version": "0.4.0",
     "os": "linux",
     "arch": "amd64",
     "mode": "standard",
@@ -73,9 +73,9 @@ over HTTPS, a batched array:
 |---|---|---|
 | `kind` | yes | `registration`, `app_start`, `heartbeat`, `mode_change`, `activation_success`, `activation_failure`, `renewal_success`, `renewal_failure`, `error_class`, `telemetry_opt_out` |
 | `installation_id` | yes | the random ID above |
-| `client_version`, `os`, `arch` | yes | e.g. `0.2.4`, `linux`, `amd64` |
+| `client_version`, `os`, `arch` | yes | e.g. `0.4.0`, `linux`, `amd64` |
 | `mode` | when known | `standard` or `ultra` |
-| `occurred_at` | yes | RFC 3339 UTC timestamp |
+| `occurred_at` | yes (except `telemetry_opt_out`) | RFC 3339 UTC timestamp |
 | `session_id` | optional | random per-run ID (`sess-…`) |
 | `error_class` | only on `error_class` events | a **coarse category only**: `network`, `auth`, `lease_expired`, `lease_invalid`, `rate_limited`, `server`, `client`, `sandbox`, `unknown` — never a message or detail |
 

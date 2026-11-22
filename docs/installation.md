@@ -1,6 +1,6 @@
 # Installation
 
-Marshal is published as a standalone binary for Linux and macOS on x86_64 (`amd64`) and ARM64 (`arm64`). On Windows, use WSL2. Governed workers (sandboxed, socket-confined) run on Linux amd64 only; on macOS and Linux arm64 Marshal plans, reviews and shows the architecture, and says plainly that it cannot run the governed workers there.
+Marshal is published as a standalone binary for Linux and macOS on x86_64 (`amd64`) and ARM64 (`arm64`). On Windows, use WSL2. In the standard release, workers run on your host in Git worktrees on Linux and macOS; Antigravity (`agy`) workers run on Linux only. Sandboxed, socket-confined workers require `-tags governed` and Linux amd64.
 
 Prefer to let your coding agent do it? Paste the [setup prompt](SETUP-PROMPT.md) into Claude Code or Codex.
 
@@ -13,7 +13,7 @@ Prefer to let your coding agent do it? Paste the [setup prompt](SETUP-PROMPT.md)
 
 Before installing Marshal, make sure your system has:
 
-- **Linux or macOS**: amd64 or arm64 (Apple Silicon) architecture. Governed workers need Linux amd64.
+- **Linux or macOS**: amd64 or arm64 (Apple Silicon) architecture. Workers in `-tags governed` builds need Linux amd64.
 - **Git**: Required for project initialization, branch management, and worktree isolation.
 - **tmux 3.3a or newer**: Required by `marshal` and `marshal tui` for window management and the docked chat.
 - **Provider CLIs**: Install and log into the AI agent tools you plan to use:
@@ -48,7 +48,7 @@ You can override default settings using environment variables:
 | Variable | Description | Default |
 |---|---|---|
 | `MARSHAL_INSTALL_DIR` | Destination folder for the `marshal` binary | `$HOME/.local/bin` |
-| `MARSHAL_VERSION` | Specific release tag to install (e.g. `v0.2.0`) | Latest release |
+| `MARSHAL_VERSION` | Specific release tag to install (e.g. `v0.4.0`) | Latest release |
 | `MARSHAL_NO_MODIFY_PATH` | `1` leaves shell startup files alone | unset |
 | `MARSHAL_INSTALL_DEPS` | `0` only reports a missing Git or tmux, never installs it | `1` |
 | `MARSHAL_INSTALL_YES` | `1` answers yes to the installer's questions | unset |
@@ -56,8 +56,8 @@ You can override default settings using environment variables:
 Example:
 
 ```bash
-MARSHAL_INSTALL_DIR="/usr/local/bin" MARSHAL_VERSION="v0.2.0" \
-  curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | \
+  MARSHAL_INSTALL_DIR="/usr/local/bin" MARSHAL_VERSION="v0.4.0" sh
 ```
 
 The installer puts the installation directory on your `PATH` for new terminals; for the terminal you installed from it prints the one line to run:
@@ -81,7 +81,7 @@ cd marshal
 go build -o marshal ./cmd/marshal
 
 # 3. Install to your local path
-install -Dm755 marshal "$HOME/.local/bin/marshal"
+mkdir -p "$HOME/.local/bin" && install -m 755 marshal "$HOME/.local/bin/marshal"
 ```
 
 ---
@@ -101,7 +101,7 @@ marshal doctor
 marshal doctor --probe-providers
 ```
 
-`marshal doctor` checks system prerequisites, detects installed agent CLIs, probes provider availability, and reports any configuration issues.
+`marshal doctor` checks system prerequisites, repository layout, and project state; add `--probe-providers` to check installed provider CLIs and versions.
 
 ---
 

@@ -21,7 +21,7 @@ marshal mcp serve --stdio --role marshal
 ```
 
 > [!NOTE]
-> For security, the MCP HTTP server binds only to loopback addresses (`127.0.0.1`, `::1`). Non-loopback bindings are rejected.
+> By default, the MCP HTTP server listens on loopback (`127.0.0.1:8080`) with bearer-token authentication. Unauthenticated mode (`--insecure`) and `marshal mcp status` reject non-loopback addresses.
 
 ### Checking MCP Server Status
 
@@ -43,7 +43,7 @@ marshal auth token create --name ide-extension
 marshal auth token list
 
 # Revoke a token
-marshal auth token revoke <token-id>
+marshal auth token revoke --id <token-id>
 ```
 
 ---
@@ -64,8 +64,8 @@ To prevent AI agents from polluting memory with incorrect assumptions or tempora
 
 1. Press **`3`** on the Board to open the **Memory View**.
 2. Browse pending candidates using `j` / `k` (or `↑` / `↓`).
-3. Press **`a`** to promote (keep) the candidate as permanent memory.
-4. Press **`r`** to reject (tombstone) the candidate.
+3. Press **`a`** then **`Enter`** to promote (keep) the candidate as durable memory (`Esc` cancels).
+4. Press **`r`** then **`Enter`** to reject (tombstone) the candidate (`Esc` cancels).
 5. Press **`i`** to inspect the candidate's provenance and supporting evidence.
 6. Press **`1`** or **`Esc`** to return to the Board.
 
@@ -100,6 +100,6 @@ marshal memory promote MEM-12345
 # Tombstone (deactivate) an outdated or incorrect memory record
 marshal memory tombstone MEM-12345
 
-# View the audit trail and history of a memory record
-marshal memory audit MEM-12345
+# List all project memory records with lifecycle states and content digests
+marshal memory audit
 ```

@@ -116,11 +116,8 @@ Use Marshal's built-in diagnostic tools to troubleshoot issues:
 # Basic system checks (Git version, state database, directories)
 marshal doctor
 
-# Include live execution probes for all installed provider CLIs
+# Also check provider CLIs and versions (--deep is an alias; no model call)
 marshal doctor --probe-providers
-
-# Deep diagnostics (verifies state integrity and repository layout)
-marshal doctor --deep
 
 # Check raw task logs from outside the TUI (needs `marshal daemon`, see below)
 marshal logs <TASK-ID>

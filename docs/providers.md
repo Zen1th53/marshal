@@ -14,9 +14,9 @@ Marshal supports four runtime providers out of the box:
 | Provider | Binary | Integration Role | Authentication / Setup |
 |---|---|---|---|
 | **Claude Code** | `claude` | Marshal, Worker, Reviewer, Verifier | Authenticate via native Anthropic CLI (`claude login`) |
-| **OpenAI Codex** | `codex` | Marshal, Worker, Reviewer, Verifier | Authenticate via native OpenAI CLI (`codex`) |
-| **OpenCode** | `opencode` | Worker, Reviewer, Verifier | Configure provider keys in OpenCode configuration |
-| **Antigravity** | `agy` | Marshal, Worker, Reviewer, Verifier | Authenticate via native Antigravity CLI (`agy login`) |
+| **OpenAI Codex** | `codex` | Marshal, Worker, Reviewer | Authenticate via native OpenAI CLI (`codex`) |
+| **OpenCode** | `opencode` | Marshal, Worker, Reviewer | Configure provider keys in OpenCode configuration |
+| **Antigravity** | `agy` | Marshal, Worker (Linux only), Reviewer | Run `agy` once in a terminal (or open the Antigravity app) and sign in |
 
 Marshal uses the CLIs already installed on your system. It does not bundle agent binaries, proxy credentials, or manage API billing.
 
@@ -30,9 +30,9 @@ Before assigning tasks to an agent provider, Marshal runs a **harness verificati
 
 The harness probe tests the provider binary to verify:
 1. **Binary Availability**: The command is present on `$PATH` and executable.
-2. **Interactive & Headless Protocol**: The provider can accept prompts, run non-interactively, and emit structured output.
+2. **Headless Protocol**: The provider runs non-interactively in a detached Git worktree and emits structured output.
 3. **Probe Integrity**: The model responds with the exact verification handshake string (`MARSHAL_PROBE_OK`).
-4. **Tool Support**: File manipulation and Git command capabilities operate properly.
+4. **Clean Worktree**: The probe instructs the model not to use tools or change files, and checks with `git status --porcelain` that the worktree is untouched.
 
 If a probe times out, exits with a non-zero status, or produces invalid output, the provider is marked `unverified` or `limited` and will not be assigned tasks until re-verified.
 
@@ -44,7 +44,7 @@ You can verify providers through several interfaces:
 
 ### 1. On the Board (TUI)
 
-- **First-Use Card**: When opening a fresh project, press **`v`** to arm verification for the next unverified provider on the readiness list. Press **`Enter`** to run the probe.
+- **Home Screen**: When **From you** names an unchecked provider, press **`y`** to run its probe (one model call).
 - **Providers View**: Press **`4`** to switch to the Providers view, select a provider with `j` / `k`, and press **`v`** then **`Enter`** to verify it.
 
 ### 2. From the TUI Command Line
@@ -61,10 +61,10 @@ Type `/` on the Board to open the command prompt:
 
 ### 3. From the Terminal (CLI)
 
-Run diagnostics before opening the TUI:
+These diagnostics check CLI availability, versions and required help flags. They do not call a model or record a verified harness profile. For live `MARSHAL_PROBE_OK` verification, use the Providers view (`4`, `v`, `Enter`) or `/harness verify`:
 
 ```bash
-# Run comprehensive checks including provider probes
+# Check the project and installed provider CLIs
 marshal doctor --probe-providers
 
 # Probe an individual provider adapter
@@ -142,9 +142,10 @@ as Codex and Claude. agy has no per-session MCP setting, so when the project
 has no `.agents/mcp_config.json` of its own Marshal writes one naming only its
 own server (no secret: the session's token and lease reach the server through
 agy's environment), keeps it out of git and removes it with the session; a
-file you own is never touched. The session also starts with
-`--settings '{"permissions":{"allow":["mcp(marshal/*)"]}}'`, applied to that
-session only, so agy does not ask you to approve each Marshal tool.
+file you own is never touched. The session also starts with session-only
+`--settings` JSON that allows `mcp(marshal/*)` and Marshal’s permitted state/briefing paths, asks before
+`ssh`, `scp`, `sftp`, `rsync` or `sudo`, and denies direct access to private
+Marshal state files and the `sqlite3` and `tmux` commands.
 
 ## Provider Limits on the Board
 
