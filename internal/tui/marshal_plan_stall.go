@@ -18,12 +18,13 @@ import (
 //
 // An imported plan with no approval behind it now wakes the Marshal and asks
 // for the approval; Activity says only what happened; and a run that makes
-// no progress past planStallBound, a plan not approved or an approved plan
-// with no task started and nothing paused, becomes something the owner is
-// asked to look at, with the reason.
+// no progress past planStallBound becomes something the owner is asked to
+// look at, with the reason. This includes a recovered hand-in with no
+// reviewer driving the run, even when the remaining tasks are queued.
 
 // planStallBound is how long an imported plan may wait for its approval, or
-// an approved plan for its first worker, before the Board asks the owner.
+// an approved plan for its first worker, or a hand-in for its reviewer,
+// before the Board asks the owner.
 var planStallBound = 5 * time.Minute
 
 // stallWatch remembers since when the Board has seen the current run stuck
@@ -46,9 +47,9 @@ func (s *planStall) overdue(now time.Time) bool {
 }
 
 // stallCondition names how the run on the Board is stuck, "" when it is
-// not: an imported plan nobody approved, or an approved plan whose every
-// open task is queued with no worker, while nothing is paused and nothing
-// else waits for the owner (a pause, a limits card or a gate is the ask).
+// not: an imported plan nobody approved, queued work with no worker, or
+// hand-ins and queued work with no reviewer or live lane. Nothing is paused
+// and nothing else waits for the owner (a limits card or a gate is the ask).
 func stallCondition(in flowIn) (key, reason string) {
 	if !in.hasRun || in.fixingPlan() || in.panel == nil || in.panel.RunID == "" {
 		return "", ""
@@ -67,9 +68,15 @@ func stallCondition(in flowIn) (key, reason string) {
 			return "", ""
 		}
 		return "approve:" + in.panel.RunID, "plan in, not approved by the Marshal for %s"
-	case marshal.Approved, marshal.Dispatching:
+	case marshal.Approved, marshal.Dispatching, marshal.Reviewing:
 		open := c.total - c.merged - c.cancelled
-		if open == 0 || c.queued != open || in.v.liveLanes() > 0 {
+		if open == 0 || in.v.liveLanes() > 0 {
+			return "", ""
+		}
+		if c.review > 0 && c.queued+c.review == open && !b.Run.Driving {
+			return "review:" + in.panel.RunID, "hand-in waiting for review for %s"
+		}
+		if c.queued != open {
 			return "", ""
 		}
 		return "dispatch:" + in.panel.RunID, "no worker on the queued tasks for %s"

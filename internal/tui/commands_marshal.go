@@ -641,6 +641,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	if recoveringRun != nil {
 		p := newMarshalPanel(runID, provider, *recoveringRun, "stored run recovered")
 		w.marshalPublish(m, runID, p)
+		w.wakeRecoveredReview(runID, *recoveringRun)
 		if launchActiveRun(root) {
 			w.showWelcome(root, p.Board)
 		}
@@ -695,6 +696,20 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	w.clearDraftRejected()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
 	return result + "\n" + w.afterPlanImported(runID, len(run.Tasks)), nil
+}
+
+// wakeRecoveredReview is called after the recovered chat and panel are ready.
+// A saved hand-in is not evidence that a reviewer survived process exit.
+func (w *Workspace) wakeRecoveredReview(runID string, run marshal.Run) {
+	if run.State != marshal.Reviewing || run.Pause != nil || run.Operation != nil || w.marshalDriving(runID) {
+		return
+	}
+	for _, task := range run.Tasks {
+		if task.State == marshal.HandedIn {
+			w.tellMarshal(marshalNotePrefix + fmt.Sprintf("Recovered run %s has a handed-in task %s waiting for review. No review is running in this process. Resume the run now with the proposal {\"action\":\"resume\"} through your proposal channel so the runtime retries the pending review and continues the queue.", runID, task.PlanTaskID))
+			return
+		}
+	}
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {
