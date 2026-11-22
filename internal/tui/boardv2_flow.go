@@ -50,6 +50,20 @@ type flowIn struct {
 	limits       map[string]int
 	globalCap    int
 	selectedLane string
+	// draftRejected is the Marshal's plan draft the runtime refused and no
+	// imported draft has replaced yet; nil for none.
+	draftRejected *draftRejectMark
+}
+
+// fixingPlan reports whether the refused draft is what the Board shows:
+// while no plan is stored (a superseding draft refused during a run leaves
+// that run's state on the Board, and only the Marshal line says it).
+func (in flowIn) fixingPlan() bool {
+	if in.draftRejected == nil {
+		return false
+	}
+	state := runState(in.run, in.v.board)
+	return !in.hasRun || state == "" || state == marshal.Drafting
 }
 
 // stageNames are the Plan pipeline's stages as the Board names them.
@@ -113,6 +127,12 @@ func flowTop(in flowIn) vm.TopBar {
 // flowState is the top bar's state word and its tone. With a run it is the
 // classic header's run word (board_stop.go runWord) in capitals.
 func flowState(in flowIn) (string, vm.Tone) {
+	if in.fixingPlan() {
+		if in.draftRejected.overdue(in.now) {
+			return "YOUR TURN", vm.ToneWarn
+		}
+		return "FIXING PLAN", vm.ToneWarn
+	}
 	if !in.hasRun {
 		switch {
 		case in.v.ownerWaits() || in.milestone != nil && in.milestone.OwnerTurn:
@@ -171,6 +191,13 @@ func flowNowLine(in flowIn) vm.NowLine {
 // flowDoing is what the Marshal does now, in a few words.
 func flowDoing(in flowIn) string {
 	var doing string
+	if r := in.draftRejected; r != nil {
+		doing = "fixing the plan the runtime refused"
+		if in.now.After(r.since) {
+			doing += " · " + goalElapsed(in.now.Sub(r.since))
+		}
+		return doing
+	}
 	if !in.hasRun {
 		switch m := in.milestone; {
 		case m != nil:
@@ -324,6 +351,11 @@ func ownerAsks(in flowIn) []ownerAsk {
 	if m := in.milestone; !in.hasRun && m != nil && m.OwnerTurn && len(out) == 0 {
 		add(false, m.Now)
 	}
+	if r := in.draftRejected; r.overdue(in.now) {
+		// The Marshal was told the reason and has not sent a fix in time:
+		// the owner looks at the chat (Activity has the reason).
+		add(false, "plan refused "+goalElapsed(in.now.Sub(r.since))+" ago, no fix yet: open the Marshal chat")
+	}
 	return out
 }
 
@@ -393,7 +425,9 @@ func nextAsk(in flowIn) string {
 		return ""
 	}
 	switch runState(in.run, in.v.board) {
-	case marshal.Drafting:
+	case marshal.Drafting, "":
+		// No stored plan yet (a panel before the first import, for example
+		// after a refused draft): the plan is what the owner approves next.
 		return "plan approval"
 	case marshal.Closed:
 		return ""

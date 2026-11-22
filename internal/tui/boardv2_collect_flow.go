@@ -86,6 +86,7 @@ func (w *Workspace) flowInputs() flowIn {
 		in.chatAsked = w.nativeChatAsked()
 	}
 	in.limits, in.globalCap = laneLimits(in.run.Settings)
+	in.draftRejected = w.draftRejectedNow()
 	ui := &w.boardUI
 	_, stopped := v.stopNotice()
 	if ui.pane(len(v.board.Inbox) > 0 || stopped) == layout.Lanes {

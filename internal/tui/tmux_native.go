@@ -1961,6 +1961,7 @@ func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSes
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
+	w.clearDraftRejected()
 	// The chat binding names the run a restarted workspace recovers. A
 	// superseding run left it on the replaced run, which then took the panel
 	// and the approval questions after every restart.
@@ -2538,8 +2539,11 @@ func tmuxPaneSize(pane *string) workerterminal.Size {
 	}
 }
 
-// marshalDraftRejected retains consumed producer bytes and reports only a
-// finite validation stage. Native draft contents and errors remain private.
+// marshalDraftRejected retains consumed producer bytes and reports a finite
+// stage with a runtime-written reason. Draft contents stay private: a
+// validation refusal is described only by app.DraftRejectionReason (a field
+// path and a fixed rule). The Marshal is woken with the reason and the Board
+// shows the refusal until a draft is imported.
 func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, stage string, cause ...error) {
 	switch stage {
 	case "draft validation failed", "plan pack transfer failed", "plan pack validation failed", "canonical Process 04 evidence unavailable":
@@ -2561,16 +2565,25 @@ func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, sta
 	}
 	// The exact runtime reason is what lets the Marshal correct and
 	// republish the draft. Draft validation errors can quote untrusted draft
-	// content, so only runtime-side reasons are repeated.
-	if stage != "draft validation failed" {
-		for _, err := range cause {
-			if err != nil {
-				note += " Reason: " + RedactContent(err.Error(), nil)
-				break
-			}
+	// content, so that stage repeats only the safe reason the runtime built
+	// (a field path and a fixed rule); the other stages are runtime-side.
+	reason := ""
+	for _, err := range cause {
+		if err == nil {
+			continue
 		}
+		if stage == "draft validation failed" {
+			reason = app.DraftRejectionReason(err)
+		} else {
+			reason = RedactContent(err.Error(), nil)
+		}
+		break
+	}
+	if reason != "" {
+		note += " Reason: " + reason
 	}
 	note += " The draft watcher remains active: publish a corrected draft to import it."
+	w.markDraftRejected(stage, reason, time.Now())
 	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, note))
 	w.RecordActivity(note)
 	if view, err := openMarshalInbox(w.workDir); err == nil {
@@ -2578,6 +2591,7 @@ func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, sta
 			_ = view.trim()
 		}
 	}
+	w.tellMarshalDraftRejected(draftRejectNotice(reason))
 }
 
 // draftSupersedesRun reports whether a published draft must become a fresh

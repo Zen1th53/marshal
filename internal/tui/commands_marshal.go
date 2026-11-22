@@ -696,6 +696,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
+	w.clearDraftRejected()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "plan ready: "+count(len(run.Tasks), "task", "tasks")))
 	w.queueMarshalPlanApproval()
 	return result + "\n" + planReadyActivity(len(run.Tasks)), nil
