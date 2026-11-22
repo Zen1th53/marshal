@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
-	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // The live Mac demo: the runtime imported the Marshal's plan, Activity said
@@ -47,14 +46,15 @@ func (s *planStall) overdue(now time.Time) bool {
 }
 
 // stallCondition names how the run on the Board is stuck, "" when it is
-// not: an imported plan nobody approved, or an approved plan whose queued
-// tasks have no worker while nothing is paused or running.
+// not: an imported plan nobody approved, or an approved plan whose every
+// open task is queued with no worker, while nothing is paused and nothing
+// else waits for the owner (a pause, a limits card or a gate is the ask).
 func stallCondition(in flowIn) (key, reason string) {
 	if !in.hasRun || in.fixingPlan() || in.panel == nil || in.panel.RunID == "" {
 		return "", ""
 	}
 	b := in.v.board
-	if b.Run.UserPaused || in.run.Pause != nil {
+	if b.Run.UserPaused || in.run.Pause != nil || in.v.ownerWaits() {
 		return "", ""
 	}
 	if _, ok := in.v.stopNotice(); ok {
@@ -68,15 +68,11 @@ func stallCondition(in flowIn) (key, reason string) {
 		}
 		return "approve:" + in.panel.RunID, "plan in, not approved by the Marshal for %s"
 	case marshal.Approved, marshal.Dispatching:
-		if c.queued == 0 || c.working > 0 || c.review > 0 || in.v.liveLanes() > 0 {
+		open := c.total - c.merged - c.cancelled
+		if open == 0 || c.queued != open || in.v.liveLanes() > 0 {
 			return "", ""
 		}
-		for _, t := range b.Tasks {
-			if t.State == boardmodel.TaskParked {
-				return "", ""
-			}
-		}
-		return "dispatch:" + in.panel.RunID, "approved, no task started, nothing paused for %s"
+		return "dispatch:" + in.panel.RunID, "no worker on the queued tasks for %s"
 	}
 	return "", ""
 }
@@ -107,7 +103,7 @@ func stallAsk(s *planStall, now time.Time) string {
 // planImportedNotice is what the Marshal chat is told when its plan is in
 // and no approval of it is pending.
 func planImportedNotice(runID string, tasks int) string {
-	return marshalNotePrefix + fmt.Sprintf("The runtime imported your plan draft: run %s with %s. It is waiting for your approval and no task starts until it applies. Submit the approve proposal now: marshal_proposal_submit with proposal {\"action\":\"approve\"}.", runID, count(tasks, "task", "tasks"))
+	return marshalNotePrefix + fmt.Sprintf("The runtime imported your plan draft: run %s with %s. It is waiting for your approval and no task starts until it applies. Send the approve proposal {\"action\":\"approve\"} now, through the same channel as your earlier proposals.", runID, count(tasks, "task", "tasks"))
 }
 
 // afterPlanImported finishes an import: it applies an approval the Marshal

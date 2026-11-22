@@ -26,6 +26,7 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	run.Tier = marshal.Ultra
 	for i := range run.Tasks {
 		run.Tasks[i].Worker = "codex"
 		run.Tasks[i].Mode = marshal.Governed
@@ -52,6 +53,9 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !s.checkerReservationApplies(approved) {
+		t.Fatalf("the checker reservation does not apply to the approved run (tier %q): the test would not exercise it", approved.Tier)
+	}
 	launched, err := s.dispatchReady(t.Context(), "run", approved, marshalBrief)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -70,5 +74,53 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 		if task.State == marshal.Queued {
 			t.Fatalf("task %s left queued: %+v", task.PlanTaskID, after.Tasks)
 		}
+	}
+}
+
+// The live run's own shape: Standard tier (Tier ""). Standard runs one task
+// at a time: the first codex task starts, nothing pauses, and Claude Code
+// stays free. (This fixture has no required canonical verification, so the
+// reservation itself is exercised by the ULTRA test above.)
+func TestApprovedStandardPlanOnOneProviderStartsFirstTask(t *testing.T) {
+	ResetProviderCooldowns()
+	t.Cleanup(ResetProviderCooldowns)
+	s, _ := marshalFixture(t, 4)
+	if _, err := s.StartPlanning(t.Context(), "run", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	run, rev, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range run.Tasks {
+		run.Tasks[i].Worker = "codex"
+		run.Tasks[i].Mode = marshal.Governed
+		run.Tasks[i].DependsOn = nil
+	}
+	if err := s.save(t.Context(), "run", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	s.CheckerCandidates = func() []string { return []string{"claude"} }
+	codex := &countingDriver{extremeMockDriver: extremeMockDriver{mode: marshal.Governed}}
+	claude := &countingDriver{extremeMockDriver: extremeMockDriver{mode: marshal.Governed}}
+	s.GovernedDrivers = map[string]driver.Driver{"codex": codex, "claude": claude}
+	s.Drivers = s.GovernedDrivers
+	if _, err := s.Approve(t.Context(), "run"); err != nil {
+		t.Fatal(err)
+	}
+	approved, _, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	launched, err := s.dispatchReady(t.Context(), "run", approved, marshalBrief)
+	if err != nil || len(launched) != 1 || codex.launches != 1 || claude.launches != 0 {
+		t.Fatalf("dispatched %d (codex %d, claude %d), err %v: want the first task on codex", len(launched), codex.launches, claude.launches, err)
+	}
+	after, _, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Pause != nil {
+		t.Fatalf("dispatch paused the run: %+v", after.Pause)
 	}
 }

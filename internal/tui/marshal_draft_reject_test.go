@@ -83,7 +83,7 @@ func TestRefusedDraftWakesMarshalAndShowsOnBoard(t *testing.T) {
 	if doing := flowDoing(in); !strings.HasPrefix(doing, "fixing the plan the runtime refused") {
 		t.Fatalf("Marshal line %q", doing)
 	}
-	if from, ok := fromYou(in); from != "nothing · next ask: "+planNextAsk() || !ok {
+	if from, ok := fromYou(in); from != "nothing · next ask: plan approval" || !ok {
 		t.Fatalf("from you %q %v, want the plan as the next ask", from, ok)
 	}
 
