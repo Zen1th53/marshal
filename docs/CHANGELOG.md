@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 ### Changed
 - The terminal Board is one short home screen: the project and state, **Now** (what is happening), **From you** (nothing, or the one thing that needs you) and **Web** (where the Web Board is), with the keys `⏎ chat`, `w web`, `s say to the Marshal`, `q quit`. The plan, lanes, tasks, workers, activity, steps, requests, readiness checklist and the cards' details are on the Web Board, which is now the full interface.
@@ -14,6 +14,19 @@
 - macOS: workers' Marshal MCP server (`marshal mcp relay`) exited at once with "MCP relay already active: operation not supported", so a worker's Marshal MCP server never started. The relay now locks its private directory where a FIFO cannot be locked, and handles macOS FIFO EOF and write behaviour.
 - macOS: `marshal update install` refused with "release binaries are built for Linux"; it now installs the darwin release archive, verified against `checksums.txt` as before.
 - macOS: with `marshal daemon` running, every command that talks to it (`marshal status`, `tasks`, `events`, `logs`, …) was refused ("local socket peer authentication refused"). The runtime socket now reads the peer's UID with `LOCAL_PEERCRED`.
+- macOS: workers started from the Board failed at once with "worker terminal transport unavailable on this platform", so no task could run on a Mac. The worker terminal now works on macOS, and the pause no longer claims the computer needs Linux amd64 when the cause is something else.
+- Accepting the architecture in the browser was refused with "Open the Marshal chat in your terminal" when Marshal was started from inside a Claude Code session: the Marshal chat inherited that session's markers, so its transcript was not saved and its session was unknown. The chat now drops them, a live chat is bound by its proposal connection, and the refusal says what is actually missing.
+- After a browser Accept the Marshal was never told: the note went to `.marshal/inbox/marshal.md` while the Marshal was briefed to read its provider's file. The briefing now names the runtime inbox, and the wake-up says where to read.
+- A message pasted into a Claude Code chat whose input box was taller than the pane stayed unsent, and blocked every later notice. Marshal now recognises a clipped input box and submits its own paste, or tells you when it cannot.
+- A worker that finished its task was recorded as a crash and run up to seven times when Git had no `user.name`/`user.email`: the commit failed after the model was done and the cause was lost. The run now pauses before any worker starts and says how to set the identity, the real cause reaches the Board's Raw error, and a hand-in failure is not retried as a crash.
+- The final check could become impossible: the Marshal could give tasks to the only tool that can do the final check (today Claude Code), and the pause then said "Install Claude Code". Marshal now keeps that tool off worker tasks when planning, on failover and on reassignment, and the pause says plainly when it did the run's tasks.
+- macOS: the Marshal was offered agy as a worker, then the plan was refused without a reason and the run sat at STARTING. agy is no longer offered where it cannot take tasks, and a refused plan now gives the Marshal a specific, safe reason, wakes it, and shows FIXING PLAN on the Board (YOUR TURN after 10 minutes without a fix).
+- A plan imported without an approval waited forever, while Activity claimed "the tasks start now". Marshal now wakes the Marshal to approve an imported plan, Activity only says the tasks start when they do, and a run that does not move for 5 minutes becomes a needs-you item with the reason.
+- A crash risk while reading provider help: help pages were read in parallel and written to a map the reader was still using.
+- Commands that arrive while another one runs wait in a queue (up to 8) instead of being refused; Ctrl+C clears the queue.
+
+### Security
+- Host workers get an allowlisted environment: the basics, proxy and CA settings, the Go toolchain, Git identity, `XDG_*` and the providers' own variables. `TMUX*`, `GITHUB_TOKEN`, `AWS_SECRET*`, `SSH_PRIVATE*` and `DOCKER_AUTH*` never reach a worker, and everything else is dropped. Side effects: owner-started sessions lose `SSH_AUTH_SOCK` and `AWS_*`, Claude through Bedrock does not authenticate on host workers, and toolchain settings other than Go's (`JAVA_HOME`, `CARGO_HOME`, pyenv) are dropped.
 
 ### Removed
 - The classic Board is removed, and so are the Board v2 terminal panes, the task inspector and the docked inspector column: `MARSHAL_BOARD=classic` no longer does anything. The home screen draws at any size down to about 40 × 10. Beside the chat the Board is given at least 60 columns (from a 101-column window), up from 56.
