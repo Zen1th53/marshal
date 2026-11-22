@@ -5,9 +5,9 @@
 ### Plan with one AI. Let other AIs build it. Stay in charge.
 
 **Marshal is a free, open-source orchestrator for the coding agents you already use.
-Claude Code, Codex, OpenCode and Antigravity work as one team in your terminal:
-one plans with you, others build in isolated worktrees, a different one reviews,
-and only verified work lands on `main`.**
+Claude Code, Codex, OpenCode and Antigravity work as one team: one plans with you,
+others build in parallel Git worktrees, every hand-in is checked before it merges,
+and you follow and steer it all from a local Web Board.**
 
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?color=blue)](https://github.com/Zen1th53/marshal/releases)
@@ -19,11 +19,20 @@ and only verified work lands on `main`.**
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="A real Marshal run on a Mac, sped up: Claude Code is picked as the Marshal, the goal is said from the Board, the Marshal asks one question and fills the requirements card, the requirements are confirmed, the architecture is accepted in the browser, Codex builds four tasks in parallel, each task is reviewed and merged, Claude Code does the final check, and the run ends DONE with all four on main." width="100%">
+  <img src=".github/assets/web-work.png" alt="The Marshal Web Board's Work section during a real run on a Mac: the stages goal, requirements, design, architecture and tasks are done and build is in progress; four tasks (color, done, due, export) are building in parallel on codex and claude workers, with a live table of workers, their model, step, running time and last signal." width="100%">
   <br>
-  <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → readiness → say the goal → planning → <b>Accept architecture</b> card, accept in the browser → lanes build in parallel → each hand-in reviewed by a different provider → verify → merge</sub>
+  <sub>The Web Board during a real run on a Mac: four tasks build in parallel on Codex and Claude Code workers.</sub>
 </p>
 
+<table>
+  <tr>
+    <td width="40%"><img src=".github/assets/web-team.png" alt="The Team section: each provider's role, model and limits per model group and window, such as codex 84% of its 5-hour window left and agy's Claude and GPT group at 0% until Nov 26." width="100%"><br><sub><b>Team</b>: who does what, and each provider's limits per model group and window.</sub></td>
+    <td width="40%"><img src=".github/assets/web-architecture.png" alt="The architecture review page: the proposed parts (cli, store, format, export, task) grouped by area with their links, and the Accept architecture button." width="100%"><br><sub><b>Architecture</b>: the Marshal proposes, only you accept.</sub></td>
+    <td width="20%"><img src=".github/assets/web-phone.png" alt="The Work section on a narrow screen with bottom navigation: Home, Work, Arch, Team, Activity." width="100%"><br><sub>Narrow screens get their own layout.</sub></td>
+  </tr>
+</table>
+
+[What you get](#what-you-get) ·
 [Set up](#set-up-with-your-agent) ·
 [How it works](#how-it-works) ·
 [Why Marshal](#why-marshal) ·
@@ -32,6 +41,23 @@ and only verified work lands on `main`.**
 [Docs](#documentation)
 
 </div>
+
+## What you get
+
+- **Agree before anything is built.** The Marshal turns your goal into a requirements card you
+  confirm, then proposes the project's architecture, which only you can accept in the browser.
+- **Parallel workers.** Codex, Claude Code and the others build separate tasks at the same time,
+  each in its own Git worktree and branch.
+- **Checked before it merges.** Every hand-in is reviewed by the Marshal and its task's checks run
+  before it merges. On ULTRA plans each hand-in also gets an independent review, and a final check
+  reruns the checks on the integrated result: by another provider when one is free, otherwise by
+  a fresh session of the same one.
+- **A Web Board as the cockpit.** A local page (127.0.0.1, opened with a one-use link) shows Home,
+  Work, Architecture, Team, Activity and Settings, and asks you only when a decision is yours.
+- **Limits you can see.** Each provider's limits per model group and window, with reset times;
+  when one group is spent, the others keep working.
+- **A short terminal home.** One screen in the terminal (state, what is happening, what is needed
+  from you), with the Marshal chat one key away.
 
 ## Set up with your agent
 
@@ -173,6 +199,12 @@ Marshal turns that into a process:
 
 ## The Board
 
+<p align="center">
+  <img src=".github/assets/demo.gif" alt="A real Marshal run on a Mac in the terminal, sped up: Claude Code is picked as the Marshal, the goal is said from the Board, the Marshal asks one question and fills the requirements card, the requirements are confirmed, the architecture is accepted in the browser, Codex builds four tasks in parallel, each task is reviewed and merged, and the run ends DONE with all four on main." width="100%">
+  <br>
+  <sub>The terminal side of a real run on a Mac, sped up: say the goal → confirm the requirements → accept the architecture in the browser → four tasks build in parallel → reviewed and merged → DONE.</sub>
+</p>
+
 `marshal` opens a tmux workspace: the Marshal chat docks on the left, the Board
 on the right. The terminal Board is one short screen; the **Web Board** is the
 full interface, and it opens in your browser as the Board starts:
@@ -212,9 +244,9 @@ full interface, and it opens in your browser as the Board starts:
 | `?` | Every key |
 
 The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
-runs on. The final ULTRA check requires Claude Code installed and not used as a worker in
-that run; if unavailable, the run stops before checking and tells you to install Claude Code
-or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
+runs on. The final ULTRA check needs Claude Code installed and not at its limit; it runs in a
+fresh session of its own, even when Claude Code also built tasks in that run.
+[All screens and keys →](docs/board-and-keys.md)
 
 ---
 
