@@ -19,7 +19,7 @@ func (w *Workspace) collectV2Cards(b *vm.Board) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	if d, ok := w.v2DecisionNow(now); ok {
+	if d, ok := w.v2DecisionNow(now); ok && !(b.NowLine.ChatAsked && d.kind == decisionArchitecture) {
 		card := d.card
 		b.Decision = &card
 	}

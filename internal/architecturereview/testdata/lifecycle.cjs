@@ -185,3 +185,9 @@ get('history-live').onclick();assert.equal(get('revision-bar').textContent,'rev 
 run('state.current=true;state.read_only=true;state.base_revision=3;draw()');assert.equal(get('revision-bar').textContent,'rev 4 · current');
 console.log('Lifecycle rendering and interactions passed');
 })().catch(e=>{console.error(e);process.exit(1);});
+
+// Every area has a label even when two columns share the Interfaces role.
+context.areaColumns=[['entry'],['cli','tui'],['config','api','browser-html'],['store'],['foundation']];
+const areaNames=run('bandNames(areaColumns)');
+assert.equal(areaNames.length,5);
+assert.ok(areaNames.every(n=>n.trim()),`unlabelled architecture area: ${JSON.stringify(areaNames)}`);
