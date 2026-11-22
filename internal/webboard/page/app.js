@@ -255,6 +255,7 @@
   // phase is what kind of moment this is, for the empty states.
   function phase(f) {
     if (f.paused) return "paused";
+    if (f.lastRun) return "finished";
     if (f.screen === "ready" || (!f.top.run && f.screen !== "planning" && f.screen !== "decision" && !f.plan.stages.length)) return "norun";
     if (f.screen === "planning" || (f.screen === "decision" && !f.top.run)) return "planning";
     if (finished(f)) return "finished";
@@ -478,6 +479,7 @@
     var n = f.nowLine;
     if (f.decision) return "The Marshal is waiting on you: " + sentence(f.decision.title);
     if (f.paused) return "The run waits for your choice." + (n.work ? " Work: " + sentence(n.work) : "");
+    if (f.lastRun) return n.work + ". Tell the Marshal a new goal below.";
     var ph = phase(f);
     if (ph === "finished") return "Finished: " + plural(merged(f), "task") + " merged" + (cancelledCount(f) ? ", " + cancelledCount(f) + " cancelled." : ".");
     var parts = [];
@@ -603,7 +605,7 @@
   var filters = [["all", "All"], ["building", "Building"], ["sentback", "Sent back"], ["waiting", "Waiting"], ["merged", "Merged"]];
   function renderWork(f) {
     var p = f.plan, ph = phase(f);
-    setText("work-sum", p.total ? p.done + " of " + p.total + " merged" + (p.title ? " · " + p.title : "") : p.title);
+    setText("work-sum", f.lastRun ? f.nowLine.work + " · read-only" : p.total ? p.done + " of " + p.total + " merged" + (p.title ? " · " + p.title : "") : p.title);
     if (changed("stages", p.stages)) {
       var ol = clear($("stages"));
       p.stages.forEach(function (s) {

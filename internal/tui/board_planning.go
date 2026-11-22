@@ -9,6 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
+	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // planningNow reports whether the Board shows the post-accept planning state:
@@ -112,22 +113,19 @@ func (w *Workspace) refreshActiveGoal(ctx context.Context) {
 	session := w.sessionID
 	prev := w.state.Goal
 	w.mu.RUnlock()
-	if st == nil || session == "" {
+	if st == nil {
 		return
 	}
 	goal, err := st.GetActiveGoalContract(ctx, session)
 	if ctx.Err() != nil {
 		return
 	}
-	changed := false
+	changed := w.readClosedGoal(ctx)
 	if err == nil {
 		if goalChanged(prev, goal) {
 			w.mu.Lock()
 			w.state.Goal = goal
 			w.mu.Unlock()
-			changed = true
-		}
-		if w.readClosedGoal(ctx) {
 			changed = true
 		}
 	}
@@ -149,23 +147,51 @@ func goalChanged(a, b model.GoalContract) bool {
 		!a.UpdatedAt.Equal(b.UpdatedAt)
 }
 
-// readClosedGoal records the goal the latest stored run delivered, when that
-// run is closed, and reports whether the cached value changed. It reads the
+type finishedRun struct {
+	panel    *MarshalPanel
+	revision int64
+}
+
+// readClosedGoal caches the latest finished result and its delivered goal,
+// and reports whether either changed. LatestMarshalRun prefers an active run,
+// so history is cleared as soon as a new stored run exists. It reads the
 // store, so it runs on the architecture follower, never on the paint path.
 func (w *Workspace) readClosedGoal(ctx context.Context) bool {
 	st := w.goalStore()
 	if st == nil {
 		return false
 	}
-	_, record, err := st.LatestMarshalRun(ctx, w.projectID)
+	project := w.projectID
+	if w.runtime != nil {
+		if w.projectIdentity == "" || string(w.projectIdentity) != w.runtime.ProjectIdentity() {
+			return false
+		}
+		if service := w.runtime.Marshal(); service != nil {
+			st, project = service.Store, service.ProjectID
+		}
+	}
+	id, record, err := st.LatestMarshalRun(ctx, project)
 	prev := w.closedGoal.Load()
+	last := w.lastRun.Load()
 	if err != nil || record.Value.State != marshal.Closed {
 		w.closedGoal.Store(nil)
-		return prev != nil
+		w.lastRun.Store(nil)
+		return prev != nil || last != nil
+	}
+	changed := last == nil || last.panel.RunID != id || last.revision != record.Revision
+	if changed {
+		evs, err := st.MarshalDecisions(ctx, id)
+		if err != nil {
+			return false
+		}
+		panel := newMarshalPanel(id, "", record.Value, "last finished run")
+		panel.Board = boardmodel.Project(boardmodel.Snapshot{RunID: id, Run: record.Value}, evs)
+		// Keep only durable final state: there are no live workers or owner requests.
+		w.lastRun.Store(&finishedRun{panel: panel, revision: record.Revision})
 	}
 	goal := record.Value.GoalBinding
 	w.closedGoal.Store(&goal)
-	return prev == nil || *prev != goal
+	return changed || prev == nil || *prev != goal
 }
 
 // planningMark is the planning milestone the home card shows and since when

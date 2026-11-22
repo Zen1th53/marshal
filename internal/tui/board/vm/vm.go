@@ -35,6 +35,8 @@ const (
 
 // Board is one frame of data.
 type Board struct {
+	// LastRun marks a finished result shown while waiting for a new goal.
+	LastRun  bool
 	Screen   Screen
 	Now      time.Time
 	Top      TopBar

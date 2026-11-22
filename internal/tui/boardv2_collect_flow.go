@@ -20,6 +20,7 @@ import (
 func (w *Workspace) collectV2Flow(b *vm.Board) {
 	in := w.flowInputs()
 	b.Now = in.now
+	b.LastRun = in.lastRun
 	b.Top = flowTop(in)
 	b.NowLine = flowNowLine(in)
 	b.Plan = flowPlan(in)
@@ -93,6 +94,17 @@ func (w *Workspace) flowInputs() flowIn {
 	_, stopped := v.stopNotice()
 	if ui.pane(len(v.board.Inbox) > 0 || stopped) == layout.Lanes {
 		in.selectedLane = ui.lane
+	}
+	// A stored result is display data, not state.Marshal: chat startup must
+	// remain free to accept a new goal and create a fresh run.
+	if !in.hasRun && !in.planning && !in.goalGiven {
+		if last := w.lastRun.Load(); last != nil {
+			in.hasRun, in.lastRun = true, true
+			in.panel, in.run = last.panel, last.panel.run
+			inbox := in.v.board.Inbox
+			in.v.board = last.panel.Board
+			in.v.board.Inbox = inbox
+		}
 	}
 	return in
 }

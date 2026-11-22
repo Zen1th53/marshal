@@ -21,6 +21,7 @@ type flowIn struct {
 	now              time.Time
 	version, project string
 	hasRun           bool
+	lastRun          bool
 	panel            *MarshalPanel
 	run              marshal.Run
 	// v is the Board as the classic paint sees it: the run's Board with the
@@ -138,6 +139,9 @@ func flowTop(in flowIn) vm.TopBar {
 // flowState is the top bar's state word and its tone. With a run it is the
 // classic header's run word (board_stop.go runWord) in capitals.
 func flowState(in flowIn) (string, vm.Tone) {
+	if in.lastRun {
+		return "READY", vm.ToneMuted
+	}
 	if in.fixingPlan() {
 		if in.draftRejected.overdue(in.now) {
 			return "YOUR TURN", vm.ToneWarn
@@ -204,6 +208,9 @@ func flowNowLine(in flowIn) vm.NowLine {
 
 // flowDoing is what the Marshal does now, in a few words.
 func flowDoing(in flowIn) string {
+	if in.lastRun {
+		return "waiting for a new goal"
+	}
 	var doing string
 	if in.fixingPlan() {
 		r := in.draftRejected
@@ -273,6 +280,21 @@ func runState(run marshal.Run, b boardmodel.Board) marshal.RunState {
 
 // flowWork is what the workers do: "8 running · 4 queued".
 func flowWork(in flowIn) string {
+	if in.lastRun {
+		c := countTasks(in.v.board.Tasks)
+		result := fmt.Sprintf("Last run: done · %d of %d merged", c.merged, c.total)
+		if c.cancelled > 0 {
+			result += fmt.Sprintf(" · %d cancelled", c.cancelled)
+		}
+		for i := len(in.v.board.Events) - 1; i >= 0; i-- {
+			e := in.v.board.Events[i]
+			if e.Type == events.EventTypeMarshalRunClosed && !e.At.IsZero() {
+				result += " · " + e.At.Local().Format("2006-01-02 15:04")
+				break
+			}
+		}
+		return result
+	}
 	if !in.hasRun {
 		return "none yet"
 	}

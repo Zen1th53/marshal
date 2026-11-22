@@ -135,7 +135,9 @@ func (w *Workspace) webBoardFrame() vm.Board {
 	// brings its own.
 	b.Keys = nil
 	if b.Decision == nil && b.Paused == nil {
-		b.Keys = w.webScreenKeys()
+		if !b.LastRun {
+			b.Keys = w.webScreenKeys()
+		}
 	}
 	return b
 }
