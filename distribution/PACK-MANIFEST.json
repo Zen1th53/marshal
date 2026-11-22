@@ -4801,8 +4801,8 @@
     },
     {
       "path": "internal/architecturereview/review.html",
-      "sha256": "82f756e720f560adc073fc56f04ed8db9c9a9a9523e14cbb8079f2c0ef671515",
-      "bytes": 92053
+      "sha256": "1d488592bb4f663a4ea8a585340d0028bd36268af6b2df86ffdd2d8b32bdf5c2",
+      "bytes": 91970
     },
     {
       "path": "internal/architecturereview/review_browser_test.go",
@@ -4821,8 +4821,8 @@
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.cjs",
-      "sha256": "d9f5b353c952cec47b1f6d63eb755739012e2de0ff7666032456e8174ef61e7b",
-      "bytes": 16967
+      "sha256": "d58d3b76c20ad235908924976569376fbc72ca18c4657917537db7e85809c159",
+      "bytes": 18504
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.json",
