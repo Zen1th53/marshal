@@ -2756,8 +2756,8 @@
     },
     {
       "path": "internal/app/marshal_model.go",
-      "sha256": "a4b339d7f69296fd88b03a56659c234382a92cf89532a0809e0c952e470a70dd",
-      "bytes": 38166
+      "sha256": "12a435e8ee64e83fae6c7269db592ffa9e65e207c9cb9b399c227e170292d658",
+      "bytes": 38213
     },
     {
       "path": "internal/app/marshal_model_session_linux.go",
@@ -3328,6 +3328,21 @@
       "path": "internal/app/optimization_runtime_test.go",
       "sha256": "9892e77eb43ef9c13c38ecdea18cff3e7513282f1a6eaf915a9fe2a1cd659081",
       "bytes": 4819
+    },
+    {
+      "path": "internal/app/output_schema_strict_default_test.go",
+      "sha256": "452bf34d591c55c6793fafaeaf70c046334b0c384f78652a6d43d123ec1cac10",
+      "bytes": 95
+    },
+    {
+      "path": "internal/app/output_schema_strict_extreme_test.go",
+      "sha256": "8252aff86a69d3f2e8856bdfdc8d630f90918f81a41eaf719965922435f2ff0a",
+      "bytes": 231
+    },
+    {
+      "path": "internal/app/output_schema_strict_test.go",
+      "sha256": "94256887105e998cc7d57b8d0df83723d4e7a0a5a9e4e2550e392a00b1ac4910",
+      "bytes": 1944
     },
     {
       "path": "internal/app/outside_reads.go",
