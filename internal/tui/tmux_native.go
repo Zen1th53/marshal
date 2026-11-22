@@ -1192,7 +1192,7 @@ func (w *Workspace) monitorAgent(
 							}
 						}
 						if !authExit && snapshot.paneID != "" {
-							if paneText, capErr := tmux.CapturePane(agentCtx, snapshot.paneID); capErr == nil && detectProviderAuthFailure(snapshot.provider, paneText) {
+							if paneText, capErr := tmux.CapturePane(agentCtx, snapshot.paneID); capErr == nil && confirmedChatAuthFailure(agentCtx, snapshot.provider, snapshot.binary, snapshot.env, paneText) {
 								authExit = true
 							}
 						}
@@ -1292,7 +1292,7 @@ func (w *Workspace) monitorAgent(
 							w.observeChatInput(snapshot.paneID, snapshot.provider, visible)
 							visible = StripANSI(visible)
 						}
-						if detectProviderAuthFailure(snapshot.provider, visible) {
+						if confirmedChatAuthFailure(agentCtx, snapshot.provider, snapshot.binary, snapshot.env, visible) {
 							if !authReported {
 								authReported = true
 								w.tmuxMu.Lock()

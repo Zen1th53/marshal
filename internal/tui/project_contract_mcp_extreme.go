@@ -256,6 +256,7 @@ func (w *Workspace) resumeProjectContractMCP(ctx context.Context, l *proposalMCP
 		return nil, projectcontext.Changed("project_contract_mcp_extreme.go:184")
 	}
 	if p.State == "admitted" {
+		delete(l.recoveryRefusals, p.ID) // Explicit retries may recover after the project changes.
 		req, err := w.runtime.RegisterMCPProjectContract(ctx, p.ID)
 		if err != nil {
 			return nil, err

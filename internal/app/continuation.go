@@ -587,7 +587,7 @@ func episodeCount(v any) int {
 }
 
 func cloneExtMeta(in map[string]any) map[string]any {
-	out := make(map[string]any, len(in)+4)
+	out := make(map[string]any, len(in))
 	for k, v := range in {
 		out[k] = v
 	}

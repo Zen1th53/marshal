@@ -30,6 +30,8 @@ func (s *Server) ConfigureProposalMCP(cfg proposalmcp.Config) {
 		}
 		method := "submit"
 		switch name {
+		case "marshal_design_review":
+			method = "design_review"
 		case "marshal_memory_candidate_submit", "memory_remember":
 			method = "memory_submit"
 		case "marshal_memory_receipt":
@@ -63,7 +65,7 @@ func (s *Server) ConfigureProposalMCP(cfg proposalmcp.Config) {
 
 func liveProposalTool(name string) bool {
 	switch name {
-	case "marshal_proposal_submit", "marshal_proposal_receipt", "marshal_memory_candidate_submit", "marshal_memory_receipt", "memory_remember", "marshal_architecture_request_answer", "marshal_architecture_at", "marshal_architecture_history", "marshal_architecture_conformance", "marshal_project_contract_submit", "marshal_project_contract_receipt", "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context":
+	case "marshal_design_review", "marshal_proposal_submit", "marshal_proposal_receipt", "marshal_memory_candidate_submit", "marshal_memory_receipt", "memory_remember", "marshal_architecture_request_answer", "marshal_architecture_at", "marshal_architecture_history", "marshal_architecture_conformance", "marshal_project_contract_submit", "marshal_project_contract_receipt", "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context":
 		return true
 	default:
 		return false
@@ -83,8 +85,9 @@ func (s *Server) proposalTools() []Tool {
 		return nil
 	}
 	return []Tool{
+		{Name: "marshal_design_review", Description: "Start/poll runtime design review; repeat identical arguments", InputSchema: objectSchema(map[string]any{"provider": stringSchema(), "draft": stringSchema(), "reading_list": map[string]any{"type": "array", "items": stringSchema()}}, "provider", "draft")},
 		{Name: "marshal_project_contract_context", Description: "Read project contract, goal, and memories; page with read_id", InputSchema: objectSchema(map[string]any{"read_id": stringSchema(), "page": map[string]any{"type": "integer", "minimum": 2}})},
-		{Name: "marshal_project_contract_submit", Description: "Submit contract: {action:'project-contract',expected_version,contract:{format_version:1,project,id,revision,purpose,components:[{id,responsibility,paths,dependencies,covers,parent?,removed?}],connections:[{from,to,carries}],invariants,required,reviewed_inventory_digest,supersedes_digest?,revision_reason?}}", InputSchema: objectSchema(map[string]any{"submission_id": stringSchema(), "proposal": map[string]any{"type": "object"}}, "submission_id", "proposal")},
+		{Name: "marshal_project_contract_submit", Description: "Submit project contract (action, expected_version, contract); owner accepts in browser", InputSchema: objectSchema(map[string]any{"submission_id": stringSchema(), "proposal": map[string]any{"type": "object"}}, "submission_id", "proposal")},
 		{Name: "marshal_project_contract_receipt", Description: "Contract submission receipt", InputSchema: objectSchema(map[string]any{"submission_id": stringSchema()}, "submission_id")},
 		{Name: "marshal_project_contract_inventory", Description: "Page memories to classify in contract (after=next_after_id)", InputSchema: objectSchema(map[string]any{"after": stringSchema(), "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 8}})},
 		{Name: "marshal_project_contract_read", Description: "Read accepted contract and reference page (after=next_after_id)", InputSchema: objectSchema(map[string]any{"after": stringSchema(), "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 8}})},

@@ -254,7 +254,12 @@ How to propose:
      skills; never install, update, vendor or patch EGM yourself. If missing,
      incompatible, newer-untested or unreadable, state the status reason and
      use built-in plain design review: draft the brief and design, then
-     obtain fresh-context review by another provider. This fallback does not
+     obtain fresh-context review through MCP
+     marshal_design_review(provider, draft, reading_list): another provider
+     when one is available, otherwise your own provider in a fresh session. The owner runtime
+     launches the reviewer; never run another provider's CLI from your shell.
+     Repeat the identical tool arguments to poll a pending receipt until it
+     completes or fails. This fallback does not
      depend on EGM. Before you start a reviewer session, tell the person in
      one plain sentence who reviews what and with which access, for example
      "I'm asking Codex to review my design draft, read-only."; never leave
@@ -372,7 +377,8 @@ How to propose:
    Starting now."
    Exit: the plan is approved.
 
-8. The run. Each task runs in its own worktree; a different provider reviews
+8. The run. Each task runs in its own worktree; an independent reviewer
+   (another provider when one is free, otherwise a fresh session) reviews
    each result; the verifier runs the checks; only verified work merges. Say
    "Work is underway." once, then nothing until something needs the person.
    The Board shows progress; the person can stop all workers at any time with
@@ -450,7 +456,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:56c0f1c7571b0565bb50622c106d6afdf8924a9ee4c613a3a43ed406ba83444d"
+const MarshalProtocolDigest = "sha256:73e988365ded7ce1b6e4a3088a6425bb65e84c6080caefed116ff3051bde8e9f"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

@@ -185,7 +185,7 @@ func (f *Firewall) AdmitRecord(ctx context.Context, rec model.MemoryRecordV2) (m
 		}
 	}
 	if r.Applied() {
-		meta := make(map[string]any, len(rec.ExtMeta)+1)
+		meta := make(map[string]any, len(rec.ExtMeta))
 		for k, v := range rec.ExtMeta {
 			meta[k] = v
 		}

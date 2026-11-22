@@ -34,6 +34,8 @@ type Config struct {
 	// Design reads the design review of the current goal (nil = none). Its
 	// result is untrusted model-written memory and is normalised strictly.
 	Design func(context.Context) (json.RawMessage, error)
+	// InitialRevision preserves the browser draft sequence when replacing a contract view.
+	InitialRevision int64
 	// ReadOnly opens the accepted project without manufacturing a new approval.
 	ReadOnly    bool
 	History     func(context.Context, int64) (json.RawMessage, error)
@@ -115,7 +117,16 @@ func New(config Config) (*Review, error) {
 		if err = validateArchitecture(architecture); err != nil {
 			return nil, err
 		}
-		r.state = map[string]any{"protocol_version": Version, "project": config.Project, "architecture_id": config.ArchitectureID, "revision": json.Number("1"), "architecture": architecture, "comments": []any{}, "approved": false, "builders": map[string]any{}}
+		revision := config.InitialRevision
+		if source, ok := architecture["source_contract"].(map[string]any); ok {
+			if n, valid := integer(source["revision"]); valid && n > revision {
+				revision = n
+			}
+		}
+		if revision < 1 {
+			revision = 1
+		}
+		r.state = map[string]any{"protocol_version": Version, "project": config.Project, "architecture_id": config.ArchitectureID, "revision": json.Number(fmt.Sprint(revision)), "architecture": architecture, "comments": []any{}, "approved": false, "builders": map[string]any{}}
 	}
 	architecture, ok := r.state["architecture"].(map[string]any)
 	if !ok {

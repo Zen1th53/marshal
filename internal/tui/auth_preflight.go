@@ -334,6 +334,12 @@ func defaultAuthPreflight(ctx context.Context, provider, binary string, env []st
 		})
 		return nil
 	}
+	// A failed status command can mean inaccessible credentials, configuration,
+	// or sandbox trouble. Only explicit authentication evidence means signed out.
+	if !detectProviderAuthFailure("codex", text) {
+		RecordAuthPreflightObservation(AuthObservation{Provider: "codex", Status: "ERROR", Reason: strings.TrimSpace(text), Source: "codex login status", ObservedAt: now})
+		return nil
+	}
 	RecordAuthPreflightObservation(AuthObservation{
 		Provider:   "codex",
 		Canonical:  "codex",
@@ -442,9 +448,17 @@ func firstProviderPositional(args []string) (string, []string) {
 // detectProviderAuthFailure inspects visible pane text or captured CLI output
 // for interactive login prompts and non-interactive token/authentication errors.
 func detectProviderAuthFailure(provider, raw string) bool {
+	detected, _ := providerAuthFailureEvidence(provider, raw)
+	return detected
+}
+
+// providerAuthFailureEvidence distinguishes generic auth text from evidence
+// specific to the monitored provider. Generic text in a pane may come from a
+// nested CLI and needs independent confirmation.
+func providerAuthFailureEvidence(provider, raw string) (detected, providerSpecific bool) {
 	clean := StripANSI(raw)
 	if strings.TrimSpace(clean) == "" {
-		return false
+		return false, false
 	}
 	lines := strings.Split(clean, "\n")
 	if len(lines) > 60 {
@@ -452,6 +466,7 @@ func detectProviderAuthFailure(provider, raw string) bool {
 	}
 
 	var unquotedLines []string
+	genericFailure := false
 	for _, line := range lines {
 		trimmed := trimPromptChrome(line)
 		if trimmed == "" {
@@ -462,7 +477,7 @@ func detectProviderAuthFailure(provider, raw string) bool {
 			(strings.HasPrefix(lower, "not logged in") && strings.Contains(lower, "login")) ||
 			(strings.HasPrefix(lower, "invalid api key") && strings.Contains(lower, "login")) {
 			if !looksQuotedLiteral(line, "not logged in") && !looksQuotedLiteral(line, "invalid api key") {
-				return true
+				genericFailure = true
 			}
 		}
 		if !looksQuotedLiteral(line, "sign in with chatgpt") &&
@@ -473,37 +488,38 @@ func detectProviderAuthFailure(provider, raw string) bool {
 		}
 	}
 	if len(unquotedLines) == 0 {
-		return false
+		return genericFailure, false
 	}
 	joined := strings.Join(unquotedLines, "\n")
 
-	if strings.Contains(joined, "sign in with chatgpt") &&
-		(strings.Contains(joined, "device code") || strings.Contains(joined, "api key")) {
-		return true
-	}
-	if strings.Contains(joined, "failed to refresh token") &&
-		(strings.Contains(joined, "revoked") ||
-			strings.Contains(joined, "reconnecting") ||
-			strings.Contains(joined, "expired") ||
-			strings.Contains(joined, "401") ||
-			strings.Contains(joined, "sign in") ||
-			strings.Contains(joined, "log out")) {
-		return true
-	}
-	if strings.Contains(joined, "refresh token was revoked") || strings.Contains(joined, "refresh_token_reused") {
-		return true
-	}
 	switch canonicalAuthProvider(provider) {
+	case "codex":
+		if strings.Contains(joined, "sign in with chatgpt") &&
+			(strings.Contains(joined, "device code") || strings.Contains(joined, "api key")) {
+			return true, true
+		}
+		if strings.Contains(joined, "failed to refresh token") &&
+			(strings.Contains(joined, "revoked") ||
+				strings.Contains(joined, "reconnecting") ||
+				strings.Contains(joined, "expired") ||
+				strings.Contains(joined, "401") ||
+				strings.Contains(joined, "sign in") ||
+				strings.Contains(joined, "log out")) {
+			return true, true
+		}
+		if strings.Contains(joined, "refresh token was revoked") || strings.Contains(joined, "refresh_token_reused") {
+			return true, true
+		}
 	case "claude":
 		if strings.Contains(joined, "not logged in") && (strings.Contains(joined, "/login") || strings.Contains(joined, "claude login") || strings.Contains(joined, "claude auth login")) {
-			return true
+			return true, true
 		}
 	case "opencode":
 		if strings.Contains(joined, "opencode auth login") && (strings.Contains(joined, "not signed in") || strings.Contains(joined, "unauthorized") || strings.Contains(joined, "authentication")) {
-			return true
+			return true, true
 		}
 	}
-	return false
+	return genericFailure, false
 }
 
 func trimPromptChrome(line string) string {
@@ -859,4 +875,20 @@ func (w *Workspace) monitorTaskAuthAndState(ctx context.Context, agent *activeTm
 	w.monitorTaskState(ctx, agent, h)
 	cancelAuth()
 	authWG.Wait()
+}
+
+// Chat panes contain arbitrary tool output, including other providers' login
+// errors. Provider-specific prompts are direct evidence; ambiguous text needs
+// Codex's own status in its launch environment before it can be attributed to
+// the running provider. A separate status probe can still report signed in
+// while an existing session is stuck refreshing a revoked token.
+func confirmedChatAuthFailure(ctx context.Context, provider, binary string, env []string, text string) bool {
+	detected, providerSpecific := providerAuthFailureEvidence(provider, text)
+	if !detected {
+		return false
+	}
+	if providerSpecific || canonicalAuthProvider(provider) != "codex" {
+		return true
+	}
+	return errors.Is(defaultAuthPreflight(ctx, provider, binary, env), ErrProviderNotSignedIn)
 }

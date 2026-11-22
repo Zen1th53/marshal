@@ -18,6 +18,8 @@ func TestMarshalReviewSaidInPlainWords(t *testing.T) {
 		"Before you start a reviewer session, tell the person in one plain sentence who reviews what and with which access",
 		`"I'm asking Codex to review my design draft, read-only."`,
 		"never leave them to approve a bare command line you did not describe.",
+		"marshal_design_review(provider, draft, reading_list)",
+		"never run another provider's CLI from your shell.",
 	} {
 		if !strings.Contains(text, rule) {
 			t.Errorf("design review guidance lacks %q", rule)

@@ -27,6 +27,7 @@ import (
 
 // MarshalCLI runs one structured, noninteractive model turn at a time.
 type MarshalCLI struct {
+	designReview               bool // runtime-owned pre-approval read-only critique
 	ProjectContext             func(context.Context, string, string) (string, error)
 	runtime                    *Runtime
 	requiredTurnPreparation    *requiredMarshalTurnPreparation

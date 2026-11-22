@@ -201,3 +201,29 @@ func replaceSupersededContractReview(directory string, seed *contractReviewSeed)
 	}
 	return os.Rename(filepath.Join(directory, "state.json"), filepath.Join(directory, fmt.Sprintf("superseded-%d.json", time.Now().UnixNano())))
 }
+
+// Replacing a pending contract must advance the browser draft sequence too,
+// including revisions made before the first contract has been accepted.
+func nextContractReviewRevision(directory string) (int64, error) {
+	files, err := filepath.Glob(filepath.Join(directory, "superseded-*.json"))
+	if err != nil {
+		return 0, err
+	}
+	next := int64(1)
+	for _, file := range files {
+		data, err := readArchitecturePrivateFile(directory, filepath.Base(file), architectureContextLimit)
+		if err != nil {
+			return 0, err
+		}
+		var state struct {
+			Revision int64 `json:"revision"`
+		}
+		if err := json.Unmarshal(data, &state); err != nil {
+			return 0, err
+		}
+		if state.Revision >= next {
+			next = state.Revision + 1
+		}
+	}
+	return next, nil
+}

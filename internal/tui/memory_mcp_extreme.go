@@ -81,13 +81,24 @@ func (w *Workspace) recoverBoundMCPMemory(record store.MarshalProposal) bool {
 		if p.State != "admitted" {
 			return true
 		}
+		if l.recoveryRefusals[record.ID] {
+			return true
+		}
 		req, err := w.runtime.RegisterMCPProjectContract(context.Background(), p.ID)
 		if err != nil {
-			w.RecordActivity("Live MCP project contract recovery refused: checked draft differs")
+			if l.recoveryRefusals == nil {
+				l.recoveryRefusals = map[string]bool{}
+			}
+			l.recoveryRefusals[record.ID] = true
+			w.RecordActivity("Live MCP project contract recovery refused: " + err.Error() + "; retry the checked submission after correcting the draft")
 			return true
 		}
 		requestJSON, _ := json.Marshal(req)
 		if record.RequestJSON != "" && record.RequestJSON != string(requestJSON) {
+			if l.recoveryRefusals == nil {
+				l.recoveryRefusals = map[string]bool{}
+			}
+			l.recoveryRefusals[record.ID] = true
 			w.RecordActivity("Live MCP project contract recovery refused: exact request differs")
 			return true
 		}
