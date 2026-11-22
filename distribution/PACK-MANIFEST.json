@@ -2656,8 +2656,8 @@
     },
     {
       "path": "internal/app/marshal_infra_retry_extreme_test.go",
-      "sha256": "1ba8187901145a8cbb8ed77880bc2d7106023e3328a9a9bc8698c1d4a4756cef",
-      "bytes": 14108
+      "sha256": "f2ffe5fefee69c54f67cdc6f3d4540700afa35e1321e957f739d645ee4774e4f",
+      "bytes": 14247
     },
     {
       "path": "internal/app/marshal_integrity_test.go",

@@ -307,7 +307,9 @@ func TestExtremePlatformRefusalStopsWithoutRetryOrCooldown(t *testing.T) {
 	}
 	// The terminal transport is not a governed-confinement requirement, so
 	// the pause must not send the owner to Linux amd64 for it.
-	if strings.Contains(run.Pause.Reason, "amd64") || strings.Contains(run.Pause.Reason, "Governed workers need") || strings.Contains(strings.Join(run.Pause.Resolutions, " "), "amd64") {
+	// The computer's own name (for example "Linux amd64" on a Linux
+	// runner) is not a requirement; only "They need ..." would be one.
+	if strings.Contains(run.Pause.Reason, "They need") || strings.Contains(run.Pause.Reason, "Governed workers need") || strings.Contains(strings.Join(run.Pause.Resolutions, " "), "amd64") {
 		t.Fatalf("pause claims a Linux amd64 requirement the cause does not have: %+v", run.Pause)
 	}
 }
