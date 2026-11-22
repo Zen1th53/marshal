@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "0cb97850512b617230a34ffa0348d1c127b3b77efaa6610601a28430924ec9c4",
-      "bytes": 15534
+      "sha256": "2d8898a3cb6a965438bcb49513e34b8c8dedc10270218f0fcad45147cd4724a5",
+      "bytes": 18131
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -566,8 +566,8 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "b62a7f25bc17ea8249f5a5f58a4c7eeb002b0b3de4467123211848ce5c1b46de",
-      "bytes": 9199
+      "sha256": "80cab32e2e205e200c2a55c0e75bdea8c1a780ea94e95cd116c2a5d700f0fa0e",
+      "bytes": 9193
     },
     {
       "path": "docs/how-it-works.md",
@@ -576,8 +576,8 @@
     },
     {
       "path": "docs/index.md",
-      "sha256": "79d3c4919a9ea414f85e85fa4f0431641059107177a616f3eb88cba471ee78a7",
-      "bytes": 4184
+      "sha256": "01f1774d936d95d97dd076abd3159a6785d0cf487dee0f3a96fdf7b5b52c3862",
+      "bytes": 4264
     },
     {
       "path": "docs/installation.md",
