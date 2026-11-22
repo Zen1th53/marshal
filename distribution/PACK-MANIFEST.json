@@ -1601,8 +1601,8 @@
     },
     {
       "path": "internal/app/continuation.go",
-      "sha256": "4004213ef37ee4627f1a6e269b3fefafd1e683579279a5fef8d0eabd38c8d61e",
-      "bytes": 29122
+      "sha256": "a6bf074ee98fc100a925e335032889398aebd7a6839c517d9893e0811d23b3eb",
+      "bytes": 29120
     },
     {
       "path": "internal/app/continuation_episode_test.go",
@@ -8336,8 +8336,8 @@
     },
     {
       "path": "internal/memory/security/admit.go",
-      "sha256": "fe9fecb533f98ddc4ee6f9014dd9a8c004da5bcea4d06a27aacd301c51ca6b5c",
-      "bytes": 5514
+      "sha256": "37052ccdfd3c9a253a3f2fc247c90664e8a378a26dd2664c42ba23437b7f0fc7",
+      "bytes": 5512
     },
     {
       "path": "internal/memory/security/admit_edition_test.go",
