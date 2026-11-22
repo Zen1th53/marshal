@@ -3330,6 +3330,21 @@
       "bytes": 4819
     },
     {
+      "path": "internal/app/output_schema_strict_default_test.go",
+      "sha256": "452bf34d591c55c6793fafaeaf70c046334b0c384f78652a6d43d123ec1cac10",
+      "bytes": 95
+    },
+    {
+      "path": "internal/app/output_schema_strict_extreme_test.go",
+      "sha256": "8252aff86a69d3f2e8856bdfdc8d630f90918f81a41eaf719965922435f2ff0a",
+      "bytes": 231
+    },
+    {
+      "path": "internal/app/output_schema_strict_test.go",
+      "sha256": "94256887105e998cc7d57b8d0df83723d4e7a0a5a9e4e2550e392a00b1ac4910",
+      "bytes": 1944
+    },
+    {
       "path": "internal/app/outside_reads.go",
       "sha256": "29ab6d7327bd25f0dccc2b32e6499612d1dcfa6f2985984b67e8b747ae200253",
       "bytes": 6113
