@@ -126,7 +126,7 @@ func TestMarshalMixedTierRequiresIndependentVerification(t *testing.T) {
 	s.Gate = marshalTestGate(true)
 	s.ModelProvider = "test"
 	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f a.txt"}}, "test", nil
+		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f a.txt"}}, "test", nil
 	}
 	startIntegrityRun(t, s, marshal.Budget{})
 	acceptIntegrityTask(t, s, "a")

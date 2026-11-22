@@ -321,9 +321,6 @@ const (
 	// CodeHandInNotRecorded stops a task whose worker finished but whose
 	// hand-in MARSHAL could not record; re-running the worker cannot help.
 	CodeHandInNotRecorded = "hand_in_not_recorded"
-	// CodeReservedChecker stops a task, before its worker starts, whose
-	// worker is the last provider that can do the run's final check.
-	CodeReservedChecker = "reserved_checker"
 )
 
 // LifecycleOperation is written before an external effect. Its completion
@@ -424,6 +421,11 @@ type Review struct {
 	Reasons      []string
 	EvidenceRefs []string
 	Independent  *IndependentReview
+	// SessionID and FreshSession are set by the runtime, never by a
+	// model's answer: the session the cross-reviewer ran in, and whether the
+	// runtime started it clean. They reach the record through Independent.
+	SessionID    string `json:"-"`
+	FreshSession bool   `json:"-"`
 }
 
 // IndependentReview keeps the ULTRA cross-review beside the Marshal's
@@ -434,6 +436,10 @@ type IndependentReview struct {
 	Provider     string
 	Reasons      []string
 	EvidenceRefs []string
+	// SessionID is the reviewer's own session; FreshSession records that
+	// the runtime started it clean, with no worker's session resumed.
+	SessionID    string `json:",omitempty"`
+	FreshSession bool   `json:",omitempty"`
 }
 
 // CommandRecord captures a command's observed or reported result.
@@ -646,11 +652,14 @@ func CriterionEvidence(task Task, h HandIn, criterion string) CriterionResult {
 
 // VerifierEvidence retains the independent session's verdict and exact input binding.
 type VerifierEvidence struct {
-	Reviewer    string
-	Provider    string
-	SessionID   string
-	Commit      string
-	Verdict     string
-	Findings    []string
-	InputDigest string
+	Reviewer  string
+	Provider  string
+	SessionID string
+	// FreshSession is set when the runtime started the verifier's session
+	// clean: no conversation, worker transcript or session was resumed.
+	FreshSession bool `json:",omitempty"`
+	Commit       string
+	Verdict      string
+	Findings     []string
+	InputDigest  string
 }

@@ -6,9 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/events"
@@ -314,7 +315,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 
 	nextWorker, err := currentWorker, error(nil)
 	if !sameProvider {
-		nextWorker, err = s.selectFailoverWorker(ctx, currentWorker, t.Mode, drivers, s.checkerFreeOrder(run, t.PlanTaskID, order))
+		nextWorker, err = s.selectFailoverWorker(ctx, currentWorker, t.Mode, drivers, order)
 	}
 	if err != nil {
 		t.State = marshal.Escalated
@@ -326,7 +327,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		}
 		t.EscalationCode = escalationCode(baseCode, t.EscalationReason)
 		run.Operation = nil
-		reason := "No other AI provider can take this task." + s.checkerKeptNote(run, t.PlanTaskID, order)
+		reason := "No other AI provider can take this task."
 		pause := marshal.Pause{Resolutions: []string{"Add or check a provider on the Providers view (press 4), then press Enter to retry."}, Detail: machine, Code: baseCode, Action: marshal.PauseResume}
 		if errors.Is(err, errWaitingOnQuota) {
 			pause.Resolutions = []string{"Press Enter after that time to continue."}
@@ -501,12 +502,8 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
-	order := GetEffectiveFailoverOrder(run.Settings)
-	next, err := s.selectFailoverWorkerFor(ctx, t.Worker, taskModel, t.Mode, drivers, s.checkerFreeOrder(*run, t.PlanTaskID, order))
+	next, err := s.selectFailoverWorkerFor(ctx, t.Worker, taskModel, t.Mode, drivers, GetEffectiveFailoverOrder(run.Settings))
 	if err != nil {
-		if note := s.checkerKeptNote(*run, t.PlanTaskID, order); note != "" {
-			err = fmt.Errorf("%w;%s", err, note)
-		}
 		if modelOut {
 			err = fmt.Errorf("%w; %s has no limit left for %s", err, t.Worker, taskModel)
 		} else if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {

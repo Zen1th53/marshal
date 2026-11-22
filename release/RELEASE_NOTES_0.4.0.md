@@ -18,10 +18,13 @@ interface, and a run that goes from your goal to merged work on a Mac.
 - **Limits per model group.** Team shows each provider's limits per model
   family and window. agy's model groups are tracked separately, so one
   exhausted group no longer blocks the others.
-- **The final check always has a checker.** The final check needs a tool that
-  names the model it answers with and did none of the run's tasks. Today that
-  is Claude Code. Marshal keeps it off worker tasks when it plans, fails over
-  or reassigns, so a run can always land.
+- **A fresh session is independent enough.** A reviewer or the final check
+  is another agent with a fresh context: its own session, started clean, with
+  no worker's session resumed. It need not be a different provider. Marshal
+  prefers one that did none of the run's tasks; otherwise the same provider
+  checks in a new session, and the evidence says so. The final check needs a
+  tool that names the model it answers with (today Claude Code), and Claude
+  Code may also do the run's tasks. No provider is kept off worker tasks.
 - The classic Board and the Board v2 terminal panes are removed.
 
 ## Fixed

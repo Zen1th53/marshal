@@ -316,6 +316,12 @@ func (r *Runtime) verifyRequiredMarshalIntegrationWithCLI(ctx context.Context, s
 	if !requiredVerifierKnownIdentity(capture.observedModel) || !requiredVerifierKnownIdentity(capture.session) || capture.binaryDigest == "" || capture.provider != cli.Provider || capture.preparation.head != head || capture.preparation.tree != binding.TreeDigest || capture.preparation.receipt.Stage != "review" || capture.preparation.receipt.Binding.RunID != binding.RunID || target == nil || capture.preparation.receipt.ID != target.receipt.ID {
 		return session, binding, projectcontext.ErrReviewPending
 	}
+	// The verifier may be a worker's provider, never a worker's session: it
+	// started clean (no conversation above), and the session it reports must
+	// be none the runtime observed for the run's workers.
+	if slices.Contains(workerSessions(observed.RuntimeProof), capture.session) {
+		return session, binding, fmt.Errorf("%w: independent verifier reused a worker's session", projectcontext.ErrReviewPending)
+	}
 	next, observation, payloads, err := requiredVerifierEvidence(session, criteria, verdict, capture)
 	if err != nil {
 		return session, binding, err

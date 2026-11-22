@@ -34,8 +34,7 @@ func nextVerifiedWorker(order []string, failed string, verified func(string) boo
 // reassignDraftWorkers moves every governed draft task whose worker verified
 // rejects to the next verified provider, reporting each move through record
 // before it is made. A task with no verified alternative keeps its worker.
-// A replacement avoid reports for the task is never chosen.
-func reassignDraftWorkers(draft *MarshalDraft, verified func(string) bool, record func(task, from, to string) error, avoid ...func(task, provider string) bool) error {
+func reassignDraftWorkers(draft *MarshalDraft, verified func(string) bool, record func(task, from, to string) error) error {
 	known := map[string]bool{}
 	check := func(provider string) bool {
 		ok, seen := known[provider]
@@ -50,14 +49,7 @@ func reassignDraftWorkers(draft *MarshalDraft, verified func(string) bool, recor
 		if provider == "" || task.Mode != "governed" || check(provider) {
 			continue
 		}
-		replacement := nextVerifiedWorker(workerFallbackOrder, provider, func(candidate string) bool {
-			for _, avoided := range avoid {
-				if avoided(task.PlanTaskID, candidate) {
-					return false
-				}
-			}
-			return check(candidate)
-		})
+		replacement := nextVerifiedWorker(workerFallbackOrder, provider, check)
 		if replacement == "" {
 			continue
 		}
@@ -192,50 +184,40 @@ func reassignProviderName(worker string) string {
 
 var errIndependentVerifierUnavailable = errors.New("marshal: independent verifier unavailable")
 
-// verifierUnavailableError is errIndependentVerifierUnavailable with every
-// exclusion. Busy names the providers excluded only because they did the
-// run's tasks: each could have checked the work had it not done it.
-type verifierUnavailableError struct {
-	excluded []string
-	Busy     []string
-}
-
-func (e *verifierUnavailableError) Error() string {
-	return fmt.Sprintf("%v; no provider differs from every worker and is installed, MCP-capable and not limited; excluded providers: %s", errIndependentVerifierUnavailable, strings.Join(e.excluded, "; "))
-}
-
-func (e *verifierUnavailableError) Unwrap() error { return errIndependentVerifierUnavailable }
-
-// independentVerifierProvider never admits a worker provider, even when all
-// alternatives are absent or cooling down. Keep every exclusion so a paused
-// run tells the operator exactly what must change before verification resumes.
+// independentVerifierProvider picks the provider for the final check. It
+// runs in a fresh session of its own, so it need not differ from the
+// workers': a provider that did none of the run's tasks is preferred, and
+// otherwise a worker's provider checks the work in a new session. Only a
+// provider that is not installed, cannot reach Marshal's tools, is limited,
+// or whose answer does not name its model is excluded; every exclusion is
+// kept so a paused run says exactly what must change.
 func (r *Runtime) independentVerifierProvider(run marshal.Run) (string, error) {
+	provider, _, err := r.independentVerifierChoice(run)
+	return provider, err
+}
+
+// independentVerifierChoice is independentVerifierProvider that also
+// reports whether the chosen provider did some of the run's tasks.
+func (r *Runtime) independentVerifierChoice(run marshal.Run) (provider string, workerProvider bool, err error) {
 	installed := installedMarshalProviders()
-	var workers, available []string
-	unavailable := &verifierUnavailableError{}
+	var workers, available, excluded []string
 	for _, task := range run.Tasks {
 		workers = append(workers, task.Worker)
 	}
-	for _, provider := range MarshalProviders() {
-		var reasons []string
-		worker := sameProviderAsWorker(provider, workers...)
-		if worker {
-			reasons = append(reasons, "worker provider")
-		}
-		gaps := r.finalCheckerGaps(provider, installed, true)
-		reasons = append(reasons, gaps...)
-		if worker && len(gaps) == 0 {
-			unavailable.Busy = append(unavailable.Busy, provider)
-		}
-		if len(reasons) != 0 {
-			unavailable.excluded = append(unavailable.excluded, provider+": "+strings.Join(reasons, ", "))
+	for _, candidate := range MarshalProviders() {
+		if reasons := r.finalCheckerGaps(candidate, installed, true); len(reasons) != 0 {
+			excluded = append(excluded, candidate+": "+strings.Join(reasons, ", "))
 		} else {
-			available = append(available, provider)
+			available = append(available, candidate)
 		}
 	}
 	if len(available) == 0 {
-		return "", unavailable
+		return "", false, fmt.Errorf("%w; no provider is installed, MCP-capable, not limited and names the model that answered; excluded providers: %s", errIndependentVerifierUnavailable, strings.Join(excluded, "; "))
 	}
-	provider, _ := pickIndependentProvider(available, workers)
-	return provider, nil
+	for _, candidate := range available {
+		if !sameProviderAsWorker(candidate, workers...) {
+			return candidate, false, nil
+		}
+	}
+	return available[0], true, nil
 }

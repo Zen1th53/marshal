@@ -88,7 +88,3 @@ func taskReturns(t marshal.Task) int {
 // governedProviderSwitchAllowed reports whether the operator may switch a
 // governed Process 05 task to another provider within its plan version.
 const governedProviderSwitchAllowed = false
-
-// independentCrossReviewRequired refuses a cross-review by the worker's own
-// provider instead of falling back to it.
-const independentCrossReviewRequired = false

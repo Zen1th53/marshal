@@ -123,7 +123,7 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
     (codex)    (claude)   (opencode)
         └──────────┼──────────┘
                    ▼
-     review by a different provider  ──▶  independent verifier runs the checks
+     review in a fresh agent session ──▶  independent verifier runs the checks
                    │
                    ▼
             merged and closed to main
@@ -135,9 +135,11 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 2. **Build in isolation.** The plan is split into small tasks. Each task names
    its files, acceptance criteria and a check command, and runs in its own Git
    worktree and branch, so parallel workers never overwrite each other.
-3. **No model grades its own work.** A different provider reviews every
-   hand-in against its criteria. An independent verifier then runs the checks
-   on the integrated result.
+3. **No model grades its own work.** Another agent with a fresh context
+   reviews every hand-in against its criteria: a different provider when one
+   is available, otherwise a new session of the same one. An independent
+   verifier, also in a session of its own, then runs the checks on the
+   integrated result.
 4. **Only verified work lands.** Accepted tasks merge, and the run closes to
    `main` with a record of who did what and which checks passed.
 

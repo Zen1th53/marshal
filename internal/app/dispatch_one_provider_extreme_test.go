@@ -3,16 +3,27 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 )
 
-// The live Mac demo after #340: Claude Code kept free as the final checker,
-// so all four independent governed tasks went to codex. Once the plan is
-// approved, dispatch starts every one of them on codex and none on Claude
-// Code: the reservation and the provider admission do not hold a plan whose
+// countingDriver records each launch, so a test can prove a worker never started.
+type countingDriver struct {
+	extremeMockDriver
+	launches int
+}
+
+func (d *countingDriver) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
+	d.launches++
+	return d.extremeMockDriver.Launch(ctx, req)
+}
+
+// The live Mac demo: all four independent governed tasks went to codex.
+// Once the plan is approved, dispatch starts every one of them on codex and
+// none on Claude Code: the provider admission does not hold a plan whose
 // tasks all share one provider.
 func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 	ResetProviderCooldowns()
@@ -35,7 +46,6 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 	if err := s.save(t.Context(), "run", run, rev); err != nil {
 		t.Fatal(err)
 	}
-	s.CheckerCandidates = func() []string { return []string{"claude"} }
 	s.QuotaLeft = func(provider string) (int, bool) {
 		if provider == "codex" {
 			return 99, true
@@ -52,9 +62,6 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 	approved, _, err := s.load(t.Context(), "run")
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !s.checkerReservationApplies(approved) {
-		t.Fatalf("the checker reservation does not apply to the approved run (tier %q): the test would not exercise it", approved.Tier)
 	}
 	launched, err := s.dispatchReady(t.Context(), "run", approved, marshalBrief)
 	if err != nil {
@@ -78,9 +85,7 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 }
 
 // The live run's own shape: Standard tier (Tier ""). Standard runs one task
-// at a time: the first codex task starts, nothing pauses, and Claude Code
-// stays free. (This fixture has no required canonical verification, so the
-// reservation itself is exercised by the ULTRA test above.)
+// at a time: the first codex task starts and nothing pauses.
 func TestApprovedStandardPlanOnOneProviderStartsFirstTask(t *testing.T) {
 	ResetProviderCooldowns()
 	t.Cleanup(ResetProviderCooldowns)
@@ -100,7 +105,6 @@ func TestApprovedStandardPlanOnOneProviderStartsFirstTask(t *testing.T) {
 	if err := s.save(t.Context(), "run", run, rev); err != nil {
 		t.Fatal(err)
 	}
-	s.CheckerCandidates = func() []string { return []string{"claude"} }
 	codex := &countingDriver{extremeMockDriver: extremeMockDriver{mode: marshal.Governed}}
 	claude := &countingDriver{extremeMockDriver: extremeMockDriver{mode: marshal.Governed}}
 	s.GovernedDrivers = map[string]driver.Driver{"codex": codex, "claude": claude}

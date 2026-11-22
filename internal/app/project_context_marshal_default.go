@@ -38,7 +38,3 @@ func (*MarshalCLI) marshalKnowledgeFits(string, string) bool { return true }
 
 // providerLimitFallback: Community keeps its role provider choice unchanged.
 const providerLimitFallback = false
-
-// finalCheckEveryRun: Community runs the independent final check on ULTRA
-// runs only.
-const finalCheckEveryRun = false

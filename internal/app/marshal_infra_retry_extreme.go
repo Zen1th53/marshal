@@ -140,7 +140,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		// Only a failure that says something about the provider cools it;
 		// a crash, an expired lease or a lost connection to Marshal's tools
 		// would otherwise park the run as waiting on a quota it still has.
-		if t.InfraStreak >= infraFailoverStreak && infraKindCoolsProvider(kind) && s.otherWorkerFor(run, *t) != "" {
+		if t.InfraStreak >= infraFailoverStreak && infraKindCoolsProvider(kind) && s.otherWorker(t.Worker, t.Mode) != "" {
 			until := s.clock().Add(infraFailureCooldown)
 			providerHealth.Mark(t.Worker, "infrastructure failure ("+kind+"): "+reason, until)
 			data["provider_cooldown_until"] = until.UTC().Format(time.RFC3339)

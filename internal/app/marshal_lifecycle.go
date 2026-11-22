@@ -6,12 +6,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
@@ -89,9 +90,6 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	}
 	rev, err = s.admitProviderDispatch(ctx, runID, &run, rev, i, brief)
 	if err != nil {
-		return MarshalDispatch{}, err
-	}
-	if err = s.refuseDispatchToReservedChecker(ctx, runID, run, rev, i); err != nil {
 		return MarshalDispatch{}, err
 	}
 	if err = s.executionAdmission(ctx, runID, taskID, run); err != nil {
@@ -617,13 +615,10 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		crossReviewData["cross_review_reviewer"] = crossReview.Reviewer
 		crossReviewData["cross_review_provider"] = crossReviewerProvider
 		crossReviewData["worker_provider"] = h.Provider
-		// A same-provider review is recorded as an explicit fallback, never
-		// left implicit: it means no other provider was available.
-		if sameProviderAsWorker(crossReviewerProvider, h.Provider, h.Worker) {
-			crossReviewData["cross_review_same_provider_fallback"] = true
-			crossReviewData["cross_review_fallback_reason"] = "no provider other than the worker's was available"
+		if err = checkCrossReviewFreshSession(crossReview, crossReviewerProvider, h, crossReviewData); err != nil {
+			return "", err
 		}
-		proposal.Independent = &marshal.IndependentReview{Verdict: crossReview.Verdict, Reviewer: crossReview.Reviewer, Provider: crossReviewerProvider, Reasons: crossReview.Reasons, EvidenceRefs: crossReview.EvidenceRefs}
+		proposal.Independent = &marshal.IndependentReview{Verdict: crossReview.Verdict, Reviewer: crossReview.Reviewer, Provider: crossReviewerProvider, Reasons: crossReview.Reasons, EvidenceRefs: crossReview.EvidenceRefs, SessionID: crossReview.SessionID, FreshSession: crossReview.FreshSession}
 	}
 	met, total, failing := marshal.CriteriaMet(*t, h)
 	envelope, state, err := s.gateInputs(ctx, runID, taskID, run, constitution.DomainCompletion)
@@ -1079,9 +1074,6 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	if marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
 		return errors.New("cannot reassign to the same harness")
 	}
-	if s.reservedChecker(run, taskID, worker) {
-		return reservedCheckerRefusal(taskID, worker)
-	}
 	previous := t.Worker
 	providerSwitch, err := s.governedProviderSwitch(ctx, run, *t, worker, operatorReason != "")
 	if err != nil {
@@ -1151,7 +1143,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
 	}
-	hasOtherWorker := s.otherWorkerFor(run, *t) != ""
+	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
 	// Zero means no bound (Extreme); Community bounds fresh-session retries.
 	maxFresh := buildMaxFreshSessionRetries()
 	if !hasOtherWorker {

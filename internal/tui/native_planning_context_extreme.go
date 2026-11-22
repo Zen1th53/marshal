@@ -124,23 +124,11 @@ type nativePlanningPage struct {
 	Page   int    `json:"page"`
 	Pages  int    `json:"pages"`
 	Next   string `json:"next,omitempty"`
-	// FinalChecker, on the first page, names the provider kept off the
-	// plan's tasks so the final check can run.
-	FinalChecker string `json:"final_checker,omitempty"`
-}
-
-// nativeFinalChecker is the worker rule a planning Marshal reads with its
-// context: which provider to keep off tasks for the final check, or "".
-func nativeFinalChecker() string {
-	return app.FinalCheckerBriefing(app.MarshalWorkers(""), false)
 }
 
 func nativePlanningPageJSON(view app.ProjectPlanningInspection, readID string, page int, pages []string) (json.RawMessage, error) {
 	view.Context = pages[page]
 	reply := nativePlanningPage{ProjectPlanningInspection: view, ReadID: readID, Page: page + 1, Pages: len(pages)}
-	if page == 0 {
-		reply.FinalChecker = nativeFinalChecker()
-	}
 	if page+1 < len(pages) {
 		reply.Next = fmt.Sprintf("This is page %d of %d. Call marshal_project_contract_context with {\"read_id\":\"%s\",\"page\":%d} for the next page; a draft is admitted only after the last page.", page+1, len(pages), readID, page+2)
 	}
@@ -251,9 +239,8 @@ func (w *Workspace) readNativePlanningMCP(ctx context.Context, l *proposalMCPLea
 	}
 	raw, err := boundedNativePlanningJSON(struct {
 		app.ProjectPlanningInspection
-		ReadID       string `json:"read_id"`
-		FinalChecker string `json:"final_checker,omitempty"`
-	}{view.ProjectPlanningInspection, readID, nativeFinalChecker()})
+		ReadID string `json:"read_id"`
+	}{view.ProjectPlanningInspection, readID})
 	if err != nil {
 		return nil, err
 	}

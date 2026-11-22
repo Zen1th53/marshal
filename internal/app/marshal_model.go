@@ -405,11 +405,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		m.AllowNativeException = false
 	}
 	var proposal marshalTaskProposal
-	checker := FinalCheckerBriefing(offered, false)
-	if checker != "" {
-		checker += " "
-	}
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(offered, ", ")+". "+checker+MarshalTaskDecomposition+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(offered, ", ")+". "+MarshalTaskDecomposition+marshalDraftTaskPolicy()+" Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Each task sets control strict when the worker must follow its instructions exactly, otherwise free. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -713,7 +709,9 @@ func (m *MarshalCLI) Verify(ctx context.Context, run marshal.Run, head string, s
 }
 
 func (m *MarshalCLI) VerifyEvidence(ctx context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
-	record := marshal.VerifierEvidence{Reviewer: "verifier:" + m.Provider, Provider: m.Provider, Commit: head, Verdict: "incomplete"}
+	// The verifier starts clean: a CLI that already holds a conversation
+	// is not a fresh session, and its evidence says so.
+	record := marshal.VerifierEvidence{Reviewer: "verifier:" + m.Provider, Provider: m.Provider, Commit: head, Verdict: "incomplete", FreshSession: m.ConversationID == ""}
 	var verdict struct {
 		Head     string   `json:"head"`
 		Verdict  string   `json:"verdict"`

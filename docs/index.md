@@ -25,7 +25,7 @@ marshal
 Once inside the Board:
 1. **Confirm requirements**: The Marshal fills a requirements card. Confirm all on the Web Board or with `y` on the Board, or press `e` and a line's letter to edit an answer.
 2. **Accept the architecture**: Press `y` to open the architecture in your browser and accept it. This is the owner gate.
-3. **The Marshal plans**: The Marshal creates and approves the plan itself; there is no plan approval popup. Tasks run, then a final independent check reruns the checks. The final ULTRA check needs Claude Code installed and unused as a worker in that run.
+3. **The Marshal plans**: The Marshal creates and approves the plan itself; there is no plan approval popup. Tasks run, then a final independent check reruns the checks. The final ULTRA check needs Claude Code installed; it runs in a fresh session, so Claude Code may also have done some of the tasks.
 4. **Finish**: The run closes to `main`, and the chat says `[Marshal] The run closed: …`.
 
 ---
@@ -34,7 +34,7 @@ Once inside the Board:
 
 - **Local & Multi-Agent**: Orchestrate Claude Code, OpenAI Codex, OpenCode, and Google Antigravity (`agy`) simultaneously on your own machine.
 - **The Board (TUI)**: A dynamic tmux-powered terminal dashboard providing real-time visibility into tasks, worker lanes, activity logs, and a docked conversation pane.
-- **Cross-Provider Review**: No agent marks its own homework. Changes handed in by one provider are reviewed against acceptance criteria by a different provider.
+- **Independent Review**: No agent marks its own homework. Each hand-in is reviewed against its acceptance criteria by another agent with a fresh context: a different provider when one is available, otherwise a new session of the same one.
 - **Independent Verification**: Test suites and acceptance criteria are evaluated by an independent verifier before code is integrated.
 - **Project Memory & MCP**: Built-in Model Context Protocol server and persistent candidate-reviewed knowledge store.
 - **Transparent & Anonymous**: Anonymous opt-out telemetry directed to `marshal.blackhat.uz`, with no code, prompts, or sensitive data transmitted.

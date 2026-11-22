@@ -190,7 +190,3 @@ func (m *MarshalCLI) prepareRequiredMarshalModelTurn(ctx context.Context, prompt
 // providerLimitFallback: the private edition moves review and verification
 // roles off a provider that reported its own quota or rate limit.
 const providerLimitFallback = true
-
-// finalCheckEveryRun: the private edition ends every run in the required
-// independent final check.
-const finalCheckEveryRun = true

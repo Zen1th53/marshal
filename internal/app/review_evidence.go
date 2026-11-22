@@ -105,9 +105,7 @@ func (s *MarshalService) captureIndependentVerification(ctx context.Context, run
 		workers = append(workers, task.Worker)
 	}
 	data["worker_providers"] = workers
-	if sameProviderAsWorker(record.Provider, workers...) {
-		err = errors.Join(err, errors.New("independent verifier used a worker provider"))
-	}
+	err = errors.Join(err, s.checkVerifierFreshSession(record, workers, workerSessions(session.RuntimeProof), data))
 	if session.RuntimeProof != nil {
 		data["runtime_proof"] = session.RuntimeProof
 	}
@@ -133,16 +131,8 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 	if errors.Is(cause, errIndependentVerifierUnavailable) {
 		// The person must make an independent checker available; the
 		// exclusions stay in the detail and the recorded event.
-		pause.Reason, pause.Detail = "The final check has no independent checker: each installed AI tool is doing this run's tasks, is limited, or cannot take this role.", cause.Error()
-		var unavailable *verifierUnavailableError
-		var busy []string
-		if errors.As(cause, &unavailable) {
-			busy = unavailable.Busy
-		}
-		if len(busy) > 0 {
-			pause.Reason = "The final check has no independent checker: " + busyCheckers(busy) + "."
-		}
-		pause.Resolutions = []string{independentCheckerResolution(busy)}
+		pause.Reason, pause.Detail = "The final check has no checker: each installed AI tool is limited or cannot take this role.", cause.Error()
+		pause.Resolutions = []string{independentCheckerResolution()}
 		data["summary"] = pause.Reason
 	} else if reason, next, ok := plainContextVerificationStop(cause); ok {
 		// A bare refusal code reads as a plain sentence; the code stays in
@@ -159,43 +149,41 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, data))
 }
 
-// busyCheckers says that the providers in busy did this run's tasks and so
-// cannot check them, e.g. "Claude Code did this run's tasks, so it cannot
-// check them".
-func busyCheckers(busy []string) string {
-	names := make([]string, 0, len(busy))
-	for _, provider := range busy {
-		names = append(names, checkerName(provider))
+// independentCheckerResolution says what makes a final checker available.
+// In the shipped edition only Claude Code can be the final checker, because
+// only its answer names the model that gave it. It may have done this run's
+// tasks: the check runs in a fresh session of its own.
+func independentCheckerResolution() string {
+	if requiredVerifierAttributionGap("codex") != "" {
+		return "Install Claude Code or wait until its limit passes. Then press Enter to let the Marshal retry."
 	}
-	pronoun := "it"
-	if len(names) > 1 {
-		pronoun = "they"
-	}
-	list := strings.Join(names, " and ")
-	if len(names) > 2 {
-		list = strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
-	}
-	return fmt.Sprintf("%s did this run's tasks, so %s cannot check them", list, pronoun)
+	return "Install another AI tool, or wait until one's limit passes. Then press Enter to let the Marshal retry."
 }
 
-// independentCheckerResolution says what makes an independent checker
-// available. In the shipped edition only Claude Code can be the final
-// checker, because only its answer names the model that gave it. busy names
-// the providers that could check the work but did this run's tasks: waiting
-// or retrying cannot help them, so the text says so plainly.
-func independentCheckerResolution(busy []string) string {
-	if len(busy) > 0 {
-		keep := checkerName(busy[0])
-		if len(busy) > 1 {
-			keep = "one of them"
-		}
-		if requiredVerifierAttributionGap("codex") != "" {
-			return busyCheckers(busy) + ", and no other AI tool here can do the final check. Start this work again as a new run: MARSHAL keeps " + keep + " off the new plan's tasks so it can do the final check."
-		}
-		return busyCheckers(busy) + ". Install an AI tool that did none of them, then press Enter to let the Marshal retry, or start this work again as a new run: MARSHAL keeps " + keep + " off the new plan's tasks so it can do the final check."
+// checkVerifierFreshSession refuses a final check that did not run in a
+// session of its own. A verifier of any provider must not report a worker's
+// session or the Marshal's own conversation. One of a worker's provider is
+// accepted only with proof that it started clean: the runtime started its
+// session fresh, and the provider reported a new session id. data records
+// the sessions compared and whether the worker-provider fallback was used.
+func (s *MarshalService) checkVerifierFreshSession(record marshal.VerifierEvidence, workers, sessions []string, data map[string]any) error {
+	data["verifier_fresh_session"] = record.FreshSession
+	if len(sessions) > 0 {
+		data["worker_sessions"] = sessions
 	}
-	if requiredVerifierAttributionGap("codex") != "" {
-		return "Install Claude Code or wait until its limit passes; it must not be doing this run's tasks. Then press Enter to let the Marshal retry."
+	var err error
+	if record.SessionID != "" && slices.Contains(sessions, record.SessionID) {
+		err = errors.New("independent verifier reused a worker's session")
 	}
-	return "Install an AI tool that is doing none of this run's tasks, or wait until one's limit passes. Then press Enter to let the Marshal retry."
+	if model, ok := s.Model.(interface{ MarshalConversationID() string }); ok && record.SessionID != "" && record.SessionID == model.MarshalConversationID() {
+		err = errors.Join(err, errors.New("independent verifier reused the Marshal's session"))
+	}
+	if sameProviderAsWorker(record.Provider, workers...) {
+		data["verifier_same_provider_fallback"] = true
+		data["verifier_fallback_reason"] = "no provider that did none of the run's tasks could do the final check; " + record.Provider + " checked it in a fresh session"
+		if !record.FreshSession || record.SessionID == "" {
+			err = errors.Join(err, errors.New("independent verifier of a worker's provider did not run in a fresh session of its own"))
+		}
+	}
+	return err
 }
