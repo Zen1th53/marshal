@@ -12370,6 +12370,11 @@
       "bytes": 9786
     },
     {
+      "path": "internal/tui/board_last_run_test.go",
+      "sha256": "068381f5a62eea178e48bfe49b5477c4781b36a60d653347f6d6eff5603a9aa8",
+      "bytes": 3862
+    },
+    {
       "path": "internal/tui/board_launch_vitals_test.go",
       "sha256": "25a2a7f4d706554643665032c54775c166d3b6d23eb28a7e79016b43598f86e4",
       "bytes": 1842
