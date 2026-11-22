@@ -315,6 +315,15 @@ const (
 	CodeSuspension            = "suspension"
 	CodeHoneypot              = "honeypot"
 	CodeGoverningFilesChanged = "governing_files_changed"
+	// CodeGitIdentity stops dispatch where Git has no user.name or
+	// user.email, so a worker's result could not be committed.
+	CodeGitIdentity = "git_identity"
+	// CodeHandInNotRecorded stops a task whose worker finished but whose
+	// hand-in MARSHAL could not record; re-running the worker cannot help.
+	CodeHandInNotRecorded = "hand_in_not_recorded"
+	// CodeReservedChecker stops a task, before its worker starts, whose
+	// worker is the last provider that can do the run's final check.
+	CodeReservedChecker = "reserved_checker"
 )
 
 // LifecycleOperation is written before an external effect. Its completion

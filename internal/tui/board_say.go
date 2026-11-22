@@ -1081,6 +1081,12 @@ func chatPromptIdle(frame string) bool {
 	at := -1
 	var rest string
 	for i := len(raw) - 1; i >= 0 && at < 0; i-- {
+		if above, _ := clippedRule(raw[i]); above {
+			// An input too tall for the pane (its prompt row scrolled
+			// away) holds text: never idle, whatever prompt row an
+			// earlier turn left higher up.
+			return false
+		}
 		body := strings.TrimLeft(StripANSI(raw[i]), " │┃║|")
 		for _, m := range promptMarkers {
 			if after, ok := strings.CutPrefix(body, m); ok && (after == "" || after[0] == ' ' || strings.HasPrefix(after, " ")) {

@@ -483,3 +483,42 @@ func TestBrowserReviewShowsPendingRevisionOfAcceptedContract(t *testing.T) {
 	draft, _ = submit(2, first, "Second revision", "rev-2", true)
 	acceptInBrowser(draft, "rev-2")
 }
+
+// A live Marshal chat whose provider wrote no history MARSHAL reads (Claude
+// Code started with an inherited CLAUDE_CODE_CHILD_SESSION saves no
+// transcript) never has its conversation ID captured. It still holds the live
+// MCP launch its contract was submitted under, and the owner's Accept binds to
+// that launch instead of being refused with "Open the Marshal chat".
+func TestBrowserAcceptBindsLiveChatWithoutCapturedSession(t *testing.T) {
+	w, l, cfg := liveMCPFixture(t)
+	w.tmuxMu.Lock()
+	a := w.tmuxActiveWins["marshal-chat"]
+	a.sessionID = ""
+	w.tmuxMu.Unlock()
+	w.proposalMCP.mu.Lock()
+	l.session = ""
+	w.proposalMCP.mu.Unlock()
+	if got := w.boundMarshalArchitectureSource(); got != "launch:"+l.id {
+		t.Fatalf("live chat without a captured session is unbound: %q", got)
+	}
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	var inventory store.ProjectContractInventoryPage
+	if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_inventory", map[string]any{"limit": 1}, true)), &inventory); err != nil {
+		t.Fatal(err)
+	}
+	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: w.runtime.ProjectContractBinding(), ID: "ARCH-unsessioned", Revision: 1, Purpose: "Accepted from a chat with no captured session", Components: []projectcontext.Component{{ID: "core", Responsibility: "Core", Paths: []string{"src"}}}, Invariants: []string{"Owner accepts in the browser"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
+	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "unsessioned-contract", "proposal": draft}, true)
+	if err := ownerPressesAccept(t, w); err != nil {
+		t.Fatalf("Accept refused for the live bound chat: %v", err)
+	}
+	raw, err := os.ReadFile(inboxPath(w.runtime.ProjectRoot(), "marshal"))
+	if err != nil || !strings.Contains(string(raw), "contract_id=ARCH-unsessioned; revision=1") {
+		t.Fatalf("instruction not recorded: %s %v", raw, err)
+	}
+	// Without that launch the chat binds nothing, and the refusal says why.
+	w.revokeProposalLease(l)
+	err = ownerPressesAccept(t, w)
+	if err == nil || !strings.Contains(err.Error(), "neither its conversation ID nor a live proposal connection") {
+		t.Fatalf("unbound chat Accept: %v", err)
+	}
+}

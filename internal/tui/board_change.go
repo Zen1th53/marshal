@@ -446,7 +446,7 @@ func (w *Workspace) holdNotice(event, text, runID string) {
 	if root == "" {
 		return
 	}
-	view, err := openInboxView(root, "marshal", false)
+	view, err := openMarshalInbox(root)
 	if err != nil {
 		return
 	}

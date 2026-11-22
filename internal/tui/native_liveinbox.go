@@ -44,6 +44,22 @@ func inboxPath(root, provider string) string {
 	return filepath.Join(root, statepath.DirName, "inbox", provider+".md")
 }
 
+// marshalInboxReader names the Marshal's runtime inbox: what MARSHAL itself
+// tells the Marshal (the owner's browser Accept, page requests, decision
+// outcomes, grants, alerts). It is one file whatever provider the Marshal
+// runs on. The provider's own channel view (claude.md, codex.md, ...) is
+// rebuilt from the shared channel, so a note written there would not last.
+const marshalInboxReader = "marshal"
+
+// marshalInboxFile is the Marshal's runtime inbox as its briefing and every
+// nudge name it, relative to the project root.
+const marshalInboxFile = statepath.DirName + "/inbox/" + marshalInboxReader + ".md"
+
+// openMarshalInbox opens the Marshal's runtime inbox for a runtime note.
+func openMarshalInbox(root string) (*inboxView, error) {
+	return openInboxView(root, marshalInboxReader, false)
+}
+
 // openInboxView prepares the file an agent reads.
 //
 // The view is not truncated. Entries that flowed past while this agent was
@@ -233,6 +249,18 @@ channel. Your view of it is %s, and it is current whenever you look. Nothing
 pushes it to you: read that file when you need to know whether someone else has
 changed something since this briefing was written.
 `, relative)
+}
+
+// marshalInboxBriefingNote follows inboxBriefingNote in the Marshal's own
+// briefing. The channel view above is named after the provider, so without
+// it a Marshal told to check its inbox read that view and never found the
+// note MARSHAL left for it.
+func marshalInboxBriefingNote() string {
+	return fmt.Sprintf(`
+MARSHAL's own messages to you as the Marshal are not in that view: the owner's
+browser Accept, page requests, decision outcomes, grants and alerts arrive in
+%s. When MARSHAL tells you to check your inbox, read %s.
+`, marshalInboxFile, marshalInboxFile)
 }
 
 // indexEmpty reports whether this watcher has never recorded progress, which

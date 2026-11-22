@@ -19,7 +19,7 @@ and only verified work lands on `main`.**
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="The Marshal Board v2 from launch to a finished run: the Who plans? picker with each provider's limit, the readiness checklist with the Marshal, workers, platform, repository and browser, a goal said from the Board, the planning screen with the Marshal's steps, the Accept architecture card over the dimmed Board with the architecture accepted in the browser, then the running control centre with the top bar and NOW line, the Plan, Lanes and Tasks panes, the Marshal, Workers, Inbox and Activity panes, each task reviewed by a different provider, verified and merged." width="100%">
+  <img src=".github/assets/demo.gif" alt="A real Marshal run on a Mac, sped up: Claude Code is picked as the Marshal, the goal is said from the Board, the Marshal asks one question and fills the requirements card, the requirements are confirmed, the architecture is accepted in the browser, Codex builds four tasks in parallel while Claude Code is kept free for the final check, each task is reviewed and merged, and the run ends DONE with all four on main." width="100%">
   <br>
   <sub>The Board's own rendering on fixture data, sped up: <b>Who plans?</b> → readiness → say the goal → planning → <b>Accept architecture</b> card, accept in the browser → lanes build in parallel → each hand-in reviewed by a different provider → verify → merge</sub>
 </p>

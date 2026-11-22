@@ -578,7 +578,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 		b.WriteString("Secrets were dropped.\n")
 	}
 	b.WriteString(strings.ReplaceAll(continuationMemoryHint, ".marshal/", statepath.DirName+"/"))
-	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
+	view, err := openMarshalInbox(w.runtime.ProjectRoot())
 	if err != nil {
 		return "", err
 	}

@@ -401,6 +401,10 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if channel != injectOff {
+		inboxNote := inboxBriefingNote(root, provider)
+		if len(marshalBrief) > 0 {
+			inboxNote += marshalInboxBriefingNote()
+		}
 		briefing, err := w.crossAgentBriefing(ctx, provider)
 		switch {
 		case err != nil:
@@ -408,7 +412,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		case strings.TrimSpace(briefing) == "":
 			// Nothing to summarize yet, but another agent may still start while
 			// this one runs, so the inbox pointer is delivered on its own.
-			if _, err := deliver(briefingHeader+inboxBriefingNote(root, provider), channel); err != nil {
+			if _, err := deliver(briefingHeader+inboxNote, channel); err != nil {
 				briefingNotes = append(briefingNotes, "Live inbox pointer not delivered: "+err.Error())
 			} else {
 				briefingNotes = append(briefingNotes,
@@ -420,7 +424,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// The agent only benefits from the inbox if the briefing says it
 			// exists, so the pointer travels with the snapshot it will go stale
 			// against.
-			briefing += inboxBriefingNote(root, provider)
+			briefing += inboxNote
 			if note, err := deliver(briefing, channel); err != nil {
 				briefingNotes = append(briefingNotes, "Cross-agent briefing not delivered: "+err.Error())
 			} else {
