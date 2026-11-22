@@ -1,9 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
-- Require an independent cross-review of every hand-in and a final independent check for every plan, Standard and ULTRA, in both editions; pause when no reviewer or verifier is available.
-- Workers receive their accepted architecture slice; every hand-in requires architecture conformance and explicit reviewer verdicts, with new unowned source files returned (default edition).
+### Changed
+- Every plan, Standard and ULTRA, gets an independent cross-review of each hand-in and a final independent check: by another provider when one is free, otherwise by a fresh session of the same one. When no reviewer or checker is available the run pauses with the reason.
+- The accepted architecture is carried into the work: each worker's brief includes its part of the architecture, every review must say whether the code conforms (or list file:part mismatches), and a new source file added outside every part sends the task back (default edition).
+- The independent design review runs from Marshal itself (MCP `marshal_design_review`), not from the Marshal's own shell.
+- The README leads with the Web Board and what you get.
+
+### Fixed
+- Every Codex review failed at once, so runs stopped after the first hand-in: the review schema was not valid in strict mode. A test now checks every model output schema.
+- A reopened project showed "No run yet"; it now shows the last finished run read-only.
+- A review left pending by a restart now resumes, and a run in review that does not move becomes a needs-you item.
+- Web Board: the requirement lines show on the card; a question the Marshal asked in chat, or its answer to your change request, wins over the architecture card; the Now timer restarts when the state changes; a stopped run shows its cause.
+- Architecture view: every part sits inside its column, and every column has a label; a revised architecture keeps its revision number.
+- A provider is reported signed out only on that provider's own evidence (Claude Code inside a Codex sandbox was reported as signed out).
+- A refused live contract recovery is logged once, not on every poll.
+- Telemetry from an installation the cloud no longer knows is refused with 404, so the client registers again (server side, deployed).
 
 ## 0.4.0
 
