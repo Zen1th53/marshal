@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -61,6 +64,18 @@ func (w *Workspace) flowInputs() flowIn {
 	}
 	if snap := w.archSnapshotNow(); snap.Loaded {
 		in.archRev, in.archAccepted = snap.Status.Revision, snap.Status.Accepted
+		if !in.hasRun && (in.goalGiven || in.planning) {
+			switch {
+			case snap.Status.Answering:
+				in.milestone = &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageArch, Now: "the Marshal is answering your request"}}
+			case in.planning && (in.milestone == nil || in.milestone.Step < stageTasks):
+				in.milestone = &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageTasks, Now: "planning the tasks"}}
+			case snap.Status.OwnerAccepted:
+				in.milestone = &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageArch, Now: "applying the architecture you accepted", Applying: true}}
+			case snap.Status.Exists && !snap.Status.Accepted:
+				in.milestone = &planningMark{PlanningMilestone: app.PlanningMilestone{Step: stageArch, Now: "the architecture is ready for you to accept in the browser", OwnerTurn: true}}
+			}
+		}
 	}
 	in.notes = w.foldedNotes()
 	in.steps, in.lastCall, in.stepsProvider = w.stepsLog().snapshot()
@@ -78,14 +93,8 @@ func (w *Workspace) flowInputs() flowIn {
 		in.stepsModel = marshalModelLabel(prov, in.marshalModel)
 	}
 	in.chatBlocked, in.chatWaiting = w.chatDecisions()
-	w.tmuxMu.Lock()
-	if a := w.tmuxActiveWins["marshal-chat"]; a != nil && a.paneID != "" {
-		in.chatAsked = chatAskedNow(a.paneID)
-	}
-	w.tmuxMu.Unlock()
-	if !in.chatAsked {
-		in.chatAsked = w.nativeChatAsked()
-	}
+	in.chatAsked = w.boardChatAsked()
+	in.milestone = w.timedMilestone(in)
 	in.limits, in.globalCap = laneLimits(in.run.Settings)
 	in.draftRejected = w.draftRejectedNow()
 	stallKey, stallReason := stallCondition(in)
@@ -131,4 +140,38 @@ func firstSet(s ...string) string {
 // liveLane reports whether a lane has a worker running its task.
 func liveLane(l boardmodel.Lane) bool {
 	return l.State != boardmodel.LaneIdle && l.State != boardmodel.LaneParked && l.State != boardmodel.LaneLost
+}
+
+// timedMilestone times the state actually shown, including new proposals at
+// the same planning step. Repeated paints and follower reads keep the timer.
+func (w *Workspace) timedMilestone(in flowIn) *planningMark {
+	s := w.v2CardState()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if in.milestone == nil {
+		s.milestoneKey = ""
+		return nil
+	}
+	m := *in.milestone
+	key := fmt.Sprintf("%s/%s/%d/%+v", in.goalText, in.goalSince.Format(time.RFC3339Nano), in.archRev, m.PlanningMilestone)
+	if key != s.milestoneKey {
+		since := in.now
+		if s.milestoneKey == "" && !m.Since.IsZero() {
+			since = m.Since
+		}
+		s.milestoneKey, s.milestoneSince = key, since
+	}
+	m.Since = s.milestoneSince
+	return &m
+}
+
+// boardChatAsked is shared by the status collector and card/key selection.
+func (w *Workspace) boardChatAsked() bool {
+	w.tmuxMu.Lock()
+	asked := false
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil && a.paneID != "" {
+		asked = chatAskedNow(a.paneID)
+	}
+	w.tmuxMu.Unlock()
+	return asked || w.nativeChatAsked()
 }

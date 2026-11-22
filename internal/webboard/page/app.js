@@ -334,7 +334,7 @@
     var cardID = f.act ? f.act.card : "";
     if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
     if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop])) return;
-    if (!d && !p) { card.hidden = true; confirmStep = null; return; }
+    if ((!d && !p) || (asksOwner(f) && d && d.kind === "architecture")) { card.hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");
     clear($("card-nodes")); clear($("card-lines")); clear($("card-tasks"));
@@ -455,8 +455,8 @@
     document.title = titleRoute + " · " + (t.state ? t.state + " · " : "") + (t.project || "Marshal") + " · Marshal Board";
     var n = f.nowLine, pill = $("you-pill");
     // A question the Marshal asked in chat is what the owner is asked for
-    // only when nothing else waits; the Board's From-you line says it.
-    var asked = asksOwner(f) && !f.decision && !f.paused;
+    // takes priority over an architecture card; the Board's From-you line says it.
+    var asked = asksOwner(f);
     var needs = (!n.fromYouOK && !asked) || !!f.decision || !!f.paused;
     var you = n.fromYou || "nothing";
     setText("you", you);

@@ -124,6 +124,20 @@ func (w *Workspace) v2PauseNow(now time.Time) (v2Pause, bool) {
 	case p.Stopped:
 		z.cause = pauseStopped
 		z.detail = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(p.Note), "stopped: "))
+		if z.detail == "" || z.detail == "The run stopped unexpectedly." {
+			// Execute's summary may be generic; Activity retains the run-scoped
+			// technical cause sent to the Marshal. Never use another run's error.
+			for _, n := range w.noteList() {
+				message, scope, ok := strings.Cut(n.Text, "\nRun: ")
+				if !ok || firstLine(scope) != p.RunID {
+					continue
+				}
+				if _, cause, ok := strings.Cut(message, "Marshal run stopped: "); ok {
+					z.detail = strings.TrimSpace(cause)
+					break
+				}
+			}
+		}
 	default:
 		z.cause = pauseStalled
 		for _, c := range stop.commands {

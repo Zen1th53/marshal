@@ -433,9 +433,8 @@ func inboxAskLine(it boardmodel.InboxItem) string {
 // owner (and how many more), or "nothing" with the next expected ask.
 func fromYou(in flowIn) (string, bool) {
 	asks := ownerAsks(in)
-	if len(asks) == 0 && in.chatAsked {
-		// Nothing on a card waits, but the Marshal's chat does: its last
-		// turn asked the owner something.
+	if in.chatAsked && in.chatBlocked == 0 {
+		// A direct question from the Marshal takes priority over cached cards.
 		return vm.ChatAskedLine, false
 	}
 	if len(asks) == 0 {
