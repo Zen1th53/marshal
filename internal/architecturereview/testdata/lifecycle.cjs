@@ -15,6 +15,37 @@ script=script.slice(0,script.indexOf('Promise.allSettled([loadBuilders()'));
 vm.runInContext(script,context);context.fixture=fixture;
 const run=code=>vm.runInContext(code,context);
 run('state=fixture;draw()');
+// Generic columns include disconnected parts below their connected neighbours.
+// This is the eight-part, three-column shape that used to overflow its bands.
+{
+const nodes=[
+  ['cli',72,72,150],['marshal-config',72,200,200],['module',72,328,200],['project-docs',72,456,200],
+  ['planner',352,72,180],['runner',352,200,180],['store',612,72,180],['provider',612,200,180]
+].map(([id,x,y,width])=>({id,x,y,width,height:72}));
+const edges=[
+  {id:'plan',points:[[222,108],[352,108]]},
+  {id:'save',points:[[532,108],[612,108]]},
+  {id:'run',points:[[532,236],[612,236]]}
+];
+context.columnLayout={version:'generic-v3',width:864,height:600,nodes,edges};
+const before=JSON.stringify(context.columnLayout);
+const checkBands=()=>{
+  const groups=run('bands(columnLayout)');
+  assert.equal(groups.length,new Set(context.columnLayout.nodes.map(n=>n.x)).size);
+  for(const n of context.columnLayout.nodes){
+    const containing=groups.filter(g=>{
+      const r=g.children[0].attributes;
+      return +r.x<=n.x&&+r.y<=n.y&&+r.x+ +r.width>=n.x+n.width&&+r.y+ +r.height>=n.y+n.height;
+    });
+    assert.equal(containing.length,1,`${n.id} must be inside its column band`);
+  }
+};
+checkBands();
+assert.equal(JSON.stringify(context.columnLayout),before,'bands must preserve node spacing and edge geometry');
+// A column without any connections, including a single-column drawing, still has a band.
+context.columnLayout={...context.columnLayout,edges:[]};checkBands();
+context.columnLayout={...context.columnLayout,nodes:nodes.slice(0,4)};checkBands();
+}
 assert.equal(get('revision-bar').textContent,'rev 3 → 4 · proposed');
 const diagram=()=>get('diagram').children,part=id=>diagram().find(n=>n.dataset.id===id);
 for(const [id,status] of [['current','existing'],['added','new'],['edited','changed'],['removed','removed'],['existing-edge','existing'],['new-edge','new'],['changed-edge','changed'],['removed-edge','removed'],['implicit-edge','new']])assert.ok(part(id).className.split(' ').includes(status),id);
