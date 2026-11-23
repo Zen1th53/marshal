@@ -474,6 +474,12 @@ func (w *Workspace) ultraRequester() (*cloud.Client, cloud.State, string) {
 }
 
 // ultraGate returns the gate under the workspace lock.
+func (w *Workspace) ultraPreferenceReadErr() error {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.ultraPreferenceErr
+}
+
 func (w *Workspace) ultraGate() (*cloud.Gate, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()

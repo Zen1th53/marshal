@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
@@ -33,7 +34,11 @@ func (w *Workspace) collectV2Mode(b *vm.Board) {
 	}
 	delegation := gate.Capability(cloud.CapabilityDelegation)
 	m.Delegation = &delegation
-	if observation, found, err := w.readUltraRequest(context.Background()); err == nil && found {
+	// The frame is built often; a slow request store must not stall it.
+	readCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	observation, found, err := w.readUltraRequest(readCtx)
+	cancel()
+	if err == nil && found {
 		m.RequestStatus = requestPresentation(observation, found).State
 	}
 	run := marshal.Run{Settings: marshal.DefaultSettings()}
@@ -57,6 +62,14 @@ func (w *Workspace) collectV2Mode(b *vm.Board) {
 	// A cap needs the observed run settings, rather than assumed defaults.
 	if m.Active != nil {
 		m.EffectiveCap = &cap
+	}
+	if w.ultraPreferenceReadErr() != nil {
+		// An unreadable preference is not the owner's choice to turn it off.
+		for i, r := range reasons {
+			if r == "ULTRA execution preference is off" {
+				reasons[i] = "ULTRA execution preference could not be read; running serially"
+			}
+		}
 	}
 	m.Reasons = reasons
 	b.Mode = m
