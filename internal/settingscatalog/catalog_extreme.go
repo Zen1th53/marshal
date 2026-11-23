@@ -3,6 +3,8 @@
 package settingscatalog
 
 import (
+	"errors"
+	"fmt"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"strconv"
 	"strings"
@@ -23,12 +25,23 @@ func editionRows() []Descriptor {
 	}
 	d := &rows[len(rows)-1]
 	d.set = func(s *marshal.Settings, raw string) error {
+		// An empty value restores the default order; separators alone do not.
+		blank := strings.TrimSpace(raw) == ""
 		raw = strings.NewReplacer("->", ",", " ", ",", "\t", ",").Replace(strings.ToLower(raw))
 		parts := []string{}
+		seen := map[string]bool{}
 		for _, p := range strings.Split(raw, ",") {
-			if p != "" {
-				parts = append(parts, p)
+			if p == "" {
+				continue
 			}
+			if seen[p] {
+				return fmt.Errorf("duplicate provider %q in failover order", p)
+			}
+			seen[p] = true
+			parts = append(parts, p)
+		}
+		if len(parts) == 0 && !blank {
+			return errors.New("failover order cannot be empty")
 		}
 		s.FailoverOrder = strings.Join(parts, ",")
 		return nil

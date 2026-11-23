@@ -2041,6 +2041,9 @@ func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, e
 
 // marshalSettings shows or changes the project's Marshal settings.
 func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string, error) {
+	// A failover order is a list and may be written as several words
+	// ("claude -> codex" or "claude codex").
+	args = joinFailoverArgs(args)
 	if len(args) > 2 {
 		return "", errors.New("usage: /marshal settings <key> <value>")
 	}
@@ -2178,4 +2181,12 @@ func (w *Workspace) marshalImport(ctx context.Context, args []string) (string, e
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "imported result drafted · /marshal approve to check and review"))
 	return "Imported " + args[0] + " for review. Inspect /marshal status; /marshal approve runs its check and review. Follow /marshal status for the next approval; /marshal close delivers the verified result.", nil
+}
+
+// joinFailoverArgs folds a multi-word failover order into one value.
+func joinFailoverArgs(args []string) []string {
+	if len(args) > 2 && args[0] == "failover-order" {
+		return []string{args[0], strings.Join(args[1:], " ")}
+	}
+	return args
 }
