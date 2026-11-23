@@ -40,17 +40,29 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	return handin, errors.Join(fmt.Errorf("provider limit: %s", reason), alertErr)
 }
 
-// GetEffectiveFailoverOrder returns default providers in default build.
-func GetEffectiveFailoverOrder(_ marshal.Settings) []string {
-	return MarshalProviders()
+// GetEffectiveFailoverOrder returns enabled default providers in governed build.
+func GetEffectiveFailoverOrder(s marshal.Settings) []string {
+	var out []string
+	for _, p := range MarshalProviders() {
+		if s.ProviderEnabled(p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
+
+func orderReassignCandidates(_ marshal.Settings, names []string) []string { return names }
 
 func isProviderFailover(t marshal.Task) bool                    { return false }
 func providerFailoverBrief(t marshal.Task, brief string) string { return brief }
 
 func finishProviderFailoverDispatch(t *marshal.Task) {}
 
-func (s *MarshalService) admitProviderDispatch(_ context.Context, _ string, _ *marshal.Run, rev int64, _ int, _ string) (int64, error) {
+func (s *MarshalService) admitProviderDispatch(ctx context.Context, _ string, run *marshal.Run, rev int64, index int, _ string) (int64, error) {
+	policy := s.projectSettingsSnapshot(ctx, run.Settings)
+	if !policy.ProviderEnabled(run.Tasks[index].Worker) {
+		return rev, fmt.Errorf("provider %s is disabled by project settings", run.Tasks[index].Worker)
+	}
 	return rev, nil
 }
 

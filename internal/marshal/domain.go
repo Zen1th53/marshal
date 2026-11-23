@@ -60,7 +60,8 @@ const (
 
 // Settings captures the policy approved for a run.
 type Settings struct {
-	WorkerStallMinutes int `json:",omitempty"`
+	WorkerStallMinutes int  `json:",omitempty"`
+	WorkerStallOff     bool `json:"worker_stall_off,omitempty"`
 	ExecutionRights    ExecutionRights
 	AcceptanceMode     AcceptanceMode
 	ReworkLimit        int
@@ -69,8 +70,88 @@ type Settings struct {
 	// Control is empty in settings stored before it existed; that reads as
 	// ControlFree.
 	Control Control `json:",omitempty"`
+	// DisabledProviders is a comma-separated list of canonical provider IDs
+	// excluded from worker admission. Empty leaves every provider enabled.
+	DisabledProviders string `json:"disabled_providers,omitempty"`
 	concurrencySettings
 	failoverSettings
+	runtimeLimitSettings
+}
+
+// CanonicalProviderID normalizes provider names and aliases.
+func CanonicalProviderID(name string) string {
+	id := strings.ToLower(strings.TrimSpace(name))
+	if id == "antigravity" {
+		return "agy"
+	}
+	return id
+}
+
+// WorkerStallDisabled reports whether the worker stall watchdog was explicitly disabled.
+func (s Settings) WorkerStallDisabled() bool {
+	return s.WorkerStallOff
+}
+
+// EffectiveWorkerStallMinutes returns the active stall window in minutes.
+// Zero means the watchdog is disabled; absent legacy values default to 15.
+func (s Settings) EffectiveWorkerStallMinutes() int {
+	if s.WorkerStallOff {
+		return 0
+	}
+	if s.WorkerStallMinutes > 0 {
+		return s.WorkerStallMinutes
+	}
+	return 15
+}
+
+// DisabledProviderList parses the comma-separated DisabledProviders setting.
+func (s Settings) DisabledProviderList() []string {
+	if strings.TrimSpace(s.DisabledProviders) == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(s.DisabledProviders, ",") {
+		if id := CanonicalProviderID(part); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// ProviderEnabled reports whether provider is eligible for worker admission.
+func (s Settings) ProviderEnabled(provider string) bool {
+	id := CanonicalProviderID(provider)
+	for _, disabled := range s.DisabledProviderList() {
+		if disabled == id {
+			return false
+		}
+	}
+	return true
+}
+
+// SetProviderEnabled enables or disables a known provider for worker admission.
+func (s *Settings) SetProviderEnabled(provider string, enabled bool) error {
+	id := CanonicalProviderID(provider)
+	switch id {
+	case "codex", "claude", "agy", "opencode":
+	default:
+		return fmt.Errorf("unknown provider %q", provider)
+	}
+	seen := map[string]bool{}
+	var next []string
+	for _, cp := range s.DisabledProviderList() {
+		if cp == id || seen[cp] {
+			continue
+		}
+		seen[cp] = true
+		next = append(next, cp)
+	}
+	if !enabled {
+		next = append(next, id)
+	}
+	slices.Sort(next)
+	s.DisabledProviders = strings.Join(next, ",")
+	return nil
 }
 
 // DefaultSettings returns the Marshal role's agreed defaults.
@@ -109,8 +190,33 @@ func (s Settings) Validate() error {
 	if err := s.validateFailoverSettings(); err != nil {
 		return err
 	}
+	if err := s.validateDisabledProviders(); err != nil {
+		return err
+	}
+	if err := s.validateRuntimeLimitSettings(); err != nil {
+		return err
+	}
 	if err := s.Budget.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s Settings) validateDisabledProviders() error {
+	if s.DisabledProviders != "" && len(s.DisabledProviderList()) == 0 {
+		return errors.New("disabled providers cannot be blank")
+	}
+	seen := map[string]bool{}
+	for _, id := range s.DisabledProviderList() {
+		switch id {
+		case "codex", "claude", "agy", "opencode":
+		default:
+			return fmt.Errorf("invalid disabled provider: %s", id)
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate disabled provider: %s", id)
+		}
+		seen[id] = true
 	}
 	return nil
 }

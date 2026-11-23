@@ -36,12 +36,40 @@ func getProviderCooldownUntil(provider string) (time.Time, bool) {
 // ResetProviderCooldowns clears all provider cooldowns (for test isolation).
 func ResetProviderCooldowns() { providerHealth.Reset() }
 
-// GetEffectiveFailoverOrder returns the active failover order for settings/run.
+// GetEffectiveFailoverOrder returns the active failover order for settings/run,
+// excluding providers disabled by project settings.
 func GetEffectiveFailoverOrder(s marshal.Settings) []string {
+	var base []string
 	if order := s.EffectiveFailoverOrder(); len(order) > 0 {
-		return order
+		base = order
+	} else {
+		base = append([]string(nil), defaultFailoverOrder...)
 	}
-	return append([]string(nil), defaultFailoverOrder...)
+	var out []string
+	for _, p := range base {
+		if s.ProviderEnabled(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func orderReassignCandidates(policy marshal.Settings, names []string) []string {
+	order := policy.EffectiveFailoverOrder()
+	if len(order) == 0 {
+		return names
+	}
+	var ordered []string
+	seen := map[string]bool{}
+	for _, want := range order {
+		for _, name := range names {
+			if !seen[name] && marshalHarnessName(name) == marshalHarnessName(want) {
+				seen[name] = true
+				ordered = append(ordered, name)
+			}
+		}
+	}
+	return ordered
 }
 
 // maxQuotaWait is the longest provider cooldown failover waits out in place.
@@ -294,11 +322,14 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	if dispatch.Handle != nil && dispatch.Handle.Request().Model != "" {
 		limitedModel = dispatch.Handle.Request().Model
 	}
+	policy := s.projectSettingsSnapshot(context.WithoutCancel(ctx), run.Settings)
 	sameProvider := false
 	if limitedModel != "" {
 		markModelLimited(currentWorker, limitedModel, reason, until)
-		if other, usable := flexibleWorkerModel(ctx, s.Store, currentWorker, "", now); usable && other != limitedModel {
-			sameProvider = true
+		if policy.ProviderEnabled(currentWorker) {
+			if other, usable := flexibleWorkerModel(ctx, s.Store, currentWorker, "", now); usable && other != limitedModel {
+				sameProvider = true
+			}
 		}
 	}
 	if !sameProvider {
@@ -310,7 +341,7 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
-	order := GetEffectiveFailoverOrder(run.Settings)
+	order := GetEffectiveFailoverOrder(policy)
 
 	nextWorker, err := currentWorker, error(nil)
 	if !sameProvider {
@@ -486,24 +517,28 @@ func (s *MarshalService) saveFailoverDecision(ctx context.Context, runID string,
 }
 
 // admitProviderDispatch prevents queued and returned tasks from launching a
-// cooling provider, including calls made directly to Dispatch.
+// disabled or cooling provider, including calls made directly to Dispatch.
 func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string, run *marshal.Run, rev int64, index int, brief string) (int64, error) {
 	t := &run.Tasks[index]
 	now := s.clock()
+	policy := s.projectSettingsSnapshot(ctx, run.Settings)
+	disabled := !policy.ProviderEnabled(t.Worker)
 	// A worker the limits reader reports known-empty is cooling too; with
 	// per-model limits, only when the model this task runs on is out.
 	taskModel := s.taskModel(ctx, *run, *t, now)
-	modelOut := s.markKnownEmptyFor(t.Worker, taskModel, now)
-	if !modelOut && !isProviderUnavailable(t.Worker, now) {
+	modelOut := !disabled && s.markKnownEmptyFor(t.Worker, taskModel, now)
+	if !disabled && !modelOut && !isProviderUnavailable(t.Worker, now) {
 		return rev, nil
 	}
 	drivers := s.Drivers
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
-	next, err := s.selectFailoverWorkerFor(ctx, t.Worker, taskModel, t.Mode, drivers, GetEffectiveFailoverOrder(run.Settings))
+	next, err := s.selectFailoverWorkerFor(ctx, t.Worker, taskModel, t.Mode, drivers, GetEffectiveFailoverOrder(policy))
 	if err != nil {
-		if modelOut {
+		if disabled {
+			err = fmt.Errorf("%w; provider %s is disabled", err, t.Worker)
+		} else if modelOut {
 			err = fmt.Errorf("%w; %s has no limit left for %s", err, t.Worker, taskModel)
 		} else if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {
 			err = fmt.Errorf("%w; %s", err, reason)
@@ -531,12 +566,20 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 	// treat the task as failed by two workers, so the new worker's first
 	// genuine return escalated at once.
 	retireFailoverReturns(t, next)
-	data := map[string]any{"failover": true, "admission": true, "previous_worker": previous, "worker": next, "reason": "provider cooldown"}
+	reason := "provider cooldown"
+	if disabled {
+		reason = "provider disabled"
+	}
+	data := map[string]any{"failover": true, "admission": true, "previous_worker": previous, "worker": next, "reason": reason}
 	if err = s.saveFailoverDecision(ctx, runID, *run, rev, t.PlanTaskID, events.EventTypeMarshalTaskReassigned, data); err != nil {
 		return rev, err
 	}
 	if s.RecordActivity != nil {
-		s.RecordActivity(rerouteActivity(previous, 1, next))
+		if disabled {
+			s.RecordActivity(fmt.Sprintf("%s is disabled — I moved 1 task to %s.", providerHealthKey(previous), providerHealthKey(next)))
+		} else {
+			s.RecordActivity(rerouteActivity(previous, 1, next))
+		}
 	}
 	return rev + 1, nil
 }

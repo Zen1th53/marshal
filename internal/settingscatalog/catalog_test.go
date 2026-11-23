@@ -104,3 +104,29 @@ func TestScopedPreferenceKeepsLegacyValueAndReceiptTogether(t *testing.T) {
 		t.Fatal("failure changed prior value", saved, err)
 	}
 }
+
+func TestProviderAndRuntimeLimitRowsExposeEffectiveValues(t *testing.T) {
+	s := marshal.DefaultSettings()
+	next, err := Apply(s, "codex-enabled", "off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Effective(next, "codex-enabled") != "off" || Effective(next, "claude-enabled") != "on" {
+		t.Fatalf("provider effective values wrong: codex=%s claude=%s", Effective(next, "codex-enabled"), Effective(next, "claude-enabled"))
+	}
+	if _, err := Apply(s, "codex-enabled", "maybe"); err == nil {
+		t.Fatal("invalid provider enablement accepted")
+	}
+	rows := map[string]Row{}
+	for _, r := range Rows(next, 1) {
+		rows[r.Key] = r
+	}
+	for _, key := range []string{"codex-enabled", "claude-enabled", "agy-enabled", "opencode-enabled", "worker-stall-minutes", "infra-retry-limit", "verification-timeout-seconds"} {
+		if _, ok := rows[key]; !ok {
+			t.Fatalf("missing catalogue row %s", key)
+		}
+	}
+	if rows["codex-enabled"].Applies != "next admission" {
+		t.Fatalf("codex-enabled applies = %q, want next admission", rows["codex-enabled"].Applies)
+	}
+}
