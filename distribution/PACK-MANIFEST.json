@@ -101,13 +101,13 @@
     },
     {
       "path": ".github/pull_request_template.md",
-      "sha256": "c1136413419630915637697f6cc47dc85d85d3ea68b95dd26bf7c5c29f1ee7e0",
-      "bytes": 843
+      "sha256": "f607b98797ae6e162eb3312fcc7e17f63534948a6d45e9848a303213e3326bf8",
+      "bytes": 1247
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "6bde1f92d299c55df4807ec24ee968c18e6c74bb3e22fb8444684ab394ff6036",
-      "bytes": 6692
+      "sha256": "7bdf10eda4d9d8a3c8316ec0c96ca6ede677d3e1f55155dab139a571d3f46322",
+      "bytes": 6827
     },
     {
       "path": ".github/workflows/codeql.yml",
@@ -583,6 +583,11 @@
       "path": "docs/faq.md",
       "sha256": "af3fe4200cd3589fff234ac03058ebace003758b3493ba12f251b6e4de199598",
       "bytes": 1866
+    },
+    {
+      "path": "docs/features.yaml",
+      "sha256": "ee4d3e978b8cdc472cdf8964d057709fae90796e3b0310a12ae2d3690467e057",
+      "bytes": 104767
     },
     {
       "path": "docs/getting-started.md",
@@ -16226,8 +16231,8 @@
     },
     {
       "path": "internal/webboard/page/index.html",
-      "sha256": "56dc1743ba498952c8fec15e7acfb0cb705ce0f090bd41c6a93c5f8d63c69755",
-      "bytes": 14736
+      "sha256": "9e0d9a6102b6e98e768cba68416e998319d6ce60ec2e7753f541653909b04786",
+      "bytes": 12895
     },
     {
       "path": "internal/webboard/page_visibility_test.go",
@@ -17173,6 +17178,26 @@
       "path": "tools/extreme/prq/prq_extreme_test.go",
       "sha256": "86a84a1cee88cbd98c8e941b14f188ada039dd85dc2688d4f0ff51c952cdbd8a",
       "bytes": 25441
+    },
+    {
+      "path": "tools/feature-inventory/frozen_features_test.go",
+      "sha256": "df4362a7e59a654552a4d75ae8267a712cd546caf759dc68b92b948c4280f740",
+      "bytes": 4530
+    },
+    {
+      "path": "tools/feature-inventory/frozen_pending_test.go",
+      "sha256": "9194e7ae20f06b778b98620eb6a799a2003559c13c613f99089bd3f83693381f",
+      "bytes": 19783
+    },
+    {
+      "path": "tools/feature-inventory/inventory.go",
+      "sha256": "f51dc799ab5be34292e05d68bd6fcef0c002a0481c0cd0eee6da241e89d9b463",
+      "bytes": 14508
+    },
+    {
+      "path": "tools/feature-inventory/main_test.go",
+      "sha256": "4fc222470b51423b9e3a26636f95ca6e903ba856302af032d9b8199e6b4aac06",
+      "bytes": 16203
     },
     {
       "path": "tools/install_extreme.sh",
