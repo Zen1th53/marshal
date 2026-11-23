@@ -505,7 +505,9 @@ func (w *Workspace) approvalRequestExpiredOrSettled(ctx context.Context, req per
 		return true
 	}
 	if a.ExpiresAt != nil && !time.Now().UTC().Before(*a.ExpiresAt) {
-		_, _, _ = w.runtime.ExpireApproval(ctx, req.RunID, id, time.Now().UTC())
+		if _, _, err := w.runtime.ExpireApproval(ctx, req.RunID, id, time.Now().UTC()); err != nil {
+			w.logTUIError("approval expiry notice", err)
+		}
 		return true
 	}
 	return false

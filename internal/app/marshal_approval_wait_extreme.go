@@ -314,7 +314,9 @@ func (s *MarshalService) reworkExpiredProcess05Approval(ctx context.Context, run
 
 	attempt := 1 + t.EvidenceAttemptBase + taskReturns(*t)
 	if s.runtime != nil && t.Process05WaitApprovalID != "" {
-		_, _, _ = s.runtime.ExpireApproval(ctx, runID, t.Process05WaitApprovalID, s.clock())
+		if _, _, err := s.runtime.ExpireApproval(ctx, runID, t.Process05WaitApprovalID, s.clock()); err != nil {
+			return err
+		}
 	}
 	if s.process05WaitPause != nil && t.Process05WaitRunID != "" {
 		if err := s.process05WaitPause(ctx, t.Process05WaitRunID); err != nil {
@@ -487,7 +489,9 @@ func (s *MarshalService) clearExpiredProcess05Waits(ctx context.Context, runID s
 	for _, id := range cleared {
 		if i := taskIndex(run, id); i >= 0 {
 			if s.runtime != nil && run.Tasks[i].Process05WaitApprovalID != "" {
-				_, _, _ = s.runtime.ExpireApproval(ctx, runID, run.Tasks[i].Process05WaitApprovalID, s.clock())
+				if _, _, err := s.runtime.ExpireApproval(ctx, runID, run.Tasks[i].Process05WaitApprovalID, s.clock()); err != nil {
+					return true, err
+				}
 			}
 			run.Tasks[i].Process05WaitRunID, run.Tasks[i].Process05WaitApprovalID = "", ""
 		}
@@ -524,20 +528,11 @@ func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID str
 		}
 		return true, nil
 	}
-	var clearedApproval *execution.RuntimeApproval
-	if s.process05ClearExpiredWait != nil && t.Process05WaitRunID != "" {
-		cleared, clearErr := s.process05ClearExpiredWait(ctx, t.Process05WaitRunID, t.PlanTaskID, s.clock())
-		if clearErr != nil {
-			return true, clearErr
-		}
-		clearedApproval = cleared
-	}
+	executionID := t.Process05WaitRunID
 	reason := expiredApprovalReason(expired.approvalID, expired.expiresAt)
 	if s.runtime != nil {
-		if clearedApproval != nil {
-			_ = s.runtime.RecordApprovalTerminal(ctx, runID, *clearedApproval, "expired", reason)
-		} else {
-			_, _, _ = s.runtime.ExpireApproval(ctx, runID, expired.approvalID, s.clock())
+		if _, _, err := s.runtime.ExpireApproval(ctx, runID, expired.approvalID, s.clock()); err != nil {
+			return true, err
 		}
 	}
 	t.Process05WaitRunID = ""
@@ -549,6 +544,11 @@ func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID str
 	}
 	if err := s.save(ctx, runID, run, rev); err != nil {
 		return true, err
+	}
+	if s.process05ClearExpiredWait != nil && executionID != "" {
+		if _, err := s.process05ClearExpiredWait(ctx, executionID, t.PlanTaskID, s.clock()); err != nil {
+			return true, err
+		}
 	}
 	eventData := map[string]any{
 		"reason":           reason,

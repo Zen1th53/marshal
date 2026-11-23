@@ -198,7 +198,9 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		}
 		if completed.State == execution.RunNeedsApproval && result.ApprovalID != "" {
 			if approval, getErr := service.Engine().ApprovalManager().GetApproval(result.ApprovalID); getErr == nil && approval != nil {
-				_ = r.RecordApprovalOpened(ctx, req.RunID, *approval)
+				if err := r.RecordApprovalOpened(ctx, req.RunID, *approval); err != nil {
+					return nil, err
+				}
 			}
 			return nil, process05ApprovalRequired(completed.RunID, req.Task.PlanTaskID, result.ApprovalID)
 		}

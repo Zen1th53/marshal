@@ -164,7 +164,12 @@ func (r *Runtime) RecordApprovalOpened(ctx context.Context, marshalRunID string,
 		Timestamp: now,
 		Data:      payloadMap,
 	}
-	_, err := r.store.RecordNoticeWithEvent(context.WithoutCancel(ctx), entry, auditEvent)
+	project, err := r.store.Project(context.WithoutCancel(ctx))
+	if err != nil {
+		return err
+	}
+	auditEvent.ProjectID = project.ID
+	_, err = r.store.RecordNoticeWithEvent(context.WithoutCancel(ctx), entry, auditEvent)
 	return err
 }
 
@@ -265,7 +270,12 @@ func (r *Runtime) RecordApprovalTerminal(ctx context.Context, marshalRunID strin
 		Timestamp: now,
 		Data:      payloadMap,
 	}
-	_, err := r.store.RecordNoticeWithEvent(context.WithoutCancel(ctx), entry, auditEvent)
+	project, err := r.store.Project(context.WithoutCancel(ctx))
+	if err != nil {
+		return err
+	}
+	auditEvent.ProjectID = project.ID
+	_, err = r.store.RecordNoticeWithEvent(context.WithoutCancel(ctx), entry, auditEvent)
 	return err
 }
 
@@ -291,8 +301,8 @@ func approvalAuditEventType(status execution.ApprovalStatus, revoked bool) strin
 	}
 }
 
-// ExpireApproval atomically transitions an expired REQUESTED approval to
-// EXPIRED and writes its terminal outbox entry and audit event.
+// ExpireApproval transitions an overdue request and repairs its terminal notice
+// when expiry was already recorded by another path.
 func (r *Runtime) ExpireApproval(ctx context.Context, marshalRunID, approvalID string, now time.Time) (*execution.RuntimeApproval, bool, error) {
 	if r == nil || r.Execution() == nil || r.Execution().Engine() == nil {
 		return nil, false, model.ErrUnavailable
@@ -301,9 +311,9 @@ func (r *Runtime) ExpireApproval(ctx context.Context, marshalRunID, approvalID s
 	if err != nil {
 		return after, false, err
 	}
-	if changed && after != nil {
-		if recErr := r.RecordApprovalTerminal(ctx, marshalRunID, *after, "expired", "approval deadline elapsed"); recErr != nil {
-			return after, true, recErr
+	if after != nil && after.Status != execution.ApprovalRequested {
+		if recErr := r.RecordApprovalTerminal(ctx, marshalRunID, *after, "", ""); recErr != nil {
+			return after, changed, recErr
 		}
 	}
 	return after, changed, nil
@@ -341,14 +351,14 @@ func (r *Runtime) CloseRunApprovals(ctx context.Context, marshalRunID string, ru
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	boundExecRuns := r.boundExecutionRunIDs(ctx, run)
+	boundApprovals := r.boundApprovalIDs(ctx, marshalRunID, run)
 	all, err := r.Execution().Engine().ApprovalManager().ListApprovals()
 	if err != nil {
 		return nil, err
 	}
 	var closed []execution.RuntimeApproval
 	for _, a := range all {
-		if !approvalMatchesMarshalRun(a, run, boundExecRuns) {
+		if !approvalMatchesMarshalRun(a, run, boundApprovals) {
 			continue
 		}
 		if a.Status != execution.ApprovalRequested && a.Status != execution.ApprovalApproved {
@@ -391,7 +401,9 @@ func (r *Runtime) ReconcileInterruptedApproval(ctx context.Context, marshalRunID
 		return after, true, nil
 	}
 	if after != nil && after.Status == execution.ApprovalRequested {
-		_ = r.RecordApprovalOpened(ctx, marshalRunID, *after)
+		if err := r.RecordApprovalOpened(ctx, marshalRunID, *after); err != nil {
+			return after, false, err
+		}
 	}
 	return after, false, nil
 }
@@ -405,6 +417,32 @@ func (r *Runtime) DeliverPendingNotices(ctx context.Context, consumer, runID str
 	if r == nil || r.store == nil {
 		return 0, model.ErrUnavailable
 	}
+	r.noticeDeliveryMu.Lock()
+	defer r.noticeDeliveryMu.Unlock()
+	if svc := r.Execution(); svc != nil && svc.Engine() != nil {
+		approvals, err := svc.Engine().ApprovalManager().ListApprovals()
+		if err != nil {
+			return 0, err
+		}
+		for _, a := range approvals {
+			if a.Status == execution.ApprovalRequested {
+				continue
+			}
+			binding, err := r.store.ApprovalNoticeRun(ctx, r.ProjectIdentity(), a.ApprovalID)
+			if err != nil {
+				return 0, err
+			}
+			if binding == "" {
+				binding = r.resolveMarshalRunIDForExecution(ctx, a.RunID, a.PlanID, a.PlanVersion)
+			}
+			if runID != "" && binding != runID {
+				continue
+			}
+			if err := r.RecordApprovalTerminal(ctx, binding, a, "", ""); err != nil {
+				return 0, err
+			}
+		}
+	}
 	pending, err := r.store.PendingNotices(ctx, r.ProjectIdentity(), runID, 200)
 	if err != nil {
 		return 0, err
@@ -412,19 +450,15 @@ func (r *Runtime) DeliverPendingNotices(ctx context.Context, consumer, runID str
 	acked := 0
 	for _, entry := range pending {
 		rendered := r.renderNoticeWithLiveStatus(ctx, entry)
-		admitted, err := r.store.NoticeAdmitted(ctx, consumer, entry.EventID)
+		admitted, err := r.store.AdmitNotice(ctx, consumer, entry.EventID, "", time.Now().UTC())
 		if err != nil {
 			return acked, err
 		}
-		if !admitted {
-			if deliver != nil {
-				if err := deliver(entry, rendered); err != nil {
-					// A busy or absent consumer cannot block lifecycle; leave
-					// the entry unacked for safe replay later.
-					return acked, err
+		if admitted && deliver != nil {
+			if err := deliver(entry, rendered); err != nil {
+				if releaseErr := r.store.ReleaseNotice(ctx, consumer, entry.EventID); releaseErr != nil {
+					return acked, fmt.Errorf("deliver notice: %v; release claim: %w", err, releaseErr)
 				}
-			}
-			if _, err := r.store.AdmitNotice(ctx, consumer, entry.EventID, rendered, time.Now().UTC()); err != nil {
 				return acked, err
 			}
 		}
@@ -433,7 +467,7 @@ func (r *Runtime) DeliverPendingNotices(ctx context.Context, consumer, runID str
 		}
 		acked++
 	}
-	return acked, nil
+	return acked, r.store.PruneNotices(ctx, time.Now().UTC().Add(-30*24*time.Hour))
 }
 
 func (r *Runtime) renderNoticeWithLiveStatus(ctx context.Context, entry store.NoticeOutboxEntry) string {
@@ -476,7 +510,7 @@ func (r *Runtime) ApprovalProjection(ctx context.Context, marshalRunID string, r
 		return nil, nil, model.ErrUnavailable
 	}
 	now := time.Now().UTC()
-	boundExecRuns := r.boundExecutionRunIDs(ctx, run)
+	boundApprovals := r.boundApprovalIDs(ctx, marshalRunID, run)
 	views := make([]ApprovalNoticeView, 0)
 	if execSvc := r.Execution(); execSvc != nil && execSvc.Engine() != nil {
 		all, err := execSvc.Engine().ApprovalManager().ListApprovals()
@@ -484,7 +518,7 @@ func (r *Runtime) ApprovalProjection(ctx context.Context, marshalRunID string, r
 			return nil, nil, err
 		}
 		for _, a := range all {
-			if !approvalMatchesMarshalRun(a, run, boundExecRuns) {
+			if !approvalMatchesMarshalRun(a, run, boundApprovals) {
 				continue
 			}
 			effectiveStatus := a.Status
@@ -544,39 +578,33 @@ func (r *Runtime) ApprovalProjection(ctx context.Context, marshalRunID string, r
 	return views, notices, nil
 }
 
-func (r *Runtime) boundExecutionRunIDs(ctx context.Context, run marshal.Run) map[string]bool {
+func (r *Runtime) boundApprovalIDs(ctx context.Context, marshalRunID string, run marshal.Run) map[string]bool {
 	bound := map[string]bool{}
 	for _, t := range run.Tasks {
 		if t.Process05WaitRunID != "" {
-			bound[t.Process05WaitRunID] = true
+			bound[t.Process05WaitApprovalID] = true
 		}
 	}
-	if r == nil || r.Execution() == nil || run.PlanID == "" || run.PlanVersion < 1 {
+	if r == nil || r.Execution() == nil || r.Execution().Engine() == nil {
 		return bound
 	}
-	execRuns, err := r.Execution().ListRuns(ctx)
+	all, err := r.Execution().Engine().ApprovalManager().ListApprovals()
 	if err != nil {
 		return bound
 	}
-	for _, p05 := range execRuns {
-		if p05.PlanID == run.PlanID && p05.PlanVersion == run.PlanVersion && r.decisionProjectMatches(string(p05.ProjectID)) {
-			bound[p05.RunID] = true
+	for _, a := range all {
+		if binding, err := r.store.ApprovalNoticeRun(ctx, r.ProjectIdentity(), a.ApprovalID); err == nil && binding == marshalRunID {
+			bound[a.ApprovalID] = true
 		}
 	}
 	return bound
 }
 
-func approvalMatchesMarshalRun(a execution.RuntimeApproval, run marshal.Run, boundExecRuns map[string]bool) bool {
-	if boundExecRuns[a.RunID] {
+func approvalMatchesMarshalRun(a execution.RuntimeApproval, run marshal.Run, boundApprovals map[string]bool) bool {
+	if boundApprovals[a.ApprovalID] {
 		return true
 	}
-	if run.PlanID != "" && run.PlanVersion > 0 && a.PlanID == run.PlanID && a.PlanVersion == run.PlanVersion {
-		for _, t := range run.Tasks {
-			if t.PlanTaskID == a.TaskID {
-				return true
-			}
-		}
-	}
+
 	for _, t := range run.Tasks {
 		if t.Process05WaitApprovalID != "" && t.Process05WaitApprovalID == a.ApprovalID {
 			return true
@@ -586,8 +614,8 @@ func approvalMatchesMarshalRun(a execution.RuntimeApproval, run marshal.Run, bou
 }
 
 // resolveMarshalRunIDForExecution finds the Marshal run bound to an execution
-// run's plan, falling back to the execution run ID if none is found.
-func (r *Runtime) resolveMarshalRunIDForExecution(ctx context.Context, execRunID, planID string, planVersion int64) string {
+// run's exact wait binding, falling back to the execution run ID if ambiguous.
+func (r *Runtime) resolveMarshalRunIDForExecution(ctx context.Context, execRunID, _ string, _ int64) string {
 	if r == nil || r.store == nil {
 		return execRunID
 	}
@@ -595,15 +623,23 @@ func (r *Runtime) resolveMarshalRunIDForExecution(ctx context.Context, execRunID
 	if bare == nil || bare.ProjectID == "" {
 		return execRunID
 	}
-	if id, rec, err := r.store.LatestMarshalRun(ctx, bare.ProjectID); err == nil {
-		if rec.Value.PlanID == planID && rec.Value.PlanVersion == planVersion {
-			return id
-		}
+	runs, err := r.store.MarshalRuns(ctx, bare.ProjectID)
+	if err != nil {
+		return execRunID
+	}
+	binding := ""
+	for id, rec := range runs {
 		for _, t := range rec.Value.Tasks {
 			if t.Process05WaitRunID == execRunID {
-				return id
+				if binding != "" && binding != id {
+					return execRunID
+				}
+				binding = id
 			}
 		}
+	}
+	if binding != "" {
+		return binding
 	}
 	return execRunID
 }

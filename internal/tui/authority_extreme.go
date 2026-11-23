@@ -646,7 +646,9 @@ func (w *Workspace) settledProcess05Approval(req permission.Request) bool {
 		return true
 	}
 	if a.ExpiresAt != nil && !time.Now().UTC().Before(*a.ExpiresAt) {
-		_, _, _ = w.runtime.ExpireApproval(context.Background(), req.RunID, id, time.Now().UTC())
+		if _, _, err := w.runtime.ExpireApproval(context.Background(), req.RunID, id, time.Now().UTC()); err != nil {
+			w.logTUIError("approval expiry notice", err)
+		}
 		return true
 	}
 	return false

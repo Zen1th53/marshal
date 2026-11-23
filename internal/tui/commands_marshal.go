@@ -1728,7 +1728,7 @@ func (w *Workspace) deliverApprovalNotices(ctx context.Context, runID string) {
 	if root == "" {
 		return
 	}
-	_, _ = w.runtime.DeliverPendingNotices(ctx, "marshal-chat", runID, func(entry store.NoticeOutboxEntry, rendered string) error {
+	_, deliveryErr := w.runtime.DeliverPendingNotices(ctx, "marshal-chat", runID, func(entry store.NoticeOutboxEntry, rendered string) error {
 		view, err := openMarshalInbox(root)
 		if err != nil {
 			return err
@@ -1737,8 +1737,11 @@ func (w *Workspace) deliverApprovalNotices(ctx context.Context, runID string) {
 		if entry.Command != "" {
 			header += fmt.Sprintf("Command: `%s` (authority: %s, destination: %s)\n", entry.Command, entry.Authority, entry.Destination)
 		}
-		return view.write(header + "\n")
+		return view.writeNotice(entry.EventID, header+"\n")
 	})
+	if deliveryErr != nil {
+		w.logTUIError("approval notice delivery", deliveryErr)
+	}
 }
 
 func updateExecutionHolder(m *marshalSession, holderID, runID string, run marshal.Run) {

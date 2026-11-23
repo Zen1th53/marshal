@@ -54,7 +54,7 @@ func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID str
 	}
 	execRuns, err := s.runtime.Execution().ListRuns(ctx)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	planProject := s.CanonicalPlanProjectID()
 	for _, p05 := range execRuns {
@@ -65,21 +65,26 @@ func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID str
 		if !ok || execTask.State != execution.TaskNeedsApproval || execTask.ApprovalID == "" {
 			continue
 		}
-		cleared, clearErr := s.runtime.Execution().Engine().ClearExpiredTaskApproval(ctx, p05.RunID, t.PlanTaskID, s.clock())
-		if clearErr != nil {
-			return false, nil
+		cleared, _, expireErr := s.runtime.ExpireApproval(ctx, runID, execTask.ApprovalID, s.clock())
+		if expireErr != nil {
+			return true, expireErr
+		}
+		if cleared == nil || cleared.Status != execution.ApprovalExpired {
+			continue
 		}
 		reason := fmt.Sprintf("approval %s expired", cleared.ApprovalID)
 		if cleared.ExpiresAt != nil {
 			reason = fmt.Sprintf("approval %s expired at %s", cleared.ApprovalID, cleared.ExpiresAt.UTC().Format("2006-01-02T15:04:05Z07:00"))
 		}
-		_ = s.runtime.RecordApprovalTerminal(ctx, runID, *cleared, "expired", reason)
 		t.State = marshal.Queued
 		if run.State == marshal.AwaitingUser {
 			run.State = marshal.Dispatching
 			run.Pause = nil
 		}
 		if err := s.save(ctx, runID, run, rev); err != nil {
+			return true, err
+		}
+		if _, err := s.runtime.Execution().Engine().ClearExpiredTaskApproval(ctx, p05.RunID, t.PlanTaskID, s.clock()); err != nil {
 			return true, err
 		}
 		eventData := map[string]any{

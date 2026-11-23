@@ -1214,7 +1214,10 @@ func (e *Engine) ClearExpiredTaskApproval(ctx context.Context, runID, taskID str
 		if expErr != nil {
 			return nil, expErr
 		}
-		if expired == nil || expired.Status != ApprovalExpired {
+		if expired == nil {
+			return nil, fmt.Errorf("%w: approval %s disappeared before expiry", ErrInvalidStateTransition, app.ApprovalID)
+		}
+		if expired.Status != ApprovalExpired {
 			return expired, fmt.Errorf("%w: approval %s transitioned to %s before expiry", ErrInvalidStateTransition, app.ApprovalID, expired.Status)
 		}
 		app = expired

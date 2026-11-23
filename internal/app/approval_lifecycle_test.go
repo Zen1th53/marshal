@@ -390,6 +390,9 @@ func TestApprovalTerminalTransitionMatrix(t *testing.T) {
 	// 5. Run close -> CLOSED/revoked.
 	t.Run("run-close-revokes", func(t *testing.T) {
 		a := newTicket("task-1")
+		if err := r.RecordApprovalOpened(ctx, "RUN-matrix", *a); err != nil {
+			t.Fatal(err)
+		}
 		mrun := marshal.Run{
 			PlanID:      execRun.PlanID,
 			PlanVersion: execRun.PlanVersion,

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -128,11 +129,12 @@ func (s *Store) recordNoticeWithEventOnce(ctx context.Context, entry NoticeOutbo
 			event_id, project_id, run_id, task_id, approval_id, category, transition,
 			phase_order, status, authority, destination, command, replacement_id,
 			summary, payload_json, created_at, acked_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+		) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ''
+		WHERE NOT EXISTS (SELECT 1 FROM audit_events WHERE event_id = ?)`,
 		entry.EventID, entry.ProjectID, entry.RunID, entry.TaskID, entry.ApprovalID,
 		entry.Category, entry.Transition, entry.PhaseOrder, entry.Status, entry.Authority,
 		entry.Destination, entry.Command, entry.ReplacementID, entry.Summary,
-		entry.PayloadJSON, entry.CreatedAt.UTC().Format(time.RFC3339Nano),
+		entry.PayloadJSON, entry.CreatedAt.UTC().Format(time.RFC3339Nano), entry.EventID,
 	)
 	if err != nil {
 		return false, fmt.Errorf("insert notice outbox: %w", err)
@@ -187,7 +189,7 @@ func (s *Store) PendingNotices(ctx context.Context, projectID, runID string, lim
 }
 
 // ListNotices returns durable outbox entries for a project (optionally scoped
-// to one run) in chronological order for Inbox, Board and MCP projections.
+// to one run), newest first for Inbox, Board and MCP projections.
 func (s *Store) ListNotices(ctx context.Context, projectID, runID string, limit int) ([]NoticeOutboxEntry, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
@@ -201,7 +203,7 @@ func (s *Store) ListNotices(ctx context.Context, projectID, runID string, limit 
 			       summary, payload_json, created_at, acked_at
 			FROM marshal_notice_outbox
 			WHERE project_id = ? AND run_id = ?
-			ORDER BY phase_order ASC, seq ASC
+			ORDER BY seq DESC
 			LIMIT ?`, projectID, runID, limit)
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
@@ -210,7 +212,7 @@ func (s *Store) ListNotices(ctx context.Context, projectID, runID string, limit 
 			       summary, payload_json, created_at, acked_at
 			FROM marshal_notice_outbox
 			WHERE project_id = ?
-			ORDER BY phase_order ASC, seq ASC
+			ORDER BY seq DESC
 			LIMIT ?`, projectID, limit)
 	}
 	if err != nil {
@@ -252,7 +254,7 @@ func (s *Store) AdmitNotice(ctx context.Context, consumer, eventID, renderedText
 	res, err := s.db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO marshal_notice_inbox(consumer, event_id, admitted_at, rendered_text)
 		VALUES (?, ?, ?, ?)`,
-		consumer, eventID, now.UTC().Format(time.RFC3339Nano), renderedText,
+		consumer, eventID, now.UTC().Format(time.RFC3339Nano), "",
 	)
 	if err != nil {
 		return false, err
@@ -310,4 +312,52 @@ func (s *Store) AckNotice(ctx context.Context, eventID string, now time.Time) er
 		now.UTC().Format(time.RFC3339Nano), eventID,
 	)
 	return err
+}
+
+// ApprovalNoticeRun returns the exact persisted run binding of an approval.
+func (s *Store) ApprovalNoticeRun(ctx context.Context, projectID, approvalID string) (string, error) {
+	var runID string
+	err := s.db.QueryRowContext(ctx, `SELECT run_id FROM marshal_notice_outbox WHERE project_id = ? AND approval_id = ? ORDER BY seq LIMIT 1`, projectID, approvalID).Scan(&runID)
+	if errors.Is(err, sql.ErrNoRows) {
+		var data string
+		err = s.db.QueryRowContext(ctx, `SELECT data_json FROM audit_events WHERE event_id IN (?, ?, ?) ORDER BY event_id LIMIT 1`, "approval:"+approvalID+":opened", "approval:"+approvalID+":terminal", "approval:"+approvalID+":revoked").Scan(&data)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		var binding struct {
+			RunID string `json:"marshal_run_id"`
+		}
+		if err := json.Unmarshal([]byte(data), &binding); err != nil {
+			return "", err
+		}
+		return binding.RunID, nil
+	}
+	return runID, err
+}
+
+// ReleaseNotice permits retry after a consumer rejects delivery.
+func (s *Store) ReleaseNotice(ctx context.Context, consumer, eventID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM marshal_notice_inbox WHERE consumer = ? AND event_id = ?`, consumer, eventID)
+	return err
+}
+
+// PruneNotices removes acknowledged delivery records after the retention window.
+// Audit events retain stable event IDs so reconciliation cannot recreate them.
+func (s *Store) PruneNotices(ctx context.Context, before time.Time) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	cutoff := before.UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM marshal_notice_inbox WHERE event_id IN (SELECT event_id FROM marshal_notice_outbox WHERE acked_at != '' AND acked_at < ?)`, cutoff); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM marshal_notice_outbox WHERE acked_at != '' AND acked_at < ?`, cutoff); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

@@ -390,7 +390,11 @@ func (r *Runtime) commandExecutionDecision(ctx context.Context, request Approval
 	if a.Status == execution.ApprovalRequested && (a.ExpiresAt == nil || !time.Now().UTC().Before(*a.ExpiresAt)) {
 		if a.ExpiresAt != nil {
 			marshalRunID := r.resolveMarshalRunIDForExecution(ctx, a.RunID, a.PlanID, a.PlanVersion)
-			if expired, _, expErr := r.ExpireApproval(ctx, marshalRunID, a.ApprovalID, time.Now().UTC()); expErr == nil && expired != nil {
+			expired, _, expErr := r.ExpireApproval(ctx, marshalRunID, a.ApprovalID, time.Now().UTC())
+			if expErr != nil {
+				return current, expErr
+			}
+			if expired != nil {
 				return executionDecision(*expired), execution.ErrApprovalTOCTOUViolation
 			}
 		}
