@@ -53,9 +53,9 @@ func TestSettingsViewShowsLocksAndActor(t *testing.T) {
 func TestSettingsMissingValueDoesNotWrite(t *testing.T) {
 	st, w := settingsWorkspace(t)
 	before, _ := st.GetMarshalSettings(t.Context(), w.projectID)
-	for _, key := range []string{"control", "rework-limit", "global-cap", "web-auto-open"} {
+	for _, key := range []string{"control", "rework-limit", "global-cap", "web-auto-open", "notifications", "memory-channel", "session-import"} {
 		out, err := w.marshalSettings(t.Context(), []string{key})
-		if err != nil || !strings.Contains(out, "usage: /marshal settings "+key) {
+		if err == nil || !strings.Contains(err.Error(), "usage: /marshal settings "+key) {
 			t.Fatal(out, err)
 		}
 	}
@@ -203,5 +203,34 @@ func TestMarshalSettingAuditReachesHomeAndChat(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("committed change absent from Activity")
+	}
+}
+
+func TestSettingsWithoutProjectGivesRecoveryHint(t *testing.T) {
+	w := NewWorkspace(nil, "", "settings-session")
+	t.Cleanup(w.Close)
+	for _, args := range [][]string{nil, {"control", "free"}} {
+		if _, err := w.marshalSettings(t.Context(), args); err == nil || !strings.Contains(err.Error(), "reopen") {
+			t.Fatalf("settings %v: %v", args, err)
+		}
+	}
+	if _, err := w.marshalSettings(t.Context(), []string{"control"}); err == nil || !strings.Contains(err.Error(), "usage:") {
+		t.Fatalf("missing value: %v", err)
+	}
+}
+
+func TestSettingsReadbackShowsCanonicalValueAndUnits(t *testing.T) {
+	_, w := settingsWorkspace(t)
+	for _, edit := range []struct{ key, value, want string }{
+		{"execution-rights", "none", "execution-rights read-only · project · project · next run"},
+		{"plan-money", "12", "plan-money 12 minor currency units · project · project · next run"},
+	} {
+		if _, err := w.marshalSettings(t.Context(), []string{edit.key, edit.value}); err != nil {
+			t.Fatal(err)
+		}
+		out, err := w.marshalSettings(t.Context(), nil)
+		if err != nil || !strings.Contains("\n"+out+"\n", "\n"+edit.want+"\n") {
+			t.Fatalf("readback: %s %v", out, err)
+		}
 	}
 }

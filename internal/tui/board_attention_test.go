@@ -104,7 +104,7 @@ func TestAttentionSettings(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
 		t.Fatal("read created directory")
 	}
-	for _, value := range []string{"off", "on", "anything"} {
+	for _, value := range []string{"off", "on"} {
 		if err := saveAttention(root, value); err != nil {
 			t.Fatal(err)
 		}
@@ -114,6 +114,19 @@ func TestAttentionSettings(t *testing.T) {
 		info, _ := os.Stat(path)
 		if info.Mode().Perm() != 0o600 {
 			t.Fatal(info.Mode())
+		}
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"anything", "", "ON"} {
+		if err := saveAttention(root, value); err == nil || !strings.Contains(err.Error(), "on|off") {
+			t.Fatalf("invalid value %q: %v", value, err)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatalf("invalid value %q changed saved settings: %v", value, err)
 		}
 	}
 	if err := os.Remove(path); err != nil {
