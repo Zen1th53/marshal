@@ -293,6 +293,38 @@ func TestArchitectureObligationSurvivesOptionalReviewOff(t *testing.T) {
 	}
 }
 
+func TestMandatoryArchitectureObligationFailsClosedOnGetPlanError(t *testing.T) {
+	ctx := context.Background()
+	r, dir := conformanceRuntime(t, true)
+	optOut := marshal.ReviewPolicy{
+		Conformance: marshal.ConformanceOff,
+	}
+	s := conformanceMarshalService(t, r, dir, optOut, false)
+
+	// Run pointing at a missing plan/version so Store.GetPlan returns an error.
+	run := marshal.Run{
+		PlanID:      "PLAN-missing",
+		PlanVersion: 99,
+		Settings:    marshal.Settings{ReviewPolicy: optOut},
+		ReviewPolicy: &marshal.ReviewPolicySnapshot{
+			PolicyVersion: marshal.ReviewPolicyVersion,
+			FinalModel:    marshal.FinalModelRequired,
+			CrossReview:   marshal.CrossReviewRequired,
+			Design:        marshal.DesignReviewOnDemand,
+			Conformance:   marshal.ConformanceOff,
+		},
+	}
+	mode, locked := s.EffectiveConformancePolicy(ctx, run)
+	if mode != marshal.ConformanceEnforce || !locked {
+		t.Fatalf("GetPlan error must fail closed to enforce, got mode=%s locked=%v", mode, locked)
+	}
+	noStore := &MarshalService{Store: nil}
+	mode, locked = noStore.EffectiveConformancePolicy(ctx, run)
+	if mode != marshal.ConformanceEnforce || !locked {
+		t.Fatalf("nil Store with bound plan must fail closed to enforce, got mode=%s locked=%v", mode, locked)
+	}
+}
+
 // conformanceMarshalService builds a MarshalService backed by conformanceRuntime
 // with a worker whose initial attempt introduces an undeclared store->api import.
 func conformanceMarshalService(t *testing.T, r *Runtime, dir string, rp marshal.ReviewPolicy, bindMandatoryContract bool) *MarshalService {

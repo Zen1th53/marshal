@@ -20,8 +20,10 @@ func TestGovernedReviewPolicyCannotBeDisabled(t *testing.T) {
 	ctx := context.Background()
 	s, _ := marshalFixture(t, 1)
 
-	// Every review policy control in the catalogue must be locked in governed edition.
-	for _, key := range []string{"cross-review", "design-review", "architecture-conformance", "final-model"} {
+	// Controls with no non-default allowed value remain locked at key level,
+	// while design-review locks only its weakening value (off) so strengthening
+	// to required remains allowed.
+	for _, key := range []string{"cross-review", "architecture-conformance", "final-model"} {
 		d, err := settingscatalog.Find(key)
 		if err != nil {
 			t.Fatalf("catalogue missing %s: %v", key, err)
@@ -30,9 +32,30 @@ func TestGovernedReviewPolicyCannotBeDisabled(t *testing.T) {
 			t.Fatalf("governed catalogue left %s unlocked", key)
 		}
 	}
+	designDesc, err := settingscatalog.Find("design-review")
+	if err != nil {
+		t.Fatalf("catalogue missing design-review: %v", err)
+	}
+	if designDesc.LockReason != "" {
+		t.Fatalf("governed catalogue locked whole design-review key: %q", designDesc.LockReason)
+	}
+	if designDesc.LockedValues[string(marshal.DesignReviewOff)] == "" {
+		t.Fatalf("governed catalogue did not lock design-review=off: %+v", designDesc.LockedValues)
+	}
 
-	// Direct catalogue setters refuse every weakened value with ErrReviewPolicyLocked.
+	// Direct catalogue setters accept strengthening design-review=required and
+	// refuse every weakened value with ErrReviewPolicyLocked.
 	defaults := marshal.DefaultSettings()
+	strengthened, err := settingscatalog.Apply(defaults, "design-review", "required")
+	if err != nil {
+		t.Fatalf("governed Apply(design-review=required) failed: %v", err)
+	}
+	if strengthened.ReviewPolicy.Effective().Design != marshal.DesignReviewRequired {
+		t.Fatalf("expected DesignReviewRequired, got %+v", strengthened.ReviewPolicy)
+	}
+	if _, _, err := s.Store.CommitMarshalSettings(ctx, s.ProjectID, strengthened, 0, "owner"); err != nil {
+		t.Fatalf("governed CommitMarshalSettings(design-review=required) failed: %v", err)
+	}
 	for _, attempt := range [][2]string{
 		{"cross-review", "off"},
 		{"design-review", "off"},
@@ -82,12 +105,27 @@ func TestGovernedLocksOnDirectPresetPersistedAndResumePaths(t *testing.T) {
 		t.Fatalf("direct SetMarshalSettings = %v, want ErrReviewPolicyLocked", err)
 	}
 
-	// 2. Preset preview and apply paths refuse weakened preset ("fast").
+	// 2. Preset preview and apply paths refuse weakened preset ("fast")
+	// and accept strengthening preset ("strict") and restoring ("balanced").
 	if _, err := settingscatalog.PreviewPreset(marshal.DefaultSettings(), "fast"); !errors.Is(err, marshal.ErrReviewPolicyLocked) {
 		t.Fatalf("PreviewPreset(fast) = %v, want ErrReviewPolicyLocked", err)
 	}
 	if _, _, err := settingscatalog.ApplyPreset(marshal.DefaultSettings(), "fast"); !errors.Is(err, marshal.ErrReviewPolicyLocked) {
 		t.Fatalf("ApplyPreset(fast) = %v, want ErrReviewPolicyLocked", err)
+	}
+	strictSettings, strictPreview, err := settingscatalog.ApplyPreset(marshal.DefaultSettings(), "strict")
+	if err != nil {
+		t.Fatalf("ApplyPreset(strict) in governed edition failed: %v", err)
+	}
+	if strictSettings.EffectiveControl() != marshal.ControlStrict || strictSettings.ReviewPolicy.Effective().Design != marshal.DesignReviewRequired || len(strictPreview.Changes) == 0 {
+		t.Fatalf("unexpected strict preset result: settings=%+v preview=%+v", strictSettings, strictPreview)
+	}
+	balancedSettings, _, err := settingscatalog.ApplyPreset(strictSettings, "balanced")
+	if err != nil {
+		t.Fatalf("ApplyPreset(balanced) from strict in governed edition failed: %v", err)
+	}
+	if balancedSettings.ReviewPolicy.Effective().Design != marshal.DesignReviewOnDemand {
+		t.Fatalf("expected balanced design-review=on-demand, got %+v", balancedSettings.ReviewPolicy)
 	}
 
 	// Create and approve a valid run first so we can verify legacy load and persisted-weakening rejection.

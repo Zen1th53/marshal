@@ -10,20 +10,21 @@ import (
 )
 
 type Descriptor struct {
-	Key        string   `json:"key"`
-	Label      string   `json:"label"`
-	Kind       string   `json:"kind"`
-	Units      string   `json:"units"`
-	Values     []string `json:"values"`
-	Default    string   `json:"default"`
-	Editions   []string `json:"editions"`
-	Scope      string   `json:"scope"`
-	Applies    string   `json:"applies"`
-	LockReason string   `json:"lockReason"`
-	Confirm    bool     `json:"confirm"`
-	Help       string   `json:"help"`
-	get        func(marshal.Settings) string
-	set        func(*marshal.Settings, string) error
+	Key          string            `json:"key"`
+	Label        string            `json:"label"`
+	Kind         string            `json:"kind"`
+	Units        string            `json:"units"`
+	Values       []string          `json:"values"`
+	Default      string            `json:"default"`
+	Editions     []string          `json:"editions"`
+	Scope        string            `json:"scope"`
+	Applies      string            `json:"applies"`
+	LockReason   string            `json:"lockReason"`
+	LockedValues map[string]string `json:"lockedValues,omitempty"`
+	Confirm      bool              `json:"confirm"`
+	Help         string            `json:"help"`
+	get          func(marshal.Settings) string
+	set          func(*marshal.Settings, string) error
 }
 
 func field[T ~string | ~int | ~int64](key, kind, units string, values []string, ptr func(*marshal.Settings) *T) Descriptor {
@@ -131,6 +132,12 @@ func Apply(s marshal.Settings, key, value string) (marshal.Settings, error) {
 			return s, fmt.Errorf("%s: %s: %w", key, d.LockReason, marshal.ErrReviewPolicyLocked)
 		}
 		return s, fmt.Errorf("%s: %s", key, d.LockReason)
+	}
+	if reason, locked := d.LockedValues[value]; locked {
+		if isReviewPolicyKey(key) {
+			return s, fmt.Errorf("%s=%s: %s: %w", key, value, reason, marshal.ErrReviewPolicyLocked)
+		}
+		return s, fmt.Errorf("%s=%s: %s", key, value, reason)
 	}
 	next := s
 	if key == "execution-rights" && value == "none" {

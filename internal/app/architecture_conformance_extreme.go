@@ -21,12 +21,15 @@ import (
 const architectureFindingLimit = 8
 
 func (s *MarshalService) hasMandatoryArchitectureObligation(ctx context.Context, run marshal.Run) bool {
-	if s == nil || s.Store == nil || run.PlanID == "" || run.PlanVersion < 1 {
+	if run.PlanID == "" || run.PlanVersion < 1 {
 		return false
+	}
+	if s == nil || s.Store == nil {
+		return true
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
-		return false
+		return true
 	}
 	return p.RequiredProjectContract != nil
 }

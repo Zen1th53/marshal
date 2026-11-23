@@ -18,8 +18,14 @@ func configureEditionDescriptor(d *Descriptor) {
 	case "worker-stall-minutes":
 		d.LockReason = "not used in this edition"
 		d.Applies = "this build"
-	case "cross-review", "design-review", "architecture-conformance", "final-model":
+	case "cross-review", "architecture-conformance", "final-model":
 		d.LockReason = "review policy is locked in this edition"
 		d.Applies = "this build"
+	case "design-review":
+		d.Values = []string{string(marshal.DesignReviewOnDemand), string(marshal.DesignReviewRequired)}
+		d.LockedValues = map[string]string{
+			string(marshal.DesignReviewOff): "weakening review policy is locked in this edition",
+		}
+		d.Help = "Controls pre-approval independent design critique in a fresh session bound to the draft digest. Disabling design review (off) is locked in this edition."
 	}
 }

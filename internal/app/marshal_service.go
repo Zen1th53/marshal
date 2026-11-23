@@ -626,13 +626,15 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 }
 
 func runDesignDraftDigest(run marshal.Run) string {
-	if run.Pack != nil && strings.TrimSpace(run.Pack.Requirements) != "" {
-		return marshal.DesignDraftDigest(run.Pack.Requirements)
-	}
 	type taskSummary struct {
 		ID             string
 		Title          string
 		Type           marshal.TaskType
+		Worker         string
+		Mode           marshal.WorkerMode
+		Control        marshal.Control
+		Components     []string
+		DependsOn      []string
 		Files          []string
 		Criteria       []string
 		Checks         []marshal.Check
@@ -643,15 +645,22 @@ func runDesignDraftDigest(run marshal.Run) string {
 	for _, t := range run.Tasks {
 		tasks = append(tasks, taskSummary{
 			ID: t.PlanTaskID, Title: t.Title, Type: t.EffectiveType(),
+			Worker: t.Worker, Mode: t.Mode, Control: t.Control,
+			Components: t.Components, DependsOn: t.DependsOn,
 			Files: t.Files, Criteria: t.Criteria, Checks: t.Checks,
 			Instructions: t.Instructions, ExpectedOutput: t.ExpectedOutput,
 		})
 	}
+	packSum := ""
+	if run.Pack != nil {
+		packSum = planPackDigest(*run.Pack)
+	}
 	raw, _ := json.Marshal(struct {
 		Goal       string
 		BaseCommit string
+		PackDigest string `json:",omitempty"`
 		Tasks      []taskSummary
-	}{run.GoalBinding, run.BaseCommit, tasks})
+	}{run.GoalBinding, run.BaseCommit, packSum, tasks})
 	return marshal.DesignDraftDigest(string(raw))
 }
 

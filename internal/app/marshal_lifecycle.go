@@ -1153,6 +1153,9 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
+	if run.State == marshal.Drafting {
+		run.DesignReview = nil
+	}
 	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
@@ -1230,6 +1233,9 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	resetInfraRetries(t)
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
+	}
+	if run.State == marshal.Drafting {
+		run.DesignReview = nil
 	}
 	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
@@ -1823,6 +1829,7 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if err = validateAmendRoutes(run, p, d); err != nil {
 		return run, err
 	}
+	beforeDraftDigest := runDesignDraftDigest(run)
 	amended, err := p.AmendScoped(p.Version, reason, d.Plan)
 	policyChanged := d.ReviewPolicy != nil && d.ReviewPolicy.Effective() != run.EffectiveReviewPolicy()
 	requirementsChanged := d.Pack != nil && packDigest(d.Pack) != packDigest(run.Pack)
@@ -1955,6 +1962,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		if run.CloseAuthorization != nil && run.CloseAuthorization.ApprovalScopeDigest != run.ApprovalScopeDigest {
 			run.CloseAuthorization.Voided = true
 		}
+	}
+	if runDesignDraftDigest(run) != beforeDraftDigest {
+		run.DesignReview = nil
 	}
 	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
 	if err != nil {
