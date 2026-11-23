@@ -85,11 +85,8 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 			return MarshalDispatch{}, err
 		}
 	}
-	for _, dep := range t.DependsOn {
-		j := taskIndex(run, dep)
-		if j < 0 || run.Tasks[j].State != marshal.Merged {
-			return MarshalDispatch{}, errors.New("dependency is not merged")
-		}
+	if adm, blocked := unmergedDependencyAdmission(run, *t); blocked {
+		return MarshalDispatch{}, &DispatchAdmissionError{Admission: adm}
 	}
 	rev, err = s.admitProviderDispatch(ctx, runID, &run, rev, i, brief)
 	if err != nil {

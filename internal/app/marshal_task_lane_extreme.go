@@ -103,8 +103,36 @@ func continuePriorTaskLanes(ctx context.Context, s *MarshalService, run *marshal
 	return nil
 }
 
+func approvedProcess05Parallel(p plan.ExecutionPlan) bool {
+	if p.Mode != plan.ModeUltra {
+		return false
+	}
+	if p.State != "" && p.State != plan.StateApproved {
+		return false
+	}
+	if p.State == plan.StateApproved {
+		if p.ApprovedScope == nil || p.ApprovedScope.Mode != plan.ModeUltra {
+			return false
+		}
+		if p.ApprovalScopeDigest == "" || p.ApprovalScopeDigest != p.ApprovedScope.Digest() {
+			return false
+		}
+		return true
+	}
+	if p.ApprovedScope != nil {
+		if p.ApprovedScope.Mode != plan.ModeUltra {
+			return false
+		}
+		if p.ApprovalScopeDigest != "" && p.ApprovalScopeDigest != p.ApprovedScope.Digest() {
+			return false
+		}
+		return true
+	}
+	return p.ApprovalScopeDigest == ""
+}
+
 func bindPrivateProcess05Tier(run *marshal.Run, p plan.ExecutionPlan) {
-	if p.Mode == plan.ModeUltra {
+	if approvedProcess05Parallel(p) {
 		run.Tier = marshal.Ultra
 		run.Process05Parallel = true
 	} else {
