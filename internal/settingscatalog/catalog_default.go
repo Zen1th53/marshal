@@ -14,8 +14,12 @@ func editionRows() []Descriptor {
 func editionEffective(marshal.Settings, string) (string, bool) { return "", false }
 
 func configureEditionDescriptor(d *Descriptor) {
-	if d.Key == "worker-stall-minutes" {
+	switch d.Key {
+	case "worker-stall-minutes":
 		d.LockReason = "not used in this edition"
+		d.Applies = "this build"
+	case "cross-review", "design-review", "architecture-conformance", "final-model":
+		d.LockReason = "review policy is locked in this edition"
 		d.Applies = "this build"
 	}
 }

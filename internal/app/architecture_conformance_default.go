@@ -12,3 +12,11 @@ import (
 func (s *MarshalService) architectureHandInEdition(context.Context, marshal.Task, marshal.HandIn) error {
 	return nil
 }
+
+func (s *MarshalService) hasMandatoryArchitectureObligation(context.Context, marshal.Run) bool {
+	return false
+}
+
+func (s *MarshalService) architectureHandInForRunEdition(_ context.Context, run marshal.Run, _ marshal.Task, _ marshal.HandIn) (conformanceOutcome, error) {
+	return conformanceOutcome{Policy: run.EffectiveReviewPolicy().Conformance}, nil
+}

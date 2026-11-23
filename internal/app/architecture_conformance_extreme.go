@@ -20,15 +20,67 @@ import (
 // architectureFindingLimit bounds the return reason.
 const architectureFindingLimit = 8
 
+func (s *MarshalService) hasMandatoryArchitectureObligation(ctx context.Context, run marshal.Run) bool {
+	if s == nil || s.Store == nil || run.PlanID == "" || run.PlanVersion < 1 {
+		return false
+	}
+	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
+	if err != nil {
+		return false
+	}
+	return p.RequiredProjectContract != nil
+}
+
+func (s *MarshalService) architectureHandInForRunEdition(ctx context.Context, run marshal.Run, t marshal.Task, h marshal.HandIn) (conformanceOutcome, error) {
+	mode, mandatory := s.EffectiveConformancePolicy(ctx, run)
+	if mode == marshal.ConformanceOff {
+		return conformanceOutcome{Policy: marshal.ConformanceOff, Omitted: true}, nil
+	}
+	blocking, err := s.architectureHandInFindings(ctx, t, h)
+	if err != nil {
+		if mode == marshal.ConformanceWarn {
+			return conformanceOutcome{Policy: marshal.ConformanceWarn, Findings: []string{err.Error()}}, nil
+		}
+		return conformanceOutcome{Policy: marshal.ConformanceEnforce, Mandatory: mandatory}, err
+	}
+	if len(blocking) == 0 {
+		return conformanceOutcome{Policy: mode, Mandatory: mandatory}, nil
+	}
+	if mode == marshal.ConformanceWarn {
+		return conformanceOutcome{Policy: marshal.ConformanceWarn, Findings: blocking}, nil
+	}
+	return conformanceOutcome{Policy: marshal.ConformanceEnforce, Findings: blocking, Mandatory: mandatory}, formatArchitectureConformanceError(blocking)
+}
+
+func formatArchitectureConformanceError(blocking []string) error {
+	shown := blocking
+	if len(shown) > architectureFindingLimit {
+		shown = append(append([]string(nil), shown[:architectureFindingLimit]...), fmt.Sprintf("and %d more", len(blocking)-architectureFindingLimit))
+	}
+	return errors.New("architecture: the code does not match the accepted architecture: " + strings.Join(shown, "; ") +
+		". Change the code to fit the architecture; if the architecture itself must change, the Marshal submits a revised project contract and a new part or dependency waits for the owner's Accept in the browser")
+}
+
 // architectureHandInEdition checks the files a hand-in changed against the
 // accepted project contract: a task writes only inside its parts (and the
 // parts inside them), and code uses another part only through a declared
 // dependency. A newly added production source file with no owning part returns the task. With
 // no accepted contract there is nothing to check.
 func (s *MarshalService) architectureHandInEdition(ctx context.Context, t marshal.Task, h marshal.HandIn) error {
+	blocking, err := s.architectureHandInFindings(ctx, t, h)
+	if err != nil {
+		return err
+	}
+	if len(blocking) == 0 {
+		return nil
+	}
+	return formatArchitectureConformanceError(blocking)
+}
+
+func (s *MarshalService) architectureHandInFindings(ctx context.Context, t marshal.Task, h marshal.HandIn) ([]string, error) {
 	accepted, err := s.runtime.store.ReadAcceptedProjectContract(ctx, s.runtime.ProjectContractBinding())
 	if err != nil || h.ResultCommit == "" || len(h.FilesTouched) == 0 {
-		return nil
+		return nil, nil
 	}
 	m := archconform.NewMap(accepted.Contract)
 	parts := taskArchitectureParts(m, t)
@@ -50,7 +102,7 @@ func (s *MarshalService) architectureHandInEdition(ctx context.Context, t marsha
 	if base != "" {
 		names, diffErr := gitMarshal(ctx, s.Repository, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--diff-filter=A", "--name-only", "-z", base, h.ResultCommit)
 		if diffErr != nil {
-			return fmt.Errorf("architecture: cannot determine newly added files: %w", diffErr)
+			return nil, fmt.Errorf("architecture: cannot determine newly added files: %w", diffErr)
 		}
 		for _, name := range strings.Split(names, "\x00") {
 			added[name] = true
@@ -65,15 +117,7 @@ func (s *MarshalService) architectureHandInEdition(ctx context.Context, t marsha
 			blocking = append(blocking, f.String())
 		}
 	}
-	if len(blocking) == 0 {
-		return nil
-	}
-	shown := blocking
-	if len(shown) > architectureFindingLimit {
-		shown = append(append([]string(nil), shown[:architectureFindingLimit]...), fmt.Sprintf("and %d more", len(blocking)-architectureFindingLimit))
-	}
-	return errors.New("architecture: the code does not match the accepted architecture: " + strings.Join(shown, "; ") +
-		". Change the code to fit the architecture; if the architecture itself must change, the Marshal submits a revised project contract and a new part or dependency waits for the owner's Accept in the browser")
+	return blocking, nil
 }
 
 // taskArchitectureParts are the parts a task builds: its declared

@@ -25,7 +25,7 @@ type Snapshot struct {
 // PolicyRows displays mandatory runtime policy without presenting an edit control.
 func PolicyRows() []Row {
 	out := []Row{}
-	for _, p := range [][2]string{{"cross-review", "required"}, {"independent-verifier", "required"}, {"design-conformance", "approved plan"}, {"scheduler", "plan order and independent file scopes"}, {"preset", "custom"}} {
+	for _, p := range [][2]string{{"independent-verifier", "required"}, {"design-conformance", "approved plan"}, {"scheduler", "plan order and independent file scopes"}, {"preset", "custom"}} {
 		out = append(out, Row{Key: p[0], Value: p[1], Effective: p[1], Next: p[1], Scope: "build", Applies: "this build", Source: "edition policy", LockedReason: "fixed runtime policy", Help: "About this build"})
 	}
 	return out

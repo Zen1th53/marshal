@@ -31,6 +31,9 @@ func saveMarshalStateTx(ctx context.Context, tx *sql.Tx, projectID, runID string
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return fmt.Errorf("%w: %w", model.ErrInvalid, err)
+	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return err
 	}

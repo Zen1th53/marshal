@@ -68,7 +68,14 @@ func editionEffective(s marshal.Settings, key string) (string, bool) {
 }
 
 func configureEditionDescriptor(d *Descriptor) {
-	if d.Key == "worker-stall-minutes" {
+	switch d.Key {
+	case "worker-stall-minutes":
 		d.Help += " Zero uses the runtime default of 15 minutes."
+	case "cross-review":
+		d.Help = "Controls optional independent hand-in cross-review for upcoming runs. Omission is recorded per attempt; mandatory architecture verdicts remain required."
+	case "design-review":
+		d.Help = "Controls pre-approval independent design critique in a fresh session bound to the draft digest."
+	case "architecture-conformance":
+		d.Help = "Controls hand-in architecture conformance (enforce, warn, or off). Plans with a mandatory architecture obligation lock conformance to enforce."
 	}
 }
