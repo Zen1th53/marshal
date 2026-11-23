@@ -427,7 +427,13 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		m.mu.Unlock()
 	}
 	if req.Kind == "marshal-command" && allow {
-		return w.applyMarshalProposal(ctx, req)
+		applyCtx := ctx
+		if source == "marshal" {
+			applyCtx = withAutomaticProposalContext(ctx)
+		} else if source != "" {
+			applyCtx = withOwnerActionContext(ctx)
+		}
+		return w.applyMarshalProposal(applyCtx, req)
 	}
 	if req.Kind == "network" && allow {
 		return a.runtime.CommandEgress(ctx, req.RunID, "allow", req.Object)
