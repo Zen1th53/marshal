@@ -15441,7 +15441,7 @@
     },
     {
       "path": "internal/tui/testdata/board/host-split-80x24.golden",
-      "sha256": "ec90e5b5b39315af10d2fdc6cf02890d4dc861b88b9667cb990ed484b480ecab",
+      "sha256": "a498605f93ddbc58b9a26258fd4fef82f65b3436eac8256d0bc2179876174c06",
       "bytes": 7731
     },
     {
