@@ -111,6 +111,9 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 // webAct is one action on the input loop: the page must have acted on the
 // card the Board shows now.
 func (w *Workspace) webAct(a webboard.Action) webActed {
+	if a.Kind == "cmd" {
+		return webActed{res: w.webSetting(a)}
+	}
 	if a.Kind == "key" && (a.Key == webKeyRetry || a.Key == webKeyStopAll) {
 		return w.webScreenAct(a)
 	}

@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 // Owner actions (phase 2). The page sends POST /api/act; the server checks
@@ -23,6 +25,9 @@ import (
 
 // Action is one owner action from the page.
 type Action struct {
+	Command *store.WebIntent
+	Commit  func(func() Result) Result
+
 	// Kind is "key" (a button of the card on screen) or "say" (a message
 	// to the Marshal, as the Board's s composer sends it).
 	Kind string
@@ -179,6 +184,8 @@ func (s *Server) originAllowed(origin string) bool {
 
 // actRequest is the body of POST /api/act.
 type actRequest struct {
+	Command
+
 	Action    string `json:"action"` // "key" or "say"
 	Card      string `json:"card"`
 	Key       string `json:"key"`
@@ -233,6 +240,10 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 		refuse(w, http.StatusForbidden, "This Board is read-only.")
 		return
 	}
+	if req.Action == "cmd" {
+		s.serveCommand(w, q, req)
+		return
+	}
 	a := Action{Card: req.Card, Text: req.Text, Confirmed: req.Confirmed}
 	name := req.Key
 	switch req.Action {
@@ -258,7 +269,16 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 	// shows now and spent before the action runs, so a replay or a second
 	// tab acting on the same frame is refused.
 	s.actMu.Lock()
-	defer s.actMu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			s.actMu.Unlock()
+		}
+	}()
+	if !s.authorized(q) {
+		refuse(w, http.StatusUnauthorized, "Reopen the Board to authenticate.")
+		return
+	}
 	f, epoch, err := s.currentFrame()
 	if err != nil {
 		refuse(w, http.StatusServiceUnavailable, "The Board frame could not be built.")
@@ -278,6 +298,8 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 		return
 	}
 	s.spend()
+	s.actMu.Unlock()
+	locked = false
 	ctx, cancel := context.WithTimeout(q.Context(), actWait)
 	defer cancel()
 	res := s.sink(ctx, a)

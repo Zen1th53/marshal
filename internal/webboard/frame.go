@@ -27,6 +27,8 @@ const Version = 1
 // Frame is one Board frame as the browser reads it. Times are RFC 3339 with
 // their zone ("" when unknown), durations whole seconds (0 when unknown).
 type Frame struct {
+	SettingsActions *SettingsState `json:"settingsActions,omitempty"`
+
 	LastRun bool     `json:"lastRun"`
 	V       int      `json:"v"`
 	Screen  string   `json:"screen"`

@@ -73,6 +73,8 @@ type Workspace struct {
 	palette    *CommandPalette
 	diffViewer *DiffViewer
 
+	webAuthority uint64 // Invalidates settings actions when the runtime target changes.
+
 	// runtime is the canonical mutation authority Control submits through.
 	// It is nil in a store-only workspace, in which case every Control action
 	// refuses with that reason rather than writing anything locally.
@@ -2217,12 +2219,15 @@ func (w *Workspace) setOutput(text string, isError bool) {
 // screens still render, and every action refuses with the reason — which is
 // the truthful behaviour for a workspace that cannot reach an authority.
 func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
+	unlockWeb := w.lockWebSettingsTarget()
+	defer unlockWeb()
 	releaseMemoryReads := w.cmd.prepareOperatorMemoryRuntimeAttach()
 	defer releaseMemoryReads()
 	w.ultraAdmission.Lock()
 	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.webAuthority++
 	w.runtime = runtime
 	w.beatRuntime.Store(runtime)
 	w.projectIdentity = identity
@@ -2535,8 +2540,11 @@ func (w *Workspace) controlSource() *ControlSource {
 				return w.exitRequested
 			},
 			replaceRuntime: func(reopened *app.Runtime) {
+				unlockWeb := w.lockWebSettingsTarget()
+				defer unlockWeb()
 				w.mu.Lock()
 				defer w.mu.Unlock()
+				w.webAuthority++
 				w.runtime = reopened
 				w.beatRuntime.Store(reopened)
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)

@@ -90,3 +90,24 @@ func (r *Runtime) CommandRequestEntitlement(ctx context.Context, e CommandEnvelo
 	sum := sha256.Sum256(b)
 	return client.RequestEntitlementTrackedCommand(ctx, identity, target.Key.SessionID, requests, e.ExpectedVersion, hex.EncodeToString(sum[:]))
 }
+
+// ObserveCommand reconciles an exact previously journaled request, including an
+// older workspace session, without submitting again or granting authority.
+func (s *ULTRARequestService) ObserveCommand(ctx context.Context, e CommandEnvelope, target EntitlementRequestTarget) (cloud.RequestObservation, bool, error) {
+	if s == nil || s.runtime == nil || s.requests == nil || e.ProjectID != s.runtime.ProjectIdentity() || target.Key.Endpoint != s.key.Endpoint || target.Key.InstallationID != s.key.InstallationID || target.WorkspaceSessionID != e.SessionID || e.TargetID != model.SessionRecoveryDigest(target.Key) || e.ExpectedVersion != target.ExpectedGeneration || e.IdempotencyKey == "" {
+		return cloud.RequestObservation{}, false, model.ErrInvalid
+	}
+	observation, found, err := s.requests.Read(ctx, target.Key)
+	if err != nil || !found {
+		return observation, found, err
+	}
+	raw, _ := json.Marshal(struct {
+		Envelope CommandEnvelope
+		Target   EntitlementRequestTarget
+	}{e, target})
+	digest := sha256.Sum256(raw)
+	if observation.CommandDigest != hex.EncodeToString(digest[:]) {
+		return cloud.RequestObservation{}, false, model.ErrConflict
+	}
+	return observation, true, nil
+}

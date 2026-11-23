@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/Zen1th53/marshal/internal/settingscatalog"
+	"github.com/Zen1th53/marshal/internal/store"
 	"strings"
 	"sync"
 
@@ -163,6 +164,12 @@ func (w *Workspace) webBoardServer() (*webboard.Server, error) {
 	srv, err := webBoardStart(w.webBoardFrame, webBoardSink(w))
 	if err != nil {
 		return nil, err
+	}
+	if w.store != nil {
+		if err := srv.ConfigureSettings(webboard.SettingsConfig{Source: w.webSettingsState, Store: w.store, CurrentStore: func() *store.Store { w.mu.RLock(); defer w.mu.RUnlock(); return w.store }, Reconcile: w.reconcileWebRequests}); err != nil {
+			srv.Close()
+			return nil, err
+		}
 	}
 	s.server = srv
 	return srv, nil

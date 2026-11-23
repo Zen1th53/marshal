@@ -67,8 +67,16 @@ func (s *Store) setUltraPreferenceAudited(ctx context.Context, projectID string,
 		return err
 	}
 	defer tx.Rollback()
+	if err = s.setUltraPreferenceTx(ctx, tx, projectID, enabled); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Store) setUltraPreferenceTx(ctx context.Context, tx *sql.Tx, projectID string, enabled bool) error {
 	var old bool
-	err = tx.QueryRowContext(ctx, "SELECT enabled FROM ultra_execution_preferences WHERE project_id=?", projectID).Scan(&old)
+	err := tx.QueryRowContext(ctx, "SELECT enabled FROM ultra_execution_preferences WHERE project_id=?", projectID).Scan(&old)
 	existed := err == nil
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -92,5 +100,5 @@ func (s *Store) setUltraPreferenceAudited(ctx context.Context, projectID string,
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }

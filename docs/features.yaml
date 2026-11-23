@@ -1,5 +1,52 @@
 version: 1
 features:
+  - id: authenticated-settings-actions
+    name: Authenticated browser project settings and ULTRA execution changes with durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/settings.go
+      - internal/webboard/page/app.js
+      - internal/tui/webboard_settings.go
+      - internal/store/web_settings.go
+    tests:
+      - internal/webboard.TestCmdRejectsCrossOriginAndReplay
+      - internal/webboard.TestCmdConfirmationBindsExactPayload
+      - internal/webboard.TestConcurrentTabsSpendTokenOnce
+      - internal/webboard.TestReceiptLookupAfterLostApplyReply
+      - internal/tui.TestWebSettingRejectsStaleRevisionAndLockedKey
+      - internal/tui.TestWebTargetChangeBeforeDequeueRefuses
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'function previewSetting('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: browser-entitlement-request
+    name: Browser entitlement requests with tracked outcomes and interrupted request reconciliation
+    editions: [governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/webboard_settings_request.go
+      - internal/webboard/page/app.js
+      - internal/app/ultra_requests.go
+    tests:
+      - internal/tui.TestWebRequestReceiptPreservesUnknownOutcome
+      - internal/app.TestObserveEntitlementCommandAcrossWorkspaceSessions
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: '"Request ULTRA entitlement"'
+        kind: control
+    tui:
+      - routeOrCommand: /ultra request
+        anchor: 'case "/ultra":'
+        kind: control
+
   # ---- Web Board features ---------------------------------------------------
   - id: F01
     name: ULTRA supervision mode, entitlement and execution switch

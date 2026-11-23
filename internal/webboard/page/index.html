@@ -223,13 +223,15 @@
 
   <!-- Settings -->
   <section id="s-settings" class="sect" aria-labelledby="h-settings" hidden>
-    <div class="sect-head"><h1 id="h-settings">Settings</h1><span class="muted">read-only</span></div>
-    <dl id="set-facts" class="kv big"></dl>
+    <div class="sect-head"><h1 id="h-settings">Settings</h1></div>
+    <div id="settings-controls"></div>
+            <div id="settings-confirm" role="status"></div>
+            <dl id="set-facts" class="kv big"></dl>
     <p><a id="docs-link" href="#settings" target="_blank" rel="noopener noreferrer">Marshal documentation</a> <span class="faint">(opens in a new tab)</span></p>
     <section class="panel" aria-labelledby="h-notyet">
       <h2 id="h-notyet" class="lbl">In the terminal Board only, for now</h2>
       <ul id="set-notyet" class="plain muted">
-        <li>Changing a setting: this page shows them read-only</li>
+        <li>Changing machine and user preferences</li>
         <li>Raw error text, MCP failure details and worker evidence</li>
         <li>The security, verify and memory views</li>
       </ul>

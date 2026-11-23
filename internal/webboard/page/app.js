@@ -1023,7 +1023,7 @@
   function renderSettings(f) {
     var r = f.ready;
     var s = f.system || {};
-    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, r.sessionLabel, f.plan.tokens, f.v, s, f.settings])) return;
+    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, r.sessionLabel, f.plan.tokens, f.v, s, f.settings, ((f.settingsActions || {}).capabilities || []).map(function (c) { return [c.op, c.target, c.revision]; })])) return;
     var dl = clear($("set-facts"));
     kv(dl, "Version", (f.top.version || "unknown") + (s.updateAvailable ? " · " + s.updateAvailable + " is available (F10 or /update in the terminal)" : ""),
       s.updateAvailable ? "tone-warn" : "");
@@ -1048,6 +1048,13 @@
     var settings = f.settings || {rows: [], changes: []};
     kv(dl, "Project settings revision", String(settings.revision || 0));
     var about = false;
+    var controls = clear($("settings-controls"));
+    ((f.settingsActions || {}).capabilities || []).forEach(function (cap) {
+      if (cap.op !== "settings/ultra.request") return;
+      var requestButton = el("button", "", "Request ULTRA entitlement"); requestButton.type = "button";
+      requestButton.onclick = function () { previewSetting(newSettingRequest(cap, "")); };
+      controls.appendChild(requestButton);
+    });
     (settings.rows || []).forEach(function (row) {
       if (row.scope === "build" && !about) { kv(dl, "About this build", "Fixed edition policies"); about = true; }
       kv(dl, row.key, row.effective + (row.units ? " " + row.units : "") +
@@ -1055,6 +1062,19 @@
         (row.value !== row.effective ? " · configured: " + row.value : "") +
         (row.lockedReason ? " · locked: " + row.lockedReason : "") +
         (row.help ? " · " + row.help : ""));
+      var cap = settingCapability(f, row.key);
+      if (cap && !row.lockedReason) {
+        var group = el("div", "setting-control");
+        var label = el("label", "", row.key + " ");
+        var input = el(cap.values && cap.values.length ? "select" : "input");
+        input.setAttribute("aria-label", row.key);
+        if (cap.values && cap.values.length) cap.values.forEach(function (value) { var option = el("option", "", value); option.value = value; input.appendChild(option); });
+        input.value = row.key === "ultra-execution" ? (row.next === "on" || row.next === "true" ? "on" : "off") : row.value;
+        label.appendChild(input); group.appendChild(label);
+        var button = el("button", "", "Preview change"); button.type = "button";
+        button.onclick = function () { previewSetting(newSettingRequest(cap, input.value)); };
+        group.appendChild(button); controls.appendChild(group);
+      }
     });
     kv(dl, "Budget usage", "Unknown usage is not zero and does not bypass quota. Run ceilings use tokens, minor currency units and seconds. Goal ceilings belong to the approved goal revision.");
     (settings.changes || []).forEach(function (c) {
@@ -1063,9 +1083,89 @@
     kv(dl, "This page", "private link for this computer only · frame format " + f.v);
   }
 
+  var settingStorage = "marshal-board-setting-request";
+  var settingReceiptTimer = null;
+  function settingCapability(f, key) {
+    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key; });
+  }
+  function newSettingRequest(cap, value) {
+    var bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
+    var id = Array.from(bytes).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+    return {action: "cmd", requestId: id, target: cap.target, op: cap.op, projectId: frame.settingsActions.projectId,
+      revision: cap.revision, payload: cap.op === "settings/ultra.request" ? {} : cap.op === "settings/ultra.set" ? {enabled: value === "on"} : {key: cap.target.id, value: value}};
+  }
+  function rememberSetting(body) {
+    var saved = Object.assign({}, body); delete saved.token; delete saved.preview;
+    sessionStorage.setItem(settingStorage, JSON.stringify(saved));
+  }
+  function settingPost(body) {
+    var cap = settingCapability(frame, body.target.id);
+    if (!cap || cap.op !== body.op || cap.revision !== body.revision || frame.settingsActions.projectId !== body.projectId) return Promise.reject(new Error("The project or settings changed. Refresh and preview again."));
+    var headers = auth(); headers["Content-Type"] = "application/json";
+    return fetch("/api/act", {method: "POST", headers: headers, credentials: "omit", cache: "no-store",
+      body: JSON.stringify(Object.assign({}, body, {token: cap.token}))}).then(function (r) {
+      return r.json().then(function (result) { if (!r.ok) throw new Error(result.text || "The change was refused."); return result; });
+    });
+  }
+  function settingReceipt(body) {
+    return fetch("/api/act/receipts/" + body.requestId, {headers: auth(), credentials: "omit", cache: "no-store"}).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error("Reopen the Board to check this request.");
+      return r.json();
+    });
+  }
+  function showSettingReceipt(r) {
+    feedback(r.status === "applied" ? "ok" : r.status === "queued" || r.status === "applying" ? "wait" : "bad",
+      r.status + ": " + (r.result || r.code) + " · revision " + r.revision);
+    clearTimeout(settingReceiptTimer);
+    if (r.status === "queued" || r.status === "applying") settingReceiptTimer = setTimeout(recoverSetting, 1000);
+    if (r.status === "applied" || r.status === "refused") { sessionStorage.removeItem(settingStorage + "-submitted"); sessionStorage.removeItem(settingStorage); clear($("settings-confirm")); }
+    if (r.status === "interrupted") {
+      var panel = clear($("settings-confirm"));
+      var check = el("button", "", "Check previous outcome"); check.type = "button"; check.onclick = recoverSetting; panel.appendChild(check);
+    }
+    return refresh();
+  }
+  function previewSetting(body) {
+    var unresolved = sessionStorage.getItem(settingStorage + "-submitted");
+    if (unresolved && unresolved !== body.requestId) { feedback("bad", "Check the previous settings receipt before starting another change."); recoverSetting(); return; }
+    try { rememberSetting(body); } catch (e) { feedback("bad", "Browser storage is unavailable; enable it before changing settings."); return; }
+    feedback("wait", "Preparing confirmation…");
+    settingReceipt(body).then(function (r) {
+      if (r) return showSettingReceipt(r);
+      return refresh().then(function () { return settingPost(Object.assign({}, body, {preview: true, confirmation: undefined})); }).then(function (r) {
+        body.confirmation = r.confirmation; rememberSetting(body);
+        var panel = clear($("settings-confirm"));
+        panel.appendChild(el("p", "", "Confirm " + (body.op === "settings/ultra.request" ? "entitlement request" : body.target.id) + " → " + (body.payload.value === undefined ? (body.payload.enabled ? "on" : "off") : body.payload.value) + " at revision " + body.revision + ". This preview expires in one minute."));
+        var button = el("button", "", "Confirm change"); button.type = "button"; panel.appendChild(button);
+        button.onclick = function () {
+          button.disabled = true;
+          sessionStorage.setItem(settingStorage + "-submitted", body.requestId);
+          refresh().then(function () { return settingPost(body); }).then(showSettingReceipt).catch(function (e) {
+            feedback("wait", "Checking the receipt…");
+            settingReceipt(body).then(function (r) { if (r) return showSettingReceipt(r); feedback("bad", e.message + " Preview again to retry this same request."); }).catch(function () { feedback("bad", "Outcome unknown. Check this request before retrying."); });
+          });
+        };
+        feedback("ok", "Preview ready; no change has been made.");
+      });
+    }).catch(function (e) { feedback("bad", e.message); });
+  }
+  function recoverSetting() {
+    var body; try { body = JSON.parse(sessionStorage.getItem(settingStorage)); } catch (e) { return; }
+    if (!body) return;
+    settingReceipt(body).then(function (r) {
+      if (r) { showSettingReceipt(r); return; }
+      var panel = clear($("settings-confirm"));
+      panel.appendChild(el("p", "", "A previous settings change has no receipt. Preview it again to retry with the same request identity."));
+      var button = el("button", "", "Preview previous change"); button.type = "button"; button.onclick = function () { previewSetting(body); }; panel.appendChild(button);
+    }).catch(function () { feedback("bad", "A previous settings outcome is unknown; reconnect to check its receipt."); });
+  }
+
   // ---- render ------------------------------------------------------------------
+  var settingsRecovered = false;
   function render(f) {
     if (!f) return;
+    if (!settingsRecovered) { settingsRecovered = true; recoverSetting(); }
     renderTop(f); renderCard(f); renderHome(f); renderWork(f); renderArchitecture(f);
     renderTeam(f); renderActivity(f); renderSettings(f);
   }

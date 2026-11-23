@@ -37,9 +37,42 @@ func (s *Store) CommitMarshalSettings(ctx context.Context, projectID string, set
 		return 0, nil, err
 	}
 	defer tx.Rollback()
+	next, changes, err := s.commitMarshalSettingsTx(ctx, tx, projectID, settings, expected, actor)
+	if err != nil {
+		return 0, nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, nil, err
+	}
+	return next, changes, nil
+}
+
+// MarshalSettingsChanges returns a bounded, newest-first history.
+func (s *Store) MarshalSettingsChanges(ctx context.Context, projectID string) ([]SettingChange, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT data_json FROM audit_events WHERE project_id=? AND event_type='marshal.settings.changed' ORDER BY timestamp DESC, event_id LIMIT 100`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SettingChange{}
+	for rows.Next() {
+		var raw string
+		var c SettingChange
+		if err = rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal([]byte(raw), &c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) commitMarshalSettingsTx(ctx context.Context, tx *sql.Tx, projectID string, settings marshal.Settings, expected int64, actor string) (int64, []SettingChange, error) {
 	old := marshal.DefaultSettings()
 	var raw string
-	err = tx.QueryRowContext(ctx, "SELECT data_json FROM marshal_settings WHERE project_id=?", projectID).Scan(&raw)
+	err := tx.QueryRowContext(ctx, "SELECT data_json FROM marshal_settings WHERE project_id=?", projectID).Scan(&raw)
 	if err == nil {
 		old = marshal.Settings{}
 		if err = json.Unmarshal([]byte(raw), &old); err != nil {
@@ -68,30 +101,5 @@ func (s *Store) CommitMarshalSettings(ctx context.Context, projectID string, set
 			return 0, nil, err
 		}
 	}
-	if err = tx.Commit(); err != nil {
-		return 0, nil, err
-	}
 	return next, changes, nil
-}
-
-// MarshalSettingsChanges returns a bounded, newest-first history.
-func (s *Store) MarshalSettingsChanges(ctx context.Context, projectID string) ([]SettingChange, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT data_json FROM audit_events WHERE project_id=? AND event_type='marshal.settings.changed' ORDER BY timestamp DESC, event_id LIMIT 100`, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []SettingChange{}
-	for rows.Next() {
-		var raw string
-		var c SettingChange
-		if err = rows.Scan(&raw); err != nil {
-			return nil, err
-		}
-		if err = json.Unmarshal([]byte(raw), &c); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
 }
