@@ -80,9 +80,11 @@ type marshalSession struct {
 	running atomic.Bool
 	// Bounded in-memory cache of automatic refusal suppression records,
 	// backed by durable store markers when a store is attached.
-	refusalMu    sync.Mutex
-	refusals     map[string]refusalSuppressionRecord
-	refusalOrder []string
+	refusalMu         sync.Mutex
+	refusals          map[string]refusalSuppressionRecord
+	refusalOrder      []string
+	refusalResetAt    map[refusalResetScope]time.Time
+	refusalResetOrder []refusalResetScope
 	// nextProvider is a Marshal switch chosen while a step was running; it is
 	// applied when the step finishes (onIdle → applyQueuedMarshal).
 	nextProvider string

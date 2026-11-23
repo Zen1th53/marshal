@@ -1431,10 +1431,17 @@ func (w *Workspace) currentRunBinding(ctx context.Context) (string, string) {
 const (
 	automaticRefusalEscalationThreshold = 3
 	maxRefusalSuppressionEntries        = 256
+	maxRefusalReceiptEntries            = 256
 	markerRefusalSuppressionPrefix      = "refusal:suppression:"
 	markerRefusalSuppressionIndex       = "refusal:suppression:index"
 	markerRefusalReceiptPrefix          = "refusal:receipt:"
+	markerRefusalReceiptIndex           = "refusal:receipt:index"
 )
+
+type refusalResetScope struct {
+	RunID  string
+	Target string
+}
 
 type refusalSuppressionKey struct {
 	RunID           string `json:"runId"`
@@ -1513,23 +1520,31 @@ func (w *Workspace) recordAutomaticProposalRefusal(ctx context.Context, runID, t
 	markerID := suppressionMarkerID(key)
 	m := w.marshalSession()
 	m.refusalMu.Lock()
-	rec, found := w.loadRefusalSuppressionLocked(ctx, m, markerID)
+	rec, found, loadErr := w.loadRefusalSuppressionLocked(ctx, m, markerID)
 	if !found {
 		rec = refusalSuppressionRecord{Key: key}
 	}
 	if rec.Escalated && rec.EscalationReceipt != nil {
 		replayed := rec.EscalationReceipt.Clone()
 		m.refusalMu.Unlock()
+		if loadErr != nil {
+			w.RecordActivity("Marshal refusal journal read failed: " + loadErr.Error())
+		}
 		return &marshal.RefusalError{
 			Receipt:  replayed,
 			Cause:    err,
 			Replayed: true,
 		}
 	}
+	now := time.Now().UTC()
+	if resetAt, reset := refusalResetTimeLocked(m, key.RunID, key.Target); reset && !now.After(resetAt) {
+		now = resetAt.Add(time.Nanosecond)
+	}
 	rec.Count++
-	rec.UpdatedAt = time.Now().UTC()
+	rec.UpdatedAt = now
 	var (
 		outErr       error
+		saveErr      error
 		escalatedNow bool
 		escReceipt   marshal.RefusalReceipt
 	)
@@ -1537,7 +1552,7 @@ func (w *Workspace) recordAutomaticProposalRefusal(ctx context.Context, runID, t
 		attemptReceipt := receipt.Clone()
 		attemptReceipt.Attempt = rec.Count
 		attemptReceipt.EscalationID = ""
-		w.saveRefusalSuppressionLocked(ctx, m, markerID, rec, attemptReceipt, "refused")
+		saveErr = w.saveRefusalSuppressionLocked(ctx, m, markerID, rec, attemptReceipt, "refused")
 		outErr = marshal.NewRefusalError(attemptReceipt, err)
 	} else {
 		escID, idErr := model.NewID("esc-")
@@ -1554,11 +1569,17 @@ func (w *Workspace) recordAutomaticProposalRefusal(ctx context.Context, runID, t
 		rec.ChatNotified = true
 		savedReceipt := escReceipt.Clone()
 		rec.EscalationReceipt = &savedReceipt
-		w.saveRefusalSuppressionLocked(ctx, m, markerID, rec, escReceipt, "escalated")
+		saveErr = w.saveRefusalSuppressionLocked(ctx, m, markerID, rec, escReceipt, "escalated")
 		outErr = marshal.NewRefusalError(escReceipt, err)
 		escalatedNow = true
 	}
 	m.refusalMu.Unlock()
+	if loadErr != nil {
+		w.RecordActivity("Marshal refusal journal read failed: " + loadErr.Error())
+	}
+	if saveErr != nil {
+		w.RecordActivity("Marshal refusal journal write failed: " + saveErr.Error())
+	}
 	if escalatedNow {
 		w.tellMarshal(automaticRefusalEscalationChatNotice(key, escReceipt))
 		w.RecordActivity("Escalated repeated Marshal refusal (" + escReceipt.EscalationID + "): " + RedactContent(escReceipt.Summary(), nil))
@@ -1566,25 +1587,82 @@ func (w *Workspace) recordAutomaticProposalRefusal(ctx context.Context, runID, t
 	return outErr
 }
 
-func (w *Workspace) loadRefusalSuppressionLocked(ctx context.Context, m *marshalSession, markerID string) (refusalSuppressionRecord, bool) {
+func recordRefusalResetLocked(m *marshalSession, runID, target string, at time.Time) {
+	if m.refusalResetAt == nil {
+		m.refusalResetAt = map[refusalResetScope]time.Time{}
+	}
+	scope := refusalResetScope{RunID: runID, Target: target}
+	if prev, exists := m.refusalResetAt[scope]; exists {
+		if prev.After(at) {
+			at = prev
+		}
+	} else {
+		m.refusalResetOrder = append(m.refusalResetOrder, scope)
+	}
+	m.refusalResetAt[scope] = at
+	for len(m.refusalResetOrder) > maxRefusalSuppressionEntries {
+		oldest := m.refusalResetOrder[0]
+		m.refusalResetOrder = m.refusalResetOrder[1:]
+		delete(m.refusalResetAt, oldest)
+	}
+}
+
+func refusalResetTimeLocked(m *marshalSession, runID, target string) (time.Time, bool) {
+	if len(m.refusalResetAt) == 0 || runID == "" {
+		return time.Time{}, false
+	}
+	var latest time.Time
+	var found bool
+	if t, ok := m.refusalResetAt[refusalResetScope{RunID: runID, Target: ""}]; ok {
+		latest = t
+		found = true
+	}
+	if target != "" {
+		if t, ok := m.refusalResetAt[refusalResetScope{RunID: runID, Target: target}]; ok {
+			if !found || t.After(latest) {
+				latest = t
+				found = true
+			}
+		}
+		return latest, found
+	}
+	for scope, t := range m.refusalResetAt {
+		if scope.RunID != runID {
+			continue
+		}
+		if !found || t.After(latest) {
+			latest = t
+			found = true
+		}
+	}
+	return latest, found
+}
+
+func (w *Workspace) loadRefusalSuppressionLocked(ctx context.Context, m *marshalSession, markerID string) (refusalSuppressionRecord, bool, error) {
 	if m.refusals != nil {
 		if rec, ok := m.refusals[markerID]; ok {
-			return rec, true
+			return rec, true, nil
 		}
 	}
 	if w.store == nil || w.projectID == "" {
-		return refusalSuppressionRecord{}, false
+		return refusalSuppressionRecord{}, false, nil
 	}
 	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerID)
-	if err != nil || !ok || raw == "" {
-		return refusalSuppressionRecord{}, false
+	if err != nil {
+		return refusalSuppressionRecord{}, false, err
+	}
+	if !ok || raw == "" {
+		return refusalSuppressionRecord{}, false, nil
 	}
 	var rec refusalSuppressionRecord
-	if json.Unmarshal([]byte(raw), &rec) != nil {
-		return refusalSuppressionRecord{}, false
+	if err := json.Unmarshal([]byte(raw), &rec); err != nil {
+		return refusalSuppressionRecord{}, false, err
+	}
+	if resetAt, reset := refusalResetTimeLocked(m, rec.Key.RunID, rec.Key.Target); reset && !rec.UpdatedAt.After(resetAt) {
+		return refusalSuppressionRecord{}, false, nil
 	}
 	w.cacheRefusalSuppressionLocked(m, markerID, rec)
-	return rec, true
+	return rec, true, nil
 }
 
 func (w *Workspace) cacheRefusalSuppressionLocked(m *marshalSession, markerID string, rec refusalSuppressionRecord) {
@@ -1602,14 +1680,14 @@ func (w *Workspace) cacheRefusalSuppressionLocked(m *marshalSession, markerID st
 	}
 }
 
-func (w *Workspace) saveRefusalSuppressionLocked(ctx context.Context, m *marshalSession, markerID string, rec refusalSuppressionRecord, receipt marshal.RefusalReceipt, outcome string) {
+func (w *Workspace) saveRefusalSuppressionLocked(ctx context.Context, m *marshalSession, markerID string, rec refusalSuppressionRecord, receipt marshal.RefusalReceipt, outcome string) error {
 	w.cacheRefusalSuppressionLocked(m, markerID, rec)
 	if w.store == nil || w.projectID == "" {
-		return
+		return nil
 	}
 	encoded, err := json.Marshal(rec)
 	if err != nil {
-		return
+		return err
 	}
 	auditData := map[string]any{
 		"run_id":           marshal.SanitizeRefusalText(rec.Key.RunID),
@@ -1625,60 +1703,106 @@ func (w *Workspace) saveRefusalSuppressionLocked(ctx context.Context, m *marshal
 	if rec.EscalationID != "" {
 		auditData["escalation_id"] = rec.EscalationID
 	}
-	_ = w.store.RecordMarshalRefusalJournal(ctx, w.projectID, markerID, string(encoded), outcome, auditData)
-	w.updateRefusalSuppressionIndexLocked(ctx, markerID, rec.Key.RunID, rec.Key.Target)
+	indexErr := w.updateRefusalSuppressionIndexLocked(ctx, markerID, rec.Key.RunID, rec.Key.Target)
+	journalErr := w.store.RecordMarshalRefusalJournal(ctx, w.projectID, markerID, string(encoded), outcome, auditData)
+	return errors.Join(indexErr, journalErr)
 }
 
-func (w *Workspace) updateRefusalSuppressionIndexLocked(ctx context.Context, markerID, runID, target string) {
+func (w *Workspace) updateRefusalSuppressionIndexLocked(ctx context.Context, markerID, runID, target string) error {
 	if w.store == nil || w.projectID == "" {
-		return
+		return nil
 	}
 	var entries []refusalSuppressionIndexEntry
-	if raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex); err == nil && ok && raw != "" {
-		_ = json.Unmarshal([]byte(raw), &entries)
+	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex)
+	if err != nil {
+		return err
+	}
+	if ok && raw != "" {
+		if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+			return err
+		}
 	}
 	found := false
+	changed := false
 	for i := range entries {
 		if entries[i].MarkerID == markerID {
-			entries[i].RunID = runID
-			entries[i].Target = target
+			if entries[i].RunID != runID || entries[i].Target != target {
+				entries[i].RunID = runID
+				entries[i].Target = target
+				changed = true
+			}
 			found = true
 			break
 		}
 	}
 	if !found {
 		entries = append(entries, refusalSuppressionIndexEntry{MarkerID: markerID, RunID: runID, Target: target})
+		changed = true
 	}
-	for len(entries) > maxRefusalSuppressionEntries {
-		evict := entries[0]
-		entries = entries[1:]
-		_ = w.store.DeleteMarshalProposalMarker(ctx, w.projectID, evict.MarkerID)
+	var errs []error
+	if len(entries) > maxRefusalSuppressionEntries {
+		excess := len(entries) - maxRefusalSuppressionEntries
+		var keptFailed []refusalSuppressionIndexEntry
+		for _, evict := range entries[:excess] {
+			if err := w.store.DeleteMarshalProposalMarker(ctx, w.projectID, evict.MarkerID); err != nil {
+				errs = append(errs, err)
+				keptFailed = append(keptFailed, evict)
+				continue
+			}
+			changed = true
+		}
+		entries = append(keptFailed, entries[excess:]...)
 	}
-	if raw, err := json.Marshal(entries); err == nil {
-		_ = w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex, string(raw), "recorded")
+	if changed {
+		encoded, err := json.Marshal(entries)
+		if err != nil {
+			errs = append(errs, err)
+			return errors.Join(errs...)
+		}
+		if err := w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex, string(encoded), "recorded"); err != nil {
+			errs = append(errs, err)
+		}
 	}
+	return errors.Join(errs...)
 }
 
 // resetAutomaticRefusalSuppression clears automatic suppression counters for
 // (runID, target) when the owner takes an explicit action, starting a fresh
 // evaluation while leaving permanent holds and service policies intact.
-func (w *Workspace) resetAutomaticRefusalSuppression(runID, target string) {
+func (w *Workspace) resetAutomaticRefusalSuppression(runID, target string) error {
 	if runID == "" {
-		return
+		return nil
 	}
 	m := w.marshalSession()
 	m.refusalMu.Lock()
-	defer m.refusalMu.Unlock()
 	matches := func(rID, tgt string) bool {
 		if rID != runID {
 			return false
 		}
 		return target == "" || tgt == "" || tgt == target
 	}
+	resetAt := time.Now().UTC()
+	var (
+		deleteOrder []string
+		deleteSet   = map[string]struct{}{}
+	)
+	addDelete := func(id string) {
+		if id == "" {
+			return
+		}
+		if _, ok := deleteSet[id]; !ok {
+			deleteSet[id] = struct{}{}
+			deleteOrder = append(deleteOrder, id)
+		}
+	}
 	if len(m.refusals) > 0 {
 		kept := m.refusalOrder[:0]
 		for _, id := range m.refusalOrder {
 			if rec, ok := m.refusals[id]; ok && matches(rec.Key.RunID, rec.Key.Target) {
+				if rec.UpdatedAt.After(resetAt) {
+					resetAt = rec.UpdatedAt
+				}
+				addDelete(id)
 				delete(m.refusals, id)
 				continue
 			}
@@ -1686,33 +1810,70 @@ func (w *Workspace) resetAutomaticRefusalSuppression(runID, target string) {
 		}
 		m.refusalOrder = kept
 	}
-	if w.store == nil || w.projectID == "" {
-		return
+	recordRefusalResetLocked(m, runID, target, resetAt)
+
+	var resetErr error
+	if w.store != nil && w.projectID != "" {
+		resetErr = w.deleteRefusalSuppressionMarkersLocked(context.Background(), matches, deleteOrder, deleteSet)
 	}
-	ctx := context.Background()
-	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex)
-	if err != nil || !ok || raw == "" {
-		return
+	m.refusalMu.Unlock()
+	if resetErr != nil {
+		w.RecordActivity("Marshal refusal reset persistence failed: " + resetErr.Error())
 	}
+	return resetErr
+}
+
+func (w *Workspace) deleteRefusalSuppressionMarkersLocked(ctx context.Context, matches func(runID, target string) bool, deleteOrder []string, deleteSet map[string]struct{}) error {
+	var errs []error
 	var entries []refusalSuppressionIndexEntry
-	if json.Unmarshal([]byte(raw), &entries) != nil {
-		return
-	}
-	kept := entries[:0]
-	changed := false
-	for _, entry := range entries {
-		if matches(entry.RunID, entry.Target) {
-			_ = w.store.DeleteMarshalProposalMarker(ctx, w.projectID, entry.MarkerID)
-			changed = true
-			continue
+	indexLoaded := false
+	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex)
+	if err != nil {
+		errs = append(errs, err)
+	} else if ok && raw != "" {
+		if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+			errs = append(errs, err)
+		} else {
+			indexLoaded = true
+			for _, entry := range entries {
+				if matches(entry.RunID, entry.Target) {
+					if _, exists := deleteSet[entry.MarkerID]; !exists {
+						deleteSet[entry.MarkerID] = struct{}{}
+						deleteOrder = append(deleteOrder, entry.MarkerID)
+					}
+				}
+			}
 		}
-		kept = append(kept, entry)
 	}
-	if changed {
-		if updated, err := json.Marshal(kept); err == nil {
-			_ = w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex, string(updated), "recorded")
+	failedDeletes := map[string]struct{}{}
+	for _, id := range deleteOrder {
+		if err := w.store.DeleteMarshalProposalMarker(ctx, w.projectID, id); err != nil {
+			errs = append(errs, err)
+			failedDeletes[id] = struct{}{}
 		}
 	}
+	if indexLoaded {
+		kept := entries[:0]
+		changed := false
+		for _, entry := range entries {
+			if matches(entry.RunID, entry.Target) {
+				if _, failed := failedDeletes[entry.MarkerID]; !failed {
+					changed = true
+					continue
+				}
+			}
+			kept = append(kept, entry)
+		}
+		if changed {
+			updated, err := json.Marshal(kept)
+			if err != nil {
+				errs = append(errs, err)
+			} else if err := w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex, string(updated), "recorded"); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (w *Workspace) saveProposalRefusalReceipt(ctx context.Context, occurrenceID string, err error) {
@@ -1729,7 +1890,58 @@ func (w *Workspace) saveProposalRefusalReceipt(ctx context.Context, occurrenceID
 	if encErr != nil {
 		return
 	}
-	_ = w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalReceiptPrefix+occurrenceID, string(raw), "refused")
+	markerID := markerRefusalReceiptPrefix + occurrenceID
+	m := w.marshalSession()
+	m.refusalMu.Lock()
+	saveErr := w.saveProposalRefusalReceiptLocked(ctx, markerID, string(raw))
+	m.refusalMu.Unlock()
+	if saveErr != nil {
+		w.RecordActivity("Marshal refusal receipt persistence failed: " + saveErr.Error())
+	}
+}
+
+func (w *Workspace) saveProposalRefusalReceiptLocked(ctx context.Context, markerID, raw string) error {
+	var entries []string
+	idxRaw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalReceiptIndex)
+	if err != nil {
+		return err
+	}
+	if ok && idxRaw != "" {
+		if err := json.Unmarshal([]byte(idxRaw), &entries); err != nil {
+			entries = nil
+		}
+	}
+	if err := w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerID, raw, "refused"); err != nil {
+		return err
+	}
+	filtered := entries[:0]
+	for _, id := range entries {
+		if id != markerID {
+			filtered = append(filtered, id)
+		}
+	}
+	entries = append(filtered, markerID)
+	var errs []error
+	if len(entries) > maxRefusalReceiptEntries {
+		excess := len(entries) - maxRefusalReceiptEntries
+		var keptFailed []string
+		for _, evict := range entries[:excess] {
+			if err := w.store.DeleteMarshalProposalMarker(ctx, w.projectID, evict); err != nil {
+				errs = append(errs, err)
+				keptFailed = append(keptFailed, evict)
+			}
+		}
+		entries = append(keptFailed, entries[excess:]...)
+	}
+	encoded, err := json.Marshal(entries)
+	if err != nil {
+		errs = append(errs, err)
+		return errors.Join(errs...)
+	}
+	if err := w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalReceiptIndex, string(encoded), "recorded"); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 func (w *Workspace) loadProposalRefusalReceipt(ctx context.Context, occurrenceID string) (marshal.RefusalReceipt, bool) {

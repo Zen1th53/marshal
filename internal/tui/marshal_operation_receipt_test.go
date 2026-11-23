@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -759,5 +760,150 @@ func TestAutomaticRetryStopsAcrossRestart(t *testing.T) {
 	rFresh, ok := marshal.RefusalOf(errFresh)
 	if !ok || rFresh.Code != marshal.RefusalCodeBusy || rFresh.Attempt != 1 || rFresh.EscalationID != "" {
 		t.Fatalf("post-owner-action fresh evaluation receipt = %+v (ok=%v, err=%v)", rFresh, ok, errFresh)
+	}
+}
+
+func TestProposalRefusalReceiptBounded(t *testing.T) {
+	w, _ := receiptTestWorkspace(t, "SESSION-receipt-bounded")
+	ctx := t.Context()
+	total := maxRefusalReceiptEntries + 5
+	for i := 1; i <= total; i++ {
+		occ := fmt.Sprintf("occ-%04d", i)
+		refErr := marshal.NewRefusalError(marshal.RefusalReceipt{
+			Code:    marshal.RefusalCodeParseInvalid,
+			Effects: marshal.EffectsNone,
+			Message: fmt.Sprintf("invalid proposal %d", i),
+		}, errors.New("invalid proposal"))
+		w.saveProposalRefusalReceipt(ctx, occ, refErr)
+	}
+	for i := 1; i <= 5; i++ {
+		occ := fmt.Sprintf("occ-%04d", i)
+		if _, ok := w.loadProposalRefusalReceipt(ctx, occ); ok {
+			t.Fatalf("expected oldest receipt %s to be evicted", occ)
+		}
+	}
+	for i := 6; i <= total; i++ {
+		occ := fmt.Sprintf("occ-%04d", i)
+		r, ok := w.loadProposalRefusalReceipt(ctx, occ)
+		if !ok || r.Code != marshal.RefusalCodeParseInvalid {
+			t.Fatalf("expected retained receipt %s, got ok=%v receipt=%+v", occ, ok, r)
+		}
+	}
+}
+
+func TestOwnerRefusalResetSurvivesReload(t *testing.T) {
+	w, rt := receiptTestWorkspace(t, "SESSION-reset-reload")
+	ctx := t.Context()
+	runID := "RUN-reset-reload"
+	seedMarshalRunForReceiptTest(t, w, runID, marshal.Run{
+		State: marshal.AwaitingUser,
+		Tasks: []marshal.Task{
+			{PlanTaskID: "T-1", Title: "Retryable task", Worker: "codex", State: marshal.Escalated, EscalationReason: "rework limit reached"},
+			{PlanTaskID: "T-2", Title: "Review task", Worker: "claude", State: marshal.HandedIn},
+		},
+	})
+	w.draftTell = func(string) {}
+
+	m := w.marshalSession()
+	_, holderID, cancel, err := m.reserveWithHolder(ctx, marshal.OperationHolder{
+		RunID:  runID,
+		TaskID: "T-2",
+		Kind:   "review",
+		Title:  "Reviewing T-2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.finishHolder(holderID, cancel, false)
+
+	runAutoRetry := func(idx int) error {
+		req := queueAutomaticProposalRequest(t, w, marshalProposal{
+			action:       "retry",
+			taskID:       "T-1",
+			freshSession: true,
+			occurrence:   fmt.Sprintf("runtime:reset-reload-%d", idx),
+		})
+		return w.decidePermission(ctx, req, true, "marshal")
+	}
+
+	// 1. Escalate after 3 equivalent automatic refusals.
+	for i := 1; i <= 3; i++ {
+		_ = runAutoRetry(i)
+	}
+	rReplay, ok := marshal.RefusalOf(runAutoRetry(4))
+	if !ok || rReplay.Code != marshal.RefusalCodeRepeatedFailure || rReplay.EscalationID == "" {
+		t.Fatalf("expected escalated refusal before reset, got %+v (ok=%v)", rReplay, ok)
+	}
+
+	// 2. Simulate an earlier index write failure: remove the suppression index
+	// while the escalated marker remains stored, then perform an owner reset.
+	if err := w.store.DeleteMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex); err != nil {
+		t.Fatalf("delete suppression index: %v", err)
+	}
+	if err := w.resetAutomaticRefusalSuppression(runID, "T-1"); err != nil {
+		t.Fatalf("resetAutomaticRefusalSuppression: %v", err)
+	}
+
+	// Simulate a fresh reload from store (empty in-memory cache and reset map).
+	m.refusalMu.Lock()
+	m.refusals = nil
+	m.refusalOrder = nil
+	m.refusalResetAt = nil
+	m.refusalResetOrder = nil
+	m.refusalMu.Unlock()
+
+	errAfterReload := runAutoRetry(5)
+	rAfterReload, ok := marshal.RefusalOf(errAfterReload)
+	if !ok || rAfterReload.Code != marshal.RefusalCodeBusy || rAfterReload.Attempt != 1 || rAfterReload.EscalationID != "" {
+		t.Fatalf("owner reset lost after reload: got %+v (ok=%v, err=%v)", rAfterReload, ok, errAfterReload)
+	}
+
+	// 3. Re-escalate, then force DeleteMarshalProposalMarker to fail via a
+	// SQLite trigger so the stored marker survives the reset attempt.
+	for i := 6; i <= 7; i++ {
+		_ = runAutoRetry(i)
+	}
+	rEsc2, ok := marshal.RefusalOf(runAutoRetry(8))
+	if !ok || rEsc2.Code != marshal.RefusalCodeRepeatedFailure || rEsc2.EscalationID == "" {
+		t.Fatalf("expected re-escalation before failing delete, got %+v (ok=%v)", rEsc2, ok)
+	}
+
+	rawDB, err := sql.Open("sqlite", statepath.Path(rt.ProjectRoot(), "state.db"))
+	if err != nil {
+		t.Fatalf("open sqlite db: %v", err)
+	}
+	defer rawDB.Close()
+	if _, err := rawDB.ExecContext(ctx, `CREATE TRIGGER block_refusal_delete BEFORE DELETE ON marshal_proposals BEGIN SELECT RAISE(ABORT, 'delete failed'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	resetErr := w.resetAutomaticRefusalSuppression(runID, "T-1")
+	if _, err := rawDB.ExecContext(ctx, `DROP TRIGGER block_refusal_delete`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+	if resetErr == nil {
+		t.Fatal("expected resetAutomaticRefusalSuppression to report store delete error")
+	}
+	if !webNoteHas(w, "Marshal refusal reset persistence failed") {
+		t.Fatalf("Activity missing reset persistence failure note: %+v", w.noteList())
+	}
+
+	// Even though the old escalated marker remained in the store, the in-memory
+	// reset stays authoritative so loadRefusalSuppressionLocked does not reload it.
+	errAfterFailedDelete := runAutoRetry(9)
+	rAfterFailedDelete, ok := marshal.RefusalOf(errAfterFailedDelete)
+	if !ok || rAfterFailedDelete.Code != marshal.RefusalCodeBusy || rAfterFailedDelete.Attempt != 1 || rAfterFailedDelete.EscalationID != "" {
+		t.Fatalf("in-memory reset not authoritative after delete failure: got %+v (ok=%v, err=%v)", rAfterFailedDelete, ok, errAfterFailedDelete)
+	}
+
+	// 4. Verify store write errors during refusal suppression persistence are logged.
+	if _, err := rawDB.ExecContext(ctx, `CREATE TRIGGER block_refusal_write BEFORE INSERT ON marshal_proposals BEGIN SELECT RAISE(ABORT, 'write failed'); END`); err != nil {
+		t.Fatalf("create write trigger: %v", err)
+	}
+	_ = runAutoRetry(10)
+	if _, err := rawDB.ExecContext(ctx, `DROP TRIGGER block_refusal_write`); err != nil {
+		t.Fatalf("drop write trigger: %v", err)
+	}
+	if !webNoteHas(w, "Marshal refusal journal write failed") {
+		t.Fatalf("Activity missing journal write failure note: %+v", w.noteList())
 	}
 }

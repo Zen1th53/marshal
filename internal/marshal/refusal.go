@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // OperationHolder names the operation holding the session lock or the
@@ -69,7 +70,11 @@ func SanitizeRefusalText(s string) string {
 	}, s)
 	cleaned = strings.Join(strings.Fields(cleaned), " ")
 	if len(cleaned) > maxRefusalTextBytes {
-		cleaned = strings.TrimSpace(cleaned[:maxRefusalTextBytes])
+		cut := maxRefusalTextBytes
+		for cut > 0 && !utf8.RuneStart(cleaned[cut]) {
+			cut--
+		}
+		cleaned = strings.TrimSpace(cleaned[:cut])
 	}
 	return cleaned
 }
