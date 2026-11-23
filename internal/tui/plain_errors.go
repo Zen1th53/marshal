@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
@@ -79,6 +80,9 @@ func plainCommandError(line string, err error) string {
 	var start *marshalStartError
 	if errors.As(err, &start) {
 		return start.Error()
+	}
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		return RedactContent(receipt.Summary(), nil)
 	}
 	switch {
 	case errors.Is(err, model.ErrNotFound), errors.Is(err, model.ErrGoalNotFound):

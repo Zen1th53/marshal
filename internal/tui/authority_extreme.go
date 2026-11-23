@@ -15,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -464,7 +465,7 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 		// Loading earlier work is the runtime's own reading of the
 		// provider's history, not a Marshal decision the person made.
 		w.RecordActivity(earlierWorkFailedLine(req.ContinuationProvider, err))
-	} else if text != "" && !verifyNoted {
+	} else if text != "" && !verifyNoted && !marshal.IsReplayedEscalation(err) {
 		w.RecordActivity(text)
 	}
 

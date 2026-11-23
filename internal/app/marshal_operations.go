@@ -10,9 +10,14 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+// ErrUnfinishedLifecycleOperation reports that a journaled lifecycle
+// operation is still active or interrupted and must be reconciled before
+// starting another lifecycle change.
+var ErrUnfinishedLifecycleOperation = errors.New("unfinished lifecycle operation")
+
 func (s *MarshalService) beginOperation(ctx context.Context, runID string, run marshal.Run, rev int64, op *marshal.LifecycleOperation) (int64, error) {
 	if run.Operation != nil {
-		return rev, errors.New("unfinished lifecycle operation; /marshal resume to reconcile it")
+		return rev, unfinishedOperationRefusal(runID, run.Operation)
 	}
 	if _, reserved := op.Event.Data["event_artifact"]; reserved {
 		return rev, fmt.Errorf("%w: reserved event_artifact key in inline intent", errMarshalEventArtifact)
@@ -138,12 +143,12 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			completed = ancestorErr == nil
 		}
 		if !completed && head != op.Before {
-			return run, rev, fmt.Errorf("unfinished merge %s: integration moved; inspect retained worktree %s", op.ID, op.Dir)
+			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished merge %s: integration moved; inspect retained worktree %s", op.ID, op.Dir), []string{"/marshal status", "/marshal amend"})
 		}
 	case "close":
 		repository, err := s.repositoryIdentity(ctx)
 		if err != nil || repository != run.Repository {
-			return run, rev, errors.New("unfinished close: approved repository changed; inspect retained operation")
+			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsUnknown, "unfinished close: approved repository changed; inspect retained operation", []string{"/marshal status"})
 		}
 		head, err := gitMarshal(ctx, s.Repository, "rev-parse", op.Target)
 		if err != nil {
@@ -151,7 +156,7 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		}
 		completed = op.Authorized && head == op.After
 		if !completed && head != op.Before {
-			return run, rev, fmt.Errorf("unfinished close %s: target moved; inspect %s", op.ID, op.Target)
+			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished close %s: target moved; inspect %s", op.ID, op.Target), []string{"/marshal status"})
 		}
 	default:
 		return run, rev, fmt.Errorf("unknown lifecycle operation %s", op.Kind)
@@ -276,9 +281,52 @@ func (s *MarshalService) cleanupClosedRuns(ctx context.Context) {
 
 func unfinishedMarshalOperation(run marshal.Run) error {
 	if run.Operation != nil {
-		return errors.New("unfinished lifecycle operation; /marshal resume to reconcile it")
+		return unfinishedOperationRefusal(run.Operation.Event.RunID, run.Operation)
 	}
 	return nil
+}
+
+func unfinishedOperationRefusal(runID string, op *marshal.LifecycleOperation) error {
+	effects := marshal.EffectsUnknown
+	if op != nil && op.HandIn != nil {
+		effects = marshal.EffectsPartial
+	}
+	return interruptedOperationRefusal(runID, op, effects, "unfinished lifecycle operation; /marshal resume to reconcile it", []string{"/marshal resume"})
+}
+
+func interruptedOperationRefusal(runID string, op *marshal.LifecycleOperation, effects marshal.RefusalEffects, message string, next []string) error {
+	if effects == marshal.EffectsNone || effects == "" {
+		effects = marshal.EffectsUnknown
+	}
+	var holder *marshal.OperationHolder
+	if op != nil {
+		opRunID := runID
+		if opRunID == "" {
+			opRunID = op.Event.RunID
+		}
+		title := "Unfinished " + op.Kind + " operation"
+		if op.Kind == "" {
+			title = "Unfinished lifecycle operation"
+		}
+		if op.TaskID != "" {
+			title += " for task " + op.TaskID
+		}
+		holder = &marshal.OperationHolder{
+			ID:        op.ID,
+			RunID:     opRunID,
+			TaskID:    op.TaskID,
+			Kind:      op.Kind,
+			Title:     title,
+			StartedAt: op.Event.At,
+		}
+	}
+	return marshal.NewRefusalError(marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeInterruptedOp,
+		Blocker:      holder,
+		Effects:      effects,
+		NextCommands: next,
+		Message:      message,
+	}, ErrUnfinishedLifecycleOperation)
 }
 
 func copyMarshalEventData(data map[string]any) map[string]any {

@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"slices"
+
+	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
 // The stop's action while a step still runs. A run can wait for the owner
@@ -25,17 +27,29 @@ func (w *Workspace) queueStopWhileBusy(stop runStop, commands []string) bool {
 		m.mu.Unlock()
 		return false
 	}
+	holder := m.currentBlockerLocked()
 	m.nextStop = append([]string(nil), commands...)
 	m.mu.Unlock()
-	w.setOutput(stopQueuedAnswer(stop, commands), false)
+	receipt := marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeBusy,
+		Blocker:      holder,
+		Effects:      marshal.EffectsNone,
+		NextCommands: []string{"/marshal status", "/marshal stop"},
+		Message:      errMarshalBusy.Error(),
+	}
+	w.setOutputWithRefusal(stopQueuedAnswer(stop, commands, holder), false, receipt)
 	return true
 }
 
 // stopQueuedAnswer is the one line a press shows while a step runs. It is the
 // same line however often Enter is pressed.
-func stopQueuedAnswer(stop runStop, commands []string) string {
+func stopQueuedAnswer(stop runStop, commands []string, holder *marshal.OperationHolder) string {
 	stop.commands = commands
-	return "The Marshal is finishing a step. When it ends, it will " + willText(stop) + " Nothing was stopped."
+	lead := "a step"
+	if holder != nil && holder.ID != "" && holder.ID != "active" && holder.Title != "" && holder.Title != "Marshal operation" {
+		lead = holder.Label()
+	}
+	return "The Marshal is finishing " + lead + ". When it ends, it will " + willText(stop) + " Nothing was stopped."
 }
 
 // queuedStopDrain is drainQueuedStop for marshalSession's onIdle, set in
