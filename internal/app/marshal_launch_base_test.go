@@ -483,6 +483,160 @@ func TestFirstDispatchAcceptsProvenDisjointAdvance(t *testing.T) {
 	}
 }
 
+func TestLaunchBaseRetainsRelaunchBaseAfterDisjointAdvance(t *testing.T) {
+	ctx := t.Context()
+	s, repo := marshalUserCloseFixture(t, 1)
+	if _, err := s.StartPlanning(ctx, "run", "write a", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.Approve(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := run.Tasks[0]
+	saved, err := s.AdmitLaunchBase(ctx, "run", run, task, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch := integrationBranch("run", run)
+	marshalGit(t, repo, "branch", branch, run.BaseCommit)
+	commitFileOnBranch(t, repo, branch, "other.txt", "disjoint\n", "advance integration")
+	for _, state := range []marshal.TaskState{marshal.Queued, marshal.Dispatched, marshal.Returned} {
+		task.State = state
+		pin, err := s.AdmitLaunchBase(ctx, "run", run, task, &saved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pin.AdmittedBaseCommit != saved.AdmittedBaseCommit {
+			t.Fatalf("%s relaunch base changed: %s != %s", state, pin.AdmittedBaseCommit, saved.AdmittedBaseCommit)
+		}
+	}
+}
+
+func TestFirstDispatchRefreshesBaseAfterOverlappingMergedTask(t *testing.T) {
+	ctx := t.Context()
+	s, repo := marshalUserCloseFixture(t, 2)
+	fake := s.Model.(marshalFakeModel)
+	for i := range fake.draft.Tasks {
+		fake.draft.Tasks[i].Files = []string{"a.txt", "b.txt"}
+		fake.draft.Tasks[i].DependsOn = nil
+		fake.draft.Plan.Tasks[i].Paths = []string{"a.txt", "b.txt"}
+		fake.draft.Plan.Tasks[i].DependsOn = nil
+	}
+	fake.draft.Plan.Graph, _ = plan.BuildGraph(fake.draft.Plan.Tasks)
+	s.Model = fake
+	var briefBase, workerBase, workerHead string
+	s.Drivers["worker"] = driver.Governed{Provider: "test", Run: func(ctx context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		if req.Task.PlanTaskID == "b" {
+			workerBase = req.Task.BaseCommit
+			var err error
+			workerHead, err = gitMarshal(ctx, req.Worktree, "rev-parse", "HEAD")
+			if err != nil {
+				return nil, err
+			}
+			if _, err := os.Stat(filepath.Join(req.Worktree, "a.txt")); err != nil {
+				return nil, err
+			}
+		}
+		return nil, os.WriteFile(filepath.Join(req.Worktree, req.Task.PlanTaskID+".txt"), []byte("done\n"), 0o600)
+	}}
+	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := s.Approve(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldPin, err := s.AdmitLaunchBase(ctx, "run", before, before.Tasks[1], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dA, err := s.Dispatch(ctx, "run", "a", "write a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CollectHandIn(ctx, "run", dA); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || v != marshal.VerdictAccept {
+		t.Fatalf("review a: %s %v", v, err)
+	}
+	if err := s.Merge(ctx, "run", "a"); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, _, err := s.observeIntegrationHead(ctx, "run", run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, retained := range []string{"intent", "result", "attempt", "started", "dirty worktree", "moved worktree", "mismatched result", "foreign advance"} {
+		t.Run(retained, func(t *testing.T) {
+			checkRun := run
+			checkRun.Tasks = append([]marshal.Task(nil), run.Tasks...)
+			task := checkRun.Tasks[1]
+			var expected *marshal.LaunchBasePin
+			switch retained {
+			case "intent":
+				expected = &oldPin
+			case "result":
+				task.ResultCommit = approved.BaseCommit
+			case "attempt":
+				task.EvidenceAttemptBase = 1
+			case "started":
+				task.State = marshal.Dispatched
+			case "dirty worktree", "moved worktree":
+				dir := filepath.Join(s.Worktrees, taskArtifactID("run", task))
+				marshalGit(t, repo, "worktree", "add", "--detach", dir, approved.BaseCommit)
+				defer marshalGit(t, repo, "worktree", "remove", "--force", dir)
+				if retained == "dirty worktree" {
+					if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("retained\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					commitInWorktree(t, dir, "b.txt", "retained\n", "retain task output")
+				}
+			case "mismatched result":
+				checkRun.Tasks[0].ResultCommit = approved.BaseCommit
+			case "foreign advance":
+				checkRun.Tasks[0].PlanTaskID = "other"
+			}
+			_, err := s.AdmitLaunchBase(ctx, "run", checkRun, task, expected)
+			assertStaleBaseRefusal(t, err, marshal.EffectsNone)
+		})
+	}
+	pin, err := s.AdmitLaunchBase(ctx, "run", run, run.Tasks[1], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pin.AdmittedBaseCommit != head || pin.ApprovedBaseCommit != approved.BaseCommit || pin.DeliveryCommit != approved.BaseCommit {
+		t.Fatalf("unexpected refreshed pin: %+v", pin)
+	}
+	dB, err := s.dispatchWithBrief(ctx, "run", "b", "", func(task marshal.Task, _ BriefContext) string {
+		briefBase = task.BaseCommit
+		return "write b"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hB, err := s.CollectHandIn(ctx, "run", dB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if briefBase != head || workerBase != head || workerHead != head || hB.BaseCommit != head {
+		t.Fatalf("refreshed bases differ: brief=%s worker=%s head=%s hand-in=%s want=%s", briefBase, workerBase, workerHead, hB.BaseCommit, head)
+	}
+	if got := marshalGit(t, repo, "rev-parse", "refs/heads/main"); got != approved.BaseCommit {
+		t.Fatalf("delivery base moved: %s", got)
+	}
+}
+
 func TestRecoveredLaunchRejectsChangedDependencyOrBase(t *testing.T) {
 	t.Run("saved pre-start intent refuses advanced delivery target with disjoint commit", func(t *testing.T) {
 		ctx := t.Context()

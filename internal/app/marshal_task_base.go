@@ -216,6 +216,46 @@ func (s *MarshalService) resolveDispatchTaskBase(ctx context.Context, runID stri
 	return task, nil
 }
 
+// unusedLaunchBase permits a refresh only before any attempt or retained output.
+func (s *MarshalService) unusedLaunchBase(ctx context.Context, runID string, run marshal.Run, task marshal.Task, expected *marshal.LaunchBasePin) bool {
+	if expected != nil || task.State != marshal.Queued || task.ResultCommit != "" || task.FailedAttemptCommit != "" || taskReturns(task) != 0 || task.EvidenceAttemptBase != 0 || task.FreshSessionRetries != 0 || task.QuarantinedRef != "" || task.StaleProcessExitUnverified || s.dispatchLive(runID, task.PlanTaskID) {
+		return false
+	}
+	if run.Operation != nil && run.Operation.Kind == "launch" && run.Operation.TaskID == task.PlanTaskID {
+		return false
+	}
+	history, err := s.Store.MarshalDecisions(ctx, runID)
+	if err != nil {
+		return false
+	}
+	for _, event := range history {
+		if event.TaskID == task.PlanTaskID && event.Type == events.EventTypeMarshalTaskDispatched {
+			return false
+		}
+	}
+	dir := filepath.Join(s.Worktrees, taskArtifactID(runID, task))
+	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
+		if err != nil {
+			return false
+		}
+		head, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
+		if err != nil || (head != task.BaseCommit && head != run.BaseCommit) {
+			return false
+		}
+		status, err := gitMarshalStdout(ctx, dir, "status", "--porcelain=v1", "--untracked-files=all")
+		if err != nil || strings.TrimSpace(status) != "" {
+			return false
+		}
+	}
+	if task.Branch != "" {
+		head, err := gitMarshal(ctx, s.Repository, "rev-parse", "--verify", "refs/heads/"+task.Branch+"^{commit}")
+		if err == nil && head != task.BaseCommit && head != run.BaseCommit {
+			return false
+		}
+	}
+	return true
+}
+
 // AdmitLaunchBase validates the approved delivery ref, repository, plan/scope,
 // authority, governing inputs, required context, merged dependencies, and
 // private integration head before worktree preparation or launch. Both direct
@@ -401,7 +441,8 @@ func (s *MarshalService) admitLaunchBase(ctx context.Context, runID string, run 
 
 	if hasIntegration && integrationHead != "" && integrationHead != binding.BaseCommit {
 		mergeConflictResume := !fresh && task.BaseCommit == integrationHead
-		hasNonDepAdvance, err := s.verifyPrivateIntegrationAdvance(ctx, binding.BaseCommit, integrationHead, task, depTasks, mergedDepHeads, mergeConflictResume)
+		canRefresh := s.unusedLaunchBase(ctx, runID, run, task, expected)
+		hasNonDepAdvance, err := s.verifyPrivateIntegrationAdvance(ctx, binding.BaseCommit, integrationHead, run, task, depTasks, mergedDepHeads, mergeConflictResume, canRefresh)
 		if err != nil {
 			return marshal.LaunchBasePin{}, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
 				TaskID:          task.PlanTaskID,
@@ -418,7 +459,8 @@ func (s *MarshalService) admitLaunchBase(ctx context.Context, runID string, run 
 		}
 		disjointAdmitted = hasNonDepAdvance
 		if fresh {
-			if reworkInTaskLane(run, task) && taskReturns(task) > 0 && !providerFailoverPending(task) && task.BaseCommit != "" && task.BaseCommit != integrationHead {
+			// Relaunches keep the base bound to their retained worktree or lane.
+			if !canRefresh && task.BaseCommit != "" && task.BaseCommit != integrationHead {
 				if _, ancErr := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", task.BaseCommit, integrationHead); ancErr != nil {
 					return marshal.LaunchBasePin{}, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
 						TaskID:          task.PlanTaskID,
@@ -429,7 +471,7 @@ func (s *MarshalService) admitLaunchBase(ctx context.Context, runID string, run 
 						IntegrationRef:  integrationRef,
 						IntegrationHead: integrationHead,
 						Route:           "replan or refresh task base",
-						Reason:          "stale_base: task lane base is not an ancestor of private integration head",
+						Reason:          "stale_base: retained task base is not an ancestor of private integration head",
 						NextCommands:    []string{"/marshal amend", "/marshal use-plan"},
 					})
 				}
@@ -620,7 +662,7 @@ func verifyExpectedLaunchPin(expected *marshal.LaunchBasePin, binding approvedDe
 	return nil
 }
 
-func (s *MarshalService) verifyPrivateIntegrationAdvance(ctx context.Context, baseCommit, integrationHead string, task marshal.Task, depTasks []marshal.Task, mergedDepHeads map[string]string, mergeConflictResume bool) (bool, error) {
+func (s *MarshalService) verifyPrivateIntegrationAdvance(ctx context.Context, baseCommit, integrationHead string, run marshal.Run, task marshal.Task, depTasks []marshal.Task, mergedDepHeads map[string]string, mergeConflictResume, allowRefresh bool) (bool, error) {
 	if _, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", baseCommit, integrationHead); err != nil {
 		return false, fmt.Errorf("private integration head %s is not a descendant of approved base %s", integrationHead, baseCommit)
 	}
@@ -631,6 +673,25 @@ func (s *MarshalService) verifyPrivateIntegrationAdvance(ctx context.Context, ba
 	if strings.TrimSpace(logOut) == "" {
 		return false, errors.New("private integration advance proof is empty")
 	}
+	// Overlapping work may be incorporated only when the entire advance is
+	// accounted for by recorded merges from this run. Disjoint advances retain
+	// their existing changed-file proof below.
+	provenRunAdvance := true
+	for _, line := range strings.Split(strings.TrimSpace(logOut), "\n") {
+		fields := strings.SplitN(line, "\x00", 3)
+		if len(fields) != 3 || !strings.HasPrefix(fields[2], "marshal: merge ") {
+			provenRunAdvance = false
+			break
+		}
+		id := strings.TrimPrefix(fields[2], "marshal: merge ")
+		i := taskIndex(run, id)
+		parents := strings.Fields(fields[1])
+		if i < 0 || id == task.PlanTaskID || run.Tasks[i].State != marshal.Merged || len(parents) != 2 || parents[1] != run.Tasks[i].ResultCommit {
+			provenRunAdvance = false
+			break
+		}
+	}
+	incorporatedAdvance := provenRunAdvance && (allowRefresh || task.BaseCommit == integrationHead)
 	depByID := make(map[string]marshal.Task, len(depTasks))
 	depResultIDs := make(map[string]string, len(mergedDepHeads))
 	for _, d := range depTasks {
@@ -684,11 +745,11 @@ func (s *MarshalService) verifyPrivateIntegrationAdvance(ctx context.Context, ba
 		if mergeConflictResume {
 			continue
 		}
-		if hasBroadFileScope(task.Files) {
+		if !incorporatedAdvance && hasBroadFileScope(task.Files) {
 			return false, fmt.Errorf("cannot prove private integration advance %s is disjoint from broad task file scope", sha)
 		}
 		for _, dep := range depTasks {
-			if hasBroadFileScope(dep.Files) {
+			if !incorporatedAdvance && hasBroadFileScope(dep.Files) {
 				return false, fmt.Errorf("cannot prove private integration advance %s is disjoint from broad dependency %s scope", sha, dep.PlanTaskID)
 			}
 		}
@@ -716,6 +777,9 @@ func (s *MarshalService) verifyPrivateIntegrationAdvance(ctx context.Context, ba
 			}
 			if governingFile(f) || marshal.ReservedPath(f) {
 				return false, fmt.Errorf("private integration commit %s modifies governing or reserved path %s", sha, f)
+			}
+			if incorporatedAdvance {
+				continue
 			}
 			for _, tf := range task.Files {
 				if pathsOverlap(f, tf) {
