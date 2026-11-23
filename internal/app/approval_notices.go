@@ -443,6 +443,11 @@ func (r *Runtime) DeliverPendingNotices(ctx context.Context, consumer, runID str
 			}
 		}
 	}
+	if svc := r.Marshal(); svc != nil {
+		if err := svc.reconcileRunNotices(ctx, runID); err != nil {
+			return 0, err
+		}
+	}
 	pending, err := r.store.PendingNotices(ctx, r.ProjectIdentity(), runID, 200)
 	if err != nil {
 		return 0, err

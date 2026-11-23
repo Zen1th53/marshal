@@ -482,7 +482,7 @@ func (s *MarshalService) saveFailoverDecision(ctx context.Context, runID string,
 	if err != nil {
 		return err
 	}
-	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, rev, &event, nil, 0)
+	return s.saveMarshalState(ctx, runID, run, rev, &event, nil, 0)
 }
 
 // admitProviderDispatch prevents queued and returned tasks from launching a

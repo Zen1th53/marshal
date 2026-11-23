@@ -61,7 +61,7 @@ func (s *MarshalService) completeOperation(ctx context.Context, runID string, re
 	}
 	next := *op.Next
 	next.Operation = nil
-	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, next, rev, &op.Event, op.HandIn, op.Attempt)
+	return s.saveMarshalState(ctx, runID, next, rev, &op.Event, op.HandIn, op.Attempt)
 }
 func (s *MarshalService) afterOperationEffect(op *marshal.LifecycleOperation) error {
 	if s.AfterLifecycleEffect != nil {
@@ -223,7 +223,7 @@ func (s *MarshalService) abandonOperationBecause(ctx context.Context, runID stri
 	if err := s.boundMarshalEvent(&event); err != nil {
 		return fmt.Errorf("bound escalated lifecycle event for abandonment: %w", err)
 	}
-	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, stored.Revision, &event, nil, 0); err != nil {
+	if err := s.saveMarshalState(ctx, runID, run, stored.Revision, &event, nil, 0); err != nil {
 		return fmt.Errorf("save lifecycle abandonment: %w", err)
 	}
 	return nil

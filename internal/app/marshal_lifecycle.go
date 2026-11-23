@@ -2031,7 +2031,18 @@ func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, 
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, data)
 }
 
+// Resume takes a paused or interrupted run on again. A resume that does not
+// go through keeps the run's pause and records a run notice naming why, so
+// the Marshal hears of it even when its chat is closed.
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
+	run, err := s.resume(ctx, runID)
+	if err != nil {
+		s.noteResumeFailure(ctx, runID, err)
+	}
+	return run, err
+}
+
+func (s *MarshalService) resume(ctx context.Context, runID string) (marshal.Run, error) {
 	if id := s.ActiveExecution(runID); id != "" {
 		run, err := s.Snapshot(ctx, runID)
 		if err == nil {

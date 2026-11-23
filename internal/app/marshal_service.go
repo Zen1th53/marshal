@@ -191,8 +191,20 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 			}
 		}
 	}
-	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
+	return s.saveMarshalState(ctx, runID, run, revision, nil, nil, 0)
+}
 
+// saveMarshalState saves the run and, when it newly pauses, records the
+// pause's run notice after the pause is durable.
+func (s *MarshalService) saveMarshalState(ctx context.Context, runID string, run marshal.Run, revision int64, event *events.Event, handIn *marshal.HandIn, attempt int) error {
+	announce := s.assignPauseNotice(ctx, runID, &run)
+	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, event, handIn, attempt); err != nil {
+		return err
+	}
+	if announce {
+		s.announcePause(ctx, runID, *run.Pause)
+	}
+	return nil
 }
 
 // load is the lifecycle read boundary. Snapshot uses readRun instead so a

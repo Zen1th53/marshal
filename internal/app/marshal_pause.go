@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -11,7 +14,9 @@ import (
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID string, cause error) error {
@@ -170,4 +175,223 @@ func pauseMarshalBudget(run *marshal.Run, result marshal.BudgetResult) {
 		reasons = append(reasons, "configured budget cannot be evaluated; usage unknown: "+strings.Join(unknown, ", "))
 	}
 	pauseMarshal(run, marshal.Pause{Reason: strings.Join(reasons, "; "), Resolutions: []string{"start a new run with updated budget settings; settings do not change this run"}, Code: marshal.CodeBudget, Action: marshal.PauseResume})
+}
+
+// RunNoticeCategory is the outbox category of run notices.
+const RunNoticeCategory = "run"
+
+// Run notice states. A stop the person asked for, a pause for a cause and a
+// resume that did not go through are told apart.
+const (
+	RunNoticePaused       = "paused"
+	RunNoticeStopped      = "stopped"
+	RunNoticeResumeFailed = "resume_failed"
+)
+
+// RunNotice is the redacted, durable announcement of a run transition the
+// person or the Marshal must act on. It is delivered at least once to each
+// consumer and deduplicated by EventID.
+type RunNotice struct {
+	EventID string    `json:"eventId"`
+	RunID   string    `json:"runId"`
+	TaskID  string    `json:"taskId,omitempty"`
+	State   string    `json:"state"`
+	Code    string    `json:"code"`
+	Summary string    `json:"summary"`
+	Next    string    `json:"next,omitempty"`
+	At      time.Time `json:"at"`
+}
+
+// runNoticeDetailLimit bounds the raw cause a pause keeps for the inspector.
+const runNoticeDetailLimit = 2000
+
+func boundedRedacted(s string, limit int) string {
+	s = RedactApprovalText(s)
+	if len(s) > limit {
+		s = strings.ToValidUTF8(s[:limit], "") + "…"
+	}
+	return s
+}
+
+// pauseStageFailure turns a recoverable failure of an Execute stage into a
+// saved pause the person resumes from, with the task's attempt kept. The
+// person's own stop, an interruption or shutdown, a conflicting writer and a
+// run that already waits for the person (a safety pause among them) are left
+// as they are. The cause is returned unchanged; a failed save is joined to
+// it so the failure stays visible, and the next resume reconciles the run.
+func (s *MarshalService) pauseStageFailure(ctx context.Context, runID, stage string, cause error) error {
+	if cause == nil || ctx.Err() != nil || errors.Is(cause, context.Canceled) || errors.Is(cause, model.ErrConflict) || presentedStop(cause) {
+		return cause
+	}
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	run, rev, err := s.load(wctx, runID)
+	if err != nil {
+		return cause
+	}
+	switch run.State {
+	case marshal.AwaitingUser, marshal.Closed, marshal.Drafting, marshal.Verifying:
+		return cause
+	}
+	if unfinishedMarshalOperation(run) != nil {
+		return cause
+	}
+	pause := marshal.Pause{ResumeState: run.State, Action: marshal.PauseResume, Detail: boundedRedacted(stage+": "+cause.Error(), runNoticeDetailLimit), Resolutions: []string{"Press Enter to try again (/marshal resume). The task's attempt is kept."}}
+	switch stage {
+	case "review":
+		pause.Code, pause.TaskID = marshal.CodeReviewFailed, firstMarshalTask(run, marshal.HandedIn)
+		pause.Reason = "Marshal could not review the handed-in work."
+	case "merge":
+		pause.Code, pause.TaskID = marshal.CodeMergeFailed, firstMarshalTask(run, marshal.Accepted)
+		pause.Reason = "Marshal could not merge the accepted work."
+	case "commands":
+		pause.Code = marshal.CodeCommandsBlocked
+		pause.Reason = "Marshal could not apply the queued run commands; new starts are held."
+	default:
+		pause.Code = marshal.CodeDispatchFailed
+		pause.Reason = "Marshal could not start a worker or record its hand-in."
+	}
+	if pause.TaskID != "" {
+		pause.Reason = strings.TrimSuffix(pause.Reason, ".") + " (task " + pause.TaskID + ")."
+	}
+	pauseMarshal(&run, pause)
+	if err := s.save(wctx, runID, run, rev); err != nil {
+		return errors.Join(cause, err)
+	}
+	return errors.Join(cause, s.record(wctx, runID, pause.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": pause.Reason, "summary": pause.Reason, "detail": pause.Detail, "code": pause.Code, "stage": stage}))
+}
+
+// presentedStop reports a stop that already carries its own cause and next
+// step for the person: a stop with a stated reason, an operation refusal, or
+// a task waiting for its approval. Those stop execution as they are.
+func presentedStop(err error) bool {
+	var known interface{ StopReason() (string, string) }
+	var refusal *marshal.RefusalError
+	return errors.As(err, &known) || errors.As(err, &refusal) || strings.Contains(err.Error(), "process 05:")
+}
+
+func firstMarshalTask(run marshal.Run, state marshal.TaskState) string {
+	for _, t := range run.Tasks {
+		if t.State == state {
+			return t.PlanTaskID
+		}
+	}
+	return ""
+}
+
+// assignPauseNotice gives a pause about to be saved its notice ID. A pause
+// already saved keeps its ID, so a stale copy saved again does not announce
+// it twice. It reports whether this save announces a new pause.
+func (s *MarshalService) assignPauseNotice(ctx context.Context, runID string, run *marshal.Run) bool {
+	if run.Pause == nil || run.Pause.NoticeID != "" {
+		return false
+	}
+	if stored, _, err := s.readRun(ctx, runID); err == nil && stored.Pause != nil && stored.Pause.NoticeID != "" &&
+		stored.Pause.Code == run.Pause.Code && stored.Pause.Reason == run.Pause.Reason && stored.Pause.TaskID == run.Pause.TaskID {
+		run.Pause.NoticeID = stored.Pause.NoticeID
+		return false
+	}
+	id, err := model.NewID("")
+	if err != nil {
+		return false
+	}
+	run.Pause.NoticeID = "run:" + runID + ":pause:" + id
+	return true
+}
+
+// pauseNotice is the notice for a saved pause.
+func pauseNotice(runID string, p marshal.Pause, at time.Time) RunNotice {
+	state := RunNoticePaused
+	if strings.HasPrefix(p.Reason, "operator requested stop") {
+		state = RunNoticeStopped
+	}
+	return RunNotice{EventID: p.NoticeID, RunID: runID, TaskID: p.TaskID, State: state, Code: p.Code,
+		Summary: boundedRedacted(p.Reason, 500), Next: boundedRedacted(strings.Join(p.Resolutions, "; "), 500), At: at}
+}
+
+// noticeProjectID is the project the notice outbox is read under.
+func (s *MarshalService) noticeProjectID() string {
+	if s.runtime != nil {
+		return s.runtime.ProjectIdentity()
+	}
+	return s.ProjectID
+}
+
+// recordRunNotice writes a run notice to the durable outbox with its audit
+// event in one transaction. A repeated event ID records nothing.
+func (s *MarshalService) recordRunNotice(ctx context.Context, n RunNotice) error {
+	if s == nil || s.Store == nil || n.EventID == "" {
+		return nil
+	}
+	if n.At.IsZero() {
+		n.At = s.clock()
+	}
+	payload, err := json.Marshal(n)
+	if err != nil {
+		return err
+	}
+	data := map[string]any{"run_id": n.RunID, "task_id": n.TaskID, "state": n.State, "code": n.Code, "summary": n.Summary, "next": n.Next}
+	entry := store.NoticeOutboxEntry{EventID: n.EventID, ProjectID: s.noticeProjectID(), RunID: n.RunID, TaskID: n.TaskID, Category: RunNoticeCategory,
+		Transition: n.State, PhaseOrder: 1, Status: n.Code, Command: n.Next, Summary: n.Summary, PayloadJSON: string(payload), CreatedAt: n.At}
+	_, err = s.Store.RecordNoticeWithEvent(context.WithoutCancel(ctx), entry, model.Event{ID: n.EventID, Type: "marshal.run_notice", ProjectID: s.ProjectID, Timestamp: n.At, Data: data})
+	return err
+}
+
+// announcePause records the notice of a pause just saved. The pause is
+// already durable: a failed notice write is reported as activity and is
+// recorded again when notices are next delivered.
+func (s *MarshalService) announcePause(ctx context.Context, runID string, p marshal.Pause) {
+	if err := s.recordRunNotice(ctx, pauseNotice(runID, p, s.clock())); err != nil && s.RecordActivity != nil {
+		s.RecordActivity("run notice for " + runID + " not recorded yet: " + RedactApprovalText(err.Error()))
+	}
+}
+
+// reconcileRunNotices records the notice of every saved pause whose notice
+// write was lost, for example to a crash between the two writes.
+func (s *MarshalService) reconcileRunNotices(ctx context.Context, runID string) error {
+	if s == nil || s.Store == nil {
+		return nil
+	}
+	runs, err := s.Store.MarshalRuns(ctx, s.ProjectID)
+	if err != nil {
+		return err
+	}
+	for id, rec := range runs {
+		if runID != "" && id != runID {
+			continue
+		}
+		if p := rec.Value.Pause; rec.Value.State == marshal.AwaitingUser && p != nil && p.NoticeID != "" {
+			if err := s.recordRunNotice(ctx, pauseNotice(id, *p, s.clock())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// noteResumeFailure records a notice for a resume that did not go through.
+// The run's own pause is kept. Repeats of the same failure on the same pause
+// share one notice.
+func (s *MarshalService) noteResumeFailure(ctx context.Context, runID string, cause error) {
+	if cause == nil || ctx.Err() != nil || errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return
+	}
+	run, _, err := s.readRun(context.WithoutCancel(ctx), runID)
+	if err != nil {
+		return
+	}
+	n := RunNotice{RunID: runID, State: RunNoticeResumeFailed, Code: "resume_failed", Summary: boundedRedacted("Resume did not go through: "+cause.Error(), 500), Next: "Resolve the reported cause, then press Enter to resume (/marshal resume)."}
+	anchor := string(run.State)
+	if run.Pause != nil {
+		n.TaskID, n.Code = run.Pause.TaskID, run.Pause.Code
+		anchor = run.Pause.NoticeID
+		if next := strings.Join(run.Pause.Resolutions, "; "); next != "" {
+			n.Next = boundedRedacted(next, 500)
+		}
+	}
+	sum := sha256.Sum256([]byte(anchor + "\x00" + n.Summary))
+	n.EventID = "run:" + runID + ":resume-failed:" + hex.EncodeToString(sum[:8])
+	if err := s.recordRunNotice(ctx, n); err != nil && s.RecordActivity != nil {
+		s.RecordActivity("run notice for " + runID + " not recorded: " + RedactApprovalText(err.Error()))
+	}
 }
