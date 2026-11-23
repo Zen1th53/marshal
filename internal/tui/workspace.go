@@ -119,6 +119,8 @@ type Workspace struct {
 	// and the second one leaves a user retyping a password that was never
 	// wrong.
 	ultraErr error
+	// ultraPreferenceErr is cleared after a successful preference reload.
+	ultraPreferenceErr error
 
 	// screen owns in-place frame painting. Without it every redraw appended to
 	// scrollback, so each keystroke left another prompt banner behind.
@@ -461,7 +463,7 @@ func (w *Workspace) AttachULTRAError(err error) {
 func (w *Workspace) ultraError() error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.ultraErr
+	return errors.Join(w.ultraErr, w.ultraPreferenceErr)
 }
 
 // ultraRequester returns what is needed to ask for an entitlement.
@@ -491,7 +493,8 @@ func (w *Workspace) setUltraExecution(enabled bool) error {
 	return w.SetUltraExecution(context.Background(), enabled)
 }
 
-// SetUltraExecution persists the preference before publishing it to admissions.
+// SetUltraExecution persists starts before publishing them to admissions.
+// Stops always close local admission and report any persistence failure.
 func (w *Workspace) SetUltraExecution(ctx context.Context, enabled bool) error {
 	changed := false
 	defer func() {
@@ -510,21 +513,19 @@ func (w *Workspace) SetUltraExecution(ctx context.Context, enabled bool) error {
 	if enabled && !w.ultra.Entitled() {
 		return errors.New("ULTRA execution requires current entitlement")
 	}
+	var persistErr error
 	if w.store != nil {
-		settings, err := w.store.GetMarshalSettings(ctx, w.ultraProjectLocked())
-		if err != nil {
-			return err
-		}
-		settings.Value.UltraExecution = &enabled
-		if _, err := w.store.SetMarshalSettings(ctx, w.ultraProjectLocked(), settings.Value, settings.Revision); err != nil {
-			return err
+		persistErr = w.store.SetUltraExecutionPreference(ctx, w.ultraProjectLocked(), enabled)
+		if persistErr != nil && enabled {
+			return persistErr
 		}
 	}
-	changed = w.ultraExecution != enabled
+	// Off always closes local admission, even when persistence is unavailable.
+	changed = w.ultraExecution != enabled && persistErr == nil
 	w.ultraExecution = enabled
 	w.state.UltraExecution = enabled
 	w.ultraStopAsked = false
-	return nil
+	return persistErr
 }
 
 func (w *Workspace) ultraProjectLocked() string {
@@ -536,13 +537,14 @@ func (w *Workspace) ultraProjectLocked() string {
 
 func (w *Workspace) loadUltraPreferenceLocked(fallback bool) {
 	w.ultraExecution = fallback
+	w.ultraPreferenceErr = nil
 	if w.store != nil {
-		settings, err := w.store.GetMarshalSettings(context.Background(), w.ultraProjectLocked())
+		preference, err := w.store.GetUltraExecutionPreference(context.Background(), w.ultraProjectLocked())
 		if err != nil {
 			w.ultraExecution = false
-			w.ultraErr = err
-		} else if settings.Value.UltraExecution != nil {
-			w.ultraExecution = *settings.Value.UltraExecution
+			w.ultraPreferenceErr = err
+		} else if preference != nil {
+			w.ultraExecution = *preference
 		}
 	}
 	w.state.UltraExecution = w.ultraExecution

@@ -3,9 +3,10 @@
 package tui
 
 import (
-	"github.com/Zen1th53/marshal/internal/cloud"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/cloud"
 )
 
 func TestGovernedUltraStartRequiresLease(t *testing.T) {
@@ -18,9 +19,9 @@ func TestGovernedUltraStartRequiresLease(t *testing.T) {
 	if w.ULTRAExecutionEnabled() {
 		t.Fatal("start without lease enabled execution")
 	}
-	rec, err := st.GetMarshalSettings(t.Context(), "project")
-	if err != nil || rec.Value.UltraExecution != nil {
-		t.Fatalf("refused start wrote settings: %+v %v", rec, err)
+	rec, err := st.GetUltraExecutionPreference(t.Context(), "project")
+	if err != nil || rec != nil {
+		t.Fatalf("refused start wrote preference: %+v %v", rec, err)
 	}
 }
 

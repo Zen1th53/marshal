@@ -27,6 +27,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/proposalmcp"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
 
 func nativePlanningFixture(t *testing.T, body ...string) (*Workspace, *proposalMCPLease, proposalmcp.Config, model.MemoryRecordV2, model.GoalContract) {
@@ -277,6 +278,16 @@ func TestNativePlanningChatPopupApprovesExactCanonicalPlan(t *testing.T) {
 	}
 	if _, err := permission.Render([]permission.Request{request}); err != nil {
 		t.Fatalf("canonical popup failed to render: %v", err)
+	}
+	// Changing execution preference after review must preserve plan approval.
+	w.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), true)
+	for _, command := range []string{"/ultra stop", "/ultra stop confirm"} {
+		if _, err := w.ExecuteCommand(t.Context(), command); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if w.ULTRAExecutionEnabled() {
+		t.Fatal("confirmed stop left execution enabled")
 	}
 	if err := w.applyMarshalProposal(t.Context(), request); err != nil {
 		t.Fatal(err)

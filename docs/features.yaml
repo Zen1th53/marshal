@@ -1870,18 +1870,26 @@ features:
         reason: "ULTRA is unavailable: no cryptographically verified entitlement is active."
 
   - id: ultra-execution
-    name: Persisted project ULTRA execution preference (parallel vs standard execution)
+    name: Independent project ULTRA execution preference (parallel vs standard execution)
     editions: [default, governed]
     sources:
+      - internal/store/ultra_preference.go
+      - internal/app/marshal_preference.go
       - internal/tui/commands_expanded.go
       - internal/tui/ultra_default.go
       - internal/tui/ultra_extreme.go
       - internal/tui/workspace.go
     tests:
+      - internal/store.TestUltraPreferenceIsIndependentOfSettings
+      - internal/store.TestUltraOffWaitsForConcurrentSettingsWrite
+      - internal/store.TestUltraPreferenceMigrationPreservesStoredChoice
       - internal/tui.TestDefaultSessionExecutionStartsOff
       - internal/tui.TestUltraPreferenceSurvivesRestart
       - internal/tui.TestUltraPreferenceOffDrainsWithoutRebinding
-      - internal/tui.TestUltraWriteFailureLeavesGateUnchanged
+      - internal/tui.TestUltraStartWriteFailureLeavesGateUnchanged
+      - internal/tui.TestUltraPreferenceReadErrorRecoversWithoutLosingActivationError
+      - internal/tui.TestNativePlanningChatPopupApprovesExactCanonicalPlan
+      - internal/tui.TestUltraStopWriteFailureClosesAdmission
     docs: []
     web: []
     tui:

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,7 +85,7 @@ func TestUltraPreferenceOffDrainsWithoutRebinding(t *testing.T) {
 	}
 }
 
-func TestUltraWriteFailureLeavesGateUnchanged(t *testing.T) {
+func TestUltraStopWriteFailureClosesAdmission(t *testing.T) {
 	st, _ := preferenceStore(t)
 	w := NewWorkspace(st, "project", "session")
 	defer w.Close()
@@ -97,8 +98,8 @@ func TestUltraWriteFailureLeavesGateUnchanged(t *testing.T) {
 	if out, err = w.ExecuteCommand(t.Context(), "/ultra stop confirm"); err == nil || strings.Contains(out, "is off") {
 		t.Fatalf("failed write reported success: %q %v", out, err)
 	}
-	if !w.ULTRAExecutionEnabled() {
-		t.Fatal("failed write changed gate")
+	if w.ULTRAExecutionEnabled() {
+		t.Fatal("failed stop write left admission enabled")
 	}
 }
 
@@ -111,5 +112,51 @@ func TestGovernedEntitlementRequestIsNotALease(t *testing.T) {
 		if err := w.SetUltraExecution(t.Context(), true); err == nil {
 			t.Fatalf("request %s granted execution", state)
 		}
+	}
+}
+
+func TestUltraStartWriteFailureLeavesGateUnchanged(t *testing.T) {
+	st, _ := preferenceStore(t)
+	w := NewWorkspace(st, "project", "session")
+	defer w.Close()
+	w.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), false)
+	_ = st.Close()
+	if err := w.SetUltraExecution(t.Context(), true); err == nil {
+		t.Fatal("start ignored persistence failure")
+	}
+	if w.ULTRAExecutionEnabled() {
+		t.Fatal("failed start changed gate")
+	}
+}
+
+func TestUltraPreferenceReadErrorRecoversWithoutLosingActivationError(t *testing.T) {
+	st, path := preferenceStore(t)
+	w := NewWorkspace(st, "project", "session")
+	defer w.Close()
+	activationErr := errors.New("activation failed")
+	w.AttachULTRAError(activationErr)
+	_ = st.Close()
+	w.AttachULTRA(nil, true)
+	if w.ultraPreferenceErr == nil || !errors.Is(w.ultraError(), activationErr) {
+		t.Fatal("preference read failure replaced activation error")
+	}
+	if w.ULTRAExecutionEnabled() {
+		t.Fatal("read failure enabled execution")
+	}
+	reopened, err := store.Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	w.mu.Lock()
+	w.store = reopened
+	w.loadUltraPreferenceLocked(true)
+	w.mu.Unlock()
+	if w.ultraPreferenceErr != nil || !errors.Is(w.ultraError(), activationErr) {
+		t.Fatal("successful reload did not clear only the preference error")
+	}
+	w.AttachULTRAError(nil)
+	if w.ultraError() != nil {
+		t.Fatal("recovered preference error remained visible")
 	}
 }

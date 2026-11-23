@@ -32,6 +32,11 @@ func TestCanonicalApprovalRetainsRuntimeAndWorkerSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, enabled := range []bool{true, false} {
+		if err := s.Store.SetUltraExecutionPreference(t.Context(), s.ProjectID, enabled); err != nil {
+			t.Fatal(err)
+		}
+	}
 	approved, err := s.Approve(t.Context(), "identity", snapshot)
 	if err != nil {
 		t.Fatal(err)

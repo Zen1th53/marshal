@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
@@ -40,7 +41,7 @@ func (s *MarshalService) admissionGate(ctx context.Context) marshal.CapabilityGa
 }
 
 // projectExecutionGate also reads preferences for project-owned native services.
-// Read failures refuse parallel admission until the settings can be read again.
+// Read failures refuse parallel admission until the preference can be read again.
 type projectExecutionGate struct {
 	marshal.CapabilityGate
 	service *MarshalService
@@ -50,12 +51,12 @@ func (g projectExecutionGate) Capability(name string) bool {
 	return g.CapabilityGate != nil && g.CapabilityGate.Capability(name)
 }
 func (g projectExecutionGate) ExecutionEnabled() bool {
-	settings, err := g.service.Store.GetMarshalSettings(context.Background(), g.service.ProjectID)
+	preference, err := g.service.Store.GetUltraExecutionPreference(context.Background(), g.service.ProjectID)
 	if err != nil {
 		return false
 	}
-	if settings.Value.UltraExecution != nil {
-		return *settings.Value.UltraExecution
+	if preference != nil {
+		return *preference
 	}
 	return cloud.ExecutionOnAtStartup
 }

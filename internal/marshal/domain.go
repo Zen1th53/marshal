@@ -60,8 +60,7 @@ const (
 
 // Settings captures the policy approved for a run.
 type Settings struct {
-	UltraExecution     *bool `json:",omitempty"`
-	WorkerStallMinutes int   `json:",omitempty"`
+	WorkerStallMinutes int `json:",omitempty"`
 	ExecutionRights    ExecutionRights
 	AcceptanceMode     AcceptanceMode
 	ReworkLimit        int
