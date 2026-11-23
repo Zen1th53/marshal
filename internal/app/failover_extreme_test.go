@@ -386,12 +386,11 @@ func TestExtremeFailover_FakeCLIsOnPath(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	s, _ := marshalFixture(t, 1)
+	fake := s.Model.(marshalFakeModel)
+	fake.draft.Tasks[0].Worker = "codex"
+	fake.draft.Tasks[0].Mode = marshal.Native
+	s.Model = fake
 	startIntegrityRun(t, s, marshal.Budget{})
-
-	run, rev, _ := s.load(t.Context(), "run")
-	run.Tasks[0].Worker = "codex"
-	run.Tasks[0].Mode = marshal.Native
-	_ = s.save(t.Context(), "run", run, rev)
 
 	s.Drivers = map[string]driver.Driver{
 		"codex": driver.Codex(fakeCodex),

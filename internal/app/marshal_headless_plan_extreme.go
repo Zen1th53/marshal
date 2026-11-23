@@ -9,7 +9,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
@@ -46,10 +45,7 @@ func (s *MarshalService) canonicalizeHeadlessDraft(ctx context.Context, requeste
 	if budget != settings.Value.Budget {
 		return MarshalDraft{}, fmt.Errorf("%w: Marshal budget changed during planning; review again", model.ErrConflict)
 	}
-	mode := plan.ModeStandard
-	if marshal.TierPolicy(s.Gate, settings.Value).Tier == marshal.Ultra {
-		mode = plan.ModeUltra
-	}
+	mode := EffectiveDraftPlanMode(s.EffectiveGate(), settings.Value)
 	canonical, err := s.runtime.PrepareNativeMarshalDraft(ctx, goal.SessionID, draft, mode)
 	if err != nil {
 		return MarshalDraft{}, err

@@ -87,6 +87,56 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	case "launch":
 		op.HandIn = nil
 		op.Attempt = 0
+		if op.LaunchBase != nil && !op.LaunchBase.ProcessStarted {
+			i := taskIndex(run, op.TaskID)
+			if i < 0 {
+				return run, rev, model.ErrNotFound
+			}
+			if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[i], op.LaunchBase); baseErr != nil {
+				if !errors.Is(baseErr, ErrStaleBase) {
+					return run, rev, baseErr
+				}
+				// No process started, so the intent is safe to drop. Keep the
+				// stale-base pause and evidence, and clear the operation so
+				// amend and use-plan are not blocked by it.
+				run.Operation = nil
+				pauseMarshal(&run, staleBasePause(baseErr, op.TaskID))
+				op.Event.Type = events.EventTypeMarshalEscalated
+				op.Event.Data["launch_outcome"] = "interrupted before launch; stale base; intent cleared"
+				op.Event.Data["reason"] = run.Pause.Reason
+				op.Next = &run
+				if err := s.boundMarshalEvent(&op.Event); err != nil {
+					return run, rev, err
+				}
+				if err := s.completeOperation(ctx, runID, rev, op); err != nil {
+					return run, rev, err
+				}
+				return run, rev + 1, baseErr
+			}
+			// No driver process started and the base/dependencies remain valid:
+			// clear the saved intent so first execution validates fresh base
+			// admission and prepares the worktree cleanly.
+			run.Operation = nil
+			op.Event.Type = events.EventTypeMarshalEscalated
+			op.Event.Data["launch_outcome"] = "interrupted before launch; intent cleared"
+			op.Event.Data["reason"] = "interrupted launch intent cleared before process start"
+			op.Next = &run
+			completed = true
+			break
+		}
+		if op.LaunchBase != nil || run.BaseCommit != "" {
+			checkRun := run
+			if op.Next != nil && taskIndex(checkRun, op.TaskID) < 0 {
+				checkRun = *op.Next
+			}
+			i := taskIndex(checkRun, op.TaskID)
+			if i < 0 {
+				return run, rev, model.ErrNotFound
+			}
+			if _, baseErr := s.admitLaunchBase(ctx, runID, checkRun, checkRun.Tasks[i], op.LaunchBase); baseErr != nil {
+				return s.reconcileStartedStaleLaunch(ctx, runID, checkRun, rev, i, op.Dir, baseErr)
+			}
+		}
 		// A launch may have reached the driver even without a receipt. Treat it
 		// as interrupted, never as queued work that Execute could launch again.
 		if op.Next != nil {
@@ -253,7 +303,7 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 		}
 		run, rev, err := s.load(ctx, id)
 		if err == nil {
-			_, _, err = s.recoverOperation(ctx, id, run, rev)
+			run, rev, err = s.recoverOperation(ctx, id, run, rev)
 		}
 		if errors.Is(err, errMarshalEventArtifact) {
 			failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, err))
@@ -267,7 +317,19 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 			if fresh, freshRev, loadErr := s.load(ctx, id); loadErr == nil {
 				run, rev = fresh, freshRev
 			}
-			pauseMarshal(&run, marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume})
+			if run.State == marshal.AwaitingUser && run.Pause != nil && run.Pause.Code == marshal.CodeStaleBase {
+				w.mu.Unlock()
+				continue
+			}
+			pause := marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume}
+			if errors.Is(err, ErrStaleBase) {
+				taskID := ""
+				if run.Operation != nil {
+					taskID = run.Operation.TaskID
+				}
+				pause = staleBasePause(err, taskID)
+			}
+			pauseMarshal(&run, pause)
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
 				failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, errors.Join(err, saveErr)))
 			}
@@ -386,4 +448,15 @@ func (s *MarshalService) repairRetainedHandInAttempt(ctx context.Context, runID 
 	}
 	op.Attempt = want
 	return nil
+}
+
+// staleBasePause is the owner pause for a launch refused on a stale base.
+func staleBasePause(err error, taskID string) marshal.Pause {
+	return marshal.Pause{
+		Reason:      err.Error(),
+		Resolutions: staleBaseResolutions(err),
+		Code:        marshal.CodeStaleBase,
+		Action:      marshal.PauseUsePlan,
+		TaskID:      taskID,
+	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/plan"
 )
 
 type admissionGateKey struct{}
@@ -51,6 +52,9 @@ func (g projectExecutionGate) Capability(name string) bool {
 	return g.CapabilityGate != nil && g.CapabilityGate.Capability(name)
 }
 func (g projectExecutionGate) ExecutionEnabled() bool {
+	if g.service == nil || g.service.Store == nil || g.service.ProjectID == "" {
+		return false
+	}
 	preference, err := g.service.Store.GetUltraExecutionPreference(context.Background(), g.service.ProjectID)
 	if err != nil {
 		return false
@@ -59,4 +63,29 @@ func (g projectExecutionGate) ExecutionEnabled() bool {
 		return *preference
 	}
 	return cloud.ExecutionOnAtStartup
+}
+
+// EffectiveGate returns the live capability gate, reading the persisted
+// project execution preference when the attached gate does not expose one.
+func (s *MarshalService) EffectiveGate() marshal.CapabilityGate {
+	if s == nil || s.Gate == nil {
+		return nil
+	}
+	if _, live := s.Gate.(interface{ ExecutionEnabled() bool }); live {
+		return s.Gate
+	}
+	if s.Store != nil && s.ProjectID != "" {
+		return projectExecutionGate{CapabilityGate: s.Gate, service: s}
+	}
+	return s.Gate
+}
+
+// EffectiveDraftPlanMode selects the plan mode for a new draft from the live
+// tier policy. Only eligible default-edition drafts receive plan.ModeUltra;
+// governed-edition Process 05 remains serial.
+func EffectiveDraftPlanMode(gate marshal.CapabilityGate, settings marshal.Settings) plan.Mode {
+	if isExtremeBuild && marshal.TierPolicy(gate, settings).Tier == marshal.Ultra {
+		return plan.ModeUltra
+	}
+	return plan.ModeStandard
 }

@@ -17,6 +17,38 @@ import (
 )
 
 func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService, run marshal.Run, req driver.Request, parent *execution.ExecutionRun) (*execution.ExecutionRun, error) {
+	if s != nil {
+		pin, err := s.admitLaunchBase(ctx, req.RunID, run, req.Task, nil)
+		if err != nil {
+			return nil, err
+		}
+		if req.Task.BaseCommit != pin.AdmittedBaseCommit {
+			return nil, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:          req.Task.PlanTaskID,
+				ApprovedRef:     pin.DeliveryRef,
+				ApprovedCommit:  pin.ApprovedBaseCommit,
+				CurrentRef:      pin.DeliveryRef,
+				CurrentCommit:   pin.DeliveryCommit,
+				IntegrationRef:  pin.IntegrationRef,
+				IntegrationHead: pin.IntegrationHead,
+				Route:           "refresh task base before launching governed task lane",
+				Reason:          fmt.Sprintf("stale_base: governed task base %s differs from admitted base %s", req.Task.BaseCommit, pin.AdmittedBaseCommit),
+				NextCommands:    []string{"/marshal amend", "/marshal use-plan"},
+			})
+		}
+		if parent != nil && parent.BaseCommit != "" && parent.BaseCommit != run.BaseCommit {
+			return nil, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:         req.Task.PlanTaskID,
+				ApprovedRef:    pin.DeliveryRef,
+				ApprovedCommit: pin.ApprovedBaseCommit,
+				CurrentRef:     pin.DeliveryRef,
+				CurrentCommit:  parent.BaseCommit,
+				Route:          "review and approve a plan on the current delivery base",
+				Reason:         "stale_base: execution parent base differs from approved delivery base",
+				NextCommands:   []string{"/marshal amend", "/marshal use-plan"},
+			})
+		}
+	}
 	if run.Process05Bound && !run.Process05Parallel {
 		return parent, nil
 	}
@@ -103,8 +135,36 @@ func continuePriorTaskLanes(ctx context.Context, s *MarshalService, run *marshal
 	return nil
 }
 
+func approvedProcess05Parallel(p plan.ExecutionPlan) bool {
+	if p.Mode != plan.ModeUltra {
+		return false
+	}
+	if p.State != "" && p.State != plan.StateApproved {
+		return false
+	}
+	if p.State == plan.StateApproved {
+		if p.ApprovedScope == nil || p.ApprovedScope.Mode != plan.ModeUltra {
+			return false
+		}
+		if p.ApprovalScopeDigest == "" || p.ApprovalScopeDigest != p.ApprovedScope.Digest() {
+			return false
+		}
+		return true
+	}
+	if p.ApprovedScope != nil {
+		if p.ApprovedScope.Mode != plan.ModeUltra {
+			return false
+		}
+		if p.ApprovalScopeDigest != "" && p.ApprovalScopeDigest != p.ApprovedScope.Digest() {
+			return false
+		}
+		return true
+	}
+	return p.ApprovalScopeDigest == ""
+}
+
 func bindPrivateProcess05Tier(run *marshal.Run, p plan.ExecutionPlan) {
-	if p.Mode == plan.ModeUltra {
+	if approvedProcess05Parallel(p) {
 		run.Tier = marshal.Ultra
 		run.Process05Parallel = true
 	} else {

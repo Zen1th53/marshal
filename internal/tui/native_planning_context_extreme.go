@@ -337,6 +337,7 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 			return projectcontext.Changed("native_planning_context_extreme.go:178")
 		}
 		warnings = plan.DecompositionWarnings(goal, draft.Plan.Tasks)
+		warnings = append(warnings, app.DraftFileScopeWarnings(draft.Tasks)...)
 		objective := goal.DesiredOutcome
 		if err := app.ValidateNativePlanningModes(objective, draft.Tasks); err != nil {
 			return err
@@ -345,10 +346,7 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 		if err != nil {
 			return err
 		}
-		mode := plan.ModeStandard
-		if marshal.TierPolicy(service.Gate, settings.Value).Tier == marshal.Ultra {
-			mode = plan.ModeUltra
-		}
+		mode := app.EffectiveDraftPlanMode(service.EffectiveGate(), settings.Value)
 		// The model's task list carries no Process 04 authority. Rebuild the
 		// complete plan from the current Goal and probed harness evidence while
 		// the one-shot context-read fence still holds.

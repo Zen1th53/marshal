@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -263,15 +264,21 @@ func TestRunCommandsUseSingleWriter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	s, _ := marshalFixture(t, 2)
+	fake := s.Model.(marshalFakeModel)
+	draft := fake.draft
+	draft.Tasks[1].DependsOn = nil
+	draft.Plan.Tasks[1].DependsOn = nil
+	graph, err := plan.BuildGraph(draft.Plan.Tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft.Plan.Graph = graph
+	fake.draft = draft
+	s.Model = fake
 	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Approve(ctx, "run"); err != nil {
-		t.Fatal(err)
-	}
-	run, rev, _ := s.load(ctx, "run")
-	run.Tasks[1].DependsOn = nil
-	if err := s.save(ctx, "run", run, rev); err != nil {
 		t.Fatal(err)
 	}
 	a, err := s.Dispatch(ctx, "run", "a", "write")
@@ -351,7 +358,7 @@ func TestRunCommandsUseSingleWriter(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	run = drainCommandsForTest(t, s)
+	run := drainCommandsForTest(t, s)
 	if taskReturns(run.Tasks[0]) != 1 || run.Tasks[1].State != marshal.HandedIn {
 		t.Fatalf("writer ordering: %s", fmt.Sprint(run.Tasks))
 	}

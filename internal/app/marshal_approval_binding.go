@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/plan"
 )
 
 // PlanApprovalSnapshot identifies the bytes and destination shown for approval.
@@ -32,7 +33,14 @@ func packDigest(pack *marshal.PlanPack) string {
 }
 
 func (s *MarshalService) repositoryIdentity(ctx context.Context) (string, error) {
-	dir, err := gitMarshal(ctx, s.Repository, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	return s.repositoryIdentityAt(ctx, s.Repository)
+}
+
+func (s *MarshalService) repositoryIdentityAt(ctx context.Context, root string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		return "", errors.New("repository path is missing")
+	}
+	dir, err := gitMarshal(ctx, root, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
 		return "", err
 	}
@@ -105,29 +113,100 @@ func closeAuthorization(run marshal.Run, user string) *marshal.CloseAuthorizatio
 	return &marshal.CloseAuthorization{User: user, ApprovalScopeDigest: run.ApprovalScopeDigest, Repository: run.Repository, BaseCommit: run.BaseCommit, TargetRef: run.TargetRef}
 }
 
-func (s *MarshalService) validateDelivery(ctx context.Context, run marshal.Run) error {
+type approvedDeliveryBinding struct {
+	Repository    string
+	TargetRef     string
+	BaseCommit    string
+	Plan          plan.ExecutionPlan
+	LegacyDerived bool
+}
+
+func isLegacyMarshalRun(run marshal.Run) bool {
+	return run.Compatibility == nil || run.Compatibility.ProtocolVersion == 0
+}
+
+// resolveApprovedDeliveryBinding verifies the run's approved repository, plan,
+// delivery target ref, and immutable base commit using the same binding rules
+// as validateDelivery. When allowLegacyDerive is true, unversioned legacy runs
+// missing stored Repository/TargetRef may derive them only from demonstrable
+// approved bindings; otherwise an approved recovery is required.
+func (s *MarshalService) resolveApprovedDeliveryBinding(ctx context.Context, run marshal.Run, allowLegacyDerive bool) (approvedDeliveryBinding, error) {
 	repo, err := s.repositoryIdentity(ctx)
 	if err != nil {
-		return err
+		return approvedDeliveryBinding{}, err
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
-		return err
+		return approvedDeliveryBinding{}, err
 	}
-	if marshalApprovalDigest(p.ApprovalScopeDigest, run) != run.ApprovalScopeDigest {
-		return errors.New("approved delivery binding changed; review and approve again")
+	if p.ProjectID != "" && p.ProjectID != s.CanonicalPlanProjectID() && string(p.ProjectID) != s.ProjectID {
+		return approvedDeliveryBinding{}, errors.New("approved plan belongs to another project; review and approve again")
+	}
+	if p.State != "" && p.State != plan.StateApproved {
+		return approvedDeliveryBinding{}, errors.New("approved plan is not in approved state; review and approve again")
+	}
+	if run.ApprovalScopeDigest == "" || marshalApprovalDigest(p.ApprovalScopeDigest, run) != run.ApprovalScopeDigest {
+		return approvedDeliveryBinding{}, errors.New("approved delivery binding changed; review and approve again")
 	}
 	project, err := s.Store.Project(ctx)
 	if err != nil {
-		return err
+		return approvedDeliveryBinding{}, err
 	}
-	if repo != run.Repository || "refs/heads/"+project.DefaultBranch != run.TargetRef || run.BaseCommit == "" {
-		return errors.New("approved delivery destination changed; review and approve again")
+	if project.DefaultBranch == "" {
+		return approvedDeliveryBinding{}, errors.New("project target branch is missing")
 	}
-	if run.CloseAuthorization != nil && !run.CloseAuthorization.Voided && !run.ValidCloseAuthorization() {
-		return errors.New("standing delivery binding changed; confirm again")
+	projectTargetRef := "refs/heads/" + project.DefaultBranch
+	if run.BaseCommit == "" {
+		return approvedDeliveryBinding{}, errors.New("approved delivery destination changed; review and approve again")
 	}
-	return nil
+	if run.Repository != "" && run.Repository != repo {
+		return approvedDeliveryBinding{}, errors.New("approved delivery destination changed; review and approve again")
+	}
+	if run.TargetRef != "" && run.TargetRef != projectTargetRef {
+		return approvedDeliveryBinding{}, errors.New("approved delivery destination changed; review and approve again")
+	}
+	legacyDerived := false
+	resolvedRepo := run.Repository
+	resolvedTarget := run.TargetRef
+	if resolvedRepo == "" || resolvedTarget == "" {
+		if !allowLegacyDerive {
+			return approvedDeliveryBinding{}, errors.New("approved delivery destination changed; review and approve again")
+		}
+		if !isLegacyMarshalRun(run) {
+			return approvedDeliveryBinding{}, errors.New("approved delivery binding is incomplete; review and approve again")
+		}
+		projectRepo, projErr := s.repositoryIdentityAt(ctx, project.Repository)
+		if projErr != nil || projectRepo != repo {
+			return approvedDeliveryBinding{}, errors.New("legacy run lacks demonstrable approved repository binding; approve a recovery plan")
+		}
+		if run.CloseAuthorization != nil && !run.CloseAuthorization.Voided {
+			ca := run.CloseAuthorization
+			if ca.ApprovalScopeDigest != run.ApprovalScopeDigest ||
+				(ca.Repository != "" && ca.Repository != repo) ||
+				(ca.TargetRef != "" && ca.TargetRef != projectTargetRef) ||
+				(ca.BaseCommit != "" && ca.BaseCommit != run.BaseCommit) {
+				return approvedDeliveryBinding{}, errors.New("legacy standing delivery binding is not demonstrable; approve a recovery plan")
+			}
+		}
+		resolvedRepo = repo
+		resolvedTarget = projectTargetRef
+		legacyDerived = true
+	}
+	if !legacyDerived && run.CloseAuthorization != nil && !run.CloseAuthorization.Voided && !run.ValidCloseAuthorization() {
+		return approvedDeliveryBinding{}, errors.New("standing delivery binding changed; confirm again")
+	}
+	return approvedDeliveryBinding{
+		Repository:    resolvedRepo,
+		TargetRef:     resolvedTarget,
+		BaseCommit:    run.BaseCommit,
+		Plan:          p,
+		LegacyDerived: legacyDerived,
+	}, nil
+}
+
+func (s *MarshalService) validateDelivery(ctx context.Context, run marshal.Run) error {
+	_, err := s.resolveApprovedDeliveryBinding(ctx, run, false)
+	return err
 }
 
 // AuthorizeDelivery grants standing close only for the exact displayed approval.

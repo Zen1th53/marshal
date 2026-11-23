@@ -57,13 +57,13 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	if w.Approver == nil {
 		return nil, errors.New("marshal: an approval source is required")
 	}
-	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID()), runtime: r, requiredGoalSession: w.SessionID, ProjectContext: s.ProjectContext, ConfigureKnowledgeMCP: s.ConfigureKnowledgeMCP}
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
 	if _, live := w.Gate.(interface{ ExecutionEnabled() bool }); !live {
 		s.Gate = projectExecutionGate{CapabilityGate: w.Gate, service: s}
 	}
+	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID()), runtime: r, service: s, Gate: s.Gate, requiredGoalSession: w.SessionID, ProjectContext: s.ProjectContext, ConfigureKnowledgeMCP: s.ConfigureKnowledgeMCP}
 	s.ApprovalActor = w.Approver
 	s.ProbeWorker = func(ctx context.Context, worker string) error {
 		_, err := r.VerifyMarshalWorker(ctx, worker, "")

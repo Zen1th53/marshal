@@ -27,7 +27,7 @@ const ceLedgerV2 = "package ledger\n\n// Balance returns the account balance in 
 // fake governed provider:
 //
 //   - task "a" (worker B) rewrites ledger/ledger.go and is merged first;
-//   - task "b" (worker A), independent, starts from the run base, asks
+//   - task "b" (worker A), independent, dispatches before that merge, asks
 //     code_context about Balance, which records a receipt on
 //     ledger/ledger.go, then writes ledger/notes.go only.
 //
@@ -66,12 +66,15 @@ func codeEvidenceRun(t *testing.T, settings string, currentEvidence ...bool) (*M
 	draft.Plan.Graph, _ = plan.BuildGraph(draft.Plan.Tasks)
 	s.Model = marshalFakeModel{draft: draft, review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	recorded := make(chan error, 1)
+	evidenceReady := make(chan struct{})
+	merged := make(chan struct{})
 	s.Drivers["worker"] = driver.Governed{Provider: "test", Run: func(runCtx context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
 		switch req.Task.PlanTaskID {
 		case "b":
 			// What the relay does for code_context on this task's binding.
 			evidenceRoot := req.Worktree
 			if len(currentEvidence) > 0 && currentEvidence[0] {
+				<-merged
 				run, _, err := s.load(runCtx, req.RunID)
 				if err != nil {
 					return nil, err
@@ -83,6 +86,7 @@ func codeEvidenceRun(t *testing.T, settings string, currentEvidence ...bool) (*M
 				err = s.recordCodeEvidenceReceipt(runCtx, req.RunID, req.Task.PlanTaskID, "TASK-worker-a", d.Receipt.ID, "code_context")
 			}
 			recorded <- err
+			close(evidenceReady)
 			if err != nil {
 				return nil, err
 			}
@@ -99,7 +103,7 @@ func codeEvidenceRun(t *testing.T, settings string, currentEvidence ...bool) (*M
 	}
 	return s, func() marshal.HandIn {
 		t.Helper()
-		// Task B changes ledger.go and merges...
+		// Dispatch both tasks before integration advances, as independent lanes do.
 		dA, err := s.Dispatch(ctx, "run", "a", "ignore refunds")
 		if err != nil {
 			t.Fatal(err)
@@ -107,19 +111,20 @@ func codeEvidenceRun(t *testing.T, settings string, currentEvidence ...bool) (*M
 		if _, err := s.CollectHandIn(ctx, "run", dA); err != nil {
 			t.Fatal(err)
 		}
+		dB, err := s.Dispatch(ctx, "run", "b", "ledger notes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(currentEvidence) == 0 || !currentEvidence[0] {
+			<-evidenceReady
+		}
 		if v, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || v != marshal.VerdictAccept {
 			t.Fatalf("review a: %s %v", v, err)
 		}
 		if err := s.Merge(ctx, "run", "a"); err != nil {
 			t.Fatal(err)
 		}
-		// ...while worker A, an independent task, works from the run base
-		// (as in a parallel lane or a stale rework base) and takes its
-		// evidence on ledger.go there...
-		dB, err := s.Dispatch(ctx, "run", "b", "ledger notes")
-		if err != nil {
-			t.Fatal(err)
-		}
+		close(merged)
 		// ...then A hands in.
 		h, err := s.CollectHandIn(ctx, "run", dB)
 		if err != nil {
@@ -249,6 +254,29 @@ func TestCodeEvidenceReturnPolicyReturnsTask(t *testing.T) {
 	}
 	if e := lastEvidenceEvent(t, s, "b"); e.Data["policy"] != codeevidence.OnInvalidatedReturn {
 		t.Fatalf("event: %+v", e.Data)
+	}
+
+	if _, err := s.Dispatch(ctx, "run", "b", "retry stale output"); err == nil {
+		t.Fatal("stale rework was admitted without a base refresh")
+	} else {
+		assertStaleBaseRefusal(t, err, marshal.EffectsNone)
+	}
+
+	// Model a reviewed base refresh before rework: incorporate integration into
+	// the retained output and record its new base. An unchanged stale rework
+	// must still be refused by launch admission.
+	run, rev, err := s.load(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := taskIndex(run, "b")
+	head := s.integrationHead(ctx, "run", run)
+	dir := filepath.Join(s.Worktrees, taskArtifactID("run", run.Tasks[idx]))
+	marshalGit(t, dir, "merge", "--no-edit", head)
+	run.Tasks[idx].BaseCommit = head
+	run.Tasks[idx].ResultCommit = marshalGit(t, dir, "rev-parse", "HEAD")
+	if err := s.save(ctx, "run", run, rev); err != nil {
+		t.Fatal(err)
 	}
 
 	// A new attempt reads current integration evidence; the first attempt's

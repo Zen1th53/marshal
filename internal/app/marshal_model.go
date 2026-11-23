@@ -30,6 +30,9 @@ type MarshalCLI struct {
 	designReview               bool // runtime-owned pre-approval read-only critique
 	ProjectContext             func(context.Context, string, string) (string, error)
 	runtime                    *Runtime
+	service                    *MarshalService
+	Gate                       marshal.CapabilityGate
+	Settings                   marshal.Settings
 	requiredTurnPreparation    *requiredMarshalTurnPreparation
 	requiredTurnCapture        *requiredMarshalTurnCapture
 	requiredArchitectureTarget *requiredArchitectureTurnTarget
@@ -410,7 +413,8 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 	if err != nil {
 		return MarshalDraft{}, err
 	}
-	return m.materialize(proposal, "", 1, workers)
+	mode := m.effectiveDraftPlanMode(ctx)
+	return m.materializeWithMode(proposal, "", 1, workers, mode)
 }
 func (m *MarshalCLI) Review(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, error) {
 	var out marshal.Review
@@ -472,7 +476,7 @@ func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) 
 		proposal = original
 	}
 	bindAmendCriteria(&proposal, run.Tasks)
-	return m.materialize(proposal, run.PlanID, run.PlanVersion, workers)
+	return m.materializeWithMode(proposal, run.PlanID, run.PlanVersion, workers, m.amendPlanMode(ctx, run))
 }
 
 type marshalTaskProposal struct {
@@ -565,8 +569,20 @@ func (s *MarshalService) DraftFromProposal(data []byte, provider string) (Marsha
 			return MarshalDraft{}, rejectDraft(errors.New("invalid Marshal draft JSON: trailing data after fenced block"), "draft", "text follows the fenced JSON block")
 		}
 	}
-	m := &MarshalCLI{Provider: provider, ProjectID: string(s.CanonicalPlanProjectID())}
-	return m.materialize(proposal, "", 1, m.availableWorkers())
+	m := &MarshalCLI{
+		Provider:  provider,
+		ProjectID: string(s.CanonicalPlanProjectID()),
+		runtime:   s.runtime,
+		service:   s,
+		Gate:      s.EffectiveGate(),
+	}
+	if s != nil && s.Store != nil && s.ProjectID != "" {
+		if settings, err := s.Store.GetMarshalSettings(context.Background(), s.ProjectID); err == nil {
+			m.Settings = settings.Value
+		}
+	}
+	mode := m.effectiveDraftPlanMode(context.Background())
+	return m.materializeWithMode(proposal, "", 1, m.availableWorkers(), mode)
 }
 
 func (m *MarshalCLI) availableWorkers() []string {
@@ -595,7 +611,64 @@ func (m *MarshalCLI) assignableWorkers() []string {
 	return out
 }
 
+func (m *MarshalCLI) effectiveDraftPlanMode(ctx context.Context) plan.Mode {
+	if m == nil {
+		return plan.ModeStandard
+	}
+	settings := m.Settings
+	if m.service != nil && m.service.Store != nil && m.service.ProjectID != "" {
+		if rec, err := m.service.Store.GetMarshalSettings(ctx, m.service.ProjectID); err == nil {
+			settings = rec.Value
+		}
+	} else if m.runtime != nil && m.runtime.store != nil {
+		if rec, err := m.runtime.store.GetMarshalSettings(ctx, m.runtime.ProjectID()); err == nil {
+			settings = rec.Value
+		}
+	}
+	var gate marshal.CapabilityGate
+	if m.service != nil && m.service.Gate != nil {
+		gate = m.service.EffectiveGate()
+	} else {
+		gate = m.Gate
+		if gate != nil {
+			if _, live := gate.(interface{ ExecutionEnabled() bool }); !live && m.runtime != nil && m.runtime.store != nil {
+				if s := m.runtime.Marshal(); s != nil {
+					gate = projectExecutionGate{CapabilityGate: gate, service: s}
+				}
+			}
+		}
+	}
+	return EffectiveDraftPlanMode(gate, settings)
+}
+
+func (m *MarshalCLI) amendPlanMode(ctx context.Context, run marshal.Run) plan.Mode {
+	if m != nil && m.service != nil && m.service.Store != nil && run.PlanID != "" && run.PlanVersion > 0 {
+		if existing, err := m.service.Store.GetPlan(ctx, run.PlanID, run.PlanVersion); err == nil && existing.Mode != "" {
+			return existing.Mode
+		}
+	}
+	if m != nil && m.runtime != nil && m.runtime.store != nil && run.PlanID != "" && run.PlanVersion > 0 {
+		if existing, err := m.runtime.store.GetPlan(ctx, run.PlanID, run.PlanVersion); err == nil && existing.Mode != "" {
+			return existing.Mode
+		}
+	}
+	if run.Process05Bound {
+		if run.Process05Parallel {
+			return plan.ModeUltra
+		}
+		return plan.ModeStandard
+	}
+	if run.Tier == marshal.Ultra && isExtremeBuild {
+		return plan.ModeUltra
+	}
+	return plan.ModeStandard
+}
+
 func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, version int64, workers []string) (MarshalDraft, error) {
+	return m.materializeWithMode(proposal, planID, version, workers, m.effectiveDraftPlanMode(context.Background()))
+}
+
+func (m *MarshalCLI) materializeWithMode(proposal marshalTaskProposal, planID string, version int64, workers []string, mode plan.Mode) (MarshalDraft, error) {
 	if len(proposal.Tasks) == 0 || !projectid.ID(m.ProjectID).Valid() {
 		err := errors.New("invalid Marshal proposal or project")
 		if len(proposal.Tasks) == 0 {
@@ -610,7 +683,10 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 			return MarshalDraft{}, err
 		}
 	}
-	p := plan.ExecutionPlan{ID: planID, ProjectID: projectid.ID(m.ProjectID), Goal: plan.GoalBinding{GoalID: "GOAL-" + planID, Revision: 1}, Version: version, State: plan.StateReady, Mode: plan.ModeStandard, ConstitutionVersion: constitution.Current, Checks: map[string][]string{}}
+	if mode != plan.ModeUltra {
+		mode = plan.ModeStandard
+	}
+	p := plan.ExecutionPlan{ID: planID, ProjectID: projectid.ID(m.ProjectID), Goal: plan.GoalBinding{GoalID: "GOAL-" + planID, Revision: 1}, Version: version, State: plan.StateReady, Mode: mode, ConstitutionVersion: constitution.Current, Checks: map[string][]string{}}
 	if m != nil && len(m.AllowedModes) > 0 {
 		for _, am := range m.AllowedModes {
 			p.HardConstraints = append(p.HardConstraints, "allowed-mode:"+string(am))
@@ -640,7 +716,7 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 			case len(item.Criteria) == 0:
 				return MarshalDraft{}, rejectDraft(err, at("criteria"), "required: give the task its success criterion")
 			case len(item.Paths) == 0:
-				return MarshalDraft{}, rejectDraft(err, at("paths"), "required: name the files the task changes")
+				return MarshalDraft{}, rejectDraft(err, at("paths"), "required: name exact project-relative files the task changes")
 			}
 			return MarshalDraft{}, rejectDraft(err, at("checks"), "required: give at least one executable check")
 		}
@@ -699,6 +775,9 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 	draft.Plan.Graph = graph
 	if err := validateDraft(draft); err != nil {
 		return MarshalDraft{}, placeDraftViolation(err, proposal)
+	}
+	if warnings := DraftFileScopeWarnings(draft.Tasks); len(warnings) > 0 {
+		draft.Plan.MarshalWarnings = append(draft.Plan.MarshalWarnings, warnings...)
 	}
 	return draft, nil
 }

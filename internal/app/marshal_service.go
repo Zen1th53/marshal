@@ -71,7 +71,10 @@ type MarshalService struct {
 	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
 	// AfterLifecycleEffect injects a failure after the effect but before completion.
 	AfterLifecycleEffect func(kind, operationID string) error
-	RecordActivity       func(string)
+	// VerifyProcessExit optionally confirms whether an already-started worker
+	// process has exited before stale-base recovery releases its capacity.
+	VerifyProcessExit func(ctx context.Context, runID, taskID string) (bool, error)
+	RecordActivity    func(string)
 	// QuotaLeft reports a provider's percent quota left and whether it is
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.

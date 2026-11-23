@@ -4,14 +4,88 @@ package app
 
 import (
 	"context"
-	"errors"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
-func canLaunchCandidate(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, launched []MarshalDispatch) (bool, bool) {
+func activeDispatchTaskIDs(run marshal.Run, candidate marshal.Task, launched []MarshalDispatch) []string {
+	seen := map[string]bool{candidate.PlanTaskID: true}
+	var ids []string
+	for _, other := range run.Tasks {
+		if (other.State == marshal.Dispatched || other.StaleProcessExitUnverified) && !seen[other.PlanTaskID] {
+			seen[other.PlanTaskID] = true
+			ids = append(ids, other.PlanTaskID)
+		}
+	}
+	for _, d := range launched {
+		if !seen[d.TaskID] {
+			seen[d.TaskID] = true
+			ids = append(ids, d.TaskID)
+		}
+	}
+	return ids
+}
+
+// EvaluateDispatchAdmission evaluates whether candidate task t can launch
+// concurrently under gate in the governed edition, where Process 05 governed
+// tasks always dispatch serially.
+func EvaluateDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIdx int, launched ...MarshalDispatch) DispatchAdmission {
+	taskID := safeAdmissionTaskID(t.PlanTaskID)
+	if adm, blocked := unmergedDependencyAdmission(run, t); blocked {
+		return adm
+	}
+	if taskIdx < 0 {
+		taskIdx = taskIndex(run, t.PlanTaskID)
+	}
+	activeIDs := activeDispatchTaskIDs(run, t, launched)
+	if run.Process05Bound && t.Mode == marshal.Governed {
+		if len(activeIDs) > 0 {
+			return DispatchAdmission{
+				Allowed:         false,
+				Code:            AdmissionSerialPlan,
+				Reason:          "governed plan tasks dispatch one at a time",
+				TaskID:          taskID,
+				BlockingTaskIDs: safeAdmissionTaskIDs(activeIDs),
+			}
+		}
+		if taskIdx > 0 {
+			var earlier []string
+			for j := 0; j < taskIdx && j < len(run.Tasks); j++ {
+				if run.Tasks[j].State != marshal.Merged {
+					earlier = append(earlier, run.Tasks[j].PlanTaskID)
+				}
+			}
+			if len(earlier) > 0 {
+				return DispatchAdmission{
+					Allowed:         false,
+					Code:            AdmissionSerialPlan,
+					Reason:          "earlier governed task must be merged before dispatch",
+					TaskID:          taskID,
+					BlockingTaskIDs: safeAdmissionTaskIDs(earlier),
+				}
+			}
+		}
+	}
 	policy := marshal.TierPolicy(gate, run.Settings)
-	if len(launched) >= policy.Concurrency {
+	if len(activeIDs) >= policy.Concurrency {
+		code := DispatchAdmissionCode("")
+		if policy.Tier != marshal.Ultra {
+			code = AdmissionStandardTier
+		}
+		return DispatchAdmission{
+			Allowed:         false,
+			Code:            code,
+			Reason:          "dispatch concurrency reached",
+			TaskID:          taskID,
+			BlockingTaskIDs: safeAdmissionTaskIDs(activeIDs),
+		}
+	}
+	return DispatchAdmission{Allowed: true, TaskID: taskID}
+}
+
+func canLaunchCandidate(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, launched []MarshalDispatch) (bool, bool) {
+	adm := EvaluateDispatchAdmission(gate, run, t, taskIndex(run, t.PlanTaskID), launched...)
+	if !adm.Allowed {
 		return false, true
 	}
 	return true, false
@@ -21,26 +95,10 @@ func shouldStopAfterLaunch(run marshal.Run, t marshal.Task) bool {
 	return run.Process05Bound && t.Mode == marshal.Governed
 }
 
-func checkDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIndex int) error {
-	policy := marshal.TierPolicy(gate, run.Settings)
-	active := 0
-	for _, other := range run.Tasks {
-		if other.State == marshal.Dispatched {
-			active++
-		}
-	}
-	if active >= policy.Concurrency {
-		return errors.New("dispatch concurrency reached")
-	}
-	if run.Process05Bound && t.Mode == marshal.Governed && active > 0 {
-		return errors.New("governed plan tasks dispatch one at a time")
-	}
-	if run.Process05Bound && t.Mode == marshal.Governed {
-		for j := 0; j < taskIndex; j++ {
-			if run.Tasks[j].State != marshal.Merged {
-				return errors.New("earlier governed task must be merged before dispatch")
-			}
-		}
+func checkDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIdx int) error {
+	adm := EvaluateDispatchAdmission(gate, run, t, taskIdx)
+	if !adm.Allowed {
+		return &DispatchAdmissionError{Admission: adm}
 	}
 	return nil
 }

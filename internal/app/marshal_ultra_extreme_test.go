@@ -406,7 +406,7 @@ func TestExtremeGlobalCap(t *testing.T) {
 				} else {
 					select {
 					case <-globalGate:
-					case <-time.After(5 * time.Second):
+					case <-time.After(30 * time.Second):
 					}
 				}
 				activeGlobal.Add(-1)
