@@ -87,6 +87,38 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	case "launch":
 		op.HandIn = nil
 		op.Attempt = 0
+		if op.LaunchBase != nil && !op.LaunchBase.ProcessStarted {
+			i := taskIndex(run, op.TaskID)
+			if i < 0 {
+				return run, rev, model.ErrNotFound
+			}
+			if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[i], op.LaunchBase); baseErr != nil {
+				return run, rev, baseErr
+			}
+			// No driver process started and the base/dependencies remain valid:
+			// clear the saved intent so first execution validates fresh base
+			// admission and prepares the worktree cleanly.
+			run.Operation = nil
+			op.Event.Type = events.EventTypeMarshalEscalated
+			op.Event.Data["launch_outcome"] = "interrupted before launch; intent cleared"
+			op.Event.Data["reason"] = "interrupted launch intent cleared before process start"
+			op.Next = &run
+			completed = true
+			break
+		}
+		if op.LaunchBase != nil || run.BaseCommit != "" {
+			checkRun := run
+			if op.Next != nil && taskIndex(checkRun, op.TaskID) < 0 {
+				checkRun = *op.Next
+			}
+			i := taskIndex(checkRun, op.TaskID)
+			if i < 0 {
+				return run, rev, model.ErrNotFound
+			}
+			if _, baseErr := s.admitLaunchBase(ctx, runID, checkRun, checkRun.Tasks[i], op.LaunchBase); baseErr != nil {
+				return s.reconcileStartedStaleLaunch(ctx, runID, checkRun, rev, i, op.Dir, baseErr)
+			}
+		}
 		// A launch may have reached the driver even without a receipt. Treat it
 		// as interrupted, never as queued work that Execute could launch again.
 		if op.Next != nil {
@@ -244,14 +276,31 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 	for _, id := range ids {
 		run, rev, err := s.load(ctx, id)
 		if err == nil {
-			_, _, err = s.recoverOperation(ctx, id, run, rev)
+			run, rev, err = s.recoverOperation(ctx, id, run, rev)
 		}
 		if errors.Is(err, errMarshalEventArtifact) {
 			failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, err))
 			continue
 		}
 		if err != nil {
-			pauseMarshal(&run, marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume})
+			if run.State == marshal.AwaitingUser && run.Pause != nil && run.Pause.Code == marshal.CodeStaleBase {
+				continue
+			}
+			pause := marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume}
+			if errors.Is(err, ErrStaleBase) {
+				taskID := ""
+				if run.Operation != nil {
+					taskID = run.Operation.TaskID
+				}
+				pause = marshal.Pause{
+					Reason:      err.Error(),
+					Resolutions: staleBaseResolutions(err),
+					Code:        marshal.CodeStaleBase,
+					Action:      marshal.PauseUsePlan,
+					TaskID:      taskID,
+				}
+			}
+			pauseMarshal(&run, pause)
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
 				failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, errors.Join(err, saveErr)))
 			}

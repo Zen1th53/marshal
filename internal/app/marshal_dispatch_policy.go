@@ -28,6 +28,7 @@ const (
 	AdmissionScopeBroad         DispatchAdmissionCode = "scope_broad"
 	AdmissionScopeOverlap       DispatchAdmissionCode = "scope_overlap"
 	AdmissionDependencyUnmerged DispatchAdmissionCode = "dependency_unmerged"
+	AdmissionStaleBase          DispatchAdmissionCode = "stale_base"
 )
 
 // DispatchAdmission describes whether a candidate task may launch now or which

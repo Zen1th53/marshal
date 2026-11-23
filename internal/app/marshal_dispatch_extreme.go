@@ -54,7 +54,7 @@ func holdsWorkerSlot(other, candidate marshal.Task) bool {
 	if other.PlanTaskID == candidate.PlanTaskID {
 		return false
 	}
-	return other.State == marshal.Dispatched || (other.State == marshal.Queued && other.Process05WaitApprovalID != "")
+	return other.State == marshal.Dispatched || other.StaleProcessExitUnverified || (other.State == marshal.Queued && other.Process05WaitApprovalID != "")
 }
 
 func activeDispatchTasks(run marshal.Run, candidate marshal.Task, launched []MarshalDispatch) []marshal.Task {
@@ -62,7 +62,7 @@ func activeDispatchTasks(run marshal.Run, candidate marshal.Task, launched []Mar
 	seen[candidate.PlanTaskID] = true
 	var active []marshal.Task
 	for _, other := range run.Tasks {
-		if other.State != marshal.Dispatched || seen[other.PlanTaskID] {
+		if (other.State != marshal.Dispatched && !other.StaleProcessExitUnverified) || seen[other.PlanTaskID] {
 			continue
 		}
 		seen[other.PlanTaskID] = true

@@ -12,7 +12,7 @@ func activeDispatchTaskIDs(run marshal.Run, candidate marshal.Task, launched []M
 	seen := map[string]bool{candidate.PlanTaskID: true}
 	var ids []string
 	for _, other := range run.Tasks {
-		if other.State == marshal.Dispatched && !seen[other.PlanTaskID] {
+		if (other.State == marshal.Dispatched || other.StaleProcessExitUnverified) && !seen[other.PlanTaskID] {
 			seen[other.PlanTaskID] = true
 			ids = append(ids, other.PlanTaskID)
 		}

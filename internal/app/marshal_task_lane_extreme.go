@@ -17,6 +17,38 @@ import (
 )
 
 func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService, run marshal.Run, req driver.Request, parent *execution.ExecutionRun) (*execution.ExecutionRun, error) {
+	if s != nil {
+		pin, err := s.admitLaunchBase(ctx, req.RunID, run, req.Task, nil)
+		if err != nil {
+			return nil, err
+		}
+		if req.Task.BaseCommit != pin.AdmittedBaseCommit {
+			return nil, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:          req.Task.PlanTaskID,
+				ApprovedRef:     pin.DeliveryRef,
+				ApprovedCommit:  pin.ApprovedBaseCommit,
+				CurrentRef:      pin.DeliveryRef,
+				CurrentCommit:   pin.DeliveryCommit,
+				IntegrationRef:  pin.IntegrationRef,
+				IntegrationHead: pin.IntegrationHead,
+				Route:           "refresh task base before launching governed task lane",
+				Reason:          fmt.Sprintf("stale_base: governed task base %s differs from admitted base %s", req.Task.BaseCommit, pin.AdmittedBaseCommit),
+				NextCommands:    []string{"/marshal amend", "/marshal use-plan"},
+			})
+		}
+		if parent != nil && parent.BaseCommit != "" && parent.BaseCommit != run.BaseCommit {
+			return nil, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:         req.Task.PlanTaskID,
+				ApprovedRef:    pin.DeliveryRef,
+				ApprovedCommit: pin.ApprovedBaseCommit,
+				CurrentRef:     pin.DeliveryRef,
+				CurrentCommit:  parent.BaseCommit,
+				Route:          "review and approve a plan on the current delivery base",
+				Reason:         "stale_base: execution parent base differs from approved delivery base",
+				NextCommands:   []string{"/marshal amend", "/marshal use-plan"},
+			})
+		}
+	}
 	if run.Process05Bound && !run.Process05Parallel {
 		return parent, nil
 	}

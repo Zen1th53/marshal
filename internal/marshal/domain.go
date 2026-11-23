@@ -247,6 +247,12 @@ type Task struct {
 	// canonical approval receipt before returning this task to dispatch.
 	Process05WaitRunID      string `json:",omitempty"`
 	Process05WaitApprovalID string `json:",omitempty"`
+	// QuarantinedRef records the preserved ref holding output from an
+	// already-started attempt whose base became stale before acceptance.
+	QuarantinedRef string `json:",omitempty"`
+	// StaleProcessExitUnverified holds worker capacity while an already-started
+	// attempt on a stale base has not yet reached verified exit.
+	StaleProcessExitUnverified bool `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.
@@ -323,14 +329,33 @@ const (
 	// CodeHandInNotRecorded stops a task whose worker finished but whose
 	// hand-in MARSHAL could not record; re-running the worker cannot help.
 	CodeHandInNotRecorded = "hand_in_not_recorded"
+	// CodeStaleBase stops launch or recovery when the approved delivery base,
+	// private integration head, or merged dependency heads are stale or unproven.
+	CodeStaleBase = "stale_base"
 )
+
+// LaunchBasePin records the observed delivery ref, private integration head,
+// admitted attempt base, and exact merged dependency heads at launch admission.
+type LaunchBasePin struct {
+	Repository              string            `json:",omitempty"`
+	DeliveryRef             string            `json:",omitempty"`
+	DeliveryCommit          string            `json:",omitempty"`
+	ApprovedBaseCommit      string            `json:",omitempty"`
+	IntegrationRef          string            `json:",omitempty"`
+	IntegrationHead         string            `json:",omitempty"`
+	AdmittedBaseCommit      string            `json:",omitempty"`
+	MergedDependencyHeads   map[string]string `json:",omitempty"`
+	DisjointAdvanceAdmitted bool              `json:",omitempty"`
+	ProcessStarted          bool              `json:",omitempty"`
+}
 
 // LifecycleOperation is written before an external effect. Its completion
 // snapshot and audit event commit in the same transaction.
 type LifecycleOperation struct {
 	ID, Kind, TaskID, Dir, Before, After, Target string
-	Authorized                                   bool `json:",omitempty"`
-	Next                                         *Run `json:",omitempty"`
+	Authorized                                   bool           `json:",omitempty"`
+	LaunchBase                                   *LaunchBasePin `json:",omitempty"`
+	Next                                         *Run           `json:",omitempty"`
 	Event                                        events.Event
 	HandIn                                       *HandIn `json:",omitempty"`
 	Attempt                                      int

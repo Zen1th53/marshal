@@ -39,6 +39,7 @@ const (
 	RefusalCodeParseInvalid       = "invalid_proposal"
 	RefusalCodeUnauthorized       = "unauthorized"
 	RefusalCodeStaleBinding       = "stale_binding"
+	RefusalCodeStaleBase          = "stale_base"
 	RefusalCodeRepeatedFailure    = "repeated_failure_escalated"
 	RefusalCodeCommandBusy        = "command_busy"
 	RefusalCodePreconditionFailed = "precondition_failed"
@@ -305,6 +306,11 @@ func ParseRefusalSummary(msg string) (RefusalReceipt, bool) {
 		r.Code = RefusalCodeUnauthorized
 		r.Effects = EffectsNone
 		r.NextCommands = []string{"/marshal chat"}
+	case strings.Contains(clean, "stale_base"),
+		strings.Contains(clean, "approved delivery base changed"):
+		r.Code = RefusalCodeStaleBase
+		r.Effects = EffectsNone
+		r.NextCommands = []string{"/marshal amend", "/marshal use-plan"}
 	case strings.Contains(clean, "Marshal proposal expired"),
 		strings.Contains(clean, "reserved merge approval expired"),
 		strings.Contains(clean, "that question is no longer open"),

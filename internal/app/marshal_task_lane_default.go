@@ -4,6 +4,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
@@ -13,7 +15,39 @@ import (
 	"github.com/Zen1th53/marshal/internal/risk"
 )
 
-func (r *Runtime) selectProcess05TaskLane(_ context.Context, _ *MarshalService, _ marshal.Run, _ driver.Request, parent *execution.ExecutionRun) (*execution.ExecutionRun, error) {
+func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService, run marshal.Run, req driver.Request, parent *execution.ExecutionRun) (*execution.ExecutionRun, error) {
+	if s != nil {
+		pin, err := s.admitLaunchBase(ctx, req.RunID, run, req.Task, nil)
+		if err != nil {
+			return nil, err
+		}
+		if req.Task.BaseCommit != pin.AdmittedBaseCommit {
+			return nil, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:          req.Task.PlanTaskID,
+				ApprovedRef:     pin.DeliveryRef,
+				ApprovedCommit:  pin.ApprovedBaseCommit,
+				CurrentRef:      pin.DeliveryRef,
+				CurrentCommit:   pin.DeliveryCommit,
+				IntegrationRef:  pin.IntegrationRef,
+				IntegrationHead: pin.IntegrationHead,
+				Route:           "refresh task base before launching governed task",
+				Reason:          fmt.Sprintf("stale_base: governed task base %s differs from admitted base %s", req.Task.BaseCommit, pin.AdmittedBaseCommit),
+				NextCommands:    []string{"/marshal amend", "/marshal use-plan"},
+			})
+		}
+		if parent != nil && parent.BaseCommit != "" && parent.BaseCommit != run.BaseCommit {
+			return nil, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:         req.Task.PlanTaskID,
+				ApprovedRef:    pin.DeliveryRef,
+				ApprovedCommit: pin.ApprovedBaseCommit,
+				CurrentRef:     pin.DeliveryRef,
+				CurrentCommit:  parent.BaseCommit,
+				Route:          "review and approve a plan on the current delivery base",
+				Reason:         "stale_base: execution parent base differs from approved delivery base",
+				NextCommands:   []string{"/marshal amend", "/marshal use-plan"},
+			})
+		}
+	}
 	return parent, nil
 }
 
