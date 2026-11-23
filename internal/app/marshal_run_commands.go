@@ -19,7 +19,10 @@ import (
 
 const runCommandLimit = 128
 
-type RunCommandInput struct{ Operation, TaskID, Worker, Reason string }
+type RunCommandInput struct {
+	Operation, TaskID, Worker, Reason string
+	FreshSession                      bool `json:",omitempty"`
+}
 type runCommandCommitKey struct{}
 
 type runWriter struct {
@@ -91,7 +94,7 @@ func (s *MarshalService) CommandRun(ctx context.Context, e CommandEnvelope, inpu
 		return marshal.RunCommand{}, err
 	}
 	c := marshal.RunCommand{ID: e.IdempotencyKey, Actor: p.ID(), GrantID: decision.CapabilityGrantID, AuthorityProject: e.ProjectID, Resource: r.layout.Database,
-		Operation: input.Operation, TaskID: input.TaskID, Worker: input.Worker, Reason: input.Reason, Revision: e.ExpectedVersion}
+		Operation: input.Operation, TaskID: input.TaskID, Worker: input.Worker, Reason: input.Reason, FreshSession: input.FreshSession, Revision: e.ExpectedVersion}
 	payload, _ := json.Marshal(struct {
 		Envelope CommandEnvelope
 		Input    RunCommandInput
@@ -168,7 +171,7 @@ func (s *MarshalService) enqueueRunCommand(ctx context.Context, runID string, c 
 		return c, errors.New("run command admission is fenced: " + run.CommandFence)
 	}
 	switch c.Operation {
-	case "return", "accept", "reassign", "cancel":
+	case "return", "accept", "retry", "reassign", "cancel":
 		i := taskIndex(run, c.TaskID)
 		if i < 0 {
 			return c, model.ErrNotFound
@@ -224,6 +227,16 @@ func (s *MarshalService) drainRunCommands(ctx context.Context, runID string) err
 		run, rev, err := s.load(ctx, runID)
 		if err != nil {
 			return err
+		}
+		pending := false
+		for _, c := range run.Commands {
+			if c.State == "queued" || c.State == "applying" || c.State == "reconciling" {
+				pending = true
+				break
+			}
+		}
+		if !pending {
+			return nil
 		}
 		if run.Operation != nil {
 			run, rev, err = s.recoverOperation(ctx, runID, run, rev)
@@ -321,6 +334,8 @@ func (s *MarshalService) drainRunCommands(ctx context.Context, runID string) err
 			_, err = authorized.ReturnByUser(commandCtx, runID, c.TaskID, c.Reason)
 		case "reassign":
 			err = authorized.ReassignByOperator(commandCtx, runID, c.TaskID, c.Worker, c.Reason)
+		case "retry":
+			err = authorized.RetryTask(commandCtx, runID, c.TaskID, c.FreshSession)
 		case "cancel":
 			err = authorized.CancelTask(commandCtx, runID, c.TaskID)
 		case "accept":

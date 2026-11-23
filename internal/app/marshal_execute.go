@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -443,11 +444,13 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		}
 		if fresh, _, err := s.load(ctx, runID); err != nil {
 			return launched, err
-		} else {
+		} else if !slices.Equal(run.Commands, fresh.Commands) {
+			// Keep the reserved round's admission snapshot unless an operator
+			// command changed it. Dispatch itself updates persisted task states.
 			run = fresh
-			if run.CommandFence != "" || run.State == marshal.AwaitingUser {
-				break
-			}
+		}
+		if run.CommandFence != "" || run.State == marshal.AwaitingUser {
+			break
 		}
 		if i := taskIndex(run, t.PlanTaskID); i >= 0 {
 			t = run.Tasks[i]

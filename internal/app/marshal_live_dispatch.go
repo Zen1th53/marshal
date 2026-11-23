@@ -16,19 +16,21 @@ func (s *MarshalService) liveDispatches() *sync.Map {
 	return &marshalLiveFallback
 }
 
-func marshalLiveKey(runID, taskID string) string { return runID + "\x00" + taskID }
+func (s *MarshalService) marshalLiveKey(runID, taskID string) string {
+	return s.Repository + "\x00" + s.ProjectID + "\x00" + runID + "\x00" + taskID
+}
 
 func (s *MarshalService) markDispatchLive(runID string, launched []MarshalDispatch) {
 	for _, d := range launched {
-		s.liveDispatches().Store(marshalLiveKey(runID, d.TaskID), true)
+		s.liveDispatches().Store(s.marshalLiveKey(runID, d.TaskID), true)
 	}
 }
 
 func (s *MarshalService) clearDispatchLive(runID, taskID string) {
-	s.liveDispatches().Delete(marshalLiveKey(runID, taskID))
+	s.liveDispatches().Delete(s.marshalLiveKey(runID, taskID))
 }
 
 func (s *MarshalService) dispatchLive(runID, taskID string) bool {
-	_, ok := s.liveDispatches().Load(marshalLiveKey(runID, taskID))
+	_, ok := s.liveDispatches().Load(s.marshalLiveKey(runID, taskID))
 	return ok
 }

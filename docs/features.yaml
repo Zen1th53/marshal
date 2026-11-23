@@ -804,7 +804,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-accept
-    name: Queue owner acceptance of a handed-in task through current review gates
+    name: Approve a handed-in result immediately when idle or queue acceptance during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -820,7 +820,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-return
-    name: Queue a return with a reason while unrelated workers continue
+    name: Return a handed-in task immediately when idle or queue it during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -836,12 +836,14 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-retry
-    name: Retry any returned or escalated task with optional fresh session
+    name: Retry a returned or escalated task immediately when idle or queue it during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
       - internal/tui/board_retry.go
-    tests: []
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestQueuedRetryRetainsFreshSession
     docs:
       - docs/board-and-keys.md
     web: []

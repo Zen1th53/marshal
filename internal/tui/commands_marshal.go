@@ -2232,7 +2232,7 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	if busy && (service == nil || service.ActiveExecution(runID) == "") {
 		return "", busyErr
 	}
-	if w.runtime != nil && service != nil {
+	if w.runtime != nil && service != nil && service.ActiveExecution(runID) != "" {
 		return w.marshalRunCommand(context.Background(), service, runID, app.RunCommandInput{Operation: "accept", TaskID: args[0]})
 	}
 	if busyErr != nil {
@@ -2268,7 +2268,7 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 			return "", err
 		}
 	}
-	if w.runtime != nil {
+	if w.runtime != nil && service.ActiveExecution(runID) != "" {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "return", TaskID: task, Reason: strings.Join(args[1:], " ")})
 	}
 	m.grant(runID, "return:"+task)
@@ -2294,8 +2294,10 @@ func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, er
 	if !isAutomaticProposalContext(ctx) {
 		w.resetAutomaticRefusalSuppression(runID, task)
 	}
-	if err := m.busyErrorIfBusy("retry"); err != nil {
-		return "", err
+	if service.ActiveExecution(runID) == "" {
+		if err := m.busyErrorIfBusy("retry"); err != nil {
+			return "", err
+		}
 	}
 	freshSession := false
 	if len(args) == 2 {
@@ -2304,6 +2306,9 @@ func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, er
 		} else {
 			return "", errors.New("usage: /marshal retry <task> [fresh-session]")
 		}
+	}
+	if w.runtime != nil && service.ActiveExecution(runID) != "" {
+		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "retry", TaskID: task, FreshSession: freshSession})
 	}
 	if err := service.RetryTask(ctx, runID, task, freshSession); err != nil {
 		return "", err
@@ -2331,7 +2336,7 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 			return "", err
 		}
 	}
-	if w.runtime != nil {
+	if w.runtime != nil && service.ActiveExecution(runID) != "" {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "reassign", TaskID: task, Worker: worker, Reason: "operator reassignment"})
 	}
 	if err := service.ReassignByOperator(ctx, runID, task, worker, "operator /marshal reassign "+task+" "+worker); err != nil {
@@ -2360,7 +2365,7 @@ func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, e
 			return "", err
 		}
 	}
-	if w.runtime != nil {
+	if w.runtime != nil && service.ActiveExecution(runID) != "" {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "cancel", TaskID: task})
 	}
 	if err := service.CancelTask(ctx, runID, task); err != nil {
