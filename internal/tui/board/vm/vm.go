@@ -39,6 +39,7 @@ type Board struct {
 	LastRun  bool
 	Screen   Screen
 	Now      time.Time
+	Mode     Mode
 	Top      TopBar
 	NowLine  NowLine
 	Marshal  Marshal
@@ -298,6 +299,7 @@ type Check struct {
 
 // Readiness is the first-open checklist.
 type Readiness struct {
+	SessionLabel string
 	Checks       []Check
 	Ready, Total int
 	TelemetryOn  bool
@@ -366,3 +368,19 @@ type Paused struct {
 
 // Key is one key hint.
 type Key struct{ Key, Label string }
+
+// Mode separates current authorization and preference from recorded run facts.
+// Nil observations have not been collected yet.
+type Mode struct {
+	Edition          string
+	Entitlement      string
+	RequestStatus    string
+	Delegation       *bool
+	ExecutionEnabled *bool
+	EffectiveTier    string
+	RecordedRunTier  string
+	PlanParallel     *bool
+	Active           *int
+	EffectiveCap     *int
+	Reasons          []string
+}

@@ -21,6 +21,33 @@ features:
         anchor: 'case "/ultra":'
         kind: control
 
+  - id: execution-mode-display
+    name: Effective execution mode and serial work explanations on home screens
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/tui/boardv2_collect.go
+      - internal/tui/ultra_request_read.go
+      - internal/app/marshal_dispatch_policy.go
+      - internal/webboard/frame.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestBoardModeReportsEffectiveTierSeparately
+      - internal/webboard.TestModeFrameDoesNotExposeLease
+      - internal/webboard.TestFrameMapsEveryField
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'setText("execution-mode"'
+        kind: view
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Session label"'
+        kind: view
+    tui:
+      - routeOrCommand: home
+        anchor: 'func homeMode('
+        kind: view
+
   - id: F02
     name: Effective worker concurrency and per-provider lane limits
     editions: [default, governed]

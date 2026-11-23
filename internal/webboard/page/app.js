@@ -489,6 +489,16 @@
   }
   function renderHome(f) {
     setText("now", heroSentence(f));
+    var m = f.mode || {};
+    var flag = function (v) { return v == null ? "unknown" : v ? "on" : "off"; };
+    var number = function (v) { return v == null ? "unknown" : String(v); };
+    setText("execution-mode", (m.edition || "unknown") + " · entitlement " + (m.entitlement || "unknown") +
+      " · preference " + flag(m.executionEnabled) + " · effective " + (m.effectiveTier || "unknown") +
+      " · active " + number(m.active) + " / cap " + number(m.effectiveCap) +
+      " · plan " + (m.planParallel == null ? "unknown" : m.planParallel ? "parallel" : "serial") +
+      " · recorded " + (m.recordedRunTier || "unknown") + " · delegation " + flag(m.delegation) +
+      " · request " + (m.requestStatus || "unknown"));
+    setText("execution-reasons", (m.reasons || []).join("; "));
     var p = f.plan, nums = clear($("nums"));
     var bits = [];
     if (p.total) bits.push([p.done + " of " + p.total, " merged"]);
@@ -1013,7 +1023,7 @@
   function renderSettings(f) {
     var r = f.ready;
     var s = f.system || {};
-    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, f.plan.tokens, f.v, s])) return;
+    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, r.sessionLabel, f.plan.tokens, f.v, s])) return;
     var dl = clear($("set-facts"));
     kv(dl, "Version", (f.top.version || "unknown") + (s.updateAvailable ? " · " + s.updateAvailable + " is available (F10 or /update in the terminal)" : ""),
       s.updateAvailable ? "tone-warn" : "");
@@ -1027,6 +1037,7 @@
     var approval = "";
     r.defaults.forEach(function (d) { if (d.name === "approval") approval = d.value; });
     kv(dl, "Approval mode", approval || "not reported to this page yet");
+    kv(dl, "Session label", (r.sessionLabel || "unknown") + " (supervision label)");
     kv(dl, "Project", f.top.project || "–");
     kv(dl, "Run", f.top.run || "no run");
     // Telemetry is known once the Board probed this computer (the checks

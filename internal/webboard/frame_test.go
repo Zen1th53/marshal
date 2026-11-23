@@ -56,7 +56,16 @@ func TestEncodeEmptyBoard(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(body)
-	if strings.Count(s, "null") != 2 {
+	var fields map[string]any
+	if err := json.Unmarshal(body, &fields); err != nil {
+		t.Fatal(err)
+	}
+	delete(fields, "mode") // Mode uses null for individual observations not yet collected.
+	rest, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(rest), "null") != 2 {
 		t.Fatalf("a list encodes as null: %s", s)
 	}
 	for _, want := range []string{`"tasks":[]`, `"workers":[]`, `"limits":[]`, `"activity":[]`, `"requests":[]`, `"keys":[]`, `"items":[]`, `"lines":[]`, `"stages":[]`, `"checks":[]`, `"defaults":[]`, `"now":""`, `"decision":null`, `"paused":null`} {
@@ -101,6 +110,7 @@ var excluded = map[string]bool{
 // excluded: a field added to the view model must be decided here.
 func TestFrameMapsEveryField(t *testing.T) {
 	pairs := map[reflect.Type]reflect.Type{
+		reflect.TypeOf(vm.Mode{}):  reflect.TypeOf(Mode{}),
 		reflect.TypeOf(vm.Board{}): reflect.TypeOf(Frame{}), reflect.TypeOf(vm.TopBar{}): reflect.TypeOf(TopBar{}),
 		reflect.TypeOf(vm.NowLine{}): reflect.TypeOf(NowLine{}), reflect.TypeOf(vm.Marshal{}): reflect.TypeOf(Marshal{}),
 		reflect.TypeOf(vm.Stage{}): reflect.TypeOf(Stage{}), reflect.TypeOf(vm.Plan{}): reflect.TypeOf(Plan{}),
@@ -272,5 +282,42 @@ func TestFrameCarriesLimitsAndSystem(t *testing.T) {
 	// A board with no limits sends an empty list, never null.
 	if f := FromBoard(fixtureReady()); f.Limits == nil || len(f.Limits) != 0 {
 		t.Fatalf("ready limits: %#v", f.Limits)
+	}
+}
+
+func TestModeFrameDoesNotExposeLease(t *testing.T) {
+	enabled, serial, active, cap := true, false, 2, 1
+	m := vm.Mode{Edition: "standard", Entitlement: "active", RequestStatus: "unknown", Delegation: &serial, ExecutionEnabled: &enabled, EffectiveTier: "ultra", RecordedRunTier: "standard", PlanParallel: &serial, Active: &active, EffectiveCap: &cap, Reasons: []string{"approved plan requires serial work"}}
+	body, err := Encode(vm.Board{Mode: m})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frame map[string]json.RawMessage
+	if err := json.Unmarshal(body, &frame); err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(frame["mode"], &fields); err != nil {
+		t.Fatal(err)
+	}
+	allowed := []string{"edition", "entitlement", "requestStatus", "delegation", "executionEnabled", "effectiveTier", "recordedRunTier", "planParallel", "active", "effectiveCap", "reasons"}
+	if len(fields) != len(allowed) {
+		t.Fatalf("unexpected mode data: %s", frame["mode"])
+	}
+	for _, name := range allowed {
+		if _, ok := fields[name]; !ok {
+			t.Errorf("missing %s", name)
+		}
+	}
+	if !reflect.DeepEqual(FromBoard(vm.Board{Mode: m}).Mode, Mode{
+		Edition: m.Edition, Entitlement: m.Entitlement, RequestStatus: m.RequestStatus,
+		Delegation: &serial, ExecutionEnabled: &enabled, EffectiveTier: "ultra", RecordedRunTier: "standard",
+		PlanParallel: &serial, Active: &active, EffectiveCap: &cap, Reasons: []string{"approved plan requires serial work"},
+	}) || fields["active"] != float64(2) || fields["effectiveCap"] != float64(1) || fields["planParallel"] != false || fields["executionEnabled"] != true {
+		t.Fatal(fields)
+	}
+	unknown := FromBoard(vm.Board{}).Mode
+	if unknown.Active != nil || unknown.PlanParallel != nil || unknown.EffectiveCap != nil || unknown.Reasons == nil {
+		t.Fatalf("unknown observations: %+v", unknown)
 	}
 }

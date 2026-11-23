@@ -30,6 +30,7 @@ type Frame struct {
 	V       int      `json:"v"`
 	Screen  string   `json:"screen"`
 	Now     string   `json:"now"`
+	Mode    Mode     `json:"mode"`
 	Top     TopBar   `json:"top"`
 	NowLine NowLine  `json:"nowLine"`
 	Marshal Marshal  `json:"marshal"`
@@ -282,6 +283,7 @@ type Setting struct {
 }
 
 type Readiness struct {
+	SessionLabel string    `json:"sessionLabel"`
 	Checks       []Check   `json:"checks"`
 	Ready        int       `json:"ready"`
 	Total        int       `json:"total"`
@@ -393,6 +395,7 @@ func limits(in []vm.ProviderLimits) []ProviderLimits {
 func FromBoard(b vm.Board) Frame {
 	f := Frame{
 		LastRun: b.LastRun, V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
+		Mode: mode(b.Mode),
 		Top: TopBar{Version: b.Top.Version, Project: b.Top.Project, Run: b.Top.Run, State: b.Top.State, StateTone: string(b.Top.StateTone),
 			Workers: b.Top.Workers, Inbox: b.Top.Inbox, Clock: stamp(b.Top.Clock)},
 		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK, ChatAsked: b.NowLine.ChatAsked},
@@ -413,7 +416,7 @@ func FromBoard(b vm.Board) Frame {
 		Requests: []Request{},
 		Chat: Chat{Bound: b.Chat.Bound, Restarts: b.Chat.Restarts, ReboundAt: stamp(b.Chat.ReboundAt), Resent: b.Chat.Resent,
 			InputClear: b.Chat.InputClear, InputKnown: b.Chat.InputKnown, Answered: b.Chat.Answered, Stage: b.Chat.Stage},
-		Ready: Readiness{Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
+		Ready: Readiness{SessionLabel: b.Ready.SessionLabel, Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
 			TelemetryAsk: b.Ready.TelemetryAsk, Defaults: []Setting{}, Checked: stamp(b.Ready.Checked), Actions: keys(b.Ready.Actions)},
 		Keys: keys(b.Keys),
 		System: System{CPUPct: b.System.CPUPct, MemPct: b.System.MemPct, DiskPct: b.System.DiskPct, TempC: b.System.TempC,
@@ -501,4 +504,26 @@ func encodeFrame(f Frame) ([]byte, error) {
 func changeKey(b vm.Board) ([]byte, error) {
 	b.Now, b.Top.Clock = time.Time{}, time.Time{}
 	return Encode(b)
+}
+
+// Mode contains only presentation observations, never authorization material.
+type Mode struct {
+	Edition          string   `json:"edition"`
+	Entitlement      string   `json:"entitlement"`
+	RequestStatus    string   `json:"requestStatus"`
+	Delegation       *bool    `json:"delegation"`
+	ExecutionEnabled *bool    `json:"executionEnabled"`
+	EffectiveTier    string   `json:"effectiveTier"`
+	RecordedRunTier  string   `json:"recordedRunTier"`
+	PlanParallel     *bool    `json:"planParallel"`
+	Active           *int     `json:"active"`
+	EffectiveCap     *int     `json:"effectiveCap"`
+	Reasons          []string `json:"reasons"`
+}
+
+func mode(m vm.Mode) Mode {
+	return Mode{Edition: m.Edition, Entitlement: m.Entitlement, RequestStatus: m.RequestStatus,
+		Delegation: m.Delegation, ExecutionEnabled: m.ExecutionEnabled, EffectiveTier: m.EffectiveTier,
+		RecordedRunTier: m.RecordedRunTier, PlanParallel: m.PlanParallel, Active: m.Active,
+		EffectiveCap: m.EffectiveCap, Reasons: append([]string{}, m.Reasons...)}
 }

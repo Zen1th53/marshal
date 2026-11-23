@@ -280,6 +280,12 @@ func renderHome(v boardVisual, b vm.Board, p homePrimary, cols, rows int) []stri
 	content := []string{v.homeHeader(b.Top, cols), "", v.homeLine("Now:", homeNow(b), cols, "")}
 	content = append(content, v.homeLines("From you:", from, cols, fromTone, 3)...)
 	content = append(content, v.homeLine("Web:", homeWeb(b.Web), cols, ""))
+	if b.Mode.Edition != "" {
+		content = append(content, v.homeLines("Execution:", homeMode(b.Mode), cols, "", 4)...)
+		if len(b.Mode.Reasons) > 0 {
+			content = append(content, v.homeLines("Why:", strings.Join(b.Mode.Reasons, "; "), cols, "", 3)...)
+		}
+	}
 	keys := homeKeysLong
 	if !v.unicode() {
 		keys = strings.ReplaceAll(keys, "⏎", "Enter")
@@ -458,4 +464,32 @@ func (w *Workspace) homeYes(ctx context.Context) {
 			w.setOutput("That changed on the Board; look again.", false)
 		}
 	}
+}
+
+func homeMode(m vm.Mode) string {
+	flag := func(v *bool) string {
+		if v == nil {
+			return "unknown"
+		}
+		if *v {
+			return "on"
+		}
+		return "off"
+	}
+	number := func(v *int) string {
+		if v == nil {
+			return "unknown"
+		}
+		return fmt.Sprint(*v)
+	}
+	plan := "unknown"
+	if m.PlanParallel != nil {
+		if *m.PlanParallel {
+			plan = "parallel"
+		} else {
+			plan = "serial"
+		}
+	}
+	return fmt.Sprintf("%s · entitlement %s · preference %s · effective %s · active %s / cap %s · plan %s · recorded %s · delegation %s · request %s",
+		m.Edition, m.Entitlement, flag(m.ExecutionEnabled), firstSet(m.EffectiveTier, "unknown"), number(m.Active), number(m.EffectiveCap), plan, firstSet(m.RecordedRunTier, "unknown"), flag(m.Delegation), firstSet(m.RequestStatus, "unknown"))
 }
