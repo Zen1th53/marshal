@@ -32,6 +32,7 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	settingNotices map[string]bool
 	// marshalLive is marshal once it exists, for lock-free readers.
 	marshalLive        atomic.Pointer[marshalSession]
 	taskDiff           taskDiffOverlay
@@ -510,6 +511,20 @@ func (w *Workspace) SetUltraExecution(ctx context.Context, enabled bool) error {
 				mode = "ULTRA when current entitlement permits"
 			}
 			w.tellMarshal("Execution preference updated: " + mode + ". Apply it at the next admission. Already admitted workers drain with their original collection and review policy; the approved scope and lane binding remain in force.")
+			w.mu.RLock()
+			st, project := w.store, w.ultraProjectLocked()
+			w.mu.RUnlock()
+			if st != nil {
+				if changes, err := st.MarshalSettingsChanges(ctx, project); err == nil {
+					for _, c := range changes {
+						if c.Key == "ultra-execution" {
+							w.publishSettingChange(c)
+							break
+						}
+					}
+				}
+			}
+
 		}
 	}()
 	w.ultraAdmission.Lock()

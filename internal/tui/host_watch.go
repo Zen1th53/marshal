@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -90,7 +92,7 @@ type hostWatcher struct {
 func newHostWatcher(s hostSampler) *hostWatcher {
 	return &hostWatcher{
 		sampler: s,
-		policy:  hostwatch.DefaultPolicy(),
+		policy:  userHostPolicy(),
 		ring:    hostwatch.NewRing(hostRingSize),
 		every:   hostSampleEvery,
 		now:     time.Now,
@@ -174,15 +176,15 @@ func (h *hostWatcher) act(a hostwatch.Action, window []hostwatch.Sample) {
 	trigger := a.Kind == hostwatch.ActionTrigger
 	switch a.Rule {
 	case ruleThermal:
-		avg, _ := avgPackage(window, 30*time.Second)
+		avg, _ := avgPackage(window, h.policy.ThermalWindow())
 		var msg, outcome string
 		if trigger {
-			msg = fmt.Sprintf("GUARD · package 30 s avg %.1f °C > %s", avg, trimFloat(h.policy.PackageTempTriggerC))
+			msg = fmt.Sprintf("GUARD · package %d s avg %.1f °C > %s", int(h.policy.ThermalWindow()/time.Second), avg, trimFloat(h.policy.PackageTempTriggerC))
 			if h.guard != nil {
 				outcome = h.guard.trigger(avg)
 			}
 		} else {
-			msg = fmt.Sprintf("RELEASE · package 30 s avg %.1f °C < %s", avg, trimFloat(h.policy.PackageTempReleaseC))
+			msg = fmt.Sprintf("RELEASE · package %d s avg %.1f °C < %s", int(h.policy.ThermalWindow()/time.Second), avg, trimFloat(h.policy.PackageTempReleaseC))
 			if h.guard != nil {
 				outcome = h.guard.release()
 			}
@@ -520,4 +522,13 @@ func (w *Workspace) startHostWatchWith(ctx context.Context, h *hostWatcher) bool
 	}
 	w.hostWatch.Store(h)
 	return w.startBackground(ctx, h.run)
+}
+
+func userHostPolicy() hostwatch.Policy {
+	p := hostwatch.DefaultPolicy()
+	p.PackageTempTriggerC, _ = strconv.ParseFloat(settingscatalog.UserPreference("thermal-trigger"), 64)
+	p.PackageTempReleaseC, _ = strconv.ParseFloat(settingscatalog.UserPreference("thermal-release"), 64)
+	p.PackageTempWindowSeconds, _ = strconv.Atoi(settingscatalog.UserPreference("thermal-window"))
+	p.ThermalDisabled = settingscatalog.UserPreference("thermal-enabled") == "off"
+	return p
 }

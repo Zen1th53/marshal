@@ -17,6 +17,21 @@ You can inspect and update orchestration settings directly from the Board comman
 /marshal settings
 ```
 
+Settings shows configured and effective values, units, scope, source, and when a change applies. The browser Settings page shows the same project rows and the latest 100 change records. Each project change commits its actor, old and new values, event ID, and revision with the settings revision check. Existing approved runs keep their approved snapshot. A key without a value shows usage and never writes.
+
+User defaults use `/marshal settings <key> <value>` too:
+
+- `update-check`, `web-auto-open`, `thermal-enabled`, `display-animation`: `on|off`.
+- `thermal-trigger` and `thermal-release`: degrees Celsius; release must be below trigger.
+- `thermal-window`: 1–60 seconds.
+- `display-theme`: `default|monochrome|high-contrast|no-color`.
+
+These defaults apply at the next launch and share one atomic user record with their change history. Explicit launch flags and environment preferences take precedence. `MARSHAL_NO_UPDATE_CHECK`, `MARSHAL_WEB_OPEN=0`, and `MARSHAL_CLOUD_ENDPOINT=off` retain their opt-outs.
+
+Project file preferences are `notifications` (`on|off`), `session-import` (`on|off`, applied at launch), and `memory-channel` (the same values as `/memory inject`). Session import never grants permission to read history. These files accept earlier one-line values and save value and audit history together. The fixed policy rows describe the current build and cannot be edited here.
+
+Run money ceilings use minor currency units; goal money ceilings use USD. Goal ceilings belong to an approved goal revision. Unknown usage remains unknown and does not bypass quota.
+
 ### Changing Settings
 
 ```text

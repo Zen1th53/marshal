@@ -5,7 +5,10 @@
 // every collector is wired.
 package vm
 
-import "time"
+import (
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
+	"time"
+)
 
 // Screen is which Board v2 layout is drawn.
 type Screen string
@@ -35,6 +38,7 @@ const (
 
 // Board is one frame of data.
 type Board struct {
+	Settings settingscatalog.Snapshot
 	// LastRun marks a finished result shown while waiting for a new goal.
 	LastRun  bool
 	Screen   Screen

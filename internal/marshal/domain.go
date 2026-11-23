@@ -669,3 +669,6 @@ type VerifierEvidence struct {
 	Findings     []string
 	InputDigest  string
 }
+
+// DefaultProviderOrder is the fallback preference shared by every runtime role.
+func DefaultProviderOrder() []string { return []string{"codex", "claude", "agy", "opencode"} }

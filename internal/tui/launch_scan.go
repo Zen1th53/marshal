@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -679,6 +680,11 @@ func (w *Workspace) runLaunchScan(ctx context.Context, root string) projectScan 
 }
 
 func (w *Workspace) scanEarlierSessions(ctx context.Context, root string) []scanSessions {
+	prefs, err := settingscatalog.ReadScopedPreference(filepath.Join(root, ".marshal", "session-import"), "session-import")
+	if err == nil && settingscatalog.Preference(prefs, "session-import") == "off" {
+		return nil
+	}
+
 	if w == nil || w.runtime == nil {
 		return nil
 	}

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/redaction"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -38,6 +39,8 @@ type Frame struct {
 	Lanes   Lanes    `json:"lanes"`
 	Tasks   []Task   `json:"tasks"`
 	Workers []Worker `json:"workers"`
+
+	Settings settingscatalog.Snapshot `json:"settings"`
 	// Limits is every provider's limit rows and dispatch state; added in
 	// version 1 without a version change (a reader that ignores it is
 	// unaffected).
@@ -394,7 +397,8 @@ func limits(in []vm.ProviderLimits) []ProviderLimits {
 // an empty list, never null.
 func FromBoard(b vm.Board) Frame {
 	f := Frame{
-		LastRun: b.LastRun, V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
+		Settings: b.Settings,
+		LastRun:  b.LastRun, V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
 		Mode: mode(b.Mode),
 		Top: TopBar{Version: b.Top.Version, Project: b.Top.Project, Run: b.Top.Run, State: b.Top.State, StateTone: string(b.Top.StateTone),
 			Workers: b.Top.Workers, Inbox: b.Top.Inbox, Clock: stamp(b.Top.Clock)},
@@ -475,6 +479,12 @@ func FromBoard(b vm.Board) Frame {
 			c.Tasks = append(c.Tasks, PausedTask{Title: t.Title, Progress: t.Progress, Kept: t.Kept})
 		}
 		f.Paused = c
+	}
+	if f.Settings.Rows == nil {
+		f.Settings.Rows = []settingscatalog.Row{}
+	}
+	if f.Settings.Changes == nil {
+		f.Settings.Changes = []settingscatalog.Change{}
 	}
 	return f
 }

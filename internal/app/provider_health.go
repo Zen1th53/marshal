@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +26,7 @@ type providerHealthEntry struct {
 var providerHealth = &ProviderHealth{entries: map[string]providerHealthEntry{}}
 
 // providerFallbackOrder is the one default fallback order for every role.
-var providerFallbackOrder = []string{"codex", "claude", "agy", "opencode"}
+var providerFallbackOrder = marshal.DefaultProviderOrder()
 
 func providerHealthKey(provider string) string {
 	name := strings.ToLower(strings.TrimSpace(provider))

@@ -456,6 +456,7 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 	if err := saveInjectChannel(root, channel); err != nil {
 		return "", fmt.Errorf("save injection channel: %w", err)
 	}
+	h.ws.publishFileSetting(injectChannelPath(root), "memory-channel")
 	var providers, notes []string
 	for _, provider := range []string{"claude", "codex", "opencode", "antigravity"} {
 		resolved, note := resolveInjectChannel(provider, channel)

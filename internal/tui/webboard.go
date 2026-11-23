@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"strings"
 	"sync"
 
@@ -46,7 +47,7 @@ var (
 // Board when it starts: yes, unless MARSHAL_WEB_OPEN=0 (the Web Board still
 // starts; w opens it).
 func webOpenAtStart() bool {
-	return strings.TrimSpace(v2Getenv("MARSHAL_WEB_OPEN")) != "0"
+	return strings.TrimSpace(v2Getenv("MARSHAL_WEB_OPEN")) != "0" && settingscatalog.UserPreference("web-auto-open") != "off"
 }
 
 // autoStartWebBoard starts the Web Board as the Board opens and, where

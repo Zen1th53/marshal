@@ -313,14 +313,14 @@ func (v boardVisual) hostTop(s hostSnapshot, w int) []string {
 
 func (v boardVisual) hostCPU(s hostSnapshot, w int) []string {
 	last, ok := s.latest()
-	avg, avgOK := avgPackage(s.Samples, 30*time.Second)
+	avg, avgOK := avgPackage(s.Samples, s.Policy.ThermalWindow())
 	if !ok || !last.CPUPackageTempCKnown {
 		return []string{v.title("CPU", "no package temperature sensor", false, w)}
 	}
 	t := last.CPUPackageTempC
 	summary := fmt.Sprintf("package %.0f °C", t)
 	if avgOK {
-		summary += fmt.Sprintf(" · 30 s avg %.1f °C", avg)
+		summary += fmt.Sprintf(" · %d s avg %.1f °C", int(s.Policy.ThermalWindow()/time.Second), avg)
 	}
 	if last.CPULoadAvgKnown {
 		summary += fmt.Sprintf(" · load %.2f %.2f %.2f", last.CPULoadAvg1, last.CPULoadAvg5, last.CPULoadAvg15)
@@ -550,9 +550,12 @@ func (s hostSnapshot) policyRows() []hostPolicyRow {
 	unknown := func(r hostPolicyRow) hostPolicyRow { r.state, r.now = "n/a", "—"; return r }
 	var rows []hostPolicyRow
 
-	thermal := hostPolicyRow{rule: fmt.Sprintf("CPU package > %s °C (30 s avg)", trimFloat(p.PackageTempTriggerC)), action: fmt.Sprintf("ask owner: lanes −50%% · restore < %s °C", trimFloat(p.PackageTempReleaseC))}
-	if avg, ok := avgPackage(s.Samples, 30*time.Second); ok {
+	thermal := hostPolicyRow{rule: fmt.Sprintf("CPU package > %s °C (%d s avg)", trimFloat(p.PackageTempTriggerC), int(p.ThermalWindow()/time.Second)), action: fmt.Sprintf("ask owner: lanes −50%% · restore < %s °C", trimFloat(p.PackageTempReleaseC))}
+	if avg, ok := avgPackage(s.Samples, s.Policy.ThermalWindow()); ok {
 		thermal.state = state(ruleThermal, false)
+		if p.ThermalDisabled {
+			thermal.state = "OFF"
+		}
 		if thermal.state == "OK" && avg > p.PackageTempReleaseC {
 			thermal.state = "WATCH"
 		}

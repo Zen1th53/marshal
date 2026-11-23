@@ -241,13 +241,7 @@ func (s *Store) GetMarshalSettings(ctx context.Context, projectID string) (Marsh
 
 // SetMarshalSettings validates and updates project settings by revision.
 func (s *Store) SetMarshalSettings(ctx context.Context, projectID string, settings marshal.Settings, expected int64) (int64, error) {
-	if projectID == "" {
-		return 0, fmt.Errorf("%w: missing project", model.ErrInvalid)
-	}
-	if err := settings.Validate(); err != nil {
-		return 0, fmt.Errorf("%w: %v", model.ErrInvalid, err)
-	}
-	return marshalWrite(ctx, s, "marshal_settings", []string{"project_id"}, []any{projectID}, settings, expected)
+	return s.SetMarshalSettingsAs(ctx, projectID, settings, expected, "system")
 }
 
 // MarshalLastAttempt keeps replacement revisions from overwriting archived evidence.

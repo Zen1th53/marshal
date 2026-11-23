@@ -1023,7 +1023,7 @@
   function renderSettings(f) {
     var r = f.ready;
     var s = f.system || {};
-    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, r.sessionLabel, f.plan.tokens, f.v, s])) return;
+    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, r.sessionLabel, f.plan.tokens, f.v, s, f.settings])) return;
     var dl = clear($("set-facts"));
     kv(dl, "Version", (f.top.version || "unknown") + (s.updateAvailable ? " · " + s.updateAvailable + " is available (F10 or /update in the terminal)" : ""),
       s.updateAvailable ? "tone-warn" : "");
@@ -1045,6 +1045,21 @@
     var probed = r.checks.length > 0 || r.defaults.length > 0;
     kv(dl, "Usage counts (telemetry)", probed ? (r.telemetryOn ? "on · marshal telemetry disable turns it off" : "off") : "not checked yet · marshal telemetry status");
     if (f.plan.tokens) kv(dl, "Tokens this run", compact(f.plan.tokens));
+    var settings = f.settings || {rows: [], changes: []};
+    kv(dl, "Project settings revision", String(settings.revision || 0));
+    var about = false;
+    (settings.rows || []).forEach(function (row) {
+      if (row.scope === "build" && !about) { kv(dl, "About this build", "Fixed edition policies"); about = true; }
+      kv(dl, row.key, row.effective + (row.units ? " " + row.units : "") +
+        " · " + row.scope + " · " + row.source + " · " + row.applies +
+        (row.value !== row.effective ? " · configured: " + row.value : "") +
+        (row.lockedReason ? " · locked: " + row.lockedReason : "") +
+        (row.help ? " · " + row.help : ""));
+    });
+    kv(dl, "Budget usage", "Unknown usage is not zero and does not bypass quota. Run ceilings use tokens, minor currency units and seconds. Goal ceilings belong to the approved goal revision.");
+    (settings.changes || []).forEach(function (c) {
+      kv(dl, "Change r" + c.revision, c.key + ": " + c.old + " → " + c.new + " · " + c.actor + " · " + c.at);
+    });
     kv(dl, "This page", "private link for this computer only · frame format " + f.v);
   }
 

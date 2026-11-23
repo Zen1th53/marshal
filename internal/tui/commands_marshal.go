@@ -10,7 +10,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +23,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -2041,92 +2041,66 @@ func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, e
 
 // marshalSettings shows or changes the project's Marshal settings.
 func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string, error) {
-	if len(args) != 0 && len(args) != 2 {
+	if len(args) > 2 {
 		return "", errors.New("usage: /marshal settings <key> <value>")
 	}
-	if w.runtime == nil {
-		return "", errors.New("the MARSHAL runtime is not attached to this workspace; reopen MARSHAL in an initialized project")
+	if len(args) == 1 {
+		if _, ok := projectFileSetting("", args[0]); ok {
+			return "usage: /marshal settings " + args[0] + " <value> · project file", nil
+		}
+		if usage, ok := userSettingUsage(args[0]); ok {
+			return usage, nil
+		}
+		d, err := settingscatalog.Find(args[0])
+		if err != nil {
+			return "", err
+		}
+		values := strings.Join(d.Values, "|")
+		if values == "" {
+			values = d.Kind + " " + d.Units
+		}
+		return fmt.Sprintf("usage: /marshal settings %s <%s> · %s · %s", d.Key, values, d.Applies, d.Help), nil
 	}
-	service := w.runtime.Marshal()
-	if service == nil {
+	actor := "owner"
+	if trusted, ok := ctx.Value(settingsActorKey{}).(string); ok {
+		actor = trusted
+	}
+	if len(args) == 2 {
+		if _, ok := projectFileSetting("", args[0]); ok {
+			return w.applyFileSetting(args[0], args[1], actor)
+		}
+		if _, ok := userSettingUsage(args[0]); ok {
+			return w.applyUserSetting(args[0], args[1], actor)
+		}
+	}
+	if w.runtime == nil || w.runtime.Marshal() == nil {
 		return "", errors.New("no project is open")
 	}
+	service := w.runtime.Marshal()
 	record, err := service.Store.GetMarshalSettings(ctx, service.ProjectID)
 	if err != nil {
 		return "", err
 	}
-	s := record.Value
 	if len(args) == 0 {
-		base := fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s\ntask-tokens %d\nplan-tokens %d\ntask-money %d\nplan-money %d\ntask-wall-seconds %d\nplan-wall-seconds %d",
-			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency, s.EffectiveControl(),
-			s.Budget.Tokens.Task, s.Budget.Tokens.Plan, s.Budget.Money.Task, s.Budget.Money.Plan, s.Budget.WallTime.Task, s.Budget.WallTime.Plan)
-		if extra := formatExtremeSettings(s); extra != "" {
-			base += "\n" + extra
-		}
-		return base + formatFailoverSetting(s), nil
-	}
-	switch args[0] {
-	case "execution-rights":
-		s.ExecutionRights = marshal.ExecutionRights(args[1])
-	case "acceptance-mode":
-		s.AcceptanceMode = marshal.AcceptanceMode(args[1])
-	case "control":
-		s.Control = marshal.Control(args[1])
-	case "rework-limit", "ultra-concurrency":
-		n, err := strconv.Atoi(args[1])
+		view, err := readSettingsView(ctx, service.Store, service.ProjectID, w.providerRoot())
 		if err != nil {
-			return "", fmt.Errorf("%s needs a number", args[0])
+			return "", err
 		}
-		if args[0] == "rework-limit" {
-			s.ReworkLimit = n
-		} else {
-			s.UltraConcurrency = n
-		}
-	case "task-tokens", "plan-tokens", "task-money", "plan-money", "task-wall-seconds", "plan-wall-seconds":
-		n, err := strconv.ParseInt(args[1], 10, 64)
-		if err != nil || n < 0 {
-			return "", fmt.Errorf("%s needs a non-negative number", args[0])
-		}
-		switch args[0] {
-		case "task-tokens":
-			s.Budget.Tokens.Task = n
-		case "plan-tokens":
-			s.Budget.Tokens.Plan = n
-		case "task-money":
-			s.Budget.Money.Task = n
-		case "plan-money":
-			s.Budget.Money.Plan = n
-		case "task-wall-seconds":
-			s.Budget.WallTime.Task = n
-		case "plan-wall-seconds":
-			s.Budget.WallTime.Plan = n
-		}
-	default:
-		if handled, msg, err := applyExtremeSetting(&s, args); handled {
-			if err != nil {
-				return "", err
-			}
-			if _, err := service.Store.SetMarshalSettings(ctx, service.ProjectID, s, record.Revision); err != nil {
-				return "", err
-			}
-			if msg != "" {
-				return msg, nil
-			}
-			return fmt.Sprintf("%s set to %s. It applies to the next Marshal run.", args[0], args[1]), nil
-		}
-		if msg, handled, err := handleFailoverSetting(args, &s); handled {
-			if err != nil {
-				return "", err
-			}
-			if _, err := service.Store.SetMarshalSettings(ctx, service.ProjectID, s, record.Revision); err != nil {
-				return "", err
-			}
-			return msg, nil
-		}
-		return "", fmt.Errorf("unknown setting %q", args[0])
+		w.addSessionSettings(&view)
+		return formatSettingsView(view.Rows, view.Changes), nil
 	}
-	if _, err := service.Store.SetMarshalSettings(ctx, service.ProjectID, s, record.Revision); err != nil {
+	next, err := settingscatalog.Apply(record.Value, args[0], args[1])
+	if err != nil {
 		return "", err
+	}
+	revision, changes, err := service.Store.CommitMarshalSettings(ctx, service.ProjectID, next, record.Revision, actor)
+	if err != nil {
+		return "", err
+	}
+	for _, change := range changes {
+		if change.Revision == revision {
+			w.publishSettingChange(change)
+		}
 	}
 	return fmt.Sprintf("%s set to %s. It applies to the next Marshal run.", args[0], args[1]), nil
 }

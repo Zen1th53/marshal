@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
@@ -181,8 +181,8 @@ func attentionEnabled(root string) bool {
 	if root == "" || statepath.CheckPath(root, attentionPath(root)) != nil {
 		return true
 	}
-	data, err := os.ReadFile(attentionPath(root))
-	return err != nil || strings.TrimSpace(string(data)) != "off"
+	p, err := settingscatalog.ReadScopedPreference(attentionPath(root), "notifications")
+	return err != nil || settingscatalog.Preference(p, "notifications") != "off"
 }
 func saveAttention(root, value string) error {
 	if root == "" {
@@ -195,10 +195,8 @@ func saveAttention(root, value string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(value+"\n"), 0o600); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
+	_, err := settingscatalog.WriteScopedPreference(path, "notifications", value, "owner")
+	return err
 }
 
 // notifyCommand turns attention alerts on or off and returns the reply the
@@ -216,6 +214,7 @@ func (w *Workspace) notifyCommand(args []string) string {
 			w.addNote(msg, true)
 			return msg
 		}
+		w.publishFileSetting(attentionPath(root), "notifications")
 	}
 	status := "on"
 	if !attentionEnabled(root) {

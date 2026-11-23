@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -49,8 +51,7 @@ func (s *Store) SetUltraExecutionPreference(ctx context.Context, projectID strin
 		return fmt.Errorf("%w: missing project", model.ErrInvalid)
 	}
 	for attempt := 0; ; attempt++ {
-		_, err := s.db.ExecContext(ctx, `INSERT INTO ultra_execution_preferences(project_id,enabled) VALUES(?,?)
- ON CONFLICT(project_id) DO UPDATE SET enabled=excluded.enabled`, projectID, enabled)
+		err := s.setUltraPreferenceAudited(ctx, projectID, enabled)
 		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
 			return err
 		}
@@ -58,4 +59,38 @@ func (s *Store) SetUltraExecutionPreference(ctx context.Context, projectID strin
 			return err
 		}
 	}
+}
+
+func (s *Store) setUltraPreferenceAudited(ctx context.Context, projectID string, enabled bool) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var old bool
+	err = tx.QueryRowContext(ctx, "SELECT enabled FROM ultra_execution_preferences WHERE project_id=?", projectID).Scan(&old)
+	existed := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO ultra_execution_preferences(project_id,enabled) VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET enabled=excluded.enabled`, projectID, enabled); err != nil {
+		return err
+	}
+	if !existed || old != enabled {
+		var rev int64
+		if err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(aggregate_revision),0)+1 FROM audit_events WHERE project_id=? AND event_type='marshal.settings.changed'`, projectID).Scan(&rev); err != nil {
+			return err
+		}
+		before := "default"
+		if existed {
+			before = fmt.Sprint(old)
+		}
+		id := uuid.NewString()
+		at := time.Now().UTC()
+		err = s.appendEventTx(ctx, tx, model.Event{ID: id, Type: "marshal.settings.changed", ProjectID: projectID, AggregateRevision: rev, Timestamp: at, Data: map[string]any{"id": id, "revision": rev, "key": "ultra-execution", "old": before, "new": fmt.Sprint(enabled), "actor": "owner", "at": at, "scope": "project execution preference", "applies": "next admission"}})
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

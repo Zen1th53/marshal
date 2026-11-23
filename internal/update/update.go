@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"io"
 	"net/http"
 	"os"
@@ -98,6 +99,9 @@ func NewChecker() *Checker {
 
 // Disabled reports whether the user has turned update checks off.
 func Disabled() bool {
+	if settingscatalog.UserPreference("update-check") == "off" {
+		return true
+	}
 	value := strings.TrimSpace(os.Getenv(DisableEnv))
 	return value != "" && value != "0" && !strings.EqualFold(value, "false")
 }

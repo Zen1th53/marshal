@@ -746,7 +746,7 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 	if _, err := parseMarshalProposal(marshalProposalPrefix + string(data)); err != nil {
 		return err
 	}
-	_, err := w.cmd.Handle(ctx, req.Object)
+	_, err := w.cmd.Handle(context.WithValue(ctx, settingsActorKey{}, req.Who), req.Object)
 	return err
 }
 

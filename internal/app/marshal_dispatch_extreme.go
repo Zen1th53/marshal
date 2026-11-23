@@ -21,29 +21,7 @@ func normalizeProvider(p string) string {
 }
 
 func extremeProviderLimits(s marshal.Settings) (map[string]int, int) {
-	limits := map[string]int{
-		"codex":    4,
-		"claude":   2,
-		"agy":      4,
-		"opencode": 4,
-	}
-	globalCap := 12
-	if s.GlobalCap > 0 {
-		globalCap = s.GlobalCap
-	}
-	if s.ProviderLimits.Codex > 0 {
-		limits["codex"] = s.ProviderLimits.Codex
-	}
-	if s.ProviderLimits.Claude > 0 {
-		limits["claude"] = s.ProviderLimits.Claude
-	}
-	if s.ProviderLimits.Agy > 0 {
-		limits["agy"] = s.ProviderLimits.Agy
-	}
-	if s.ProviderLimits.OpenCode > 0 {
-		limits["opencode"] = s.ProviderLimits.OpenCode
-	}
-	return limits, globalCap
+	return marshal.EffectiveWorkerLimits(s)
 }
 
 // Missing, root, escaping and wildcard scopes cannot establish independence.

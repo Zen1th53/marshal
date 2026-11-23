@@ -67,7 +67,7 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings
-        anchor: 'case "rework-limit", "ultra-concurrency":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F03
@@ -146,7 +146,7 @@ features:
     web: []
     tui:
       - routeOrCommand: /marshal settings control
-        anchor: 'case "control":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F08
@@ -167,7 +167,7 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings acceptance-mode
-        anchor: 'case "acceptance-mode":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F09
@@ -184,7 +184,7 @@ features:
     web: []
     tui:
       - routeOrCommand: /marshal settings execution-rights
-        anchor: 'case "execution-rights":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F10
@@ -201,7 +201,7 @@ features:
     web: []
     tui:
       - routeOrCommand: /marshal settings rework-limit
-        anchor: 'if args[0] == "rework-limit"'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F11
@@ -244,7 +244,7 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings global-cap
-        anchor: 'case "global-cap", "global-limit", "global-concurrency":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F13
@@ -286,7 +286,7 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings
-        anchor: 'case "task-tokens", "plan-tokens", "task-money", "plan-money", "task-wall-seconds", "plan-wall-seconds":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: F15
@@ -2009,27 +2009,37 @@ features:
     name: Project setting control (free or strict task instructions)
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/marshal/domain.go
       - internal/app/marshal_service.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestRunTaskControl
     docs:
       - docs/configuration.md
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /marshal settings control
-        anchor: 'case "control":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-acceptance-mode
     name: Project setting acceptance-mode (marshal, marshal-then-user, user)
     editions: [default, governed]
     sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/webboard/page/app.js
       - internal/tui/boardv2_collect_marshal.go
       - internal/marshal/domain.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestSettingsDefaultsAndEnums
     docs:
@@ -2040,68 +2050,92 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings acceptance-mode
-        anchor: 'case "acceptance-mode":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-execution-rights
     name: Project setting execution-rights (none, read-only, small-tasks)
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/tui/marshal_confine.go
       - internal/marshal/domain.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestSettingsDefaultsAndEnums
     docs:
       - docs/configuration.md
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /marshal settings execution-rights
-        anchor: 'case "execution-rights":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-rework-limit
     name: Project setting rework-limit
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/marshal/domain.go
       - internal/app/marshal_lifecycle.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestReworkPolicy
     docs:
       - docs/configuration.md
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /marshal settings rework-limit
-        anchor: 'if args[0] == "rework-limit"'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-ultra-concurrency
     name: Project setting ultra-concurrency
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/tui/boardv2_flow_default.go
       - internal/marshal/domain.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestTierPolicyMarshalLeaseUsesSettings
     docs:
       - docs/configuration.md
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /marshal settings ultra-concurrency
-        anchor: 's.UltraConcurrency = n'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-provider-limits
     name: Project settings codex-limit, claude-limit, agy-limit and opencode-limit
     editions: [default]
     sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/settings_extreme.go
       - internal/webboard/page/app.js
       - internal/marshal/settings_concurrency_extreme.go
       - internal/app/marshal_dispatch_extreme.go
+      - internal/tui/settings_view.go
     tests:
       - internal/tui.TestExtremeSettingsApplyAndFormat
       - internal/marshal.TestExtremeConcurrencySettingsRoundTripAndValidation
@@ -2113,16 +2147,19 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings codex-limit
-        anchor: 'case "codex", "codex-limit", "codex-concurrency":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-global-cap
     name: Project setting global-cap
     editions: [default]
     sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/settings_extreme.go
       - internal/webboard/page/app.js
       - internal/marshal/settings_concurrency_extreme.go
+      - internal/tui/settings_view.go
     tests:
       - internal/tui.TestExtremeSettingsApplyAndFormat
     docs:
@@ -2133,16 +2170,19 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings global-cap
-        anchor: 'case "global-cap", "global-limit", "global-concurrency":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-failover-order
     name: Project setting failover-order
     editions: [default]
     sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/failover_extreme.go
       - internal/webboard/page/app.js
       - internal/marshal/failover_settings_extreme.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestExtremeFailoverSettingsRoundTrip
     docs:
@@ -2160,21 +2200,35 @@ features:
     name: Project setting worker stall window (WorkerStallMinutes)
     editions: [default]
     sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/marshal/domain.go
       - internal/app/worker_stall_extreme.go
+      - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeWorkerStallClassifiesAsProviderFailure
     docs: []
-    web: []
-    tui: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings worker-stall-minutes
+        anchor: 'func (w *Workspace) marshalSettings('
+        kind: control
 
   - id: setting-budget-tokens
     name: Project settings task-tokens and plan-tokens
     editions: [default, governed]
     sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/webboard/page/app.js
       - internal/marshal/budget.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestBudgetUnknownAndCeilings
     docs: []
@@ -2184,57 +2238,76 @@ features:
         kind: view
     tui:
       - routeOrCommand: /marshal settings task-tokens
-        anchor: 'case "task-tokens":'
+        anchor: 'settingscatalog.Apply('
         kind: control
       - routeOrCommand: /marshal settings plan-tokens
-        anchor: 'case "plan-tokens":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-budget-money
     name: Project settings task-money and plan-money
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/marshal/budget.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestBudgetUnknownAndCeilings
     docs: []
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /marshal settings task-money
-        anchor: 'case "task-money":'
+        anchor: 'settingscatalog.Apply('
         kind: control
       - routeOrCommand: /marshal settings plan-money
-        anchor: 'case "plan-money":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: setting-budget-wall-time
     name: Project settings task-wall-seconds and plan-wall-seconds
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
       - internal/tui/commands_marshal.go
       - internal/marshal/budget.go
+      - internal/tui/settings_view.go
     tests:
       - internal/marshal.TestBudgetWallTimeBoundary
     docs: []
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /marshal settings task-wall-seconds
-        anchor: 'case "task-wall-seconds":'
+        anchor: 'settingscatalog.Apply('
         kind: control
       - routeOrCommand: /marshal settings plan-wall-seconds
-        anchor: 'case "plan-wall-seconds":'
+        anchor: 'settingscatalog.Apply('
         kind: control
 
   - id: goal-budget-limits
     name: Goal revision budget limits (/budget set calls, duration, tokens, cost, handoffs, reserve)
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
       - internal/tui/commands_budget.go
       - internal/tui/commands.go
+      - internal/tui/settings_view.go
     tests: []
     docs: []
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /budget set
         anchor: 'func (h *CommandHandler) handleBudgetSet('
@@ -2370,6 +2443,7 @@ features:
       - internal/tui/launch_scan.go
       - internal/webboard/page/app.js
       - internal/tui/permissions.go
+      - internal/tui/settings_view.go
     tests:
       - internal/constitution.TestContinuationProtocolSafety
     docs: []
@@ -2386,25 +2460,41 @@ features:
     name: On-demand and policy-configured independent design review
     editions: [default]
     sources:
+      - internal/tui/settings_view.go
+      - internal/webboard/page/app.js
       - internal/tui/design_review_extreme.go
       - internal/app/design_review.go
     tests:
       - internal/app.TestRuntimeDesignReviewerFreshHostLaunch
     docs: []
-    web: []
-    tui: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'func formatSettingsView('
+        kind: view
 
   - id: architecture-conformance
     name: Hand-in architecture conformance enforcement policy
     editions: [default]
     sources:
+      - internal/webboard/page/app.js
       - internal/app/architecture_conformance_extreme.go
       - internal/app/marshal_lifecycle.go
+      - internal/tui/settings_view.go
     tests:
       - internal/app.TestHandInThatUsesAnUndeclaredPartIsReturned
     docs: []
-    web: []
-    tui: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'func formatSettingsView('
+        kind: view
 
   - id: memory-candidate-review
     name: Edition memory candidate complete-read review and promotion rules
@@ -2433,11 +2523,16 @@ features:
     name: Native session memory briefing injection channel (/memory inject)
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
       - internal/tui/commands_expanded.go
       - internal/tui/native_briefing.go
+      - internal/tui/settings_view.go
     tests: []
     docs: []
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /memory inject
         anchor: 'func (h *CommandHandler) handleMemoryInject('
@@ -2519,26 +2614,42 @@ features:
     name: Repository final verification wall-clock timeout policy
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
       - internal/app/verification_timeout_extreme.go
       - internal/app/verification_timeout_default.go
+      - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeVerificationHasNoWallClockLimit
     docs: []
-    web: []
-    tui: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'func formatSettingsView('
+        kind: view
 
   - id: infra-retry-bounds
     name: Infrastructure retry limit and provider cooldown policy before hand-in
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
       - internal/app/marshal_infra_retry_extreme.go
       - internal/app/marshal_infra_retry_default.go
+      - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeInfraFailuresDoNotSpendRework
       - internal/app.TestCommunityHasNoInfraRetry
     docs: []
-    web: []
-    tui: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'func formatSettingsView('
+        kind: view
 
   - id: worker-candidate-writes
     name: Edition policy for worker candidate memory and design writes
@@ -2634,11 +2745,16 @@ features:
     name: Project attention notification preference (.marshal/notify, /notify)
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
       - internal/tui/board_attention.go
       - internal/tui/commands.go
+      - internal/tui/settings_view.go
     tests: []
     docs: []
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: /notify
         anchor: 'func (w *Workspace) notifyCommand('
@@ -2688,13 +2804,18 @@ features:
     name: Web Board browser auto-open at Board startup (MARSHAL_WEB_OPEN)
     editions: [default, governed]
     sources:
+      - internal/webboard/page/app.js
       - internal/tui/webboard.go
       - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
     tests: []
     docs:
       - docs/configuration.md
       - docs/board-and-keys.md
-    web: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
     tui:
       - routeOrCommand: w
         anchor: 'func webOpenAtStart() bool'
@@ -3161,6 +3282,70 @@ features:
     web: []
     tui: []
 
+  - id: settings-catalogue-and-history
+    name: Scoped settings, effective sources, edition policies and committed actor history
+    editions: [default, governed]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/preferences.go
+      - internal/tui/settings_view.go
+      - internal/tui/commands_marshal.go
+      - internal/store/settings_audit.go
+      - internal/store/ultra_preference.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/settingscatalog.TestEditionDefaultsAndApplyBoundaries
+      - internal/tui.TestSettingsViewShowsLocksAndActor
+      - internal/tui.TestSettingsScopePrecedenceAndFailedWrites
+      - internal/tui.TestSettingsMissingValueDoesNotWrite
+      - internal/tui.TestCatalogueEveryKeyResolvesStoreOverrideAndFailedWrite
+      - internal/tui.TestMarshalSettingAuditReachesHomeAndChat
+      - internal/store.TestSettingsCASAuditsOnce
+      - internal/store.TestExecutionPreferenceAuditsAtomically
+    docs:
+      - docs/configuration.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'func formatSettingsView('
+        kind: view
+      - routeOrCommand: /marshal settings web-auto-open
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings update-check
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-enabled
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-trigger
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-release
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-window
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings display-theme
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings display-animation
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings notifications
+        anchor: 'func projectFileSetting('
+        kind: control
+      - routeOrCommand: /marshal settings memory-channel
+        anchor: 'func projectFileSetting('
+        kind: control
+      - routeOrCommand: /marshal settings session-import
+        anchor: 'func projectFileSetting('
+        kind: control
+
 pending:
   # Web Board features with incomplete surface coverage
   - id: F01
@@ -3408,45 +3593,12 @@ pending:
   - id: verifier-required
     missing: both
     source: internal/marshal/tier.go
-  - id: setting-control
-    missing: web
-    source: internal/tui/commands_marshal.go
-  - id: setting-execution-rights
-    missing: web
-    source: internal/tui/commands_marshal.go
-  - id: setting-rework-limit
-    missing: web
-    source: internal/tui/commands_marshal.go
-  - id: setting-ultra-concurrency
-    missing: web
-    source: internal/tui/commands_marshal.go
-  - id: setting-worker-stall-minutes
-    missing: both
-    source: internal/app/worker_stall_extreme.go
-  - id: setting-budget-money
-    missing: web
-    source: internal/tui/commands_marshal.go
-  - id: setting-budget-wall-time
-    missing: web
-    source: internal/tui/commands_marshal.go
-  - id: goal-budget-limits
-    missing: web
-    source: internal/tui/commands_budget.go
   - id: permission-decision-authority
     missing: web
     source: internal/tui/permissions.go
-  - id: design-review
-    missing: both
-    source: internal/tui/design_review_extreme.go
-  - id: architecture-conformance
-    missing: both
-    source: internal/app/architecture_conformance_extreme.go
   - id: memory-candidate-review
     missing: web
     source: internal/tui/memory_review_extreme.go
-  - id: memory-inject-channel
-    missing: web
-    source: internal/tui/commands_expanded.go
   - id: flexible-worker-models
     missing: both
     source: internal/app/model_flex_extreme.go
@@ -3465,12 +3617,6 @@ pending:
   - id: automatic-outside-reads
     missing: both
     source: internal/app/unrestricted_extreme.go
-  - id: verification-timeout
-    missing: both
-    source: internal/app/verification_timeout_extreme.go
-  - id: infra-retry-bounds
-    missing: both
-    source: internal/app/marshal_infra_retry_extreme.go
   - id: worker-candidate-writes
     missing: both
     source: internal/mcp/worker_candidates_extreme.go
@@ -3483,12 +3629,6 @@ pending:
   - id: edition-constants-misc
     missing: both
     source: internal/tui/edition_extreme.go
-  - id: notify
-    missing: web
-    source: internal/tui/board_attention.go
-  - id: web-auto-open
-    missing: web
-    source: internal/tui/webboard.go
   - id: env-switches
     missing: both
     source: internal/tui/board_opening.go
