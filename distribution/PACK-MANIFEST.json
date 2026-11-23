@@ -586,8 +586,8 @@
     },
     {
       "path": "docs/features.yaml",
-      "sha256": "ccf389d2b63713c39ea3f9d1c257021bc2d8c8cd3f59ea2e8c5ed37c996b3394",
-      "bytes": 111828
+      "sha256": "0b40b01ea947425e862ad5b539c6f68da3c556dfccfb911d08e08cdf1ec93f20",
+      "bytes": 112045
     },
     {
       "path": "docs/getting-started.md",
@@ -12331,8 +12331,8 @@
     },
     {
       "path": "internal/tui/board_attention_test.go",
-      "sha256": "04ea232956483df358722fa20bc191929ba5965436e8a78976f23b700bd3477b",
-      "bytes": 7571
+      "sha256": "6a37530bf1de93bf78192bb67f69362e0138bcefc8cbfd42a9900c0e412a4152",
+      "bytes": 7994
     },
     {
       "path": "internal/tui/board_bench_test.go",
@@ -13146,8 +13146,8 @@
     },
     {
       "path": "internal/tui/command_sweep_crosscut_test.go",
-      "sha256": "52ecaec525755e0b30d2e909f8f28ebb10d233a294de39acad3ccca1526a5f7e",
-      "bytes": 30001
+      "sha256": "a9a4d629dd8c17ec6b5bb6f406f445ef7dc8936a22b328ca0796411b6aad1573",
+      "bytes": 30124
     },
     {
       "path": "internal/tui/command_sweep_work_test.go",
@@ -13271,8 +13271,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "3f42585e28d4fa5c8c1a6f411fe88f859d8d0be3bdd03d4be5a212c2f48bac6a",
-      "bytes": 81049
+      "sha256": "0de72aef55c83830731460ab611d8a13111efd498742cc266dce6916ab72cb0b",
+      "bytes": 81107
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -14061,8 +14061,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal_test.go",
-      "sha256": "bff9b435b080e3eab8f2c3498703b824ffd47ea78faa771b69c7c14eb8affe63",
-      "bytes": 54481
+      "sha256": "b17d625554107744c39ac9c0c562a7bb0cede0c0eb68337ea6f0e0ea5c29806d",
+      "bytes": 54594
     },
     {
       "path": "internal/tui/marshal_protection_test.go",
@@ -15171,8 +15171,8 @@
     },
     {
       "path": "internal/tui/settings_view_test.go",
-      "sha256": "2a1bf770f44de4b9d72ec0e636b3129d4c9b4af76de5ad2340d122862946bcbc",
-      "bytes": 6538
+      "sha256": "a825534e166bc965cb5df121203beb62695ce0b6ad463d553bf939d2fdea1b47",
+      "bytes": 7762
     },
     {
       "path": "internal/tui/skill_sources_test.go",
@@ -17261,8 +17261,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "8f3cb1eca59a79c20340cb0067e647bed96e1d3073fc08d23a1ebc9ddd020ade",
-      "bytes": 453336
+      "sha256": "b0099c899351c72654bebf70fdd7155d3d62d23c77bf31c5a307fa126e9db78a",
+      "bytes": 453089
     },
     {
       "path": "tools/extreme/prq/main_default.go",

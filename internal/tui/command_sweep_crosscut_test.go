@@ -374,7 +374,11 @@ func TestCommandSweepCrosscutMarshalSettings(t *testing.T) {
 				t.Fatalf("%s %s: %q %v", key, value, out, err)
 			}
 			out, err = w.cmd.Handle(ctx, "/marshal settings")
-			if err != nil || !strings.Contains(out, key+" "+value) {
+			expected := value
+			if key == "execution-rights" && value == "none" {
+				expected = "read-only"
+			}
+			if err != nil || !strings.Contains("\n"+out, "\n"+key+" "+expected+" ") {
 				t.Fatalf("readback %q %v", out, err)
 			}
 		}

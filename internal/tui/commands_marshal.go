@@ -2049,10 +2049,10 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 	}
 	if len(args) == 1 {
 		if _, ok := projectFileSetting("", args[0]); ok {
-			return "usage: /marshal settings " + args[0] + " <value> · project file", nil
+			return "", fmt.Errorf("usage: /marshal settings %s <value> · project file", args[0])
 		}
 		if usage, ok := userSettingUsage(args[0]); ok {
-			return usage, nil
+			return "", errors.New(usage)
 		}
 		d, err := settingscatalog.Find(args[0])
 		if err != nil {
@@ -2062,7 +2062,7 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 		if values == "" {
 			values = d.Kind + " " + d.Units
 		}
-		return fmt.Sprintf("usage: /marshal settings %s <%s> · %s · %s", d.Key, values, d.Applies, d.Help), nil
+		return "", fmt.Errorf("usage: /marshal settings %s <%s> · %s · %s", d.Key, values, d.Applies, d.Help)
 	}
 	actor := "owner"
 	if trusted, ok := ctx.Value(settingsActorKey{}).(string); ok {
@@ -2077,7 +2077,7 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 		}
 	}
 	if w.runtime == nil || w.runtime.Marshal() == nil {
-		return "", errors.New("no project is open")
+		return "", errors.New("no project is open; reopen MARSHAL in an initialized project")
 	}
 	service := w.runtime.Marshal()
 	record, err := service.Store.GetMarshalSettings(ctx, service.ProjectID)
