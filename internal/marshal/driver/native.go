@@ -125,23 +125,42 @@ func orDefault(value, fallback string) string {
 
 // Launch starts the CLI in the worktree with no terminal attached.
 func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
-	if err := req.validate(); err != nil {
+	req, err := n.prepare(ctx, req)
+	if err != nil {
 		return nil, err
 	}
+	return n.launch(ctx, req, cleanWorkerEnv(workerenv.Host(os.Environ())))
+}
+
+// LaunchHeld starts the CLI behind a startup barrier: the worker does nothing
+// until the returned Release, and a closed barrier makes it exit unstarted.
+func (n Native) LaunchHeld(ctx context.Context, req Request, key string) (*HeldStart, error) {
+	req, err := n.prepare(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	_, held, err := n.start(ctx, req, cleanWorkerEnv(workerenv.Host(os.Environ())), key)
+	return held, err
+}
+
+func (n Native) prepare(ctx context.Context, req Request) (Request, error) {
+	if err := req.validate(); err != nil {
+		return req, err
+	}
 	if n.Args == nil || n.Parse == nil {
-		return nil, fmt.Errorf("%w: %s driver is incomplete", ErrInvalidRequest, n.Provider)
+		return req, fmt.Errorf("%w: %s driver is incomplete", ErrInvalidRequest, n.Provider)
 	}
 	if n.ResolveModel != nil {
 		selected, err := n.ResolveModel(ctx, req)
 		if err != nil {
-			return nil, err
+			return req, err
 		}
 		if strings.TrimSpace(selected) == "" {
-			return nil, fmt.Errorf("%w: %s has no selected verified model", ErrInvalidRequest, n.Provider)
+			return req, fmt.Errorf("%w: %s has no selected verified model", ErrInvalidRequest, n.Provider)
 		}
 		req.Model = selected
 	}
-	return n.launch(ctx, req, cleanWorkerEnv(workerenv.Host(os.Environ())))
+	return req, nil
 }
 
 // LaunchSession runs an interactive native session with the same supervisor as
@@ -152,17 +171,29 @@ func LaunchSession(ctx context.Context, provider, binary, root string, args, env
 }
 
 func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle, error) {
+	h, _, err := n.start(ctx, req, env, "")
+	return h, err
+}
+
+// start launches the CLI. A non-empty heldKey holds it behind the startup
+// barrier and registers the key in its environment for rediscovery.
+func (n Native) start(ctx context.Context, req Request, env []string, heldKey string) (*Handle, *HeldStart, error) {
+	held := heldKey != ""
 	argv := n.Args(req)
 	cleanup := func() {}
 	if n.ConfigureLaunch != nil {
 		var err error
 		argv, env, cleanup, err = n.ConfigureLaunch(ctx, req, argv, env)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if cleanup == nil {
 			cleanup = func() {}
 		}
+	}
+	if held {
+		// Registered after launch configuration, which may rebuild env.
+		env = append(env, LaunchKeyEnv+"="+heldKey)
 	}
 	started := false
 	defer func() {
@@ -181,26 +212,37 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	setProcessGroup(cmd)
-	if err := processgroup.Wrap(cmd); err != nil {
+	release, closeGate := func() error { return nil }, func() {}
+	if held {
+		var err error
+		release, closeGate, err = wrapHeld(cmd)
+		if err != nil {
+			cancel()
+			return nil, nil, err
+		}
+	} else if err := processgroup.Wrap(cmd); err != nil {
 		cancel()
-		return nil, err
+		return nil, nil, err
 	}
 	closeTerminal, err := workerterminal.Attach(runCtx, cmd)
 	if err != nil {
+		closeGate()
 		cancel()
-		return nil, err
+		return nil, nil, err
 	}
 	if err := cmd.Start(); err != nil {
+		closeGate()
 		closeTerminal()
 		cancel()
-		return nil, fmt.Errorf("start %s: %w", n.Provider, err)
+		return nil, nil, fmt.Errorf("start %s: %w", n.Provider, err)
 	}
 	if err := workerterminal.Started(runCtx, cmd); err != nil {
+		closeGate()
 		_ = processgroup.Stop(cmd)
 		_ = cmd.Wait()
 		closeTerminal()
 		cancel()
-		return nil, err
+		return nil, nil, err
 	}
 	h := &Handle{req: req, cancel: cancel, done: make(chan struct{})}
 	command := n.Binary + " " + strings.Join(argv, " ")
@@ -224,7 +266,37 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdout.String()) + stderr.String()}
 		h.reported = n.Parse(stdout.Bytes())
 	}()
-	return h, nil
+	if !held {
+		return h, nil, nil
+	}
+	start := &HeldStart{
+		SessionID: heldKey,
+		Release: func() (*Handle, error) {
+			if err := release(); err != nil {
+				return nil, err
+			}
+			return h, nil
+		},
+		// A closed barrier makes the held supervisor exit without starting the
+		// worker; reaping it in Wait proves the exit.
+		Abort: func() error {
+			closeGate()
+			select {
+			case <-h.done:
+			case <-time.After(5 * time.Second):
+				_ = cmd.Process.Kill()
+				<-h.done
+			}
+			return nil
+		},
+	}
+	identity, err := heldIdentity(cmd)
+	if err != nil {
+		_ = start.Abort()
+		return nil, nil, err
+	}
+	start.Process = identity
+	return h, start, nil
 }
 
 // Wait assembles the hand-in once the CLI exits. A worker that exits with an

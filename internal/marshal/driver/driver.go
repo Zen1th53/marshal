@@ -79,6 +79,8 @@ type Handle struct {
 	reported        []marshal.CommandRecord
 	runtimeObserved []marshal.CommandRecord
 	runErr          error
+	// receipt is set when a supervised launch recorded this worker.
+	receipt *LaunchReceipt
 }
 
 func (h *Handle) Worktree() string { return h.req.Worktree }

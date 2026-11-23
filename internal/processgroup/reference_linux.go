@@ -89,3 +89,12 @@ func RunningReference(ref Reference) (bool, error) {
 	start, alive, err := processIdentity(ref.PID)
 	return alive && start == ref.Start, err
 }
+
+// ReferenceOf pins a live process by PID; ok is false when it is gone.
+func ReferenceOf(pid int) (Reference, bool, error) {
+	start, alive, err := processIdentity(pid)
+	if err != nil || !alive {
+		return Reference{}, false, err
+	}
+	return Reference{pid, start}, true, nil
+}

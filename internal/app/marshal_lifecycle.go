@@ -174,6 +174,17 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
 	next.Tasks[i].ExecutionTier = policy.Tier
+	if s.LaunchSupervisor != nil {
+		// Reuse the key of a launch recovery proved never started.
+		if t.LaunchKey == "" {
+			key, err := model.NewID("marshal-launch-")
+			if err != nil {
+				return MarshalDispatch{}, err
+			}
+			t.LaunchKey = key
+		}
+		next.Tasks[i].LaunchKey = t.LaunchKey
+	}
 	t.ExecutionTier = policy.Tier
 	finishProviderFailoverDispatch(&next.Tasks[i])
 	if fresh {
@@ -317,11 +328,22 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		}
 		rev++
 	}
-	handle, err := d.Launch(dispatchCtx, driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName})
+	req := driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName}
+	var handle *driver.Handle
+	if s.LaunchSupervisor == nil {
+		handle, err = d.Launch(dispatchCtx, req)
+	} else {
+		handle, err = s.LaunchSupervisor.Launch(dispatchCtx, t.LaunchKey, d, req, func(ctx context.Context) error {
+			_, err := s.admitLaunchBase(ctx, runID, run, *t, op.LaunchBase)
+			return err
+		})
+	}
 	if err != nil {
 		// A canceled or timed-out acknowledgement does not prove that launch
-		// was refused. Retain the intent so recovery cannot dispatch it again.
-		retainOperation = errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+		// was refused. Retain the intent so recovery cannot dispatch it again;
+		// so does a held launch whose worker may exist.
+		var held *driver.LaunchHeldError
+		retainOperation = errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &held) && held.ProcessMayExist)
 		return MarshalDispatch{}, err
 	}
 	retainOperation = true
@@ -332,6 +354,18 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
+	}
+	if s.LaunchSupervisor != nil {
+		// Adopt only the worker the receipt names, with its recorded session.
+		receipt, ok := handle.LaunchReceipt()
+		if !ok || receipt.Key != t.LaunchKey {
+			_ = d.Cancel(handle)
+			return MarshalDispatch{}, &driver.LaunchHeldError{Key: t.LaunchKey, Disposition: driver.LaunchAmbiguous, Reason: "worker handle carries no receipt for its launch key", Recovery: "inspect the worker before adopting its result", ProcessMayExist: true}
+		}
+		if err = s.LaunchSupervisor.Attached(t.LaunchKey, receipt.SessionID); err != nil {
+			_ = d.Cancel(handle)
+			return MarshalDispatch{}, err
+		}
 	}
 	if _, err = s.Charge(ctx, runID, taskID, "dispatch", marshal.Charge{Tokens: marshal.Amount{}, Money: marshal.Amount{}}); err != nil {
 		_ = d.Cancel(handle)
@@ -384,6 +418,13 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	initial, initialRev, err = s.observeMarshalCompatibility(ctx, runID, initial, initialRev)
 	if err != nil {
 		return marshal.HandIn{}, err
+	}
+	launchKey := ""
+	if i := taskIndex(initial, dispatch.TaskID); i >= 0 {
+		launchKey = initial.Tasks[i].LaunchKey
+	}
+	if s.LaunchSupervisor != nil && launchKey != "" && s.LaunchSupervisor.Quarantined(launchKey) {
+		return marshal.HandIn{}, &driver.LaunchHeldError{Key: launchKey, Disposition: driver.LaunchAmbiguous, Reason: "output from an ambiguous launch is quarantined", Recovery: "inspect the worker process and its worktree, then resolve the held launch", ProcessMayExist: true}
 	}
 	op := &marshal.LifecycleOperation{Kind: "hand-in", TaskID: dispatch.TaskID, Dir: dispatch.Handle.Worktree(), Event: events.Event{Type: events.EventTypeMarshalTaskHandedIn}}
 	if _, err = s.beginOperation(ctx, runID, initial, initialRev, op); err != nil {
@@ -540,6 +581,7 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	attempt := 1 + t.EvidenceAttemptBase
 	attempt += taskReturns(*t)
 	t.ResultCommit = handin.ResultCommit
+	t.LaunchKey = ""
 	if validationErr == nil {
 		t.State = marshal.HandedIn
 		run.State = marshal.Reviewing
@@ -564,6 +606,10 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	}
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return handin, err
+	}
+	if s.LaunchSupervisor != nil && launchKey != "" {
+		// The result is adopted; a leftover record only costs disk.
+		_ = s.LaunchSupervisor.Finish(launchKey)
 	}
 	elapsed := s.clock().Sub(dispatch.Started)
 	if elapsed < 0 {

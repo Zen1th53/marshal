@@ -253,6 +253,9 @@ type Task struct {
 	// StaleProcessExitUnverified holds worker capacity while an already-started
 	// attempt on a stale base has not yet reached verified exit.
 	StaleProcessExitUnverified bool `json:",omitempty"`
+	// LaunchKey names the supervised launch of the current attempt. Recovery
+	// reuses it and never mints a new one for an unclear launch.
+	LaunchKey string `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.

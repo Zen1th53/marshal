@@ -7,6 +7,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -87,10 +88,31 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	case "launch":
 		op.HandIn = nil
 		op.Attempt = 0
+		launchKey := ""
+		if op.Next != nil {
+			if i := taskIndex(*op.Next, op.TaskID); i >= 0 {
+				launchKey = op.Next.Tasks[i].LaunchKey
+			}
+		}
+		launchDisposition := driver.LaunchDisposition("")
+		if s.LaunchSupervisor != nil && launchKey != "" && op.LaunchBase != nil && op.LaunchBase.ProcessStarted {
+			var inspectErr error
+			if launchDisposition, inspectErr = s.LaunchSupervisor.Inspect(launchKey); inspectErr != nil {
+				launchDisposition = driver.LaunchAmbiguous
+			}
+			if launchDisposition == driver.LaunchAbsent {
+				// The launch receipt proves no worker ran: treat it as an intent
+				// that never reached the driver, keeping its key for the retry.
+				op.LaunchBase.ProcessStarted = false
+			}
+		}
 		if op.LaunchBase != nil && !op.LaunchBase.ProcessStarted {
 			i := taskIndex(run, op.TaskID)
 			if i < 0 {
 				return run, rev, model.ErrNotFound
+			}
+			if launchDisposition == driver.LaunchAbsent {
+				run.Tasks[i].LaunchKey = launchKey
 			}
 			if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[i], op.LaunchBase); baseErr != nil {
 				if !errors.Is(baseErr, ErrStaleBase) {
@@ -149,6 +171,11 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		op.Event.Data["launch_outcome"] = "interrupted; driver completion unknown"
 		run.Tasks[i].State = marshal.Dispatched
 		run.State = marshal.Dispatching
+		if launchDisposition == driver.LaunchAmbiguous {
+			// The worker may still run: keep its slot and quarantine its output.
+			op.Event.Data["launch_outcome"] = "interrupted; launch ambiguous; output quarantined"
+			pauseMarshal(&run, marshal.Pause{Reason: "worker launch " + launchKey + " is ambiguous; its slot stays held and its output is quarantined", Resolutions: []string{"inspect the worker process and its worktree before resolving the held launch"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume, TaskID: op.TaskID})
+		}
 		op.Next = &run
 		completed = true
 	case "hand-in":
