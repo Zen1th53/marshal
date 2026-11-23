@@ -549,6 +549,9 @@ func TestRecoveredLaunchRejectsChangedDependencyOrBase(t *testing.T) {
 		if paused.Tasks[0].State != marshal.Queued {
 			t.Fatalf("pre-start stale intent transitioned task to %s, want queued", paused.Tasks[0].State)
 		}
+		if paused.Operation != nil {
+			t.Fatalf("pre-start stale intent was retained and would block amend: %+v", paused.Operation)
+		}
 		if paused.ApprovalScopeDigest != approved.ApprovalScopeDigest || !paused.ValidCloseAuthorization() {
 			t.Fatalf("recovery lost approval binding: %+v", paused)
 		}

@@ -93,7 +93,25 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 				return run, rev, model.ErrNotFound
 			}
 			if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[i], op.LaunchBase); baseErr != nil {
-				return run, rev, baseErr
+				if !errors.Is(baseErr, ErrStaleBase) {
+					return run, rev, baseErr
+				}
+				// No process started, so the intent is safe to drop. Keep the
+				// stale-base pause and evidence, and clear the operation so
+				// amend and use-plan are not blocked by it.
+				run.Operation = nil
+				pauseMarshal(&run, staleBasePause(baseErr, op.TaskID))
+				op.Event.Type = events.EventTypeMarshalEscalated
+				op.Event.Data["launch_outcome"] = "interrupted before launch; stale base; intent cleared"
+				op.Event.Data["reason"] = run.Pause.Reason
+				op.Next = &run
+				if err := s.boundMarshalEvent(&op.Event); err != nil {
+					return run, rev, err
+				}
+				if err := s.completeOperation(ctx, runID, rev, op); err != nil {
+					return run, rev, err
+				}
+				return run, rev + 1, baseErr
 			}
 			// No driver process started and the base/dependencies remain valid:
 			// clear the saved intent so first execution validates fresh base
@@ -292,13 +310,7 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 				if run.Operation != nil {
 					taskID = run.Operation.TaskID
 				}
-				pause = marshal.Pause{
-					Reason:      err.Error(),
-					Resolutions: staleBaseResolutions(err),
-					Code:        marshal.CodeStaleBase,
-					Action:      marshal.PauseUsePlan,
-					TaskID:      taskID,
-				}
+				pause = staleBasePause(err, taskID)
 			}
 			pauseMarshal(&run, pause)
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
@@ -418,4 +430,15 @@ func (s *MarshalService) repairRetainedHandInAttempt(ctx context.Context, runID 
 	}
 	op.Attempt = want
 	return nil
+}
+
+// staleBasePause is the owner pause for a launch refused on a stale base.
+func staleBasePause(err error, taskID string) marshal.Pause {
+	return marshal.Pause{
+		Reason:      err.Error(),
+		Resolutions: staleBaseResolutions(err),
+		Code:        marshal.CodeStaleBase,
+		Action:      marshal.PauseUsePlan,
+		TaskID:      taskID,
+	}
 }

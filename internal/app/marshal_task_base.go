@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/events"
@@ -931,4 +930,3 @@ func advanceCleanUnusedTaskWorktree(ctx context.Context, wt *worktree.Manager, r
 }
 
 // Unused helper guard if slices is needed in future checks.
-var _ = slices.Equal[[]string]
