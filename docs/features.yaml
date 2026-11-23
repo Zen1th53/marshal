@@ -941,7 +941,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-settings
-    name: List or modify Marshal project settings from the command line
+    name: List effective settings or modify a value with usage errors and project recovery hints
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -949,6 +949,9 @@ features:
       - internal/tui/failover_extreme.go
     tests:
       - internal/tui.TestExtremeSettingsApplyAndFormat
+      - internal/tui.TestSettingsMissingValueDoesNotWrite
+      - internal/tui.TestSettingsWithoutProjectGivesRecoveryHint
+      - internal/tui.TestSettingsReadbackShowsCanonicalValueAndUnits
     docs:
       - docs/configuration.md
       - docs/board-and-keys.md

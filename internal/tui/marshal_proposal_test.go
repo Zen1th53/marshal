@@ -475,7 +475,11 @@ func TestMarshalProposalSettingAllowList(t *testing.T) {
 				t.Fatal("setting did not use existing CAS handler")
 			}
 			output, err := w.cmd.Handle(t.Context(), "/marshal settings")
-			if err != nil || !strings.Contains(output+"\n", key+" "+value+"\n") {
+			expected := value
+			if key == "execution-rights" && value == "none" {
+				expected = "read-only"
+			}
+			if err != nil || !strings.Contains("\n"+output, "\n"+key+" "+expected+" ") {
 				t.Fatalf("%s=%s readback: %s %v", key, value, output, err)
 			}
 		}

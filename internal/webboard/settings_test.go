@@ -150,6 +150,8 @@ func TestConcurrentTabsSpendTokenOnce(t *testing.T) {
 	h := newSettingsHarness(t)
 	first := h.preview(t, h.command("00112233445566778899aabbccddeeff"))
 	second := h.preview(t, h.command("10112233445566778899aabbccddeeff"))
+	// Both tabs hold the token from the same current frame.
+	first.Token = h.s.settingsFrame().Capabilities[0].Token
 	second.Token = first.Token
 	var wg sync.WaitGroup
 	codes := make(chan int, 2)
@@ -352,5 +354,27 @@ func TestSettingsFollowCurrentProjectStore(t *testing.T) {
 	after, _ := next.GetMarshalSettings(t.Context(), "project")
 	if before.Revision != 0 || after.Revision != 1 || after.Value.ReworkLimit != 4 {
 		t.Fatal(before, after)
+	}
+}
+
+func TestIdleSettingsFrameKeepsItsTokens(t *testing.T) {
+	h := newSettingsHarness(t)
+	first := h.s.settingsFrame()
+	second := h.s.settingsFrame()
+	if first == nil || second == nil || len(first.Capabilities) == 0 {
+		t.Fatal("settings frame has no capabilities")
+	}
+	for i := range first.Capabilities {
+		if first.Capabilities[i].Token != second.Capabilities[i].Token {
+			t.Fatalf("token for %v changed between idle frames", first.Capabilities[i].Target)
+		}
+	}
+	claims, ok := h.s.readClaims(first.Capabilities[0].Token)
+	if !ok {
+		t.Fatal("token does not verify")
+	}
+	h.s.forgetSettingsToken(claims.Nonce)
+	if third := h.s.settingsFrame(); third.Capabilities[0].Token == first.Capabilities[0].Token {
+		t.Fatal("a spent token was offered again")
 	}
 }

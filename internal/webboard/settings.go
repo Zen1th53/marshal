@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -174,15 +175,53 @@ func (s *Server) settingsFrame() *SettingsState {
 	}
 	state := c.Source()
 	auth := s.authIdentity()
+	now := time.Now()
+	s.settingsTokMu.Lock()
+	defer s.settingsTokMu.Unlock()
+	if s.settingsTokens == nil {
+		s.settingsTokens = map[string]cachedSettingsToken{}
+	}
+	for key, t := range s.settingsTokens {
+		if t.expires <= now.Unix() {
+			delete(s.settingsTokens, key)
+		}
+	}
 	for n := range state.Capabilities {
 		cap := &state.Capabilities[n]
+		// Reuse an unspent token for the same binding while it has at least a
+		// minute left, so an idle Board's frame (and its stream) stays stable.
+		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%v\x00%v", state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, cap.Revision)
+		if t, ok := s.settingsTokens[key]; ok && t.expires-now.Unix() >= 60 {
+			cap.Token = t.token
+			continue
+		}
 		nonce, err := randomToken(16)
 		if err != nil {
 			return nil
 		}
-		cap.Token = s.signClaims(commandClaims{state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, cap.Revision, nonce, time.Now().Add(2 * time.Minute).Unix()})
+		expires := now.Add(2 * time.Minute).Unix()
+		cap.Token = s.signClaims(commandClaims{state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, cap.Revision, nonce, expires})
+		s.settingsTokens[key] = cachedSettingsToken{token: cap.Token, nonce: nonce, expires: expires}
 	}
 	return &state
+}
+
+// cachedSettingsToken is a minted settings action token kept until it is
+// spent or close to expiry.
+type cachedSettingsToken struct {
+	token, nonce string
+	expires      int64
+}
+
+// forgetSettingsToken drops a spent token so the next frame carries a new one.
+func (s *Server) forgetSettingsToken(nonce string) {
+	s.settingsTokMu.Lock()
+	defer s.settingsTokMu.Unlock()
+	for key, t := range s.settingsTokens {
+		if t.nonce == nonce {
+			delete(s.settingsTokens, key)
+		}
+	}
 }
 func commandDigest(c Command) string {
 	c.Confirmation = nil
@@ -333,6 +372,7 @@ func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actReq
 		s.lastBody = nil
 		s.frameMu.Unlock()
 		s.commandSpent[claims.Nonce] = claims.Expires
+		s.forgetSettingsToken(claims.Nonce)
 		writeJSON(w, 200, map[string]any{"status": "preview", "confirmation": preview})
 		return
 	}
@@ -352,6 +392,7 @@ func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actReq
 		return
 	}
 	s.commandSpent[claims.Nonce] = claims.Expires
+	s.forgetSettingsToken(claims.Nonce)
 	delete(s.previews, preview.Nonce)
 	s.actMu.Unlock()
 	unlock = false
