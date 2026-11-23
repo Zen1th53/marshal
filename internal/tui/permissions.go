@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inbox"
+	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"slices"
@@ -155,6 +157,12 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			if w.routeBuildPermission(ctx, req) {
 				continue
 			}
+			if w.approvalRequestExpiredOrSettled(ctx, req) {
+				w.permissions.mu.Lock()
+				delete(w.permissions.outstanding, req.Key())
+				w.permissions.mu.Unlock()
+				continue
+			}
 			if w.boardVisible() {
 				w.permissions.mu.Lock()
 				w.permissions.inbox = append(w.permissions.inbox, req)
@@ -277,6 +285,9 @@ func (w *Workspace) boardInbox() []boardmodel.InboxItem {
 	w.permissions.mu.Unlock()
 	items := make([]boardmodel.InboxItem, 0, len(requests))
 	for _, req := range requests {
+		if w.approvalRequestExpiredOrSettled(context.Background(), req) {
+			continue
+		}
 		items = append(items, boardmodel.NewInboxItem(req))
 	}
 	slices.SortStableFunc(items, func(a, b boardmodel.InboxItem) int {
@@ -435,6 +446,24 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		}
 		return w.applyMarshalProposal(applyCtx, req)
 	}
+	if req.Kind == "marshal-command" && !allow && !editionExtreme {
+		if approvalID, ok := strings.CutPrefix(req.Object, "/marshal approve-task "); ok && approvalID != "" {
+			if record, resolveErr := a.runtime.ResolveDecision(ctx, a.sessionID, "execution:"+approvalID); resolveErr == nil && record.Pending {
+				_, _ = a.runtime.CommandDecideApproval(ctx, app.ApprovalDecision{
+					Envelope: app.CommandEnvelope{
+						ProjectID:       a.runtime.ProjectIdentity(),
+						SessionID:       a.sessionID,
+						TargetID:        record.ID,
+						ExpectedVersion: record.Version,
+						IdempotencyKey:  uuid.NewString(),
+					},
+					Digest:  record.Digest,
+					Approve: false,
+					Reason:  source,
+				})
+			}
+		}
+	}
 	if req.Kind == "network" && allow {
 		return a.runtime.CommandEgress(ctx, req.RunID, "allow", req.Object)
 	}
@@ -458,6 +487,28 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		}
 	}
 	return nil
+}
+
+func (w *Workspace) approvalRequestExpiredOrSettled(ctx context.Context, req permission.Request) bool {
+	if req.Kind != "marshal-command" || w.runtime == nil || w.runtime.Execution() == nil || w.runtime.Execution().Engine() == nil {
+		return false
+	}
+	id, ok := strings.CutPrefix(req.Object, "/marshal approve-task ")
+	if !ok || id == "" {
+		return false
+	}
+	a, err := w.runtime.Execution().Engine().ApprovalManager().GetApproval(id)
+	if err != nil {
+		return false
+	}
+	if a.Status != execution.ApprovalRequested {
+		return true
+	}
+	if a.ExpiresAt != nil && !time.Now().UTC().Before(*a.ExpiresAt) {
+		_, _, _ = w.runtime.ExpireApproval(ctx, req.RunID, id, time.Now().UTC())
+		return true
+	}
+	return false
 }
 
 func (w *Workspace) decideReadRevoke(ctx context.Context, folder string) error {

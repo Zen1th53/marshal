@@ -24,7 +24,9 @@ import (
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/settingscatalog"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	"github.com/google/uuid"
 )
 
 const marshalUsage = `Marshal mode — one model plans with you, then marshals the work to other agents.
@@ -1487,9 +1489,36 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	if !bound {
 		return "", errors.New("approval does not belong to the active Marshal plan")
 	}
+	if !editionExtreme {
+		if control := w.controlSource(); control != nil {
+			if authority, ok := control.Authority.(*runtimeControlAuthority); ok && authority != nil && authority.runtime != nil && authority.localControl != nil && authority.localControlErr == nil {
+				record, resolveErr := authority.runtime.ResolveDecision(ctx, authority.sessionID, "execution:"+args[0])
+				if resolveErr != nil {
+					return "", resolveErr
+				}
+				if _, decErr := authority.runtime.CommandDecideApproval(authority.localControl.Context(ctx), app.ApprovalDecision{
+					Envelope: app.CommandEnvelope{
+						ProjectID:       authority.runtime.ProjectIdentity(),
+						SessionID:       authority.sessionID,
+						TargetID:        record.ID,
+						ExpectedVersion: record.Version,
+						IdempotencyKey:  uuid.NewString(),
+					},
+					Digest:  record.Digest,
+					Approve: true,
+					Reason:  "approved in Marshal TUI",
+				}); decErr != nil {
+					return "", decErr
+				}
+				w.deliverApprovalNotices(context.WithoutCancel(ctx), runID)
+				return "Task approved. The run continues when you run /marshal resume.", nil
+			}
+		}
+	}
 	if err := execService.Approve(ctx, args[0], marshalOperator(), "approved in Marshal TUI"); err != nil {
 		return "", err
 	}
+	w.deliverApprovalNotices(context.WithoutCancel(ctx), runID)
 	return "Task approved. The run continues when you press Enter on the Board's inbox.", nil
 }
 
@@ -1661,6 +1690,8 @@ func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, holde
 		if ctx.Err() == nil {
 			updateExecutionHolder(m, holderID, runID, r)
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, r, "running"))
+			w.queuePrivateProcess05Continuation(r)
+			w.deliverApprovalNotices(ctx, runID)
 		}
 	})
 	if err != nil {
@@ -1675,11 +1706,39 @@ func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, holde
 		_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, Kind: "run stopped", State: "stopped", Message: "Marshal run stopped: " + err.Error()})
 	}
 	w.queuePrivateProcess05Continuation(run)
+	w.deliverApprovalNotices(context.WithoutCancel(ctx), runID)
 	// A run that stops for a new plan (a returned governed task, an amended
 	// Process 04 plan) needs the Marshal's next draft imported; the watcher
 	// of the launch that imported the last draft has already ended.
 	w.ensureMarshalDraftWatch(w.workDir, provider, runID)
 	return w.marshalNativeApprovalWaiting(service, run)
+}
+
+// deliverApprovalNotices drains durable approval outbox entries into the
+// Marshal's accepting inbox without blocking lifecycle if the chat/inbox is
+// absent or busy.
+func (w *Workspace) deliverApprovalNotices(ctx context.Context, runID string) {
+	if w.runtime == nil {
+		return
+	}
+	root := w.runtime.ProjectRoot()
+	if root == "" {
+		root = w.workDir
+	}
+	if root == "" {
+		return
+	}
+	_, _ = w.runtime.DeliverPendingNotices(ctx, "marshal-chat", runID, func(entry store.NoticeOutboxEntry, rendered string) error {
+		view, err := openMarshalInbox(root)
+		if err != nil {
+			return err
+		}
+		header := fmt.Sprintf("## MARSHAL approval %s · %s\n\n%s\n", entry.Transition, entry.ApprovalID, rendered)
+		if entry.Command != "" {
+			header += fmt.Sprintf("Command: `%s` (authority: %s, destination: %s)\n", entry.Command, entry.Authority, entry.Destination)
+		}
+		return view.write(header + "\n")
+	})
 }
 
 func updateExecutionHolder(m *marshalSession, holderID, runID string, run marshal.Run) {
@@ -2022,6 +2081,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 			}
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
 			w.queuePrivateProcess05Continuation(run)
+			w.deliverApprovalNotices(context.WithoutCancel(ctx), runID)
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))

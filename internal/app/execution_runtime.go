@@ -317,7 +317,14 @@ func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, 
 	if err := refuseNativeTurnApproval(*pending); err != nil {
 		return err
 	}
-	return s.engine.DecideApproval(ctx, approvalID, true, approverID, rationale)
+	if err := s.engine.DecideApproval(ctx, approvalID, true, approverID, rationale); err != nil {
+		return err
+	}
+	if updated, getErr := s.engine.ApprovalManager().GetApproval(approvalID); getErr == nil && updated != nil && s.runtime != nil {
+		marshalRunID := s.runtime.resolveMarshalRunIDForExecution(ctx, updated.RunID, updated.PlanID, updated.PlanVersion)
+		_ = s.runtime.RecordApprovalTerminal(ctx, marshalRunID, *updated, "approved", rationale)
+	}
+	return nil
 }
 
 // Reject records a rejection decision for a pending approval.
@@ -332,7 +339,14 @@ func (s *ExecutionService) Reject(ctx context.Context, approvalID, approverID, r
 	if err := refuseNativeTurnApproval(*pending); err != nil {
 		return err
 	}
-	return s.engine.DecideApproval(ctx, approvalID, false, approverID, rationale)
+	if err := s.engine.DecideApproval(ctx, approvalID, false, approverID, rationale); err != nil {
+		return err
+	}
+	if updated, getErr := s.engine.ApprovalManager().GetApproval(approvalID); getErr == nil && updated != nil && s.runtime != nil {
+		marshalRunID := s.runtime.resolveMarshalRunIDForExecution(ctx, updated.RunID, updated.PlanID, updated.PlanVersion)
+		_ = s.runtime.RecordApprovalTerminal(ctx, marshalRunID, *updated, "denied", rationale)
+	}
+	return nil
 }
 
 // CreateCheckpoint manually snapshots the project workspace.

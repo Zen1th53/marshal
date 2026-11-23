@@ -3122,13 +3122,14 @@ features:
 
   # ---- MCP tools (internal/mcp) ----------------------------------------------
   - id: MCP-marshal-status-and-digest
-    name: Marshal run status, digest and event stream MCP tools (marshal_status, run_digest, events_list)
+    name: Marshal run status, digest, approvals and event stream MCP tools (marshal_status, run_digest, marshal_approvals, events_list)
     editions: [default, governed]
     sources:
       - internal/tui/boardv2_steps.go
       - internal/webboard/page/index.html
       - internal/mcp/server.go
       - internal/mcp/run_digest.go
+      - internal/mcp/marshal_approvals.go
       - internal/mcp/events_page.go
     tests: []
     docs:

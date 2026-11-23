@@ -185,4 +185,17 @@ func TestExtremeProcess05RequestedExpiryRefusesResumeWithoutChangingReceipt(t *t
 	if !bytes.Equal(a, b) {
 		t.Fatal("expired receipt read changed canonical status or revision")
 	}
+	// Refusal plus recoverability: explicit owner retry clears the expired serial
+	// binding without charging rework so a fresh ticket can be requested.
+	s.now = func() time.Time { return receipt.ExpiresAt.Add(time.Second) }
+	if err := s.RetryTask(ctx, "expiry-run", "fix", false); err != nil {
+		t.Fatalf("explicit owner retry of expired serial wait failed: %v", err)
+	}
+	recovered, err := s.Snapshot(ctx, "expiry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Tasks[0].Process05WaitApprovalID != "" || len(recovered.Tasks[0].ReturnsByAgent) != 0 || workerCalls.Load() != 0 {
+		t.Fatalf("serial retry did not cleanly clear expired wait without rework: %+v worker=%d", recovered.Tasks[0], workerCalls.Load())
+	}
 }

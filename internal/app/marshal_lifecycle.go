@@ -1147,6 +1147,9 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 		return errors.New("task not found")
 	}
 	t := &run.Tasks[i]
+	if handled, retryErr := s.retryExpiredApprovalWait(ctx, runID, run, rev, i); handled {
+		return retryErr
+	}
 	if t.State != marshal.Escalated && t.State != marshal.Returned {
 		if t.State == marshal.HandedIn {
 			return fmt.Errorf("task is %s; use /marshal return %s <reason> to request rework", t.State, taskID)
@@ -1669,6 +1672,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	// The run's own merged worktrees and branches are done with; a failure
 	// keeps them and never undoes the close.
 	_ = s.cleanupDeliveredRun(ctx, runID, next, target)
+	if s.runtime != nil {
+		_, _ = s.runtime.CloseRunApprovals(ctx, runID, next, "marshal run closed", s.clock())
+	}
 	return nil
 }
 
@@ -2116,6 +2122,17 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 		// A parallel worker this process launched and is still collecting
 		// was not interrupted: resuming the run must not return it.
 		if t.State == marshal.Dispatched && !s.dispatchLive(runID, t.PlanTaskID) {
+			if s.requeueGovernedApprovalTask(ctx, run, *t) {
+				run.Tasks[i].State = marshal.Queued
+				if err = s.save(ctx, runID, run, rev); err != nil {
+					return run, err
+				}
+				run, rev, err = s.load(ctx, runID)
+				if err != nil {
+					return run, err
+				}
+				continue
+			}
 			if infraRetryApplies(run, *t) {
 				// Observe the failed attempt before preparing a base checkout.
 				// Its branch may legitimately have advanced before hand-in.

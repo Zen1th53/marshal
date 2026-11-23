@@ -629,7 +629,7 @@ func (w *Workspace) decorateMarshalStatus(ctx context.Context, base string) stri
 }
 
 // settledProcess05Approval reports whether the approval a Process 05
-// approve-task request names is no longer waiting for a decision.
+// approve-task request names is no longer waiting for a decision (settled or expired).
 func (w *Workspace) settledProcess05Approval(req permission.Request) bool {
 	if w.runtime == nil || w.runtime.Execution().Engine() == nil {
 		return false
@@ -639,7 +639,17 @@ func (w *Workspace) settledProcess05Approval(req permission.Request) bool {
 		return false
 	}
 	a, err := w.runtime.Execution().Engine().ApprovalManager().GetApproval(id)
-	return err == nil && a.Status != execution.ApprovalRequested
+	if err != nil {
+		return false
+	}
+	if a.Status != execution.ApprovalRequested {
+		return true
+	}
+	if a.ExpiresAt != nil && !time.Now().UTC().Before(*a.ExpiresAt) {
+		_, _, _ = w.runtime.ExpireApproval(context.Background(), req.RunID, id, time.Now().UTC())
+		return true
+	}
+	return false
 }
 
 // expiredRunProposal settles a run proposal whose bound plan version and

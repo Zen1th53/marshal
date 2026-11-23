@@ -11,11 +11,17 @@ import (
 // empty occurrence prevents the runtime-proposal approval shortcut: the normal
 // authority router must deliver a fresh request and receive a genuine decision.
 func (w *Workspace) queuePrivateProcess05Continuation(run marshal.Run) {
-	if w.runtime == nil || run.State != marshal.AwaitingUser {
+	if w.runtime == nil {
+		return
+	}
+	if run.State != marshal.AwaitingUser && !run.Process05Parallel {
 		return
 	}
 	for _, task := range run.Tasks {
 		if task.State != marshal.Queued || task.Process05WaitApprovalID == "" {
+			continue
+		}
+		if !w.pendingProcess05Approval(context.Background(), run, task.Process05WaitApprovalID) {
 			continue
 		}
 		if err := w.queueMarshalRunProposal(marshalProposal{action: "approve-task", id: task.Process05WaitApprovalID, who: "MARSHAL runtime"}); err != nil {

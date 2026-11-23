@@ -26,10 +26,13 @@ type ApprovalRequest struct {
 	TaskID         string
 	PlanID         string
 	PlanVersion    int64
+	Attempt        int
 	OperationType  string
 	TargetResource string
 	RiskLevel      model.Risk
 	Scope          string
+	ScopeDigest    string
+	Authority      string
 	DiffPreview    string
 	Parameters     string
 	CurrentState   string
@@ -44,6 +47,17 @@ func ComputeActionDigest(opType, target, diff, params string) string {
 	fmt.Fprintf(h, "target:%s\n", target)
 	fmt.Fprintf(h, "diff:%s\n", diff)
 	fmt.Fprintf(h, "params:%s\n", params)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ComputeScopeDigest creates a deterministic SHA256 digest of the bound approval scope.
+func ComputeScopeDigest(planID string, planVersion int64, opType, target, scope, actionDigest string) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "plan:%s@%d\n", planID, planVersion)
+	fmt.Fprintf(h, "op:%s\n", opType)
+	fmt.Fprintf(h, "target:%s\n", target)
+	fmt.Fprintf(h, "scope:%s\n", scope)
+	fmt.Fprintf(h, "action:%s\n", actionDigest)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -107,6 +121,18 @@ func (am *ApprovalManager) RequestApproval(req ApprovalRequest) (*RuntimeApprova
 	if requester == "" {
 		requester = req.RunID
 	}
+	scopeDigest := req.ScopeDigest
+	if scopeDigest == "" {
+		scopeDigest = ComputeScopeDigest(req.PlanID, req.PlanVersion, req.OperationType, req.TargetResource, req.Scope, actionDigest)
+	}
+	authority := req.Authority
+	if authority == "" {
+		authority = defaultTaskApprovalAuthority()
+	}
+	attempt := req.Attempt
+	if attempt <= 0 {
+		attempt = 1
+	}
 	approval := &RuntimeApproval{
 		RequestedBy: requester, HardViolation: req.HardViolation, Revision: 1,
 		ApprovalID:     approvalID,
@@ -114,10 +140,13 @@ func (am *ApprovalManager) RequestApproval(req ApprovalRequest) (*RuntimeApprova
 		TaskID:         req.TaskID,
 		PlanID:         req.PlanID,
 		PlanVersion:    req.PlanVersion,
+		Attempt:        attempt,
 		OperationType:  req.OperationType,
 		TargetResource: req.TargetResource,
 		RiskLevel:      req.RiskLevel,
 		Scope:          req.Scope,
+		ScopeDigest:    scopeDigest,
+		Authority:      authority,
 		DiffPreview:    req.DiffPreview,
 		ActionDigest:   actionDigest,
 		StateDigest:    stateDigest,
@@ -169,9 +198,24 @@ func (am *ApprovalManager) DecideContext(ctx context.Context, approvalID string,
 		now = time.Now().UTC()
 	}
 
+	// Terminal or already-decided records are never overwritten by a late or
+	// duplicate decision; return the existing receipt (including any
+	// replacement pointer) unchanged.
+	if app.Status != ApprovalRequested {
+		copy := *app
+		if app.Status == ApprovalExpired {
+			return &copy, fmt.Errorf("%w: approval expired", ErrApprovalTOCTOUViolation)
+		}
+		if app.ReplacementID != "" {
+			return &copy, fmt.Errorf("%w: cannot decide on approval in state %s (replacement %s)", ErrInvalidStateTransition, app.Status, app.ReplacementID)
+		}
+		return &copy, fmt.Errorf("%w: cannot decide on approval in state %s", ErrInvalidStateTransition, app.Status)
+	}
+
 	if app.ExpiresAt != nil && !now.Before(*app.ExpiresAt) {
 		previous := *app
 		app.Status = ApprovalExpired
+		app.ResolvedAt = &now
 		app.Revision++
 		if am.dir != "" {
 			if err := am.persist(app); err != nil {
@@ -181,10 +225,6 @@ func (am *ApprovalManager) DecideContext(ctx context.Context, approvalID string,
 		}
 		copy := *app
 		return &copy, fmt.Errorf("%w: approval expired", ErrApprovalTOCTOUViolation)
-	}
-
-	if app.Status != ApprovalRequested {
-		return app, fmt.Errorf("%w: cannot decide on approval in state %s", ErrInvalidStateTransition, app.Status)
 	}
 
 	requester := app.RequestedBy
@@ -245,6 +285,196 @@ func (am *ApprovalManager) Deny(approvalID, decider, reason string, now time.Tim
 	return err
 }
 
+// Expire atomically transitions an unanswered REQUESTED approval whose deadline
+// has elapsed to EXPIRED. If another terminal transition or approval decision
+// already won, it returns the existing state unchanged with transitioned=false.
+func (am *ApprovalManager) Expire(approvalID string, now time.Time) (*RuntimeApproval, bool, error) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return nil, false, err
+	}
+	app, exists := am.approvals[approvalID]
+	if !exists {
+		return nil, false, fmt.Errorf("approval %s not found", approvalID)
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if app.Status != ApprovalRequested || app.ExpiresAt == nil || now.Before(*app.ExpiresAt) {
+		copy := *app
+		return &copy, false, nil
+	}
+	previous := *app
+	app.Status = ApprovalExpired
+	app.ResolvedAt = &now
+	app.Revision++
+	if am.dir != "" {
+		if err := am.persist(app); err != nil {
+			*app = previous
+			return nil, false, err
+		}
+	}
+	copy := *app
+	return &copy, true, nil
+}
+
+// Supersede atomically replaces a REQUESTED or unconsumed APPROVED approval
+// with a stronger replacement ticket. If supersession wins after allow but
+// before consume, the unconsumed grant is revoked under the same lock fence.
+func (am *ApprovalManager) Supersede(approvalID, replacementID, reason string, now time.Time) (*RuntimeApproval, bool, error) {
+	if strings.TrimSpace(replacementID) == "" || replacementID == approvalID {
+		return nil, false, fmt.Errorf("%w: valid replacement approval id is required", ErrRunInvalid)
+	}
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return nil, false, err
+	}
+	app, exists := am.approvals[approvalID]
+	if !exists {
+		return nil, false, fmt.Errorf("approval %s not found", approvalID)
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if app.Status != ApprovalRequested && app.Status != ApprovalApproved {
+		copy := *app
+		return &copy, false, nil
+	}
+	previous := *app
+	wasApproved := app.Status == ApprovalApproved
+	app.Status = ApprovalSuperseded
+	app.ReplacementID = replacementID
+	if app.ResolvedAt == nil {
+		app.ResolvedAt = &now
+	}
+	if reason != "" {
+		if wasApproved {
+			app.RevokedReason = reason
+		} else {
+			app.DecisionReason = reason
+		}
+	}
+	if wasApproved {
+		app.Revoked = true
+		app.RevokedAt = &now
+	}
+	app.Revision++
+	if am.dir != "" {
+		if err := am.persist(app); err != nil {
+			*app = previous
+			return nil, false, err
+		}
+	}
+	copy := *app
+	return &copy, true, nil
+}
+
+// CloseApproval atomically closes and revokes a REQUESTED or unconsumed
+// APPROVED approval when its owning run closes. If close wins after allow but
+// before consume, the unconsumed grant is invalidated under the same fence.
+func (am *ApprovalManager) CloseApproval(approvalID, reason string, now time.Time) (*RuntimeApproval, bool, error) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return nil, false, err
+	}
+	app, exists := am.approvals[approvalID]
+	if !exists {
+		return nil, false, fmt.Errorf("approval %s not found", approvalID)
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if app.Status != ApprovalRequested && app.Status != ApprovalApproved {
+		copy := *app
+		return &copy, false, nil
+	}
+	previous := *app
+	app.Status = ApprovalClosed
+	app.Revoked = true
+	app.RevokedAt = &now
+	app.RevokedReason = reason
+	if app.ResolvedAt == nil {
+		app.ResolvedAt = &now
+	}
+	app.Revision++
+	if am.dir != "" {
+		if err := am.persist(app); err != nil {
+			*app = previous
+			return nil, false, err
+		}
+	}
+	copy := *app
+	return &copy, true, nil
+}
+
+// ReconcileInterrupted evaluates an interrupted REQUESTED approval. When its
+// binding is intact and its deadline has not elapsed, it remains REQUESTED for
+// replay; otherwise it is closed and revoked as INTERRUPTED.
+func (am *ApprovalManager) ReconcileInterrupted(approvalID string, bindingIntact bool, reason string, now time.Time) (*RuntimeApproval, bool, error) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return nil, false, err
+	}
+	app, exists := am.approvals[approvalID]
+	if !exists {
+		return nil, false, fmt.Errorf("approval %s not found", approvalID)
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if app.Status != ApprovalRequested {
+		copy := *app
+		return &copy, false, nil
+	}
+	if bindingIntact && app.ExpiresAt != nil && now.Before(*app.ExpiresAt) {
+		copy := *app
+		return &copy, false, nil
+	}
+	previous := *app
+	app.Status = ApprovalInterrupted
+	app.Revoked = true
+	app.RevokedAt = &now
+	app.RevokedReason = reason
+	app.ResolvedAt = &now
+	app.Revision++
+	if am.dir != "" {
+		if err := am.persist(app); err != nil {
+			*app = previous
+			return nil, false, err
+		}
+	}
+	copy := *app
+	return &copy, true, nil
+}
+
 // ValidateAndConsume validates the approval against current action digest and consumes it (one-shot).
 func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, currentStateDigest string, now time.Time) error {
 	am.mu.Lock()
@@ -269,6 +499,40 @@ func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, c
 		now = time.Now().UTC()
 	}
 
+	// Never overwrite an already-terminal approval state with EXPIRED.
+	if app.Status != ApprovalApproved {
+		switch app.Status {
+		case ApprovalDenied:
+			return ErrApprovalDenied
+		case ApprovalExpired:
+			return fmt.Errorf("%w: approval expired at %s", ErrApprovalTOCTOUViolation, app.ExpiresAt)
+		case ApprovalRequested:
+			if app.ExpiresAt != nil && !now.Before(*app.ExpiresAt) {
+				app.Status = ApprovalExpired
+				app.ResolvedAt = &now
+				app.Revision++
+				if am.dir != "" {
+					if err := am.persist(app); err != nil {
+						*app = previous
+						return err
+					}
+				}
+				return fmt.Errorf("%w: approval expired at %s", ErrApprovalTOCTOUViolation, app.ExpiresAt)
+			}
+			return fmt.Errorf("%w: approval status is %s, required APPROVED", ErrApprovalRequired, app.Status)
+		case ApprovalSuperseded:
+			return fmt.Errorf("%w: approval superseded by %s", ErrApprovalTOCTOUViolation, app.ReplacementID)
+		case ApprovalClosed, ApprovalInterrupted, ApprovalInvalidated:
+			return fmt.Errorf("%w: approval status is %s (revoked)", ErrApprovalTOCTOUViolation, app.Status)
+		default:
+			return fmt.Errorf("%w: approval status is %s, required APPROVED", ErrApprovalRequired, app.Status)
+		}
+	}
+
+	if app.Revoked {
+		return fmt.Errorf("%w: approval grant has been revoked", ErrApprovalTOCTOUViolation)
+	}
+
 	if app.ExpiresAt != nil && !now.Before(*app.ExpiresAt) {
 		app.Status = ApprovalExpired
 		app.Revision++
@@ -279,13 +543,6 @@ func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, c
 			}
 		}
 		return fmt.Errorf("%w: approval expired at %s", ErrApprovalTOCTOUViolation, app.ExpiresAt)
-	}
-
-	if app.Status != ApprovalApproved {
-		if app.Status == ApprovalDenied {
-			return ErrApprovalDenied
-		}
-		return fmt.Errorf("%w: approval status is %s, required APPROVED", ErrApprovalRequired, app.Status)
 	}
 
 	// Exact action check: prevents TOCTOU mutation of approved action

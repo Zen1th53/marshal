@@ -108,11 +108,24 @@ const (
 	ApprovalDenied      ApprovalStatus = "DENIED"
 	ApprovalExpired     ApprovalStatus = "EXPIRED"
 	ApprovalInvalidated ApprovalStatus = "INVALIDATED"
+	ApprovalSuperseded  ApprovalStatus = "SUPERSEDED"
+	ApprovalClosed      ApprovalStatus = "CLOSED"
+	ApprovalInterrupted ApprovalStatus = "INTERRUPTED"
 	// ApprovalConsumed is a successful, one-shot use of an exact approval.
 	// It must remain distinct from INVALIDATED, which denotes a stale or
 	// tampered binding and must never resume provider work.
 	ApprovalConsumed ApprovalStatus = "CONSUMED"
 )
+
+// IsTerminal reports whether the approval status can no longer be decided or consumed.
+func (s ApprovalStatus) IsTerminal() bool {
+	switch s {
+	case ApprovalDenied, ApprovalExpired, ApprovalInvalidated, ApprovalSuperseded, ApprovalClosed, ApprovalInterrupted, ApprovalConsumed:
+		return true
+	default:
+		return false
+	}
+}
 
 // EvidenceStatus represents the freshness and validity of an evidence record.
 type EvidenceStatus string
@@ -293,6 +306,18 @@ type Lease struct {
 	TakeoverProvenance string      `json:"takeover_provenance,omitempty"`
 }
 
+// ApprovalIdentity is the authoritative request identity for an approval ticket.
+type ApprovalIdentity struct {
+	ApprovalID  string     `json:"approval_id"`
+	RunID       string     `json:"run"`
+	TaskID      string     `json:"task"`
+	Attempt     int        `json:"attempt"`
+	ScopeDigest string     `json:"scope_digest"`
+	Authority   string     `json:"authority"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+}
+
 // RuntimeApproval records a hard gated action requiring explicit human decision.
 type RuntimeApproval struct {
 	Revision           int64          `json:"revision,omitempty"`
@@ -304,19 +329,52 @@ type RuntimeApproval struct {
 	TaskID             string         `json:"task_id"`
 	PlanID             string         `json:"plan_id"`
 	PlanVersion        int64          `json:"plan_version"`
+	Attempt            int            `json:"attempt,omitempty"`
 	OperationType      string         `json:"operation_type"`
 	TargetResource     string         `json:"target_resource"`
 	RiskLevel          model.Risk     `json:"risk_level"`
 	Scope              string         `json:"scope"`
+	ScopeDigest        string         `json:"scope_digest,omitempty"`
+	Authority          string         `json:"authority,omitempty"`
 	DiffPreview        string         `json:"diff_preview,omitempty"`
 	ActionDigest       string         `json:"action_digest"`
 	StateDigest        string         `json:"state_digest"`
 	Status             ApprovalStatus `json:"status"`
 	ApprovedBy         string         `json:"approved_by,omitempty"`
 	DecisionReason     string         `json:"decision_reason,omitempty"`
+	ReplacementID      string         `json:"replacement_id,omitempty"`
+	Revoked            bool           `json:"revoked,omitempty"`
+	RevokedAt          *time.Time     `json:"revoked_at,omitempty"`
+	RevokedReason      string         `json:"revoked_reason,omitempty"`
 	CreatedAt          time.Time      `json:"created_at"`
 	ResolvedAt         *time.Time     `json:"resolved_at,omitempty"`
 	ExpiresAt          *time.Time     `json:"expires_at,omitempty"`
+}
+
+// Identity returns the authoritative request identity for this approval.
+func (a RuntimeApproval) Identity() ApprovalIdentity {
+	attempt := a.Attempt
+	if attempt <= 0 {
+		attempt = 1
+	}
+	scopeDigest := a.ScopeDigest
+	if scopeDigest == "" {
+		scopeDigest = ComputeScopeDigest(a.PlanID, a.PlanVersion, a.OperationType, a.TargetResource, a.Scope, a.ActionDigest)
+	}
+	authority := a.Authority
+	if authority == "" {
+		authority = defaultTaskApprovalAuthority()
+	}
+	return ApprovalIdentity{
+		ApprovalID:  a.ApprovalID,
+		RunID:       a.RunID,
+		TaskID:      a.TaskID,
+		Attempt:     attempt,
+		ScopeDigest: scopeDigest,
+		Authority:   authority,
+		CreatedAt:   a.CreatedAt,
+		ExpiresAt:   a.ExpiresAt,
+	}
 }
 
 // CheckpointRecord records a durable rollback boundary.

@@ -27,6 +27,7 @@ type Server struct {
 	proposalCall       func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 	chatPermission     func(context.Context, json.RawMessage) (json.RawMessage, error)
 	role               string
+	boundRunID         string
 	workerTaskID       string
 	workerBinding      app.KnowledgeBinding
 	workerBindingErr   error
@@ -337,30 +338,35 @@ func (s *Server) listTools() []Tool {
 		},
 		{
 			Name:        "run_digest",
-			Description: "Current run state, tasks, pause, events_cursor",
+			Description: "Run state, tasks, pause, cursor",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
+			Name:        "marshal_approvals",
+			Description: "Bound run approvals",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{"run_id": stringSchema(), "include_closed": map[string]any{"type": "boolean"}}},
+		},
+		{
 			Name:        "events_list",
-			Description: "List or page audit events",
+			Description: "Page audit events",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{"since_cursor": stringSchema(), "types": stringSchema(), "task_id": stringSchema(), "limit": map[string]any{"type": "integer"}}},
 		},
 		{
 			Name:        "artifacts_list",
-			Description: "List artifacts",
+			Description: "Artifacts",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "verification_status",
-			Description: "Run verification",
+			Description: "Verification",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
-		{Name: "process06_status", Description: "Process 06 verification session", InputSchema: objectSchema(map[string]any{"verification_id": stringSchema()}, "verification_id")},
-		{Name: "process07_memory_commit", Description: "Process 07 memory commit", InputSchema: objectSchema(map[string]any{"memory_commit_id": stringSchema()}, "memory_commit_id")},
-		{Name: "process07_memory_search", Description: "Search Process 07 memory", InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "terms": stringSchema(), "include_general": map[string]any{"type": "boolean"}, "include_stale": map[string]any{"type": "boolean"}}, "project_id")},
-		{Name: "process07_memory_history", Description: "Process 07 memory item history", InputSchema: objectSchema(map[string]any{"item_id": stringSchema()}, "item_id")},
-		{Name: "process07_routing_trust", Description: "Process 07 routing trust", InputSchema: objectSchema(map[string]any{"task_class": stringSchema()})},
-		{Name: "process07_playbooks", Description: "Process 07 playbook candidates", InputSchema: objectSchema(map[string]any{"project_id": stringSchema()}, "project_id")},
+		{Name: "process06_status", Description: "P06 session", InputSchema: objectSchema(map[string]any{"verification_id": stringSchema()}, "verification_id")},
+		{Name: "process07_memory_commit", Description: "P07 commit", InputSchema: objectSchema(map[string]any{"memory_commit_id": stringSchema()}, "memory_commit_id")},
+		{Name: "process07_memory_search", Description: "P07 search", InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "terms": stringSchema(), "include_general": map[string]any{"type": "boolean"}, "include_stale": map[string]any{"type": "boolean"}}, "project_id")},
+		{Name: "process07_memory_history", Description: "P07 history", InputSchema: objectSchema(map[string]any{"item_id": stringSchema()}, "item_id")},
+		{Name: "process07_routing_trust", Description: "P07 trust", InputSchema: objectSchema(map[string]any{"task_class": stringSchema()})},
+		{Name: "process07_playbooks", Description: "P07 playbooks", InputSchema: objectSchema(map[string]any{"project_id": stringSchema()}, "project_id")},
 		{
 			Name:        "memory_status",
 			Description: "Memory health and count",
@@ -416,10 +422,10 @@ func (s *Server) listTools() []Tool {
 	// promotion, rollback, and policy mutation: those remain governed app
 	// actions with lifecycle and approval requirements.
 	tools = append(tools,
-		Tool{Name: "process08_cycle", Description: "Process 08 optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
-		Tool{Name: "process08_counterfactuals", Description: "Process 08 counterfactuals", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
-		Tool{Name: "process08_manifests", Description: "Process 08 benchmark manifests", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
-		Tool{Name: "process08_canaries", Description: "Process 08 canary records", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_cycle", Description: "P08 cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_counterfactuals", Description: "P08 counterfactuals", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_manifests", Description: "P08 manifests", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_canaries", Description: "P08 canaries", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
 	)
 	tools = append(tools, s.knowledgeTools()...)
 	tools = append(tools, designRecordTool())
@@ -788,6 +794,10 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		data, _ := json.Marshal(digest)
 		return string(data), nil
 
+	case "marshal_approvals":
+		approvals, err := s.marshalApprovals(ctx, args)
+		return marshalToolResult(approvals, err)
+
 	case "events_list":
 		events, err := s.runtime.Events(ctx)
 		if err != nil {
@@ -981,7 +991,7 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapHandoffRead
 	case "agents_list":
 		return auth.CapAgentRead
-	case "events_list", "artifacts_list", "run_digest":
+	case "events_list", "artifacts_list", "run_digest", "marshal_approvals":
 		return auth.CapEvidenceRead
 	case "verification_status", "process06_status":
 		return auth.CapVerifyRun
