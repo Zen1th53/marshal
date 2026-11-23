@@ -511,8 +511,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "ce7772b8a4f2ec9281f2c0afc30a16ff30e95dd64757c79bdcecb998cb4f17af",
-      "bytes": 36786
+      "sha256": "42c41dfd2d479a68ea8e375ca550b2586c50164d11a8bd4ebcd29e243960b40f",
+      "bytes": 37198
     },
     {
       "path": "docs/SETUP-PROMPT.md",
@@ -11966,8 +11966,8 @@
     },
     {
       "path": "internal/tui/architecture_browser_accept_extreme_test.go",
-      "sha256": "81240d5f43465c6adbed18d2b6308c8e68be1313d81251620bc139ae07f70ec2",
-      "bytes": 27778
+      "sha256": "75c28d8fc6ad767111c2806250638ee49343220cce482cb0e8b3035befd53502",
+      "bytes": 29709
     },
     {
       "path": "internal/tui/architecture_error_test.go",
@@ -14666,8 +14666,8 @@
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme.go",
-      "sha256": "d769004cb04a4de126f9fc17c4f4636d1efe03844a85305573ae8a68391d2e4b",
-      "bytes": 14896
+      "sha256": "3f27ad7d7925c2acbfae121a29d4cfbbe086cf0e6296869b4211971341c1779a",
+      "bytes": 15458
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme_test.go",
@@ -16693,6 +16693,11 @@
       "path": "release/RELEASE_NOTES_0.4.1.md",
       "sha256": "75a5e68bc326ee80dde63f3bf7862063fdfa971d29a7e07a507249e8d453d8dc",
       "bytes": 1654
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.4.2.md",
+      "sha256": "ca03610a83d5dfa03b06528d842af6667db2838704a1af2eb9d00119586769a2",
+      "bytes": 520
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",

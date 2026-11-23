@@ -386,6 +386,29 @@ func TestContractSubmitRefusalNamesTheBadPath(t *testing.T) {
 	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "good-path", "proposal": draft}, true)
 }
 
+// A draft that leaves contract.project out is bound to this project, and one
+// naming another project is refused with that reason. Both used to come back
+// as "the project changed", which no re-read could fix (seen live: fifteen
+// identical retries before the Marshal gave up).
+func TestContractSubmitBindsAnOmittedProject(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	child := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	var inventory store.ProjectContractInventoryPage
+	if err := json.Unmarshal([]byte(child.call(t, "marshal_project_contract_inventory", map[string]any{"limit": 1}, true)), &inventory); err != nil {
+		t.Fatal(err)
+	}
+	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: projectcontext.ProjectBinding{CanonicalID: "PROJECT-elsewhere", StorageID: "PROJECT-local"}, ID: "ultron", Revision: 1, Purpose: "Voice assistant", Components: []projectcontext.Component{{ID: "voice", Responsibility: "Listen", Paths: []string{"ultron"}}}, Invariants: []string{"Ask before destructive commands"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
+	msg := child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "other-project", "proposal": draft}, false)
+	if strings.Contains(msg, "changed while") || !strings.Contains(msg, "contract.project must be") || !strings.Contains(msg, w.runtime.ProjectContractBinding().CanonicalID) {
+		t.Fatalf("another project's draft was not refused with its reason: %s", msg)
+	}
+	draft.Contract.Project = projectcontext.ProjectBinding{}
+	child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "no-project", "proposal": draft}, true)
+	if reason := w.browserAcceptBlocked()(); reason != "" {
+		t.Fatalf("the draft without contract.project is not pending for Accept: %q", reason)
+	}
+}
+
 // Once a contract is accepted, a new revision the Marshal submits waits for
 // the owner like the first draft did: opening the architecture shows that
 // revision, not the accepted page, and its Accept binds that revision so the
