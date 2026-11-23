@@ -107,7 +107,7 @@ func testWatcher(t testing.TB, sink laneCapSink) (*hostWatcher, *fakeHost, *fake
 	h := newHostWatcher(f)
 	h.now = c.now
 	h.facts = func() hostFacts {
-		return hostFacts{Hostname: "Asusworkstation", OS: "Arch Linux", Kernel: "7.2.11-arch1-1", BootAt: hostEpoch.Add(-8*time.Hour - 3*time.Minute), Iface: "eno1", IP: "192.168.3.21", MaxGHz: 5.6, Swap: "zram 64 GiB", Storage: "2 × Lexar SSD NM610 PRO 2TB 2.0 TB NVMe", CacheDir: "~/.cache/go-build"}
+		return hostFacts{Hostname: "dev-workstation", OS: "Arch Linux", Kernel: "7.2.11-arch1-1", BootAt: hostEpoch.Add(-8*time.Hour - 3*time.Minute), Iface: "eno1", IP: "10.200.30.21", MaxGHz: 5.6, Swap: "zram 64 GiB", Storage: "2 × Lexar SSD NM610 PRO 2TB 2.0 TB NVMe", CacheDir: "~/.cache/go-build"}
 	}
 	h.cacheSize = func(context.Context) (uint64, bool) { return 24e9, true }
 	if sink != nil {
@@ -232,7 +232,7 @@ func TestHostViewContent(t *testing.T) {
 	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true)}
 	text := strings.Join(v.hostLines(snap, 160, 60), "\n")
 	for _, want := range []string{
-		"Asusworkstation · Arch Linux · kernel 7.2.11-arch1-1 · up 8h03m · eno1 192.168.3.21",
+		"dev-workstation · Arch Linux · kernel 7.2.11-arch1-1 · up 8h03m · eno1 10.200.30.21",
 		"Intel Core i7-14700K · 20 cores / 28 threads · max 5.6 GHz",
 		"62 GiB · swap: zram 64 GiB",
 		"NVIDIA GeForce RTX 4060 Ti 16 GB",
@@ -242,7 +242,7 @@ func TestHostViewContent(t *testing.T) {
 		"/ 94% used · 116 GB free",
 		"24 GB · ~/.cache/go-build",
 		"RTX 4060 Ti · 53 °C · 33% busy",
-		"eno1 192.168.3.21",
+		"eno1 10.200.30.21",
 		"last minute",
 		"CPU package > 90 °C (30 s avg) OK",
 		"root free < 10 GB or 5% OK",

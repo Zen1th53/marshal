@@ -22,7 +22,7 @@ func claudeNBSPBox(content, hint string) string {
 		"────────────────────────────────────────\n" +
 		prompt + "\n" +
 		"────────────────────────────────────────\n" +
-		"  [zen1th53@Asusworkstation]-[~/marshal-work]\n" +
+		"  [operator@dev-workstation]-[~/marshal-work]\n" +
 		"  " + hint + "\n"
 }
 

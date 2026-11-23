@@ -15,7 +15,7 @@ func claudeLiveBox(content string) string {
 		"──────────────────────────────────────────────────────────────\n" +
 		"❯ " + content + "\n" +
 		"──────────────────────────────────────────────────────────────\n" +
-		"  [zen1th53@Asusworkstation]-[~/marshal-work]\n" +
+		"  [operator@dev-workstation]-[~/marshal-work]\n" +
 		"  ⏵⏵ don't ask on (shift+tab to cycle)\n"
 }
 
