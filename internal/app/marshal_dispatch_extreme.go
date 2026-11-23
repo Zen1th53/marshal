@@ -67,6 +67,16 @@ func holdsWorkerSlot(other, candidate marshal.Task) bool {
 }
 
 func canLaunchCandidate(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, launched []MarshalDispatch) (bool, bool) {
+	// A refreshed run already contains launches from this round. Count only
+	// reservations that have not yet appeared in the persisted task states.
+	pending := make([]MarshalDispatch, 0, len(launched))
+	for _, d := range launched {
+		i := taskIndex(run, d.TaskID)
+		if i < 0 || !holdsWorkerSlot(run.Tasks[i], t) {
+			pending = append(pending, d)
+		}
+	}
+	launched = pending
 	if marshal.TierPolicy(gate, run.Settings).Tier != marshal.Ultra {
 		policy := marshal.TierPolicy(gate, run.Settings)
 		active := len(launched)

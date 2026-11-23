@@ -395,3 +395,48 @@ func TestRefusedPriorityStopClearsItsFence(t *testing.T) {
 		t.Fatalf("refused stop left new starts fenced: %q", run.CommandFence)
 	}
 }
+
+func TestQueuedRetryRetainsFreshSession(t *testing.T) {
+	s := handedInFixture(t)
+	s.Model = nil
+	run, rev, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Tasks[0].State = marshal.Escalated
+	if err = s.save(t.Context(), "run", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	c := runCommandForTest(t, s, "retry-task", "retry", "a")
+	c.FreshSession = true
+	receipt := queueRunCommandForTest(t, s, c)
+	before, err := s.Snapshot(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.State != "queued" || before.Tasks[0].State != marshal.Escalated {
+		t.Fatalf("retry applied before drain: %+v", receipt)
+	}
+	after := drainCommandsForTest(t, s)
+	if after.Commands[0].State != "applied" || after.Tasks[0].State != marshal.Returned || after.Tasks[0].FreshSessionRetries != 1 {
+		t.Fatalf("retry did not retain its session choice: %+v", after)
+	}
+	after = drainCommandsForTest(t, s)
+	if after.Tasks[0].FreshSessionRetries != 1 {
+		t.Fatal("retry was replayed")
+	}
+}
+
+func TestLiveDispatchesStayWithinRepository(t *testing.T) {
+	first, _ := marshalFixture(t, 1)
+	second, _ := marshalFixture(t, 1)
+	first.markDispatchLive("run", []MarshalDispatch{{TaskID: "a"}})
+	t.Cleanup(func() { first.clearDispatchLive("run", "a") })
+	if !first.dispatchLive("run", "a") || second.dispatchLive("run", "a") {
+		t.Fatal("live worker registry crossed repository boundaries")
+	}
+	second.clearDispatchLive("run", "a")
+	if !first.dispatchLive("run", "a") {
+		t.Fatal("another repository cleared a live worker")
+	}
+}

@@ -751,6 +751,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			t.RunRevision = run.Version + 1
 			run.Tasks[taskID] = t
 			if err := e.persistRun(ctx, &run); err != nil {
+				if lease != nil && t.NativeTurn == nil {
+					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
+				}
 				return &run, err
 			}
 

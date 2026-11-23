@@ -151,7 +151,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		}
 		if p05.State == execution.RunReady {
 			if err := service.SetPreserveBranch(ctx, p05.RunID, executionBase); err != nil {
-				return nil, err
+				return nil, process05PauseConflict(ctx, service, p05.RunID, err)
 			}
 		} else if p05.Delivery != execution.DeliveryPreserveBranch || p05.BaseCommit != executionBase {
 			return nil, errors.New("process 05: resumed run has a different branch binding")
@@ -176,6 +176,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 				}
 			}
 		}
+		err = process05PauseConflict(ctx, service, p05.RunID, err)
 		if err == nil && completed != nil && completed.State == execution.RunPaused {
 			if state := completed.Tasks[req.Task.PlanTaskID].State; state != execution.TaskCompletedPendingVerify && !state.IsTerminal() {
 				return nil, ErrProcess05Paused
@@ -284,6 +285,19 @@ func (r *Runtime) process05Runs(ctx context.Context, run marshal.Run) ([]executi
 		}
 	}
 	return parts, nil
+}
+
+// A pause can win the state write between branch binding and task start.
+// Keep that admitted attempt parked rather than counting it as a worker crash.
+func process05PauseConflict(ctx context.Context, service *ExecutionService, runID string, cause error) error {
+	if !errors.Is(cause, execution.ErrRunConflict) || !strings.Contains(cause.Error(), "version mismatch") {
+		return cause
+	}
+	current, err := service.GetRun(ctx, runID)
+	if err == nil && current.State == execution.RunPaused {
+		return ErrProcess05Paused
+	}
+	return cause
 }
 
 // process05Paused reports whether the person left part of the run's
