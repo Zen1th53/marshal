@@ -61,7 +61,7 @@ func finishProviderFailoverDispatch(t *marshal.Task) {}
 func (s *MarshalService) admitProviderDispatch(ctx context.Context, _ string, run *marshal.Run, rev int64, index int, _ string) (int64, error) {
 	policy := s.projectSettingsSnapshot(ctx, run.Settings)
 	if !policy.ProviderEnabled(run.Tasks[index].Worker) {
-		return rev, fmt.Errorf("provider %s is disabled by project settings", run.Tasks[index].Worker)
+		return rev, &ProviderDisabledError{Provider: run.Tasks[index].Worker}
 	}
 	return rev, nil
 }

@@ -537,7 +537,7 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 	next, err := s.selectFailoverWorkerFor(ctx, t.Worker, taskModel, t.Mode, drivers, GetEffectiveFailoverOrder(policy))
 	if err != nil {
 		if disabled {
-			err = fmt.Errorf("%w; provider %s is disabled", err, t.Worker)
+			err = &ProviderDisabledError{Provider: t.Worker, Cause: err}
 		} else if modelOut {
 			err = fmt.Errorf("%w; %s has no limit left for %s", err, t.Worker, taskModel)
 		} else if reason, _ := providerHealth.Cooling(t.Worker, now); reason != "" {
