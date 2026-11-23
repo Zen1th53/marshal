@@ -606,7 +606,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	publishStatus()
 
-	cmd := exec.CommandContext(ctx, binary, args...)
+	command := append([]string{binary}, args...)
+	if len(marshalBrief) > 0 {
+		command, err = confineMarshalCommand(ctx, provider, root, w.marshalExecutionRights(ctx), command)
+		if err != nil {
+			return "", marshalNotStarted(provider, err)
+		}
+	}
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

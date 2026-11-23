@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -45,11 +46,11 @@ type guardEntry struct {
 
 // guardSnapshot is the main working tree's changed paths: top is the
 // repository's top directory, prefix the project's directory relative to
-// it ("" when they are the same), files the changed paths relative to top
-// in slash form.
+// it ("" when they are the same), head the repository's HEAD commit when
+// readable, and files the changed paths relative to top in slash form.
 type guardSnapshot struct {
-	top, prefix string
-	files       map[string]guardEntry
+	top, prefix, head string
+	files             map[string]guardEntry
 }
 
 // guardAlert is one detection the person has not decided yet.
@@ -84,6 +85,9 @@ type guardState struct {
 	// marshalWrites is what stops the open Marshal chat writing project
 	// files, set when it is launched.
 	marshalWrites marshalWriteMode
+	// confinement is the evaluated launch/reattach confinement boundary;
+	// Git detection remains independent of it.
+	confinement marshalConfinementDecision
 }
 
 // guardSource is a test's seam for the working tree's status; nil runs
@@ -247,7 +251,13 @@ func guardStatusAt(ctx context.Context, root string) (guardSnapshot, error) {
 		}
 		files[p] = e
 	}
-	return guardSnapshot{top: top, prefix: prefix, files: files}, nil
+	head := ""
+	if headCmd, headErr := hostgit.Command(ctx, top, "rev-parse", "--verify", "HEAD"); headErr == nil {
+		if headOut, err := headCmd.Output(); err == nil {
+			head = strings.TrimSpace(string(headOut))
+		}
+	}
+	return guardSnapshot{top: top, prefix: prefix, head: head, files: files}, nil
 }
 
 func guardRealPaths(top, root string) (string, string, error) {
@@ -328,6 +338,12 @@ func (w *Workspace) guardTick(ctx context.Context, watching bool) {
 		return
 	}
 	changed := guardChanged(g.base.files, snap.files)
+	headMoved := g.base.head != "" && snap.head != "" && g.base.head != snap.head
+	movedHead := snap.head
+	movedTop := snap.top
+	if headMoved {
+		g.base.head = snap.head
+	}
 	raised, grew := false, false
 	switch a := g.alert; {
 	case a == nil && len(changed) > 0:
@@ -376,6 +392,16 @@ func (w *Workspace) guardTick(ctx context.Context, watching bool) {
 	g.mu.Unlock()
 	if raised || grew {
 		w.addNote(guardNoteText(paths, prefix, byMarshal), true)
+	}
+	if headMoved {
+		attr := attributeHistoricalCommit(ctx, movedTop, movedHead, nil, nil)
+		summary := fmt.Sprintf("out-of-run HEAD change detected: commit=%s actor=%s source=%s", attr.Commit, attr.Actor, attr.Source)
+		_, _ = w.recordOutsideRunEvidence(w.providerRoot(), "guard-head", summary, runtimeEvidenceMeta{
+			Event:  "guard-head-moved",
+			Source: "guard",
+			Actor:  attr.Actor,
+		})
+		w.addNote("Repository HEAD moved outside a run ("+shortCommit(movedHead)+", actor: "+attr.Actor+").", true)
 	}
 	if raised {
 		w.tellMarshalGuard(ctx, paths, prefix, byMarshal)
@@ -649,6 +675,13 @@ func guardUndoSummary(u guardUndo, prefix string) string {
 // repository at top. Each path is checked again: safe, a file or link (not
 // a directory), its directory inside the repository.
 func runGuardUndo(ctx context.Context, top string, u guardUndo) error {
+	if d := evaluateMarshalConfinement(marshalConfinementRequest{
+		Surface:               surfaceRuntimeGitWriter,
+		ExplicitOperatorGrant: true,
+		Command:               "guard undo",
+	}); !d.Allowed {
+		return errors.New(d.Reason)
+	}
 	realTop, err := filepath.EvalSymlinks(top)
 	if err != nil {
 		return err
@@ -745,4 +778,190 @@ func (v boardVisual) guardCount() int {
 // open change card, the quota card or the "what next?" card.
 func (v boardVisual) ownerWaits() bool {
 	return waitingGates(v.gates) > 0 || v.guard != nil || v.ask != nil || v.req != nil || v.change != nil || v.next != nil || v.quotaCardActive()
+}
+
+// commitActorAttribution records whether a historical Git commit could be
+// attributed from retained guard, provider, reflog or commit evidence. When no
+// retained evidence identifies an actor, Actor is recorded as "unknown".
+type commitActorAttribution struct {
+	Commit     string `json:"commit"`
+	Actor      string `json:"actor"`
+	Source     string `json:"source"`
+	Evidence   string `json:"evidence,omitempty"`
+	Identified bool   `json:"identified"`
+}
+
+func shortCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if len(commit) > 12 {
+		return commit[:12]
+	}
+	return commit
+}
+
+func normalizeAttributedActor(actor string) string {
+	actor = strings.TrimSpace(actor)
+	if actor == "" {
+		return ""
+	}
+	low := strings.ToLower(actor)
+	switch low {
+	case "unknown", "none", "n/a", "marshal":
+		return ""
+	}
+	return RedactContent(actor, nil)
+}
+
+func extractEvidenceRecordActor(record, commit string) string {
+	commit = strings.TrimSpace(commit)
+	if commit == "" || record == "" {
+		return ""
+	}
+	short := shortCommit(commit)
+	if !strings.Contains(record, commit) && (len(short) < 7 || !strings.Contains(record, short)) {
+		return ""
+	}
+	for _, field := range strings.Fields(record) {
+		for _, prefix := range []string{"actor=", "actor:", "marshal-actor:"} {
+			if strings.HasPrefix(strings.ToLower(field), prefix) {
+				if actor := normalizeAttributedActor(field[len(prefix):]); actor != "" {
+					return actor
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func matchRetainedEvidenceFiles(root, commit, wantSource string) (actor, evidenceFile string) {
+	if root == "" || commit == "" {
+		return "", ""
+	}
+	dir := filepath.Join(root, statepath.DirName, "evidence")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", ""
+	}
+	short := shortCommit(commit)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".meta.json") {
+			continue
+		}
+		metaPath := filepath.Join(dir, name)
+		if statepath.CheckPath(root, metaPath) != nil {
+			continue
+		}
+		data, err := os.ReadFile(metaPath)
+		if err != nil {
+			continue
+		}
+		var receipt runtimeEvidenceReceipt
+		if json.Unmarshal(data, &receipt) != nil {
+			continue
+		}
+		if wantSource != "" && !strings.Contains(strings.ToLower(receipt.Source), wantSource) {
+			continue
+		}
+		candActor := normalizeAttributedActor(receipt.Actor)
+		if candActor == "" {
+			continue
+		}
+		// Match commit in metadata or companion text file.
+		if strings.Contains(string(data), commit) || (len(short) >= 7 && strings.Contains(string(data), short)) {
+			return candActor, name
+		}
+		if validEvidenceIdentifier(receipt.Timestamped) {
+			path := filepath.Join(dir, receipt.Timestamped)
+			if statepath.CheckPath(root, path) != nil {
+				continue
+			}
+			body, err := os.ReadFile(path)
+			if err == nil && (strings.Contains(string(body), commit) || (len(short) >= 7 && strings.Contains(string(body), short))) {
+				return candActor, receipt.Timestamped
+			}
+		}
+	}
+	return "", ""
+}
+
+// attributeHistoricalCommit attributes a historical Git commit ONLY when
+// retained guard, provider, reflog or explicit commit attribution evidence
+// identifies the actor; otherwise it records Actor as "unknown".
+func attributeHistoricalCommit(ctx context.Context, root, commit string, guardRecords, providerRecords []string) commitActorAttribution {
+	commit = strings.TrimSpace(commit)
+	out := commitActorAttribution{
+		Commit:     commit,
+		Actor:      "unknown",
+		Source:     "unknown",
+		Identified: false,
+	}
+	if commit == "" {
+		return out
+	}
+	for _, rec := range guardRecords {
+		if actor := extractEvidenceRecordActor(rec, commit); actor != "" {
+			return commitActorAttribution{Commit: commit, Actor: actor, Source: "guard", Evidence: RedactContent(rec, nil), Identified: true}
+		}
+	}
+	if actor, file := matchRetainedEvidenceFiles(root, commit, "guard"); actor != "" {
+		return commitActorAttribution{Commit: commit, Actor: actor, Source: "guard", Evidence: file, Identified: true}
+	}
+	for _, rec := range providerRecords {
+		if actor := extractEvidenceRecordActor(rec, commit); actor != "" {
+			return commitActorAttribution{Commit: commit, Actor: actor, Source: "provider", Evidence: RedactContent(rec, nil), Identified: true}
+		}
+	}
+	if actor, file := matchRetainedEvidenceFiles(root, commit, "provider"); actor != "" {
+		return commitActorAttribution{Commit: commit, Actor: actor, Source: "provider", Evidence: file, Identified: true}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if root != "" {
+		if cmd, err := hostgit.Command(ctx, root, "reflog", "--format=%H\t%gs"); err == nil {
+			if raw, err := cmd.Output(); err == nil {
+				for _, line := range strings.Split(string(raw), "\n") {
+					hash, msg, ok := strings.Cut(line, "\t")
+					if !ok || strings.TrimSpace(hash) != commit {
+						continue
+					}
+					if actor := extractEvidenceRecordActor(hash+" "+msg, commit); actor != "" {
+						return commitActorAttribution{Commit: commit, Actor: actor, Source: "reflog", Evidence: RedactContent(strings.TrimSpace(msg), nil), Identified: true}
+					}
+				}
+			}
+		}
+		if cmd, err := hostgit.Command(ctx, root, "show", "-s", "--format=%B", commit); err == nil {
+			if raw, err := cmd.Output(); err == nil {
+				for _, line := range strings.Split(string(raw), "\n") {
+					trimmed := strings.TrimSpace(line)
+					for _, prefix := range []string{"Marshal-Actor:"} {
+						if len(trimmed) > len(prefix) && strings.EqualFold(trimmed[:len(prefix)], prefix) {
+							if actor := normalizeAttributedActor(trimmed[len(prefix):]); actor != "" {
+								return commitActorAttribution{Commit: commit, Actor: actor, Source: "commit", Evidence: RedactContent(trimmed, nil), Identified: true}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// refuseOutOfRunEvidenceCommit enforces that out-of-run evidence ingestion
+// never commits to the project's Git repository.
+func refuseOutOfRunEvidenceCommit(edition, platform string) error {
+	d := evaluateMarshalConfinement(marshalConfinementRequest{
+		Edition:  edition,
+		Platform: platform,
+		Surface:  surfaceRuntimeGitWriter,
+		Rights:   marshal.RightsReadOnly,
+		Command:  "git commit -m evidence",
+	})
+	if !d.Allowed {
+		return errors.New(d.Reason)
+	}
+	return nil
 }

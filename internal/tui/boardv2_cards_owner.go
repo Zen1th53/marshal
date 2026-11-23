@@ -156,8 +156,9 @@ func nextDecision(c nextCard) v2Decision {
 // what the first answer's key reads as.
 func askDecision(c askCard, enter string) v2Decision {
 	q := cleanBoard(strings.Join(strings.Fields(c.Question), " "))
-	d := v2Decision{kind: decisionAsk, key: "ask:" + c.digest, card: vm.Decision{
-		Kind: decisionAsk, Title: "Marshal asks · " + firstLine(c.Question),
+	d := v2Decision{kind: decisionAsk, key: "ask:" + c.ID + ":" + c.Launch + ":" + strconv.FormatInt(c.Revision, 10), card: vm.Decision{
+		Binding: c.ID + ":" + c.Launch + ":" + strconv.FormatInt(c.Revision, 10),
+		Kind:    decisionAsk, Title: "Marshal asks · " + firstLine(c.Question),
 		Summary: "your answer goes to the Marshal chat as your own message",
 		Lines:   []vm.CardLine{{Text: q}},
 	}}

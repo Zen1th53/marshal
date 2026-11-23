@@ -323,6 +323,7 @@ type Link struct {
 // Decision is the owner card. The review link is never sent: it carries the
 // architecture review's private token, which is the owner's Accept.
 type Decision struct {
+	Binding      string     `json:"binding,omitempty"`
 	Kind         string     `json:"kind"`
 	Title        string     `json:"title"`
 	Corner       string     `json:"corner"`
@@ -460,7 +461,7 @@ func FromBoard(b vm.Board) Frame {
 		f.Ready.Defaults = append(f.Ready.Defaults, Setting{Name: d[0], Value: d[1]})
 	}
 	if d := b.Decision; d != nil {
-		c := &Decision{Kind: d.Kind, Title: d.Title, Corner: d.Corner, Summary: d.Summary, ChangedNote: d.ChangedNote,
+		c := &Decision{Binding: d.Binding, Kind: d.Kind, Title: d.Title, Corner: d.Corner, Summary: d.Summary, ChangedNote: d.ChangedNote,
 			Nodes: []Node{}, Lines: []CardLine{}, HasLink: d.Link != "", NoDisplay: d.NoDisplay, SelfApproval: d.SelfApproval,
 			Actions: keys(d.Actions), Links: []Link{}}
 		for _, n := range d.Nodes {

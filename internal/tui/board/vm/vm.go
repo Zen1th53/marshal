@@ -321,6 +321,7 @@ type Node struct {
 
 // Decision is the card over the Board when the owner must act.
 type Decision struct {
+	Binding      string // opaque lifecycle binding for owner actions
 	Kind         string // architecture, plan, inbox, ask, requirements, change, next, guard: what the card decides
 	Title        string // "Accept architecture · rev 1"
 	Corner       string // the card's top-right note; empty: "esc later"

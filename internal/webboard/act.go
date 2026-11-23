@@ -132,11 +132,11 @@ func CardID(f Frame) string {
 	case f.Decision != nil:
 		d := f.Decision
 		return "decision:" + cardDigest(struct {
-			Kind, Title, Corner, Summary, Changed, Self string
-			Nodes                                       []Node
-			Lines                                       []CardLine
-			Actions                                     []Key
-		}{d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions})
+			Binding, Kind, Title, Corner, Summary, Changed, Self string
+			Nodes                                                []Node
+			Lines                                                []CardLine
+			Actions                                              []Key
+		}{d.Binding, d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions})
 	case f.Paused != nil:
 		p := f.Paused
 		titles := make([]string, 0, len(p.Tasks))

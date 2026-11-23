@@ -155,6 +155,21 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 	if !slices.Contains(webboard.ActionKeys(f), a.Key) {
 		return refused("That button is not on the Board now."), false, 0
 	}
+	if f.Decision != nil && f.Decision.Kind == decisionAsk {
+		card := w.currentAsk()
+		if card == nil {
+			return refused("The question is no longer open."), false, 0
+		}
+		key := a.Key
+		if key == "⏎" || key == "click" {
+			key = "enter"
+		}
+		r := w.answerAskBound(context.Background(), askAnswerBinding{Project: card.Project, ID: card.ID, Launch: card.Launch, Revision: card.Revision, Actor: "owner:web", Key: key})
+		if r.Err != nil {
+			return webboard.Result{Status: r.Status, Text: r.Err.Error()}, false, 0
+		}
+		return webboard.Result{Status: "done", Text: "Answer recorded."}, false, 0
+	}
 	label, title := webActionLabel(f, a.Key), webCardTitle(f)
 	switch {
 	case a.Key == "q":
