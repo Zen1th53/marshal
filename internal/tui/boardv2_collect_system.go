@@ -29,9 +29,9 @@ func (w *Workspace) collectV2System(b *vm.Board) {
 			s.DiskPct, s.LowDisk = c.DiskPct, c.LowDisk
 		}
 		s.ThermalGuard = c.Guard || snap.Guard.Active
-		if snap.Guard.Active {
-			s.ThermalCap = snap.Guard.Lowered
-		}
+		// Only an owner-approved temporary cap is in effect; an undecided
+		// or declined request leaves the cap as configured.
+		s.ThermalCap = snap.Guard.Temporary
 		s.Notice = snap.Notice
 	}
 	w.mu.RLock()
