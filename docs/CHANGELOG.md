@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+### Fixed
+- An architecture draft that left `contract.project` out was refused as "the project changed while this was being read", so the Marshal re-read and resubmitted in a loop that could never pass (seen live: fifteen identical retries). A draft without `contract.project` is now bound to the project it was sent from, and one naming another project is refused with the exact value it must carry.
+
 ## 0.4.1
 
 ### Changed

@@ -70,8 +70,16 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := proposalmcp.DecodeStrict(args.Proposal, &sub); err != nil {
 			return nil, err
 		}
-		if sub.Contract.Project != w.runtime.ProjectContractBinding() {
-			return nil, projectcontext.Changed("project_contract_mcp_extreme.go:67")
+		// The chat can only draft for the project it runs in, so a draft that
+		// leaves contract.project out is bound here. A draft naming another
+		// project is refused with that reason: calling it a change sent the
+		// Marshal round a read-and-retry loop that could never succeed.
+		binding := w.runtime.ProjectContractBinding()
+		if sub.Contract.Project == (projectcontext.ProjectBinding{}) {
+			sub.Contract.Project = binding
+		}
+		if sub.Contract.Project != binding {
+			return nil, fmt.Errorf("%w: contract.project must be {\"canonical_id\":%q,\"storage_id\":%q}, the project in marshal_project_contract_inventory, or be left out", projectcontext.ErrInvalid, binding.CanonicalID, binding.StorageID)
 		}
 		// A secret in the draft is removed before the draft is journaled, so
 		// registration never refuses it and the secret is never kept.
