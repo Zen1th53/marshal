@@ -251,9 +251,9 @@ func TestHostViewContent(t *testing.T) {
 		"available < 8 GiB OK",
 		"what Marshal noticed and did",
 		"GUARD · package 30 s avg",
-		"asked owner: lane cap 12 → 6 (inbox)",
+		"asked owner: temporary lane cap 12 → 6 (inbox)",
 		"RELEASE · package 30 s avg",
-		"asked owner: restore lane cap 6 → default (inbox)",
+		"temporary lane cap 6 cleared",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Host view lacks %q", want)

@@ -365,6 +365,38 @@ func TestLegacyThermalCapMigrationPreservesOwnerEdits(t *testing.T) {
 			t.Fatal("notice repeated")
 		}
 	})
+	t.Run("a reduction saved before changes were audited gets a notice", func(t *testing.T) {
+		f := &fakeThermalStore{rec: rec(six, 1), events: []model.Event{decision(1, "6", lowering)}}
+		restored, notice, err := repairLegacyThermalCap(t.Context(), f, project)
+		if restored || err != nil || len(f.commits) != 0 || !strings.Contains(notice, "global-cap 6") {
+			t.Fatalf("repair %v %q %v", restored, notice, err)
+		}
+	})
+	t.Run("the real store restores a proven reduction", func(t *testing.T) {
+		st, w := settingsWorkspace(t)
+		legacy := permission.Request{Kind: "marshal-command", Object: "/marshal settings global-cap 6", Scope: "this project, next Marshal run; run R-1 keeps its approved cap", Who: hostWatchActor, Reason: lowering}
+		// An earlier release applied this decision as a saved setting; the
+		// current release refuses to, but the decision is audited.
+		_ = w.decidePermission(t.Context(), legacy, true, "operator popup")
+		if _, err := w.marshalSettings(t.Context(), []string{"global-cap", "6"}); err != nil {
+			t.Fatal(err)
+		}
+		if msg := w.repairThermalCap(t.Context()); !strings.Contains(msg, "restored global-cap") {
+			t.Fatalf("repair said %q", msg)
+		}
+		after, err := st.GetMarshalSettings(t.Context(), w.projectID)
+		if err != nil || projectGlobalCap(after.Value) != 0 {
+			t.Fatalf("settings %+v %v", after, err)
+		}
+		changes, _ := st.MarshalSettingsChanges(t.Context(), w.projectID)
+		if len(changes) == 0 || changes[0].Actor != hostWatchActor || changes[0].New != "0" {
+			t.Fatalf("changes %+v", changes)
+		}
+		// A second launch has nothing to do.
+		if msg := w.repairThermalCap(t.Context()); msg != "" {
+			t.Fatalf("second repair said %q", msg)
+		}
+	})
 	t.Run("a failed compare-and-swap changes nothing", func(t *testing.T) {
 		f := &fakeThermalStore{rec: rec(six, 3), changes: []store.SettingChange{capChange(3, 2, "0", "6")}, events: []model.Event{decision(1, "6", lowering)}, commitErr: errors.New("revision conflict")}
 		restored, _, err := repairLegacyThermalCap(t.Context(), f, project)

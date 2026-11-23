@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -58,15 +59,11 @@ func repairLegacyThermalCap(ctx context.Context, st thermalRepairStore, projectI
 			caps = append(caps, c)
 		}
 	}
-	if len(caps) == 0 || caps[0].New != strconv.Itoa(cur) {
-		return false, "", nil
-	}
-	latest := caps[0]
 	events, err := st.ListEvents(ctx)
 	if err != nil {
 		return false, "", err
 	}
-	thermal := false
+	var lowered []time.Time // owner-accepted thermal lowerings to this value
 	for _, e := range events {
 		if e.Type != "PERMISSION_DECIDED" || e.ProjectID != projectID || e.Data["requester"] != hostWatchActor || e.Data["allow"] != true {
 			continue
@@ -74,20 +71,37 @@ func repairLegacyThermalCap(ctx context.Context, st thermalRepairStore, projectI
 		object, _ := e.Data["object"].(string)
 		scope, _ := e.Data["scope"].(string)
 		reason, _ := e.Data["reason"].(string)
-		if object != legacyThermalObject+strconv.Itoa(cur) || !strings.HasPrefix(scope, legacyThermalScope) || !strings.Contains(reason, legacyThermalReason) {
-			continue
+		if object == legacyThermalObject+strconv.Itoa(cur) && strings.HasPrefix(scope, legacyThermalScope) && strings.Contains(reason, legacyThermalReason) {
+			lowered = append(lowered, e.Timestamp)
 		}
+	}
+	if len(lowered) == 0 {
+		return false, "", nil
+	}
+	notice = fmt.Sprintf("global-cap %d may be a lane cap the thermal guard saved in an earlier session; check it with /marshal settings global-cap", cur)
+	if len(caps) == 0 || caps[0].New != strconv.Itoa(cur) {
+		// No change record shows what the lowering replaced (releases
+		// before settings changes were audited); a decision after the last
+		// recorded change makes the value ambiguous.
+		for _, at := range lowered {
+			if len(caps) == 0 || at.After(caps[0].At) {
+				return false, notice, nil
+			}
+		}
+		return false, "", nil
+	}
+	latest := caps[0]
+	thermal := false
+	for _, at := range lowered {
 		// The decision must come after the previous global-cap change and
 		// before the change that set this value.
-		if e.Timestamp.After(latest.At) || (len(caps) > 1 && !e.Timestamp.After(caps[1].At)) {
-			continue
+		if !at.After(latest.At) && (len(caps) == 1 || at.After(caps[1].At)) {
+			thermal = true
 		}
-		thermal = true
 	}
 	if !thermal {
 		return false, "", nil
 	}
-	notice = fmt.Sprintf("global-cap %d may be a lane cap the thermal guard saved in an earlier session; check it with /marshal settings global-cap", cur)
 	if latest.Revision != rec.Revision || latest.Actor != "owner" {
 		return false, notice, nil
 	}
