@@ -356,3 +356,42 @@ func TestRunCommandsUseSingleWriter(t *testing.T) {
 		t.Fatalf("writer ordering: %s", fmt.Sprint(run.Tasks))
 	}
 }
+
+func TestCommandTypedAgainstOlderRevisionIsQueued(t *testing.T) {
+	s := handedInFixture(t)
+	c := runCommandForTest(t, s, "late-return", "return", "a")
+	run, rev, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Execution saved the run after the owner read it (the revision moves).
+	if err = s.save(t.Context(), "run", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	receipt := queueRunCommandForTest(t, s, c)
+	if receipt.State != "queued" {
+		t.Fatalf("command against an older run revision was not queued: %+v", receipt)
+	}
+}
+
+func TestRefusedPriorityStopClearsItsFence(t *testing.T) {
+	s := handedInFixture(t)
+	stop := runCommandForTest(t, s, "stop", "stop", "")
+	queueRunCommandForTest(t, s, stop)
+	run, rev, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The approved plan changes before the stop is drained, so it is refused.
+	run.PlanVersion++
+	if err = s.save(t.Context(), "run", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	run = drainCommandsForTest(t, s)
+	if run.Commands[0].State != "refused" {
+		t.Fatalf("stop was not refused: %+v", run.Commands[0])
+	}
+	if run.CommandFence != "" {
+		t.Fatalf("refused stop left new starts fenced: %q", run.CommandFence)
+	}
+}

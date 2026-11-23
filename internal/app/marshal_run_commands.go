@@ -149,9 +149,10 @@ func (s *MarshalService) enqueueRunCommand(ctx context.Context, runID string, c 
 			return old, nil
 		}
 	}
-	if c.Revision != rev {
-		return c, model.ErrConflict
-	}
+	// The run keeps changing while execution continues, so the command is
+	// not bound to the run revision it was typed against. Task commands are
+	// bound to the task digest below and rechecked when they are drained;
+	// the save itself is still compare-and-swap.
 	if err = s.checkRunCommandAuthority(ctx, c); err != nil {
 		return c, err
 	}
@@ -295,6 +296,10 @@ func (s *MarshalService) drainRunCommands(ctx context.Context, runID string) err
 			c.State, c.Detail = "refused", "task state or attempt changed"
 		} else {
 			c.State = "applying"
+		}
+		if c.State == "refused" && (c.Operation == "pause" || c.Operation == "stop") && run.CommandFence == c.Operation {
+			// A refused priority signal must not leave new starts fenced.
+			run.CommandFence = ""
 		}
 		run.Commands[index] = c
 		if err = s.save(ctx, runID, run, rev); err != nil {
