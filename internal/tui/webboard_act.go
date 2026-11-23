@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
@@ -62,7 +63,7 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 	defer cancel()
 	if !w.postUI(wait, run) {
 		if claimed.CompareAndSwap(false, true) {
-			return webboard.Result{Status: "refused", Text: "The Board is busy; nothing was done. Try again."}
+			return w.webBusyResult("The Board is busy; nothing was done. Try again.")
 		}
 	}
 	var r webActed
@@ -70,7 +71,7 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 	case r = <-done:
 	case <-wait.Done():
 		if claimed.CompareAndSwap(false, true) {
-			return webboard.Result{Status: "refused", Text: "The Board is busy; nothing was done. Try again."}
+			return w.webBusyResult("The Board is busy; nothing was done. Try again.")
 		}
 		r = <-done
 	}
@@ -78,6 +79,17 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 		return r.res
 	}
 	return w.webCommandResult(ctx, r)
+}
+
+func (w *Workspace) webBusyResult(text string) webboard.Result {
+	receipt := marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeCommandBusy,
+		Blocker:      w.marshalSession().currentBlocker(),
+		Effects:      marshal.EffectsNone,
+		NextCommands: []string{"/marshal status"},
+		Message:      text,
+	}
+	return webboard.Result{Status: "refused", Text: text}.WithRefusal(receipt)
 }
 
 // webCommandResult waits, off the loop, for the command a key started and
@@ -99,10 +111,14 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 	if w.outputSeq.Load() != r.seq {
 		w.mu.RLock()
 		text, isErr := w.answer, w.answerIsError
+		refusal := w.lastRefusal
 		w.mu.RUnlock()
 		res.Text = text
 		if isErr {
 			res.Status = "refused"
+		}
+		if refusal != nil {
+			res = res.WithRefusal(refusal.Clone())
 		}
 	}
 	return res
@@ -144,7 +160,14 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 		return refused("Press Stop the run again to confirm."), false, 0
 	}
 	if w.commandBusy.Load() {
-		return refused("A command is still running on the Board; try again when it finishes."), false, 0
+		return w.webBusyResult("A command is still running on the Board; try again when it finishes."), false, 0
+	}
+	if f.Paused != nil && a.Key == "⏎" {
+		if z, ok := w.v2PauseNow(boardNow()); ok && !z.wait && z.enter.action != marshal.PauseUsePlan {
+			if busyErr := w.marshalSession().busyErrorIfBusy("paused_enter"); busyErr != nil {
+				return refusedErr(busyErr), false, 0
+			}
+		}
 	}
 	before := w.outputSeq.Load()
 	took := false
@@ -181,12 +204,17 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 	if seq != before {
 		w.mu.RLock()
 		text, isErr := w.answer, w.answerIsError
+		refusal := w.lastRefusal
 		w.mu.RUnlock()
 		res.Text = text
 		// The raw error is shown as an error on purpose; any other error
 		// answer means the key did not do what the button says.
 		if isErr && a.Key != "d" {
-			return refused(text), false, 0
+			out := refused(text)
+			if refusal != nil {
+				out = out.WithRefusal(refusal.Clone())
+			}
+			return out, false, 0
 		}
 	}
 	switch {
@@ -210,6 +238,13 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 
 func refused(text string) webboard.Result {
 	return webboard.Result{Status: "refused", Text: text}
+}
+
+func refusedErr(err error) webboard.Result {
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		return webboard.Result{Status: "refused", Text: RedactContent(receipt.Summary(), nil)}.WithRefusal(receipt)
+	}
+	return refused(RedactContent(err.Error(), nil))
 }
 
 // webActionLabel is the button's label on the card.
@@ -382,12 +417,15 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 		return out(refused("Press " + label + " again to confirm."))
 	}
 	if w.commandBusy.Load() {
-		return out(refused("A command is still running on the Board; try again when it finishes."))
+		return out(w.webBusyResult("A command is still running on the Board; try again when it finishes."))
 	}
 	before := w.outputSeq.Load()
 	r := webActed{res: webboard.Result{Status: "done"}}
 	switch a.Key {
 	case webKeyRetry:
+		if busyErr := w.marshalSession().busyErrorIfBusy("retry"); busyErr != nil {
+			return out(refusedErr(busyErr))
+		}
 		id, why := retryTarget(w)
 		if why != "" {
 			return out(refused(why))
@@ -406,9 +444,14 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 	if r.seq != before {
 		w.mu.RLock()
 		text, isErr := w.answer, w.answerIsError
+		refusal := w.lastRefusal
 		w.mu.RUnlock()
 		if isErr {
-			return out(refused(text))
+			res := refused(text)
+			if refusal != nil {
+				res = res.WithRefusal(refusal.Clone())
+			}
+			return out(res)
 		}
 		r.res.Text = text
 	}

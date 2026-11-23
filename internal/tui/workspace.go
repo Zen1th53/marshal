@@ -22,6 +22,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/harness"
 	"github.com/Zen1th53/marshal/internal/hostgit"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -294,6 +295,7 @@ type Workspace struct {
 	// by outputSeq.
 	answer        string
 	answerIsError bool
+	lastRefusal   *marshal.RefusalReceipt
 	// chatTypeMu is held while anything types into the tmux chat pane, so
 	// two writers never interleave in its composer.
 	chatTypeMu sync.Mutex
@@ -1807,6 +1809,12 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 		w.state.LastOutput = activityTail(w.state.LastOutput)
 	}
 	w.answer, w.answerIsError = w.state.LastOutput, w.state.LastOutputIsError
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		cp := receipt.Clone()
+		w.lastRefusal = &cp
+	} else {
+		w.lastRefusal = nil
+	}
 	w.state.LastCommand = RedactContent(cmd, w.state.KnownSecrets)
 	w.lastCommandError = ""
 	if err != nil {
@@ -2123,8 +2131,30 @@ func (w *Workspace) setOutput(text string, isError bool) {
 	w.state.LastOutput = text
 	w.state.LastOutputIsError = isError
 	w.answer, w.answerIsError = text, isError
+	w.lastRefusal = nil
 	w.mu.Unlock()
 	w.renderFullView()
+}
+
+func (w *Workspace) setOutputWithRefusal(text string, isError bool, receipt marshal.RefusalReceipt) {
+	cp := receipt.Sanitized()
+	w.mu.Lock()
+	w.outputSeq.Add(1)
+	w.state.LastOutput = text
+	w.state.LastOutputIsError = isError
+	w.answer, w.answerIsError = text, isError
+	w.lastRefusal = &cp
+	w.mu.Unlock()
+	w.renderFullView()
+}
+
+func (w *Workspace) lastOperationRefusal() (marshal.RefusalReceipt, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.lastRefusal == nil {
+		return marshal.RefusalReceipt{}, false
+	}
+	return w.lastRefusal.Clone(), true
 }
 
 // AttachRuntime wires the canonical mutation authority into the workspace.

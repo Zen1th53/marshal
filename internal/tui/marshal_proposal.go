@@ -41,6 +41,14 @@ type marshalProposal struct {
 // Parse a single visible assistant line, never shell source. Reject unknown,
 // duplicate, non-string and action-inappropriate fields and trailing data.
 func parseMarshalProposal(line string) (marshalProposal, error) {
+	p, err := parseMarshalProposalRaw(line)
+	if err != nil {
+		return p, proposalParseRefusal(err)
+	}
+	return p, nil
+}
+
+func parseMarshalProposalRaw(line string) (marshalProposal, error) {
 	var p marshalProposal
 	invalid := errors.New("invalid or non-allow-listed Marshal proposal")
 	if !strings.HasPrefix(line, marshalProposalPrefix) || len(line) > 4096 {
@@ -381,7 +389,11 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 				if w.store != nil {
 					_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "rejected")
 				}
-				w.RecordActivity("Ignored Marshal proposal: malformed or non-allow-listed fields.")
+				w.saveProposalRefusalReceipt(context.Background(), p.occurrence, err)
+				w.RecordActivity("Ignored Marshal proposal: " + RedactContent(err.Error(), nil))
+				if who == "Marshal" {
+					w.writeMarshalInboxRefusal("proposal parse", err)
+				}
 				continue
 			}
 			w.enqueueValidatedMarshalProposal(p)
@@ -451,7 +463,7 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 		return nil
 	}
 	if service == nil || runID == "" || (pending != nil && p.action != "amend-approve" && p.action != "amend-deny") || (pending == nil && (p.action == "amend-approve" || p.action == "amend-deny")) {
-		return errors.New("no matching active plan")
+		return proposalStaleBindingRefusal(errors.New("no matching active plan"))
 	}
 	record, err := service.Store.GetMarshalRun(context.Background(), service.ProjectID, runID)
 	if err != nil {
@@ -460,11 +472,11 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	run := record.Value
 	if p.action == "approve" || p.action == "amend-approve" {
 		if err := refuseUnimportedMarshalDraft(service.Repository); err != nil {
-			return err
+			return proposalStaleBindingRefusal(err)
 		}
 	}
 	if p.action == "approve" && run.State != marshal.Drafting {
-		return errors.New("plan is not awaiting approval")
+		return proposalStaleBindingRefusal(errors.New("plan is not awaiting approval"))
 	}
 	if p.action == "accept" || p.action == "return" || p.action == "reassign" || p.action == "retry" {
 		targetID := p.id
@@ -479,12 +491,12 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 			}
 		}
 		if !found {
-			return errors.New("task is not in the active plan")
+			return proposalStaleBindingRefusal(errors.New("task is not in the active plan"))
 		}
 	}
 	if p.action == "approve-task" {
 		if !w.pendingProcess05Approval(context.Background(), run, p.id) {
-			return errors.New("approval does not belong to the active Marshal plan")
+			return proposalStaleBindingRefusal(errors.New("approval does not belong to the active Marshal plan"))
 		}
 	}
 	if p.action == "approve" || p.action == "amend-approve" {
@@ -514,7 +526,7 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	binding := marshalRunProposalBinding(run.PlanVersion, record.Revision, pending)
 	var resumeDescription permission.Request
 	if !w.describePrivateProcess05Resume(&resumeDescription, p) {
-		return errors.New("Process 05 continuation gates are not ready")
+		return proposalStaleBindingRefusal(errors.New("Process 05 continuation gates are not ready"))
 	}
 	w.permissions.mu.Lock()
 	if w.permissions.runProposals == nil {
@@ -632,13 +644,17 @@ func popupReviewText(s string) string {
 }
 
 func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Request) error {
+	automatic := isAutomaticProposalContext(ctx) || (!isOwnerActionContext(ctx) && (req.Who == "Marshal" || req.SourceLaunch != ""))
+	if automatic {
+		ctx = withAutomaticProposalContext(ctx)
+	}
 	if strings.HasPrefix(req.TaskID, "reserved:") {
 		m := w.marshalSession()
 		m.mu.Lock()
 		service, runID := m.service, m.runID
 		m.mu.Unlock()
 		if service == nil || runID != req.RunID {
-			return errors.New("reserved merge approval expired")
+			return w.finishProposalRefusal(ctx, automatic, req.RunID, req.TaskID, "reserved-merge", req.TaskID, req.ProposalID, proposalStaleBindingRefusal(errors.New("reserved merge approval expired")))
 		}
 		record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
 		if err != nil {
@@ -651,7 +667,7 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			}
 		}
 		if !matched {
-			return errors.New("reserved merge approval expired")
+			return w.finishProposalRefusal(ctx, automatic, runID, req.TaskID, "reserved-merge", req.TaskID, req.ProposalID, proposalStaleBindingRefusal(errors.New("reserved merge approval expired")))
 		}
 		m.grant(runID, req.TaskID)
 		_, err = w.cmd.handleMarshal(ctx, []string{"resume"})
@@ -659,43 +675,49 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			m.mu.Lock()
 			delete(m.approvals, runID+"/"+req.TaskID)
 			m.mu.Unlock()
+			return w.finishProposalRefusal(ctx, automatic, runID, req.TaskID, "reserved-merge", fmt.Sprintf("%d:%d", record.Value.PlanVersion, record.Revision), req.ProposalID, err)
 		}
-		return err
+		return nil
 	}
 	if req.RunID != "" {
 		w.permissions.mu.Lock()
 		p, ok := w.permissions.runProposals[req.Key()]
 		w.permissions.mu.Unlock()
 		if !ok || p.command() != req.Object {
-			return errors.New("invalid Marshal run proposal")
+			return w.finishProposalRefusal(ctx, automatic, req.RunID, "", "run-proposal", req.TaskID, req.ProposalID, proposalStaleBindingRefusal(errors.New("invalid Marshal run proposal")))
 		}
+		target := proposalTarget(p)
 		m := w.marshalSession()
 		m.mu.Lock()
 		service, runID, pending := m.service, m.runID, m.pending
 		m.mu.Unlock()
 		if service == nil || runID != req.RunID || (pending != nil && p.action != "amend-approve" && p.action != "amend-deny") || (pending == nil && (p.action == "amend-approve" || p.action == "amend-deny")) {
-			return errors.New("Marshal proposal expired")
+			return w.finishProposalRefusal(ctx, automatic, req.RunID, target, p.action, req.TaskID, req.ProposalID, proposalStaleBindingRefusal(errors.New("Marshal proposal expired")))
 		}
 		binding := req.TaskID
 		if p.action == "approve" || p.action == "amend-approve" {
 			var snapshot app.PlanApprovalSnapshot
 			if req.ApprovalBinding == "" || json.Unmarshal([]byte(req.ApprovalBinding), &snapshot) != nil {
-				return errors.New("plan snapshot missing; review and approve again")
+				return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, proposalStaleBindingRefusal(errors.New("plan snapshot missing; review and approve again")))
 			}
 			p.reviewed = &snapshot
 		}
 		record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
 		if err != nil || (p.action != "deliver" && marshalRunProposalBinding(record.Value.PlanVersion, record.Revision, pending) != binding) || (p.action == "deliver" && record.Value.ApprovalScopeDigest != req.ApprovalBinding) {
-			return errors.New("Marshal proposal expired")
+			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, proposalStaleBindingRefusal(errors.New("Marshal proposal expired")))
 		}
 		if p.action == "approve" || p.action == "amend-approve" {
 			_, err = w.marshalApproveReviewed(ctx, p.reviewed)
-			return err
+			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		if p.action == "deliver" {
-			_, cancel, err := m.reserve()
+			_, holderID, cancel, err := m.reserveWithHolder(ctx, marshal.OperationHolder{
+				RunID: runID,
+				Kind:  "deliver",
+				Title: "Authorizing automatic delivery",
+			})
 			if err != nil {
-				return err
+				return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 			}
 			purpose := "standing-close:" + record.Value.ApprovalScopeDigest
 			m.grant(runID, purpose)
@@ -703,19 +725,19 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			m.mu.Lock()
 			delete(m.approvals, runID+"/"+purpose)
 			m.mu.Unlock()
-			m.finish(cancel)
+			m.finishHolder(holderID, cancel, false)
 			if authErr != nil {
-				return authErr
+				return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, authErr)
 			}
 			_, err = w.marshalResume(ctx)
-			return err
+			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		if err := w.validatePrivateProcess05Resume(ctx, req, p); err != nil {
-			return err
+			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		// Dispatch arguments directly so spaces in free-text reasons are exact.
 		_, err = w.cmd.handleMarshal(ctx, marshalProposalArgs(p))
-		return err
+		return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 	}
 	if req.Who == hostWatchActor {
 		// A host-watch lane-cap request is applied only once, and only
@@ -740,7 +762,7 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 		return err
 	}
 	if len(parts) != 4 || parts[0] != "/marshal" || parts[1] != "settings" {
-		return errors.New("invalid Marshal command proposal")
+		return proposalParseRefusal(errors.New("invalid Marshal command proposal"))
 	}
 	data, _ := json.Marshal(map[string]string{"action": "setting", "key": parts[2], "value": parts[3]})
 	if _, err := parseMarshalProposal(marshalProposalPrefix + string(data)); err != nil {
@@ -793,7 +815,7 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 	}
 	text := fmt.Sprintf("## MARSHAL operator popup decision\n\n%s: %s\n", decision, req.Object)
 	if err != nil {
-		text = "## MARSHAL operator popup decision\n\nApplication failed; do not continue as approved.\n"
+		text = "## MARSHAL operator popup decision\n\nApplication failed; do not continue as approved.\n" + formatInboxRefusalDetails(err)
 	}
 	if w.runtime == nil {
 		return
@@ -1078,8 +1100,16 @@ func (w *Workspace) rejectMarshalProposalFile(fs *os.Root, name string, cause er
 	if fs.Rename(name, name+".rejected") != nil {
 		return
 	}
-	_ = fs.WriteFile(name+".error", []byte(cause.Error()+"\n"), 0o600)
-	w.RecordActivity("Marshal proposal " + name + " refused: " + cause.Error())
+	content := RedactContent(cause.Error(), nil) + "\n"
+	if receipt, ok := marshal.RefusalOf(cause); ok {
+		sanitized := receipt.Sanitized()
+		sanitized.Message = RedactContent(sanitized.Message, nil)
+		if encoded, err := json.Marshal(sanitized); err == nil {
+			content += "receipt: " + string(encoded) + "\n"
+		}
+	}
+	_ = fs.WriteFile(name+".error", []byte(content), 0o600)
+	w.RecordActivity("Marshal proposal " + name + " refused: " + RedactContent(cause.Error(), nil))
 }
 
 // Recovery queues the original bound request. Reconstructing a fresh binding
@@ -1209,7 +1239,7 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 	case "architecture":
 		var openErr error
 		if p.who != "Marshal" || !strings.HasPrefix(p.occurrence, "runtime:") {
-			openErr = errors.New("architecture auto-open requires the bound live Marshal source; use /marshal architecture")
+			openErr = proposalAuthRefusal(errors.New("architecture auto-open requires the bound live Marshal source; use /marshal architecture"), "/marshal architecture")
 		} else if w.currentReq() != nil {
 			// Wait until the owner confirms the open requirements card so we
 			// do not drop this request with "goal contract not found".
@@ -1218,8 +1248,9 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 			_, openErr = w.marshalArchitectureProposal(w.workers.context(), p.occurrence, p.reason)
 		}
 		if openErr != nil {
+			w.saveProposalRefusalReceipt(context.Background(), p.occurrence, openErr)
 			w.resolveArchitectureProposal(p.occurrence, openErr)
-			w.RecordActivity("Ignored Marshal architecture proposal: " + openErr.Error())
+			w.RecordActivity("Ignored Marshal architecture proposal: " + RedactContent(openErr.Error(), nil))
 		}
 	case "ask":
 		w.openAsk(p)
@@ -1280,10 +1311,508 @@ func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
 		w.applyMarshalGoalProposal(p)
 	case "accept", "return", "amend", "amend-approve", "amend-deny", "close", "resume", "deliver", "approve-task", "reassign", "retry":
 		if err := w.queueMarshalRunProposal(p); err != nil {
+			automatic := p.who == "Marshal" || strings.HasPrefix(p.occurrence, "mcp:") || strings.HasPrefix(p.occurrence, "runtime:")
+			runID, binding := w.currentRunBinding(context.Background())
+			finalErr := w.finishProposalRefusal(context.Background(), automatic, runID, proposalTarget(p), p.action, binding, p.occurrence, err)
 			if w.store != nil && p.occurrence != "" {
 				_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "rejected")
 			}
-			w.RecordActivity("Ignored Marshal proposal: " + err.Error())
+			if !marshal.IsReplayedEscalation(finalErr) {
+				w.RecordActivity("Ignored Marshal proposal: " + RedactContent(finalErr.Error(), nil))
+			}
+			if p.who == "Marshal" {
+				w.writeMarshalInboxRefusal(p.command(), finalErr)
+			}
 		}
+	}
+}
+
+type automaticProposalCtxKey struct{}
+type ownerActionCtxKey struct{}
+
+func withAutomaticProposalContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, automaticProposalCtxKey{}, true)
+}
+
+func isAutomaticProposalContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	v, _ := ctx.Value(automaticProposalCtxKey{}).(bool)
+	return v
+}
+
+func withOwnerActionContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ownerActionCtxKey{}, true)
+}
+
+func isOwnerActionContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	v, _ := ctx.Value(ownerActionCtxKey{}).(bool)
+	return v
+}
+
+func proposalParseRefusal(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := marshal.RefusalOf(err); ok {
+		return err
+	}
+	return marshal.NewRefusalError(marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeParseInvalid,
+		Effects:      marshal.EffectsNone,
+		NextCommands: []string{"/marshal help"},
+		Message:      err.Error(),
+	}, err)
+}
+
+func proposalAuthRefusal(err error, next ...string) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := marshal.RefusalOf(err); ok {
+		return err
+	}
+	if len(next) == 0 {
+		next = []string{"/marshal status"}
+	}
+	return marshal.NewRefusalError(marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeUnauthorized,
+		Effects:      marshal.EffectsNone,
+		NextCommands: next,
+		Message:      err.Error(),
+	}, err)
+}
+
+func proposalStaleBindingRefusal(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := marshal.RefusalOf(err); ok {
+		return err
+	}
+	return marshal.NewRefusalError(marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeStaleBinding,
+		Effects:      marshal.EffectsNone,
+		NextCommands: []string{"/marshal status"},
+		Message:      err.Error(),
+	}, err)
+}
+
+func proposalTarget(p marshalProposal) string {
+	switch p.action {
+	case "reassign", "retry":
+		return p.taskID
+	case "accept", "return", "approve-task", "memory":
+		return p.id
+	default:
+		return ""
+	}
+}
+
+func (w *Workspace) currentRunBinding(ctx context.Context) (string, string) {
+	m := w.marshalSession()
+	m.mu.Lock()
+	service, runID, pending := m.service, m.runID, m.pending
+	m.mu.Unlock()
+	if service == nil || runID == "" {
+		return runID, "0:0"
+	}
+	record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
+	if err != nil {
+		return runID, "0:0"
+	}
+	return runID, marshalRunProposalBinding(record.Value.PlanVersion, record.Revision, pending)
+}
+
+const (
+	automaticRefusalEscalationThreshold = 3
+	maxRefusalSuppressionEntries        = 256
+	markerRefusalSuppressionPrefix      = "refusal:suppression:"
+	markerRefusalSuppressionIndex       = "refusal:suppression:index"
+	markerRefusalReceiptPrefix          = "refusal:receipt:"
+)
+
+type refusalSuppressionKey struct {
+	RunID           string `json:"runId"`
+	Target          string `json:"target"`
+	Op              string `json:"op"`
+	Blocker         string `json:"blocker"`
+	BindingRevision string `json:"bindingRevision"`
+}
+
+type refusalSuppressionRecord struct {
+	Key               refusalSuppressionKey   `json:"key"`
+	Count             int                     `json:"count"`
+	Escalated         bool                    `json:"escalated"`
+	EscalationID      string                  `json:"escalationId,omitempty"`
+	ChatNotified      bool                    `json:"chatNotified,omitempty"`
+	EscalationReceipt *marshal.RefusalReceipt `json:"escalationReceipt,omitempty"`
+	UpdatedAt         time.Time               `json:"updatedAt"`
+}
+
+type refusalSuppressionIndexEntry struct {
+	MarkerID string `json:"markerId"`
+	RunID    string `json:"runId"`
+	Target   string `json:"target"`
+}
+
+func suppressionMarkerID(key refusalSuppressionKey) string {
+	raw, _ := json.Marshal(key)
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("%s%x", markerRefusalSuppressionPrefix, sum)
+}
+
+func blockerSuppressionIdentity(receipt marshal.RefusalReceipt) string {
+	if receipt.Blocker != nil {
+		if receipt.Code == marshal.RefusalCodeInterruptedOp && receipt.Blocker.ID != "" {
+			return receipt.Code + ":" + receipt.Blocker.Kind + ":" + receipt.Blocker.ID
+		}
+		return receipt.Code + ":" + receipt.Blocker.Kind + ":" + receipt.Blocker.RunID + ":" + receipt.Blocker.TaskID
+	}
+	return receipt.Code
+}
+
+func (w *Workspace) finishProposalRefusal(ctx context.Context, automatic bool, runID, target, op, bindingRevision, occurrenceID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	finalErr := err
+	if automatic {
+		finalErr = w.recordAutomaticProposalRefusal(ctx, runID, target, op, bindingRevision, err)
+	}
+	if occurrenceID != "" {
+		w.saveProposalRefusalReceipt(ctx, occurrenceID, finalErr)
+	}
+	return finalErr
+}
+
+func (w *Workspace) recordAutomaticProposalRefusal(ctx context.Context, runID, target, op, bindingRevision string, err error) error {
+	receipt, ok := marshal.RefusalOf(err)
+	if !ok {
+		receipt = marshal.RefusalReceipt{
+			Code:         marshal.RefusalCodePreconditionFailed,
+			Effects:      marshal.EffectsUnknown,
+			NextCommands: []string{"/marshal status"},
+			Message:      RedactContent(err.Error(), nil),
+		}
+	}
+	if bindingRevision == "" {
+		_, bindingRevision = w.currentRunBinding(ctx)
+	}
+	key := refusalSuppressionKey{
+		RunID:           runID,
+		Target:          target,
+		Op:              op,
+		Blocker:         blockerSuppressionIdentity(receipt),
+		BindingRevision: bindingRevision,
+	}
+	markerID := suppressionMarkerID(key)
+	m := w.marshalSession()
+	m.refusalMu.Lock()
+	rec, found := w.loadRefusalSuppressionLocked(ctx, m, markerID)
+	if !found {
+		rec = refusalSuppressionRecord{Key: key}
+	}
+	if rec.Escalated && rec.EscalationReceipt != nil {
+		replayed := rec.EscalationReceipt.Clone()
+		m.refusalMu.Unlock()
+		return &marshal.RefusalError{
+			Receipt:  replayed,
+			Cause:    err,
+			Replayed: true,
+		}
+	}
+	rec.Count++
+	rec.UpdatedAt = time.Now().UTC()
+	var (
+		outErr       error
+		escalatedNow bool
+		escReceipt   marshal.RefusalReceipt
+	)
+	if rec.Count < automaticRefusalEscalationThreshold {
+		attemptReceipt := receipt.Clone()
+		attemptReceipt.Attempt = rec.Count
+		attemptReceipt.EscalationID = ""
+		w.saveRefusalSuppressionLocked(ctx, m, markerID, rec, attemptReceipt, "refused")
+		outErr = marshal.NewRefusalError(attemptReceipt, err)
+	} else {
+		escID, idErr := model.NewID("esc-")
+		if idErr != nil || escID == "" {
+			escID = fmt.Sprintf("esc-%x", sha256.Sum256([]byte(markerID)))[:16]
+		}
+		escReceipt = receipt.Clone()
+		escReceipt.Code = marshal.RefusalCodeRepeatedFailure
+		escReceipt.Attempt = automaticRefusalEscalationThreshold
+		escReceipt.EscalationID = escID
+		escReceipt.Message = fmt.Sprintf("automatic retries stopped after %d equivalent refusals; change the condition before retrying (%s)", automaticRefusalEscalationThreshold, marshal.SanitizeRefusalText(receipt.Message))
+		rec.Escalated = true
+		rec.EscalationID = escID
+		rec.ChatNotified = true
+		savedReceipt := escReceipt.Clone()
+		rec.EscalationReceipt = &savedReceipt
+		w.saveRefusalSuppressionLocked(ctx, m, markerID, rec, escReceipt, "escalated")
+		outErr = marshal.NewRefusalError(escReceipt, err)
+		escalatedNow = true
+	}
+	m.refusalMu.Unlock()
+	if escalatedNow {
+		w.tellMarshal(automaticRefusalEscalationChatNotice(key, escReceipt))
+		w.RecordActivity("Escalated repeated Marshal refusal (" + escReceipt.EscalationID + "): " + RedactContent(escReceipt.Summary(), nil))
+	}
+	return outErr
+}
+
+func (w *Workspace) loadRefusalSuppressionLocked(ctx context.Context, m *marshalSession, markerID string) (refusalSuppressionRecord, bool) {
+	if m.refusals != nil {
+		if rec, ok := m.refusals[markerID]; ok {
+			return rec, true
+		}
+	}
+	if w.store == nil || w.projectID == "" {
+		return refusalSuppressionRecord{}, false
+	}
+	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerID)
+	if err != nil || !ok || raw == "" {
+		return refusalSuppressionRecord{}, false
+	}
+	var rec refusalSuppressionRecord
+	if json.Unmarshal([]byte(raw), &rec) != nil {
+		return refusalSuppressionRecord{}, false
+	}
+	w.cacheRefusalSuppressionLocked(m, markerID, rec)
+	return rec, true
+}
+
+func (w *Workspace) cacheRefusalSuppressionLocked(m *marshalSession, markerID string, rec refusalSuppressionRecord) {
+	if m.refusals == nil {
+		m.refusals = map[string]refusalSuppressionRecord{}
+	}
+	if _, exists := m.refusals[markerID]; !exists {
+		m.refusalOrder = append(m.refusalOrder, markerID)
+	}
+	m.refusals[markerID] = rec
+	for len(m.refusalOrder) > maxRefusalSuppressionEntries {
+		oldest := m.refusalOrder[0]
+		m.refusalOrder = m.refusalOrder[1:]
+		delete(m.refusals, oldest)
+	}
+}
+
+func (w *Workspace) saveRefusalSuppressionLocked(ctx context.Context, m *marshalSession, markerID string, rec refusalSuppressionRecord, receipt marshal.RefusalReceipt, outcome string) {
+	w.cacheRefusalSuppressionLocked(m, markerID, rec)
+	if w.store == nil || w.projectID == "" {
+		return
+	}
+	encoded, err := json.Marshal(rec)
+	if err != nil {
+		return
+	}
+	auditData := map[string]any{
+		"run_id":           marshal.SanitizeRefusalText(rec.Key.RunID),
+		"target":           marshal.SanitizeRefusalText(rec.Key.Target),
+		"op":               marshal.SanitizeRefusalText(rec.Key.Op),
+		"blocker":          marshal.SanitizeRefusalText(rec.Key.Blocker),
+		"binding_revision": marshal.SanitizeRefusalText(rec.Key.BindingRevision),
+		"code":             marshal.SanitizeRefusalText(receipt.Code),
+		"effects":          string(receipt.Effects),
+		"attempt":          receipt.Attempt,
+		"escalated":        rec.Escalated,
+	}
+	if rec.EscalationID != "" {
+		auditData["escalation_id"] = rec.EscalationID
+	}
+	_ = w.store.RecordMarshalRefusalJournal(ctx, w.projectID, markerID, string(encoded), outcome, auditData)
+	w.updateRefusalSuppressionIndexLocked(ctx, markerID, rec.Key.RunID, rec.Key.Target)
+}
+
+func (w *Workspace) updateRefusalSuppressionIndexLocked(ctx context.Context, markerID, runID, target string) {
+	if w.store == nil || w.projectID == "" {
+		return
+	}
+	var entries []refusalSuppressionIndexEntry
+	if raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex); err == nil && ok && raw != "" {
+		_ = json.Unmarshal([]byte(raw), &entries)
+	}
+	found := false
+	for i := range entries {
+		if entries[i].MarkerID == markerID {
+			entries[i].RunID = runID
+			entries[i].Target = target
+			found = true
+			break
+		}
+	}
+	if !found {
+		entries = append(entries, refusalSuppressionIndexEntry{MarkerID: markerID, RunID: runID, Target: target})
+	}
+	for len(entries) > maxRefusalSuppressionEntries {
+		evict := entries[0]
+		entries = entries[1:]
+		_ = w.store.DeleteMarshalProposalMarker(ctx, w.projectID, evict.MarkerID)
+	}
+	if raw, err := json.Marshal(entries); err == nil {
+		_ = w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex, string(raw), "recorded")
+	}
+}
+
+// resetAutomaticRefusalSuppression clears automatic suppression counters for
+// (runID, target) when the owner takes an explicit action, starting a fresh
+// evaluation while leaving permanent holds and service policies intact.
+func (w *Workspace) resetAutomaticRefusalSuppression(runID, target string) {
+	if runID == "" {
+		return
+	}
+	m := w.marshalSession()
+	m.refusalMu.Lock()
+	defer m.refusalMu.Unlock()
+	matches := func(rID, tgt string) bool {
+		if rID != runID {
+			return false
+		}
+		return target == "" || tgt == "" || tgt == target
+	}
+	if len(m.refusals) > 0 {
+		kept := m.refusalOrder[:0]
+		for _, id := range m.refusalOrder {
+			if rec, ok := m.refusals[id]; ok && matches(rec.Key.RunID, rec.Key.Target) {
+				delete(m.refusals, id)
+				continue
+			}
+			kept = append(kept, id)
+		}
+		m.refusalOrder = kept
+	}
+	if w.store == nil || w.projectID == "" {
+		return
+	}
+	ctx := context.Background()
+	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex)
+	if err != nil || !ok || raw == "" {
+		return
+	}
+	var entries []refusalSuppressionIndexEntry
+	if json.Unmarshal([]byte(raw), &entries) != nil {
+		return
+	}
+	kept := entries[:0]
+	changed := false
+	for _, entry := range entries {
+		if matches(entry.RunID, entry.Target) {
+			_ = w.store.DeleteMarshalProposalMarker(ctx, w.projectID, entry.MarkerID)
+			changed = true
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	if changed {
+		if updated, err := json.Marshal(kept); err == nil {
+			_ = w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalSuppressionIndex, string(updated), "recorded")
+		}
+	}
+}
+
+func (w *Workspace) saveProposalRefusalReceipt(ctx context.Context, occurrenceID string, err error) {
+	if occurrenceID == "" || err == nil || w.store == nil || w.projectID == "" {
+		return
+	}
+	receipt, ok := marshal.RefusalOf(err)
+	if !ok {
+		return
+	}
+	sanitized := receipt.Sanitized()
+	sanitized.Message = RedactContent(sanitized.Message, nil)
+	raw, encErr := json.Marshal(sanitized)
+	if encErr != nil {
+		return
+	}
+	_ = w.store.RecordMarshalProposalMarker(ctx, w.projectID, markerRefusalReceiptPrefix+occurrenceID, string(raw), "refused")
+}
+
+func (w *Workspace) loadProposalRefusalReceipt(ctx context.Context, occurrenceID string) (marshal.RefusalReceipt, bool) {
+	if occurrenceID == "" || w.store == nil || w.projectID == "" {
+		return marshal.RefusalReceipt{}, false
+	}
+	raw, ok, err := w.store.MarshalProposalMarker(ctx, w.projectID, markerRefusalReceiptPrefix+occurrenceID)
+	if err != nil || !ok || raw == "" {
+		return marshal.RefusalReceipt{}, false
+	}
+	var receipt marshal.RefusalReceipt
+	if json.Unmarshal([]byte(raw), &receipt) != nil {
+		return marshal.RefusalReceipt{}, false
+	}
+	return receipt.Sanitized(), true
+}
+
+func automaticRefusalEscalationChatNotice(key refusalSuppressionKey, receipt marshal.RefusalReceipt) string {
+	subject := key.Op
+	if key.Target != "" {
+		subject += " " + key.Target
+	}
+	if subject == "" {
+		subject = "proposal"
+	}
+	blocker := "the active blocker"
+	if receipt.Blocker != nil {
+		blocker = receipt.Blocker.Label()
+	}
+	next := "/marshal status"
+	if len(receipt.NextCommands) > 0 {
+		next = strings.Join(receipt.NextCommands, ", ")
+	}
+	return fmt.Sprintf(marshalNotePrefix+"Escalation %s: automatic %s failed %d times under the same condition (blocked by %s; %s). Do not repeat the identical proposal; wait for the condition to change or ask the owner. Next: %s.",
+		receipt.EscalationID,
+		marshal.SanitizeRefusalText(subject),
+		receipt.Attempt,
+		RedactContent(blocker, nil),
+		receipt.EffectsText(),
+		RedactContent(next, nil),
+	)
+}
+
+func formatInboxRefusalDetails(err error) string {
+	if err == nil {
+		return ""
+	}
+	receipt, ok := marshal.RefusalOf(err)
+	if !ok {
+		return "detail: " + RedactContent(marshal.SanitizeRefusalText(err.Error()), nil) + "\n"
+	}
+	s := receipt.Sanitized()
+	var b strings.Builder
+	fmt.Fprintf(&b, "code: %s\n", s.Code)
+	if s.Blocker != nil {
+		fmt.Fprintf(&b, "blocker: %s\n", RedactContent(s.Blocker.Label(), nil))
+	}
+	fmt.Fprintf(&b, "effects: %s\n", s.Effects)
+	if s.Attempt > 0 {
+		fmt.Fprintf(&b, "attempt: %d\n", s.Attempt)
+	}
+	if s.EscalationID != "" {
+		fmt.Fprintf(&b, "escalationId: %s\n", s.EscalationID)
+	}
+	if len(s.NextCommands) > 0 {
+		fmt.Fprintf(&b, "nextCommands: %s\n", RedactContent(strings.Join(s.NextCommands, ", "), nil))
+	}
+	if s.Message != "" {
+		fmt.Fprintf(&b, "detail: %s\n", RedactContent(s.Message, nil))
+	}
+	return b.String()
+}
+
+func (w *Workspace) writeMarshalInboxRefusal(subject string, err error) {
+	if w.runtime == nil || err == nil {
+		return
+	}
+	text := fmt.Sprintf("## MARSHAL runtime refusal\n\naction: %s\n%s", marshal.SanitizeRefusalText(subject), formatInboxRefusalDetails(err))
+	view, e := openMarshalInbox(w.runtime.ProjectRoot())
+	if e == nil {
+		e = view.write(text)
+	}
+	if e != nil {
+		w.RecordActivity("Marshal refusal inbox delivery failed: " + e.Error())
 	}
 }

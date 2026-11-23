@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type MarshalProposal struct{ ID, Line, RequestJSON string }
@@ -85,4 +88,47 @@ func (s *Store) MarshalProposalMarker(ctx context.Context, projectID, id string)
 		return "", false, err
 	}
 	return line, true, nil
+}
+
+// DeleteMarshalProposalMarker removes a durable marker row previously saved
+// with RecordMarshalProposalMarker or RecordMarshalRefusalJournal.
+func (s *Store) DeleteMarshalProposalMarker(ctx context.Context, projectID, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM marshal_proposals WHERE project_id=? AND occurrence_id=? AND outcome<>''`, projectID, id)
+	return err
+}
+
+// RecordMarshalRefusalJournal atomically upserts a durable refusal or
+// escalation journal marker in marshal_proposals and appends a sanitized
+// audit event when auditData is provided.
+func (s *Store) RecordMarshalRefusalJournal(ctx context.Context, projectID, id, line, outcome string, auditData map[string]any) error {
+	if outcome == "" {
+		outcome = "refused"
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO marshal_proposals(project_id,occurrence_id,line,outcome) VALUES(?,?,?,?) ON CONFLICT(project_id,occurrence_id) DO UPDATE SET line=excluded.line, outcome=excluded.outcome`,
+		projectID, id, line, outcome,
+	); err != nil {
+		return err
+	}
+	if len(auditData) > 0 {
+		eventID, err := model.NewID("refusal-")
+		if err != nil {
+			return err
+		}
+		if err := s.AppendEvent(ctx, tx, model.Event{
+			ID:        eventID,
+			Type:      "MARSHAL_OPERATION_REFUSAL",
+			ProjectID: projectID,
+			Timestamp: time.Now().UTC(),
+			Data:      auditData,
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

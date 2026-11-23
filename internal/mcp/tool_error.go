@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
@@ -12,10 +13,34 @@ import (
 // toolErrorCode is the JSON-RPC code every failed Marshal tool call carries.
 const toolErrorCode = -32000
 
-// rpcErrData keeps the stable machine code of a translated tool error, so a
-// caller that parses codes still can while the message stays a plain sentence.
+// rpcErrData keeps the stable machine code and optional typed refusal fields
+// of a translated tool error, so a caller that parses codes and refusal
+// metadata still can while the message stays a plain sentence.
 type rpcErrData struct {
-	Code string `json:"code"`
+	Code         string                   `json:"code"`
+	Blocker      *marshal.OperationHolder `json:"blocker,omitempty"`
+	Effects      marshal.RefusalEffects   `json:"effects,omitempty"`
+	NextCommands []string                 `json:"nextCommands,omitempty"`
+	EscalationID string                   `json:"escalationId,omitempty"`
+	Attempt      int                      `json:"attempt,omitempty"`
+}
+
+func refusalRPCError(receipt marshal.RefusalReceipt, message string) *rpcErr {
+	if message == "" {
+		message = receipt.Summary()
+	}
+	return &rpcErr{
+		Code:    toolErrorCode,
+		Message: message,
+		Data: &rpcErrData{
+			Code:         receipt.Code,
+			Blocker:      receipt.Blocker,
+			Effects:      receipt.Effects,
+			NextCommands: receipt.NextCommands,
+			EscalationID: receipt.EscalationID,
+			Attempt:      receipt.Attempt,
+		},
+	}
 }
 
 // toolError turns an error from one of Marshal's own tools into the error the
@@ -24,6 +49,9 @@ type rpcErrData struct {
 // Live proposal errors cross the parent transport as text, so each code is
 // matched by its sentinel's text as well as by errors.Is.
 func toolError(tool string, err error) *rpcErr {
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		return refusalRPCError(receipt, receipt.Summary())
+	}
 	msg := err.Error()
 	for _, known := range []struct {
 		sentinel error
@@ -75,6 +103,9 @@ func toolError(tool string, err error) *rpcErr {
 			text = "The arguments for " + tool + " are not valid: " + detail + "."
 		}
 		return &rpcErr{Code: toolErrorCode, Message: text, Data: &rpcErrData{Code: "invalid_input"}}
+	}
+	if receipt, ok := marshal.ParseRefusalSummary(msg); ok {
+		return refusalRPCError(receipt, msg)
 	}
 	return &rpcErr{Code: toolErrorCode, Message: msg}
 }
