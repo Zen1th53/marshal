@@ -72,7 +72,10 @@ type Server struct {
 	actMu        sync.Mutex
 	settings     settingsPointer
 	commandSpent map[string]int64
-	previews     map[string]Confirmation
+	// settingsTokens caches minted settings action tokens by binding.
+	settingsTokMu  sync.Mutex
+	settingsTokens map[string]cachedSettingsToken
+	previews       map[string]Confirmation
 
 	listener net.Listener
 	http     *http.Server
