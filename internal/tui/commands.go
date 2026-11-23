@@ -820,8 +820,8 @@ Composer:
   Paste                    Long or multi-line pastes collapse to a placeholder
                            and are restored in full when you submit
   Select & copy            Works with the terminal's own selection` + operatorMemoryReviewHelp()
-	if !ultraSwitchable {
-		help = strings.Replace(help, "  /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement\n", "", 1)
+	if editionExtreme {
+		help = strings.Replace(help, "  /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement\n", "  /ultra [status|start|stop]  Show local ULTRA entitlement or save the execution preference\n", 1)
 	}
 	return help
 }

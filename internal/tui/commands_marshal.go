@@ -400,6 +400,21 @@ func marshalChatProvider(provider string) string {
 // The steps and questions come from the constitution's Marshal protocol,
 // which is refused if it does not match its digest; what follows it is only
 // what this run needs: the workers, the current settings and the draft form.
+func (w *Workspace) currentMarshalRoleBriefing(ctx context.Context, provider string) (string, error) {
+	settings := marshal.DefaultSettings()
+	w.mu.RLock()
+	st, project := w.store, w.ultraProjectLocked()
+	w.mu.RUnlock()
+	if st != nil {
+		rec, err := st.GetMarshalSettings(ctx, project)
+		if err != nil {
+			return "", err
+		}
+		settings = rec.Value
+	}
+	return marshalRoleBriefing(app.MarshalWorkers(provider), settings, marshal.TierPolicy(workspaceUltraGate{workspace: w}, settings).Tier)
+}
+
 func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marshal.Tier) (string, error) {
 	protocol, err := constitution.MarshalProtocol()
 	if err != nil {
@@ -930,10 +945,7 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 		}
 		provider, note = w.chooseMarshalProvider(ctx)
 	}
-	var gate marshal.CapabilityGate
-	if w.ultra != nil {
-		gate = workspaceUltraGate{gate: w.ultra, execution: w.ultraExecution}
-	}
+	var gate marshal.CapabilityGate = workspaceUltraGate{workspace: w}
 	service, err := w.runtime.MarshalWired(app.MarshalWiring{Provider: provider, Gate: gate, Approver: m.approver, SessionID: w.sessionID})
 	if err != nil {
 		return nil, "", "", err
@@ -955,19 +967,21 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 }
 
 type workspaceUltraGate struct {
-	gate      marshal.CapabilityGate
-	execution bool
+	workspace *Workspace
 }
 
 func (g workspaceUltraGate) Capability(name string) bool {
-	if g.gate == nil {
-		return false
-	}
-	return g.gate.Capability(name)
+	gate, _ := g.workspace.ultraGate()
+	return gate.Capability(name)
 }
 
 func (g workspaceUltraGate) ExecutionEnabled() bool {
-	return g.execution
+	return g.workspace.ULTRAExecutionEnabled()
+}
+
+func (g workspaceUltraGate) LockAdmission() func() {
+	g.workspace.ultraAdmission.Lock()
+	return g.workspace.ultraAdmission.Unlock
 }
 
 // errMarshalBusy refuses a Marshal operation while another one runs.

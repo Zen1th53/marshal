@@ -99,6 +99,7 @@ type Workspace struct {
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
+	ultraAdmission sync.Mutex
 	// ultraStopAsked records that /ultra stop asked the person to confirm;
 	// only /ultra stop confirm straight after it turns execution off.
 	ultraStopAsked bool
@@ -413,12 +414,14 @@ func (w *Workspace) AttachULTRASession(a cloud.Authorization) {
 // asks. That is what makes "every entry path is gated" a property of the code
 // rather than a convention someone has to remember.
 func (w *Workspace) AttachULTRA(gate *cloud.Gate, executionEnabled bool) {
+	w.ultraAdmission.Lock()
+	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.ultra = gate
-	w.ultraExecution = executionEnabled
+	w.loadUltraPreferenceLocked(executionEnabled)
 	w.state.UltraEntitled = gate.Entitled()
-	w.state.UltraExecution = executionEnabled
+	w.state.UltraExecution = w.ultraExecution
 }
 
 // AttachULTRARequester supplies what asking for an entitlement needs.
@@ -484,11 +487,65 @@ func (w *Workspace) ULTRAExecutionEnabled() bool {
 
 // setUltraExecution records the person's ULTRA Execution preference and
 // withdraws any pending stop question.
-func (w *Workspace) setUltraExecution(enabled bool) {
+func (w *Workspace) setUltraExecution(enabled bool) error {
+	return w.SetUltraExecution(context.Background(), enabled)
+}
+
+// SetUltraExecution persists the preference before publishing it to admissions.
+func (w *Workspace) SetUltraExecution(ctx context.Context, enabled bool) error {
+	changed := false
+	defer func() {
+		if changed {
+			mode := "Standard"
+			if enabled {
+				mode = "ULTRA when current entitlement permits"
+			}
+			w.tellMarshal("Execution preference updated: " + mode + ". Apply it at the next admission. Already admitted workers drain with their original collection and review policy; the approved scope and lane binding remain in force.")
+		}
+	}()
+	w.ultraAdmission.Lock()
+	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if enabled && !w.ultra.Entitled() {
+		return errors.New("ULTRA execution requires current entitlement")
+	}
+	if w.store != nil {
+		settings, err := w.store.GetMarshalSettings(ctx, w.ultraProjectLocked())
+		if err != nil {
+			return err
+		}
+		settings.Value.UltraExecution = &enabled
+		if _, err := w.store.SetMarshalSettings(ctx, w.ultraProjectLocked(), settings.Value, settings.Revision); err != nil {
+			return err
+		}
+	}
+	changed = w.ultraExecution != enabled
 	w.ultraExecution = enabled
+	w.state.UltraExecution = enabled
 	w.ultraStopAsked = false
+	return nil
+}
+
+func (w *Workspace) ultraProjectLocked() string {
+	if w.runtime != nil && w.runtime.Marshal() != nil {
+		return w.runtime.Marshal().ProjectID
+	}
+	return w.projectID
+}
+
+func (w *Workspace) loadUltraPreferenceLocked(fallback bool) {
+	w.ultraExecution = fallback
+	if w.store != nil {
+		settings, err := w.store.GetMarshalSettings(context.Background(), w.ultraProjectLocked())
+		if err != nil {
+			w.ultraExecution = false
+			w.ultraErr = err
+		} else if settings.Value.UltraExecution != nil {
+			w.ultraExecution = *settings.Value.UltraExecution
+		}
+	}
+	w.state.UltraExecution = w.ultraExecution
 }
 
 // askUltraStop records that the person was asked to confirm /ultra stop.
@@ -596,7 +653,10 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/memory inject preview"] = []string{"claude", "codex", "opencode", "agy", "antigravity"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	if ultraSwitchable {
-		compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
+		compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop"}
+		if !editionExtreme {
+			compCtx.Subcommands["/ultra"] = append(compCtx.Subcommands["/ultra"], "request")
+		}
 		compCtx.Subcommands["/ultra stop"] = []string{"confirm"}
 	}
 	compCtx.Subcommands["/provider"] = []string{"status", "use", "config"}
@@ -694,6 +754,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			Participants:       participants,
 		},
 	}
+	ws.loadUltraPreferenceLocked(cloud.ExecutionOnAtStartup)
 	ws.completer.ctx.InstallableSkills = ws.readInstallableSkills
 	ws.cmd = NewCommandHandler(ws)
 	// The palette ranks by the Board's focus and selection as it opens, and
@@ -2135,11 +2196,17 @@ func (w *Workspace) setOutput(text string, isError bool) {
 func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
 	releaseMemoryReads := w.cmd.prepareOperatorMemoryRuntimeAttach()
 	defer releaseMemoryReads()
+	w.ultraAdmission.Lock()
+	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.runtime = runtime
 	w.beatRuntime.Store(runtime)
 	w.projectIdentity = identity
+	if runtime != nil {
+		w.store = runtime.Store()
+	}
+	w.loadUltraPreferenceLocked(cloud.ExecutionOnAtStartup)
 	if runtime != nil {
 		runtime.SetEgressAlertSink(w.deliverEgressAlert)
 		runtime.SetPermissionSink(w.queuePermission)
@@ -2427,14 +2494,7 @@ func (w *Workspace) controlSource() *ControlSource {
 				defer w.mu.RUnlock()
 				return w.mode
 			},
-			setPreference: func(enabled bool) error {
-				w.mu.Lock()
-				defer w.mu.Unlock()
-				// This is a preference, never an authority: the gate is
-				// untouched, so with no entitlement it changes nothing.
-				w.ultraExecution = enabled
-				return nil
-			},
+			setPreference: w.setUltraExecution,
 			preference: func() bool {
 				w.mu.RLock()
 				defer w.mu.RUnlock()

@@ -17,7 +17,7 @@ import (
 )
 
 func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService, run marshal.Run, req driver.Request, parent *execution.ExecutionRun) (*execution.ExecutionRun, error) {
-	if serialProcess05Base(s.Gate, run) {
+	if run.Process05Bound && !run.Process05Parallel {
 		return parent, nil
 	}
 	if !run.Process05Bound || req.Task.Mode != marshal.Governed || !marshalDepsMerged(run, req.Task) {

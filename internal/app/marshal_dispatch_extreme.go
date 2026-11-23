@@ -91,7 +91,13 @@ func holdsWorkerSlot(other, candidate marshal.Task) bool {
 func canLaunchCandidate(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, launched []MarshalDispatch) (bool, bool) {
 	if marshal.TierPolicy(gate, run.Settings).Tier != marshal.Ultra {
 		policy := marshal.TierPolicy(gate, run.Settings)
-		if len(launched) >= policy.Concurrency {
+		active := len(launched)
+		for _, other := range run.Tasks {
+			if holdsWorkerSlot(other, t) {
+				active++
+			}
+		}
+		if active >= policy.Concurrency {
 			return false, true
 		}
 		return true, false
@@ -163,7 +169,7 @@ func shouldStopAfterLaunch(run marshal.Run, t marshal.Task) bool {
 func checkDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIndex int) error {
 	// Only an immutable approved ULTRA plan uses isolated task lanes. Older and
 	// Standard Process05 runs retain their serial dispatch and merge ordering.
-	if serialProcess05Base(gate, run) && t.Mode == marshal.Governed {
+	if run.Process05Bound && !run.Process05Parallel && t.Mode == marshal.Governed {
 		for _, other := range run.Tasks {
 			if other.State == marshal.Dispatched {
 				return errors.New("governed plan tasks dispatch one at a time")

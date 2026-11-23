@@ -60,7 +60,8 @@ const (
 
 // Settings captures the policy approved for a run.
 type Settings struct {
-	WorkerStallMinutes int `json:",omitempty"`
+	UltraExecution     *bool `json:",omitempty"`
+	WorkerStallMinutes int   `json:",omitempty"`
 	ExecutionRights    ExecutionRights
 	AcceptanceMode     AcceptanceMode
 	ReworkLimit        int
@@ -204,6 +205,7 @@ type WorkerSelection struct {
 }
 
 type Task struct {
+	ExecutionTier       Tier   `json:",omitempty"`
 	ArchitectureContext string `json:",omitempty"`
 	failoverTask
 	WorkerSelection  *WorkerSelection `json:",omitempty"`

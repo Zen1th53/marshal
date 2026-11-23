@@ -300,7 +300,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	}
 
 	winName := tmux.ChatWindowName(projectRoot)
-	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
+	brief, err := w.currentMarshalRoleBriefing(ctx, provider)
 	if err != nil {
 		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}
@@ -505,7 +505,7 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 		agent.binary = bin
 	}
 
-	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
+	brief, err := w.currentMarshalRoleBriefing(ctx, provider)
 	if err != nil {
 		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}

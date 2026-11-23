@@ -26,6 +26,7 @@ import (
 )
 
 type MarshalDispatch struct {
+	Tier     marshal.Tier
 	Driver   driver.Driver
 	Handle   *driver.Handle
 	TaskID   string
@@ -34,6 +35,9 @@ type MarshalDispatch struct {
 }
 
 func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief string) (MarshalDispatch, error) {
+	gate, release := reserveExecution(s.Gate)
+	ctx = context.WithValue(ctx, admissionGateKey{}, gate)
+	release()
 	return s.dispatchWithBrief(ctx, runID, taskID, brief, nil)
 }
 
@@ -105,8 +109,8 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		}
 		return MarshalDispatch{}, fmt.Errorf("dispatch paused at budget boundary: %s", reason)
 	}
-	policy := marshal.TierPolicy(s.Gate, run.Settings)
-	if err := checkDispatchAdmission(s.Gate, run, *t, i); err != nil {
+	policy := marshal.TierPolicy(s.admissionGate(ctx), run.Settings)
+	if err := checkDispatchAdmission(s.admissionGate(ctx), run, *t, i); err != nil {
 		return MarshalDispatch{}, err
 	}
 	d := s.Drivers[t.Worker]
@@ -158,6 +162,8 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
+	next.Tasks[i].ExecutionTier = policy.Tier
+	t.ExecutionTier = policy.Tier
 	finishProviderFailoverDispatch(&next.Tasks[i])
 	if fresh {
 		next.Tasks[i].ResultCommit = ""
@@ -274,7 +280,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	return MarshalDispatch{Driver: d, Handle: handle, TaskID: taskID, Started: s.clock(), Deadline: deadline}, nil
+	return MarshalDispatch{Tier: policy.Tier, Driver: d, Handle: handle, TaskID: taskID, Started: s.clock(), Deadline: deadline}, nil
 }
 
 // restartTaskBranch sets a task's branch and worktree back to its base for a

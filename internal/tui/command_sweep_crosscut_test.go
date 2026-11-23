@@ -263,7 +263,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
 	ultraStatus := "ULTRA status: INACTIVE"
 	if editionExtreme {
-		ultraStatus = ultraFixedAnswer
+		ultraStatus = "ULTRA: ACTIVE"
 	}
 	for _, c := range []struct{ line, want string }{{"/help all", "MARSHAL Terminal Workspace Commands:"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", ultraStatus}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
 		s.sendLine(c.line)

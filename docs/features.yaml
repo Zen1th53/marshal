@@ -1870,7 +1870,7 @@ features:
         reason: "ULTRA is unavailable: no cryptographically verified entitlement is active."
 
   - id: ultra-execution
-    name: ULTRA execution preference switch (parallel vs standard execution)
+    name: Persisted project ULTRA execution preference (parallel vs standard execution)
     editions: [default, governed]
     sources:
       - internal/tui/commands_expanded.go
@@ -1879,7 +1879,9 @@ features:
       - internal/tui/workspace.go
     tests:
       - internal/tui.TestDefaultSessionExecutionStartsOff
-      - internal/tui.TestExtremeSessionStartsUltraAndCannotStop
+      - internal/tui.TestUltraPreferenceSurvivesRestart
+      - internal/tui.TestUltraPreferenceOffDrainsWithoutRebinding
+      - internal/tui.TestUltraWriteFailureLeavesGateUnchanged
     docs: []
     web: []
     tui:

@@ -196,7 +196,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if err != nil {
 			// Workers already launched in this round are still running;
 			// collect them so none is left without a hand-in.
-			err = errors.Join(err, s.collectAll(ctx, runID, launched, observe, current))
+			err = errors.Join(err, s.collectAdmitted(ctx, runID, launched, observe, current))
 			after, _ := current()
 			return after, err
 		}
@@ -231,19 +231,19 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if observe != nil {
 			_, _ = current()
 		}
-		policy := marshal.TierPolicy(s.Gate, run.Settings)
-		if policy.Tier == marshal.Ultra && len(launched) > 1 {
-			if err := s.collectAndReviewUltra(ctx, runID, launched, observe, current); err != nil {
-				after, _ := current()
-				return after, err
-			}
-		} else {
-			if err := s.collectAll(ctx, runID, launched, observe, current); err != nil {
-				after, _ := current()
-				return after, err
-			}
+		if err := s.collectAdmitted(ctx, runID, launched, observe, current); err != nil {
+			after, _ := current()
+			return after, err
 		}
 	}
+}
+
+// collectAdmitted uses the mode reserved before launch, even after a preference change.
+func (s *MarshalService) collectAdmitted(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
+	if len(launched) > 0 && launched[0].Tier == marshal.Ultra {
+		return s.collectAndReviewUltra(ctx, runID, launched, observe, current)
+	}
+	return s.collectAll(ctx, runID, launched, observe, current)
 }
 
 // collectAndReviewUltra collects and reviews each launched worker in ULTRA as soon
@@ -346,8 +346,50 @@ func (s *MarshalService) reviewHandedIn(ctx context.Context, runID string, run m
 // with the governance reasons instead.
 func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run marshal.Run, brief MarshalBrief) ([]MarshalDispatch, error) {
 	var launched []MarshalDispatch
+	var ready []marshal.Task
 	for _, t := range run.Tasks {
-		canLaunch, stop := canLaunchCandidate(s.Gate, run, t, launched)
+		if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
+			continue
+		}
+		if !marshalDepsMerged(run, t) {
+			continue
+		}
+		if waiting, err := s.privateProcess05WaitPending(ctx, run, t); err != nil {
+			return nil, err
+		} else if waiting {
+			continue
+		}
+		ready = append(ready, t)
+	}
+	gate, release := reserveExecution(s.Gate)
+	// Reserve the batch before launching any worker. The owner can acknowledge
+	// off immediately afterwards; every reserved attempt retains this mode.
+	var candidates []marshal.Task
+	var reserved []MarshalDispatch
+	for _, t := range ready {
+		if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
+			continue
+		}
+		if !marshalDepsMerged(run, t) || (s.HeldTask != nil && s.HeldTask(runID, t.PlanTaskID)) {
+			continue
+		}
+		can, stop := canLaunchCandidate(gate, run, t, reserved)
+		if stop {
+			break
+		}
+		if !can {
+			continue
+		}
+		candidates = append(candidates, t)
+		reserved = append(reserved, MarshalDispatch{TaskID: t.PlanTaskID})
+		if shouldStopAfterLaunchGate(gate, run, t) {
+			break
+		}
+	}
+	release()
+	ctx = context.WithValue(ctx, admissionGateKey{}, gate)
+	for _, t := range candidates {
+		canLaunch, stop := canLaunchCandidate(gate, run, t, launched)
 		if stop {
 			break
 		}
@@ -386,7 +428,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			if i := taskIndex(run, t.PlanTaskID); i >= 0 {
 				run.Tasks[i].Worker = next
 			}
-			canLaunch, stop = canLaunchCandidate(s.Gate, run, t, launched)
+			canLaunch, stop = canLaunchCandidate(gate, run, t, launched)
 			if stop {
 				break
 			}
@@ -422,7 +464,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			return launched, err
 		}
 		launched = append(launched, d)
-		if shouldStopAfterLaunchGate(s.Gate, run, t) {
+		if shouldStopAfterLaunchGate(gate, run, t) {
 			break
 		}
 	}

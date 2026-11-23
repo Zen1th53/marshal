@@ -61,6 +61,9 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
+	if _, live := w.Gate.(interface{ ExecutionEnabled() bool }); !live {
+		s.Gate = projectExecutionGate{CapabilityGate: w.Gate, service: s}
+	}
 	s.ApprovalActor = w.Approver
 	s.ProbeWorker = func(ctx context.Context, worker string) error {
 		_, err := r.VerifyMarshalWorker(ctx, worker, "")

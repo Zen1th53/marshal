@@ -22,7 +22,7 @@ func (s *MarshalService) resolveDispatchTaskBase(ctx context.Context, runID stri
 		task.BaseCommit = strings.TrimSpace(head)
 	}
 	i := taskIndex(run, task.PlanTaskID)
-	if serialProcess05Base(s.Gate, run) && task.Mode == marshal.Governed && task.ResultCommit == "" && i > 0 {
+	if (run.Process05Bound && !run.Process05Parallel) && task.Mode == marshal.Governed && task.ResultCommit == "" && i > 0 {
 		integration := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 		if head, err := gitMarshal(ctx, integration, "rev-parse", "HEAD"); err == nil {
 			task.BaseCommit = head
