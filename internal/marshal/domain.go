@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 // Tier selects the run's worker and review policy.
@@ -340,6 +341,11 @@ type LifecycleOperation struct {
 	Event                                        events.Event
 	HandIn                                       *HandIn `json:",omitempty"`
 	Attempt                                      int
+	// DeliveryKind, ReceiptID and ReceiptDigest bind a close to the proof
+	// it was authorized on. Empty is the full canonical proof.
+	DeliveryKind  string `json:",omitempty"`
+	ReceiptID     string `json:",omitempty"`
+	ReceiptDigest string `json:",omitempty"`
 }
 
 // RuntimeCompatibility records observed runtime provenance independently of proof.
@@ -381,6 +387,13 @@ type Run struct {
 	// DesignReview holds the draft-digest-bound independent design critique
 	// receipt for the current draft, invalidated on material amendment.
 	DesignReview *DesignReviewReceipt `json:",omitempty"`
+	// ChecksOnly is the current checks-only receipt of a run whose owner
+	// opted out of the final independent model check. Any amendment clears
+	// it; a close always takes a fresh one.
+	ChecksOnly *verification.ChecksOnlyReceipt `json:",omitempty"`
+	// DeliveryKind names how a closed run was proven before delivery.
+	// Empty is the full canonical proof.
+	DeliveryKind string `json:",omitempty"`
 }
 
 // PlanPack is what the Marshal gathered from the person, written as

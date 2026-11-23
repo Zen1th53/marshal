@@ -1426,6 +1426,11 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	if run.State != marshal.Verifying {
 		return verification.Blocked, errors.New("run is not ready for verification")
 	}
+	// An approved opt-out of the final model check is proven by the approved
+	// checks alone; the verifier's availability is never consulted.
+	if checksOnlyDelivery(run) {
+		return s.verifyChecksOnly(ctx, runID, run, rev, charge)
+	}
 	if s.Verify == nil {
 		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable"))
 	}
@@ -1536,11 +1541,14 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
 		return err
 	}
-	if s.Verify == nil {
-		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
-	}
-	if err = s.requireIndependentVerifier(ctx, run); err != nil {
-		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	checksOnly := checksOnlyDelivery(run)
+	if !checksOnly {
+		if s.Verify == nil {
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
+		}
+		if err = s.requireIndependentVerifier(ctx, run); err != nil {
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+		}
 	}
 	project, err := s.Store.Project(ctx)
 	if err != nil {
@@ -1570,18 +1578,39 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 			return closeVerificationStage(err)
 		}
 	}
-	session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
-	if err != nil {
-		// Say why: a bare "not verified" hid a context or budget refusal
-		// behind a session that had in fact verified.
-		return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
-	}
-	if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
-		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
-	}
-	if s.requiredCanonicalVerification == nil {
-		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
-			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	var receipt *verification.ChecksOnlyReceipt
+	if checksOnly {
+		authority := "owner-close"
+		if run.ValidCloseAuthorization() {
+			authority = "standing-close-authorization"
+		}
+		observed, err := s.runChecksOnlyReceipt(ctx, runID, run, head, authority)
+		if err != nil {
+			return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", err))
+		}
+		if !observed.Passed() {
+			return &closeVerificationError{err: errors.New("integrated result is not verified"), result: verification.VerificationFailed, session: checksOnlySession(observed)}
+		}
+		if s.requiredChecksOnlyClose != nil {
+			if err = s.requiredChecksOnlyClose(ctx, runID, run, head, observed); err != nil {
+				return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", err))
+			}
+		}
+		receipt = &observed
+	} else {
+		session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
+		if err != nil {
+			// Say why: a bare "not verified" hid a context or budget refusal
+			// behind a session that had in fact verified.
+			return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
+		}
+		if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
+			return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
+		}
+		if s.requiredCanonicalVerification == nil {
+			if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
+				return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+			}
 		}
 	}
 	// What moves the target must be exactly the commit that was verified.
@@ -1614,6 +1643,17 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	next := run
 	next.State = marshal.Closed
 	op := &marshal.LifecycleOperation{Kind: "close", Before: old, After: head, Target: target, Next: &next, Event: events.Event{Type: events.EventTypeMarshalRunClosed, Data: map[string]any{"target": project.DefaultBranch, "commit": head, "checkpoint": checkpoint, "previous_commit": old}}}
+	if receipt != nil {
+		// The close, its checkpoint, event and next state all name the exact
+		// receipt it was authorized on.
+		next.ChecksOnly = receipt
+		next.DeliveryKind = verification.DeliveredChecksOnly
+		op.DeliveryKind, op.ReceiptID, op.ReceiptDigest = verification.DeliveredChecksOnly, receipt.ID, receipt.Digest
+		op.Event.Data["delivery_kind"] = verification.DeliveredChecksOnly
+		op.Event.Data["checks_only_receipt_id"] = receipt.ID
+		op.Event.Data["checks_only_receipt_digest"] = receipt.Digest
+		op.Event.Data["omitted_roles"] = strings.Join(receipt.OmittedRoles, ",")
+	}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return err
@@ -1846,6 +1886,8 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if d.Pack != nil {
 		run.Pack = d.Pack
 	}
+	// Any amendment invalidates a checks-only receipt; a close takes a fresh one.
+	run.ChecksOnly = nil
 	if major || policyChanged || requirementsChanged || checksChanged || headChanged {
 		run.DesignReview = nil
 		if run.CloseAuthorization != nil {
@@ -2175,6 +2217,15 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			return run, err
 		}
 		return run, nil
+	}
+	// A retained checks-only receipt that no longer binds the current
+	// approval, revisions or policy is dropped; a close takes a fresh one.
+	if run.ChecksOnly != nil && run.State != marshal.Closed && !checksOnlyReceiptCurrent(run, *run.ChecksOnly) {
+		run.ChecksOnly = nil
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return run, err
+		}
+		rev++
 	}
 	if run.State == marshal.AwaitingUser {
 		if run.Pause != nil && run.Pause.ResumeState == "" && run.Pause.Code == marshal.CodeRunStalled && !hasEscalatedTask(run) {

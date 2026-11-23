@@ -6,8 +6,10 @@ import (
 	"fmt"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 func (s *MarshalService) beginOperation(ctx context.Context, runID string, run marshal.Run, rev int64, op *marshal.LifecycleOperation) (int64, error) {
@@ -78,6 +80,7 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	}
 	op.Event.Data = copyMarshalEventData(op.Event.Data)
 	completed := false
+	unapplied := false
 	switch op.Kind {
 	case "launch":
 		op.HandIn = nil
@@ -149,6 +152,13 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		if err != nil {
 			return run, rev, err
 		}
+		if op.DeliveryKind != "" {
+			completed, unapplied, err = s.recoverChecksOnlyClose(ctx, op, head)
+			if err != nil {
+				return run, rev, err
+			}
+			break
+		}
 		completed = op.Authorized && head == op.After
 		if !completed && head != op.Before {
 			return run, rev, fmt.Errorf("unfinished close %s: target moved; inspect %s", op.ID, op.Target)
@@ -173,6 +183,17 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	// durable explanation; an operator may amend or approve a fresh attempt.
 	run.Operation = nil
 	pauseMarshal(&run, marshal.Pause{Reason: "interrupted " + op.Kind + " operation " + op.ID, Resolutions: []string{"inspect retained artifacts and amend the plan before retrying"}, Code: marshal.CodeInterruptedOperation, Action: marshal.PauseResume})
+	if unapplied {
+		// The target never moved: the intent is cleared as unapplied and the
+		// run resumes at verification, where a fresh close takes a new
+		// operation, current proof and current authority. The checkpoint and
+		// receipt stay as audit evidence.
+		run.Pause.ResumeState = marshal.Verifying
+		run.Pause.Resolutions = []string{"press Enter to verify and deliver again"}
+		op.Event.Data["close_outcome"] = "unapplied"
+		op.Event.Data["unapplied_operation_id"] = op.ID
+		op.Event.Data["cause"] = "interrupted before the target moved"
+	}
 	op.Event.Type = events.EventTypeMarshalEscalated
 	op.Event.Data["reason"] = run.Pause.Reason
 	op.Next = &run
@@ -321,4 +342,38 @@ func (s *MarshalService) repairRetainedHandInAttempt(ctx context.Context, runID 
 	}
 	op.Attempt = want
 	return nil
+}
+
+// recoverChecksOnlyClose observes an interrupted checks-only close. Git at
+// the recorded after commit finishes the stored close only with the matching
+// authorized operation and sealed receipt; Git still at the recorded before
+// commit, with no partial checkout update, clears the intent as unapplied.
+// When before equals after, ref equality proves nothing, so the close is
+// unapplied. Anything else is held for inspection.
+func (s *MarshalService) recoverChecksOnlyClose(ctx context.Context, op *marshal.LifecycleOperation, head string) (completed, unapplied bool, err error) {
+	if op.DeliveryKind != verification.DeliveredChecksOnly {
+		return false, false, fmt.Errorf("unfinished close %s: unknown delivery kind %q; inspect retained operation", op.ID, op.DeliveryKind)
+	}
+	if head == op.After && op.Before != op.After {
+		next := op.Next
+		if !op.Authorized || next == nil || next.State != marshal.Closed || next.DeliveryKind != op.DeliveryKind || next.ChecksOnly == nil || next.ChecksOnly.ID != op.ReceiptID || next.ChecksOnly.Digest != op.ReceiptDigest || !next.ChecksOnly.Passed() || next.ChecksOnly.Head != op.After || next.ChecksOnly.TargetBefore != op.Before {
+			return false, false, fmt.Errorf("unfinished close %s: target advanced without a matching authorized proof; inspect %s", op.ID, op.Target)
+		}
+		return true, false, nil
+	}
+	if head != op.Before {
+		return false, false, fmt.Errorf("unfinished close %s: target moved; inspect %s", op.ID, op.Target)
+	}
+	checkedOut, err := marshalTargetWorktree(ctx, s.Repository, op.Target)
+	if err != nil {
+		return false, false, fmt.Errorf("unfinished close %s: checkout unreadable; inspect %s: %w", op.ID, op.Target, err)
+	}
+	if checkedOut != "" {
+		current, headErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
+		status, statusErr := gitMarshalStdout(ctx, checkedOut, "status", "--porcelain=v1", "--untracked-files=all")
+		if headErr != nil || statusErr != nil || current != op.Before || len(hostgit.SourceStatusChanges(status)) != 0 {
+			return false, false, fmt.Errorf("unfinished close %s: checkout of %s may be partly updated; inspect it", op.ID, op.Target)
+		}
+	}
+	return false, true, nil
 }

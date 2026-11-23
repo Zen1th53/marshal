@@ -41,6 +41,44 @@ func (r *Runtime) retainRequiredContextCloseProof(source *requiredIntegrationSou
 	return nil
 }
 
+// requiredChecksOnlyCloseProof is the live one-shot capability a checks-only
+// close presents at the close fence in place of the canonical session and
+// attestation. It exists only after this runtime reobserved the same
+// integration source and the approved checks all passed on its head.
+type requiredChecksOnlyCloseProof struct {
+	mu                           sync.Mutex
+	runtime                      *Runtime
+	sourceObservation, principal string
+	receiptID, receiptDigest     string
+	consumed                     bool
+}
+
+func (r *Runtime) retainRequiredChecksOnlyCloseProof(ctx context.Context, id string, run marshal.Run, head string, receipt verification.ChecksOnlyReceipt) error {
+	principal, err := requiredArchitectureOwner(ctx, r)
+	if err != nil {
+		return err
+	}
+	if !checksOnlyDelivery(run) || !receipt.Passed() || receipt.Head != head || receipt.RunID != id {
+		return fmt.Errorf("required close checks-only receipt: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-receipt"))
+	}
+	r.requiredIntegrationSources.mu.Lock()
+	defer r.requiredIntegrationSources.mu.Unlock()
+	var source *requiredIntegrationSource
+	for _, candidate := range r.requiredIntegrationSources.byRun {
+		if candidate.marshalRunID == id {
+			if source != nil {
+				return fmt.Errorf("required close unique observed source: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-source"))
+			}
+			source = candidate
+		}
+	}
+	if source == nil || source.runtime != r || source.head != head || !reflect.DeepEqual(source.marshalRun, run) {
+		return fmt.Errorf("required close checks-only source: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-source"))
+	}
+	source.checksOnly = &requiredChecksOnlyCloseProof{runtime: r, sourceObservation: source.observationID, principal: principal.ID, receiptID: receipt.ID, receiptDigest: receipt.Digest}
+	return nil
+}
+
 // The trusted common caller supplies only the final target Git effect. The
 // journal's two exact writes are the sole accepted Marshal revision change.
 // No model invocation or SQL transaction spans that effect.
@@ -63,28 +101,54 @@ func (r *Runtime) withRequiredContextCloseEffect(ctx context.Context, service *M
 			source = candidate
 		}
 	}
+	checksOnly := op.DeliveryKind != ""
 	var proof *requiredContextCloseProof
+	var checksProof *requiredChecksOnlyCloseProof
 	if source != nil {
-		proof = source.completion
+		proof, checksProof = source.completion, source.checksOnly
 	}
 	r.requiredIntegrationSources.mu.Unlock()
-	if source == nil || source.runtime != r || proof == nil {
-		return projectcontext.ErrReviewPending
+	if checksOnly {
+		// A checks-only close substitutes its receipt and live capability
+		// for the canonical session and attestation; every other predicate
+		// below still holds.
+		if op.DeliveryKind != verification.DeliveredChecksOnly || !checksOnlyDelivery(baseline) || op.Next.ChecksOnly == nil || op.Next.DeliveryKind != op.DeliveryKind || op.Next.ChecksOnly.ID != op.ReceiptID || op.Next.ChecksOnly.Digest != op.ReceiptDigest || !op.Next.ChecksOnly.Passed() {
+			return fmt.Errorf("required close checks-only receipt: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-op"))
+		}
+		if source == nil || source.runtime != r || checksProof == nil {
+			return projectcontext.ErrReviewPending
+		}
+		if checksProof.runtime != r || checksProof.principal != principal.ID || checksProof.sourceObservation != source.observationID || checksProof.receiptID != op.ReceiptID || checksProof.receiptDigest != op.ReceiptDigest || op.Next.ChecksOnly.Head != source.head {
+			return fmt.Errorf("required close live proof owner: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-owner"))
+		}
+		checksProof.mu.Lock()
+		defer checksProof.mu.Unlock()
+		if checksProof.consumed {
+			return fmt.Errorf("required close one-shot capability: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-once"))
+		}
+		checksProof.consumed = true
+	} else {
+		if source == nil || source.runtime != r || proof == nil {
+			return projectcontext.ErrReviewPending
+		}
+		if proof.runtime != r || proof.principal != principal.ID || proof.sourceObservation != source.observationID {
+			return fmt.Errorf("required close live proof owner: %w", projectcontext.Changed("project_context_close_extreme.go:75"))
+		}
+		proof.mu.Lock()
+		defer proof.mu.Unlock()
+		if proof.consumed {
+			return fmt.Errorf("required close one-shot capability: %w", projectcontext.Changed("project_context_close_extreme.go:80"))
+		}
+		proof.consumed = true
 	}
-	if proof.runtime != r || proof.principal != principal.ID || proof.sourceObservation != source.observationID {
-		return fmt.Errorf("required close live proof owner: %w", projectcontext.Changed("project_context_close_extreme.go:75"))
-	}
-	proof.mu.Lock()
-	defer proof.mu.Unlock()
-	if proof.consumed {
-		return fmt.Errorf("required close one-shot capability: %w", projectcontext.Changed("project_context_close_extreme.go:80"))
-	}
-	proof.consumed = true
 	if !reflect.DeepEqual(baseline, source.marshalRun) || op.After != source.head || op.Target != baseline.TargetRef {
 		return fmt.Errorf("required close approved baseline: %w", projectcontext.Changed("project_context_close_extreme.go:84"))
 	}
 	next := baseline
 	next.State = marshal.Closed
+	if checksOnly {
+		next.ChecksOnly, next.DeliveryKind = op.Next.ChecksOnly, op.DeliveryKind
+	}
 	if !reflect.DeepEqual(*op.Next, next) {
 		return fmt.Errorf("required close authorized next state: %w", projectcontext.Changed("project_context_close_extreme.go:89"))
 	}
@@ -115,6 +179,16 @@ func (r *Runtime) withRequiredContextCloseEffect(ctx context.Context, service *M
 		}
 		if current.tree != source.tree || current.commonDir != source.commonDir {
 			return fmt.Errorf("required close current source tree: %w", projectcontext.Changed("project_context_close_extreme.go:117"))
+		}
+		if checksOnly {
+			if err = r.validateRequiredIntegrationSource(ctx, &current, root, tasks); err != nil {
+				return err
+			}
+			before, err := gitMarshal(ctx, service.Repository, "rev-parse", op.Target)
+			if err != nil || strings.TrimSpace(before) != op.Before {
+				return fmt.Errorf("required close target base: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-base"))
+			}
+			return effect()
 		}
 		session, err := r.store.GetVerificationSession(ctx, proof.session.ID)
 		if err != nil || !reflect.DeepEqual(session, proof.session) || verification.Evaluate(session, session.Binding, time.Now().UTC()) != verification.VerifiedComplete {

@@ -112,6 +112,9 @@ type MarshalService struct {
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error
 	requiredCanonicalVerification func(context.Context, string, marshal.Run, string) (verification.Session, verification.Binding, error)
+	// requiredChecksOnlyClose retains the live one-shot capability a
+	// checks-only close presents at the required-context close fence.
+	requiredChecksOnlyClose func(context.Context, string, marshal.Run, string, verification.ChecksOnlyReceipt) error
 	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
 	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
 	process05WaitPause            func(context.Context, string) error
