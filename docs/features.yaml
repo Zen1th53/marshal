@@ -804,11 +804,14 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-accept
-    name: Grant one-time owner acceptance of a handed-in task result
+    name: Queue owner acceptance of a handed-in task through current review gates
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
-    tests: []
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
     docs: []
     web: []
     tui:
@@ -817,11 +820,14 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-return
-    name: Return a task awaiting owner decision to its worker with a reason
+    name: Queue a return with a reason while unrelated workers continue
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
-    tests: []
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
     docs: []
     web: []
     tui:
@@ -849,7 +855,10 @@ features:
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
-    tests: []
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
     docs:
       - docs/board-and-keys.md
     web: []
@@ -863,7 +872,10 @@ features:
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
-    tests: []
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
     docs: []
     web: []
     tui:
@@ -890,7 +902,9 @@ features:
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
-    tests: []
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestPriorityPauseFencesNewStarts
     docs:
       - docs/board-and-keys.md
     web: []

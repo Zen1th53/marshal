@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
@@ -26,6 +27,21 @@ func (w *Workspace) queueStopWhileBusy(stop runStop, commands []string) bool {
 	if !m.busy {
 		m.mu.Unlock()
 		return false
+	}
+	service, runID := m.service, m.runID
+	if w.runtime != nil && service != nil && runID != "" && service.ActiveExecution(runID) != "" {
+		handled := len(commands) > 0
+		for _, command := range commands {
+			fields := strings.Fields(command)
+			if len(fields) < 2 || fields[0] != "/marshal" || (fields[1] != "return" && fields[1] != "reassign" && fields[1] != "cancel" && fields[1] != "accept" && fields[1] != "resume") {
+				handled = false
+				break
+			}
+		}
+		if handled {
+			m.mu.Unlock()
+			return false
+		}
 	}
 	holder := m.currentBlockerLocked()
 	m.nextStop = append([]string(nil), commands...)

@@ -242,20 +242,37 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 	}
 	var failures []error
 	for _, id := range ids {
+		w := s.runWriter(id)
+		if w.isActive() {
+			continue
+		}
+		w.mu.Lock()
+		if w.isActive() {
+			w.mu.Unlock()
+			continue
+		}
 		run, rev, err := s.load(ctx, id)
 		if err == nil {
 			_, _, err = s.recoverOperation(ctx, id, run, rev)
 		}
 		if errors.Is(err, errMarshalEventArtifact) {
 			failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, err))
+			w.mu.Unlock()
 			continue
 		}
+		if err == nil {
+			err = s.drainRunCommands(ctx, id)
+		}
 		if err != nil {
+			if fresh, freshRev, loadErr := s.load(ctx, id); loadErr == nil {
+				run, rev = fresh, freshRev
+			}
 			pauseMarshal(&run, marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume})
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
 				failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, errors.Join(err, saveErr)))
 			}
 		}
+		w.mu.Unlock()
 	}
 	s.cleanupClosedRuns(ctx)
 	return errors.Join(failures...)

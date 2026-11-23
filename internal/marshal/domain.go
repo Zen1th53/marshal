@@ -346,7 +346,21 @@ type RuntimeCompatibility struct {
 }
 
 // Run binds plan approval, settings, tasks, and close authority.
+// RunCommand retains an immutable request and its durable outcome.
+type RunCommand struct {
+	ID, Actor, GrantID, AuthorityProject, Resource, Digest string
+	Operation, TaskID, Worker, Reason                      string
+	Revision                                               int64
+	PlanID                                                 string
+	PlanVersion                                            int64
+	ScopeDigest, TaskDigest, Purpose                       string
+	State, Detail                                          string
+}
+
 type Run struct {
+	Commands              []RunCommand          `json:",omitempty"`
+	CommandFence          string                `json:",omitempty"`
+	ExecutionID           string                `json:",omitempty"`
 	Compatibility         *RuntimeCompatibility `json:",omitempty"`
 	GoverningDigest       string                `json:",omitempty"`
 	Repository, TargetRef string

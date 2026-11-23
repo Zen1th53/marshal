@@ -2026,6 +2026,26 @@ func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, 
 }
 
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
+	if id := s.ActiveExecution(runID); id != "" {
+		run, err := s.Snapshot(ctx, runID)
+		if err == nil {
+			run.ExecutionID = id
+		}
+		return run, err
+	}
+	w := s.runWriter(runID)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if id := w.activeID(); id != "" {
+		run, err := s.Snapshot(ctx, runID)
+		if err == nil {
+			run.ExecutionID = id
+		}
+		return run, err
+	}
+	if err := s.drainRunCommands(ctx, runID); err != nil {
+		return marshal.Run{}, err
+	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return run, err
@@ -2077,6 +2097,7 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			}
 		}
 		run.State = run.Pause.ResumeState
+		run.CommandFence = ""
 		run.Pause = nil
 		if err = s.save(ctx, runID, run, rev); err != nil {
 			return run, err

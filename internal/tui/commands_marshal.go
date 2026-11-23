@@ -379,6 +379,12 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 		if runID != "" {
 			w.resetAutomaticRefusalSuppression(runID, "")
 		}
+		m.mu.Lock()
+		service := m.service
+		m.mu.Unlock()
+		if w.runtime != nil && service != nil && service.ActiveExecution(runID) != "" {
+			return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "stop"})
+		}
 		return w.marshalStop(), nil
 	case "resume":
 		return w.marshalResume(ctx)
@@ -1975,6 +1981,9 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if id := service.ActiveExecution(runID); id != "" {
+		return "Run execution " + id + " is already active.", nil
+	}
 	m.mu.Lock()
 	pending := m.pending != nil
 	m.mu.Unlock()
@@ -2151,11 +2160,18 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	}
 	m.mu.Lock()
 	service := m.service
+	busy := m.busy
 	var busyErr error
-	if m.busy {
+	if busy {
 		busyErr = m.busyErrorLocked("accept")
 	}
 	m.mu.Unlock()
+	if busy && (service == nil || service.ActiveExecution(runID) == "") {
+		return "", busyErr
+	}
+	if w.runtime != nil && service != nil {
+		return w.marshalRunCommand(context.Background(), service, runID, app.RunCommandInput{Operation: "accept", TaskID: args[0]})
+	}
 	if busyErr != nil {
 		return "", busyErr
 	}
@@ -2171,8 +2187,7 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 }
 
 // marshalReturn is the person's decision to send a handed-in task back with
-// a reason. It is refused while the run is executing, so the decision never
-// races the runtime's own review of the same task.
+// a reason. During execution the run writer applies it at a safe point.
 func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, error) {
 	if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
 		return "", errors.New("usage: /marshal return <task> <reason>")
@@ -2185,8 +2200,13 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 	if !isAutomaticProposalContext(ctx) {
 		w.resetAutomaticRefusalSuppression(runID, task)
 	}
-	if err := m.busyErrorIfBusy("return"); err != nil {
-		return "", err
+	if service.ActiveExecution(runID) == "" {
+		if err := m.busyErrorIfBusy("return"); err != nil {
+			return "", err
+		}
+	}
+	if w.runtime != nil {
+		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "return", TaskID: task, Reason: strings.Join(args[1:], " ")})
 	}
 	m.grant(runID, "return:"+task)
 	verdict, err := service.ReturnByUser(ctx, runID, task, strings.Join(args[1:], " "))
@@ -2243,8 +2263,13 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 	if !isAutomaticProposalContext(ctx) {
 		w.resetAutomaticRefusalSuppression(runID, task)
 	}
-	if err := m.busyErrorIfBusy("reassign"); err != nil {
-		return "", err
+	if service.ActiveExecution(runID) == "" {
+		if err := m.busyErrorIfBusy("reassign"); err != nil {
+			return "", err
+		}
+	}
+	if w.runtime != nil {
+		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "reassign", TaskID: task, Worker: worker, Reason: "operator reassignment"})
 	}
 	if err := service.ReassignByOperator(ctx, runID, task, worker, "operator /marshal reassign "+task+" "+worker); err != nil {
 		return "", err
@@ -2267,8 +2292,13 @@ func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, e
 	if !isAutomaticProposalContext(ctx) {
 		w.resetAutomaticRefusalSuppression(runID, task)
 	}
-	if err := m.busyErrorIfBusy("cancel"); err != nil {
-		return "", err
+	if service.ActiveExecution(runID) == "" {
+		if err := m.busyErrorIfBusy("cancel"); err != nil {
+			return "", err
+		}
+	}
+	if w.runtime != nil {
+		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "cancel", TaskID: task})
 	}
 	if err := service.CancelTask(ctx, runID, task); err != nil {
 		return "", err
@@ -2434,4 +2464,36 @@ func joinFailoverArgs(args []string) []string {
 		return []string{args[0], strings.Join(args[1:], " ")}
 	}
 	return args
+}
+
+func (w *Workspace) marshalRunCommand(ctx context.Context, service *app.MarshalService, runID string, input app.RunCommandInput) (string, error) {
+	a, ok := w.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.localControl == nil {
+		return "", errors.New("local operator authority is unavailable")
+	}
+	record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
+	if err != nil {
+		return "", err
+	}
+	id, err := model.NewID("command-")
+	if err != nil {
+		return "", err
+	}
+	receipt, err := service.CommandRun(a.localControl.Context(ctx), app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: runID, TargetID: input.TaskID, ExpectedVersion: record.Revision, IdempotencyKey: id}, input)
+	if err != nil {
+		return "", err
+	}
+	if receipt.State == "refused" || receipt.State == "held" {
+		return "", fmt.Errorf("command %s %s: %s", receipt.ID, receipt.State, receipt.Detail)
+	}
+	if receipt.State == "applied" {
+		m := w.marshalSession()
+		m.mu.Lock()
+		provider := m.provider
+		m.mu.Unlock()
+		if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "run action "+receipt.Operation+" applied"))
+		}
+	}
+	return fmt.Sprintf("Run action %s: %s (%s).", receipt.Operation, receipt.State, receipt.ID), nil
 }

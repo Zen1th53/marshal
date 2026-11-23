@@ -31,6 +31,16 @@ func saveMarshalStateTx(ctx context.Context, tx *sql.Tx, projectID, runID string
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
 	}
+	if command, ok := ctx.Value(marshalCommandAdmissionKey{}).(CommandRecord); ok {
+		if err := bindMarshalCommandTx(ctx, tx, command); err != nil {
+			return err
+		}
+	}
+	if command, ok := ctx.Value(marshalCommandKey{}).(CommandRecord); ok {
+		if err := insertCommandReceipt(ctx, tx, command, expected+1); err != nil {
+			return err
+		}
+	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return err
 	}

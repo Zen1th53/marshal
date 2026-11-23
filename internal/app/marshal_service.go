@@ -168,6 +168,27 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 	if run.State == marshal.AwaitingUser && run.Pause == nil {
 		pauseMarshal(&run, marshal.Pause{Reason: "operator intervention required", Resolutions: []string{"resolve the escalation, suspension or security issue, or amend the plan"}, Code: marshal.CodeOperatorIntervention, Action: marshal.PauseResume})
 	}
+	if command, ok := ctx.Value(runCommandCommitKey{}).(marshal.RunCommand); ok {
+		if err := s.checkRunCommandAuthority(ctx, command); err != nil {
+			return err
+		}
+		if run.PlanID != command.PlanID || run.PlanVersion != command.PlanVersion || run.ApprovalScopeDigest != command.ScopeDigest {
+			return model.ErrConflict
+		}
+		task := taskIndex(run, command.TaskID)
+		for i := range run.Commands {
+			if task >= 0 && taskCommandDigest(run.Tasks[task]) != command.TaskDigest && run.Commands[i].ID == command.ID && run.Commands[i].Actor == command.Actor && run.Commands[i].State == "applying" {
+				ctx = store.WithMarshalCommand(ctx, store.CommandRecord{ProjectID: command.AuthorityProject, Actor: command.Actor, Key: "marshal:" + runID + ":" + command.ID, Operation: "marshal." + command.Operation, SessionID: runID, TargetID: command.TaskID, ExpectedVersion: command.Revision, Digest: command.Digest, CapabilityGrantID: command.GrantID})
+				if command.Operation == "accept" && run.Tasks[task].State != marshal.Accepted {
+					run.Commands[i].State = "refused"
+					run.Commands[i].Detail = "acceptance refused by review gate"
+				} else {
+					run.Commands[i].State = "applied"
+					run.Commands[i].Detail = "task state committed"
+				}
+			}
+		}
+	}
 	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
 
 }

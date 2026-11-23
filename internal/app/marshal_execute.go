@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -129,6 +129,26 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 	if brief == nil {
 		return marshal.Run{}, fmt.Errorf("marshal execute: no brief for workers")
 	}
+	w := s.runWriter(runID)
+	executionID, _ := model.NewID("execution-")
+	if activeID, started := w.startExecution(executionID); !started {
+		run, err := s.Snapshot(ctx, runID)
+		if err == nil && activeID != "" {
+			run.ExecutionID = activeID
+		}
+		return run, err
+	}
+	w.mu.Lock()
+	defer func() { w.endExecution(); w.mu.Unlock() }()
+	ctx = context.WithValue(ctx, runWriterContextKey{}, w)
+	if run, rev, err := s.load(ctx, runID); err == nil {
+		run.ExecutionID = executionID
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return run, err
+		}
+	} else {
+		return run, err
+	}
 	current := func() (marshal.Run, error) {
 		run, _, err := s.load(ctx, runID)
 		if err == nil && observe != nil {
@@ -137,6 +157,9 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		return run, err
 	}
 	for round := 0; ; round++ {
+		if err := s.runCommandSafePoint(ctx, runID); err != nil {
+			return marshal.Run{}, err
+		}
 		run, err := current()
 		if err != nil {
 			return run, err
@@ -249,54 +272,80 @@ func (s *MarshalService) collectAdmitted(ctx context.Context, runID string, laun
 // collectAndReviewUltra collects and reviews each launched worker in ULTRA as soon
 // as it is ready. State writes to the run and store are serialized.
 func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
-	var (
-		mu   sync.Mutex
-		wg   sync.WaitGroup
-		errs []error
-	)
-	for _, d := range launched {
-		wg.Add(1)
-		go func(dispatch MarshalDispatch) {
-			defer wg.Done()
-			if dispatch.Handle != nil && dispatch.Handle.Done() != nil {
-				select {
-				case <-dispatch.Handle.Done():
-				case <-ctx.Done():
-				}
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			defer s.clearDispatchLive(runID, dispatch.TaskID)
-			if _, err := s.CollectHandIn(ctx, runID, dispatch); err != nil {
-				errs = append(errs, fmt.Errorf("collect %s: %w", dispatch.TaskID, err))
-			} else {
-				if err := s.reviewCollectedDispatch(ctx, runID, dispatch.TaskID); err != nil {
-					errs = append(errs, fmt.Errorf("review %s: %w", dispatch.TaskID, err))
-				}
-			}
-			if observe != nil {
-				_, _ = current()
-			}
-		}(d)
-	}
-	wg.Wait()
-	return errors.Join(errs...)
+	return s.collectBatchCommands(ctx, runID, launched, observe, current, true)
 }
 
-// collectAll collects every launched worker, even after one collection
-// fails, so no worker is left running without its hand-in recorded. Every
-// failure is reported.
 func (s *MarshalService) collectAll(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
+	return s.collectBatchCommands(ctx, runID, launched, observe, current, false)
+}
+
+// Only driver completion waits happen outside the writer. Collection, review
+// and queued task effects all execute here in one ordered stream.
+func (s *MarshalService) collectBatchCommands(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), review bool) error {
 	var errs []error
-	for _, d := range launched {
+	pending := append([]MarshalDispatch(nil), launched...)
+	for len(pending) > 0 {
+		if err := s.runCommandSafePoint(ctx, runID); err != nil {
+			errs = append(errs, err)
+		}
+		cases := []reflect.SelectCase{{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())}}
+		w, _ := ctx.Value(runWriterContextKey{}).(*runWriter)
+		var wake <-chan struct{}
+		if w != nil {
+			wake = w.wake
+		}
+		cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(wake)})
+		count := len(pending)
+		if !review {
+			count = 1
+		}
+		immediate := -1
+		for i := 0; i < count; i++ {
+			if pending[i].Handle == nil || pending[i].Handle.Done() == nil {
+				immediate = i
+				break
+			}
+			cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(pending[i].Handle.Done())})
+		}
+		index := immediate
+		if index < 0 {
+			if w != nil {
+				w.mu.Unlock()
+			}
+			chosen, _, _ := reflect.Select(cases)
+			if w != nil {
+				w.mu.Lock()
+			}
+			if chosen == 1 {
+				continue
+			}
+			if chosen == 0 {
+				index = 0
+			} else {
+				index = chosen - 2
+			}
+		}
+		// A queued decision gets a safe point before the next collection write.
+		if err := s.drainRunCommands(ctx, runID); err != nil {
+			errs = append(errs, err)
+		}
+		d := pending[index]
+		pending = append(pending[:index], pending[index+1:]...)
 		_, err := s.CollectHandIn(ctx, runID, d)
 		s.clearDispatchLive(runID, d.TaskID)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("collect %s: %w", d.TaskID, err))
+		} else if review {
+			if err = s.reviewCollectedDispatch(ctx, runID, d.TaskID); err != nil {
+				errs = append(errs, fmt.Errorf("review %s: %w", d.TaskID, err))
+			}
 		}
 		if observe != nil {
 			_, _ = current()
 		}
+	}
+	if err := s.drainRunCommands(context.WithoutCancel(ctx), runID); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
@@ -389,6 +438,20 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 	release()
 	ctx = context.WithValue(ctx, admissionGateKey{}, gate)
 	for _, t := range candidates {
+		if err := s.runCommandSafePoint(ctx, runID); err != nil {
+			return launched, err
+		}
+		if fresh, _, err := s.load(ctx, runID); err != nil {
+			return launched, err
+		} else {
+			run = fresh
+			if run.CommandFence != "" || run.State == marshal.AwaitingUser {
+				break
+			}
+		}
+		if i := taskIndex(run, t.PlanTaskID); i >= 0 {
+			t = run.Tasks[i]
+		}
 		canLaunch, stop := canLaunchCandidate(gate, run, t, launched)
 		if stop {
 			break
@@ -464,6 +527,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			return launched, err
 		}
 		launched = append(launched, d)
+		s.markDispatchLive(runID, []MarshalDispatch{d})
 		if shouldStopAfterLaunchGate(gate, run, t) {
 			break
 		}
@@ -498,12 +562,7 @@ func (s *MarshalService) waitPausedExecution(ctx context.Context, runID string, 
 	if !s.pauseHolds(runID, run) || !s.process05Paused(ctx, run) {
 		return false, nil
 	}
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-changed:
-		return true, nil
-	}
+	return s.waitRunChange(ctx, runID, changed)
 }
 
 // settleFinishedExecution ends each part of the run's canonical execution
@@ -540,12 +599,7 @@ func (s *MarshalService) waitHeldTasks(ctx context.Context, runID string, run ma
 	if !held {
 		return false, nil
 	}
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-changed:
-		return true, nil
-	}
+	return s.waitRunChange(ctx, runID, changed)
 }
 
 // finish verifies the integrated result and, when the user granted a
