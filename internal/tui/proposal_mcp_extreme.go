@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/proposalmcp"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -59,9 +60,41 @@ type proposalMCPSubmission struct {
 	Proposal     json.RawMessage `json:"proposal"`
 }
 type proposalMCPReceipt struct {
-	OccurrenceID string `json:"occurrence_id"`
-	State        string `json:"state"`
-	Reason       string `json:"reason,omitempty"`
+	OccurrenceID string                   `json:"occurrence_id"`
+	State        string                   `json:"state"`
+	Reason       string                   `json:"reason,omitempty"`
+	Code         string                   `json:"code,omitempty"`
+	Blocker      *marshal.OperationHolder `json:"blocker,omitempty"`
+	Effects      marshal.RefusalEffects   `json:"effects,omitempty"`
+	NextCommands []string                 `json:"nextCommands,omitempty"`
+	EscalationID string                   `json:"escalationId,omitempty"`
+	Attempt      int                      `json:"attempt,omitempty"`
+}
+
+func (w *Workspace) marshalProposalMCPReceipt(ctx context.Context, p store.MCPProposal) (json.RawMessage, error) {
+	rec := proposalMCPReceipt{
+		OccurrenceID: p.ID,
+		State:        p.State,
+		Reason:       p.Reason,
+	}
+	if receipt, ok := w.loadProposalRefusalReceipt(ctx, p.ID); ok {
+		rec.Code = receipt.Code
+		rec.Blocker = receipt.Blocker
+		rec.Effects = receipt.Effects
+		rec.NextCommands = receipt.NextCommands
+		rec.EscalationID = receipt.EscalationID
+		rec.Attempt = receipt.Attempt
+	} else if p.State == "rejected" && p.Reason != "" {
+		if receipt, ok := marshal.ParseRefusalSummary(p.Reason); ok {
+			rec.Code = receipt.Code
+			rec.Blocker = receipt.Blocker
+			rec.Effects = receipt.Effects
+			rec.NextCommands = receipt.NextCommands
+			rec.EscalationID = receipt.EscalationID
+			rec.Attempt = receipt.Attempt
+		}
+	}
+	return json.Marshal(rec)
 }
 
 func randomProposalID() (string, error) {
@@ -280,7 +313,7 @@ func (w *Workspace) closeProposalMCP() {
 // Caller holds the authority mutex until canonical admission/effect completes.
 func (w *Workspace) validateProposalLease(l *proposalMCPLease) error {
 	if l == nil || l.revoked || !l.active || w.proposalMCP.active != l || w.proposalMCP.closed {
-		return errors.New("proposal launch is inactive")
+		return proposalAuthRefusal(errors.New("proposal launch is inactive"), "/marshal chat")
 	}
 	if l.native {
 		// The native chat holds no tmux agent; its transport is the launch.
@@ -292,7 +325,7 @@ func (w *Workspace) validateProposalLease(l *proposalMCPLease) error {
 			l.session = session
 		}
 		if !ok {
-			return errors.New("proposal launch replaced or session differs")
+			return proposalAuthRefusal(errors.New("proposal launch replaced or session differs"), "/marshal chat")
 		}
 		return nil
 	}
@@ -307,7 +340,7 @@ func (w *Workspace) validateProposalLease(l *proposalMCPLease) error {
 	}
 	w.tmuxMu.Unlock()
 	if !valid {
-		return errors.New("proposal launch replaced or session differs")
+		return proposalAuthRefusal(errors.New("proposal launch replaced or session differs"), "/marshal chat")
 	}
 	return nil
 }
@@ -360,32 +393,32 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 			return nil, err
 		}
 		if !validProposalID(args.SubmissionID) {
-			return nil, errors.New("invalid submission id")
+			return nil, proposalParseRefusal(errors.New("invalid submission id"))
 		}
 		p, err := w.store.MCPProposal(ctx, w.projectID, w.liveOccurrenceMCP(ctx, l, args.SubmissionID))
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(proposalMCPReceipt{p.ID, p.State, p.Reason})
+		return w.marshalProposalMCPReceipt(ctx, p)
 	}
 	if method != "submit" {
-		return nil, errors.New("unknown proposal method")
+		return nil, proposalParseRefusal(errors.New("unknown proposal method"))
 	}
 	var args proposalMCPSubmission
 	if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
-		return nil, err
+		return nil, proposalParseRefusal(err)
 	}
 	if !validProposalID(args.SubmissionID) || len(args.Proposal) > 4096 {
-		return nil, errors.New("invalid proposal submission")
+		return nil, proposalParseRefusal(errors.New("invalid proposal submission"))
 	}
 	id := w.liveOccurrenceMCP(ctx, l, args.SubmissionID)
 	if existing, err := w.store.MCPProposal(ctx, w.projectID, id); err == nil {
 		sum := sha256.Sum256(args.Proposal)
 		if existing.Digest != hex.EncodeToString(sum[:]) {
-			return nil, errors.New("submission id binds another payload")
+			return nil, proposalStaleBindingRefusal(errors.New("submission id binds another payload"))
 		}
 		if existing.State != "admitted" {
-			return json.Marshal(proposalMCPReceipt{existing.ID, existing.State, existing.Reason})
+			return w.marshalProposalMCPReceipt(ctx, existing)
 		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -394,7 +427,7 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 		Action string `json:"action"`
 	}
 	if err := json.Unmarshal(args.Proposal, &probe); err != nil {
-		return nil, err
+		return nil, proposalParseRefusal(err)
 	}
 	var parsed marshalProposal
 	var decision struct {
@@ -406,19 +439,19 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 	var pending *buildPendingDecision
 	if probe.Action == "decide" {
 		if err := proposalmcp.DecodeStrict(args.Proposal, &decision); err != nil {
-			return nil, err
+			return nil, proposalParseRefusal(err)
 		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(args.Proposal, &fields)
 		if len(fields) != 4 || string(fields["allow"]) == "null" || fields["allow"] == nil || decision.ID == "" || strings.TrimSpace(decision.Reason) == "" || len(decision.Reason) > 500 || strings.ContainsFunc(decision.Reason, unicode.IsControl) {
-			return nil, errors.New("invalid decision: require exactly action=decide, nonempty id, boolean allow, and nonblank reason of at most 500 UTF-8 bytes with no control characters")
+			return nil, proposalParseRefusal(errors.New("invalid decision: require exactly action=decide, nonempty id, boolean allow, and nonblank reason of at most 500 UTF-8 bytes with no control characters"))
 		}
 		w.permissions.mu.Lock()
 		pending = w.permissions.build.pending[decision.ID]
 		valid := pending != nil && pending.launchID == l.id && pending.answer == nil && time.Now().Before(pending.deadline)
 		w.permissions.mu.Unlock()
 		if !valid {
-			return nil, errors.New("that question is no longer open: it was already answered, it expired, or it belongs to an earlier chat; read the inbox for the current question")
+			return nil, proposalStaleBindingRefusal(errors.New("that question is no longer open: it was already answered, it expired, or it belongs to an earlier chat; read the inbox for the current question"))
 		}
 	} else {
 		var err error
@@ -431,7 +464,7 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 			for _, rec := range w.runtime.ContinuationCandidates() {
 				if rec.ID == parsed.id {
 					if _, err := w.store.MCPMemoryByRecordID(ctx, w.projectID, rec.ID); err == nil {
-						return nil, errors.New("broker memory requires its original checked submission and separate decision")
+						return nil, proposalAuthRefusal(errors.New("broker memory requires its original checked submission and separate decision"), "/marshal status")
 					} else if !errors.Is(err, sql.ErrNoRows) {
 						return nil, errors.New("memory source journal unavailable")
 					}
@@ -440,7 +473,7 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 				}
 			}
 			if !found {
-				return nil, errors.New("memory candidate does not exist in the live runtime")
+				return nil, proposalStaleBindingRefusal(errors.New("memory candidate does not exist in the live runtime"))
 			}
 		}
 	}
@@ -461,10 +494,12 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 			current := w.permissions.build.pending[decision.ID]
 			if current != pending || current.answer != nil || !time.Now().Before(current.deadline) {
 				w.permissions.mu.Unlock()
-				if err := w.store.SetMCPProposalState(ctx, w.projectID, id, "rejected", "decision no longer pending"); err != nil {
+				staleErr := proposalStaleBindingRefusal(errors.New("decision no longer pending"))
+				w.saveProposalRefusalReceipt(ctx, id, staleErr)
+				if err := w.store.SetMCPProposalState(ctx, w.projectID, id, "rejected", staleErr.Error()); err != nil {
 					return nil, err
 				}
-				return nil, errors.New("decision no longer pending")
+				return nil, staleErr
 			}
 			if err = w.store.AcceptMCPDecision(ctx, w.projectID, id, string(requestJSON), bound.Key()); err != nil {
 				w.permissions.mu.Unlock()
@@ -493,7 +528,13 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 					if outcome == "applied" {
 						state = "applied"
 					}
-					if err = w.store.SetMCPProposalState(ctx, w.projectID, id, state, "canonical proposal outcome: "+outcome); err != nil {
+					reason := "canonical proposal outcome: " + outcome
+					if state == "rejected" {
+						if receipt, ok := w.loadProposalRefusalReceipt(ctx, id); ok {
+							reason = RedactContent(receipt.Summary(), nil)
+						}
+					}
+					if err = w.store.SetMCPProposalState(ctx, w.projectID, id, state, reason); err != nil {
 						return nil, err
 					}
 				}
@@ -504,7 +545,7 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(proposalMCPReceipt{p.ID, p.State, p.Reason})
+	return w.marshalProposalMCPReceipt(ctx, p)
 }
 func (w *Workspace) bindProposalMCPRequest(req permission.Request) (permission.Request, error) {
 	if !strings.HasPrefix(req.ProposalID, "mcp:") {
@@ -545,7 +586,7 @@ func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, er
 	l := w.proposalMCP.active
 	if err := w.validateProposalLease(l); err != nil || l.id != req.SourceLaunch {
 		w.proposalMCP.mu.Unlock()
-		return nil, errors.New("proposal permission belongs to inactive launch")
+		return nil, proposalAuthRefusal(errors.New("proposal permission belongs to inactive launch"), "/marshal chat")
 	}
 	p, err := w.store.MCPProposal(context.Background(), w.projectID, req.SourceOccurrence)
 	if err == nil && p.Launch == l.id && p.State != "admitted" && p.State != "answer_accepted" {
@@ -554,7 +595,7 @@ func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, er
 	}
 	if err != nil || p.Launch != l.id {
 		w.proposalMCP.mu.Unlock()
-		return nil, errors.New("proposal receipt is not pending")
+		return nil, proposalStaleBindingRefusal(errors.New("proposal receipt is not pending"))
 	}
 	if err = w.store.SetMCPProposalState(context.Background(), w.projectID, p.ID, "applying", "canonical application admitted"); err != nil {
 		w.proposalMCP.mu.Unlock()
@@ -575,7 +616,8 @@ func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, er
 		reason := "canonical application completed"
 		if applyErr != nil {
 			state = "rejected"
-			reason = applyErr.Error()
+			reason = RedactContent(applyErr.Error(), nil)
+			w.saveProposalRefusalReceipt(context.Background(), p.ID, applyErr)
 		}
 		err := w.store.SetMCPProposalState(context.Background(), w.projectID, p.ID, state, reason)
 		return errors.Join(err, w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.ID, state))

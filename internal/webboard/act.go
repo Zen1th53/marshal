@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -56,6 +57,25 @@ type Result struct {
 	// Confirm is set when the key armed a second step (the plan's reply,
 	// the inbox's allow or deny): the page shows a Confirm button.
 	Confirm *Confirm `json:"confirm,omitempty"`
+	// Typed refusal metadata when Status is "refused" (or queued behind a blocker).
+	Code         string                   `json:"code,omitempty"`
+	Blocker      *marshal.OperationHolder `json:"blocker,omitempty"`
+	Effects      marshal.RefusalEffects   `json:"effects,omitempty"`
+	NextCommands []string                 `json:"nextCommands,omitempty"`
+	EscalationID string                   `json:"escalationId,omitempty"`
+	Attempt      int                      `json:"attempt,omitempty"`
+}
+
+// WithRefusal attaches a sanitized RefusalReceipt to the Web action reply.
+func (r Result) WithRefusal(receipt marshal.RefusalReceipt) Result {
+	s := receipt.Sanitized()
+	r.Code = s.Code
+	r.Blocker = s.Blocker
+	r.Effects = s.Effects
+	r.NextCommands = s.NextCommands
+	r.EscalationID = s.EscalationID
+	r.Attempt = s.Attempt
+	return r
 }
 
 // Confirm is a second step the Board waits for.

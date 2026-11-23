@@ -139,6 +139,9 @@ func (w *Workspace) retryAndContinue(ctx context.Context, id string) {
 	w.runCommandFunc(ctx, "retry "+id, func(ctx context.Context) (string, error) {
 		answer, err := boardRetry(w, ctx, id)
 		if err != nil {
+			if _, ok := marshal.RefusalOf(err); ok {
+				return "", err
+			}
 			return w.plainRetryError(id, err), nil
 		}
 		return answer, nil
@@ -149,6 +152,9 @@ func (w *Workspace) retryAndContinue(ctx context.Context, id string) {
 // raw error is logged to Activity only for the ones with nothing to tell the
 // operator.
 func (w *Workspace) plainRetryError(id string, err error) string {
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		return RedactContent(receipt.Summary(), nil)
+	}
 	msg := err.Error()
 	id = cleanBoard(id)
 	switch {

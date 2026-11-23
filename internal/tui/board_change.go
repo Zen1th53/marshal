@@ -854,11 +854,15 @@ func (w *Workspace) defaultChangeAmend(ctx context.Context, reason string) (bool
 	if err != nil {
 		return false, err
 	}
-	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
+	runCtx, holderID, cancel, err := w.reserveMarshalOperationAs(ctx, marshal.OperationHolder{
+		RunID: runID,
+		Kind:  "amend",
+		Title: "Amending Marshal plan",
+	})
 	if err != nil {
 		return false, err
 	}
-	defer m.finish(cancel)
+	defer m.finishHolder(holderID, cancel, false)
 	return w.runAmend(runCtx, m, service, runID, provider, reason)
 }
 

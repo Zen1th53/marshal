@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
@@ -110,5 +111,50 @@ func TestToolErrorsKeepTheRefusalReason(t *testing.T) {
 	// Other details stay internal.
 	if got := toolError("marshal_project_contract_context", fmt.Errorf("%w: no completed canonical Process05 root", projectcontext.ErrReviewPending)); strings.Contains(got.Message, "Process05") {
 		t.Fatalf("internal detail shown: %q", got.Message)
+	}
+}
+
+func TestToolErrorPreservesTypedRefusalReceipt(t *testing.T) {
+	holder := &marshal.OperationHolder{
+		ID:     "op-review-9",
+		RunID:  "RUN-9",
+		TaskID: "T-2",
+		Kind:   "review",
+		Title:  "Reviewing T-2",
+	}
+	err := marshal.NewRefusalError(marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeRepeatedFailure,
+		Blocker:      holder,
+		Effects:      marshal.EffectsNone,
+		NextCommands: []string{"/marshal status", "/marshal stop"},
+		EscalationID: "esc-1234",
+		Attempt:      3,
+		Message:      "automatic retries stopped after 3 equivalent refusals; change the condition before retrying (a Marshal operation is already running)",
+	}, errors.New("a Marshal operation is already running"))
+
+	got := toolError("marshal_proposal_submit", err)
+	if got.Code != toolErrorCode || got.Data == nil {
+		t.Fatalf("unexpected rpc error: %+v", got)
+	}
+	if got.Data.Code != marshal.RefusalCodeRepeatedFailure || got.Data.Effects != marshal.EffectsNone || got.Data.EscalationID != "esc-1234" || got.Data.Attempt != 3 {
+		t.Fatalf("refusal data = %+v", got.Data)
+	}
+	if got.Data.Blocker == nil || got.Data.Blocker.ID != "op-review-9" || got.Data.Blocker.Kind != "review" || got.Data.Blocker.TaskID != "T-2" {
+		t.Fatalf("blocker = %+v", got.Data.Blocker)
+	}
+	if len(got.Data.NextCommands) != 2 || got.Data.NextCommands[0] != "/marshal status" || got.Data.NextCommands[1] != "/marshal stop" {
+		t.Fatalf("nextCommands = %q", got.Data.NextCommands)
+	}
+
+	// Wire-text refusal transported across proposalmcp reconstructs the same structured fields.
+	wire := toolError("marshal_proposal_submit", errors.New(err.Error()))
+	if wire.Data == nil || wire.Data.Code != marshal.RefusalCodeRepeatedFailure || wire.Data.Effects != marshal.EffectsNone || wire.Data.EscalationID != "esc-1234" || wire.Data.Attempt != 3 {
+		t.Fatalf("wire refusal data = %+v", wire.Data)
+	}
+	if wire.Data.Blocker == nil || wire.Data.Blocker.ID != "op-review-9" || wire.Data.Blocker.Kind != "review" || wire.Data.Blocker.TaskID != "T-2" {
+		t.Fatalf("wire blocker = %+v", wire.Data.Blocker)
+	}
+	if len(wire.Data.NextCommands) != 2 || wire.Data.NextCommands[0] != "/marshal status" || wire.Data.NextCommands[1] != "/marshal stop" {
+		t.Fatalf("wire nextCommands = %q", wire.Data.NextCommands)
 	}
 }
