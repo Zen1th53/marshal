@@ -56,6 +56,7 @@ var frozenTaskStateWriters = map[string]int{
 	"marshal_lifecycle.go applyMarshalReturn -> Returned":                       1,
 	"marshal_lifecycle.go dispatchWithBrief -> Dispatched":                      1,
 	"marshal_lifecycle.go escalateWithDetail -> Escalated":                      1,
+	"marshal_lifecycle.go finishMarshalReturn -> Escalated":                     1,
 	"marshal_lifecycle.go parkPausedTask -> Queued":                             1,
 	"marshal_lifecycle.go reassign -> Reassigned":                               1,
 	"marshal_operations.go recoverOperation -> Dispatched":                      1,

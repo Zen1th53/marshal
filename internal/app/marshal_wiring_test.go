@@ -111,6 +111,9 @@ func TestM09ReassignMovesToAnotherWorkerThenEscalates(t *testing.T) {
 	fake := s.Model.(marshalFakeModel)
 	fake.review = marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "marshal", Reasons: []string{"not good enough"}}
 	s.Model = fake
+	// Both reviewers return it, so the rework limit applies rather than a
+	// reviewer disagreement.
+	setCrossReview(s, marshal.VerdictReturn, "not good enough")
 	s.Drivers["other"] = s.Drivers["worker"]
 	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
