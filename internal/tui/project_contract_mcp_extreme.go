@@ -63,8 +63,16 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 			return nil, err
 		}
-		if !validProposalID(args.SubmissionID) || len(args.Proposal) > projectcontext.MaximumContractSubmissionBytes {
+		if !validProposalID(args.SubmissionID) {
 			return nil, projectcontext.ErrBudget
+		}
+		if len(args.Proposal) > projectcontext.MaximumContractSubmissionBytes {
+			return nil, innerLimit(proposalmcp.LimitKindContract, len(args.Proposal), projectcontext.ErrBudget)
+		}
+		// The shape is checked first, so a mistyped, missing or unknown field
+		// is named by its path before any content or coverage rule runs.
+		if err := proposalmcp.ValidateContractSubmission(args.Proposal); err != nil {
+			return nil, fmt.Errorf("%w: %v", projectcontext.ErrInvalid, err)
 		}
 		var sub store.ProjectContractSubmission
 		if err := proposalmcp.DecodeStrict(args.Proposal, &sub); err != nil {
@@ -79,25 +87,28 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 			sub.Contract.Project = binding
 		}
 		if sub.Contract.Project != binding {
-			return nil, fmt.Errorf("%w: contract.project must be {\"canonical_id\":%q,\"storage_id\":%q}, the project in marshal_project_contract_inventory, or be left out", projectcontext.ErrInvalid, binding.CanonicalID, binding.StorageID)
+			return nil, fmt.Errorf("%w: proposal.contract.project: must be {\"canonical_id\":%q,\"storage_id\":%q}, the project in marshal_project_contract_inventory, or be left out", projectcontext.ErrInvalid, binding.CanonicalID, binding.StorageID)
 		}
 		// A secret in the draft is removed before the draft is journaled, so
 		// registration never refuses it and the secret is never kept.
 		if err := redactProjectContractSubmission(&sub); err != nil {
 			return nil, err
 		}
-		// Quality rules first, so a thin draft is told exactly what to fill in
-		// (a blank responsibility or carries also cannot be drawn):
-		// responsibilities, described connections, coverage.
+		// Content before coverage: blank responsibilities and undescribed
+		// connections, then whether the owner can open the draft, and only
+		// then whether the requirements are covered.
+		if err := app.ValidateContractQuality(sub.Contract, nil); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		// Refuse now, with the reason, what the owner could not open later.
+		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
 		requirements, err := w.activeContractRequirements(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("cannot check architecture coverage: %w; retry submission", err)
 		}
 		if err := app.ValidateContractQuality(sub.Contract, requirements); err != nil {
-			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
-		}
-		// Refuse now, with the reason, what the owner could not open later.
-		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
 			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
 		// Whole-project revision rules: the next revision keeps every accepted

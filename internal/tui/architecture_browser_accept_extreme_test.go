@@ -399,7 +399,7 @@ func TestContractSubmitBindsAnOmittedProject(t *testing.T) {
 	}
 	draft := store.ProjectContractSubmission{Action: "project-contract", Contract: projectcontext.Contract{FormatVersion: projectcontext.FormatVersion, Project: projectcontext.ProjectBinding{CanonicalID: "PROJECT-elsewhere", StorageID: "PROJECT-local"}, ID: "ultron", Revision: 1, Purpose: "Voice assistant", Components: []projectcontext.Component{{ID: "voice", Responsibility: "Listen", Paths: []string{"ultron"}}}, Invariants: []string{"Ask before destructive commands"}, Required: []projectcontext.MemoryRef{}, ReviewedInventoryDigest: inventory.CompletenessDigest}}
 	msg := child.call(t, "marshal_project_contract_submit", map[string]any{"submission_id": "other-project", "proposal": draft}, false)
-	if strings.Contains(msg, "changed while") || !strings.Contains(msg, "contract.project must be") || !strings.Contains(msg, w.runtime.ProjectContractBinding().CanonicalID) {
+	if strings.Contains(msg, "changed while") || !strings.Contains(msg, "contract.project: must be") || !strings.Contains(msg, w.runtime.ProjectContractBinding().CanonicalID) {
 		t.Fatalf("another project's draft was not refused with its reason: %s", msg)
 	}
 	draft.Contract.Project = projectcontext.ProjectBinding{}

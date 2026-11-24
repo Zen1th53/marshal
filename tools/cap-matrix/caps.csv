@@ -10,9 +10,9 @@ driver worker stream,8388608,covered,,internal/marshal/driver:TestBoundedStreamP
 driver git diff,16777216,covered,,internal/marshal/driver:TestGitOutputLimitAtCap;internal/marshal/driver:TestOversizedDiffHandInKeepsPointer;internal/app:TestOversizedDiffKeepsFullScopeValidation,verified base and result pointer with per-file reads; scope still covers every changed path
 plan pack file,65536,covered,,internal/app:TestPackFileLimitAtCap,the pack is refused whole with the file and sizes named and a split suggested
 Marshal tool limit errors,0,covered,,internal/mcp:TestToolErrorPreservesLimitAndChangedDetails,old codes kept with the structured limit and changed-read detail in the error data
-live ordinary proposal,4096,pending,live proposal submission,internal/mcp:ProposalInner,typed refusal and persisted notice with a compact or split action
-live contract proposal,65536,pending,live proposal submission,internal/mcp:ContractInner,typed refusal and persisted notice with a compact or split action
-live proposal frame,16384,pending,live proposal submission,internal/mcp:ProposalFrameSocket;internal/mcp:ProposalFrameSpool,typed refusal and persisted notice with a compact or split action
+live ordinary proposal,4096,covered,,internal/tui:TestProposalInner;internal/mcp:TestProposalInnerLimitReachesTool,typed refusal and persisted notice with a compact or split action
+live contract proposal,65536,covered,,internal/tui:TestContractInner;internal/mcp:TestProposalInnerLimitReachesTool,typed refusal and persisted notice with a compact or split action
+live proposal frame,16384,covered,,internal/mcp:TestProposalFrameSocket;internal/mcp:TestProposalFrameSpool;internal/proposalmcp:TestLiveProposalFrameLimitAtCap;internal/proposalmcp:TestFrameReadersAgreeAtCap;internal/tui:TestProposalFrameNoticeRecordedOnce,typed refusal and persisted notice with a compact or split action
 native planning context,98304,covered,,internal/tui:TestNativePlanningLimitAtCap,page optional material; mandatory context kept; otherwise a field-specific split
 decision questions,16384,covered,,internal/tui:TestProcess05QuestionsLimitAtCap,fewer questions in order with the same IDs; only a single question over the bound is refused
 native live inbox,65536,covered,,internal/tui:TestInboxViewLimitAtCap,durable entries with a bounded tail and cursor; unanswered items listed first and note counts toward the bound
