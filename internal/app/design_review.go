@@ -70,8 +70,8 @@ func (req DesignReviewRequest) Validate(drafter string) error {
 // ReviewDesign launches from the owner runtime, outside the Marshal provider's
 // shell sandbox (which on macOS cannot read another CLI's Keychain login).
 // When bound to a drafting run, it gates on that run's policy snapshot (not the
-// live project setting), reviews the canonical run draft, stamps the receipt
-// with RunDesignDraftDigest, and attaches it via RecordDesignReview.
+// live project setting), reviews and hashes the same canonical draft snapshot,
+// and attaches the receipt via RecordDesignReview.
 func (r *Runtime) ReviewDesign(ctx context.Context, drafter string, req DesignReviewRequest) (DesignReviewResult, error) {
 	if err := req.Validate(drafter); err != nil {
 		return DesignReviewResult{}, err
@@ -101,11 +101,7 @@ func (r *Runtime) ReviewDesign(ctx context.Context, drafter string, req DesignRe
 			if run.EffectiveReviewPolicy().Design == marshal.DesignReviewOff {
 				return DesignReviewResult{}, errors.New("design review is disabled by run review policy")
 			}
-			digest, err := service.RunDesignDraftDigest(ctx, req.RunID)
-			if err != nil {
-				return DesignReviewResult{}, err
-			}
-			boundRunID, boundRun, draftDigest = req.RunID, run, digest
+			boundRunID, boundRun = req.RunID, run
 		} else {
 			if service != nil && service.Store != nil {
 				latestID, rec, err := service.Store.LatestMarshalRun(ctx, service.ProjectID)
@@ -119,11 +115,7 @@ func (r *Runtime) ReviewDesign(ctx context.Context, drafter string, req DesignRe
 					if rec.Value.EffectiveReviewPolicy().Design == marshal.DesignReviewOff {
 						return DesignReviewResult{}, errors.New("design review is disabled by run review policy")
 					}
-					digest, err := service.RunDesignDraftDigest(ctx, latestID)
-					if err != nil {
-						return DesignReviewResult{}, err
-					}
-					boundRunID, boundRun, draftDigest = latestID, rec.Value, digest
+					boundRunID, boundRun = latestID, rec.Value
 				}
 			}
 			if boundRunID == "" {
@@ -146,7 +138,7 @@ func (r *Runtime) ReviewDesign(ctx context.Context, drafter string, req DesignRe
 	cli.ConfigureKnowledgeMCP = nil
 	runDraftPayload := ""
 	if boundRunID != "" {
-		runDraftPayload = formatRunDesignDraftForReview(boundRun, draftDigest)
+		runDraftPayload, draftDigest = formatRunDesignDraftForReview(boundRun)
 	}
 	result, err := cli.reviewDesign(ctx, req, draftDigest, runDraftPayload)
 	if err != nil {
@@ -161,7 +153,8 @@ func (r *Runtime) ReviewDesign(ctx context.Context, drafter string, req DesignRe
 	return result, nil
 }
 
-func formatRunDesignDraftForReview(run marshal.Run, draftDigest string) string {
+func formatRunDesignDraftForReview(run marshal.Run) (string, string) {
+	draftDigest := runDesignDraftDigest(run)
 	type taskSummary struct {
 		ID             string             `json:"id"`
 		Title          string             `json:"title"`
@@ -210,16 +203,16 @@ func formatRunDesignDraftForReview(run marshal.Run, draftDigest string) string {
 	}
 	raw, _ := json.Marshal(payload)
 	if len(raw) <= maxReviewRunDraftBytes {
-		return string(raw)
+		return string(raw), draftDigest
 	}
 	payload.TaskNotes = nil
 	payload.Requirements = truncateUTF8(payload.Requirements, 4<<10)
 	payload.Index = truncateUTF8(payload.Index, 2<<10)
 	raw, _ = json.Marshal(payload)
 	if len(raw) <= maxReviewRunDraftBytes {
-		return string(raw)
+		return string(raw), draftDigest
 	}
-	return truncateUTF8(string(raw), maxReviewRunDraftBytes)
+	return truncateUTF8(string(raw), maxReviewRunDraftBytes), draftDigest
 }
 
 func (m *MarshalCLI) reviewDesign(ctx context.Context, req DesignReviewRequest, draftDigest, runDraftPayload string) (DesignReviewResult, error) {
