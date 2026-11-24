@@ -133,6 +133,26 @@ func (w *Workspace) workerBeats(runID string) []app.WorkerBeat {
 	return w.beatRuntime.Load().WorkerBeats(runID)
 }
 
+// workerLiveness is what the runtime can verify of each worker attempt of
+// runID still in flight, by task.
+func (w *Workspace) workerLiveness(runID string) map[string]boardmodel.WorkerLiveness {
+	if w.beatSource != nil {
+		return nil
+	}
+	out := map[string]boardmodel.WorkerLiveness{}
+	for _, l := range w.beatRuntime.Load().WorkerLiveness(runID) {
+		if l.Process == app.ProcessExited {
+			continue
+		}
+		x := boardmodel.WorkerLiveness{Process: l.Process, Turn: l.Turn, LastAction: l.LastAction, Note: l.Note}
+		if l.ModelWaitSince != nil {
+			x.ModelWaitSince = *l.ModelWaitSince
+		}
+		out[l.TaskID] = x
+	}
+	return out
+}
+
 // boardWorkers lists the live worker invocations of a run from the tmux
 // windows the workspace already tracks. Workers are named by provider and
 // numbered in task order, as the lanes show them.
@@ -155,6 +175,7 @@ func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 		}
 	}
 	w.tmuxMu.Unlock()
+	liveness := w.workerLiveness(runID)
 	for _, b := range w.workerBeats(runID) {
 		if !windowed[b.TaskID] {
 			agents = append(agents, agent{provider: providerName(b.Worker), task: b.TaskID, beat: &b})
@@ -188,6 +209,7 @@ func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 		x := boardmodel.Worker{ID: fmt.Sprintf("%s-%d", a.provider, seen[a.provider]), Provider: a.provider, TaskID: a.task, Pane: a.pane, Last: last, Status: status}
 		if a.beat != nil {
 			x.Heartbeat, x.Started, x.Beat = true, a.beat.Started, a.beat.Beat
+			x.Liveness = liveness[a.task]
 		}
 		out = append(out, x)
 	}
@@ -214,6 +236,10 @@ func workersFingerprint(ws []boardmodel.Worker, now time.Time) string {
 		fmt.Fprintf(&b, "%s|%s|%s|%s|%s;", x.ID, x.TaskID, x.Pane, x.Status, x.Last)
 		if x.Heartbeat {
 			fmt.Fprintf(&b, "beat %d %t;", x.Beat.UnixNano(), now.Sub(x.Beat) > boardmodel.WorkerBeatGrace)
+			if l := x.Liveness; l.Process != "" {
+				waitLong := !l.ModelWaitSince.IsZero() && now.Sub(l.ModelWaitSince) >= app.ModelWaitNoticeAfter
+				fmt.Fprintf(&b, "%s %s %d %t;", l.Process, l.Turn, l.ModelWaitSince.UnixNano(), waitLong)
+			}
 		}
 	}
 	return b.String()
@@ -336,6 +362,7 @@ func (w *Workspace) followBoard(ctx context.Context) {
 			continue
 		case <-t.C:
 		}
+		w.signalModelWaits(ctx)
 		w.refreshBoard(ctx)
 		w.noteRunControl(ctx)
 	}

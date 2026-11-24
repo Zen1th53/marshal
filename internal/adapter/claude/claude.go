@@ -318,9 +318,10 @@ func DecodeOutputEvents(output []byte) []map[string]any {
 
 // quietWorkerLiveness keeps the completion event and its grace but drops the
 // idle stop: with --output-format json Claude prints nothing until it ends,
-// so silence is no sign of a stuck worker and must not stop it.
+// so silence is no sign of a stuck worker and must not stop it. For the same
+// reason its output says nothing of the model turn: no progress is reported.
 func quietWorkerLiveness(request adapter.Request) *adapter.Liveness {
 	live := adapter.WorkerLiveness(request, ClassifyStreamLine)
-	live.StallAfter, live.IdleTimeout, live.Stalled = 0, 0, nil
+	live.StallAfter, live.IdleTimeout, live.Stalled, live.Progress = 0, 0, nil, nil
 	return live
 }

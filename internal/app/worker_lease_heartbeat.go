@@ -156,6 +156,7 @@ func (k *workerLeaseKeeper) outcome(err error) error {
 func (r *Runtime) keepWorkerLeaseAlive(ctx context.Context, task execution.TaskExecution, request *adapter.Request) (context.Context, func() error) {
 	// The same heartbeats tell the Board the worker is alive (worker_liveness.go).
 	beatWorkerRequest(ctx, request)
+	bindWorkerAttempt(ctx, task)
 	if !task.Mutates || task.LeaseID == "" {
 		return ctx, func() error { return nil }
 	}
