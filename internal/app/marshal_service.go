@@ -99,6 +99,13 @@ type MarshalService struct {
 	// admission and failover decide on that model's limits instead of the
 	// provider's worst window (failover_model_extreme.go).
 	ModelQuotaLeft func(provider, model string) (left int, known bool)
+	// LaneCap is the global lane cap new admissions use given the
+	// configured one, lower while a temporary host lane cap holds. Nil
+	// keeps the configured cap.
+	LaneCap func(configured int) int
+	// admissionWait blocks until a held launch may be admitted. Nil waits
+	// on a timer; tests advance their clock instead.
+	admissionWait func(ctx context.Context, until time.Time) error
 	// HeldTask reports whether the owner's change is holding this plan task:
 	// a task the owner asked to pause while they decide a mid-run change.
 	// dispatchReady skips a held task that has not started yet, so it does

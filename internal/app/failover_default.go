@@ -67,3 +67,11 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, _ string, ru
 }
 
 func providerFailoverPending(marshal.Task) bool { return false }
+
+// recoveryAdmission admits every launch the batch dispatcher allows: this
+// edition keeps its quota pause and does not pace a recovery.
+func (s *MarshalService) recoveryAdmission(_ context.Context, _ marshal.CapabilityGate, _ marshal.Run, t marshal.Task, _ []MarshalDispatch, _ time.Time) (DispatchAdmission, []string, int) {
+	return DispatchAdmission{Allowed: true, TaskID: safeAdmissionTaskID(t.PlanTaskID)}, nil, 0
+}
+
+func (s *MarshalService) takeRecoveryStarts([]string, time.Time, int) func() { return func() {} }

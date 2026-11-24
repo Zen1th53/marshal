@@ -988,6 +988,8 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	service.RecordActivity = w.RecordActivity
 	service.QuotaLeft = w.providerLeft
 	service.ModelQuotaLeft = w.providerModelLeft
+	// A temporary host lane cap lowers the cap new admissions use.
+	service.LaneCap = w.thermalLaneCap
 	// The hooks take the run being dispatched, not runID: a draft that
 	// supersedes the run keeps this service for the new run ID, and a hold
 	// applies to that new run (board_change.go).
