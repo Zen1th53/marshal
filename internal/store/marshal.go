@@ -138,6 +138,9 @@ func (s *Store) SetMarshalRun(ctx context.Context, projectID, runID string, run 
 		return 0, err
 	}
 	defer tx.Rollback()
+	if err := checkMarshalSlots(run); err != nil {
+		return 0, err
+	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return 0, err
 	}
@@ -251,8 +254,19 @@ func (s *Store) MarshalLastAttempt(ctx context.Context, runID, taskID string) (i
 	return attempt, err
 }
 
+// checkMarshalSlots refuses worker slot accounting that releases capacity or
+// stages a result without a proved exit.
+func checkMarshalSlots(run marshal.Run) error {
+	if err := run.ValidateSlots(); err != nil {
+		return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+	}
+	return nil
+}
+
+// MarshalUnfinishedRuns lists runs with a lifecycle operation, a pending
+// command, or a worker exit that is staged or not yet acknowledged.
 func (s *Store) MarshalUnfinishedRuns(ctx context.Context, projectID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND (json_extract(r.data_json,'$.Operation') IS NOT NULL OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Commands') command WHERE json_extract(command.value,'$.State') IN ('queued','applying','reconciling'))) ORDER BY r.rowid`, projectID)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND (json_extract(r.data_json,'$.Operation') IS NOT NULL OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Commands') command WHERE json_extract(command.value,'$.State') IN ('queued','applying','reconciling')) OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Slots') slot WHERE json_extract(slot.value,'$.State')='staged' OR (json_extract(slot.value,'$.State')='released' AND COALESCE(json_extract(slot.value,'$.Acked'),0)=0))) ORDER BY r.rowid`, projectID)
 	if err != nil {
 		return nil, err
 	}

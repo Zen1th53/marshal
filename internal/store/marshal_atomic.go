@@ -41,6 +41,9 @@ func saveMarshalStateTx(ctx context.Context, tx *sql.Tx, projectID, runID string
 			return err
 		}
 	}
+	if err := checkMarshalSlots(run); err != nil {
+		return err
+	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return err
 	}

@@ -226,6 +226,13 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		Next:       &next,
 		Event:      events.Event{Type: events.EventTypeMarshalTaskDispatched, Data: eventData},
 	}
+	if err := s.slotFault("reserve"); err != nil {
+		return MarshalDispatch{}, err
+	}
+	// The worker slot is reserved in the same write as the launch intent.
+	if err := s.reserveWorkerSlot(&next, next.Tasks[i], rev); err != nil {
+		return MarshalDispatch{}, err
+	}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return MarshalDispatch{}, err
@@ -238,6 +245,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 			}
 		}
 	}()
+	if err := s.slotFault("reserved"); err != nil {
+		return MarshalDispatch{}, err
+	}
 
 	wt := worktree.New(s.Repository, s.Worktrees)
 	request := model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit}
@@ -347,6 +357,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		return MarshalDispatch{}, err
 	}
 	retainOperation = true
+	if s.LaunchSupervisor != nil {
+		markSlotRunning(op.Next, t.LaunchKey)
+	}
 	if err = s.afterOperationEffect(op); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
@@ -437,8 +450,23 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 			return handin, errors.Join(err, loadErr)
 		}
 		pending.Operation = nil
+		// A worker that exited without a result frees its slot in the same
+		// write; one whose exit is unproven keeps it.
+		released := ""
+		if j := pending.SlotIndex(launchKey); j >= 0 && s.LaunchSupervisor != nil {
+			if k := taskIndex(pending, dispatch.TaskID); k >= 0 {
+				if _, slot, stageErr := s.stageWorkerResult(pending, pending.Slots[j], pending.Tasks[k], dispatch.Handle, nil, false, op.ID); stageErr == nil {
+					pending.Slots[j] = slot
+					released = launchKey
+				}
+			}
+		}
 		if saveErr := s.save(context.WithoutCancel(ctx), runID, pending, pendingRev); saveErr != nil {
 			return handin, errors.Join(err, saveErr)
+		}
+		if released != "" {
+			// Recovery repeats an acknowledgement that fails here.
+			_ = s.ackWorkerSlot(context.WithoutCancel(ctx), runID, released)
 		}
 	}
 	if errors.Is(err, worker.ErrHoneypot) {
@@ -580,6 +608,22 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	validationErr = errors.Join(validationErr, s.architectureHandIn(ctx, *t, handin))
 	attempt := 1 + t.EvidenceAttemptBase
 	attempt += taskReturns(*t)
+	// Stage the proved exit with the result; the completion below commits
+	// the result and frees the slot in one write.
+	var stagedSlots []marshal.WorkerSlot
+	if j := run.SlotIndex(launchKey); j >= 0 && s.LaunchSupervisor != nil {
+		staged, released, stageErr := s.stageWorkerResult(run, run.Slots[j], *t, dispatch.Handle, &handin, validationErr == nil, op.ID)
+		if stageErr != nil {
+			return handin, s.holdWorkerSlot(ctx, runID, launchKey, op.ID, stageErr)
+		}
+		if err = s.slotFault("stage"); err != nil {
+			return handin, err
+		}
+		stagedSlots = append([]marshal.WorkerSlot(nil), run.Slots...)
+		stagedSlots[j] = staged
+		run.Slots = append([]marshal.WorkerSlot(nil), run.Slots...)
+		run.Slots[j] = released
+	}
 	t.ResultCommit = handin.ResultCommit
 	t.LaunchKey = ""
 	if validationErr == nil {
@@ -597,6 +641,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	// Persist the observed hand-in as the receipt before recording completion.
 	pending := initial
 	pending.Operation = op
+	if stagedSlots != nil {
+		pending.Slots = stagedSlots
+	}
 	if err = s.save(ctx, runID, pending, rev); err != nil {
 		return handin, err
 	}
@@ -604,12 +651,20 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if err = s.afterOperationEffect(op); err != nil {
 		return handin, err
 	}
+	if err = s.slotFault("apply"); err != nil {
+		return handin, err
+	}
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return handin, err
 	}
 	if s.LaunchSupervisor != nil && launchKey != "" {
-		// The result is adopted; a leftover record only costs disk.
-		_ = s.LaunchSupervisor.Finish(launchKey)
+		if stagedSlots != nil {
+			// The release is committed; recovery repeats a failed notice.
+			_ = s.ackWorkerSlot(context.WithoutCancel(ctx), runID, launchKey)
+		} else {
+			// The result is adopted; a leftover record only costs disk.
+			_ = s.LaunchSupervisor.Finish(launchKey)
+		}
 	}
 	elapsed := s.clock().Sub(dispatch.Started)
 	if elapsed < 0 {
@@ -2192,7 +2247,11 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 	if err := s.executionAdmission(ctx, runID, "", run); err != nil {
 		return run, err
 	}
-	run, rev, err = s.recoverOperation(ctx, runID, run, rev)
+	run, rev, err = s.recoverOperation(withAuthorizedResume(ctx), runID, run, rev)
+	if err != nil {
+		return run, err
+	}
+	run, rev, err = s.reconcileWorkerSlots(ctx, runID, run, rev, false)
 	if err != nil {
 		return run, err
 	}

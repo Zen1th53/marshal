@@ -77,7 +77,18 @@ type MarshalService struct {
 	// LaunchSupervisor, when set, holds each worker behind a durable launch
 	// receipt before it may start. Nil keeps the direct driver launch.
 	LaunchSupervisor *driver.LaunchSupervisor
-	RecordActivity   func(string)
+	// WorkerSlotCap fixes how many supervised workers one run may reserve at
+	// once; zero uses the settings' worker limit.
+	WorkerSlotCap int
+	// ProveWorkerExit, when set, replaces the owner's proof that a
+	// supervised worker exited (its receipt and reaped handle).
+	ProveWorkerExit func(marshal.WorkerSlot, *driver.Handle) (marshal.StagedExit, error)
+	// WorkerSlotReleased notifies the scheduler after a slot release is
+	// committed. It may be called again for the same release.
+	WorkerSlotReleased func(runID, launchKey string) error
+	// workerSlotFault injects a failure at a named slot transition in tests.
+	workerSlotFault func(point string) error
+	RecordActivity  func(string)
 	// QuotaLeft reports a provider's percent quota left and whether it is
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.

@@ -171,6 +171,12 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		op.Event.Data["launch_outcome"] = "interrupted; driver completion unknown"
 		run.Tasks[i].State = marshal.Dispatched
 		run.State = marshal.Dispatching
+		// The started worker keeps the slot reserved for its launch.
+		markSlotRunning(&run, launchKey)
+		if j := run.SlotIndex(launchKey); j >= 0 && launchDisposition == driver.LaunchAmbiguous {
+			run.Slots[j].State = marshal.SlotHeld
+			run.Slots[j].Reason = "worker launch is ambiguous"
+		}
 		if launchDisposition == driver.LaunchAmbiguous {
 			// The worker may still run: keep its slot and quarantine its output.
 			op.Event.Data["launch_outcome"] = "interrupted; launch ambiguous; output quarantined"
@@ -180,6 +186,13 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		completed = true
 	case "hand-in":
 		completed = op.HandIn != nil && op.Next != nil
+		if completed {
+			// A paused run keeps the staged result and its reservation until
+			// the person resumes it.
+			if held, heldRev, err := s.quarantineStagedExit(ctx, runID, &run, rev, op); held || err != nil {
+				return run, heldRev, err
+			}
+		}
 		if completed {
 			if err := s.repairRetainedHandInAttempt(ctx, runID, op); err != nil {
 				return run, rev, err
@@ -331,6 +344,9 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 		run, rev, err := s.load(ctx, id)
 		if err == nil {
 			run, rev, err = s.recoverOperation(ctx, id, run, rev)
+		}
+		if err == nil {
+			run, rev, err = s.reconcileWorkerSlots(ctx, id, run, rev, false)
 		}
 		if errors.Is(err, errMarshalEventArtifact) {
 			failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, err))

@@ -412,6 +412,9 @@ type Run struct {
 	// Pack is the plan as the person read it before approving; runs drafted
 	// without one, such as headless drafts, leave it nil.
 	Pack *PlanPack `json:",omitempty"`
+	// Slots are the worker reservations of supervised launches, kept until
+	// the worker's exit is proved and its result committed.
+	Slots []WorkerSlot `json:",omitempty"`
 }
 
 // PlanPack is what the Marshal gathered from the person, written as
