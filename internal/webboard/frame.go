@@ -175,6 +175,10 @@ type Lane struct {
 	LastSignal int64  `json:"lastSignalSec"`
 	Stale      bool   `json:"stale"`
 	Selected   bool   `json:"selected"`
+	Process    string `json:"process,omitempty"`
+	Turn       string `json:"turn,omitempty"`
+	ModelWait  int64  `json:"modelWaitSec,omitempty"`
+	Note       string `json:"note,omitempty"`
 }
 
 type Lanes struct {
@@ -435,7 +439,8 @@ func FromBoard(b vm.Board) Frame {
 	}
 	for _, l := range b.Lanes.Items {
 		f.Lanes.Items = append(f.Lanes.Items, Lane{Name: l.Name, Provider: l.Provider, Model: l.Model, Task: l.Task, Step: l.Step,
-			Reviewing: l.Reviewing, Elapsed: secs(l.Elapsed), LastSignal: secs(l.LastSignal), Stale: l.Stale, Selected: l.Selected})
+			Reviewing: l.Reviewing, Elapsed: secs(l.Elapsed), LastSignal: secs(l.LastSignal), Stale: l.Stale, Selected: l.Selected,
+			Process: l.Process, Turn: l.Turn, ModelWait: secs(l.ModelWait), Note: l.Note})
 	}
 	for _, t := range b.Tasks {
 		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note})

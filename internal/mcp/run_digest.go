@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -13,18 +14,20 @@ import (
 // runDigest is one small read of where the current Marshal run stands, so the
 // Marshal reads state once per turn instead of polling events and tasks.
 type runDigest struct {
-	RunID            string              `json:"run_id,omitempty"`
-	State            marshal.RunState    `json:"state,omitempty"`
-	Tier             marshal.Tier        `json:"tier,omitempty"`
-	PlanID           string              `json:"plan_id,omitempty"`
-	PlanVersion      int64               `json:"plan_version,omitempty"`
-	Paused           string              `json:"paused,omitempty"`
-	Resolutions      []string            `json:"resolutions,omitempty"`
-	PauseCode        string              `json:"pause_code,omitempty"`
-	PauseAction      string              `json:"pause_action,omitempty"`
-	PauseTask        string              `json:"pause_task,omitempty"`
-	CloseAuthorized  bool                `json:"close_authorized"`
-	Tasks            []runDigestTask     `json:"tasks"`
+	RunID           string           `json:"run_id,omitempty"`
+	State           marshal.RunState `json:"state,omitempty"`
+	Tier            marshal.Tier     `json:"tier,omitempty"`
+	PlanID          string           `json:"plan_id,omitempty"`
+	PlanVersion     int64            `json:"plan_version,omitempty"`
+	Paused          string           `json:"paused,omitempty"`
+	Resolutions     []string         `json:"resolutions,omitempty"`
+	PauseCode       string           `json:"pause_code,omitempty"`
+	PauseAction     string           `json:"pause_action,omitempty"`
+	PauseTask       string           `json:"pause_task,omitempty"`
+	CloseAuthorized bool             `json:"close_authorized"`
+	Tasks           []runDigestTask  `json:"tasks"`
+	// ActiveOperation is the lifecycle operation the run has in progress.
+	ActiveOperation  *runDigestOperation `json:"active_operation,omitempty"`
 	PendingApprovals int                 `json:"pending_approvals,omitempty"`
 	ExpiredApprovals int                 `json:"expired_approvals,omitempty"`
 	Approvals        []runDigestApproval `json:"approvals,omitempty"`
@@ -47,6 +50,13 @@ type runDigestTask struct {
 	Title  string            `json:"title,omitempty"`
 	Worker string            `json:"worker,omitempty"`
 	State  marshal.TaskState `json:"state"`
+	// Liveness is what Marshal can verify of the task's worker attempt.
+	Liveness *app.WorkerLiveness `json:"liveness,omitempty"`
+}
+
+type runDigestOperation struct {
+	Kind   string `json:"kind"`
+	TaskID string `json:"task,omitempty"`
 }
 
 func (s *Server) runDigest(ctx context.Context) (runDigest, error) {
@@ -80,8 +90,20 @@ func (s *Server) runDigest(ctx context.Context) (runDigest, error) {
 		out.PauseCode, out.PauseAction, out.PauseTask = run.Pause.Code, string(run.Pause.Action), run.Pause.TaskID
 	}
 	out.CloseAuthorized = run.ValidCloseAuthorization()
+	if op := run.Operation; op != nil {
+		out.ActiveOperation = &runDigestOperation{Kind: op.Kind, TaskID: op.TaskID}
+	}
+	liveness := map[string]app.WorkerLiveness{}
+	for _, l := range s.runtime.RunLiveness(id, run) {
+		liveness[l.TaskID] = l
+	}
 	for _, t := range run.Tasks {
-		out.Tasks = append(out.Tasks, runDigestTask{ID: t.PlanTaskID, Title: t.Title, Worker: t.Worker, State: t.State})
+		row := runDigestTask{ID: t.PlanTaskID, Title: t.Title, Worker: t.Worker, State: t.State}
+		// A worker's own session reads only its own task's liveness.
+		if l, ok := liveness[t.PlanTaskID]; ok && (s.role != "worker" || t.PlanTaskID == s.workerTaskID) {
+			row.Liveness = &l
+		}
+		out.Tasks = append(out.Tasks, row)
 	}
 	if views, _, projErr := s.runtime.ApprovalProjection(ctx, id, run, false); projErr == nil && len(views) > 0 {
 		for _, v := range views {
