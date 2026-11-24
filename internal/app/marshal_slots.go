@@ -216,6 +216,9 @@ func (s *MarshalService) ackWorkerSlot(ctx context.Context, runID, key string) e
 			return err
 		}
 	}
+	if err := s.slotFault("acked"); err != nil {
+		return err
+	}
 	run.Slots[j].Acked = true
 	return s.save(ctx, runID, run, rev)
 }
@@ -300,16 +303,17 @@ func (s *MarshalService) reconcileWorkerSlots(ctx context.Context, runID string,
 		}
 		rev++
 	}
-	var failures []error
 	for _, key := range acks {
-		failures = append(failures, s.ackWorkerSlot(ctx, runID, key))
+		// The release is committed; a failed notice stays unacknowledged and
+		// the next recovery repeats it.
+		_ = s.ackWorkerSlot(ctx, runID, key)
 	}
 	if len(acks) > 0 {
 		fresh, freshRev, err := s.load(ctx, runID)
 		if err != nil {
-			return run, rev, errors.Join(append(failures, err)...)
+			return run, rev, err
 		}
 		run, rev = fresh, freshRev
 	}
-	return run, rev, errors.Join(failures...)
+	return run, rev, nil
 }

@@ -2237,6 +2237,8 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 		}
 		return run, err
 	}
+	// The person's resume may apply a result staged while the run was paused.
+	ctx = withAuthorizedResume(ctx)
 	if err := s.drainRunCommands(ctx, runID); err != nil {
 		return marshal.Run{}, err
 	}
@@ -2247,7 +2249,7 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 	if err := s.executionAdmission(ctx, runID, "", run); err != nil {
 		return run, err
 	}
-	run, rev, err = s.recoverOperation(withAuthorizedResume(ctx), runID, run, rev)
+	run, rev, err = s.recoverOperation(ctx, runID, run, rev)
 	if err != nil {
 		return run, err
 	}

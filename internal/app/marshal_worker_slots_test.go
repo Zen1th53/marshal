@@ -193,12 +193,7 @@ func TestStagedHandInReplaysOnceAcrossPauseLeaseLossAndShutdown(t *testing.T) {
 			}
 		}
 
-		run, rev := f.run(t)
-		if _, _, err := f.s.recoverOperation(withAuthorizedResume(t.Context()), "run", run, rev); err != nil {
-			t.Fatal(err)
-		}
-		run, rev = f.run(t)
-		if _, _, err := f.s.reconcileWorkerSlots(t.Context(), "run", run, rev, false); err != nil {
+		if _, err := f.s.Resume(t.Context(), "run"); err != nil {
 			t.Fatal(err)
 		}
 		f.expectApplied(t, key, 1)
@@ -262,6 +257,28 @@ func TestStagedHandInReplaysOnceAcrossPauseLeaseLossAndShutdown(t *testing.T) {
 		f.expectApplied(t, key, 1)
 		f.restart(t)
 		f.expectApplied(t, key, 1)
+	})
+
+	t.Run("fault after notice repeats the notice once more", func(t *testing.T) {
+		f := newSlotFixture(t)
+		d, key := f.dispatch(t)
+		f.s.workerSlotFault = func(p string) error {
+			if p == "acked" {
+				return errors.New("injected fault after notice")
+			}
+			return nil
+		}
+		if _, err := f.s.CollectHandIn(t.Context(), "run", d); err != nil {
+			t.Fatalf("committed result reported as failed: %v", err)
+		}
+		if slot := f.slot(t, key); slot.State != marshal.SlotReleased || slot.Acked || *f.notified != 1 {
+			t.Fatalf("fault after notice: slot=%+v notices=%d", slot, *f.notified)
+		}
+		f.s.workerSlotFault = nil
+		f.restart(t)
+		f.expectApplied(t, key, 2)
+		f.restart(t)
+		f.expectApplied(t, key, 2)
 	})
 
 	t.Run("fault at stage holds nothing new", func(t *testing.T) {
@@ -348,7 +365,12 @@ func TestApprovalAndReviewReleaseOnlyExitedWorkerSlots(t *testing.T) {
 		f := newSlotFixture(t)
 		f.worker.inner.Args = func(driver.Request) []string { return []string{"-c", "true"} }
 		d, key := f.dispatch(t)
-		_, _ = f.s.CollectHandIn(t.Context(), "run", d)
+		if _, err := f.s.CollectHandIn(t.Context(), "run", d); err != nil {
+			t.Fatal(err)
+		}
+		if run, _ := f.run(t); run.Operation != nil || run.Tasks[0].State == marshal.Dispatched || run.Tasks[0].State == marshal.HandedIn || f.handIns(t) != 1 {
+			t.Fatalf("invalid hand-in not recorded and returned: op=%+v task=%s hand-ins=%d", run.Operation, run.Tasks[0].State, f.handIns(t))
+		}
 		slot := f.slot(t, key)
 		if slot.State != marshal.SlotReleased || slot.Exit == nil || slot.Exit.HandInValid || !slot.Acked {
 			t.Fatalf("invalid hand-in slot: %+v exit=%+v", slot, slot.Exit)
