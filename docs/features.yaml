@@ -580,6 +580,7 @@ features:
     editions: [default, governed]
     sources:
       - internal/marshal/domain.go
+      - internal/settingscatalog/presets.go
     tests: []
     docs: []
     web: []
@@ -2049,9 +2050,12 @@ features:
     name: Independent cross-review requirement policy
     editions: [default, governed]
     sources:
+      - internal/tui/commands_marshal.go
       - internal/tui/boardv2_collect_marshal.go
       - internal/webboard/page/app.js
       - internal/marshal/tier.go
+      - internal/marshal/review_policy.go
+      - internal/settingscatalog/catalog.go
       - internal/app/marshal_lifecycle.go
     tests:
       - internal/marshal.TestCrossReviewNeedsAReviewerNotAnotherProvider
@@ -2061,9 +2065,9 @@ features:
         anchor: 'f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });'
         kind: view
     tui:
-      - routeOrCommand: "4"
-        anchor: '[2]string{"review", "other provider"}'
-        kind: view
+      - routeOrCommand: /marshal settings cross-review
+        anchor: 'settingscatalog.Apply('
+        kind: control
 
   - id: verifier-required
     name: Final model verifier policy switch and checks-only proof selection
@@ -2532,41 +2536,50 @@ features:
     name: On-demand and policy-configured independent design review
     editions: [default]
     sources:
+      - internal/tui/commands_marshal.go
       - internal/tui/settings_view.go
       - internal/webboard/page/app.js
       - internal/tui/design_review_extreme.go
       - internal/app/design_review.go
+      - internal/marshal/review_policy.go
+      - internal/settingscatalog/catalog.go
     tests:
       - internal/app.TestRuntimeDesignReviewerFreshHostLaunch
+      - internal/app.TestDesignReviewReceiptBoundToDraft
     docs: []
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
         kind: view
     tui:
-      - routeOrCommand: /marshal settings
-        anchor: 'func formatSettingsView('
-        kind: view
+      - routeOrCommand: /marshal settings design-review
+        anchor: 'settingscatalog.Apply('
+        kind: control
 
   - id: architecture-conformance
     name: Hand-in architecture conformance enforcement policy
     editions: [default]
     sources:
+      - internal/tui/commands_marshal.go
       - internal/webboard/page/app.js
       - internal/app/architecture_conformance_extreme.go
       - internal/app/marshal_lifecycle.go
       - internal/tui/settings_view.go
+      - internal/marshal/review_policy.go
+      - internal/settingscatalog/catalog.go
     tests:
       - internal/app.TestHandInThatUsesAnUndeclaredPartIsReturned
+      - internal/app.TestConformanceWarnKeepsFindings
+      - internal/app.TestArchitectureObligationSurvivesOptionalReviewOff
     docs: []
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
         kind: view
     tui:
-      - routeOrCommand: /marshal settings
-        anchor: 'func formatSettingsView('
-        kind: view
+      - routeOrCommand: /marshal settings architecture-conformance
+        anchor: 'settingscatalog.Apply('
+        kind: control
 
   - id: memory-candidate-review
     name: Edition memory candidate complete-read review and promotion rules

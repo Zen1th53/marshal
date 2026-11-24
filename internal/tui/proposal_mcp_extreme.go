@@ -379,7 +379,7 @@ func (w *Workspace) serveProposalMCP(ctx context.Context, l *proposalMCPLease, m
 // holds proposalMCP.mu.
 func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, error) {
 	if method == "design_review" {
-		return w.designReviewMCP(l, raw)
+		return w.designReviewMCP(ctx, l, raw)
 	}
 	if strings.HasPrefix(method, "project_contract_") {
 		return w.projectContractMCP(ctx, l, method, raw)

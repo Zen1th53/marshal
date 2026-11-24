@@ -17,22 +17,24 @@ type DispatchPolicy struct {
 	Tier                Tier
 	Concurrency         int
 	CrossReviewRequired bool
-	VerifierRequired    bool
+	ReviewPolicy        ReviewPolicy
 }
 
 // TierPolicy reads the gate when dispatch is about to start.
 func TierPolicy(gate CapabilityGate, settings Settings) DispatchPolicy {
+	rp := effectiveEditionReviewPolicy(settings.ReviewPolicy.Effective())
+	crossReview := rp.CrossReview != CrossReviewOff
 	if gate == nil || !gate.Capability(CapabilityMarshal) {
-		return DispatchPolicy{Tier: Standard, Concurrency: 1, CrossReviewRequired: true, VerifierRequired: true}
+		return DispatchPolicy{Tier: Standard, Concurrency: 1, CrossReviewRequired: crossReview, ReviewPolicy: rp}
 	}
 	if eg, ok := gate.(interface{ ExecutionEnabled() bool }); ok && !eg.ExecutionEnabled() {
-		return DispatchPolicy{Tier: Standard, Concurrency: 1, CrossReviewRequired: true, VerifierRequired: true}
+		return DispatchPolicy{Tier: Standard, Concurrency: 1, CrossReviewRequired: crossReview, ReviewPolicy: rp}
 	}
 	concurrency := settings.UltraConcurrency
 	if concurrency < 1 {
 		concurrency = DefaultSettings().UltraConcurrency
 	}
-	return DispatchPolicy{Tier: Ultra, Concurrency: concurrency, CrossReviewRequired: true, VerifierRequired: true}
+	return DispatchPolicy{Tier: Ultra, Concurrency: concurrency, CrossReviewRequired: crossReview, ReviewPolicy: rp}
 }
 
 // CheckCrossReviewProvider enforces provider independence when cross-review is required.

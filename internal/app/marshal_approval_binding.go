@@ -22,6 +22,7 @@ type PlanApprovalSnapshot struct {
 	RouteSummary, TeamSummary, VerificationSummary, TaskCheckSummary string
 	AssignmentSummary                                                string
 	MarshalBudgetSummary, PlanningMode                               string
+	ReviewPolicySummary                                              string
 }
 
 func packDigest(pack *marshal.PlanPack) string {
@@ -42,6 +43,9 @@ func (s *MarshalService) repositoryIdentity(ctx context.Context) (string, error)
 func (s *MarshalService) PlanApprovalSnapshot(ctx context.Context, runID string) (PlanApprovalSnapshot, error) {
 	run, rev, err := s.readRun(ctx, runID)
 	if err != nil {
+		return PlanApprovalSnapshot{}, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return PlanApprovalSnapshot{}, err
 	}
 	pack, err := s.refreshPlanPack(runID, run)
@@ -70,6 +74,8 @@ func (s *MarshalService) PlanApprovalSnapshot(ctx context.Context, runID string)
 	snapshot.PlanningMode = string(p.Mode)
 	marshalBudget, _ := json.Marshal(run.Budget)
 	snapshot.MarshalBudgetSummary = string(marshalBudget)
+	reviewPolicy, _ := json.Marshal(run.EffectiveReviewPolicy())
+	snapshot.ReviewPolicySummary = string(reviewPolicy)
 	if p.RequiredProjectContract != nil {
 		snapshot.ContractDigest = p.RequiredProjectContract.Digest
 	}
@@ -106,6 +112,9 @@ func closeAuthorization(run marshal.Run, user string) *marshal.CloseAuthorizatio
 }
 
 func (s *MarshalService) validateDelivery(ctx context.Context, run marshal.Run) error {
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return err
+	}
 	repo, err := s.repositoryIdentity(ctx)
 	if err != nil {
 		return err
