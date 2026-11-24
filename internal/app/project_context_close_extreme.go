@@ -239,7 +239,7 @@ func (r *Runtime) withRequiredContextCloseEffect(ctx context.Context, service *M
 			return fmt.Errorf("required close checks-only receipt: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-op"))
 		}
 		if source == nil || source.runtime != r || checksProof == nil {
-			return projectcontext.ErrReviewPending
+			return fmt.Errorf("%w: checks-only close has no live observed source or proof in this runtime (source present: %t, proof present: %t)", projectcontext.ErrReviewPending, source != nil, checksProof != nil)
 		}
 		if checksProof.runtime != r || checksProof.principal != principal.ID || checksProof.sourceObservation != source.observationID || checksProof.receiptID != op.ReceiptID || checksProof.receiptDigest != op.ReceiptDigest || op.Next.ChecksOnly.Head != source.head {
 			return fmt.Errorf("required close live proof owner: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-owner"))
@@ -252,7 +252,7 @@ func (r *Runtime) withRequiredContextCloseEffect(ctx context.Context, service *M
 		checksProof.consumed = true
 	} else {
 		if source == nil || source.runtime != r || proof == nil {
-			return projectcontext.ErrReviewPending
+			return fmt.Errorf("%w: close has no live observed source or completion proof in this runtime (source present: %t, proof present: %t)", projectcontext.ErrReviewPending, source != nil, proof != nil)
 		}
 		if proof.runtime != r || proof.principal != principal.ID || proof.sourceObservation != source.observationID {
 			return fmt.Errorf("required close live proof owner: %w", projectcontext.Changed("project_context_close_extreme.go:75"))
