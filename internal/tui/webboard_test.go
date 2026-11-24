@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -245,4 +246,37 @@ func TestMarshalWebCommand(t *testing.T) {
 		}
 	}
 	t.Fatal("the palette has no web.open row")
+}
+
+// A browser that cannot be opened is never answered "opening": /marshal web
+// reports the failed launcher, and the w key says "opening" before the
+// opener runs so the failure replaces it instead of the other way round.
+func TestWebBoardOpenFailureIsNotAnsweredOpening(t *testing.T) {
+	origGOOS := v2GOOS
+	t.Cleanup(func() { v2GOOS = origGOOS })
+	v2GOOS = "darwin"
+	orig := webBoardOpen
+	t.Cleanup(func() { webBoardOpen = orig })
+	webBoardOpen = func(context.Context, string) error { return errors.New("open browser: exit status 3") }
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	w.endOpening()
+
+	resp, err := w.marshalWeb()
+	if err == nil || strings.Contains(resp, "opening in your browser") || !strings.Contains(err.Error(), "could not be opened") {
+		t.Fatalf("/marshal web with a failing opener: %q %v", resp, err)
+	}
+
+	w.openWebBoardKey()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		w.mu.RLock()
+		answer, isErr := w.answer, w.answerIsError
+		w.mu.RUnlock()
+		if isErr && strings.Contains(answer, "could not be opened") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("w with a failing opener never reported the failure")
 }
