@@ -12821,8 +12821,8 @@
     },
     {
       "path": "internal/tui/board_ask.go",
-      "sha256": "abfc5c597e2217c32596546322d1de46decf29da85ede70dbcee1db8a94b017d",
-      "bytes": 32693
+      "sha256": "1a21770dc771a2da4cef338191f6797fc22ce3d0f38f7b4afd00fe78266a64f1",
+      "bytes": 33207
     },
     {
       "path": "internal/tui/board_ask_test.go",
@@ -13211,8 +13211,8 @@
     },
     {
       "path": "internal/tui/board_say.go",
-      "sha256": "b7dfec035f8a995780844de5ef058a9bb71770003d748387c0caf47bb3cdd367",
-      "bytes": 40983
+      "sha256": "3ac0f0d1f657fa6e6bf5db6dcdaa2c29a435529427a88f374713769c4cf7b1bb",
+      "bytes": 42792
     },
     {
       "path": "internal/tui/board_say_review_test.go",
@@ -13571,8 +13571,8 @@
     },
     {
       "path": "internal/tui/chat_delivery.go",
-      "sha256": "31f2afc0cbe98d127582b0a112d27c01f874a3788ae2ec1ba9ae176d6fb2e9ff",
-      "bytes": 17173
+      "sha256": "09dcc74fb75414ff36c98ac2822897bf99d1d409cf29e76b259d7ab1a1cdea66",
+      "bytes": 17634
     },
     {
       "path": "internal/tui/chat_delivery_clipped_test.go",
@@ -16696,8 +16696,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "c3996ef332a7b831773e44bc2df4ca6e7c5bd457e3efcc4c32169e5900c860c5",
-      "bytes": 99577
+      "sha256": "5f33a6a2fc5fa2de912e96c3e7b18c1cb7ae6e00bca654f2e2d3edbeb9e11bd9",
+      "bytes": 99688
     },
     {
       "path": "internal/tui/workspace_keys_test.go",
@@ -18041,8 +18041,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "cda41c6783545b211be49262f3d470ef43b32b55bafde8e4b5858047762950d1",
-      "bytes": 479269
+      "sha256": "66d9d6414545123541c7aa44681598a035b7c3cdcefbc5303edb7d79fcfe8978",
+      "bytes": 471552
     },
     {
       "path": "tools/extreme/prq/main_default.go",

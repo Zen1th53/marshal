@@ -305,6 +305,9 @@ type Workspace struct {
 	// chatTypeMu is held while anything types into the tmux chat pane, so
 	// two writers never interleave in its composer.
 	chatTypeMu sync.Mutex
+	// chatRun runs tmux for chat delivery; nil means tmux.RunCommand (a seam
+	// for tests).
+	chatRun chatRunner
 	// leftoverRunning is set while the chat monitor submits a leftover
 	// paste of ours, so ticks never stack up behind one.
 	leftoverRunning atomic.Bool

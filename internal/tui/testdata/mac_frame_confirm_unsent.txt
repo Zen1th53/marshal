@@ -1,0 +1,46 @@
+  [38;2;153;153;153mexpand)[39m
+
+[38;2;255;255;255m⏺[39m I've written up the requirements. Six of the eight lines are filled from your
+  message and the code, and two still need an answer from you.
+
+  The first is which branch the work starts from and lands on. The repository
+  is on [38;2;177;185;249mmain[39m with no other branches or open work, so I recommend starting from
+  [38;2;177;185;249mmain[39m and landing on [38;2;177;185;249mmain[39m. That keeps it simple for a change this small.
+
+  Reply "Start from main, land on main" (recommended) or "Land on a new feature
+  branch", then press Enter.
+
+[38;2;153;153;153m✻[39m [38;2;153;153;153mCogitated[39m [38;2;153;153;153mfor[39m [38;2;153;153;153m49s[39m [38;2;153;153;153m·[39m [38;2;153;153;153mdone[39m [38;2;153;153;153m2:11[39m [38;2;153;153;153mAM[39m
+
+[38;2;153;153;153m[48;2;55;55;55m❯ [38;2;255;255;255mStart from main, land on main[39m
+
+[49m  [38;2;153;153;153mCalled marshal [1m2[0m[38;2;153;153;153m times (ctrl+o to expand)[39m
+
+[38;2;255;255;255m⏺[39m The work will start from [38;2;177;185;249mmain[39m and land on [38;2;177;185;249mmain[39m, and the card now shows 7 of 8
+  lines filled.
+
+  The last open line is budget and deadline. Right now no token, money or time
+  limits are set. I recommend no fixed budget or deadline, because this is two
+  small functions with tests.
+
+  Reply "No fixed budget or deadline" (recommended) or "Set a budget or
+  deadline", then press Enter.
+
+[38;2;153;153;153m✻[39m [38;2;153;153;153mCogitated for 17s · done[39m [38;2;153;153;153m2:14 AM[39m
+
+[38;2;153;153;153m[48;2;55;55;55m❯ [38;2;255;255;255mNo fixed budget or deadline[39m
+
+[49m  [38;2;153;153;153mCalled marshal (ctrl+o to expand)[39m
+
+[38;2;255;255;255m⏺[39m All 8 lines of the requirements card are now filled, and it's on the Board.
+  Please look it over: press Enter to confirm all of it, or press e to change a
+  line.
+
+[38;2;153;153;153m✻[39m [38;2;153;153;153mCrunched for 8s · done 2:16 AM[39m
+
+[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────
+[39m❯ confirm all
+[38;2;136;136;136m───────────────────────────────────────────────────────────────────────────────
+[39m  [38;2;255;107;128m⏵⏵ don't ask on[38;2;153;153;153m (shift+tab to cycle)[39m
+
+

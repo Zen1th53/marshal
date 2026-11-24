@@ -762,9 +762,14 @@ func (w *Workspace) deliverAskAnswer(ctx context.Context, rec askRecord, label s
 	if pane := w.sayPane(); pane != "" {
 		// Prompt delivery must succeed before a durable acknowledgement. An
 		// in-memory chat queue alone cannot acknowledge an answer.
-		if _, err := w.typeIntoChat(ctx, pane, label); err != nil {
+		if _, err := w.typeIntoChatStrict(ctx, pane, label); err != nil {
 			if errors.Is(err, errChatBusy) || errors.Is(err, errChatNotReady) {
 				return err
+			}
+			if errors.Is(err, errChatUnsubmitted) {
+				// Pasted, recorded as ours, not taken yet: the card stays
+				// and the next press submits it instead of pasting again.
+				return fmt.Errorf("the answer is pasted in the Marshal chat but not submitted yet; press the choice again (%w)", errChatUnsubmitted)
 			}
 			return fmt.Errorf("%w: %v", errAskAdmissionUncertain, err)
 		}
@@ -1068,7 +1073,8 @@ func (w *Workspace) answerAsk(i int) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	_ = w.answerAskBound(ctx, askAnswerBinding{
+	seq := w.outputSeq.Load()
+	r := w.answerAskBound(ctx, askAnswerBinding{
 		Project:  card.Project,
 		ID:       card.ID,
 		Launch:   card.Launch,
@@ -1076,6 +1082,10 @@ func (w *Workspace) answerAsk(i int) {
 		Actor:    "owner:tui",
 		Choice:   i,
 	})
+	if r.Err != nil && w.outputSeq.Load() == seq {
+		// Never leave the owner at a card that did nothing.
+		w.setOutput("The answer was not sent: "+r.Err.Error(), true)
+	}
 }
 
 // askAboutGuard reports whether a question decides the changed-files alert
