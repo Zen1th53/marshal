@@ -314,6 +314,11 @@
       var retry = workCapabilities(frame, retryTask(frame)).find(function (c) { return c.op === "task/retry"; });
       if (retry) { var typed = el("button", cls, label); typed.type = "button"; typed.onclick = function () { previewSetting(newWorkRequest(retry, {})); }; return typed; }
     }
+    if (key === "ctrl+x" && frame) {
+      // The screen's stop key takes the same bound request as the run control.
+      var workers = runCapabilities(frame).find(function (c) { return c.op === "run/stop-workers"; });
+      if (workers) { var bound = el("button", cls, label); bound.type = "button"; bound.onclick = function () { previewSetting(newWorkRequest(workers, {})); }; return bound; }
+    }
     var id = (frame.act ? frame.act.card : "") + "|" + key;
     var on = armed === id;
     return button(cls + (on ? " danger" : ""), on ? "Click again to " + label : cap(label), function () {
@@ -1123,9 +1128,28 @@
       row.appendChild(button); box.appendChild(row);
     });
   }
-  function commandPanel(body) { return $(body && (body.target.kind === "task" || body.target.kind === "lane") ? "work-confirm" : "settings-confirm"); }
+  function runCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run"; });
+  }
+  // Run-wide controls sit above every route, so they stay reachable with a
+  // card or a drawer open; each one previews and confirms its bound request.
+  function renderRunControls(f) {
+    var labels = {"run/pause": "Pause the run", "run/stop": "Stop the run", "run/resume": "Resume the run", "run/stop-workers": "Stop the run's workers", "run/amend.deny": "Deny the amendment"};
+    var caps = runCapabilities(f), box = $("run-controls");
+    if (!changed("run-controls", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
+    clear(box); box.hidden = !caps.length;
+    if (!caps.length) return;
+    var reason = el("input"); reason.placeholder = "Reason (optional)"; reason.maxLength = 2000; reason.setAttribute("aria-label", "Run action reason");
+    box.appendChild(reason);
+    caps.forEach(function (c) {
+      var b = el("button", c.op === "run/resume" ? "ghost" : "ghost danger", labels[c.op] || c.op); b.type = "button";
+      b.onclick = function () { var payload = {}; if (reason.value.trim()) payload.reason = reason.value.trim(); previewSetting(newWorkRequest(c, payload)); };
+      box.appendChild(b);
+    });
+  }
+  function commandPanel(body) { return $(body && body.target.kind === "run" ? "run-confirm" : body && (body.target.kind === "task" || body.target.kind === "lane") ? "work-confirm" : "settings-confirm"); }
   function settingCapability(f, key) {
-    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key && c.target.kind !== "task" && c.target.kind !== "lane"; });
+    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key && c.target.kind !== "task" && c.target.kind !== "lane" && c.target.kind !== "run"; });
   }
   function newSettingRequest(cap, value) {
     var bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
@@ -1176,7 +1200,7 @@
       return refresh().then(function () { return settingPost(Object.assign({}, body, {preview: true, confirmation: undefined})); }).then(function (r) {
         body.confirmation = r.confirmation; rememberSetting(body);
         var panel = clear(commandPanel(body));
-        var work = body.target.kind === "task" || body.target.kind === "lane";
+        var work = body.target.kind === "task" || body.target.kind === "lane" || body.target.kind === "run";
         var detail = work ? JSON.stringify(body.payload) : (body.payload.value === undefined ? (body.payload.enabled ? "on" : "off") : body.payload.value);
         panel.appendChild(el("p", "", "Confirm " + body.op + " for " + body.target.id + ": " + detail + ". This preview expires in one minute."));
         var button = el("button", "", "Confirm change"); button.type = "button"; panel.appendChild(button);
@@ -1209,7 +1233,7 @@
     if (!f) return;
     if (!settingsRecovered) { settingsRecovered = true; recoverSetting(); }
     renderTop(f); renderCard(f); renderHome(f); renderWork(f); renderArchitecture(f);
-    renderTeam(f); renderActivity(f); renderSettings(f);
+    renderTeam(f); renderActivity(f); renderSettings(f); renderRunControls(f);
   }
 
   function feedback(kind, text) {

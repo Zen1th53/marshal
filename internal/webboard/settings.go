@@ -271,7 +271,7 @@ func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actReq
 	}
 	key, value := c.Payload.Key, c.Payload.Value
 	switch c.Op {
-	case "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart":
+	case "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart", "run/pause", "run/stop", "run/resume", "run/stop-workers", "run/amend.deny":
 		if !validWorkPayload(c) {
 			refuse(w, 400, "Invalid work payload.")
 			return

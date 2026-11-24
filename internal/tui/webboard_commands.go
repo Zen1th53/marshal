@@ -34,10 +34,14 @@ func (w *Workspace) webWorkCapabilities(ctx context.Context) []webboard.SettingC
 		return nil
 	}
 	record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
-	if err != nil || record.Value.CommandFence != "" || record.Value.Operation != nil {
+	if err != nil {
 		return nil
 	}
-	var caps []webboard.SettingCapability
+	// Run-wide controls stay reachable while the run is fenced or paused.
+	caps := w.webRunCapabilities(service, record.Value, runID, record.Revision)
+	if record.Value.CommandFence != "" || record.Value.Operation != nil {
+		return caps
+	}
 	for _, task := range record.Value.Tasks {
 		var ops []string
 		switch task.State {
@@ -122,6 +126,11 @@ func (w *Workspace) webWorkCommand(a webboard.Action) webboard.Result {
 		if i.Op == "task/approve-task" {
 			return w.webApproveTask(i, payload, service)
 		}
+		if webRunOp(i.Op) {
+			var refusal webboard.Result
+			execute, refusal = w.webRunCommand(i, payload, service, a)
+			return refusal
+		}
 		input, err := webRunInput(i, payload)
 		if err != nil {
 			return refused(err.Error())
@@ -190,7 +199,7 @@ func (w *Workspace) reconcileWebWork(ctx context.Context) {
 	}
 	service := w.runtime.Marshal()
 	for _, i := range intents {
-		if !strings.HasPrefix(i.Op, "task/") && !strings.HasPrefix(i.Op, "lane/") {
+		if !webWorkOp(i.Op) {
 			continue
 		}
 		if i.Op == "task/approve-task" {
@@ -210,7 +219,8 @@ func (w *Workspace) reconcileWebWork(ctx context.Context) {
 				continue
 			}
 			status := "applied"
-			if c.State != "applied" {
+			// A reconciling priority signal has fenced new starts already.
+			if c.State != "applied" && c.State != "reconciling" {
 				status = "refused"
 			}
 			_ = w.store.FinishWebRequest(ctx, i, store.WebReceipt{RequestID: i.RequestID, Status: status, Code: c.State, Revision: i.Revision, Effects: []string{"run-command"}, Result: c.Detail})

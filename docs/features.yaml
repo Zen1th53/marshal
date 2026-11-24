@@ -1,5 +1,30 @@
 version: 1
 features:
+  - id: bound-browser-run-controls
+    name: Browser run pause, stop, resume, worker stop and amendment denial with plan bindings and durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/webboard_run_actions.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/commands.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestWebRunControlsRespectApprovalAndHold
+      - internal/tui.TestLegacyStopAndTypedStopUseBoundWriter
+      - internal/tui.TestWebRunOpReceiptMatrix
+      - internal/webboard.TestRunCommandTargetBindsSelectedRun
+      - internal/webboard.TestRunControlTokenIsBoundAndSingleUse
+      - internal/webboard.TestWorkControlsPreserveTypedBindings
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function renderRunControls('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal stop
+        anchor: 'func (w *Workspace) webRunCommand('
+        kind: control
+
   - id: bound-browser-work-actions
     name: Browser task and worker actions with attempt bindings and durable receipts
     editions: [default, governed]
