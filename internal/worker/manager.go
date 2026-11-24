@@ -97,6 +97,7 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		}
 		return adapter.ProcessResult{}, fmt.Errorf("start worker process: %w", err)
 	}
+	live.started()
 	if err := workerterminal.Started(runCtx, cmd); err != nil {
 		_ = processgroup.Stop(cmd)
 		_ = cmd.Wait()

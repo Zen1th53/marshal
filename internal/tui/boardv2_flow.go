@@ -691,9 +691,14 @@ func flowLanes(in flowIn) vm.Lanes {
 			row.Step = "idle"
 		case l.Status != "" && l.Status != "working":
 			row.Step = l.Status
+		case !l.Liveness.ModelWaitSince.IsZero():
+			row.Step = "waiting on model"
+		case l.Liveness.Process == app.ProcessUnverifiable:
+			row.Step = "unverified"
 		default:
 			row.Step = "working"
 		}
+		laneLiveness(&row, l, in.now)
 		if !l.Started.IsZero() && in.now.After(l.Started) {
 			row.Elapsed = in.now.Sub(l.Started)
 		}

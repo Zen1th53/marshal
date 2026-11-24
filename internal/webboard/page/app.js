@@ -709,7 +709,7 @@
     if (!id) { dr.hidden = true; sigs.drawer = ""; return; }
     var l = t ? laneFor(f, t.id) : null, rl = t ? reviewLaneFor(f, t.id) : null;
     var rt = retryTask(f);
-    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused])) return;
+    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step, l.lane.process, l.lane.note], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused])) return;
     dr.hidden = false;
     var facts = clear($("dr-facts")), acts = clear($("dr-acts"));
     setText("dr-note", "");
@@ -734,6 +734,8 @@
     kv(facts, "Worker", [t.writer, l && l.lane.name, l && l.lane.model].filter(Boolean).join(" · ") || "not assigned yet");
     if (l) {
       kv(facts, "Step", l.lane.step);
+      if (l.lane.process) kv(facts, "Worker process", l.lane.process + (l.lane.turn ? " · turn " + l.lane.turn.replace("_", " ") : ""));
+      if (l.lane.note) kv(facts, "Liveness", l.lane.note);
       var run = el("span", "el"); run.dataset.lane = l.i; kv(facts, "Running for", run);
       var sig = el("span", "sig"); sig.dataset.lane = l.i; kv(facts, "Last signal", sig);
     }
@@ -777,7 +779,7 @@
   function renderLanes(f) {
     var l = f.lanes;
     show("w-lanes", l.items.length > 0 || !!f.top.run);
-    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected]; }))) { tickLanes(); return; }
+    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected, x.process, x.turn, x.note]; }))) { tickLanes(); return; }
     var tb = clear($("la-rows"));
     l.items.forEach(function (x, i) {
       var tr = el("tr");
@@ -785,7 +787,7 @@
       tr.appendChild(el("td", "", x.name));
       tr.appendChild(el("td", "muted", x.model || x.provider));
       tr.appendChild(el("td", x.reviewing ? "tone-vio" : "", x.task));
-      tr.appendChild(el("td", "", x.step));
+      tr.appendChild(el("td", "", x.note ? x.step + " · " + x.note : x.step));
       var e = el("td", "num el"); e.dataset.lane = i; tr.appendChild(e);
       var s = el("td", "num sig"); s.dataset.lane = i; tr.appendChild(s);
       tb.appendChild(tr);
