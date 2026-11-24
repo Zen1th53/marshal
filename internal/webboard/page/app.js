@@ -275,19 +275,29 @@
   var terminalOnly = { "c": 1, "7": 1, "e": 1, "q": 1, "esc": 1 };
   function cardButtons(f) {
     var d = f.decision, p = f.paused, keys = d ? d.actions : p ? p.actions : [];
+    if (d && d.choices && d.choices.length) {
+      // Every typed choice the card offers, each by its own id: a key
+      // means only what its choice says.
+      return d.choices.map(function (c) { return { key: c.key, label: cap(c.label), local: !!c.local, choice: c }; });
+    }
     var out = [], choices = d && (d.kind === "ask" || d.kind === "guard");
     keys.forEach(function (k) {
       if (terminalOnly[k.key] && !choices) return;
       if (d && d.kind === "inbox" && k.key === "⏎") return; // details: the terminal's inspector
-      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" && !choices });
+      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" && !choices && !!d && (d.kind === "architecture" || d.kind === "plan") });
     });
-    if (out.length > 3 && !choices) {
-      // Keep the primary and the stop; the raw error is the first to go.
-      var first = out[0], rest = out.slice(1).filter(function (b) { return b.key !== "d"; });
-      out = [first].concat(rest.slice(0, 2));
-    }
     return out;
   }
+  // decide sends a typed choice of the card on screen, bound to the revision
+  // and plan digest the page shows.
+  function decide(c, extra, label) {
+    var d = frame && frame.decision;
+    if (!d) return Promise.resolve();
+    var body = { action: "decide", choice: c.id, value: c.value || "", cardRevision: d.revision, planDigest: d.plan ? d.plan.digest : "" };
+    Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+    return act(body, label || cap(c.label));
+  }
+  var planOpen = "", editing = null;
   function screenKey(f, key) {
     if (f.decision || f.paused || !f.act || !f.act.tokens[key]) return null;
     for (var i = 0; i < f.keys.length; i++) if (f.keys[i].key === key) return f.keys[i];
@@ -342,7 +352,7 @@
     var card = $("card"), d = f.decision, p = f.paused;
     var cardID = f.act ? f.act.card : "";
     if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
-    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop])) return;
+    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop, planOpen, !!editing])) return;
     if ((!d && !p) || (asksOwner(f) && d && d.kind === "architecture")) { card.hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");
@@ -370,6 +380,7 @@
         if (l.note) dd.appendChild(el("span", "muted", " · " + l.note));
         $("card-lines").appendChild(dd);
       });
+      renderPlanPreview(d);
       setText("card-extra", "");
       more = !!(d.changedNote || d.nodes.length || d.lines.length);
     } else {
@@ -406,6 +417,7 @@
       prim.addEventListener("click", function () {
         var text = confirmStep.text ? typed.value.trim() : "";
         if (confirmStep.text && !text) { feedback("bad", "Type what the Board asks for first."); typed.focus(); return; }
+        if (confirmStep.choice) { decide(confirmStep.choice, { confirmed: true, text: text }, "Confirm"); return; }
         act({ action: "key", key: "⏎", text: text }, "Confirm");
       });
       if (frame && frame.act && frame.act.tokens.esc) {
@@ -427,13 +439,16 @@
       return;
     }
     if (!bs.length) { prim.hidden = true; return; }
+    if (editing && d && d.kind === "requirements") { renderEdit(d, prim, sec); return; }
     prim.hidden = false;
     bs.forEach(function (b, i) {
       var stop = !!f.paused && b.key === "x";
       var on = stop && armedStop === (f.act && f.act.card);
       var text = on ? "Click again to stop the run" : b.label;
       var go = function () {
-        if (b.local) { location.hash = "#home"; $("say-text").focus(); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (b.local) { location.hash = "#home"; openComposer(d && d.kind === "architecture" ? "run/architecture.comment" : d && d.kind === "plan" ? "run/plan.comment" : "run/chat.send"); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (b.choice && b.choice.id === "requirements.edit") { editing = { line: "", text: "" }; sigs.card = ""; render(frame); return; }
+        if (b.choice) { armedStop = null; decide(b.choice); return; }
         if (stop && !on) {
           armedStop = f.act && f.act.card;
           feedback("wait", "Stopping keeps the run and its work; /marshal resume continues it. Click again to stop.");
@@ -451,6 +466,46 @@
       } else {
         sec.appendChild(button("linkbtn" + (on ? " danger" : ""), text, go));
       }
+    });
+  }
+
+  // renderEdit is the requirements card's line edit: the line and its new
+  // text, sent as one typed choice bound to the card's revision.
+  function renderEdit(d, prim, sec) {
+    var c = null;
+    d.choices.forEach(function (x) { if (x.id === "requirements.edit") c = x; });
+    var pick = el("select"), text = el("input");
+    pick.setAttribute("aria-label", "Line to edit");
+    text.setAttribute("aria-label", "New text");
+    text.maxLength = 200;
+    d.lines.forEach(function (l) { if (!l.key) return; var o = el("option", "", l.key + " · " + (l.label || "")); o.value = l.key; pick.appendChild(o); });
+    pick.onchange = function () { d.lines.forEach(function (l) { if (l.key === pick.value) text.value = l.text === "—" ? "" : l.text; }); };
+    pick.onchange();
+    sec.appendChild(pick); sec.appendChild(text);
+    prim.hidden = false;
+    prim.textContent = "Send the edit";
+    prim.addEventListener("click", function () {
+      if (!c) return;
+      if (!text.value.trim()) { feedback("bad", "Write the line's new text first."); text.focus(); return; }
+      decide(c, { line: pick.value, text: text.value.trim() }, "Edit line " + pick.value);
+    });
+    sec.appendChild(button("linkbtn", "Cancel", function () { editing = null; sigs.card = ""; render(frame); }));
+  }
+  // renderPlan draws the drafted plan the card approves, once the owner
+  // opened it: each task with its exact checks.
+  function renderPlanPreview(d) {
+    if (!d.plan || planOpen !== d.plan.digest) return;
+    var box = $("card-lines");
+    box.appendChild(el("dt", "", "plan"));
+    box.appendChild(el("dd", "muted", d.plan.id + " · version " + d.plan.version + " · " + d.plan.tasks.length + " tasks"));
+    d.plan.tasks.forEach(function (t) {
+      box.appendChild(el("dt", "", t.id));
+      var dd = el("dd", "", t.title);
+      if (t.dependsOn.length) dd.appendChild(el("div", "muted", "after " + t.dependsOn.join(", ")));
+      if (t.files.length) dd.appendChild(el("div", "muted", "files " + t.files.join(", ")));
+      t.criteria.forEach(function (x) { dd.appendChild(el("div", "", "done when " + x)); });
+      t.checks.forEach(function (x) { dd.appendChild(el("code", "", x)); });
+      box.appendChild(dd);
     });
   }
 
@@ -1229,13 +1284,32 @@
       row.appendChild(button); box.appendChild(row);
     });
   }
+  var composerOps = {"run/chat.send": "Message the Marshal", "run/plan.comment": "Comment on the plan", "run/architecture.comment": "Comment on the architecture", "run/goal.intake": "Add goal details", "run/goal.amend.propose": "Propose a goal change"};
+  function composerCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run" && composerOps[c.op]; });
+  }
   function runCapabilities(f) {
-    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run"; });
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run" && !composerOps[c.op]; });
+  }
+  // renderComposerScopes lists what a message can be bound to now; the
+  // choice names the plan, review, launch or goal the words are sent against.
+  function renderComposerScopes(f) {
+    var caps = composerCapabilities(f), sel = $("say-scope");
+    if (!changed("say-scope", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
+    var keep = sel.value; clear(sel); sel.hidden = !caps.length;
+    caps.forEach(function (c) { var o = el("option", "", composerOps[c.op]); o.value = c.op; sel.appendChild(o); });
+    if (caps.some(function (c) { return c.op === keep; })) sel.value = keep;
+  }
+  function openComposer(op) {
+    var sel = $("say-scope");
+    if (op && Array.prototype.some.call(sel.options, function (o) { return o.value === op; })) sel.value = op;
+    $("say-text").focus();
   }
   // Run-wide controls sit above every route, so they stay reachable with a
   // card or a drawer open; each one previews and confirms its bound request.
   function renderRunControls(f) {
     var labels = {"run/pause": "Pause the run", "run/stop": "Stop the run", "run/resume": "Resume the run", "run/stop-workers": "Stop the run's workers", "run/amend.deny": "Deny the amendment"};
+    renderComposerScopes(f);
     var caps = runCapabilities(f), box = $("run-controls");
     if (!changed("run-controls", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
     clear(box); box.hidden = !caps.length;
@@ -1356,7 +1430,7 @@
   function act(body, label) {
     if (pending) return Promise.resolve();
     if (!frame || !frame.act) { feedback("bad", "Not connected to the Board yet."); return Promise.resolve(); }
-    var name = body.action === "say" ? "say" : body.key;
+    var name = body.action === "say" ? "say" : body.action === "decide" ? "choice:" + body.choice + "/" + body.value : body.key;
     var tok = frame.act.tokens[name];
     if (!tok) { feedback("bad", "Refused: that button is not on the Board now."); return Promise.resolve(); }
     body.card = frame.act.card;
@@ -1377,7 +1451,9 @@
         if (x.code === 401) { feedback("bad", "Refused: this link has expired. Run /marshal web in the Board for a new one."); return false; }
         if (x.code === 409) { confirmStep = null; feedback("bad", "Refused: " + (text || "the Board changed.")); return false; }
         if (x.code !== 200 || res.status === "refused") { feedback("bad", "Refused: " + (text || "the Board answered " + x.code + ".")); return false; }
-        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card } : null;
+        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card, choice: body.action === "decide" ? { id: body.choice, value: body.value } : null } : null;
+        if (body.action === "decide" && body.choice === "plan.read" && frame.decision && frame.decision.plan) planOpen = frame.decision.plan.digest;
+        if (body.action === "decide" && body.choice === "requirements.edit") editing = null;
         var word = res.status === "sent" ? "Sent" : res.status === "queued" ? "Queued" : res.status === "started" ? "Started" : "Done";
         feedback("ok", !text ? word + "." : text.indexOf(word) === 0 ? text : word + ": " + text);
         if (res.link) {
@@ -1402,6 +1478,8 @@
     if (!text) { box.focus(); return; }
     var max = frame && frame.act ? frame.act.sayMax : 2000;
     if (text.length > max) { feedback("bad", "Too long: at most " + max + " characters."); return; }
+    var sel = $("say-scope"), cap = sel && !sel.hidden && composerCapabilities(frame).find(function (c) { return c.op === sel.value; });
+    if (cap) { previewSetting(newWorkRequest(cap, {text: text})); return; }
     act({ action: "say", text: text }, "Send").then(function (ok) { if (ok) box.value = ""; });
   }
 
@@ -1499,6 +1577,106 @@
     });
   }
 
+
+  // ---- run details: a read, never an action ------------------------------
+  // Everything below is drawn with textContent; the ids are opaque and are
+  // sent back as the server gave them.
+  function evGet(path) {
+    return fetch(path, { headers: auth(), cache: "no-store", credentials: "omit" }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, code: r.status, d: d || {} }; });
+    });
+  }
+  function evStatus(text) { $("ev-status").textContent = text || ""; }
+  function evPre(text) { var p = el("pre", "ev-pre"); p.textContent = text; return p; }
+  function evList(title, items) {
+    var box = el("div", "ev-list");
+    box.appendChild(el("h4", null, title));
+    var ul = el("ul", "plain");
+    items.forEach(function (t) { ul.appendChild(el("li", null, t)); });
+    box.appendChild(ul);
+    return box;
+  }
+  function evMore(label, id, into, draw) {
+    var b = el("button", null, label);
+    b.type = "button";
+    b.addEventListener("click", function () {
+      b.disabled = true;
+      evGet("/api/details/page?id=" + encodeURIComponent(id)).then(function (x) {
+        if (!x.ok) { evStatus(x.d.text || "That page is out of date; show the details again."); b.disabled = false; return; }
+        b.remove();
+        draw(x.d, into);
+      }).catch(function () { evStatus("The Board is not answering."); b.disabled = false; });
+    });
+    into.appendChild(b);
+  }
+  function evDiff(d, into) {
+    if (d.note) into.appendChild(el("p", "muted", d.note));
+    if (d.text) into.appendChild(evPre(d.text));
+    if (d.next) evMore("Next files", d.next, into, evDiff);
+  }
+  // evTranscript shows one page in place of the one before it.
+  function evTranscript(t, into) {
+    while (into.children.length > 2) into.removeChild(into.lastChild);
+    var box = el("div", "ev-chat");
+    (t.messages || []).forEach(function (m) {
+      var row = el("div", "ev-msg");
+      row.appendChild(el("b", null, "Claims to be " + m.role + (m.at ? " · " + m.at : "") + ": "));
+      row.appendChild(el("span", null, m.text));
+      box.appendChild(row);
+    });
+    if (t.older) evMore("Earlier messages", t.older, into, evTranscript);
+    into.appendChild(box);
+    if (t.unavailable) into.appendChild(el("p", "muted", "Earlier conversation unavailable: " + t.unavailable));
+    if (t.newer) evMore("Later messages", t.newer, into, evTranscript);
+  }
+  function evRender(d) {
+    var out = $("ev-body");
+    out.textContent = "";
+    if (d.paused) {
+      var p = el("div", "ev-block");
+      p.appendChild(el("h3", null, "Why the run is paused"));
+      p.appendChild(el("p", null, d.paused.reason));
+      if (d.paused.code) p.appendChild(el("p", "muted", "Code: " + d.paused.code));
+      if (d.paused.raw) p.appendChild(evPre(d.paused.raw));
+      if ((d.paused.resolutions || []).length) p.appendChild(evList("Ways forward", d.paused.resolutions));
+      out.appendChild(p);
+    }
+    if (d.mcp) {
+      var m = el("div", "ev-block");
+      m.appendChild(el("h3", null, "MCP failure"));
+      m.appendChild(evPre(d.mcp));
+      out.appendChild(m);
+    }
+    (d.tasks || []).forEach(function (t) {
+      var b = el("div", "ev-block");
+      b.appendChild(el("h3", null, t.task + " · " + t.title + " · " + t.state));
+      if (t.verdict) b.appendChild(el("p", null, "Review: " + t.verdict + (t.reviewer ? " by " + t.reviewer : "")));
+      [["Reasons", t.reasons], ["Checks", t.checks], ["Task scope", t.scope], ["Changed paths", t.changed], ["Limits", t.limits]].forEach(function (x) {
+        if ((x[1] || []).length) b.appendChild(evList(x[0], x[1]));
+      });
+      if (t.base || t.result) b.appendChild(el("p", "muted", "Reviewed " + (t.base || "?") + " to " + (t.result || "?")));
+      if (t.diffId) {
+        var holder = el("div", "ev-diff");
+        b.appendChild(holder);
+        evMore("Show the reviewed diff", t.diffId, holder, evDiff);
+      }
+      out.appendChild(b);
+    });
+    var c = el("div", "ev-block");
+    c.appendChild(el("h3", null, "Retained conversation"));
+    c.appendChild(el("p", "muted", (d.transcript && d.transcript.note) || ""));
+    out.appendChild(c);
+    evTranscript(d.transcript || {}, c);
+  }
+  function evLoad() {
+    evStatus("Reading…");
+    evGet("/api/details").then(function (x) {
+      if (!x.ok) { evStatus(x.d.text || "Details are not available."); return; }
+      evStatus("");
+      evRender(x.d);
+    }).catch(function () { evStatus("The Board is not answering."); });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     $("docs-link").href = docsURL;
     applyRoute(false);
@@ -1522,6 +1700,7 @@
     tick();
     setInterval(tick, 1000);
     $("say-send").addEventListener("click", send);
+    $("ev-load").addEventListener("click", evLoad);
     $("say-text").addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });

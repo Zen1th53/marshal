@@ -466,7 +466,7 @@ func inboxPageLines(v boardVisual, b vm.Board, now time.Time) []pageLine {
 		out = append(out, pageLine{}, v.section("WAITING"))
 		out = append(out, waits...)
 	}
-	out = append(out, pageLine{}, pageLine{text: v.fg("dim", "Decide these on the Web Board: w opens it.")})
+	out = append(out, pageLine{}, pageLine{text: v.fg("dim", "Decide these here (o) or on the Web Board (w).")})
 	return out
 }
 
@@ -783,6 +783,7 @@ func (w *Workspace) openHomePage(page string) {
 		ui.homePage = ""
 		return
 	}
+	w.dropDecisionFocus()
 	ui.homePage = page
 	ui.homePageState = pageState{}
 }

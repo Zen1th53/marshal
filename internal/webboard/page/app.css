@@ -258,3 +258,7 @@ body.is-down main { opacity: .6; }
 @media (prefers-reduced-motion: no-preference) {
   .bar > span { transition: width .4s ease; }
 }
+
+.ev-pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24em; overflow: auto; font-family: ui-monospace, monospace; font-size: 13px; }
+.ev-block { margin: 12px 0; }
+.ev-msg { overflow-wrap: anywhere; white-space: pre-wrap; margin: 4px 0; }

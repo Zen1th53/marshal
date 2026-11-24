@@ -76,6 +76,7 @@ type Server struct {
 	settingsTokMu  sync.Mutex
 	settingsTokens map[string]cachedSettingsToken
 	previews       map[string]Confirmation
+	details        detailsPointer
 
 	listener net.Listener
 	http     *http.Server
@@ -356,7 +357,7 @@ func (s *Server) Handler() http.Handler {
 			s.serveFile(w, f.name, f.contentType)
 			return
 		}
-		if q.URL.Path != "/api/board" && q.URL.Path != "/api/events" {
+		if q.URL.Path != "/api/board" && q.URL.Path != "/api/events" && q.URL.Path != "/api/details" && q.URL.Path != "/api/details/page" {
 			deny(w, http.StatusNotFound, "Not found.")
 			return
 		}
@@ -367,6 +368,10 @@ func (s *Server) Handler() http.Handler {
 		}
 		if q.URL.Path == "/api/events" {
 			s.serveEvents(w, q)
+			return
+		}
+		if q.URL.Path == "/api/details" || q.URL.Path == "/api/details/page" {
+			s.serveDetails(w, q)
 			return
 		}
 		body, _, err := s.frame()

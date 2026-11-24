@@ -278,6 +278,9 @@ func (w *Workspace) planDecision(g ownerGate) v2Decision {
 		c.Actions = append(c.Actions, enter)
 	}
 	c.Actions = append(c.Actions, vm.Key{Key: "7", Label: "open the plan"}, vm.Key{Key: "k", Label: "comment"})
+	if p := w.marshalPanel(); p != nil {
+		c.Plan = planPreviewOf(p.run)
+	}
 	return v2Decision{kind: decisionPlan, key: g.key, gate: g, card: c}
 }
 

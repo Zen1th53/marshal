@@ -47,6 +47,19 @@ func (v *View) Update(items []model.InboxItem) {
 
 func (v *View) Selected() string { return v.selected }
 
+// Select moves the selection to the request with key, cancelling an
+// unfinished confirmation of another one; false when it is not listed.
+func (v *View) Select(key string) bool {
+	if slices.IndexFunc(v.items, func(i model.InboxItem) bool { return i.Request.Key() == key }) < 0 {
+		return false
+	}
+	if v.selected != key {
+		v.selected = key
+		v.Cancel()
+	}
+	return true
+}
+
 func (v *View) Current() (model.InboxItem, bool) {
 	for _, item := range v.items {
 		if item.Request.Key() == v.selected {
@@ -102,7 +115,7 @@ func (v *View) WantsText() bool {
 	item, ok := v.Current()
 	return ok && item.Gate == model.GateTyped && !v.idConfirmed
 }
-func (v *View) ClearInput()    { v.input = "" }
+func (v *View) ClearInput() { v.input = "" }
 func (v *View) Backspace() {
 	r := []rune(v.input)
 	if len(r) > 0 {
@@ -111,6 +124,9 @@ func (v *View) Backspace() {
 }
 func (v *View) Cancel()          { v.action, v.input, v.inspect, v.idConfirmed = 0, "", false, false }
 func (v *View) Confirming() bool { return v.action != 0 }
+
+// Action is the decision under confirmation, 0 for none.
+func (v *View) Action() rune { return v.action }
 
 // Inspecting reports whether the selected item's reason is open.
 func (v *View) Inspecting() bool { return v.inspect }

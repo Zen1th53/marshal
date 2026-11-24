@@ -30,6 +30,7 @@ type SettingPayload struct {
 	Provider   string `json:"provider,omitempty"`
 	Model      string `json:"model,omitempty"`
 	ApprovalID string `json:"approvalId,omitempty"`
+	Text       string `json:"text,omitempty"`
 }
 type Confirmation struct {
 	Digest   string `json:"digest"`
@@ -271,7 +272,7 @@ func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actReq
 	}
 	key, value := c.Payload.Key, c.Payload.Value
 	switch c.Op {
-	case "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart", "run/pause", "run/stop", "run/resume", "run/stop-workers", "run/amend.deny":
+	case "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart", "run/pause", "run/stop", "run/resume", "run/stop-workers", "run/amend.deny", "run/chat.send", "run/plan.comment", "run/architecture.comment", "run/goal.intake", "run/goal.amend.propose":
 		if !validWorkPayload(c) {
 			refuse(w, 400, "Invalid work payload.")
 			return

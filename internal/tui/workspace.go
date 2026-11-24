@@ -1404,8 +1404,8 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.renderFullView()
 		return false
 	}
-	// Inbox decisions (allow, deny, a gate's confirmation) are made on the
-	// Web Board: no terminal key reaches them (board_home.go).
+	// Inbox decisions (allow, deny, a gate's confirmation) are made from
+	// explicit decision focus (board_decisions_view.go) or on the Web Board.
 	// Space and Ctrl+K open the one palette (P5-04). Ctrl+K edits text while
 	// the composer holds some; Space is a space anywhere but the bare Board.
 	if event.Type == KeyCtrlK && (w.palette.IsOpen() || !w.composing()) {

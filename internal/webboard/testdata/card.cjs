@@ -5,7 +5,7 @@ const elements = new Map();
 const get = id => { if (!elements.has(id)) elements.set(id, { hidden: false }); return elements.get(id); };
 const card = get("card");
 const context = vm.createContext({
-  $: get, clear: () => {}, setText: () => {}, renderButtons: () => {}, changed: () => true, confirmStep: null, pending: false, armedStop: null,
+  $: get, clear: () => {}, setText: () => {}, renderButtons: () => {}, changed: () => true, confirmStep: null, pending: false, armedStop: null, planOpen: "", editing: null,
 });
 for (const [start, end] of [['  function asksOwner(', '  // ---- small helpers'], ['  function renderCard(', '  // renderButtons']]) {
   vm.runInContext(script.slice(script.indexOf(start), script.indexOf(end)), context);

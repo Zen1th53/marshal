@@ -114,8 +114,18 @@
       <p id="says-meta" class="muted"></p>
     </section>
 
+    <!-- Retained evidence: read on demand, plain text only. -->
+    <section id="evidence" class="panel" aria-labelledby="h-evidence">
+      <h2 id="h-evidence" class="lbl">Run details</h2>
+      <p class="muted">Why the run stopped, what failed, what the reviews found, and the retained diff and conversation.</p>
+      <button id="ev-load" type="button">Show run details</button>
+      <p id="ev-status" class="muted" role="status" aria-live="polite"></p>
+      <div id="ev-body"></div>
+    </section>
+
     <div class="say">
       <label for="say-text" class="lbl">Tell the Marshal</label>
+      <select id="say-scope" aria-label="What the message is about" hidden></select>
       <div class="sayrow">
         <textarea id="say-text" rows="2" placeholder="Tell the Marshal…" maxlength="2000"></textarea>
         <button id="say-send" type="button" class="send">Send</button>

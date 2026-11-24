@@ -129,6 +129,8 @@ func TestFrameMapsEveryField(t *testing.T) {
 		reflect.TypeOf(vm.System{}): reflect.TypeOf(System{}), reflect.TypeOf(vm.MarshalSays{}): reflect.TypeOf(MarshalSays{}),
 		reflect.TypeOf(vm.Signal{}): reflect.TypeOf(Signal{}), reflect.TypeOf(vm.Waiting{}): reflect.TypeOf(Waiting{}),
 		reflect.TypeOf(vm.Approval{}): reflect.TypeOf(Approval{}),
+		reflect.TypeOf(vm.Choice{}):   reflect.TypeOf(Choice{}), reflect.TypeOf(vm.PlanPreview{}): reflect.TypeOf(PlanPreview{}),
+		reflect.TypeOf(vm.PlanTask{}): reflect.TypeOf(PlanTask{}),
 	}
 	seen := map[reflect.Type]bool{}
 	var walk func(reflect.Type)
