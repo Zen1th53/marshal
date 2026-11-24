@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/events"
-	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/worktree"
@@ -880,6 +880,21 @@ func (s *MarshalService) verifyStartedProcessExited(ctx context.Context, runID s
 	if s.dispatchLive(runID, t.PlanTaskID) {
 		return false, nil
 	}
+	launchKey := t.LaunchKey
+	if run.Operation != nil && run.Operation.Kind == "launch" && run.Operation.TaskID == t.PlanTaskID && run.Operation.Next != nil {
+		if i := taskIndex(*run.Operation.Next, t.PlanTaskID); i >= 0 && run.Operation.Next.Tasks[i].LaunchKey != "" {
+			launchKey = run.Operation.Next.Tasks[i].LaunchKey
+		}
+	}
+	if launchKey != "" {
+		if s.LaunchSupervisor == nil {
+			return false, nil
+		}
+		disposition, err := s.LaunchSupervisor.Inspect(launchKey)
+		if err != nil || disposition != driver.LaunchExited {
+			return false, err
+		}
+	}
 	if s.VerifyProcessExit != nil {
 		exited, err := s.VerifyProcessExit(ctx, runID, t.PlanTaskID)
 		if err != nil || !exited {
@@ -888,9 +903,7 @@ func (s *MarshalService) verifyStartedProcessExited(ctx context.Context, runID s
 	}
 	if run.Process05Bound && run.Process05Parallel && t.Mode == marshal.Governed && s.process05CloseOrphanLane != nil {
 		if err := s.process05CloseOrphanLane(ctx, run, t); err != nil {
-			if errors.Is(err, execution.ErrRunBlocked) {
-				return false, nil
-			}
+			return false, err
 		}
 	}
 	return true, nil

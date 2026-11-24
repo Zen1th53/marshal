@@ -176,7 +176,16 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 				}
 			}
 		}
-		err = process05PauseConflict(ctx, service, p05.RunID, err)
+		if errors.Is(err, execution.ErrRunConflict) {
+			// The person's pause can win the lane's write while the lane is
+			// still starting. Nothing ran, so the task waits as paused instead
+			// of counting as a failed attempt.
+			if observed, getErr := service.GetRun(ctx, p05.RunID); getErr == nil && observed.State == execution.RunPaused {
+				if task := observed.Tasks[req.Task.PlanTaskID]; task.NativeTurn == nil && task.State != execution.TaskRunning && task.State != execution.TaskCompletedPendingVerify && !task.State.IsTerminal() {
+					return nil, ErrProcess05Paused
+				}
+			}
+		}
 		if err == nil && completed != nil && completed.State == execution.RunPaused {
 			if state := completed.Tasks[req.Task.PlanTaskID].State; state != execution.TaskCompletedPendingVerify && !state.IsTerminal() {
 				return nil, ErrProcess05Paused
@@ -318,6 +327,14 @@ func (r *Runtime) process05Paused(ctx context.Context, run marshal.Run) bool {
 		}
 	}
 	return false
+}
+
+// process05RootRunning reports whether the root of the run's canonical
+// execution exists and is not paused. A task lane left paused under such a
+// root is continued by the Marshal's own dispatch.
+func (r *Runtime) process05RootRunning(ctx context.Context, run marshal.Run) bool {
+	parts, err := r.process05Runs(ctx, run)
+	return err == nil && len(parts) > 0 && parts[0].State != execution.RunPaused
 }
 
 // resumePausedProcess05 resumes the root of the run's canonical execution
