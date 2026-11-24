@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/proposalmcp"
 	"github.com/Zen1th53/marshal/internal/ratelimit"
@@ -70,6 +71,10 @@ func (s *Server) callStdioProposal(ctx context.Context, req jsonRPCRequest) (jso
 			if err != nil || len(frame)+1 > wireLimit {
 				resp.Result = nil
 				resp.Error = &rpcErr{Code: -32000, Message: "project contract inspection response exceeds complete wire budget; reduce page limit"}
+				if err == nil {
+					resp.Error.Data = &rpcErrData{Code: "limit_exceeded", Limit: &model.Limit{Kind: "contract_wire", Subject: rawParams.Name + " response", ActualBytes: int64(len(frame) + 1), CapBytes: int64(wireLimit), Limited: true,
+						Action: "Read a smaller page of the same revision: pass a lower limit, or a component, and continue with the returned cursor."}}
+				}
 			}
 		}
 		return resp, true

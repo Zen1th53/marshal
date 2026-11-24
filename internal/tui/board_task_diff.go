@@ -2,9 +2,12 @@ package tui
 
 import (
 	"bytes"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 const taskDiffLimit = 4 << 20
@@ -143,4 +146,69 @@ func (o *taskDiffOverlay) StatusLine(width int) string {
 type taskDiffBuffer struct {
 	buf      bytes.Buffer
 	overflow bool
+}
+
+// pageTaskDiff returns the whole files of a task's diff that fit one Board
+// page, starting at the file the cursor names. A cursor is bound to the task
+// and its result commit, so a page of another task or another commit is
+// refused. A diff that fits is returned whole with no limit. A single file
+// larger than a page is not cut: the page is empty and the limit names the
+// commit to inspect that file in.
+func pageTaskDiff(task, commit, raw, cursor string) (string, *model.Limit, error) {
+	files := splitDiffFiles(raw)
+	start := 0
+	if cursor != "" {
+		prefix := task + "@" + commit + "#"
+		n, err := strconv.Atoi(strings.TrimPrefix(cursor, prefix))
+		if !strings.HasPrefix(cursor, prefix) || err != nil || n < 1 || n >= len(files) {
+			return "", nil, fmt.Errorf("%w: the diff page is not a page of task %s at commit %s", model.ErrPolicyDenied, task, commit)
+		}
+		start = n
+	}
+	if start == 0 && len(raw) <= taskDiffLimit {
+		return raw, nil, nil
+	}
+	var page strings.Builder
+	end := start
+	for end < len(files) && page.Len()+len(files[end]) <= taskDiffLimit {
+		page.WriteString(files[end])
+		end++
+	}
+	limit := &model.Limit{Kind: "board_diff", Subject: "task " + task + " diff", ActualBytes: int64(len(raw)), CapBytes: taskDiffLimit, Limited: true, KeptBytes: int64(page.Len()), EvidenceRef: commit}
+	switch {
+	case end == start:
+		limit.Action = fmt.Sprintf("%s is larger than a Board page; inspect it in commit %s.", diffFileName(files[start]), commit)
+		if start+1 < len(files) {
+			limit.Cursor = fmt.Sprintf("%s@%s#%d", task, commit, start+1)
+		}
+	case end < len(files):
+		limit.Cursor = fmt.Sprintf("%s@%s#%d", task, commit, end)
+		limit.Action = fmt.Sprintf("Showing files %d to %d of %d; open the next page for the rest.", start+1, end, len(files))
+	default:
+		limit.Action = fmt.Sprintf("Showing files %d to %d of %d.", start+1, end, len(files))
+	}
+	return page.String(), limit, nil
+}
+
+// splitDiffFiles cuts a unified diff into one piece per file.
+func splitDiffFiles(raw string) []string {
+	var files []string
+	for raw != "" {
+		next := strings.Index(raw[1:], "\ndiff --git ")
+		if next < 0 {
+			files = append(files, raw)
+			break
+		}
+		files = append(files, raw[:next+2])
+		raw = raw[next+2:]
+	}
+	return files
+}
+
+func diffFileName(file string) string {
+	line, _, _ := strings.Cut(file, "\n")
+	if name, ok := strings.CutPrefix(line, "diff --git "); ok {
+		return name
+	}
+	return "the first file"
 }

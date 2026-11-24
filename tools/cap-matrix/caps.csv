@@ -13,10 +13,10 @@ Marshal tool limit errors,0,covered,,internal/mcp:TestToolErrorPreservesLimitAnd
 live ordinary proposal,4096,pending,live proposal submission,internal/mcp:ProposalInner,typed refusal and persisted notice with a compact or split action
 live contract proposal,65536,pending,live proposal submission,internal/mcp:ContractInner,typed refusal and persisted notice with a compact or split action
 live proposal frame,16384,pending,live proposal submission,internal/mcp:ProposalFrameSocket;internal/mcp:ProposalFrameSpool,typed refusal and persisted notice with a compact or split action
-native planning context,98304,pending,read and page adapters,internal/tui:NativePlanning,page optional material; mandatory context kept; otherwise a field-specific split
-decision questions,16384,pending,read and page adapters,internal/tui:Questions,individual questions in order with the same IDs
-native live inbox,65536,pending,read and page adapters,internal/tui:Inbox,durable entries with a bounded tail and cursor
-Board diff,4194304,pending,read and page adapters,internal/tui:BoardDiff,scoped file pages or an authorized commit view
-Marshal events knowledge and recall reads,65536,pending,read and page adapters,internal/mcp:Events;internal/mcp:Knowledge;internal/mcp:Recall,revision-bound cursor and remaining count or a named error with a detail path
-code evidence reads,8192,pending,read and page adapters,internal/mcp:CodeContext;internal/mcp:CodeExpand;internal/mcp:CodeValidate,receipt-bound paging keeping evidence identity
-design record and contract reads,1048576,pending,read and page adapters,internal/mcp:DesignRecord;internal/mcp:ContractWire,design refused whole with a smaller-artifact action; contract reads page at the same revision
+native planning context,98304,covered,,internal/tui:TestNativePlanningLimitAtCap,page optional material; mandatory context kept; otherwise a field-specific split
+decision questions,16384,covered,,internal/tui:TestProcess05QuestionsLimitAtCap,fewer questions in order with the same IDs; only a single question over the bound is refused
+native live inbox,65536,covered,,internal/tui:TestInboxViewLimitAtCap,durable entries with a bounded tail; the note counts toward the bound and names where the rest is kept
+Board diff,4194304,covered,,internal/tui:TestBoardDiffLimitAtCap,scoped file pages or an authorized commit view
+Marshal events knowledge and recall reads,65536,covered,,internal/mcp:TestEventsPageLimitAtCap;internal/mcp:TestKnowledgePageLimitAtCap;internal/mcp:TestRecallPageLimitAtCap,revision-bound cursor and remaining count or a named error with a detail path
+code evidence reads,8192,covered,,internal/mcp:TestCodeContextBudgetAtCap;internal/mcp:TestCodeExpandBudgetAtCap;internal/mcp:TestCodeValidateTextAtCap,receipt-bound paging keeping evidence identity
+design record and contract reads,1048576,covered,,internal/mcp:TestDesignRecordLimitAtCap;internal/mcp:TestContractWireLimitAtCap,design refused whole with a smaller-artifact action; contract reads page at the same revision

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/nativehistory"
 )
@@ -194,22 +195,32 @@ func (v *inboxView) trim() error {
 	}
 	entries := strings.SplitAfter(rest, "\n\n## ")
 	dropped := 0
-	for len(entries) > 1 && len(header)+len(strings.Join(entries, "")) > viewMaxBytes {
+	// The note counts toward the bound, so the rebuilt view never passes it.
+	size := func() int { return len(header) + len(inboxDropNote(dropped)) + len(strings.Join(entries, "")) }
+	for len(entries) > 1 && size() > viewMaxBytes {
 		entries = entries[1:]
 		dropped++
+	}
+	note := inboxDropNote(dropped)
+	if !private && size() > viewMaxBytes {
+		// One entry alone is larger than the view: keep its newest bytes.
+		entry := entries[len(entries)-1]
+		note = fmt.Sprintf("\n_%d older entr%s dropped and the start of the newest entry cut to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n",
+			dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
+		keep := max(viewMaxBytes-len(header)-len(note), 0)
+		cut := max(len(entry)-keep, 0)
+		for cut < len(entry) && !utf8.RuneStart(entry[cut]) {
+			cut++
+		}
+		entries, dropped = []string{entry[cut:]}, dropped+1
 	}
 	if private {
 		// A retained view may contain an old visible kickoff. Withhold the whole
 		// view rather than leave a wrapped remainder; durable memory is retained.
-		header, entries, dropped = viewHeader(v.reader), []string{"[REDACTED]\n"}, 0
+		header, entries, dropped, note = viewHeader(v.reader), []string{"[REDACTED]\n"}, 0, ""
 	}
 	if dropped == 0 && !private {
 		return nil
-	}
-	note := ""
-	if dropped > 0 {
-		note = fmt.Sprintf("\n_%d older entr%s dropped to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n## ",
-			dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
 	}
 	rebuilt := header + note + strings.Join(entries, "")
 	if err := os.WriteFile(v.path, []byte(rebuilt), 0600); err != nil {
@@ -219,6 +230,16 @@ func (v *inboxView) trim() error {
 	v.written = len(rebuilt)
 	v.mu.Unlock()
 	return nil
+}
+
+// inboxDropNote tells the reader how many older entries left the view and
+// where the complete record stays.
+func inboxDropNote(dropped int) string {
+	if dropped == 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n_%d older entr%s dropped to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n## ",
+		dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
 }
 
 // Count reports how many entries this session rendered into the view.

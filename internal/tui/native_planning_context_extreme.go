@@ -369,14 +369,28 @@ func (w *Workspace) persistNativePlanningDraft(ctx context.Context, provider str
 	return run, err
 }
 
+// nativePlanningLaunchLimit refuses a launch whose hidden instructions do
+// not fit, naming the part and both sizes. The planning context itself is
+// never inlined (it is paged through the context read), so the way on is
+// to shorten the named part, not to retry.
+func nativePlanningLaunchLimit(provider, part string, size int) error {
+	subject := fmt.Sprintf("%s hidden %s", provider, part)
+	action := "Shorten the " + part + ": keep the mandatory protocol whole and move optional material into the paged marshal_project_contract_context read."
+	return model.NewLimitError(fmt.Errorf("%w: %s is %d bytes (cap %d). %s", projectcontext.ErrBudget, subject, size, nativePlanningCombinedMaximumBytes, action),
+		model.Limit{Kind: "native_planning_launch", Subject: subject, ActualBytes: int64(size), CapBytes: nativePlanningCombinedMaximumBytes, Action: action})
+}
+
 // appendNativePlanningHiddenExact adds text as it is, or refuses with
 // ErrBudget and changes nothing (neither args nor dir).
 func appendNativePlanningHiddenExact(provider, root string, args []string, dir *briefingDir, text string) ([]string, error) {
 	var err error
 	hidden := ""
 	if hiddenChannel(provider) == injectMarshalDir {
-		if dir == nil || dir.size+len(text)+2 > nativePlanningCombinedMaximumBytes {
+		if dir == nil {
 			return nil, projectcontext.ErrBudget
+		}
+		if size := dir.size + len(text) + 2; size > nativePlanningCombinedMaximumBytes {
+			return nil, nativePlanningLaunchLimit(provider, "briefing file", size)
 		}
 		data, e := os.ReadFile(dir.file())
 		if e != nil && !errors.Is(e, os.ErrNotExist) {
@@ -411,7 +425,7 @@ func appendNativePlanningHiddenExact(provider, root string, args []string, dir *
 			}
 		}
 		if total > nativePlanningCombinedMaximumBytes {
-			return nil, projectcontext.ErrBudget
+			return nil, nativePlanningLaunchLimit(provider, "system prompt", total)
 		}
 	}
 	envelope, e := json.Marshal(struct {
@@ -423,7 +437,7 @@ func appendNativePlanningHiddenExact(provider, root string, args []string, dir *
 		return nil, e
 	}
 	if len(envelope) > nativePlanningCombinedMaximumBytes {
-		return nil, projectcontext.ErrBudget
+		return nil, nativePlanningLaunchLimit(provider, "launch arguments", len(envelope))
 	}
 	if hiddenChannel(provider) == injectMarshalDir {
 		if _, err = dir.add(text); err != nil {

@@ -92,7 +92,7 @@ func (s *Server) callCodeEvidenceTool(ctx context.Context, caller auth.Principal
 		if err != nil || strings.TrimSpace(task) == "" {
 			return "", true, fmt.Errorf("%w: task text required", model.ErrInvalid)
 		}
-		budget, err := knowledgeIntArg(args, "budget", codeevidence.DefaultContextBytes, 1024, codeevidence.MaxContextBytes)
+		budget, err := codeEvidenceBudget(args, name, codeevidence.DefaultContextBytes, codeevidence.MaxContextBytes)
 		if err != nil {
 			return "", true, err
 		}
@@ -117,7 +117,7 @@ func (s *Server) callCodeEvidenceTool(ctx context.Context, caller auth.Principal
 		if req.Receipt == "" && req.Cursor == "" {
 			return "", true, fmt.Errorf("%w: receipt or cursor required", model.ErrInvalid)
 		}
-		budget, err := knowledgeIntArg(args, "budget", codeevidence.DefaultExpandBytes, 1024, codeevidence.MaxExpandBytes)
+		budget, err := codeEvidenceBudget(args, name, codeevidence.DefaultExpandBytes, codeevidence.MaxExpandBytes)
 		if err != nil {
 			return "", true, err
 		}
@@ -147,10 +147,8 @@ func (s *Server) callCodeEvidenceTool(ctx context.Context, caller auth.Principal
 			return "", true, err
 		}
 		sum := codeevidence.Summarize(rep)
-		out.Summary, out.Text = &sum, rep.Text
-		if len(out.Text) > codeevidence.MaxValidateBytes {
-			out.Text, out.Truncated = strings.ToValidUTF8(out.Text[:codeevidence.MaxValidateBytes], ""), true
-		}
+		out.Summary = &sum
+		out.Text, out.Truncated = boundCodeValidateText(rep.Text)
 	}
 	data, err := json.Marshal(out)
 	if err != nil {
@@ -160,4 +158,25 @@ func (s *Server) callCodeEvidenceTool(ctx context.Context, caller auth.Principal
 		return "", true, err
 	}
 	return string(data), true, nil
+}
+
+// codeEvidenceBudget reads a budget argument. A budget over the tool's
+// largest page is refused with a typed limit: a smaller budget pages the
+// same receipt with its cursor, so the evidence identity is kept.
+func codeEvidenceBudget(args map[string]any, tool string, fallback, maximum int) (int, error) {
+	if n, ok := args["budget"].(float64); ok && n > float64(maximum) && n == float64(int64(n)) {
+		return 0, model.NewLimitError(fmt.Errorf("%w: budget %d is over the %d-byte %s page", model.ErrInvalid, int64(n), maximum, tool),
+			model.Limit{Kind: "code_evidence_page", Subject: tool + " budget", ActualBytes: int64(n), CapBytes: int64(maximum),
+				Action: fmt.Sprintf("Call %s with budget %d or less and continue with code_expand on the same receipt and cursor.", tool, maximum)})
+	}
+	return knowledgeIntArg(args, "budget", fallback, 1024, maximum)
+}
+
+// boundCodeValidateText keeps validation text within its page on a UTF-8
+// boundary; the summary still counts every receipt checked.
+func boundCodeValidateText(text string) (string, bool) {
+	if len(text) <= codeevidence.MaxValidateBytes {
+		return text, false
+	}
+	return strings.ToValidUTF8(text[:codeevidence.MaxValidateBytes], ""), true
 }

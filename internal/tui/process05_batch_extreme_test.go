@@ -332,38 +332,94 @@ func TestProcess05StaleTransportIntentNeverFallsBackToOrdinaryDelivery(t *testin
 	}
 }
 
-func TestProcess05OversizePacketRefusesEveryQuestionWithoutTruncation(t *testing.T) {
+// A batch of questions exactly at the packet bound is one packet; one byte
+// more falls back to fewer questions in the same order with the same IDs,
+// leaving the rest pending for their own turn. Only a single question over
+// the bound is refused, and only that one, without truncation.
+func TestProcess05QuestionsLimitAtCap(t *testing.T) {
 	w, requests := process05QuestionFixture(t)
 	log, _ := fakeCodexDecisionPane(t, "pasted")
-	for i := range requests {
-		requests[i].Scope += "; exact detail " + strings.Repeat("x", privateDecisionPacketBytes/3)
-	}
 	w.registerPrivateProcess05Questions(t.Context(), requests)
 	w.permissions.mu.Lock()
 	var id string
 	var p *buildPendingDecision
 	for key, value := range w.permissions.build.pending {
-		id, p = key, value
-		break
+		if id == "" || key < id {
+			id, p = key, value
+		}
 	}
 	w.permissions.mu.Unlock()
 	items, payload, bounded := w.privateDecisionPacket(id, p)
-	if bounded || len(items) != 4 || len(payload) <= privateDecisionPacketBytes {
-		t.Fatal("fixture did not retain exact oversized scopes")
+	if !bounded || len(items) != 4 || len(payload) > privateDecisionPacketBytes {
+		t.Fatalf("fixture packet: %d items %d bytes", len(items), len(payload))
 	}
-	w.deliverCodexDecision(t.Context(), id, p)
-	for _, call := range decisionCalls(t, log) {
-		if call.Args[0] == "set-buffer" || call.Args[0] == "paste-buffer" || call.Args[0] == "send-keys" {
-			t.Fatal("oversized scopes entered native input")
-		}
+	last := items[3].p
+	w.permissions.mu.Lock()
+	last.text += strings.Repeat("x", privateDecisionPacketBytes-len(payload))
+	w.permissions.mu.Unlock()
+	items, payload, bounded = w.privateDecisionPacket(id, p)
+	if !bounded || len(items) != 4 || len(payload) != privateDecisionPacketBytes {
+		t.Fatalf("at bound: %d items %d bytes", len(items), len(payload))
 	}
 	w.permissions.mu.Lock()
-	remaining := len(w.permissions.build.pending)
+	last.text += "x"
 	w.permissions.mu.Unlock()
-	if remaining != 0 {
-		t.Fatal("oversize left unaccounted batch callbacks")
+	over, payload, bounded := w.privateDecisionPacket(id, p)
+	if !bounded || len(over) != 3 || len(payload) > privateDecisionPacketBytes {
+		t.Fatalf("one over: %d items %d bytes", len(over), len(payload))
 	}
-	events, err := w.store.ListEvents(t.Context())
+	for i := range over {
+		if over[i].id != items[i].id || !strings.Contains(payload, over[i].id) {
+			t.Fatal("fallback changed question order or IDs")
+		}
+	}
+	if strings.Contains(payload, items[3].id) {
+		t.Fatal("fallback packet carried the question that did not fit")
+	}
+	w.deliverCodexDecision(t.Context(), id, p)
+	pasted := ""
+	for _, call := range decisionCalls(t, log) {
+		if call.Args[0] == "set-buffer" {
+			pasted = call.Args[len(call.Args)-1]
+		}
+	}
+	if !strings.Contains(pasted, over[2].id) || strings.Contains(pasted, items[3].id) {
+		t.Fatal("native turn did not carry exactly the fitting questions")
+	}
+	w.permissions.mu.Lock()
+	waiting := w.permissions.build.pending[items[3].id]
+	w.permissions.mu.Unlock()
+	if waiting == nil || waiting.delivered || waiting.answer != nil {
+		t.Fatal("question that did not fit was not kept for its own turn")
+	}
+
+	// A single question over the bound alone is refused without truncation.
+	w2, requests2 := process05QuestionFixture(t)
+	log2, _ := fakeCodexDecisionPane(t, "pasted")
+	requests2[0].Scope += "; exact detail " + strings.Repeat("x", privateDecisionPacketBytes)
+	w2.registerPrivateProcess05Questions(t.Context(), requests2)
+	w2.permissions.mu.Lock()
+	var bigID string
+	var big *buildPendingDecision
+	for key, value := range w2.permissions.build.pending {
+		if len(value.text) > privateDecisionPacketBytes {
+			bigID, big = key, value
+		}
+	}
+	w2.permissions.mu.Unlock()
+	if big == nil {
+		t.Fatal("fixture did not keep the exact oversized scope")
+	}
+	if items, _, bounded := w2.privateDecisionPacket(bigID, big); bounded || len(items) != 1 {
+		t.Fatalf("single oversized question: %d items bounded=%v", len(items), bounded)
+	}
+	w2.deliverCodexDecision(t.Context(), bigID, big)
+	for _, call := range decisionCalls(t, log2) {
+		if call.Args[0] == "set-buffer" || call.Args[0] == "paste-buffer" || call.Args[0] == "send-keys" {
+			t.Fatal("oversized question entered native input")
+		}
+	}
+	events, err := w2.store.ListEvents(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,8 +429,11 @@ func TestProcess05OversizePacketRefusesEveryQuestionWithoutTruncation(t *testing
 			denied++
 		}
 	}
-	if denied != 4 {
-		t.Fatalf("independent oversize outcomes=%d", denied)
+	w2.permissions.mu.Lock()
+	remaining := len(w2.permissions.build.pending)
+	w2.permissions.mu.Unlock()
+	if denied != 1 || remaining != 3 {
+		t.Fatalf("oversize outcomes=%d remaining=%d", denied, remaining)
 	}
 }
 
