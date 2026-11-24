@@ -727,7 +727,10 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			m.mu.Unlock()
 			m.finishHolder(holderID, cancel, false)
 			if authErr != nil {
-				return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, authErr)
+				return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, proposalAuthRefusal(fmt.Errorf("automatic delivery was not authorized: %w", authErr)))
+			}
+			if authorized, readErr := service.Store.GetMarshalRun(ctx, service.ProjectID, runID); readErr != nil || (authorized.Value.CloseAuthorization == nil && authorized.Value.State != marshal.Closed) {
+				return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, proposalAuthRefusal(errors.Join(errDeliverNoCloseAuthority, readErr)))
 			}
 			_, err = w.marshalResume(ctx)
 			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
@@ -801,6 +804,45 @@ func marshalProposalArgs(p marshalProposal) []string {
 	}
 }
 
+// errDeliverNoCloseAuthority is the named refusal of a delivery approval that
+// left the run without close authority.
+var errDeliverNoCloseAuthority = errors.New("automatic delivery was not authorized: the run has no close authority")
+
+// deliverProposalOutcome is what an approved delivery proposal achieved, in
+// the words the Marshal reads: the exact delivery of a closed run, a
+// submission still waiting for its checks, or the named refusal of a run
+// left without close authority. It never says the work was delivered before
+// it was.
+func deliverProposalOutcome(run marshal.Run) string {
+	switch {
+	case run.State == marshal.Closed:
+		proof := "the full canonical proof"
+		if run.DeliveryKind != "" {
+			proof = run.DeliveryKind
+		}
+		return fmt.Sprintf("delivered: the run is closed and its work is in %s (proved by %s).", run.TargetRef, proof)
+	case run.CloseAuthorization != nil:
+		return fmt.Sprintf("submitted, pending verification: automatic delivery to %s is authorized, but nothing is delivered yet. The work is delivered only after every check passes; follow /marshal status.", run.TargetRef)
+	}
+	return "refused: " + errDeliverNoCloseAuthority.Error() + "; nothing will be delivered. Ask the owner to approve delivery again."
+}
+
+// deliverOutcomeText reads the run's current state for deliverProposalOutcome.
+func (w *Workspace) deliverOutcomeText(runID string) string {
+	m := w.marshalSession()
+	m.mu.Lock()
+	service := m.service
+	m.mu.Unlock()
+	if service == nil || service.Store == nil {
+		return "submitted, outcome unknown: the run could not be read; follow /marshal status before assuming the work was delivered."
+	}
+	record, err := service.Store.GetMarshalRun(context.Background(), service.ProjectID, runID)
+	if err != nil {
+		return "submitted, outcome unknown: the run could not be read; follow /marshal status before assuming the work was delivered."
+	}
+	return deliverProposalOutcome(record.Value)
+}
+
 func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow bool, err error) {
 	if req.Who != "Marshal" && req.ProposalID == "" && req.Kind != "memory" {
 		return
@@ -810,6 +852,9 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 		decision = "applied"
 	}
 	text := fmt.Sprintf("## MARSHAL operator popup decision\n\n%s: %s\n", decision, req.Object)
+	if allow && err == nil && req.Kind == "marshal-command" && req.Object == "/marshal deliver" {
+		text = fmt.Sprintf("## MARSHAL operator popup decision\n\n%s: %s\n", req.Object, w.deliverOutcomeText(req.RunID))
+	}
 	if err != nil {
 		text = "## MARSHAL operator popup decision\n\nApplication failed; do not continue as approved.\n" + formatInboxRefusalDetails(err)
 	}

@@ -70,7 +70,11 @@ type marshalSession struct {
 	conversationID string
 	cancel         context.CancelFunc
 	// stopCause is why the running step was cancelled (owner or shutdown).
-	stopCause     string
+	stopCause string
+	// stopSource mirrors stopCause for the cancel functions of reserved
+	// steps, which may run without m.mu and name their source as the
+	// context's cause.
+	stopSource    atomic.Pointer[string]
 	nativeCancels []context.CancelFunc
 	draftCancel   context.CancelFunc
 	draftDone     chan struct{}
@@ -1134,9 +1138,11 @@ func (m *marshalSession) reserveWithHolder(parent context.Context, meta marshal.
 	if meta.StartedAt.IsZero() {
 		meta.StartedAt = time.Now().UTC()
 	}
-	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
+	ctx, cancelCause := context.WithCancelCause(context.WithoutCancel(parent))
+	cancel := func() { cancelCause(marshalCancelled{source: m.loadStopSource()}) }
 	m.busy, m.cancel, m.holder = true, cancel, meta.Sanitized()
 	m.stopCause = ""
+	m.stopSource.Store(nil)
 	m.running.Store(true)
 	return ctx, m.holder.ID, cancel, nil
 }
@@ -1699,12 +1705,19 @@ func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, holde
 			w.deliverApprovalNotices(ctx, runID)
 		}
 	})
-	if err != nil {
-		w.logTUIError("run stopped", err)
-	}
 	m.mu.Lock()
 	cause := m.stopCause
 	m.mu.Unlock()
+	if cause == "" && ctx.Err() != nil {
+		cause = marshalCancelSource(ctx)
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			w.logTUIError("run stopped ("+marshalCancelled{source: cause}.Error()+")", err)
+		} else {
+			w.logTUIError("run stopped", err)
+		}
+	}
 	note, alert := marshalExecuteOutcome(run, err, ctx.Err() != nil, cause)
 	panel := newMarshalPanel(runID, provider, run, note)
 	panel.Stopped = err != nil
@@ -1799,17 +1812,60 @@ func (w *Workspace) noteMarshalShutdown() {
 	m.mu.Lock()
 	if m.cancel != nil || len(m.nativeCancels) > 0 {
 		m.stopCause = marshalStopShutdown
+		m.storeStopSource(marshalStopShutdown)
 	}
 	m.mu.Unlock()
 }
 
-// marshalCancelNote is the panel note of a step cancelled for cause; a
-// cancellation with no recorded cause reads as an interruption.
-func marshalCancelNote(cause string) string {
-	if cause == marshalStopByOwner {
-		return knownStopPrefix + "You stopped the run; its state is kept." + knownStopGap + "Press Enter to resume."
+// marshalStopUnknown names a cancellation whose source was not recorded.
+const marshalStopUnknown = "unknown"
+
+// marshalCancelled is the cause a cancelled Marshal step's context carries,
+// so whatever records the cancellation can name who stopped it. It still
+// matches context.Canceled.
+type marshalCancelled struct{ source string }
+
+func (c marshalCancelled) Error() string {
+	switch c.source {
+	case marshalStopByOwner:
+		return "cancelled by the owner's stop"
+	case marshalStopShutdown:
+		return "cancelled by MARSHAL shutting down"
 	}
-	return knownStopPrefix + "MARSHAL was interrupted while the run was working; its state is kept." + knownStopGap + "Press Enter to resume."
+	return "cancelled; the source is unknown"
+}
+
+func (c marshalCancelled) Is(target error) bool { return target == context.Canceled }
+
+func (m *marshalSession) storeStopSource(source string) { m.stopSource.Store(&source) }
+
+func (m *marshalSession) loadStopSource() string {
+	if p := m.stopSource.Load(); p != nil && *p != "" {
+		return *p
+	}
+	return marshalStopUnknown
+}
+
+// marshalCancelSource is who cancelled ctx: the owner, shutdown, or
+// explicitly unknown when nothing recorded a source.
+func marshalCancelSource(ctx context.Context) string {
+	var c marshalCancelled
+	if errors.As(context.Cause(ctx), &c) && c.source != "" {
+		return c.source
+	}
+	return marshalStopUnknown
+}
+
+// marshalCancelNote is the panel note of a step cancelled for cause; a
+// cancellation with no recorded cause says that its source is unknown.
+func marshalCancelNote(cause string) string {
+	switch cause {
+	case marshalStopByOwner:
+		return knownStopPrefix + "You stopped the run; its state is kept." + knownStopGap + "Press Enter to resume."
+	case marshalStopShutdown:
+		return knownStopPrefix + "MARSHAL was interrupted by its own shutdown while the run was working; its state is kept." + knownStopGap + "Press Enter to resume."
+	}
+	return knownStopPrefix + "MARSHAL was interrupted while the run was working and the source of the cancellation is unknown; its state is kept." + knownStopGap + "Press Enter to resume."
 }
 
 // marshalExecuteOutcome is the panel note after Execute returns, and whether
@@ -2106,6 +2162,7 @@ func (w *Workspace) marshalStopFor(cause string) string {
 	cancel := m.cancel
 	if (cancel != nil || len(m.nativeCancels) > 0) && m.stopCause == "" {
 		m.stopCause = cause
+		m.storeStopSource(cause)
 	}
 	waiting := m.nativeCancels
 	m.nativeCancels = nil
