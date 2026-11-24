@@ -27,6 +27,8 @@ type WebIntent struct {
 	Key            string `json:"key"`
 	Value          string `json:"value"`
 	Revision       int64  `json:"revision"`
+	RunID          string `json:"runId,omitempty"`
+	AttemptID      string `json:"attemptId,omitempty"`
 }
 
 type WebReceipt struct {
@@ -104,13 +106,21 @@ func (s *Store) AdmitWebSetting(ctx context.Context, i WebIntent) (WebReceipt, e
 	if count >= 64 {
 		return WebReceipt{}, model.ErrConflict
 	}
+	if i.Op == "lane/nudge" {
+		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM web_settings_actions WHERE project_id=? AND json_extract(intent,'$.op')=? AND json_extract(intent,'$.key')=? AND created>?`, i.ProjectID, i.Op, i.Key, time.Now().Add(-30*time.Second).Unix()).Scan(&count); err != nil {
+			return WebReceipt{}, err
+		}
+		if count != 0 {
+			return WebReceipt{}, model.ErrConflict
+		}
+	}
 	var revision int64
 	switch i.Op {
 	case "settings/set":
 		err = tx.QueryRowContext(ctx, `SELECT revision FROM marshal_settings WHERE project_id=?`, i.ProjectID).Scan(&revision)
 	case "settings/ultra.set":
 		err = tx.QueryRowContext(ctx, `SELECT revision FROM ultra_preference_revisions WHERE project_id=?`, i.ProjectID).Scan(&revision)
-	case "settings/ultra.request":
+	case "settings/ultra.request", "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart", "run/pause", "run/stop", "run/resume", "run/stop-workers", "run/amend.deny":
 		revision = i.Revision
 	default:
 		return WebReceipt{}, model.ErrInvalid
@@ -125,7 +135,7 @@ func (s *Store) AdmitWebSetting(ctx context.Context, i WebIntent) (WebReceipt, e
 		return WebReceipt{}, model.ErrConflict
 	}
 	// A queued settings revision can be claimed by only one tab.
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM web_settings_actions WHERE project_id=? AND status IN ('queued','applying') AND json_extract(intent,'$.op')=? AND json_extract(intent,'$.revision')=?`, i.ProjectID, i.Op, i.Revision).Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM web_settings_actions WHERE project_id=? AND status IN ('queued','applying') AND json_extract(intent,'$.op')=? AND json_extract(intent,'$.revision')=? AND json_extract(intent,'$.key')=?`, i.ProjectID, i.Op, i.Revision, i.Key).Scan(&count); err != nil {
 		return WebReceipt{}, err
 	}
 	if count != 0 {

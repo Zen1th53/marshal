@@ -29,3 +29,13 @@ func TestChatQuestionHidesStaleArchitectureCard(t *testing.T) {
 		t.Fatalf("card rendering: %v\n%s", err, out)
 	}
 }
+
+func TestWorkControlsPreserveTypedBindings(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is needed for page interaction checks")
+	}
+	if output, err := exec.Command(node, "testdata/commands.cjs").CombinedOutput(); err != nil {
+		t.Fatalf("work controls: %v\n%s", err, output)
+	}
+}

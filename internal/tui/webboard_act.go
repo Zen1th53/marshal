@@ -57,6 +57,10 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 		if !claimed.CompareAndSwap(false, true) {
 			return
 		}
+		if a.Kind == "cmd" && a.Command != nil && webWorkOp(a.Command.Op) {
+			go func() { done <- webActed{res: w.webWorkCommand(a)} }()
+			return
+		}
 		done <- w.webAct(a)
 	}
 	wait, cancel := context.WithTimeout(ctx, webActWait)
@@ -128,6 +132,9 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 // card the Board shows now.
 func (w *Workspace) webAct(a webboard.Action) webActed {
 	if a.Kind == "cmd" {
+		if a.Command != nil && webWorkOp(a.Command.Op) {
+			return webActed{res: w.webWorkCommand(a)}
+		}
 		return webActed{res: w.webSetting(a)}
 	}
 	if a.Kind == "key" && (a.Key == webKeyRetry || a.Key == webKeyStopAll) {
@@ -381,7 +388,9 @@ func (w *Workspace) webScreenKeys() []vm.Key {
 	if id := w.webRetryShown(); id != "" {
 		keys = append(keys, vm.Key{Key: webKeyRetry, Label: "retry " + cleanBoard(id)})
 	}
-	if w.marshalPanel() != nil {
+	if p := w.marshalPanel(); p != nil && (w.runtime == nil || len(w.webRunLanes(p.RunID)) > 0) {
+		// With a runtime the page sends the bound stop-workers request, so
+		// the key is offered only while the run has workers to bind.
 		keys = append(keys, vm.Key{Key: webKeyStopAll, Label: "stop all workers"})
 	}
 	return keys
@@ -441,6 +450,9 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 	r := webActed{res: webboard.Result{Status: "done"}}
 	switch a.Key {
 	case webKeyRetry:
+		if w.runtime != nil {
+			return out(refused("Refresh the page and use the bound task retry control."))
+		}
 		if busyErr := w.marshalSession().busyErrorIfBusy("retry"); busyErr != nil {
 			return out(refusedErr(busyErr))
 		}
@@ -455,6 +467,11 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 		w.handleRetryKey(KeyEvent{Type: KeyEnter})
 		r.started = w.commandBusy.Load()
 	case webKeyStopAll:
+		if w.runtime != nil {
+			// The same admission as the typed control: the run's workers
+			// are stopped only through the bound stop-workers op.
+			return out(refused("Refresh the page and use the bound stop-workers control."))
+		}
 		w.runCommand(w.workers.context(), "/stop all")
 		r.output = w.uiEvents != nil && w.outputSeq.Load() == before
 	}

@@ -838,7 +838,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-accept
-    name: Approve a handed-in result immediately when idle or queue acceptance during execution
+    name: Apply result acceptance through the run writer when idle or during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -854,7 +854,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-return
-    name: Return a handed-in task immediately when idle or queue it during execution
+    name: Return a handed-in task through the run writer when idle or during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -870,7 +870,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-retry
-    name: Retry a returned or escalated task immediately when idle or queue it during execution
+    name: Retry a bound returned or escalated attempt through the run writer
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -878,6 +878,9 @@ features:
       - internal/app/marshal_run_commands.go
     tests:
       - internal/app.TestQueuedRetryRetainsFreshSession
+      - internal/tui.TestActiveRunQueuesRetryAndNamesExecution
+      - internal/tui.TestLegacyTaskCommandUsesBoundWriter
+      - internal/tui.TestTaskProposalReplaysWriterReceipt
     docs:
       - docs/board-and-keys.md
     web: []
@@ -3525,6 +3528,58 @@ features:
         kind: control
       - routeOrCommand: /marshal settings session-import
         anchor: 'func projectFileSetting('
+        kind: control
+
+  - id: bound-browser-run-controls
+    name: Browser run pause, stop, resume, worker stop and amendment denial with plan bindings and durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/webboard_run_actions.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/commands.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestWebRunControlsRespectApprovalAndHold
+      - internal/tui.TestLegacyStopAndTypedStopUseBoundWriter
+      - internal/tui.TestWebRunOpReceiptMatrix
+      - internal/webboard.TestRunCommandTargetBindsSelectedRun
+      - internal/webboard.TestRunControlTokenIsBoundAndSingleUse
+      - internal/webboard.TestWorkControlsPreserveTypedBindings
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function renderRunControls('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal stop
+        anchor: 'func (w *Workspace) webRunCommand('
+        kind: control
+
+  - id: bound-browser-work-actions
+    name: Browser task and worker actions with attempt bindings and durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/webboard_commands.go
+      - internal/tui/webboard_lanes.go
+      - internal/webboard/commands.go
+      - internal/webboard/settings.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/webboard.TestCmdTokenCannotCrossTargetOrOp
+      - internal/webboard.TestWorkControlsPreserveTypedBindings
+      - internal/tui.TestTaskCommandStaleAttemptRefused
+      - internal/tui.TestSkipRequiresReplan
+      - internal/tui.TestWebOpMatrixUsesExistingAuthorityAndPayload
+      - internal/tui.TestWebLaneMutationRechecksAttemptAtDequeue
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function renderWorkControls('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal retry
+        anchor: 'func (w *Workspace) marshalRunCommand('
         kind: control
 
 pending:

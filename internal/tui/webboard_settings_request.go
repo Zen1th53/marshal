@@ -120,6 +120,7 @@ func webRequestReceipt(i store.WebIntent, b webRequestBinding, o cloud.RequestOb
 
 // reconcileWebRequests only observes journals, including after authority expires.
 func (w *Workspace) reconcileWebRequests(ctx context.Context) {
+	w.reconcileWebWork(ctx)
 	w.mu.RLock()
 	st, runtime, project := w.store, w.runtime, w.ultraProjectLocked()
 	w.mu.RUnlock()

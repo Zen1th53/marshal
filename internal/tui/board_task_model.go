@@ -223,3 +223,8 @@ func taskModelMovable(s boardmodel.TaskState) bool {
 	}
 	return false
 }
+
+// taskModelCommand is shared by the terminal picker and bound browser actions.
+func taskModelCommand(id, worker, reason, digest string) app.RunCommandInput {
+	return app.RunCommandInput{Operation: "reassign", TaskID: id, Worker: worker, Reason: reason, TaskDigest: digest}
+}

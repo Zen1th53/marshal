@@ -285,7 +285,8 @@ func TestRunCommandsUseSingleWriter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CollectHandIn(ctx, "run", a); err != nil {
+	first, err := s.CollectHandIn(ctx, "run", a)
+	if err != nil {
 		t.Fatal(err)
 	}
 	started, release := make(chan struct{}), make(chan struct{})
@@ -354,14 +355,62 @@ func TestRunCommandsUseSingleWriter(t *testing.T) {
 	if err != nil || resumed.ExecutionID != "active-test" {
 		t.Fatalf("resume while running: execution=%q err=%v", resumed.ExecutionID, err)
 	}
+	retry := runCommandForTest(t, s, "live-retry", "retry", "a")
+	retry.FreshSession = true
+	if receipt, err := s.enqueueRunCommand(ctx, "run", retry); err != nil || receipt.State != "queued" {
+		t.Fatalf("retry admission: %+v %v", receipt, err)
+	}
+	for {
+		snapshot, err := s.Snapshot(ctx, "run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(snapshot.Commands) == 2 && snapshot.Commands[1].State == "applied" {
+			if snapshot.Tasks[0].ResultCommit != first.ResultCommit || snapshot.Tasks[1].State != marshal.Dispatched {
+				t.Fatal("retry lost retained work or waited for unrelated work")
+			}
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("retry did not apply during collection")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	if replay, err := s.enqueueRunCommand(ctx, "run", retry); err != nil || replay.State != "applied" {
+		t.Fatalf("lost reply replay: %+v %v", replay, err)
+	}
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	run := drainCommandsForTest(t, s)
-	if taskReturns(run.Tasks[0]) != 1 || run.Tasks[1].State != marshal.HandedIn {
+	if run.Tasks[0].FreshSessionRetries != 1 || taskReturns(run.Tasks[0]) != 1 || run.Tasks[1].State != marshal.HandedIn {
 		t.Fatalf("writer ordering: %s", fmt.Sprint(run.Tasks))
 	}
+	s.Drivers["worker"] = driver.Governed{Provider: "worker", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		path := filepath.Join(req.Worktree, "a.txt")
+		prior, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return nil, os.WriteFile(path, append(prior, []byte("again\n")...), 0600)
+	}}
+	next, err := s.Dispatch(ctx, "run", "a", "revise")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.CollectHandIn(ctx, "run", next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", first.ResultCommit, second.ResultCommit); err != nil {
+		t.Fatal("retry did not start from retained commit", err)
+	}
+	if got := marshalGit(t, s.Repository, "show", second.ResultCommit+":a.txt"); got != "done\nagain" {
+		t.Fatalf("retry contents = %q", got)
+	}
+
 }
 
 func TestCommandTypedAgainstOlderRevisionIsQueued(t *testing.T) {
@@ -445,5 +494,33 @@ func TestLiveDispatchesStayWithinRepository(t *testing.T) {
 	second.clearDispatchLive("run", "a")
 	if !first.dispatchLive("run", "a") {
 		t.Fatal("another repository cleared a live worker")
+	}
+}
+
+func TestRetryRefusesStaleRetainedWorkBeforeMutation(t *testing.T) {
+	s, repo := reworkFixture(t)
+	first := reworkAttempt(t, s)
+	if _, err := s.ReturnByUser(t.Context(), "run", "a", "revise"); err != nil {
+		t.Fatal(err)
+	}
+	run, rev, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := marshalGit(t, repo, "rev-parse", "HEAD^{tree}")
+	run.Tasks[0].ResultCommit = marshalGit(t, repo, "commit-tree", tree, "-m", "unrelated")
+	if err := s.save(t.Context(), "run", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	before := TaskCommandDigest(run.Tasks[0])
+	if err := s.RetryTask(t.Context(), "run", "a", true); !errors.Is(err, ErrStaleBase) {
+		t.Fatalf("stale retry = %v", err)
+	}
+	after, err := s.Snapshot(t.Context(), "run")
+	if err != nil || TaskCommandDigest(after.Tasks[0]) != before {
+		t.Fatalf("stale retry changed task: %+v %v", after, err)
+	}
+	if got := marshalGit(t, repo, "rev-parse", priorResultRef("run", "a", first.ResultCommit)); got != first.ResultCommit {
+		t.Fatal("retained work changed")
 	}
 }

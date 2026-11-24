@@ -21,7 +21,8 @@ const runCommandLimit = 128
 
 type RunCommandInput struct {
 	Operation, TaskID, Worker, Reason string
-	FreshSession                      bool `json:",omitempty"`
+	FreshSession                      bool   `json:",omitempty"`
+	TaskDigest                        string `json:",omitempty"`
 }
 type runCommandCommitKey struct{}
 
@@ -94,7 +95,7 @@ func (s *MarshalService) CommandRun(ctx context.Context, e CommandEnvelope, inpu
 		return marshal.RunCommand{}, err
 	}
 	c := marshal.RunCommand{ID: e.IdempotencyKey, Actor: p.ID(), GrantID: decision.CapabilityGrantID, AuthorityProject: e.ProjectID, Resource: r.layout.Database,
-		Operation: input.Operation, TaskID: input.TaskID, Worker: input.Worker, Reason: input.Reason, FreshSession: input.FreshSession, Revision: e.ExpectedVersion}
+		Operation: input.Operation, TaskID: input.TaskID, Worker: input.Worker, Reason: input.Reason, FreshSession: input.FreshSession, TaskDigest: input.TaskDigest, Revision: e.ExpectedVersion}
 	payload, _ := json.Marshal(struct {
 		Envelope CommandEnvelope
 		Input    RunCommandInput
@@ -106,7 +107,8 @@ func (s *MarshalService) CommandRun(ctx context.Context, e CommandEnvelope, inpu
 	return s.enqueueRunCommand(ctx, e.SessionID, c)
 }
 
-func taskCommandDigest(t marshal.Task) string {
+// TaskCommandDigest binds a request to the exact task and attempt displayed.
+func TaskCommandDigest(t marshal.Task) string {
 	data, _ := json.Marshal(t)
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
@@ -172,11 +174,18 @@ func (s *MarshalService) enqueueRunCommand(ctx context.Context, runID string, c 
 	}
 	switch c.Operation {
 	case "return", "accept", "retry", "reassign", "cancel":
+		if err := unfinishedMarshalOperation(run); err != nil {
+			return c, err
+		}
 		i := taskIndex(run, c.TaskID)
 		if i < 0 {
 			return c, model.ErrNotFound
 		}
-		c.TaskDigest = taskCommandDigest(run.Tasks[i])
+		digest := TaskCommandDigest(run.Tasks[i])
+		if c.TaskDigest != "" && c.TaskDigest != digest {
+			return c, model.ErrConflict
+		}
+		c.TaskDigest = digest
 		if c.Operation == "accept" {
 			c.Purpose, err = s.TaskAcceptance(ctx, runID, c.TaskID)
 			if err != nil {
@@ -305,7 +314,7 @@ func (s *MarshalService) drainRunCommands(ctx context.Context, runID string) err
 			c.State, c.Detail = "reconciling", "new starts fenced; admitted workers are being reconciled"
 		} else if run.CommandFence != "" {
 			c.State, c.Detail = "refused", "run paused before command started"
-		} else if i := taskIndex(run, c.TaskID); i < 0 || taskCommandDigest(run.Tasks[i]) != c.TaskDigest {
+		} else if i := taskIndex(run, c.TaskID); i < 0 || TaskCommandDigest(run.Tasks[i]) != c.TaskDigest {
 			c.State, c.Detail = "refused", "task state or attempt changed"
 		} else {
 			c.State = "applying"

@@ -12,14 +12,15 @@ import (
 // webSettingsState advertises only project settings with a ready local writer.
 func (w *Workspace) webSettingsState() webboard.SettingsState {
 	w.mu.RLock()
-	defer w.mu.RUnlock()
 	project := w.ultraProjectLocked()
 	state := webboard.SettingsState{ProjectID: project, Fence: w.webSettingsFenceLocked(), Capabilities: []webboard.SettingCapability{}}
 	if w.store == nil {
+		w.mu.RUnlock()
 		return state
 	}
 	rec, err := w.store.GetMarshalSettings(context.Background(), project)
 	if err != nil {
+		w.mu.RUnlock()
 		return state
 	}
 	for _, d := range settingscatalog.Catalogue() {
@@ -35,6 +36,8 @@ func (w *Workspace) webSettingsState() webboard.SettingsState {
 	if cap := w.webRequestCapability(context.Background()); cap != nil {
 		state.Capabilities = append(state.Capabilities, *cap)
 	}
+	w.mu.RUnlock()
+	state.Capabilities = append(state.Capabilities, w.webWorkCapabilities(context.Background())...)
 	return state
 }
 

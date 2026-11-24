@@ -126,8 +126,12 @@ func retryContinuation(w *Workspace, id string, resume func() error) (string, er
 // holds the run, resumes it, returning the operator's answer. It is a package
 // var so a test can stand in for the Marshal calls it makes.
 var boardRetry = func(w *Workspace, ctx context.Context, id string) (string, error) {
-	if _, err := w.marshalRetry(ctx, []string{id, "fresh-session"}); err != nil {
+	answer, err := w.marshalRetry(ctx, []string{id, "fresh-session"})
+	if err != nil {
 		return "", err
+	}
+	if strings.Contains(answer, "queued (") {
+		return answer, nil
 	}
 	return retryContinuation(w, id, func() error { _, err := w.marshalResume(ctx); return err })
 }
