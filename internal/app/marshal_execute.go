@@ -231,7 +231,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if err != nil {
 			// Workers already launched in this round are still running;
 			// collect them so none is left without a hand-in.
-			err = errors.Join(err, s.collectAdmitted(ctx, runID, launched, observe, current))
+			err = errors.Join(err, s.collectAdmitted(ctx, runID, launched, observe, current, nil))
 			err = s.pauseStageFailure(ctx, runID, "dispatch", err)
 			after, _ := current()
 			return after, err
@@ -270,7 +270,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if observe != nil {
 			_, _ = current()
 		}
-		if err := s.collectAdmitted(ctx, runID, launched, observe, current); err != nil {
+		if err := s.collectAdmitted(ctx, runID, launched, observe, current, s.rollingRefill(runID, brief, launched)); err != nil {
 			err = s.pauseStageFailure(ctx, runID, "dispatch", err)
 			after, _ := current()
 			return after, err
@@ -279,26 +279,61 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 }
 
 // collectAdmitted uses the mode reserved before launch, even after a preference change.
-func (s *MarshalService) collectAdmitted(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
+// refill, when set, starts newly eligible work as each worker's slot is freed.
+func (s *MarshalService) collectAdmitted(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), refill rollingRefill) error {
 	if len(launched) > 0 && launched[0].Tier == marshal.Ultra {
-		return s.collectAndReviewUltra(ctx, runID, launched, observe, current)
+		return s.collectAndReviewUltra(ctx, runID, launched, observe, current, refill)
 	}
 	return s.collectAll(ctx, runID, launched, observe, current)
 }
 
 // collectAndReviewUltra collects and reviews each launched worker in ULTRA as soon
 // as it is ready. State writes to the run and store are serialized.
-func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
-	return s.collectBatchCommands(ctx, runID, launched, observe, current, true)
+func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), refill rollingRefill) error {
+	return s.collectBatchCommands(ctx, runID, launched, observe, current, true, refill)
 }
 
 func (s *MarshalService) collectAll(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
-	return s.collectBatchCommands(ctx, runID, launched, observe, current, false)
+	return s.collectBatchCommands(ctx, runID, launched, observe, current, false, nil)
 }
+
+// rollingRefill admits and launches work into worker slots freed during
+// collection. It returns the workers it started, which join collection.
+type rollingRefill func(ctx context.Context) ([]MarshalDispatch, error)
+
+// rollingRefill returns the refill for an admitted ULTRA batch, or nil when
+// rolling dispatch is not available for it. Refill admits only while ULTRA
+// is still on; turning it off lets live workers drain through this collector
+// before the next round admits serially.
+func (s *MarshalService) rollingRefill(runID string, brief MarshalBrief, launched []MarshalDispatch) rollingRefill {
+	if len(launched) == 0 || launched[0].Tier != marshal.Ultra || !s.rollingRefillAvailable() {
+		return nil
+	}
+	return func(ctx context.Context) ([]MarshalDispatch, error) {
+		run, _, err := s.load(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		if run.State == marshal.AwaitingUser || run.CommandFence != "" || s.pauseHolds(runID, run) {
+			return nil, nil
+		}
+		if marshal.TierPolicy(s.Gate, run.Settings).Tier != marshal.Ultra {
+			return nil, nil
+		}
+		more, err := s.dispatchReady(context.WithValue(ctx, rollingRefillKey{}, true), runID, run, brief)
+		s.markDispatchLive(runID, more)
+		return more, err
+	}
+}
+
+// rollingRefillKey marks a dispatch round started during collection: it
+// never waits for a provider's recovery pace, since that would delay
+// collecting the workers still running.
+type rollingRefillKey struct{}
 
 // Only driver completion waits happen outside the writer. Collection, review
 // and queued task effects all execute here in one ordered stream.
-func (s *MarshalService) collectBatchCommands(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), review bool) error {
+func (s *MarshalService) collectBatchCommands(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), review bool, refill rollingRefill) error {
 	var errs []error
 	pending := append([]MarshalDispatch(nil), launched...)
 	for len(pending) > 0 {
@@ -353,6 +388,19 @@ func (s *MarshalService) collectBatchCommands(ctx context.Context, runID string,
 		if err != nil {
 			errs = append(errs, fmt.Errorf("collect %s: %w", d.TaskID, err))
 		} else if review {
+			// The collected worker's slot is free: start eligible work in it
+			// before this result's review, so a slow review or a slow sibling
+			// does not hold capacity idle.
+			if refill != nil && len(errs) == 0 {
+				more, refillErr := refill(ctx)
+				pending = append(pending, more...)
+				if refillErr != nil {
+					errs = append(errs, fmt.Errorf("refill: %w", refillErr))
+				}
+				if observe != nil && len(more) > 0 {
+					_, _ = current()
+				}
+			}
 			if err = s.reviewCollectedDispatch(ctx, runID, d.TaskID); err != nil {
 				errs = append(errs, fmt.Errorf("review %s: %w", d.TaskID, err))
 			}
@@ -553,6 +601,10 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		}
 		adm, families, rampCap := s.recoveryAdmission(ctx, gate, run, t, launched, now)
 		if !adm.Allowed {
+			if refilling, _ := ctx.Value(rollingRefillKey{}).(bool); refilling && adm.RetryAt != nil {
+				// The next round waits for the pace; refill does not.
+				continue
+			}
 			if adm.RetryAt != nil && adm.RetryAt.After(admitAt) {
 				if admitAt.IsZero() && s.RecordActivity != nil {
 					s.RecordActivity(firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID) + " is waiting: " + adm.Reason + ".")

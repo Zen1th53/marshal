@@ -149,3 +149,6 @@ const governedProviderSwitchAllowed = false
 
 // mergeInPlanOrder keeps governed runs merging in plan order.
 func mergeInPlanOrder(marshal.Run) bool { return true }
+
+// rollingRefillAvailable is false: this edition dispatches in batches.
+func (s *MarshalService) rollingRefillAvailable() bool { return false }
