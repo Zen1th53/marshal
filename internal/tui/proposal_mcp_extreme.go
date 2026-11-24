@@ -614,6 +614,9 @@ func (w *Workspace) beginProposalMCPApply(req permission.Request) (func(bool, er
 			state = "applied"
 		}
 		reason := "canonical application completed"
+		if allow && applyErr == nil && req.Kind == "marshal-command" && req.Object == "/marshal deliver" {
+			reason = w.deliverOutcomeText(req.RunID)
+		}
 		if applyErr != nil {
 			state = "rejected"
 			reason = RedactContent(applyErr.Error(), nil)

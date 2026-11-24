@@ -72,3 +72,42 @@ func TestCancellationRecordsSourceOrUnknown(t *testing.T) {
 		t.Fatalf("recorded causes %q %q %q", ownerCause, shutdownCause, unknownCause)
 	}
 }
+
+// An approved delivery proposal tells the Marshal what actually happened: a
+// submission still pending its checks, the exact delivery of a closed run, or
+// a named refusal when the run holds no close authority. "Applied" alone read
+// as delivered work.
+func TestDeliverProposalReportsPendingOrExactDelivery(t *testing.T) {
+	pending := deliverProposalOutcome(marshal.Run{State: marshal.Reviewing, TargetRef: "refs/heads/main", CloseAuthorization: &marshal.CloseAuthorization{}})
+	if !strings.Contains(pending, "pending verification") || !strings.Contains(pending, "nothing is delivered yet") || !strings.Contains(pending, "refs/heads/main") {
+		t.Fatalf("pending outcome %q", pending)
+	}
+	delivered := deliverProposalOutcome(marshal.Run{State: marshal.Closed, TargetRef: "refs/heads/main", DeliveryKind: "delivered_checks_only"})
+	if !strings.HasPrefix(delivered, "delivered:") || !strings.Contains(delivered, "refs/heads/main") || !strings.Contains(delivered, "delivered_checks_only") {
+		t.Fatalf("delivered outcome %q", delivered)
+	}
+	if full := deliverProposalOutcome(marshal.Run{State: marshal.Closed, TargetRef: "refs/heads/main"}); !strings.Contains(full, "full canonical proof") {
+		t.Fatalf("full delivery outcome %q", full)
+	}
+	refused := deliverProposalOutcome(marshal.Run{State: marshal.Reviewing, TargetRef: "refs/heads/main"})
+	if !strings.HasPrefix(refused, "refused:") || !strings.Contains(refused, "close authority") {
+		t.Fatalf("refused outcome %q", refused)
+	}
+	for _, text := range []string{pending, delivered, refused} {
+		if strings.Contains(text, "applied") {
+			t.Fatalf("delivery outcome still reads as applied: %q", text)
+		}
+	}
+
+	// Without a readable run the notice says the outcome is unknown rather
+	// than claiming delivery.
+	w := NewWorkspace(nil, "owned-project", "owned-session")
+	t.Cleanup(w.Close)
+	if text := w.deliverOutcomeText("RUN-1"); !strings.Contains(text, "outcome unknown") {
+		t.Fatalf("unreadable outcome %q", text)
+	}
+	refusal := proposalAuthRefusal(errDeliverNoCloseAuthority)
+	if receipt, ok := marshal.RefusalOf(refusal); !ok || receipt.Code != marshal.RefusalCodeUnauthorized || receipt.Effects != marshal.EffectsNone {
+		t.Fatalf("missing close authority is not a named refusal: %#v %v", receipt, ok)
+	}
+}
