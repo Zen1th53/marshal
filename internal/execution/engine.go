@@ -899,7 +899,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			} else if execErr != nil || !result.Success {
 				failReason := "worker execution error"
 				if execErr != nil {
-					failReason = execErr.Error()
+					failReason = cancellationReason(ctx, execErr)
 				} else if result.ErrorMessage != "" {
 					failReason = result.ErrorMessage
 				}
@@ -1547,4 +1547,17 @@ func (e *Engine) budgetExhausted(ctx context.Context, run ExecutionRun, now time
 		return err.Error()
 	}
 	return ""
+}
+
+// cancellationReason is the failure text of a task error. A cancellation
+// names the source its context recorded, or says plainly that the source is
+// unknown, instead of a bare "context canceled".
+func cancellationReason(ctx context.Context, err error) string {
+	if !errors.Is(err, context.Canceled) {
+		return err.Error()
+	}
+	if cause := context.Cause(ctx); cause != nil && cause != context.Canceled {
+		return cause.Error() + " (" + err.Error() + ")"
+	}
+	return "cancelled; the source is unknown (" + err.Error() + ")"
 }
