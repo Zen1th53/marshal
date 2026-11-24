@@ -114,7 +114,7 @@ func (s *MarshalService) taskReturnReasons(ctx context.Context, runID string, t 
 }
 
 // Execute drives an approved run to the next point that needs a person:
-// merge accepted work in plan order, review hand-ins, dispatch ready tasks
+// merge accepted work by dependency order, review hand-ins, dispatch ready tasks
 // under the tier policy, and verify the integrated result.
 //
 // Workers run in parallel: a round launches every ready task the tier
@@ -363,9 +363,13 @@ func (s *MarshalService) collectBatchCommands(ctx context.Context, runID string,
 	return errors.Join(errs...)
 }
 
-// mergeAccepted merges accepted tasks in plan order, stopping at the first
-// task that is not yet accepted: merge order is plan order.
+// mergeAccepted merges accepted tasks. A run that merges in plan order stops
+// at the first task that is not yet accepted; any other run merges each
+// accepted task whose dependencies are merged.
 func (s *MarshalService) mergeAccepted(ctx context.Context, runID string, run marshal.Run) (bool, error) {
+	if !mergeInPlanOrder(run) {
+		return s.mergeReady(ctx, runID, run)
+	}
 	progressed := false
 	for _, t := range run.Tasks {
 		if t.State == marshal.Merged || t.State == marshal.Cancelled {

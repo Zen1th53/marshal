@@ -146,3 +146,6 @@ func taskReturns(t marshal.Task) int {
 // governedProviderSwitchAllowed reports whether the operator may switch a
 // governed Process 05 task to another provider within its plan version.
 const governedProviderSwitchAllowed = false
+
+// mergeInPlanOrder keeps governed runs merging in plan order.
+func mergeInPlanOrder(marshal.Run) bool { return true }

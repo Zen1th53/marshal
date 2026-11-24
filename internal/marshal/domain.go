@@ -385,6 +385,35 @@ type LifecycleOperation struct {
 	DeliveryKind  string `json:",omitempty"`
 	ReceiptID     string `json:",omitempty"`
 	ReceiptDigest string `json:",omitempty"`
+	// Merge binds a merge to the inputs it was staged from and the exact
+	// candidate it publishes. Empty is a merge journaled by an earlier build.
+	Merge *MergeIntent `json:",omitempty"`
+}
+
+// MergeIntent is a merge's durable binding. The candidate commit is staged
+// on a private ref before the intent is written, so the integration checkout
+// is untouched until the intent exists, and only the exact candidate is ever
+// published.
+type MergeIntent struct {
+	Run, Task string
+	Attempt   int
+	// PlanDigest is the approved scope; FenceRevision is the run revision the
+	// intent was written over.
+	PlanDigest    string
+	FenceRevision int64
+	// ExpectedHead is the integration head before the merge; AttemptBase is
+	// the base the accepted attempt was built on; Result is its commit.
+	ExpectedHead, AttemptBase, Result string
+	DependencyHeads                   map[string]string `json:",omitempty"`
+	ApprovedChecksDigest              string
+	AcceptedEvidenceDigest            string
+	// Candidate, CandidateTree and StagingRef name the staged merge commit;
+	// Worktree and CommonDir name the authoritative integration checkout.
+	Candidate, CandidateTree, StagingRef string
+	Worktree, CommonDir                  string
+	// Revalidated is set when the head advanced past the attempt's base and
+	// the approved checks and review ran again on the candidate.
+	Revalidated bool `json:",omitempty"`
 }
 
 // RuntimeCompatibility records observed runtime provenance independently of proof.

@@ -1475,10 +1475,8 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if i < 0 || run.Tasks[i].State != marshal.Accepted {
 		return errors.New("task is not accepted")
 	}
-	for j := 0; j < i; j++ {
-		if run.Tasks[j].State != marshal.Merged {
-			return errors.New("merge order violation")
-		}
+	if reason := mergeBlocked(run, i); reason != "" {
+		return errors.New(reason)
 	}
 	accepted := run.Tasks[i].ResultCommit
 	if err := s.checkHoneypotAdmission(ctx, run.Tasks[i], accepted); err != nil {
@@ -1498,15 +1496,15 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	}
 	branch := integrationBranch(runID, run)
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
+	anyMerged := false
+	for _, t := range run.Tasks {
+		if t.State == marshal.Merged {
+			anyMerged = true
+		}
+	}
 	before := run.BaseCommit
 	existingIntegration := false
-	if i > 0 {
-		before, err = gitMarshal(ctx, dir, "rev-parse", "HEAD")
-		if err != nil {
-			return err
-		}
-		existingIntegration = true
-	} else if head, exists, obsErr := s.observeIntegrationHead(ctx, runID, run); obsErr != nil {
+	if head, exists, obsErr := s.observeIntegrationHead(ctx, runID, run); obsErr != nil {
 		return obsErr
 	} else if exists && head != "" {
 		if _, ancErr := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", run.BaseCommit, head); ancErr != nil {
@@ -1514,6 +1512,27 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 		}
 		before = head
 		existingIntegration = true
+	} else if anyMerged {
+		return errors.New("private integration head is missing")
+	}
+	// A merge driver named in .gitattributes runs a configured command during
+	// the merge. A hand-in that adds one is returned instead of merged, so a
+	// worker cannot choose code for the runtime to run.
+	if sets, derr := marshalSetsMergeDriverFrom(ctx, s.Repository, before, accepted); derr != nil {
+		return derr
+	} else if sets {
+		return s.returnUnmergeable(ctx, runID, run, rev, i, before, "merge refused: the hand-in declares a merge driver in .gitattributes", nil)
+	}
+	intent, refusal, err := s.stageMergeCandidate(ctx, runID, run, rev, i, before, dir)
+	if err != nil {
+		return err
+	}
+	if refusal != "" {
+		data := map[string]any{}
+		if strings.HasPrefix(refusal, ErrStaleBase.Error()) {
+			data["merge_refusal"] = ErrStaleBase.Error()
+		}
+		return s.returnUnmergeable(ctx, runID, run, rev, i, before, refusal, data)
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
@@ -1528,7 +1547,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if all {
 		next.State = marshal.Verifying
 	}
-	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged}}
+	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged}, Merge: intent}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return err
@@ -1542,7 +1561,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 		}
 	}()
 
-	if i == 0 {
+	if !anyMerged {
 		wm := worktree.New(s.Repository, s.Worktrees)
 		if existingIntegration {
 			if _, err = wm.Resume(ctx, model.WorktreeRequest{TaskID: integrationTaskID(runID, run), Branch: branch, BaseCommit: before}); err != nil {
@@ -1552,36 +1571,17 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 			return err
 		}
 	}
-	// A merge driver named in .gitattributes runs a configured command during
-	// the merge. A hand-in that adds one is returned instead of merged, so a
-	// worker cannot choose code for the runtime to run.
-	if sets, derr := marshalSetsMergeDriver(ctx, dir, accepted); derr != nil {
-		return derr
-	} else if sets {
-		err = errors.New("the hand-in declares a merge driver in .gitattributes")
-	} else {
-		_, err = gitMarshal(ctx, dir, "merge", "--no-ff", "-m", "marshal: merge "+taskID, accepted)
-	}
-	if err != nil {
-		_, _ = gitMarshal(ctx, dir, "merge", "--abort")
-		head, headErr := gitMarshal(ctx, dir, "rev-parse", "HEAD")
-		if headErr != nil {
-			return headErr
-		}
-		run.Tasks[i].BaseCommit = head
-		run.State = marshal.Reviewing
-		attempt := 1 + run.Tasks[i].EvidenceAttemptBase
-		attempt += taskReturns(run.Tasks[i])
-		stored, reviewErr := s.Store.GetMarshalReview(ctx, runID, taskID, attempt)
-		if reviewErr != nil {
-			return reviewErr
-		}
-		review := stored.Value
-		review.Reasons = append(review.Reasons, "merge refused: "+err.Error())
-		_, err = s.finishMarshalReturn(ctx, runID, run, rev, i, review, map[string]any{"base_commit": head})
+	// The checkout must be the clean, run-owned integration source at the
+	// expected head before it moves; otherwise nothing was published.
+	if err = s.checkIntegrationCheckout(ctx, intent, op.Target, before, ""); err != nil {
 		return err
 	}
+	// From here the checkout may have moved: the journal is held for
+	// recovery rather than abandoned.
 	effectCompleted = true
+	if err = s.publishMergeCandidate(ctx, intent, op.Target); err != nil {
+		return err
+	}
 	// The merge commit is made under the accepted architecture.
 	s.recordArchitectureCommit(ctx, dir, "", "merged", taskID)
 	if err = s.afterOperationEffect(op); err != nil {
@@ -2619,7 +2619,12 @@ var marshalMergeAttr = regexp.MustCompile(`(^|\s)merge=`)
 // marshalSetsMergeDriver reports whether branch changes a .gitattributes file,
 // relative to the integration head, so that it names a merge driver.
 func marshalSetsMergeDriver(ctx context.Context, dir, branch string) (bool, error) {
-	names, err := gitMarshal(ctx, dir, "diff", "--no-ext-diff", "--no-textconv", "--name-only", "HEAD..."+branch)
+	return marshalSetsMergeDriverFrom(ctx, dir, "HEAD", branch)
+}
+
+// marshalSetsMergeDriverFrom is marshalSetsMergeDriver against base.
+func marshalSetsMergeDriverFrom(ctx context.Context, dir, base, branch string) (bool, error) {
+	names, err := gitMarshal(ctx, dir, "diff", "--no-ext-diff", "--no-textconv", "--name-only", base+"..."+branch)
 	if err != nil {
 		return false, err
 	}

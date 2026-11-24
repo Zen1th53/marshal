@@ -213,6 +213,13 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			}
 		}
 	case "merge":
+		if op.Merge != nil && op.Merge.Candidate != "" {
+			var holdErr error
+			if completed, holdErr = s.recoverMergeIntent(ctx, runID, run, op); holdErr != nil {
+				return run, rev, holdErr
+			}
+			break
+		}
 		ref := op.Target
 		if ref == "" {
 			ref = "refs/heads/" + integrationBranch(runID, run)
@@ -237,6 +244,13 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		}
 		if !completed && head != op.Before {
 			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished merge %s: integration moved; inspect retained worktree %s", op.ID, op.Dir), []string{"/marshal status", "/marshal amend"})
+		}
+		// A legacy merge is acknowledged only from a clean integration
+		// checkout at the proven commit.
+		if completed {
+			if observed, _, obsErr := s.observeIntegrationHead(ctx, runID, run); obsErr != nil || observed != head {
+				return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished merge %s: integration checkout does not match the merged commit; inspect retained worktree %s", op.ID, op.Dir), []string{"/marshal status", "/marshal amend"})
+			}
 		}
 	case "close":
 		repository, err := s.repositoryIdentity(ctx)

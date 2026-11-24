@@ -410,3 +410,10 @@ func retireWorkerReturns(t *marshal.Task, worker string) {
 // governedProviderSwitchAllowed reports whether the operator may switch a
 // governed Process 05 task to another provider within its plan version.
 const governedProviderSwitchAllowed = true
+
+// mergeInPlanOrder keeps serial governed runs merging in plan order. Other
+// runs merge each accepted task once its dependencies are merged, so an
+// independent task never waits behind unrelated slow work.
+func mergeInPlanOrder(run marshal.Run) bool {
+	return run.Process05Bound && !run.Process05Parallel
+}
