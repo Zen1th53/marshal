@@ -275,19 +275,29 @@
   var terminalOnly = { "c": 1, "7": 1, "e": 1, "q": 1, "esc": 1 };
   function cardButtons(f) {
     var d = f.decision, p = f.paused, keys = d ? d.actions : p ? p.actions : [];
+    if (d && d.choices && d.choices.length) {
+      // Every typed choice the card offers, each by its own id: a key
+      // means only what its choice says.
+      return d.choices.map(function (c) { return { key: c.key, label: cap(c.label), local: !!c.local, choice: c }; });
+    }
     var out = [], choices = d && (d.kind === "ask" || d.kind === "guard");
     keys.forEach(function (k) {
       if (terminalOnly[k.key] && !choices) return;
       if (d && d.kind === "inbox" && k.key === "⏎") return; // details: the terminal's inspector
-      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" && !choices });
+      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" && !choices && !!d && (d.kind === "architecture" || d.kind === "plan") });
     });
-    if (out.length > 3 && !choices) {
-      // Keep the primary and the stop; the raw error is the first to go.
-      var first = out[0], rest = out.slice(1).filter(function (b) { return b.key !== "d"; });
-      out = [first].concat(rest.slice(0, 2));
-    }
     return out;
   }
+  // decide sends a typed choice of the card on screen, bound to the revision
+  // and plan digest the page shows.
+  function decide(c, extra, label) {
+    var d = frame && frame.decision;
+    if (!d) return Promise.resolve();
+    var body = { action: "decide", choice: c.id, value: c.value || "", cardRevision: d.revision, planDigest: d.plan ? d.plan.digest : "" };
+    Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+    return act(body, label || cap(c.label));
+  }
+  var planOpen = "", editing = null;
   function screenKey(f, key) {
     if (f.decision || f.paused || !f.act || !f.act.tokens[key]) return null;
     for (var i = 0; i < f.keys.length; i++) if (f.keys[i].key === key) return f.keys[i];
@@ -342,7 +352,7 @@
     var card = $("card"), d = f.decision, p = f.paused;
     var cardID = f.act ? f.act.card : "";
     if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
-    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop])) return;
+    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop, planOpen, !!editing])) return;
     if ((!d && !p) || (asksOwner(f) && d && d.kind === "architecture")) { card.hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");
@@ -370,6 +380,7 @@
         if (l.note) dd.appendChild(el("span", "muted", " · " + l.note));
         $("card-lines").appendChild(dd);
       });
+      renderPlanPreview(d);
       setText("card-extra", "");
       more = !!(d.changedNote || d.nodes.length || d.lines.length);
     } else {
@@ -406,6 +417,7 @@
       prim.addEventListener("click", function () {
         var text = confirmStep.text ? typed.value.trim() : "";
         if (confirmStep.text && !text) { feedback("bad", "Type what the Board asks for first."); typed.focus(); return; }
+        if (confirmStep.choice) { decide(confirmStep.choice, { confirmed: true, text: text }, "Confirm"); return; }
         act({ action: "key", key: "⏎", text: text }, "Confirm");
       });
       if (frame && frame.act && frame.act.tokens.esc) {
@@ -427,6 +439,7 @@
       return;
     }
     if (!bs.length) { prim.hidden = true; return; }
+    if (editing && d && d.kind === "requirements") { renderEdit(d, prim, sec); return; }
     prim.hidden = false;
     bs.forEach(function (b, i) {
       var stop = !!f.paused && b.key === "x";
@@ -434,6 +447,8 @@
       var text = on ? "Click again to stop the run" : b.label;
       var go = function () {
         if (b.local) { location.hash = "#home"; $("say-text").focus(); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (b.choice && b.choice.id === "requirements.edit") { editing = { line: "", text: "" }; sigs.card = ""; render(frame); return; }
+        if (b.choice) { armedStop = null; decide(b.choice); return; }
         if (stop && !on) {
           armedStop = f.act && f.act.card;
           feedback("wait", "Stopping keeps the run and its work; /marshal resume continues it. Click again to stop.");
@@ -451,6 +466,46 @@
       } else {
         sec.appendChild(button("linkbtn" + (on ? " danger" : ""), text, go));
       }
+    });
+  }
+
+  // renderEdit is the requirements card's line edit: the line and its new
+  // text, sent as one typed choice bound to the card's revision.
+  function renderEdit(d, prim, sec) {
+    var c = null;
+    d.choices.forEach(function (x) { if (x.id === "requirements.edit") c = x; });
+    var pick = el("select"), text = el("input");
+    pick.setAttribute("aria-label", "Line to edit");
+    text.setAttribute("aria-label", "New text");
+    text.maxLength = 200;
+    d.lines.forEach(function (l) { if (!l.key) return; var o = el("option", "", l.key + " · " + (l.label || "")); o.value = l.key; pick.appendChild(o); });
+    pick.onchange = function () { d.lines.forEach(function (l) { if (l.key === pick.value) text.value = l.text === "—" ? "" : l.text; }); };
+    pick.onchange();
+    sec.appendChild(pick); sec.appendChild(text);
+    prim.hidden = false;
+    prim.textContent = "Send the edit";
+    prim.addEventListener("click", function () {
+      if (!c) return;
+      if (!text.value.trim()) { feedback("bad", "Write the line's new text first."); text.focus(); return; }
+      decide(c, { line: pick.value, text: text.value.trim() }, "Edit line " + pick.value);
+    });
+    sec.appendChild(button("linkbtn", "Cancel", function () { editing = null; sigs.card = ""; render(frame); }));
+  }
+  // renderPlan draws the drafted plan the card approves, once the owner
+  // opened it: each task with its exact checks.
+  function renderPlanPreview(d) {
+    if (!d.plan || planOpen !== d.plan.digest) return;
+    var box = $("card-lines");
+    box.appendChild(el("dt", "", "plan"));
+    box.appendChild(el("dd", "muted", d.plan.id + " · version " + d.plan.version + " · " + d.plan.tasks.length + " tasks"));
+    d.plan.tasks.forEach(function (t) {
+      box.appendChild(el("dt", "", t.id));
+      var dd = el("dd", "", t.title);
+      if (t.dependsOn.length) dd.appendChild(el("div", "muted", "after " + t.dependsOn.join(", ")));
+      if (t.files.length) dd.appendChild(el("div", "muted", "files " + t.files.join(", ")));
+      t.criteria.forEach(function (x) { dd.appendChild(el("div", "", "done when " + x)); });
+      t.checks.forEach(function (x) { dd.appendChild(el("code", "", x)); });
+      box.appendChild(dd);
     });
   }
 
@@ -1356,7 +1411,7 @@
   function act(body, label) {
     if (pending) return Promise.resolve();
     if (!frame || !frame.act) { feedback("bad", "Not connected to the Board yet."); return Promise.resolve(); }
-    var name = body.action === "say" ? "say" : body.key;
+    var name = body.action === "say" ? "say" : body.action === "decide" ? "choice:" + body.choice + "/" + body.value : body.key;
     var tok = frame.act.tokens[name];
     if (!tok) { feedback("bad", "Refused: that button is not on the Board now."); return Promise.resolve(); }
     body.card = frame.act.card;
@@ -1377,7 +1432,9 @@
         if (x.code === 401) { feedback("bad", "Refused: this link has expired. Run /marshal web in the Board for a new one."); return false; }
         if (x.code === 409) { confirmStep = null; feedback("bad", "Refused: " + (text || "the Board changed.")); return false; }
         if (x.code !== 200 || res.status === "refused") { feedback("bad", "Refused: " + (text || "the Board answered " + x.code + ".")); return false; }
-        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card } : null;
+        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card, choice: body.action === "decide" ? { id: body.choice, value: body.value } : null } : null;
+        if (body.action === "decide" && body.choice === "plan.read" && frame.decision && frame.decision.plan) planOpen = frame.decision.plan.digest;
+        if (body.action === "decide" && body.choice === "requirements.edit") editing = null;
         var word = res.status === "sent" ? "Sent" : res.status === "queued" ? "Queued" : res.status === "started" ? "Started" : "Done";
         feedback("ok", !text ? word + "." : text.indexOf(word) === 0 ? text : word + ": " + text);
         if (res.link) {

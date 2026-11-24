@@ -412,3 +412,33 @@ func TestActPushesNewTokens(t *testing.T) {
 		t.Fatal("the pushed frame carries the spent token")
 	}
 }
+
+// A typed choice is posted with its own token and reaches the sink with its
+// revision, plan digest and line; a page-only choice has no token, and a
+// replay is refused.
+func TestActDecideCarriesTypedChoice(t *testing.T) {
+	b := vm.Board{Decision: &vm.Decision{Kind: "requirements", Title: "Confirm requirements", Summary: "s", Revision: "requirements:1:0", Choices: []vm.Choice{
+		{ID: "requirements.edit", Key: "e", Label: "edit a line"}, {ID: "plan.comment", Key: "k", Label: "comment", Local: true},
+	}}}
+	s, _, log := startActing(t, b)
+	f := boardFrame(t, s)
+	if _, ok := f.Act.Tokens[ChoiceToken("plan.comment", "")]; ok {
+		t.Fatal("a page-only choice got a token")
+	}
+	tok := f.Act.Tokens[ChoiceToken("requirements.edit", "")]
+	if tok == "" {
+		t.Fatalf("no choice token: %v", f.Act.Tokens)
+	}
+	body, _ := json.Marshal(map[string]any{"action": "decide", "card": f.Act.Card, "token": tok, "choice": "requirements.edit", "value": "",
+		"cardRevision": "requirements:1:0", "planDigest": "D", "line": "c", "text": "from dev"})
+	if r, res := post(t, s, body, nil); r.StatusCode != http.StatusOK || res.Status != "done" {
+		t.Fatalf("decide: %d %+v", r.StatusCode, res)
+	}
+	got := log.taken()
+	if len(got) != 1 || got[0].Kind != "decide" || got[0].Choice != "requirements.edit" || got[0].Revision != "requirements:1:0" || got[0].Digest != "D" || got[0].Line != "c" || got[0].Text != "from dev" {
+		t.Fatalf("sink got %+v", got)
+	}
+	if r, _ := post(t, s, body, nil); r.StatusCode != http.StatusConflict {
+		t.Fatalf("replay: %d", r.StatusCode)
+	}
+}

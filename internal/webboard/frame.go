@@ -420,6 +420,63 @@ type Decision struct {
 	SelfApproval string     `json:"selfApproval"`
 	Actions      []Key      `json:"actions"`
 	Links        []Link     `json:"links"`
+	// Revision is what a typed choice binds; Choices every action of the
+	// card by typed id; Plan the drafted plan an approval binds (nil for
+	// other cards).
+	Revision string       `json:"revision"`
+	Choices  []Choice     `json:"choices"`
+	Plan     *PlanPreview `json:"plan,omitempty"`
+}
+
+// Choice is one typed action of a decision card.
+type Choice struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Local bool   `json:"local"`
+}
+
+// PlanPreview is the drafted plan, redacted, with the digest its approval
+// must carry.
+type PlanPreview struct {
+	ID      string     `json:"id"`
+	Version int64      `json:"version"`
+	Digest  string     `json:"digest"`
+	Tasks   []PlanTask `json:"tasks"`
+}
+
+type PlanTask struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	DependsOn []string `json:"dependsOn"`
+	Files     []string `json:"files"`
+	Criteria  []string `json:"criteria"`
+	Checks    []string `json:"checks"`
+}
+
+// planLines is ss redacted, at most 50 of them.
+func planLines(ss []string) []string {
+	out := []string{}
+	for i, x := range ss {
+		if i == 50 {
+			out = append(out, "…")
+			break
+		}
+		out = append(out, redaction.RedactAll(x))
+	}
+	return out
+}
+
+func planPreview(p *vm.PlanPreview) *PlanPreview {
+	if p == nil {
+		return nil
+	}
+	out := &PlanPreview{ID: p.ID, Version: p.Version, Digest: p.Digest, Tasks: []PlanTask{}}
+	for _, t := range p.Tasks {
+		out.Tasks = append(out.Tasks, PlanTask{ID: redaction.RedactAll(t.ID), Title: redaction.RedactAll(t.Title), DependsOn: planLines(t.DependsOn), Files: planLines(t.Files), Criteria: planLines(t.Criteria), Checks: planLines(t.Checks)})
+	}
+	return out
 }
 
 type PausedTask struct {
@@ -551,7 +608,10 @@ func FromBoard(b vm.Board) Frame {
 	if d := b.Decision; d != nil {
 		c := &Decision{Binding: d.Binding, Kind: d.Kind, Title: d.Title, Corner: d.Corner, Summary: d.Summary, ChangedNote: d.ChangedNote,
 			Nodes: []Node{}, Lines: []CardLine{}, HasLink: d.Link != "", NoDisplay: d.NoDisplay, SelfApproval: d.SelfApproval,
-			Actions: keys(d.Actions), Links: []Link{}}
+			Actions: keys(d.Actions), Links: []Link{}, Revision: d.Revision, Choices: []Choice{}, Plan: planPreview(d.Plan)}
+		for _, x := range d.Choices {
+			c.Choices = append(c.Choices, Choice{ID: x.ID, Value: x.Value, Key: x.Key, Label: x.Label, Local: x.Local})
+		}
 		for _, n := range d.Nodes {
 			c.Nodes = append(c.Nodes, Node{Name: n.Name, Sub: n.Sub, Changed: n.Changed})
 		}

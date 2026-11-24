@@ -155,12 +155,19 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 	switch a.Kind {
 	case "say":
 		return w.webSay(a.Text), false, 0
+	case "decide":
+		return w.webDecide(f, a), false, 0
 	case "key":
 	default:
 		return refused("Unknown action."), false, 0
 	}
 	if !slices.Contains(webboard.ActionKeys(f), a.Key) {
 		return refused("That button is not on the Board now."), false, 0
+	}
+	if typed, ok := w.legacyChoice(f, a.Key); ok {
+		// A card's key is its typed choice, under the same checks.
+		typed.Confirmed, typed.Text = a.Confirmed, a.Text
+		return w.webDecide(f, typed), false, 0
 	}
 	if f.Decision != nil && f.Decision.Kind == decisionAsk {
 		card := w.currentAsk()

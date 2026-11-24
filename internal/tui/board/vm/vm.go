@@ -419,6 +419,41 @@ type Decision struct {
 	Actions      []Key
 	Refs         []string // per action, what a click on it reaches ("" for its key); the collector's own ids
 	Links        []Link   // arrows between Nodes on the sketch (4 per row)
+	// Revision is the bound identity of what the card decides: a typed
+	// choice must name it, and a changed card has a new one.
+	Revision string
+	// Choices are the card's actions by typed id, each with the key that
+	// presses it on the terminal Board.
+	Choices []Choice
+	// Plan is the drafted plan the card approves, nil for other cards.
+	Plan *PlanPreview
+}
+
+// Choice is one action of a decision card: ID is the typed action
+// ("change.keep", "plan.approve", "card.choose"), Value what it chooses
+// ("ask:3", "deny"), Key the terminal key and Local set when it only changes
+// what the page shows (a comment box, the plan text).
+type Choice struct {
+	ID, Value, Key, Label string
+	Local                 bool
+}
+
+// PlanPreview is a drafted plan as the owner reads it before approving:
+// its tasks with their exact checks, and the digest an approval binds.
+type PlanPreview struct {
+	ID      string
+	Version int64
+	Digest  string
+	Tasks   []PlanTask
+}
+
+// PlanTask is one task of a plan preview.
+type PlanTask struct {
+	ID, Title string
+	DependsOn []string
+	Files     []string
+	Criteria  []string
+	Checks    []string
 }
 
 // CardLine is one row of a card's content: a requirement line ("a", "scope",

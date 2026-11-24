@@ -41,6 +41,11 @@ type Action struct {
 	Text string
 	// Confirmed is set on the second click of a two-step action.
 	Confirmed bool
+	// Choice and Value name a decision card's typed choice for "decide";
+	// Revision is the card's bound revision the page saw, Digest the plan
+	// digest the owner read, Line the requirement line an edit changes and
+	// Reason a return's reason.
+	Choice, Value, Revision, Digest, Line, Reason string
 }
 
 // Result is what happened, for the page to say.
@@ -131,12 +136,18 @@ func CardID(f Frame) string {
 	switch {
 	case f.Decision != nil:
 		d := f.Decision
+		plan := ""
+		if d.Plan != nil {
+			plan = d.Plan.Digest
+		}
 		return "decision:" + cardDigest(struct {
 			Binding, Kind, Title, Corner, Summary, Changed, Self string
 			Nodes                                                []Node
 			Lines                                                []CardLine
 			Actions                                              []Key
-		}{d.Binding, d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions})
+			Revision, Plan                                       string
+			Choices                                              []Choice
+		}{d.Binding, d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions, d.Revision, plan, d.Choices})
 	case f.Paused != nil:
 		p := f.Paused
 		titles := make([]string, 0, len(p.Tasks))
@@ -166,7 +177,13 @@ func actionKeys(ks []Key) []string {
 func ActionKeys(f Frame) []string {
 	switch {
 	case f.Decision != nil:
-		return append(actionKeys(f.Decision.Actions), "esc")
+		out := append(actionKeys(f.Decision.Actions), "esc")
+		for _, c := range f.Decision.Choices {
+			if !c.Local {
+				out = append(out, ChoiceToken(c.ID, c.Value))
+			}
+		}
+		return out
 	case f.Paused != nil:
 		return actionKeys(f.Paused.Actions)
 	}
@@ -174,6 +191,9 @@ func ActionKeys(f Frame) []string {
 	// (retry the stuck task, stop all workers).
 	return actionKeys(f.Keys)
 }
+
+// ChoiceToken is the token name of a decision card's typed choice.
+func ChoiceToken(id, value string) string { return "choice:" + id + "/" + value }
 
 // actToken is the token for action on card at epoch.
 func (s *Server) actToken(card string, epoch uint64, action string) string {
@@ -212,6 +232,13 @@ type actRequest struct {
 	Text      string `json:"text"`
 	Token     string `json:"token"`
 	Confirmed bool   `json:"confirmed"`
+	// A decision card's typed choice ("decide").
+	Choice       string `json:"choice"`
+	Value        string `json:"value"`
+	CardRevision string `json:"cardRevision"`
+	PlanDigest   string `json:"planDigest"`
+	Line         string `json:"line"`
+	Reason       string `json:"reason"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -272,6 +299,13 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 		a.Key = req.Key
 		if utf8.RuneCountInString(req.Text) > 200 {
 			refuse(w, http.StatusRequestEntityTooLarge, "The typed text is too long.")
+			return
+		}
+	case "decide":
+		a.Kind, a.Choice, a.Value, a.Revision, a.Digest, a.Line, a.Reason = "decide", req.Choice, req.Value, req.CardRevision, req.PlanDigest, req.Line, req.Reason
+		name = ChoiceToken(req.Choice, req.Value)
+		if utf8.RuneCountInString(req.Text) > 200 || utf8.RuneCountInString(req.Reason) > 2000 || len(req.Choice) > 64 || len(req.Value) > 64 || len(req.Line) > 1 {
+			refuse(w, http.StatusRequestEntityTooLarge, "The choice is too large.")
 			return
 		}
 	case "say":

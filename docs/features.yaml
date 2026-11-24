@@ -76,6 +76,32 @@ features:
         anchor: 'func (w *Workspace) answerAsk(i int)'
         kind: control
 
+  - id: typed-web-decisions
+    name: Browser decision cards with typed choices bound to the card revision, plan digest approval and requirement line edits
+    editions: [default, governed]
+    sources:
+      - internal/tui/webboard_decisions.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/act.go
+      - internal/webboard/frame.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestChangeKeepActionUsesDecisionID
+      - internal/tui.TestRequirementsEditVersioned
+      - internal/tui.TestPlanApproveRequiresViewedCurrentDigest
+      - internal/tui.TestDecisionAuthorityAndRevisionMatrix
+      - internal/tui.TestLegacyActionUsesTypedAuthority
+      - internal/webboard.TestDecisionRendersAllAvailableActions
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function decide('
+        kind: control
+    tui:
+      - routeOrCommand: decision card keys
+        anchor: 'func (w *Workspace) webDecide('
+        kind: control
+
   - id: authenticated-settings-actions
     name: Authenticated browser project settings and ULTRA execution changes with durable receipts
     editions: [default, governed]
