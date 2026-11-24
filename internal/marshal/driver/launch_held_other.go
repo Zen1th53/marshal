@@ -3,9 +3,23 @@
 package driver
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
+
+	"github.com/Zen1th53/marshal/internal/processgroup"
 )
+
+// Without the barrier a governed worker launches directly, unsupervised.
+func governedHoldAvailable() bool { return false }
+
+func holdBootID() (string, error) {
+	return "", fmt.Errorf("%w: no boot identity on this platform or edition", ErrLaunchUnsupported)
+}
+
+func withHeldStart(ctx context.Context, _ func(processgroup.Reference) error) context.Context {
+	return ctx
+}
 
 // Without the private supervisor's barrier there is no way to hold a worker
 // before it starts, so supervised launch is unavailable here.

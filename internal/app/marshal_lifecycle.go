@@ -377,6 +377,13 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		return MarshalDispatch{}, err
 	}
 	retainOperation = true
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" && handle.Unheld() {
+		// The worker never reached a startup barrier: it runs as a direct
+		// launch, without a key or slot.
+		dropWorkerSlot(op.Next, t.LaunchKey)
+		op.Next.Tasks[i].LaunchKey = ""
+		t.LaunchKey = ""
+	}
 	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
 		markSlotRunning(op.Next, t.LaunchKey)
 	}

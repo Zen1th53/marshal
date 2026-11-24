@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -132,4 +134,59 @@ func copyFixtureRoles(dst, src *MarshalService) {
 	dst.GovernedCheck, dst.ApprovalActor, dst.GateState, dst.Verify = src.GovernedCheck, src.ApprovalActor, src.GateState, src.Verify
 	dst.Gate, dst.Drivers, dst.GovernedDrivers = src.Gate, src.Drivers, src.GovernedDrivers
 	dst.Worktrees = src.Worktrees
+}
+
+// A runtime-wired governed worker that cannot be held, because the platform
+// has no startup barrier or because its run starts no worker process at
+// one, falls back to a direct launch without a key or slot: the run is
+// neither failed nor blocked, and the worker runs once.
+func TestRuntimeMarshalGovernedLaunchFallsBackWhenUnheld(t *testing.T) {
+	withLaunchHost(t, &launchHost{boot: "boot-1"})
+	fixture, _ := marshalFixture(t, 1)
+	runs := 0
+	fixture.Drivers = map[string]driver.Driver{"worker": driver.Governed{Provider: "test", Held: true, Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		runs++
+		return nil, os.WriteFile(filepath.Join(req.Worktree, req.Task.PlanTaskID+".txt"), []byte("done\n"), 0o600)
+	}}}
+	rt := runtimeOverFixture(t, fixture)
+	live := rt.Marshal()
+	if live.LaunchSupervisor == nil {
+		t.Fatal("no supervisor on a host that can hold a launch")
+	}
+	copyFixtureRoles(live, fixture)
+	withoutRequiredContext(live)
+	ctx := t.Context()
+	if _, err := live.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := live.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := live.Dispatch(ctx, "run", "a", "write file")
+	if err != nil {
+		t.Fatalf("unheld governed worker refused: %v", err)
+	}
+	if _, ok := d.Handle.LaunchReceipt(); ok {
+		t.Fatal("unheld governed worker carries a launch receipt")
+	}
+	run, err := live.Snapshot(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Tasks[0].LaunchKey != "" || len(run.Slots) != 0 {
+		t.Fatalf("direct launch took a key or slot: key=%q slots=%+v", run.Tasks[0].LaunchKey, run.Slots)
+	}
+	if _, err := live.CollectHandIn(ctx, "run", d); err != nil {
+		t.Fatal(err)
+	}
+	if runs != 1 {
+		t.Fatalf("governed run started %d times, want once", runs)
+	}
+	entries, err := os.ReadDir(filepath.Join(rt.layout.RuntimeDir, "launches"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unheld launch left %d receipts", len(entries))
+	}
 }

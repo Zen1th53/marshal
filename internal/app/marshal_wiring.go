@@ -142,14 +142,14 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	}
 	governedRun := r.marshalGovernedRun(s)
 	s.GovernedDrivers = map[string]driver.Driver{
-		"codex":    driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck},
-		"claude":   driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck},
-		"opencode": driver.Governed{Provider: "opencode", Run: governedRun, Check: r.governedHandInCheck},
+		"codex":    driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck, Held: true},
+		"claude":   driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck, Held: true},
+		"opencode": driver.Governed{Provider: "opencode", Run: governedRun, Check: r.governedHandInCheck, Held: true},
 	}
 	// AGY is offered only where its native OAuth source and governed adapter
 	// are supported. Registration itself never supplies a verified profile.
 	if privateAGYEnabled() {
-		s.GovernedDrivers["agy"] = driver.Governed{Provider: "agy", Run: governedRun, Check: r.governedHandInCheck}
+		s.GovernedDrivers["agy"] = driver.Governed{Provider: "agy", Run: governedRun, Check: r.governedHandInCheck, Held: true}
 	}
 	s.GovernedDrivers["claude-code"] = s.GovernedDrivers["claude"]
 	s.GateState = s.observedGateState

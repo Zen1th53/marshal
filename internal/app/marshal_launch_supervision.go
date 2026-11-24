@@ -47,13 +47,10 @@ func newMarshalLaunchSupervisor(stateDir string, processes driver.ProcessAdapter
 }
 
 // supervisesLaunch reports whether d's launch can be held behind a durable
-// receipt. Other drivers, such as governed workers, launch directly.
+// receipt. Other drivers, such as governed workers where this platform has
+// no startup barrier, launch directly.
 func (s *MarshalService) supervisesLaunch(d driver.Driver) bool {
-	if s.LaunchSupervisor == nil {
-		return false
-	}
-	_, ok := d.(driver.SupervisedLauncher)
-	return ok
+	return s.LaunchSupervisor != nil && driver.HoldsLaunch(d)
 }
 
 // verifyMarshalWorkerExit reports a worker as still running while this
