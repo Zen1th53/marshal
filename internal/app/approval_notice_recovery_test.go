@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -11,6 +12,58 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/store"
 )
+
+func TestApprovalNoticeDeliveryResumesAfterAdmission(t *testing.T) {
+	for _, alreadyDelivered := range []bool{false, true} {
+		t.Run(map[bool]string{false: "before-inbox-write", true: "after-inbox-write"}[alreadyDelivered], func(t *testing.T) {
+			r := runtimeForPlan(t)
+			ctx := t.Context()
+			a, err := r.Execution().Engine().ApprovalManager().RequestApproval(execution.ApprovalRequest{RunID: "execution-replay", TaskID: "task", OperationType: "TASK_EXECUTE", TTL: time.Hour})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.RecordApprovalOpened(ctx, "run-replay", *a); err != nil {
+				t.Fatal(err)
+			}
+			pending, err := r.Store().PendingNotices(ctx, r.ProjectIdentity(), "run-replay", 10)
+			if err != nil || len(pending) != 1 {
+				t.Fatalf("pending notices: %+v %v", pending, err)
+			}
+			id := pending[0].EventID
+			if admitted, err := r.Store().AdmitNotice(ctx, "chat", id, "", time.Now().UTC()); err != nil || !admitted {
+				t.Fatalf("admit: %v %v", admitted, err)
+			}
+			// Model a durable destination that deduplicates by event ID.
+			inbox := map[string]string{}
+			if alreadyDelivered {
+				inbox[id] = "previous delivery"
+			}
+			unavailable := errors.New("inbox unavailable")
+			if acked, err := r.DeliverPendingNotices(ctx, "chat", "run-replay", func(store.NoticeOutboxEntry, string) error {
+				return unavailable
+			}); !errors.Is(err, unavailable) || acked != 0 {
+				t.Fatalf("failed replay: %d %v", acked, err)
+			}
+			calls := 0
+			deliver := func(entry store.NoticeOutboxEntry, rendered string) error {
+				calls++
+				if _, exists := inbox[entry.EventID]; !exists {
+					inbox[entry.EventID] = rendered
+				}
+				return nil
+			}
+			if acked, err := r.DeliverPendingNotices(ctx, "chat", "run-replay", deliver); err != nil || acked != 1 {
+				t.Fatalf("replay: %d %v", acked, err)
+			}
+			if acked, err := r.DeliverPendingNotices(ctx, "chat", "run-replay", deliver); err != nil || acked != 0 {
+				t.Fatalf("acknowledged replay: %d %v", acked, err)
+			}
+			if calls != 1 || len(inbox) != 1 || inbox[id] == "" {
+				t.Fatalf("destination: calls=%d inbox=%v", calls, inbox)
+			}
+		})
+	}
+}
 
 func TestApprovalTerminalNoticeRecovery(t *testing.T) {
 	for _, sweep := range []bool{false, true} {
