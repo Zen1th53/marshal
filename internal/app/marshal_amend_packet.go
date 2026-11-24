@@ -62,6 +62,7 @@ func marshalAmendPacket(run marshal.Run, reason string) ([]byte, int, error) {
 			ID    string `json:"id"`
 			Title string `json:"title,omitempty"`
 		} `json:"plan_summary"`
+		Omitted   string `json:"omitted,omitempty"`
 		Amendment string `json:"amendment"`
 	}{PlanID: run.PlanID, PlanVersion: run.PlanVersion, Target: item, Amendment: reason}
 	for _, task := range run.Tasks {
@@ -76,11 +77,29 @@ func marshalAmendPacket(run marshal.Run, reason string) ([]byte, int, error) {
 		return nil, -1, err
 	}
 	// Titles are useful orientation, but are never needed to amend the target.
+	// Drop them from the end first with a visible notice naming what was
+	// omitted and where to inspect the full approved plan.
+	droppedTitles := 0
 	for i := len(packet.PlanSummary) - 1; len(data) > marshalAmendPacketBytes && i >= 0; i-- {
+		if packet.PlanSummary[i].Title == "" {
+			continue
+		}
 		packet.PlanSummary[i].Title = ""
+		droppedTitles++
+		packet.Omitted = fmt.Sprintf("Omitted %d of %d optional plan_summary task titles to stay within the %d-byte amendment cap; inspect approved plan %s v%d for full titles.", droppedTitles, len(packet.PlanSummary), marshalAmendPacketBytes, run.PlanID, run.PlanVersion)
 		data, err = encode()
 		if err != nil {
 			return nil, -1, err
+		}
+	}
+	if len(data) > marshalAmendPacketBytes && droppedTitles > 0 {
+		// Re-measure without the optional omission note only if the note itself
+		// pushed an otherwise-fitting packet over the cap; if required fields
+		// alone still exceed the cap, keep the refusal accurate.
+		probe := packet
+		probe.Omitted = ""
+		if withoutNote, mErr := json.Marshal(probe); mErr == nil && len(withoutNote) > marshalAmendPacketBytes {
+			data = withoutNote
 		}
 	}
 	if len(data) > marshalAmendPacketBytes {

@@ -249,7 +249,11 @@ func (s *MarshalService) pauseStageFailure(ctx context.Context, runID, stage str
 	switch {
 	case limited:
 		pause = limitPause(limit, pause.Detail)
-		pause.TaskID = firstMarshalTask(run, marshal.Dispatched)
+		if stage == "review" {
+			pause.TaskID = firstMarshalTask(run, marshal.HandedIn)
+		} else {
+			pause.TaskID = firstMarshalTask(run, marshal.Dispatched)
+		}
 	case stage == "review":
 		pause.Code, pause.TaskID = marshal.CodeReviewFailed, firstMarshalTask(run, marshal.HandedIn)
 		pause.Reason = "Marshal could not review the handed-in work."
@@ -306,6 +310,9 @@ func (e awaitingApproval) Unwrap() error { return e.err }
 // context, which a retry cannot clear until the context is put right. Those
 // stop execution as they are.
 func presentedStop(err error) bool {
+	if _, limited := model.LimitOf(err); limited {
+		return false
+	}
 	var known interface{ StopReason() (string, string) }
 	var refusal *marshal.RefusalError
 	var waiting awaitingApproval
