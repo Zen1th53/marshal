@@ -2,6 +2,8 @@ package tui
 
 type marshalRunAuthority struct {
 	egress, workerModes, settings, control, goal string
+	// concurrency states the worker limits of the run, ending in "; ".
+	concurrency string
 }
 
 // marshalNoKeystrokes is the same in both editions: the Marshal acts only

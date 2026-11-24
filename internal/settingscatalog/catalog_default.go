@@ -22,6 +22,8 @@ func editionEffective(marshal.Settings, string) (string, bool) { return "", fals
 
 func configureEditionDescriptor(d *Descriptor) {
 	switch d.Key {
+	case "ultra-concurrency":
+		d.Help = "Maximum number of workers at once while ULTRA execution is on (otherwise one at a time). Tasks of an approved governed plan still dispatch one at a time."
 	case "worker-stall-minutes":
 		d.LockReason = "not used in this edition"
 		d.Applies = "this build"
@@ -44,3 +46,6 @@ func configureEditionDescriptor(d *Descriptor) {
 		d.get = func(marshal.Settings) string { return "not available" }
 	}
 }
+
+// EditionLabel names the build this catalogue describes.
+const EditionLabel = "governed"

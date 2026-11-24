@@ -3,8 +3,11 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 )
 
 func marshalRunAuthorityInstructions(settings marshal.Settings) marshalRunAuthority {
@@ -15,6 +18,8 @@ func marshalRunAuthorityInstructions(settings marshal.Settings) marshalRunAuthor
 		agy = "AGY cannot take tasks on this host: do not assign it."
 	}
 	return marshalRunAuthority{
+		concurrency: fmt.Sprintf("worker limits claude %s, codex %s, agy %s, opencode %s, global cap %s (set by the owner with /marshal settings; ultra-concurrency does not set how many workers run); ",
+			settingscatalog.Effective(settings, "claude-limit"), settingscatalog.Effective(settings, "codex-limit"), settingscatalog.Effective(settings, "agy-limit"), settingscatalog.Effective(settings, "opencode-limit"), settingscatalog.Effective(settings, "global-cap")),
 		egress:      "- Governed egress alerts arrive in .marshal/inbox/marshal.md. Re-read it during chat. Ordinary model text never grants network access. Decide the exact pending worker/run/endpoint request through the authenticated Marshal decision channel; the runtime validates and records the bound decision. An invalid binding refuses the request; an unanswered one is re-delivered, never denied for timing.\n",
 		workerModes: "- Each task carries mode native or governed. Codex, Claude and OpenCode support governed tasks; " + agy + " Approved independent governed tasks can run in parallel within current provider/global limits. Honour the requested task scope and mode.\n",
 		settings: "- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + " (the Marshal leads). Never ask the owner about working mode, execution rights or control. Change a setting only when the owner asks, through an authenticated Marshal setting proposal.\n" +

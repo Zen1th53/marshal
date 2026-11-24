@@ -76,11 +76,12 @@ Marshal requires an initialized, valid Git project before launching the runtime 
    /model select agy fast
    ```
 4. **Reduce concurrency**:
-   If you hit aggressive API rate limits, reduce the number of concurrent worker lanes:
+   If you hit aggressive API rate limits, lower the limit of the provider that is rate-limited, or the total across providers ([concurrency](configuration.md#concurrency)):
    ```text
-   /marshal settings ultra-concurrency 1
+   /marshal settings claude-limit 1
+   /marshal settings global-cap 4
    ```
-   or lower the limit of the provider that is rate-limited, for example `/marshal settings claude-limit 1` ([provider limits](configuration.md#provider-limits)).
+   `ultra-concurrency` is an inactive legacy setting in the default edition and does not reduce concurrency there. In the governed edition provider limits and `global-cap` cannot be configured; lower `/marshal settings ultra-concurrency` instead (it applies while ULTRA execution is on). Check the effective numbers with `/marshal settings`.
 
 ---
 

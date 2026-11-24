@@ -40,39 +40,132 @@ Run money ceilings use minor currency units; goal money ceilings use USD. Goal c
 /marshal settings acceptance-mode user
 ```
 
-Changes apply to the **next** drafted plan.
+`/marshal settings <key>` with no value shows the choices, units and when a change applies; it never writes. Each setting says when it applies in the **Applies** column of the tables below: most apply to the **next run**, and provider switches and failover order apply at the **next admission**. The Marshal chat reads `execution-rights` when it launches. An approved run keeps the snapshot it was approved with.
 
-| Setting | Choices | Default | Description |
-|---|---|---|---|
-| `control` | `free`, `strict` | `free` | How closely workers adhere to instructions. `free`: workers decide implementation details within assigned files. `strict`: workers follow drafted steps strictly. |
-| `acceptance-mode` | `marshal`, `user`, `marshal-then-user` | `marshal` | Who authorizes task acceptance. `marshal` (default): the Marshal reviews and accepts. `user`: you accept every task. `marshal-then-user`: the Marshal reviews first, then you confirm. |
-| `execution-rights` | `none`, `read-only`, `small-tasks` | `read-only` | What the Marshal itself may do directly rather than dispatching to worker lanes. The default `read-only` means the Marshal never creates, edits or deletes project files itself. |
-| `rework-limit` | Non-negative integer | `2` | Maximum retry attempts for a returned task before reassigning to a different provider or escalating to the operator. |
-| `ultra-concurrency` | Positive integer | `4` | Maximum number of worker tasks allowed to run simultaneously. |
+In the default edition the Marshal can also change the settings listed in its proposal schema (`acceptance-mode`, `execution-rights`, `control`, `rework-limit`, `ultra-concurrency` and the six budget ceilings) when you ask it to, without a separate confirmation step. In the governed edition the Marshal's proposal opens a popup and nothing changes until you press `A`. The audit and activity trail record every change.
 
-### Provider Limits
+### Settings Reference
 
-How many workers each provider may run at once, and how many may run in total. The Web Board shows them in **DEFAULTS · this project** with the readiness checklist and in the Lanes title (`limit claude 4 · agy 4 · total 12`).
+The tables below are generated from the settings catalogue (`go run ./tools/feature-inventory/cmd/settingsdocs -write docs/configuration.md`, once for each edition) and are checked in CI. Defaults are the effective values a new project uses. Two editions are built from this repository: the **default** edition, and the **governed** edition (`-tags governed`).
+
+#### Default edition
+
+<!-- settings-table:default:begin -->
+
+| Setting | Choices or units | Default | Applies | Notes |
+|---|---|---|---|---|
+| `execution-rights` | read-only, small-tasks | `read-only` | next run | Approved and running settings keep their snapshot. |
+| `acceptance-mode` | marshal, marshal-then-user, user | `marshal` | next run | Approved and running settings keep their snapshot. |
+| `control` | free, strict | `free` | next run | Approved and running settings keep their snapshot. |
+| `cross-review` | required, off | `required` | next run | Controls optional independent hand-in cross-review for upcoming runs. Omission is recorded per attempt; mandatory architecture verdicts remain required. |
+| `design-review` | on-demand, required, off | `on-demand` | next run | Controls pre-approval independent design critique in a fresh session bound to the draft digest. |
+| `architecture-conformance` | enforce, warn, off | `enforce` | next run | Controls hand-in architecture conformance (enforce, warn, or off). Plans with a mandatory architecture obligation lock conformance to enforce. |
+| `final-model` | required, off | `required` | next run | Locked: canonical completion requires the independent verifier. Canonical completion requires the independent verifier; no settings edit alone authorizes delivery. |
+| `rework-limit` | attempts | `2` | next run | Approved and running settings keep their snapshot. Zero allows no rework attempts. |
+| `ultra-concurrency` | workers | `4` | next run | Inactive legacy setting kept for older projects: it does not set how many workers run. Use the provider limits and global-cap. |
+| `worker-stall-minutes` | minutes | `15` | next run | Approved and running settings keep their snapshot. Zero or off disables the stall watchdog while keeping observation signals; blank restores 15 minutes. |
+| `codex-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `claude-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `agy-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `opencode-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `task-tokens` | tokens | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `plan-tokens` | tokens | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `task-money` | minor currency units | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `plan-money` | minor currency units | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `task-wall-seconds` | seconds | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `plan-wall-seconds` | seconds | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `codex-limit` | workers | `4` | next run | Approved and running settings keep their snapshot. |
+| `claude-limit` | workers | `2` | next run | Approved and running settings keep their snapshot. |
+| `agy-limit` | workers | `4` | next run | Approved and running settings keep their snapshot. |
+| `opencode-limit` | workers | `4` | next run | Approved and running settings keep their snapshot. |
+| `global-cap` | workers | `12` | next run | Approved and running settings keep their snapshot. |
+| `failover-order` | string | `codex,claude,agy,opencode` | next admission | Controls provider failover order for new dispatches, reassignments and quota failovers. |
+| `infra-retry-limit` | attempts | `6` | next run | Approved and running settings keep their snapshot. Zero makes infrastructure retries unlimited; blank restores 6. |
+| `infra-failover-streak` | failures | `2` | next run | Approved and running settings keep their snapshot. Zero disables failure-streak cooldown; blank restores 2. |
+| `infra-cooldown-seconds` | seconds | `600` | next run | Approved and running settings keep their snapshot. Zero disables provider cooldown after failure streaks; blank restores 600 seconds. |
+| `verification-timeout-seconds` | seconds | `0` | next verification | Zero leaves repository verification unlimited; blank uses the unlimited default. |
+
+<!-- settings-table:default:end -->
+
+#### Governed edition
+
+<!-- settings-table:governed:begin -->
+
+| Setting | Choices or units | Default | Applies | Notes |
+|---|---|---|---|---|
+| `execution-rights` | read-only, small-tasks | `read-only` | next run | Approved and running settings keep their snapshot. |
+| `acceptance-mode` | marshal, marshal-then-user, user | `marshal-then-user` | next run | Approved and running settings keep their snapshot. |
+| `control` | free, strict | `free` | next run | Approved and running settings keep their snapshot. |
+| `cross-review` | required, off | `required` | this build | Locked: review policy is locked in this edition. Approved and running settings keep their snapshot. |
+| `design-review` | on-demand, required | `on-demand` | next run | Controls pre-approval independent design critique in a fresh session bound to the draft digest. Disabling design review (off) is locked in this edition. Value off is locked: weakening review policy is locked in this edition. |
+| `architecture-conformance` | enforce, warn, off | `enforce` | this build | Locked: review policy is locked in this edition. Approved and running settings keep their snapshot. |
+| `final-model` | required, off | `required` | this build | Locked: review policy is locked in this edition. Canonical completion requires the independent verifier; no settings edit alone authorizes delivery. |
+| `rework-limit` | attempts | `2` | next run | Approved and running settings keep their snapshot. Zero allows no rework attempts. |
+| `ultra-concurrency` | workers | `3` | next run | Maximum number of workers at once while ULTRA execution is on (otherwise one at a time). Tasks of an approved governed plan still dispatch one at a time. |
+| `worker-stall-minutes` | minutes | `none` | this build | Locked: not used in this edition. Approved and running settings keep their snapshot. |
+| `codex-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `claude-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `agy-enabled` | on, off | `on` | next admission | Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `opencode-enabled` | on, off | `not available` | this build | Locked: not available in this edition. Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission. |
+| `task-tokens` | tokens | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `plan-tokens` | tokens | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `task-money` | minor currency units | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `plan-money` | minor currency units | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `task-wall-seconds` | seconds | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `plan-wall-seconds` | seconds | `0` | next run | Approved and running settings keep their snapshot. Zero leaves this ceiling unlimited. |
+| `codex-limit` | policy | `not available` | this build | Locked: not configurable in this edition. Workers use the run concurrency limit. |
+| `claude-limit` | policy | `not available` | this build | Locked: not configurable in this edition. Workers use the run concurrency limit. |
+| `agy-limit` | policy | `not available` | this build | Locked: not configurable in this edition. Workers use the run concurrency limit. |
+| `opencode-limit` | policy | `not available` | this build | Locked: not configurable in this edition. Workers use the run concurrency limit. |
+| `global-cap` | policy | `not available` | this build | Locked: not configurable in this edition. Workers use the run concurrency limit. |
+| `failover-order` | policy | `not available` | this build | Locked: not configurable in this edition. Workers use the run concurrency limit. |
+| `infra-retry-limit` | attempts | `0` | this build | Locked: not available in this edition. Infrastructure retry is not available in this edition. |
+| `infra-failover-streak` | policy | `not available` | this build | Locked: not available in this edition. Automatic provider failover is not available in this edition. |
+| `infra-cooldown-seconds` | policy | `not available` | this build | Locked: not available in this edition. Automatic provider failover is not available in this edition. |
+| `verification-timeout-seconds` | seconds | `900` | this build | Locked: fixed at 15 minutes in this edition. Repository verification stays fixed at 15 minutes (900 seconds) in this edition. |
+
+<!-- settings-table:governed:end -->
+
+Notes that apply to both tables:
+
+- `execution-rights` accepts `none` as an older spelling; it is stored and behaves as `read-only`. `small-tasks` lets the Marshal make small changes itself.
+- `acceptance-mode` defaults to `marshal` in the default edition and to `marshal-then-user` in the governed edition.
+- A value locked by the edition is shown in its row and refused with the reason.
+
+### Concurrency
+
+How many workers run at once depends on the edition.
+
+- **Default edition**: with ULTRA execution on, the caps are the per-provider limits (`claude-limit`, `codex-limit`, `agy-limit`, `opencode-limit`) and `global-cap`. With ULTRA execution off or not entitled, one worker runs at a time. `ultra-concurrency` is kept so older projects still load, but it does not set how many workers run: use the provider limits and `global-cap`. `antigravity-limit` is the same setting as `agy-limit`.
+- **Governed edition**: provider limits, `global-cap` and `failover-order` cannot be configured (`/marshal settings claude-limit 4` is refused as not configurable in this edition). `ultra-concurrency` (default 3) is the number of workers allowed at once while ULTRA execution is on (otherwise one at a time), and governed tasks of an approved plan dispatch one at a time.
 
 ```text
 /marshal settings claude-limit 4
-/marshal settings agy-limit 4
-/marshal settings codex-limit 2
-/marshal settings opencode-limit 4
 /marshal settings global-cap 8
 /marshal settings failover-order codex,claude,agy,opencode
 ```
 
-| Setting | Choices | Default | Description |
-|---|---|---|---|
-| `claude-limit` | Non-negative integer | `2` | Claude Code workers at once. |
-| `codex-limit` | Non-negative integer | `4` | Codex workers at once. |
-| `agy-limit` | Non-negative integer | `4` | Antigravity workers at once (`antigravity-limit` is the same setting). |
-| `opencode-limit` | Non-negative integer | `4` | OpenCode workers at once. |
-| `global-cap` | Non-negative integer | `12` | Workers at once across all providers. |
-| `failover-order` | Provider names, comma-separated | `codex,claude,agy,opencode` | The order in which work moves to another provider when one is out of limit. |
+`0` returns a limit to its default. `failover-order` takes provider names separated by commas, spaces or `->`. To keep work away from a provider, switch it off with its `<provider>-enabled` setting. The Web Board shows the limits in **DEFAULTS · this project** and in the Lanes title (`limit claude 4 · agy 4 · total 12`).
 
-`0` returns a limit to its default. Each of these applies to the next Marshal run. `/marshal settings` lists the current values.
+### Budgets and Units
+
+There are two separate budget systems:
+
+- **Run ceilings**, set with `/marshal settings`: `task-tokens`, `plan-tokens` (tokens), `task-money`, `plan-money` (minor currency units, such as cents) and `task-wall-seconds`, `plan-wall-seconds` (seconds). Zero leaves a ceiling unlimited. When a token or money ceiling is set and a worker's usage is unknown, the run pauses instead of continuing, because unknown usage is not treated as zero.
+- **Goal budget**, set with `/budget set [calls=<n>] [duration=<go duration>] [tokens=<n>] [cost=<n>] [handoffs=<n>] [reserve=<n>]`. Goal ceilings belong to an approved goal revision and use USD for money. `/budget` shows the current budget.
+
+Other units: `rework-limit` counts attempts, and the thermal preferences above are degrees Celsius and seconds. In the default edition the worker stall window is `worker-stall-minutes` (default 15; `off` or `0` disables the watchdog); the governed edition does not use it.
+
+### Operating Mode and ULTRA
+
+`/mode` shows or sets the supervision mode (`manual`, `auto`, `ultra`); it grants no authority, and hard approvals always stay with you. ULTRA needs a verified entitlement. `/ultra status|start|stop` shows, turns on or turns off ULTRA execution for the project.
+
+### Other Controls
+
+- `/notify on|off|status` controls attention notifications (the `notifications` project preference above).
+- `/memory inject [channel]` sets how a native session receives the other agents' work; see [Memory and MCP](memory-and-mcp.md).
+- `marshal telemetry status|enable|disable` controls anonymous usage counts; `MARSHAL_CLOUD_ENDPOINT=off` disables cloud communication entirely.
+- Project setting changes made from the Web Settings page or the command line record the actor, old and new values and revision in the settings change history.
 
 ---
 
@@ -101,6 +194,8 @@ Marshal CLI commands accept global flags:
 | `--json` | Output command results as structured JSON (suitable for scripting and automation). Can be placed before or after subcommands. |
 | `-h`, `--help` | Display command usage and flag descriptions without executing side effects. |
 
+`marshal tui` also takes `--theme THEME`, `--no-color` and `--no-animation`; they override the saved display defaults for that launch.
+
 Example:
 
 ```bash
@@ -123,4 +218,8 @@ marshal --json memory list
 | `MARSHAL_INSTALL_DEPS` | `0` stops `install.sh` from installing a missing Git or tmux; it only reports them. |
 | `MARSHAL_INSTALL_YES` | `1` answers yes to `install.sh`'s questions (sudo still needs a terminal). |
 | `MARSHAL_WEB_OPEN` | `0` keeps the browser closed when the Board starts: the Web Board still starts, and `w` or `/marshal web` opens it. Unset (the default) opens it in your browser where there is a display. |
+| `MARSHAL_NO_USAGE_PROBES` | Any non-empty value stops Marshal from probing provider usage; admission usage is then unknown, and unknown usage never bypasses quota. |
+| `MARSHAL_REDUCED_MOTION` | Any value other than empty or `0` turns Board animation off. |
+| `MARSHAL_OPENCODE_MODEL` | The model Marshal uses for OpenCode, including its harness verification. |
+| `MARSHAL_CODEX_TRUST_PROFILE` | Default edition: `off` stops Marshal from adding its trust profile to Codex launches. |
 | `BOARD_TRUECOLOR` | `1` draws the Board in 24-bit colour, as `COLORTERM=truecolor` or `24bit` does, for a terminal that takes 24-bit colour but does not set `COLORTERM`. |

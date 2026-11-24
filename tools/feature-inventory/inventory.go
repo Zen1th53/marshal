@@ -185,7 +185,7 @@ func Validate(repo fs.FS, inv Inventory, frozen []Pending) error {
 			}
 		}
 		for _, doc := range f.Docs {
-			if _, err := readRepo(repo, doc); err != nil {
+			if err := checkDoc(repo, doc); err != nil {
 				fail(f.ID, "document "+doc+": "+err.Error())
 			}
 		}
@@ -467,4 +467,38 @@ func checkSurface(repo fs.FS, f Feature, s Surface, tui bool, edition string) er
 
 func hasHTMLAttribute(text, name, value string) bool {
 	return regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\s*=\s*["']` + regexp.QuoteMeta(value) + `["']`).MatchString(text)
+}
+
+// checkDoc accepts "path.md" or "path.md#heading-slug"; the slug must name a
+// heading of that page.
+func checkDoc(repo fs.FS, doc string) error {
+	file, fragment, hasFragment := strings.Cut(doc, "#")
+	data, err := readRepo(repo, file)
+	if err != nil {
+		return err
+	}
+	if !hasFragment {
+		return nil
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimLeft(line, "#")
+		if trimmed != line && strings.HasPrefix(trimmed, " ") && headingSlug(trimmed) == fragment {
+			return nil
+		}
+	}
+	return fmt.Errorf("heading %q not found in %s", fragment, file)
+}
+
+// headingSlug is the lowercase, hyphenated anchor a documentation page gives a heading.
+func headingSlug(heading string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(heading)) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('-')
+		}
+	}
+	return b.String()
 }
