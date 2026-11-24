@@ -239,6 +239,18 @@ func TestLifecycleEffectRecovery(t *testing.T) {
 					t.Fatalf("hand-in recovery: %+v", run)
 				}
 			case "merge":
+				if err := restarted.RecoverPendingOperations(ctx); err != nil {
+					t.Fatal(err)
+				}
+				mergedNotices := 0
+				for _, notice := range taskNotices(t, &restarted) {
+					if notice.Transition == TaskNoticeMerged {
+						mergedNotices++
+					}
+				}
+				if mergedNotices != 1 {
+					t.Fatalf("recovered merge notices = %d, want one", mergedNotices)
+				}
 				if run.State != marshal.Verifying || run.Tasks[0].State != marshal.Merged {
 					t.Fatalf("merge recovery: %+v", run)
 				}

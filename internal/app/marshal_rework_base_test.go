@@ -261,3 +261,40 @@ func TestSerialReworkRecoveryKeepsPriorResultAndNeedsApprovedBinding(t *testing.
 		t.Fatal("serial rework reran without a new approved binding")
 	}
 }
+
+func TestUnrelatedReviewFindingsDoNotEscalate(t *testing.T) {
+	for _, independentRejects := range []bool{false, true} {
+		t.Run(fmt.Sprint(independentRejects), func(t *testing.T) {
+			s, _ := reworkFixture(t)
+			for _, reason := range []string{"missing input validation", "incorrect output ordering"} {
+				if independentRejects {
+					setCrossReview(s, marshal.VerdictReturn, reason)
+				} else {
+					setMarshalReview(s, marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "marshal", Reasons: []string{reason}})
+				}
+				reworkAttempt(t, s)
+				if _, err := s.Review(t.Context(), "run", "a", knownCharge()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			run, _, err := s.load(t.Context(), "run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d := run.Tasks[0].ReviewDisagreement; d == nil || d.Count != 1 || run.Tasks[0].State == marshal.Escalated || run.State == marshal.AwaitingUser {
+				t.Fatalf("unrelated finding stopped rework: %+v", run)
+			}
+		})
+	}
+}
+
+func TestReviewFindingIdentityIgnoresFormattingAndOrder(t *testing.T) {
+	review := marshal.Review{Verdict: marshal.VerdictAccept, Independent: &marshal.IndependentReview{Verdict: marshal.VerdictReturn, Reasons: []string{"Missing validation", "Wrong order"}}}
+	task := marshal.Task{PlanTaskID: "a"}
+	first := noteReviewDisagreement(nil, task, 1, review, nil, nil)
+	review.Independent.Reasons = []string{" wrong  ORDER ", "missing\nvalidation", "missing validation"}
+	next := noteReviewDisagreement(first, task, 2, review, nil, nil)
+	if next.Count != 2 || next.Key != first.Key {
+		t.Fatalf("formatting changed finding identity: %+v", next)
+	}
+}
