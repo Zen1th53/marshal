@@ -41,6 +41,11 @@ type Frame struct {
 	Lanes   Lanes    `json:"lanes"`
 	Tasks   []Task   `json:"tasks"`
 	Workers []Worker `json:"workers"`
+	// Waiting is why the run does not move, null while it moves; Approvals
+	// is every approval awaiting an answer or just expired. Both added in
+	// version 1 without a version change.
+	Waiting   *Waiting   `json:"waiting"`
+	Approvals []Approval `json:"approvals"`
 
 	Settings settingscatalog.Snapshot `json:"settings"`
 	// Limits is every provider's limit rows and dispatch state; added in
@@ -179,6 +184,79 @@ type Lane struct {
 	Turn       string `json:"turn,omitempty"`
 	ModelWait  int64  `json:"modelWaitSec,omitempty"`
 	Note       string `json:"note,omitempty"`
+	// Signal is the last worker signal: its observed time, so the page
+	// ticks its age, and its state as the server judged it.
+	Signal  Signal   `json:"signal"`
+	Waiting *Waiting `json:"waiting"`
+}
+
+// Signal is a lane's last worker signal. State is live, quiet, stale,
+// unverifiable, exited or none; only the server says stale, unverifiable
+// or exited, and unverifiable is never shown as exited.
+type Signal struct {
+	At    string `json:"at"`
+	State string `json:"state"`
+	Label string `json:"label"`
+}
+
+// Waiting is why a run, task, lane or approval waits: a code ("unknown"
+// when no cause is known), a label, what blocks it and when it may move
+// again ("" when unknown), where the reason came from and where to look.
+type Waiting struct {
+	Code      string `json:"code"`
+	Label     string `json:"label"`
+	BlockerID string `json:"blockerId,omitempty"`
+	RetryAt   string `json:"retryAt,omitempty"`
+	Source    string `json:"source"`
+	Inspect   string `json:"inspect"`
+}
+
+// Approval is one approval awaiting an answer. createdAt and expiresAt let
+// the page tick its age; ageSec is its age when the frame was made (0 when
+// the frame has no clock). reason is redacted and capped. actions are the
+// owner's bound answers, empty when it cannot be answered from here.
+type Approval struct {
+	ID          string   `json:"id"`
+	TaskID      string   `json:"taskId"`
+	Awaiting    string   `json:"awaiting"`
+	CreatedAt   string   `json:"createdAt"`
+	ExpiresAt   string   `json:"expiresAt"`
+	AgeSec      int64    `json:"ageSec"`
+	Status      string   `json:"status"`
+	Reason      string   `json:"reason"`
+	Destination string   `json:"destination"`
+	Command     string   `json:"command"`
+	Actions     []Key    `json:"actions"`
+	Waiting     *Waiting `json:"waiting"`
+}
+
+// ReasonMax is the most of an approval's reason a frame carries.
+const ReasonMax = 160
+
+func waiting(w *vm.Waiting) *Waiting {
+	if w == nil {
+		return nil
+	}
+	return &Waiting{Code: w.Code, Label: redaction.RedactAll(w.Label), BlockerID: w.BlockerID, RetryAt: stamp(w.RetryAt),
+		Source: w.Source, Inspect: redaction.RedactAll(w.Inspect)}
+}
+
+func approvals(in []vm.Approval, now time.Time) []Approval {
+	out := make([]Approval, 0, len(in))
+	for _, a := range in {
+		reason := strings.TrimSpace(redaction.RedactAll(a.Reason))
+		if r := []rune(reason); len(r) > ReasonMax {
+			reason = string(r[:ReasonMax]) + "…"
+		}
+		row := Approval{ID: a.ID, TaskID: a.TaskID, Awaiting: a.Awaiting, CreatedAt: stamp(a.CreatedAt), ExpiresAt: stamp(a.ExpiresAt),
+			Status: a.Status, Reason: reason, Destination: redaction.RedactAll(a.Destination), Command: redaction.RedactAll(a.Command),
+			Actions: keys(a.Actions), Waiting: waiting(a.Waiting)}
+		if !now.IsZero() && !a.CreatedAt.IsZero() {
+			row.AgeSec = secs(now.Sub(a.CreatedAt))
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 type Lanes struct {
@@ -194,6 +272,8 @@ type Task struct {
 	Reviewer string `json:"reviewer"`
 	State    string `json:"state"`
 	Note     string `json:"note"`
+	// Waiting is why the task does not move, null while it builds or is done.
+	Waiting *Waiting `json:"waiting"`
 }
 
 type Worker struct {
@@ -416,14 +496,16 @@ func FromBoard(b vm.Board) Frame {
 		Plan: Plan{Title: b.Plan.Title, Accepted: b.Plan.Accepted, Stages: []Stage{}, Done: b.Plan.Done, Active: b.Plan.Active,
 			Waiting: b.Plan.Waiting, Total: b.Plan.Total, ETA: secs(b.Plan.ETA), Throughput: append([]int{}, b.Plan.Throughput...),
 			MergedPerHr: b.Plan.MergedPerHr, Reworked: b.Plan.Reworked, Tokens: b.Plan.Tokens},
-		Lanes:    Lanes{Items: []Lane{}, Limits: b.Lanes.Limits},
-		Tasks:    []Task{},
-		Workers:  []Worker{},
-		Limits:   limits(b.Limits),
-		Inbox:    Inbox{Count: b.Inbox.Count, Lines: append([]string{}, b.Inbox.Lines...), Next: b.Inbox.Next},
-		Activity: []Event{},
-		Steps:    Steps{Items: []Step{}, Quiet: secs(b.Steps.Quiet), Model: b.Steps.Model},
-		Requests: []Request{},
+		Lanes:     Lanes{Items: []Lane{}, Limits: b.Lanes.Limits},
+		Tasks:     []Task{},
+		Waiting:   waiting(b.Waiting),
+		Approvals: approvals(b.Approvals, b.Now),
+		Workers:   []Worker{},
+		Limits:    limits(b.Limits),
+		Inbox:     Inbox{Count: b.Inbox.Count, Lines: append([]string{}, b.Inbox.Lines...), Next: b.Inbox.Next},
+		Activity:  []Event{},
+		Steps:     Steps{Items: []Step{}, Quiet: secs(b.Steps.Quiet), Model: b.Steps.Model},
+		Requests:  []Request{},
 		Chat: Chat{Bound: b.Chat.Bound, Restarts: b.Chat.Restarts, ReboundAt: stamp(b.Chat.ReboundAt), Resent: b.Chat.Resent,
 			InputClear: b.Chat.InputClear, InputKnown: b.Chat.InputKnown, Answered: b.Chat.Answered, Stage: b.Chat.Stage},
 		Ready: Readiness{SessionLabel: b.Ready.SessionLabel, Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
@@ -440,10 +522,11 @@ func FromBoard(b vm.Board) Frame {
 	for _, l := range b.Lanes.Items {
 		f.Lanes.Items = append(f.Lanes.Items, Lane{Name: l.Name, Provider: l.Provider, Model: l.Model, Task: l.Task, Step: l.Step,
 			Reviewing: l.Reviewing, Elapsed: secs(l.Elapsed), LastSignal: secs(l.LastSignal), Stale: l.Stale, Selected: l.Selected,
-			Process: l.Process, Turn: l.Turn, ModelWait: secs(l.ModelWait), Note: l.Note})
+			Process: l.Process, Turn: l.Turn, ModelWait: secs(l.ModelWait), Note: l.Note,
+			Signal: Signal{At: stamp(l.Signal.At), State: l.Signal.State, Label: l.Signal.Label}, Waiting: waiting(l.Waiting)})
 	}
 	for _, t := range b.Tasks {
-		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note})
+		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note, Waiting: waiting(t.Waiting)})
 	}
 	for _, w := range b.Workers {
 		f.Workers = append(f.Workers, Worker{Provider: w.Provider, Glyph: w.Glyph, LeftPct: w.LeftPct, Tag: w.Tag, TagTone: string(w.TagTone),

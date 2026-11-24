@@ -367,11 +367,12 @@ features:
       - internal/app/worker_liveness.go
     tests:
       - internal/webboard.TestEncodeRunningFrame
+      - internal/webboard.TestUnverifiableWorkerNeverRendersDead
     docs:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
-        anchor: 'no signal for a while'
+        anchor: 'function signalView(x, add)'
         kind: view
     tui:
       - routeOrCommand: "1"
@@ -387,10 +388,12 @@ features:
       - internal/tui/boardv2_flow.go
     tests:
       - internal/webboard.TestEncodeRunningFrame
+      - internal/tui.TestBoardExplainsEveryWaitingState
+      - internal/tui.TestAllBlockedEntitiesHaveWaitReasonAndDestination
     docs: []
     web:
       - routeOrCommand: "#work"
-        anchor: 'case "waiting": word = t.note ? t.note.replace(/^waits /, "waits ") : "waiting"; break;'
+        anchor: 'case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;'
         kind: view
     tui:
       - routeOrCommand: /why
@@ -406,12 +409,16 @@ features:
       - internal/tui/boardv2_cards_decision.go
     tests:
       - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestApprovalFrameIncludesAgeAndRedactsReason
     docs:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#home"
         anchor: 'inbox: "a request waiting in the inbox"'
         kind: control
+      - routeOrCommand: "#home"
+        anchor: 'function renderInbox(f)'
+        kind: view
     tui:
       - routeOrCommand: /approvals
         anchor: 'case "/approvals":'

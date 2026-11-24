@@ -40,29 +40,35 @@ const (
 type Board struct {
 	Settings settingscatalog.Snapshot
 	// LastRun marks a finished result shown while waiting for a new goal.
-	LastRun  bool
-	Screen   Screen
-	Now      time.Time
-	Mode     Mode
-	Top      TopBar
-	NowLine  NowLine
-	Marshal  Marshal
-	Plan     Plan
-	Lanes    Lanes
-	Tasks    []Task
-	Workers  []Worker
-	Limits   []ProviderLimits
-	Inbox    Inbox
-	Activity []Event
-	Steps    Steps
-	Requests []Request
-	Chat     Chat
-	Ready    Readiness
-	Decision *Decision // non-nil: the decision card is shown over the Board
-	Paused   *Paused   // non-nil: the paused card is shown
-	Keys     []Key
-	System   System
-	Web      Web
+	LastRun bool
+	Screen  Screen
+	Now     time.Time
+	Mode    Mode
+	Top     TopBar
+	NowLine NowLine
+	Marshal Marshal
+	Plan    Plan
+	Lanes   Lanes
+	Tasks   []Task
+	// Waiting is why the run as a whole does not move (a pause, a lease,
+	// admission); nil while it moves.
+	Waiting *Waiting
+	// Approvals is every approval of the run that awaits an answer or has
+	// just expired, oldest first.
+	Approvals []Approval
+	Workers   []Worker
+	Limits    []ProviderLimits
+	Inbox     Inbox
+	Activity  []Event
+	Steps     Steps
+	Requests  []Request
+	Chat      Chat
+	Ready     Readiness
+	Decision  *Decision // non-nil: the decision card is shown over the Board
+	Paused    *Paused   // non-nil: the paused card is shown
+	Keys      []Key
+	System    System
+	Web       Web
 	// MarshalSays is the Marshal chat's last turn to the owner.
 	MarshalSays MarshalSays
 }
@@ -182,6 +188,76 @@ type Lane struct {
 	Process, Turn string
 	ModelWait     time.Duration
 	Note          string // why the worker cannot be verified, or waits long
+	// Signal is the lane's last worker signal as observed; Waiting is why
+	// the lane does not move, nil while it works.
+	Signal  Signal
+	Waiting *Waiting
+}
+
+// Signal states. Quiet is known quiet past a minute (amber); stale is a
+// heartbeat that stopped (red); unverifiable is a worker Marshal cannot see,
+// which is never shown as exited; exited is a confirmed exit.
+const (
+	SignalLive         = "live"
+	SignalQuiet        = "quiet"
+	SignalStale        = "stale"
+	SignalUnverifiable = "unverifiable"
+	SignalExited       = "exited"
+	SignalNone         = "none" // a worker window: no heartbeat to read
+)
+
+// Signal is a lane's last worker signal. At is when it was observed (zero:
+// none observed), so a page can tick its age itself; Label says what the
+// state means in plain words.
+type Signal struct {
+	At    time.Time
+	State string
+	Label string
+}
+
+// Wait codes: why a run, task, lane, review or approval waits. A wait with
+// no known cause is WaitUnknown and still names its Source and Inspect.
+const (
+	WaitPause        = "pause"
+	WaitLease        = "lease"
+	WaitAdmission    = "admission"
+	WaitDependency   = "dependency"
+	WaitOverlap      = "overlap"
+	WaitProvider     = "provider"
+	WaitCapacity     = "capacity"
+	WaitSignal       = "signal"
+	WaitReviewRole   = "review_role"
+	WaitReviewQueue  = "review_queue"
+	WaitVerification = "verification"
+	WaitOwner        = "owner"
+	WaitAuthority    = "approval_authority"
+	WaitExpiry       = "approval_expiry"
+	WaitUnknown      = "unknown"
+)
+
+// Waiting is why something waits. BlockerID is what it waits on (a task,
+// an approval) when one is known; RetryAt is the earliest it may move again
+// (zero unknown); Source is where the reason was read; Inspect is where to
+// look or answer ("/marshal status", "Inbox", a command).
+type Waiting struct {
+	Code, Label, BlockerID string
+	RetryAt                time.Time
+	Source, Inspect        string
+}
+
+// Approval is one approval that awaits an answer. Awaiting is who can
+// answer it (owner or marshal); Status is requested, expired or superseded;
+// Reason is redacted. Actions are the bound answers the owner can give, as
+// commands, and are empty when the row cannot be answered (expired,
+// superseded, or the Marshal's to answer). Destination says where it is
+// answered.
+type Approval struct {
+	ID, TaskID, Awaiting string
+	CreatedAt, ExpiresAt time.Time
+	Status, Reason       string
+	Destination, Command string
+	Actions              []Key
+	Waiting              *Waiting
 }
 
 // Lanes is the Lanes pane.
@@ -195,6 +271,8 @@ type Task struct {
 	ID, Title, Files, Writer, Reviewer string
 	State                              string // merged, review, building, waiting
 	Note                               string // "waits T03"
+	// Waiting is why the task does not move; nil while it builds or is done.
+	Waiting *Waiting
 }
 
 // Worker is one provider row of the Workers pane.
