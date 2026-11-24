@@ -63,8 +63,11 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 			return nil, err
 		}
-		if !validProposalID(args.SubmissionID) || len(args.Proposal) > projectcontext.MaximumContractSubmissionBytes {
+		if !validProposalID(args.SubmissionID) {
 			return nil, projectcontext.ErrBudget
+		}
+		if len(args.Proposal) > projectcontext.MaximumContractSubmissionBytes {
+			return nil, innerLimit(proposalmcp.LimitKindContract, len(args.Proposal), projectcontext.ErrBudget)
 		}
 		var sub store.ProjectContractSubmission
 		if err := proposalmcp.DecodeStrict(args.Proposal, &sub); err != nil {

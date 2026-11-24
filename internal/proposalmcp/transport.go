@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"net"
@@ -29,8 +31,10 @@ import (
 const (
 	// maxRequestBytes bounds a single transport frame before parsing. It is
 	// deliberately small: proposals are short action payloads, and an oversized
-	// frame is rejected rather than buffered.
-	maxRequestBytes = 16384
+	// frame is rejected rather than buffered. It counts the encoded frame
+	// body only: the socket's terminating newline is not part of it, and a
+	// spooled frame has none. Requests and responses share the bound.
+	maxRequestBytes = MaxFrameBytes
 
 	// transportTimeout bounds dial, read and write on every connection. It is a
 	// safety net; callers that carry a real deadline pass it through Call.
@@ -88,6 +92,9 @@ type requestEnvelope struct {
 type responseEnvelope struct {
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
+	// Limit is the byte cap behind a refusal, so the caller receives the
+	// same typed limit the handler raised rather than its text alone.
+	Limit *model.Limit `json:"limit,omitempty"`
 }
 
 type server struct {
@@ -254,6 +261,9 @@ func (s *server) serve(ctx context.Context, data []byte) responseEnvelope {
 	if env.Method == "" {
 		return responseEnvelope{Error: "invalid request: empty method"}
 	}
+	if env.Method == NoticeMethod && len(data) > MaxNoticeFrameBytes {
+		return responseEnvelope{Error: "invalid request: limit notice too large"}
+	}
 	if !constantTimeEqual(env.Capability, s.capability) {
 		return responseEnvelope{Error: "unauthorized"}
 	}
@@ -270,24 +280,65 @@ func (s *server) serve(ctx context.Context, data []byte) responseEnvelope {
 	}
 	result, err := s.handler(ctx, env.Method, raw)
 	if err != nil {
-		return responseEnvelope{Error: err.Error()}
+		resp := responseEnvelope{Error: err.Error()}
+		if limit, ok := model.LimitOf(err); ok {
+			resp.Limit = &limit
+		}
+		return resp
 	}
 	return responseEnvelope{Result: result}
 }
 
-func (s *server) writeResponse(conn net.Conn, resp responseEnvelope) {
+// encodeResponse is resp as one frame body within the shared frame bound.
+// A result whose frame would not fit is replaced by a compact typed refusal
+// that asks for a smaller page, so the reader never sees a frame it rejects.
+func encodeResponse(resp responseEnvelope) []byte {
 	data, err := json.Marshal(resp)
 	if err != nil {
-		data = []byte(`{"error":"internal transport error"}`)
+		return []byte(`{"error":"internal transport error"}`)
 	}
-	data = append(data, '\n')
+	if len(data) <= maxRequestBytes {
+		return data
+	}
+	limit := model.Limit{Kind: LimitKindResponse, Subject: "response frame", ActualBytes: int64(len(data)), CapBytes: maxRequestBytes, Limited: true,
+		Action: "Ask for a smaller page (a lower limit) so the reply fits."}
+	data, err = json.Marshal(responseEnvelope{Error: projectcontext.ErrBudget.Error() + ": the reply frame is too large", Limit: &limit})
+	if err != nil {
+		return []byte(`{"error":"internal transport error"}`)
+	}
+	return data
+}
+
+func (s *server) writeResponse(conn net.Conn, resp responseEnvelope) {
+	data := append(encodeResponse(resp), '\n')
 	_, _ = conn.Write(data)
 }
 
 // Call sends one request over a fresh connection to the endpoint and returns
 // the raw result bytes. A transport error can occur after durable admission;
 // retry with the same submission ID or inspect its receipt before resubmitting.
+//
+// A request whose encoded frame exceeds the frame bound is never sent. Call
+// returns a typed limit for it and tells the broker in a separate compact
+// notice (see sendLimitNotice) that carries no part of the refused request.
 func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) (json.RawMessage, error) {
+	data, err := encodeRequest(cfg, method, args)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxRequestBytes {
+		return nil, refuseFrame(ctx, cfg, method, args, len(data))
+	}
+	resp, err := send(ctx, cfg, data)
+	if err != nil {
+		return nil, err
+	}
+	return decodeResponse(resp)
+}
+
+// encodeRequest is the exact frame body Call writes for method and args: the
+// one byte count every preflight measures.
+func encodeRequest(cfg Config, method string, args json.RawMessage) ([]byte, error) {
 	if cfg.Namespace != statepath.DirName {
 		return nil, errors.New("proposalmcp: state namespace binding differs")
 	}
@@ -302,17 +353,23 @@ func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("proposalmcp: encode request: %w", err)
 	}
+	return data, nil
+}
+
+// send writes one encoded frame to the broker, through the socket or, when
+// the caller's sandbox refuses the socket, the spool, and returns the raw
+// response frame.
+func send(ctx context.Context, cfg Config, data []byte) ([]byte, error) {
+	if len(data) > maxRequestBytes {
+		return nil, fmt.Errorf("proposalmcp: request exceeds %d bytes", maxRequestBytes)
+	}
 	var dialer net.Dialer
 	conn, err := dialer.DialContext(ctx, "unix", cfg.Endpoint)
 	if err != nil {
 		if cfg.Spool != "" && sandboxRefusedDial(err) {
 			// The caller's sandbox refuses Unix sockets; the broker
 			// reads the same frame from its spool.
-			resp, spoolErr := callSpool(ctx, cfg.Spool, data)
-			if spoolErr != nil {
-				return nil, spoolErr
-			}
-			return decodeResponse(resp)
+			return callSpool(ctx, cfg.Spool, data)
 		}
 		return nil, fmt.Errorf("proposalmcp: dial: %w", err)
 	}
@@ -328,8 +385,8 @@ func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) 
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 
-	data = append(data, '\n')
-	if _, err := conn.Write(data); err != nil {
+	frame := append(append([]byte(nil), data...), '\n')
+	if _, err := conn.Write(frame); err != nil {
 		return nil, fmt.Errorf("proposalmcp: write request: %w", err)
 	}
 
@@ -337,16 +394,20 @@ func Call(ctx context.Context, cfg Config, method string, args json.RawMessage) 
 	if err != nil {
 		return nil, fmt.Errorf("proposalmcp: read response: %w", err)
 	}
-	return decodeResponse(resp)
+	return resp, nil
 }
 
-// decodeResponse is a response frame's result, or its error.
+// decodeResponse is a response frame's result, or its error. A refusal that
+// carries a limit is returned as that typed limit.
 func decodeResponse(resp []byte) (json.RawMessage, error) {
 	var re responseEnvelope
 	if err := DecodeStrict(resp, &re); err != nil {
 		return nil, fmt.Errorf("proposalmcp: decode response: %w", err)
 	}
 	if re.Error != "" {
+		if re.Limit != nil {
+			return nil, model.NewLimitError(errors.New(re.Error), *re.Limit)
+		}
 		return nil, errors.New(re.Error)
 	}
 	return re.Result, nil

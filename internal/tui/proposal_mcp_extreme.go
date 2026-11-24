@@ -45,8 +45,11 @@ type proposalMCPPredecessor struct {
 const proposalMCPRebindWindow = 10 * time.Minute
 
 type proposalMCPLease struct {
-	recoveryRefusals             map[string]bool
-	designReviews                map[string]*designReviewJob
+	recoveryRefusals map[string]bool
+	designReviews    map[string]*designReviewJob
+	// limitNotices are the limit notices this lease has recorded, by
+	// event ID (proposal_limit_extreme.go).
+	limitNotices                 map[string]bool
 	planning                     *nativePlanningLeaseRead
 	id, owner, provider, session string
 	dir                          *briefingDir
@@ -350,8 +353,13 @@ func (w *Workspace) validateProposalLease(l *proposalMCPLease) error {
 // released, whatever it answers. A call on a lease that is not live is
 // refused and noted nowhere.
 func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage) (json.RawMessage, error) {
+	if method == proposalmcp.NoticeMethod {
+		return w.handleLimitNotice(ctx, l, raw)
+	}
+	runID := w.currentRunID()
 	out, live, err := w.serveProposalMCP(ctx, l, method, raw)
 	if live {
+		w.noteInnerLimit(ctx, l, method, raw, runID, err)
 		w.noteBrokerStep(l.id, l.provider, method, raw, out, err)
 	}
 	return out, err
@@ -408,8 +416,11 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 	if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 		return nil, proposalParseRefusal(err)
 	}
-	if !validProposalID(args.SubmissionID) || len(args.Proposal) > 4096 {
+	if !validProposalID(args.SubmissionID) {
 		return nil, proposalParseRefusal(errors.New("invalid proposal submission"))
+	}
+	if len(args.Proposal) > proposalmcp.MaxProposalBytes {
+		return nil, innerLimit(proposalmcp.LimitKindProposal, len(args.Proposal), proposalParseRefusal(errors.New("invalid proposal submission")))
 	}
 	id := w.liveOccurrenceMCP(ctx, l, args.SubmissionID)
 	if existing, err := w.store.MCPProposal(ctx, w.projectID, id); err == nil {
