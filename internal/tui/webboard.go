@@ -165,6 +165,7 @@ func (w *Workspace) webBoardServer() (*webboard.Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	srv.ConfigureDetails(w.webDetailsSource())
 	if w.store != nil {
 		if err := srv.ConfigureSettings(webboard.SettingsConfig{Source: w.webSettingsState, Store: w.store, CurrentStore: func() *store.Store { w.mu.RLock(); defer w.mu.RUnlock(); return w.store }, Reconcile: w.reconcileWebRequests}); err != nil {
 			srv.Close()

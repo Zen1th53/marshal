@@ -1556,6 +1556,104 @@
     });
   }
 
+
+  // ---- run details: a read, never an action ------------------------------
+  // Everything below is drawn with textContent; the ids are opaque and are
+  // sent back as the server gave them.
+  function evGet(path) {
+    return fetch(path, { headers: auth(), cache: "no-store", credentials: "omit" }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, code: r.status, d: d || {} }; });
+    });
+  }
+  function evStatus(text) { $("ev-status").textContent = text || ""; }
+  function evPre(text) { var p = el("pre", "ev-pre"); p.textContent = text; return p; }
+  function evList(title, items) {
+    var box = el("div", "ev-list");
+    box.appendChild(el("h4", null, title));
+    var ul = el("ul", "plain");
+    items.forEach(function (t) { ul.appendChild(el("li", null, t)); });
+    box.appendChild(ul);
+    return box;
+  }
+  function evMore(label, id, into, draw) {
+    var b = el("button", null, label);
+    b.type = "button";
+    b.addEventListener("click", function () {
+      b.disabled = true;
+      evGet("/api/details/page?id=" + encodeURIComponent(id)).then(function (x) {
+        if (!x.ok) { evStatus(x.d.text || "That page is out of date; show the details again."); b.disabled = false; return; }
+        b.remove();
+        draw(x.d, into);
+      }).catch(function () { evStatus("The Board is not answering."); b.disabled = false; });
+    });
+    into.appendChild(b);
+  }
+  function evDiff(d, into) {
+    if (d.note) into.appendChild(el("p", "muted", d.note));
+    if (d.text) into.appendChild(evPre(d.text));
+    if (d.next) evMore("Next files", d.next, into, evDiff);
+  }
+  function evTranscript(t, into, older) {
+    var box = el("div", "ev-chat");
+    (t.messages || []).forEach(function (m) {
+      var row = el("div", "ev-msg");
+      row.appendChild(el("b", null, "Claims to be " + m.role + (m.at ? " · " + m.at : "") + ": "));
+      row.appendChild(el("span", null, m.text));
+      box.appendChild(row);
+    });
+    if (older) into.insertBefore(box, into.children[2] || null); else into.appendChild(box);
+    if (t.unavailable) into.appendChild(el("p", "muted", "Earlier conversation unavailable: " + t.unavailable));
+    if (t.older) evMore("Earlier messages", t.older, into, function (d, w) { evTranscript(d, w, true); });
+    if (t.newer) evMore("Later messages", t.newer, into, function (d, w) { evTranscript(d, w, false); });
+  }
+  function evRender(d) {
+    var out = $("ev-body");
+    out.textContent = "";
+    if (d.paused) {
+      var p = el("div", "ev-block");
+      p.appendChild(el("h3", null, "Why the run is paused"));
+      p.appendChild(el("p", null, d.paused.reason));
+      if (d.paused.code) p.appendChild(el("p", "muted", "Code: " + d.paused.code));
+      if (d.paused.raw) p.appendChild(evPre(d.paused.raw));
+      if ((d.paused.resolutions || []).length) p.appendChild(evList("Ways forward", d.paused.resolutions));
+      out.appendChild(p);
+    }
+    if (d.mcp) {
+      var m = el("div", "ev-block");
+      m.appendChild(el("h3", null, "MCP failure"));
+      m.appendChild(evPre(d.mcp));
+      out.appendChild(m);
+    }
+    (d.tasks || []).forEach(function (t) {
+      var b = el("div", "ev-block");
+      b.appendChild(el("h3", null, t.task + " · " + t.title + " · " + t.state));
+      if (t.verdict) b.appendChild(el("p", null, "Review: " + t.verdict + (t.reviewer ? " by " + t.reviewer : "")));
+      [["Reasons", t.reasons], ["Checks", t.checks], ["Task scope", t.scope], ["Changed paths", t.changed], ["Limits", t.limits]].forEach(function (x) {
+        if ((x[1] || []).length) b.appendChild(evList(x[0], x[1]));
+      });
+      if (t.base || t.result) b.appendChild(el("p", "muted", "Reviewed " + (t.base || "?") + " to " + (t.result || "?")));
+      if (t.diffId) {
+        var holder = el("div", "ev-diff");
+        b.appendChild(holder);
+        evMore("Show the reviewed diff", t.diffId, holder, evDiff);
+      }
+      out.appendChild(b);
+    });
+    var c = el("div", "ev-block");
+    c.appendChild(el("h3", null, "Retained conversation"));
+    c.appendChild(el("p", "muted", (d.transcript && d.transcript.note) || ""));
+    out.appendChild(c);
+    evTranscript(d.transcript || {}, c, false);
+  }
+  function evLoad() {
+    evStatus("Reading…");
+    evGet("/api/details").then(function (x) {
+      if (!x.ok) { evStatus(x.d.text || "Details are not available."); return; }
+      evStatus("");
+      evRender(x.d);
+    }).catch(function () { evStatus("The Board is not answering."); });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     $("docs-link").href = docsURL;
     applyRoute(false);
@@ -1579,6 +1677,7 @@
     tick();
     setInterval(tick, 1000);
     $("say-send").addEventListener("click", send);
+    $("ev-load").addEventListener("click", evLoad);
     $("say-text").addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });
