@@ -33,7 +33,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal                         Show status and usage
   /marshal chat                    Open a conversation with the Marshal
   /marshal architecture [goal]     Open the view-only architecture diagram in your browser
-  /marshal web                     Open this Board in your browser (this computer only, read-only)
+  /marshal web                     Open this Board in your browser (this computer only; keys and chat messages work as in the terminal)
   /marshal draft discard           Discard an unimported draft and reopen chat
   /marshal <goal>                  Draft a plan for the goal; governed tasks need current Process 04 evidence
   /marshal import <TASK-id> <check>  Review a finished CLI task through normal approval and merge
@@ -55,7 +55,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
   /marshal model <` + marshalProviderUsage + `>  Switch the Marshal and remember the provider for this project
-  /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency, control (free|strict), or budget ceilings`
+  /marshal settings [key value]    Show the settings catalogue, defaults, edition locks and applies boundaries; set one key`
 
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
@@ -245,7 +245,42 @@ func (w *Workspace) marshalFailurePanel(runID, provider string, run marshal.Run,
 	return w.marshalPanelWithNote(runID, provider, note)
 }
 
-var marshalSubcommands = []string{"chat", "architecture", "web", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
+// marshalSubcommands comes from the implemented command reference.
+var marshalSubcommands = registeredMarshalCommands()
+
+func registeredMarshalCommands() []string {
+	var names []string
+	for _, line := range strings.Split(marshalUsage, "\n") {
+		// The command is the text before the first run of two spaces.
+		command, _, _ := strings.Cut(strings.TrimSpace(line), "  ")
+		fields := strings.Fields(command)
+		if len(fields) < 2 || fields[0] != "/marshal" || strings.HasPrefix(fields[1], "<") {
+			continue
+		}
+		if !slices.Contains(names, fields[1]) {
+			names = append(names, fields[1])
+		}
+	}
+	for _, name := range []string{"help", "pause", "models", "deliver", "plan-show", "plan-approve", "plan-amend"} {
+		names = append(names, name)
+	}
+	return names
+}
+
+func marshalGuidance(sub string) string {
+	switch sub {
+	case "pause":
+		return "Use /pause all to pause new dispatch; /resume all to continue. Nothing was run."
+	case "models":
+		return "Use /models for available models; /marshal model <provider> changes the Marshal. Nothing was run."
+	case "deliver":
+		return "Use /marshal status to inspect delivery readiness, then /marshal close for the applicable delivery approval. Nothing was run."
+	}
+	if strings.HasPrefix(sub, "plan-") {
+		return "Use /marshal status to inspect the plan, /marshal approve to review approval, or /marshal amend <reason> to propose changes. Nothing was run."
+	}
+	return ""
+}
 
 var allMarshalSubcommands = []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
 
@@ -319,6 +354,10 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 		return status + "\n\n" + marshalUsage, err
 	}
 	sub := strings.ToLower(args[0])
+	// Only the bare word is guidance; a longer line starting with it is a goal.
+	if guidance := marshalGuidance(sub); guidance != "" && len(args) == 1 {
+		return guidance, nil
+	}
 	switch sub {
 	case "help", "status", "approve", "close", "stop", "resume":
 		if len(args) != 1 {
@@ -2615,7 +2654,7 @@ func (w *Workspace) marshalImport(ctx context.Context, args []string) (string, e
 
 // joinFailoverArgs folds a multi-word failover order into one value.
 func joinFailoverArgs(args []string) []string {
-	if len(args) > 2 && args[0] == "failover-order" {
+	if len(args) > 2 && settingscatalog.Canonical(args[0]) == "failover-order" {
 		return []string{args[0], strings.Join(args[1:], " ")}
 	}
 	return args

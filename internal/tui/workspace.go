@@ -649,7 +649,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks", "/task",
 			"/policy", "/sandbox", "/memory", "/provider", "/providers", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
-			"/reinjection", "/alignment", "/optimization", "/verification", "/notify", "/diff", "/review",
+			"/blind", "/reinjection", "/alignment", "/optimization", "/verification", "/notify", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -698,10 +698,10 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/marshal"] = marshalSubcommands
 	compCtx.Subcommands["/marshal model"] = app.MarshalProviders()
 	compCtx.Subcommands["/marshal amend"] = []string{"approve", "deny"}
-	compCtx.Subcommands["/marshal settings"] = []string{"execution-rights", "acceptance-mode", "rework-limit", "ultra-concurrency", "control"}
-	compCtx.Subcommands["/marshal settings execution-rights"] = []string{"none", "read-only", "small-tasks"}
-	compCtx.Subcommands["/marshal settings acceptance-mode"] = []string{"marshal", "marshal-then-user", "user"}
-	compCtx.Subcommands["/marshal settings control"] = []string{"free", "strict"}
+	configureSettingsCompletion(&compCtx)
+	compCtx.Subcommands["/marshal draft"] = []string{"discard"}
+	compCtx.Subcommands["/goal cancel"] = []string{"confirm"}
+
 	for _, reader := range []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"} {
 		compCtx.Subcommands["/memory peers "+reader] = []string{"all", "none", "claude", "codex", "opencode", "agy", "antigravity"}
 		if reader == "participants" {

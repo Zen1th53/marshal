@@ -794,7 +794,7 @@ func (h *CommandHandler) helpText() string {
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)
   /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
-  /view [chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
+  /view [board|classic|chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
   /takeover, /take-over    Enable interactive typing in the active worker pane
   /task-model <task>       Choose the model a task runs on
   /stop all                Stop all worker sessions while keeping MARSHAL active
@@ -823,7 +823,7 @@ Composer:
 	if editionExtreme {
 		help = strings.Replace(help, "  /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement\n", "  /ultra [status|start|stop]  Show local ULTRA entitlement or save the execution preference\n", 1)
 	}
-	return help
+	return help + "\n\n" + marshalUsage + "\nGuidance only: /marshal pause, models, deliver and plan-* name the real command paths and run nothing.\n"
 }
 
 // plainTextRunsNothing explains why a bare line did nothing, and names the ways

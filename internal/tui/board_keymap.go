@@ -109,7 +109,7 @@ var boardKeymap = []boardKey{
 	{Group: "HOME", Keys: "e", What: "requirements: edit a line", Press: pressRune('e'), Class: KeyOpen, ID: "home.reqedit", When: func(w *Workspace) bool { return w.currentReq() != nil }, Why: reason("No requirements wait for you.")},
 	{Group: "HOME", Keys: "q", What: "quit Marshal", Press: pressRune('q'), Class: KeyConfirm, ID: "home.quit", Hint: "quit"},
 	{Group: "HOME", Keys: "Esc", What: "close a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
-	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
+	{Group: "BOARD", Keys: "d", What: "project diff", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
 	{Group: "BOARD", Keys: "a", What: "project architecture in the browser", Command: "/marshal architecture", Class: KeyOpen, ID: "architecture.browse", Core: true, CoreOrder: 2, CoreKey: "a", CoreLabel: "open the architecture"},
 
 	{Group: "IN A VIEW", Keys: "a  r  i", What: "memory: keep, reject, evidence", Class: KeyConfirm, Except: map[string]KeyClass{"i": KeyOpen}, ID: "memory.decide", When: func(w *Workspace) bool { return w.memView.Load() }, Why: reason("Open the Memory view first.")},
@@ -118,7 +118,6 @@ var boardKeymap = []boardKey{
 	{Group: "IN A VIEW", Keys: "r", What: "providers: route around, then Enter", Class: KeyConfirm, ID: "providers.route", When: func(w *Workspace) bool { return w.provView.Load() }, Why: reason("Open the Providers view first.")},
 	{Group: "IN A VIEW", Keys: "x", What: "verify: return claims, then Enter", Press: pressRune('x'), Class: KeyConfirm, ID: "verify.return", Hint: "return unsupported", When: func(w *Workspace) bool { return w.verView.Load() }, Why: reason("Open the Verify view first.")},
 	{Group: "IN A VIEW", Keys: "a  d", What: "security: allow, deny, then Enter", Class: KeyConfirm, ID: "security.decide", When: func(w *Workspace) bool { return w.secView.Load() }, Why: reason("Open the Security view first.")},
-	{Group: "IN A VIEW", Keys: "Enter", What: "plan: inspect the selected task", Class: KeyOpen, ID: "plan.inspect", When: func(w *Workspace) bool { return w.planView.Load() }, Why: reason("Open the Plan view first.")},
 	{Group: "IN A VIEW", Keys: "o", What: "architecture: open in the browser", Press: pressRune('o'), Class: KeyOpen, ID: "arch.open", Hint: "open in browser", When: func(w *Workspace) bool { return w.archView.Load() }, Why: reason("Open the Architecture view first.")},
 
 	{Group: "MARSHAL", Keys: "m", What: "change the Marshal", Hint: "Marshal", Press: pressRune('m'), Class: KeyOpen, ID: "marshal.pick", Core: true, CoreOrder: 4, CoreKey: "m", CoreLabel: "change model or provider"},
@@ -467,7 +466,7 @@ type helpLine struct {
 // works. Their keys still answer one plain line when pressed.
 func (v boardVisual) helpHides(k boardKey) bool {
 	switch k.ID {
-	case "view.verify", "view.security", "view.plan", "verify.return", "security.decide", "plan.inspect":
+	case "view.verify", "view.security", "view.plan", "verify.return", "security.decide":
 		return v.viewNoRun
 	case "fkey.mcp":
 		return !v.mcpFailed
