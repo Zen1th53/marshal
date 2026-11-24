@@ -1966,13 +1966,13 @@
     },
     {
       "path": "internal/app/failover_default.go",
-      "sha256": "7b702d6312dfab58eb23c3522bf7c6d6a4d5d3b02af5ce7b559d92766e7ad458",
-      "bytes": 2516
+      "sha256": "c3d58e408a12ea4499359baf1c08cfbf8811b7c24bc8f63c4c2b9e86789f99c0",
+      "bytes": 3038
     },
     {
       "path": "internal/app/failover_default_test.go",
-      "sha256": "f870de1ac0c90c0531c3982a08220ec99810f16ff5ff6079f8d31737176c6804",
-      "bytes": 3633
+      "sha256": "7bc6b1e2bae0e74f0efd67178ea2cb06cbd563c9158f006c9b3790eb017dedad",
+      "bytes": 5524
     },
     {
       "path": "internal/app/failover_extreme.go",
@@ -2310,6 +2310,16 @@
       "bytes": 1716
     },
     {
+      "path": "internal/app/marshal_admission_extreme.go",
+      "sha256": "20765ab15a726a4ade0d183017a2c3b4019ba70391ab3a87488a1467e4940817",
+      "bytes": 4786
+    },
+    {
+      "path": "internal/app/marshal_admission_extreme_test.go",
+      "sha256": "3cc290ddb3a8be91288e565e9168765d7b7eb4f51eb13fe5fbe81221ef850e6d",
+      "bytes": 12440
+    },
+    {
       "path": "internal/app/marshal_agy_draft_default_test.go",
       "sha256": "9f4ce4e2c6b95e73dbe06be4d2002cdf197daf42dbf1678ccc07c2e49bafdf41",
       "bytes": 430
@@ -2531,8 +2541,8 @@
     },
     {
       "path": "internal/app/marshal_dispatch_policy.go",
-      "sha256": "6f1e4fc8fd4dc96706c59408d6ae78ad57646e20814de7dd8d1d5e4f271d5854",
-      "bytes": 8370
+      "sha256": "cc548f61a127872e1956ccf136818f3c57f1c3c476f2f5aa468a6521013fb66e",
+      "bytes": 9363
     },
     {
       "path": "internal/app/marshal_draft_policy_default.go",
@@ -2571,8 +2581,8 @@
     },
     {
       "path": "internal/app/marshal_execute.go",
-      "sha256": "c591a0b92942372d2d50d902b41a40ef165ea4027c8a6de755c0525e8d7c7195",
-      "bytes": 28322
+      "sha256": "b2f5b4a0236d277e69b0b01f5a8dba92055e16ac6ae198f77c8aa3a215b8dd39",
+      "bytes": 29651
     },
     {
       "path": "internal/app/marshal_execute_test.go",
@@ -2726,8 +2736,8 @@
     },
     {
       "path": "internal/app/marshal_lane_admission.go",
-      "sha256": "f3c7e91cf9cb8f89501c48179e2e2cec95c7cc32e85ab1fdc36280934b798579",
-      "bytes": 8116
+      "sha256": "eca28e63f5572dd5f84bea3712893fda6362b301b47feec941fcbdca90539248",
+      "bytes": 10278
     },
     {
       "path": "internal/app/marshal_lane_admission_extreme_test.go",
@@ -3081,8 +3091,8 @@
     },
     {
       "path": "internal/app/marshal_service.go",
-      "sha256": "36a57907514c6afee94fe21ced18ea1aa6e1031d6eac39fee8e7394814679373",
-      "bytes": 27725
+      "sha256": "5bf8451ff3a0f3c7df10e0ef0c9258390e809579f319c74144c608756096ba2a",
+      "bytes": 28109
     },
     {
       "path": "internal/app/marshal_service_test.go",
@@ -3996,8 +4006,8 @@
     },
     {
       "path": "internal/app/provider_health.go",
-      "sha256": "8574a37d8cf575544bbeec8daf30a9085e21016b7962dbed2eca688295cbfe24",
-      "bytes": 2388
+      "sha256": "b2ccc533a0611b44b32e4c24593b090ce93ea10f227fcc9df35076639d71f3d6",
+      "bytes": 5054
     },
     {
       "path": "internal/app/provider_health_test.go",
@@ -4041,13 +4051,13 @@
     },
     {
       "path": "internal/app/provider_stall_timeout_default_test.go",
-      "sha256": "e1aadfd6726d6d5af141e7f85696e7670f36edb5fb146fed12429e57c429d908",
-      "bytes": 4381
+      "sha256": "431789e6fca34aefd9eec56b3e047cbc8744b97da808c5c1aa4d00fb39decae2",
+      "bytes": 4671
     },
     {
       "path": "internal/app/provider_stall_timeout_extreme_test.go",
-      "sha256": "2fe3dde48db95d4881effd1adf5c64f81556f9b4d60605578c75b86fa41dc57e",
-      "bytes": 14023
+      "sha256": "87489872f8a9521b250e3d8da331d90922e68432af1f98c135f86fd71c62eb0e",
+      "bytes": 14313
     },
     {
       "path": "internal/app/provider_status.go",
@@ -13431,8 +13441,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "af0ff78b6071e6f1982519432e4eced8f23afaa78de784046324843cc1beffe0",
-      "bytes": 91098
+      "sha256": "dba745de0eb1576b2fcbec81ab91162eb7b867debc267a38610d62acbea3d1ec",
+      "bytes": 91199
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
