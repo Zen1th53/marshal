@@ -710,7 +710,7 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			p.reviewed = &snapshot
 		}
 		var request marshalRunRequest
-		journaledTask := w.runtime != nil && (p.action == "return" || p.action == "retry" || p.action == "reassign" || (p.action == "accept" && service.ActiveExecution(runID) != ""))
+		journaledTask := w.runtime != nil && (p.action == "accept" || p.action == "return" || p.action == "retry" || p.action == "reassign")
 		if journaledTask {
 			if req.ApprovalBinding == "" {
 				return proposalStaleBindingRefusal(errors.New("task request binding is missing"))
@@ -764,6 +764,10 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		if err := w.validatePrivateProcess05Resume(ctx, req, p); err != nil {
+			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
+		}
+		if journaledTask && p.action == "accept" && !replay {
+			_, err = w.marshalAccept(ctx, []string{target})
 			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		if journaledTask {

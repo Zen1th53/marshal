@@ -407,7 +407,7 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "import":
 		return w.marshalImport(ctx, args[1:])
 	case "accept":
-		return w.marshalAccept(args[1:])
+		return w.marshalAccept(ctx, args[1:])
 	case "return":
 		return w.marshalReturn(ctx, args[1:])
 	case "retry":
@@ -2442,7 +2442,7 @@ func (w *Workspace) marshalAmendDeny() (string, error) {
 	return "Amendment denied.", nil
 }
 
-func (w *Workspace) marshalAccept(args []string) (string, error) {
+func (w *Workspace) marshalAccept(ctx context.Context, args []string) (string, error) {
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
 		return "", errors.New("usage: /marshal accept <task>")
 	}
@@ -2464,8 +2464,12 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	if busyErr != nil && (service == nil || service.ActiveExecution(runID) == "") {
 		return "", busyErr
 	}
-	if w.runtime != nil && service != nil && service.ActiveExecution(runID) != "" {
-		return w.marshalRunCommand(context.Background(), service, runID, app.RunCommandInput{Operation: "accept", TaskID: args[0]})
+	// With a Marshal model the acceptance review gate must run, so the
+	// decision goes through the run writer like every other owner command.
+	// Without one nothing can review the result; the approval is then
+	// granted once, under the run writer, for the next resume.
+	if w.runtime != nil && service != nil && (service.Model != nil || service.ActiveExecution(runID) != "") {
+		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "accept", TaskID: args[0]})
 	}
 	if busyErr != nil {
 		return "", busyErr
@@ -2473,11 +2477,14 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	if service == nil {
 		return "", errors.New("stop the current operation before accepting a result")
 	}
-	purpose, err := service.TaskAcceptance(context.Background(), runID, args[0])
+	digest := ""
+	if request, ok := ctx.Value(marshalRunRequestKey{}).(marshalRunRequest); ok {
+		digest = request.TaskDigest
+	}
+	purpose, err := service.GrantIdleTaskAcceptance(context.Background(), runID, args[0], digest, func(purpose string) { m.grant(runID, purpose) })
 	if err != nil {
 		return "", err
 	}
-	m.grant(runID, purpose)
 	return "Approved result " + purpose + " once; /marshal resume to continue.", nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 )
 
@@ -270,4 +271,37 @@ func (s *MarshalService) TaskAcceptance(ctx context.Context, runID, taskID strin
 		return "", errors.New("hand-in result does not match task")
 	}
 	return taskAcceptancePurpose(run, task, attempt, h.Value), nil
+}
+
+// GrantIdleTaskAcceptance records the person's acceptance of a handed-in task
+// when no Marshal model can review it. It runs under the run writer, refuses
+// while an execution is active or starting, and rejects a request whose
+// binding no longer matches the displayed task. grant is called with the
+// acceptance purpose while the writer is held.
+func (s *MarshalService) GrantIdleTaskAcceptance(ctx context.Context, runID, taskID, digest string, grant func(purpose string)) (string, error) {
+	w := s.runWriter(runID)
+	if !w.mu.TryLock() {
+		return "", errors.New("the run is executing; retry when it pauses")
+	}
+	defer w.mu.Unlock()
+	if w.isActive() {
+		return "", errors.New("the run is executing; retry when it pauses")
+	}
+	run, _, err := s.readRun(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	i := taskIndex(run, taskID)
+	if i < 0 {
+		return "", model.ErrNotFound
+	}
+	if digest != "" && digest != TaskCommandDigest(run.Tasks[i]) {
+		return "", model.ErrConflict
+	}
+	purpose, err := s.TaskAcceptance(ctx, runID, taskID)
+	if err != nil {
+		return "", err
+	}
+	grant(purpose)
+	return purpose, nil
 }

@@ -2406,8 +2406,8 @@
     },
     {
       "path": "internal/app/marshal_approval_binding.go",
-      "sha256": "4219cacc5655db59c37872c9efc085004271dbbb2bb663ee603f58e1b65372f1",
-      "bytes": 10629
+      "sha256": "a3a9ba4912263f65417eee5a213cb9eb09bdf34a3ae4ba22ca3c1f425787ddf7",
+      "bytes": 11785
     },
     {
       "path": "internal/app/marshal_approval_binding_test.go",
@@ -13801,8 +13801,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "4a754256932b8a752a261ff5281024e298d4873f9c6f48da848268255de18315",
-      "bytes": 104069
+      "sha256": "381c8a89e49168b1c834ce4801012c2a5a7b916aff662206e195cc26df9485a5",
+      "bytes": 104543
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -14601,8 +14601,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "3498d217ef21648a80947f6fd78dcbbed735ec669d58536990f5bc5816aaeee4",
-      "bytes": 75482
+      "sha256": "99a0fb539dbd709d24dc047649875c4fa76d015baaa1c08fd2ab1aeea0c98109",
+      "bytes": 75656
     },
     {
       "path": "internal/tui/marshal_proposal_default_test.go",
