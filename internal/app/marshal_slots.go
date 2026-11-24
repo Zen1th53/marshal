@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -89,6 +90,10 @@ func (s *MarshalService) reserveWorkerSlot(next *marshal.Run, t marshal.Task, re
 }
 
 // markSlotRunning records that the launch receipt proved the worker started.
+func dropWorkerSlot(run *marshal.Run, key string) {
+	run.Slots = slices.DeleteFunc(run.Slots, func(slot marshal.WorkerSlot) bool { return slot.LaunchKey == key })
+}
+
 func markSlotRunning(run *marshal.Run, key string) {
 	if j := run.SlotIndex(key); j >= 0 && run.Slots[j].State == marshal.SlotReserved {
 		run.Slots[j].State = marshal.SlotRunning

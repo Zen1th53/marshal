@@ -4,6 +4,7 @@ package driver
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,12 +14,41 @@ import (
 	"syscall"
 
 	"github.com/Zen1th53/marshal/internal/processgroup"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // wrapHeld uses the private supervisor's startup barrier: the worker command
 // cannot start until release writes its token.
 func wrapHeld(cmd *exec.Cmd) (func() error, func(), error) {
 	return processgroup.WrapHeld(cmd)
+}
+
+// governedHoldAvailable reports whether a governed worker process can be
+// held here: the private supervisor re-executes this binary and process
+// identities carry the boot identity.
+func governedHoldAvailable() bool {
+	if _, err := linuxBootID(); err != nil {
+		return false
+	}
+	_, err := os.Executable()
+	return err == nil
+}
+
+func holdBootID() (string, error) { return linuxBootID() }
+
+// withHeldStart makes the next worker process started under ctx wait at the
+// private supervisor's barrier until observe returns. An observer already in
+// ctx, such as a terminal relay, still sees the process first.
+func withHeldStart(ctx context.Context, observe workerterminal.Lifecycle) context.Context {
+	prev := workerterminal.LifecycleOf(ctx)
+	return workerterminal.WithHeldLifecycle(ctx, func(ref processgroup.Reference) error {
+		if prev != nil {
+			if err := prev(ref); err != nil {
+				return err
+			}
+		}
+		return observe(ref)
+	})
 }
 
 func heldIdentity(cmd *exec.Cmd) (ProcessIdentity, error) {

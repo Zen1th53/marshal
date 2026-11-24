@@ -161,6 +161,9 @@ type HeldStart struct {
 	Release func() (*Handle, error)
 	// Abort refuses the barrier, stops the child and proves its exit.
 	Abort func() error
+	// Unheld, when set, is a worker that ran without reaching a startup
+	// barrier. Its launch proceeds directly, without a receipt or slot.
+	Unheld *Handle
 }
 
 // SupervisedLauncher is implemented by drivers whose launch has a real
@@ -281,6 +284,13 @@ func (s *LaunchSupervisor) Launch(ctx context.Context, key string, d Driver, req
 	if err != nil {
 		// The intent stays: a later launch proves absence before reusing it.
 		return nil, err
+	}
+	if start.Unheld != nil {
+		// Nothing was held, so nothing can be rediscovered under the key. A
+		// leftover intent is harmless: recovery proves it absent.
+		_ = s.Journal.Remove(key)
+		start.Unheld.unheld = true
+		return start.Unheld, nil
 	}
 	abort := func(cause error) error {
 		if stopErr := start.Abort(); stopErr != nil {
@@ -411,6 +421,10 @@ func (s *LaunchSupervisor) Finish(key string) error {
 	defer unlock()
 	return s.Journal.Remove(key)
 }
+
+// Unheld reports a supervised launch whose worker never reached a startup
+// barrier and so ran without a launch key or slot.
+func (h *Handle) Unheld() bool { return h != nil && h.unheld }
 
 // LaunchReceipt returns the receipt a supervised launch recorded, if any.
 func (h *Handle) LaunchReceipt() (LaunchReceipt, bool) {

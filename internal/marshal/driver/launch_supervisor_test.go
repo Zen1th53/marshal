@@ -262,3 +262,23 @@ func TestLaunchSupervisorUnsupported(t *testing.T) {
 		t.Fatalf("platform without identity: %v", err)
 	}
 }
+
+// A governed driver not opted into holding, or on a platform or edition
+// without a startup barrier, is not supervised and never starts its run
+// from a held launch.
+func TestGovernedHoldUnavailableRefusesBeforeRunning(t *testing.T) {
+	ran := false
+	g := Governed{Run: func(context.Context, Request) ([]marshal.CommandRecord, error) { ran = true; return nil, nil }}
+	if HoldsLaunch(g) {
+		t.Fatal("governed driver without Held is supervised")
+	}
+	if _, err := g.LaunchHeld(t.Context(), Request{}, "key"); !errors.Is(err, ErrLaunchUnsupported) {
+		t.Fatalf("held launch of an unheld driver: %v", err)
+	}
+	if ran {
+		t.Fatal("refused held launch started the run")
+	}
+	if g.Held = true; HoldsLaunch(g) != governedHoldAvailable() {
+		t.Fatal("held governed driver ignores the platform barrier")
+	}
+}

@@ -161,6 +161,8 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if errors.Is(err, execution.ErrInvalidStateTransition) && strings.Contains(err.Error(), "already executing") {
 			// A provider-native approval resumes its bound turn in the background.
 			// The Marshal resume command waits for that same task's durable result.
+			// No worker process starts here, so a supervised launch is unheld.
+			driver.LaunchWithoutHold(ctx)
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
 			for {

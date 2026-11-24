@@ -309,6 +309,13 @@ func (s *MarshalService) rollingRefill(runID string, brief MarshalBrief, launche
 	if len(launched) == 0 || launched[0].Tier != marshal.Ultra || !s.rollingRefillAvailable() {
 		return nil
 	}
+	// Refill counts freed worker slots; a batch with a worker whose driver
+	// cannot hold its launch keeps batch dispatch.
+	for _, d := range launched {
+		if !s.supervisesLaunch(d.Driver) {
+			return nil
+		}
+	}
 	return func(ctx context.Context) ([]MarshalDispatch, error) {
 		run, _, err := s.load(ctx, runID)
 		if err != nil {
@@ -319,6 +326,13 @@ func (s *MarshalService) rollingRefill(runID string, brief MarshalBrief, launche
 		}
 		if marshal.TierPolicy(s.Gate, run.Settings).Tier != marshal.Ultra {
 			return nil, nil
+		}
+		// Refill counts freed worker slots, so every live worker must hold
+		// one; while a directly launched worker runs, the batch stays a batch.
+		for _, t := range run.Tasks {
+			if t.State == marshal.Dispatched && t.LaunchKey == "" {
+				return nil, nil
+			}
 		}
 		more, err := s.dispatchReady(context.WithValue(ctx, rollingRefillKey{}, true), runID, run, brief)
 		s.markDispatchLive(runID, more)

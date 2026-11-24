@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -194,7 +195,11 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
 	next.Tasks[i].ExecutionTier = policy.Tier
-	if s.LaunchSupervisor != nil {
+	if s.LaunchSupervisor != nil && !s.supervisesLaunch(d) {
+		// A driver that cannot hold its worker launches directly, unslotted.
+		t.LaunchKey = ""
+		next.Tasks[i].LaunchKey = ""
+	} else if s.LaunchSupervisor != nil {
 		// Reuse the key of a launch recovery proved never started.
 		if t.LaunchKey == "" {
 			key, err := model.NewID("marshal-launch-")
@@ -369,7 +374,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	}
 	req := driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName}
 	var handle *driver.Handle
-	if s.LaunchSupervisor == nil {
+	if s.LaunchSupervisor == nil || t.LaunchKey == "" {
 		handle, err = d.Launch(dispatchCtx, req)
 	} else {
 		handle, err = s.LaunchSupervisor.Launch(dispatchCtx, t.LaunchKey, d, req, func(ctx context.Context) error {
@@ -388,7 +393,14 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	}
 	keepRecovery = true
 	retainOperation = true
-	if s.LaunchSupervisor != nil {
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" && handle.Unheld() {
+		// The worker never reached a startup barrier: it runs as a direct
+		// launch, without a key or slot.
+		dropWorkerSlot(op.Next, t.LaunchKey)
+		op.Next.Tasks[i].LaunchKey = ""
+		t.LaunchKey = ""
+	}
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
 		markSlotRunning(op.Next, t.LaunchKey)
 	}
 	if err = s.afterOperationEffect(op); err != nil {
@@ -399,7 +411,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	if s.LaunchSupervisor != nil {
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
 		// Adopt only the worker the receipt names, with its recorded session.
 		receipt, ok := handle.LaunchReceipt()
 		if !ok || receipt.Key != t.LaunchKey {
@@ -1085,8 +1097,7 @@ func acceptanceRefusal(reason constitution.ReasonCode, independent *marshal.Inde
 // noteReviewDisagreement records a hand-in on which exactly one of the
 // Marshal and the independent reviewer accepted. The key groups materially
 // equivalent conflicts by task, reviewer roles, verdict direction and failing
-// criteria; free-text reasons are kept but never keyed, so rewording a
-// finding does not reset the count.
+// criteria and normalized findings from the rejecting reviewer.
 func noteReviewDisagreement(prev *marshal.ReviewDisagreement, t marshal.Task, attempt int, review marshal.Review, marshalReasons, failing []string) *marshal.ReviewDisagreement {
 	direction := "marshal-accepts"
 	if review.Verdict != marshal.VerdictAccept {
@@ -1094,7 +1105,25 @@ func noteReviewDisagreement(prev *marshal.ReviewDisagreement, t marshal.Task, at
 	}
 	criteria := append([]string(nil), failing...)
 	sort.Strings(criteria)
-	sum := sha256.Sum256([]byte(strings.Join(append([]string{t.PlanTaskID, "marshal", "independent", direction}, criteria...), "\x00")))
+	reasons := marshalReasons
+	mismatches := review.ArchitectureMismatches
+	if review.Verdict == marshal.VerdictAccept {
+		reasons = review.Independent.Reasons
+		mismatches = review.Independent.ArchitectureMismatches
+	}
+	findings := make(map[string]bool)
+	for _, reason := range append(append([]string(nil), reasons...), mismatches...) {
+		if finding := strings.ToLower(strings.Join(strings.Fields(reason), " ")); finding != "" {
+			findings[finding] = true
+		}
+	}
+	identities := make([]string, 0, len(findings))
+	for finding := range findings {
+		identities = append(identities, finding)
+	}
+	sort.Strings(identities)
+	identity, _ := json.Marshal([]any{t.PlanTaskID, "marshal", "independent", direction, criteria, identities})
+	sum := sha256.Sum256(identity)
 	d := &marshal.ReviewDisagreement{
 		Key:                 hex.EncodeToString(sum[:]),
 		Count:               1,
@@ -1838,7 +1867,6 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return err
 	}
-	s.announceTask(ctx, runID, taskID, slotAttempt(run.Tasks[i]), TaskNoticeMerged, op.ID, "Task "+taskID+" completed: it passed review and was merged.", "")
 	return nil
 }
 

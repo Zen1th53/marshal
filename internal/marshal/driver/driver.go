@@ -84,6 +84,9 @@ type Handle struct {
 	runErr          error
 	// receipt is set when a supervised launch recorded this worker.
 	receipt *LaunchReceipt
+	// unheld is set when a supervised launch's worker never reached a
+	// startup barrier, so it ran without a launch key or slot.
+	unheld bool
 }
 
 func (h *Handle) Worktree() string { return h.req.Worktree }
@@ -476,6 +479,10 @@ type Governed struct {
 	Run          GovernedRunner
 	Provider     string
 	CheckTimeout time.Duration
+	// Held lets a supervised launch hold the run's provider worker process
+	// at its startup barrier until the launch receipt records it. It takes
+	// effect only where this platform and edition have such a barrier.
+	Held bool
 }
 
 func (Governed) Mode() marshal.WorkerMode { return marshal.Governed }

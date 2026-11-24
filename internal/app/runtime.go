@@ -112,6 +112,8 @@ type Runtime struct {
 
 	// workerBeats are the governed worker attempts in flight (worker_liveness.go).
 	workerBeats workerBeatRegistry
+	// launchSupervision is built once per runtime (marshal_launch_supervision.go).
+	launchSupervision launchSupervisionState
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
@@ -2413,6 +2415,8 @@ func (r *Runtime) Marshal() *MarshalService {
 	service.process05CloseOrphanLane = r.closeOrphanProcess05Lane
 	service.process05ResumePaused = r.resumePausedProcess05
 	r.bindMarshalProjectKnowledge(service)
+	service.LaunchSupervisor = r.marshalLaunchSupervisor()
+	service.VerifyProcessExit = r.verifyMarshalWorkerExit
 	// Open assigns an instance ID and manages project lifecycle ownership.
 	// Services composed directly over a store have no runtime lifecycle to own.
 	if r.runtimeInstanceID != "" {

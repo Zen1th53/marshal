@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -60,6 +63,20 @@ func (r *taskLaunchRunner) Run(ctx context.Context, command adapter.Command) (ad
 		return r.base.Run(ctx, command)
 	}
 	configureWorkerStall(ctx, &command)
+	// A supervised governed launch holds its first provider worker here,
+	// with the launch key registered in the held process. Only the worker
+	// process beats; an adapter's own short commands before it, such as
+	// model discovery, do not and are never held.
+	if command.Heartbeat != nil {
+		if held, entry, ok := driver.HoldGovernedWorker(ctx); ok {
+			ctx = held
+			env := command.Env
+			if env == nil {
+				env = os.Environ()
+			}
+			command.Env = append(slices.Clip(env), entry)
+		}
+	}
 	release, err := r.runtime.beginTaskWorkerLaunch(ctx, r.taskID)
 	if err != nil {
 		return adapter.ProcessResult{}, err
@@ -103,6 +120,9 @@ func (r *Runtime) observedTaskAdapter(inner adapter.Adapter, provider, taskID st
 }
 func (p *observedTaskProvider) Run(ctx context.Context, request adapter.Request) (adapter.Result, error) {
 	if !p.runnerAdmission {
+		// This adapter runs without the task launch runner, so it starts no
+		// held worker process: a supervised governed launch proceeds unheld.
+		driver.LaunchWithoutHold(ctx)
 		release, err := p.runtime.beginTaskWorkerLaunch(ctx, p.taskID)
 		if err != nil {
 			return adapter.Result{}, err

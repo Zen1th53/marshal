@@ -179,3 +179,40 @@ func TestMarshalImportRoutingCommitsWithPlanAndRun(t *testing.T) {
 		t.Fatalf("foreign read: %v", err)
 	}
 }
+
+func TestMarshalCompletionRollsBackWhenNoticeFails(t *testing.T) {
+	s := openTestStore(t)
+	marshalTestProject(t, s)
+	run := marshal.Run{PlanID: "plan", PlanVersion: 1, Settings: marshal.DefaultSettings(), State: marshal.Merging, Tasks: []marshal.Task{{PlanTaskID: "a", State: marshal.Accepted}}}
+	if err := s.SaveMarshalState(t.Context(), "p", "run", run, 0, nil, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_notice BEFORE INSERT ON marshal_notice_outbox BEGIN SELECT RAISE(ABORT, 'injected notice failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	run.State, run.Tasks[0].State = marshal.Verifying, marshal.Merged
+	now := time.Now().UTC()
+	event := events.Event{ID: "merged", Type: events.EventTypeMarshalTaskMerged, Subject: "p", RunID: "run", TaskID: "a", At: now}
+	notice := NoticeWrite{Entry: NoticeOutboxEntry{EventID: "notice", ProjectID: "p", RunID: "run", TaskID: "a", Category: "task", Transition: "merged", PayloadJSON: "{}", CreatedAt: now}, Event: model.Event{ID: "notice", ProjectID: "p", Type: "marshal.run_notice", Timestamp: now}}
+	if err := s.SaveMarshalState(t.Context(), "p", "run", run, 1, &event, nil, 0, notice); err == nil {
+		t.Fatal("notice failure ignored")
+	}
+	stored, err := s.GetMarshalRun(t.Context(), "p", "run")
+	if err != nil || stored.Revision != 1 || stored.Value.Tasks[0].State != marshal.Accepted {
+		t.Fatalf("partial completion: %+v %v", stored, err)
+	}
+	history, err := s.MarshalDecisions(t.Context(), "run")
+	if err != nil || len(history) != 0 {
+		t.Fatalf("partial completion event: %v %v", history, err)
+	}
+	if _, err := s.db.Exec(`DROP TRIGGER reject_notice`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveMarshalState(t.Context(), "p", "run", run, 1, &event, nil, 0, notice); err != nil {
+		t.Fatal(err)
+	}
+	notices, err := s.ListNotices(t.Context(), "p", "run", 10)
+	if err != nil || len(notices) != 1 {
+		t.Fatalf("retried completion notices: %v %v", notices, err)
+	}
+}
