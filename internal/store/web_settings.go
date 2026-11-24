@@ -120,7 +120,7 @@ func (s *Store) AdmitWebSetting(ctx context.Context, i WebIntent) (WebReceipt, e
 		err = tx.QueryRowContext(ctx, `SELECT revision FROM marshal_settings WHERE project_id=?`, i.ProjectID).Scan(&revision)
 	case "settings/ultra.set":
 		err = tx.QueryRowContext(ctx, `SELECT revision FROM ultra_preference_revisions WHERE project_id=?`, i.ProjectID).Scan(&revision)
-	case "settings/ultra.request", "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart", "run/pause", "run/stop", "run/resume", "run/stop-workers", "run/amend.deny":
+	case "settings/ultra.request", "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart", "run/pause", "run/stop", "run/resume", "run/stop-workers", "run/amend.deny", "run/chat.send", "run/plan.comment", "run/architecture.comment", "run/goal.intake", "run/goal.amend.propose":
 		revision = i.Revision
 	default:
 		return WebReceipt{}, model.ErrInvalid

@@ -4,10 +4,8 @@ import (
 	"context"
 	"slices"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -340,41 +338,6 @@ func (w *Workspace) clickOwnerRef(ref string) bool {
 		return false
 	}
 	return true
-}
-
-// webSay is "Tell the Marshal…": the message goes the way the Board's s
-// composer sends it (sayToMarshal), as the owner's words, never as a
-// command, even when it starts with "/".
-func (w *Workspace) webSay(text string) webboard.Result {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return refused("Write something to send.")
-	}
-	if utf8.RuneCountInString(text) > webboard.SayMax {
-		return refused("The message is too long: at most " + strconv.Itoa(webboard.SayMax) + " characters.")
-	}
-	w.chat.mu.Lock()
-	native := w.chat.tr != nil
-	w.chat.mu.Unlock()
-	if !native && w.sayPane() == "" {
-		// sayAs would put the text back into the terminal's composer;
-		// from the web nothing is sent and the page keeps the text.
-		return refused("No Marshal chat is open, so nothing was sent. /marshal chat in the terminal starts one.")
-	}
-	w.sayToMarshal(w.workers.context(), text)
-	res := webboard.Result{Status: "sent", Text: "Sent to the Marshal."}
-	if echo := w.sayEchoList(); len(echo) > 0 {
-		switch echo[0].State {
-		case sayQueued, saySending:
-			if !native {
-				res = webboard.Result{Status: "queued", Text: "Queued: the Marshal's chat gets it as soon as it is free; Activity shows when it is in."}
-			}
-		case sayFailed:
-			res = refused("Not sent: " + echo[0].Why + ".")
-		}
-	}
-	w.RecordActivity("From the web: a message to the Marshal (" + res.Status + ").")
-	return res
 }
 
 // The two Board keys the page offers when no card is shown: r (retry the

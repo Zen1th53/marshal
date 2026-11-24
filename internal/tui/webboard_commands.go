@@ -39,6 +39,7 @@ func (w *Workspace) webWorkCapabilities(ctx context.Context) []webboard.SettingC
 	}
 	// Run-wide controls stay reachable while the run is fenced or paused.
 	caps := w.webRunCapabilities(service, record.Value, runID, record.Revision)
+	caps = append(caps, w.webComposerCapabilities(record.Value, runID, record.Revision)...)
 	if record.Value.CommandFence != "" || record.Value.Operation != nil {
 		return caps
 	}
@@ -126,6 +127,11 @@ func (w *Workspace) webWorkCommand(a webboard.Action) webboard.Result {
 		if i.Op == "task/approve-task" {
 			return w.webApproveTask(i, payload, service)
 		}
+		if webComposerOp(i.Op) {
+			var refusal webboard.Result
+			execute, refusal = w.webComposerCommand(i, payload, service)
+			return refusal
+		}
 		if webRunOp(i.Op) {
 			var refusal webboard.Result
 			execute, refusal = w.webRunCommand(i, payload, service, a)
@@ -207,6 +213,12 @@ func (w *Workspace) reconcileWebWork(ctx context.Context) {
 			key := fmt.Sprintf("%x", sha256.Sum256([]byte(i.RequestID)))
 			if readErr == nil && approval.TaskID == i.Key && approval.DecisionCommandKey == key && (approval.Status == "APPROVED" || approval.Status == "CONSUMED") {
 				_ = w.store.FinishWebRequest(ctx, i, store.WebReceipt{RequestID: i.RequestID, Status: "applied", Code: "applied", Revision: i.Revision, Effects: []string{"task-approval"}, Result: "The bound task approval was committed."})
+			}
+			continue
+		}
+		if webComposerOp(i.Op) {
+			if i.RequestBinding != "" {
+				w.reconcileWebMessage(ctx, i)
 			}
 			continue
 		}

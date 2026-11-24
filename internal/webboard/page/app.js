@@ -446,7 +446,7 @@
       var on = stop && armedStop === (f.act && f.act.card);
       var text = on ? "Click again to stop the run" : b.label;
       var go = function () {
-        if (b.local) { location.hash = "#home"; $("say-text").focus(); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (b.local) { location.hash = "#home"; openComposer(d && d.kind === "architecture" ? "run/architecture.comment" : d && d.kind === "plan" ? "run/plan.comment" : "run/chat.send"); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
         if (b.choice && b.choice.id === "requirements.edit") { editing = { line: "", text: "" }; sigs.card = ""; render(frame); return; }
         if (b.choice) { armedStop = null; decide(b.choice); return; }
         if (stop && !on) {
@@ -1284,13 +1284,32 @@
       row.appendChild(button); box.appendChild(row);
     });
   }
+  var composerOps = {"run/chat.send": "Message the Marshal", "run/plan.comment": "Comment on the plan", "run/architecture.comment": "Comment on the architecture", "run/goal.intake": "Add goal details", "run/goal.amend.propose": "Propose a goal change"};
+  function composerCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run" && composerOps[c.op]; });
+  }
   function runCapabilities(f) {
-    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run"; });
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run" && !composerOps[c.op]; });
+  }
+  // renderComposerScopes lists what a message can be bound to now; the
+  // choice names the plan, review, launch or goal the words are sent against.
+  function renderComposerScopes(f) {
+    var caps = composerCapabilities(f), sel = $("say-scope");
+    if (!changed("say-scope", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
+    var keep = sel.value; clear(sel); sel.hidden = !caps.length;
+    caps.forEach(function (c) { var o = el("option", "", composerOps[c.op]); o.value = c.op; sel.appendChild(o); });
+    if (caps.some(function (c) { return c.op === keep; })) sel.value = keep;
+  }
+  function openComposer(op) {
+    var sel = $("say-scope");
+    if (op && Array.prototype.some.call(sel.options, function (o) { return o.value === op; })) sel.value = op;
+    $("say-text").focus();
   }
   // Run-wide controls sit above every route, so they stay reachable with a
   // card or a drawer open; each one previews and confirms its bound request.
   function renderRunControls(f) {
     var labels = {"run/pause": "Pause the run", "run/stop": "Stop the run", "run/resume": "Resume the run", "run/stop-workers": "Stop the run's workers", "run/amend.deny": "Deny the amendment"};
+    renderComposerScopes(f);
     var caps = runCapabilities(f), box = $("run-controls");
     if (!changed("run-controls", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
     clear(box); box.hidden = !caps.length;
@@ -1459,6 +1478,8 @@
     if (!text) { box.focus(); return; }
     var max = frame && frame.act ? frame.act.sayMax : 2000;
     if (text.length > max) { feedback("bad", "Too long: at most " + max + " characters."); return; }
+    var sel = $("say-scope"), cap = sel && !sel.hidden && composerCapabilities(frame).find(function (c) { return c.op === sel.value; });
+    if (cap) { previewSetting(newWorkRequest(cap, {text: text})); return; }
     act({ action: "say", text: text }, "Send").then(function (ok) { if (ok) box.value = ""; });
   }
 
