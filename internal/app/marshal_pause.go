@@ -202,6 +202,35 @@ type RunNotice struct {
 	At      time.Time `json:"at"`
 }
 
+// TaskNoticeCategory is the outbox category of task progress notices.
+const TaskNoticeCategory = "task"
+
+// Task progress notice states, in the order a task moves through them. A
+// worker's exit only says the worker stopped; the task is complete only
+// once it is merged after its required review.
+const (
+	TaskNoticeWorkerExited   = "worker_exited"
+	TaskNoticeHandedIn       = "handed_in"
+	TaskNoticeReviewReturned = "review_returned"
+	TaskNoticeReviewAccepted = "review_accepted"
+	TaskNoticeMerged         = "merged"
+)
+
+// announceTask records one task progress notice after the state it reports
+// is saved. Its ID names the run, task, attempt and the event that moved the
+// task, so a repeat of the same event records nothing. A failed write is
+// reported as activity; the saved state stays as it is.
+func (s *MarshalService) announceTask(ctx context.Context, runID, taskID string, attempt int, state, eventID, summary, next string) {
+	if eventID == "" {
+		return
+	}
+	n := RunNotice{EventID: fmt.Sprintf("run:%s:task:%s:attempt:%d:%s:%s", runID, taskID, attempt, state, eventID), RunID: runID, TaskID: taskID, State: state, Code: state,
+		Summary: boundedRedacted(summary, 500), Next: boundedRedacted(next, 500)}
+	if err := s.recordNotice(ctx, TaskNoticeCategory, n); err != nil && s.RecordActivity != nil {
+		s.RecordActivity("task notice for " + runID + " not recorded: " + RedactApprovalText(err.Error()))
+	}
+}
+
 // runNoticeDetailLimit bounds the raw cause a pause keeps for the inspector.
 const runNoticeDetailLimit = 2000
 
@@ -334,6 +363,10 @@ func (s *MarshalService) noticeProjectID() string {
 // recordRunNotice writes a run notice to the durable outbox with its audit
 // event in one transaction. A repeated event ID records nothing.
 func (s *MarshalService) recordRunNotice(ctx context.Context, n RunNotice) error {
+	return s.recordNotice(ctx, RunNoticeCategory, n)
+}
+
+func (s *MarshalService) recordNotice(ctx context.Context, category string, n RunNotice) error {
 	if s == nil || s.Store == nil || n.EventID == "" {
 		return nil
 	}
@@ -345,7 +378,7 @@ func (s *MarshalService) recordRunNotice(ctx context.Context, n RunNotice) error
 		return err
 	}
 	data := map[string]any{"run_id": n.RunID, "task_id": n.TaskID, "state": n.State, "code": n.Code, "summary": n.Summary, "next": n.Next}
-	entry := store.NoticeOutboxEntry{EventID: n.EventID, ProjectID: s.noticeProjectID(), RunID: n.RunID, TaskID: n.TaskID, Category: RunNoticeCategory,
+	entry := store.NoticeOutboxEntry{EventID: n.EventID, ProjectID: s.noticeProjectID(), RunID: n.RunID, TaskID: n.TaskID, Category: category,
 		Transition: n.State, PhaseOrder: 1, Status: n.Code, Command: n.Next, Summary: n.Summary, PayloadJSON: string(payload), CreatedAt: n.At}
 	_, err = s.Store.RecordNoticeWithEvent(context.WithoutCancel(ctx), entry, model.Event{ID: n.EventID, Type: "marshal.run_notice", ProjectID: s.ProjectID, Timestamp: n.At, Data: data})
 	return err

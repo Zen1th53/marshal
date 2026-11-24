@@ -1740,7 +1740,7 @@ func (w *Workspace) deliverApprovalNotices(ctx context.Context, runID string) {
 		if err != nil {
 			return err
 		}
-		if entry.Category == app.RunNoticeCategory {
+		if entry.Category == app.RunNoticeCategory || entry.Category == app.TaskNoticeCategory {
 			return view.writeNotice(entry.EventID, runNoticeText(entry, rendered))
 		}
 		header := fmt.Sprintf("## MARSHAL approval %s · %s\n\n%s\n", entry.Transition, entry.ApprovalID, rendered)

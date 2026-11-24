@@ -49,6 +49,9 @@ func (s *MarshalService) slotFault(point string) error {
 	return nil
 }
 
+// TaskAttempt is the number of the task's current attempt.
+func TaskAttempt(t marshal.Task) int { return slotAttempt(t) }
+
 func slotAttempt(t marshal.Task) int {
 	return 1 + t.EvidenceAttemptBase + taskReturns(t)
 }

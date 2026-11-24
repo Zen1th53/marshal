@@ -141,10 +141,10 @@ func TestAlertsAndClearingStayWithinRun(t *testing.T) {
 			}
 			defer d.Cancel(h)
 			w.monitorTaskState(context.Background(), first, h)
-			if first.state != "done" || second.state != "working" || w.tmuxAlerts["second:same"] != "task waiting: waiting" || w.tmuxAlerts["exec-second:canonical"] != "egress refused: waiting" {
+			if first.state != "exited" || second.state != "working" || w.tmuxAlerts["second:same"] != "task waiting: waiting" || w.tmuxAlerts["exec-second:canonical"] != "egress refused: waiting" {
 				t.Fatalf("cross-run completion/clearing: %s / %s %v", first.state, second.state, w.tmuxAlerts)
 			}
-			if w.tmuxAlerts["first:same"] != "worker done: done" {
+			if w.tmuxAlerts["first:same"] != "worker exited: exited" {
 				t.Fatal("completion omitted owning run")
 			}
 		})
