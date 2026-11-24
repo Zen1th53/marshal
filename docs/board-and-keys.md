@@ -14,7 +14,12 @@ The Board is Marshal's control centre. In the terminal it is one short **home sc
  Now:       paused · 3 running · 9 queued (4/12 done)
  From you:  run paused: rv06 stuck — y move rv06 to codex and continue
  Web:       opened in your browser (w opens it again)
- ⏎ chat   w web   s say to the Marshal   q quit
+ Work:      2 active / cap 4 · 1 waiting
+ Lanes:     claude-1 T03 4m · agy-1 review T02 9m STALE
+ Tasks:     T02 review · T03 building · T04 waiting (dependency) · +2 more
+ Marshal:   claude Opus 5.5 high · context 42% · 5h 61% · weekly 83%
+ Activity:  14:04 · review · T02 sent for review ×2
+ ⏎ chat   w web   s say   r run   i inbox   c checks   ? keys   q quit
 ```
 
 - **Top line**: the project, the state (`READY`, `PLANNING`, `YOUR TURN`, `RUNNING`, `PAUSED` …), the running workers and the clock.
@@ -26,8 +31,18 @@ The Board is Marshal's control centre. In the terminal it is one short **home sc
   - anonymous usage counts on first use: `y` keeps them on, `t` turns them off (docs/telemetry.md lists every field);
   - agy not signed in: `g` opens its sign-in window.
 - **Web**: `opened in your browser`, `open with w`, or, on a computer with no display, `no display here: /marshal web shows the link to open`. The Web Board's private link is never on the home screen.
+- **Host**: only when the host, an update or MCP needs attention: the host notice, the thermal guard and its lane cap, low disk, `update <tag> (F10)` and `MCP failed (F6)`, with `2` for the Host view. It has its own row, so a command answer on the last row does not hide it.
+- **Work**, **Lanes**, **Tasks**, **Marshal**, **Activity**: active work against the cap, each lane's task and time (`STALE` when its worker went quiet), the tasks not merged yet with why they wait, the Marshal's provider, model, effort, context and quota left, and the latest Activity line. A line that does not fit ends with `+N more`.
 
 The home screen draws at any size down to about 40 × 10: the blank row goes first, then the lower lines.
+
+### Run, Inbox and Readiness
+
+Three pages show the rest of what the Web Board shows, in the terminal; `Esc` or `1` returns to the home and every home key still works on them. `j`/`k` or the arrows move the selection, which stays on the same lane or task while the list changes or the window is resized; `PgUp`/`PgDn` move a page.
+
+- `r` **Run**: the stages, progress, ETA, merges per hour, rework, token total and throughput; every lane with its provider, model, task, step, elapsed time, last signal and why it waits; every task with its writer, reviewer and why it waits (code, blocker, until when); Activity; the Marshal, its steps and requests with their answers; and the chat's health (bound, answers, restarts, rebinds, resends). At 120 columns or more Activity and the Marshal sit beside the work.
+- `i` **Inbox**: the From-you line, the decision and paused cards, every queued item, each approval with its age, expiry and actions, and what each waiting task waits for. Decisions are made on the Web Board (`w`).
+- `c` **Readiness**: the readiness checks with their hints, the defaults, the provider caps and limits (percent left, window, reset) and the host.
 
 ---
 
@@ -43,6 +58,7 @@ The home screen draws at any size down to about 40 × 10: the blank row goes fir
 | `a` | Open the current architecture in your browser (also `/marshal architecture`). |
 | `m` | Choose the Marshal's provider and model. |
 | `e` | With the requirements waiting: edit a line (then its letter). |
+| `r`, `i`, `c` | Open the Run, Inbox or Readiness page. |
 | `Space` or `Ctrl+K` | Open the action palette. |
 | `/` | Type a command, such as `/marshal settings` or `/task-model T03` (the model a task runs on). |
 | `?` | Every key. |

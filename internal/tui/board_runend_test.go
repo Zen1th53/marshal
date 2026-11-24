@@ -29,7 +29,7 @@ func closedRunBesideChat(t *testing.T) *Workspace {
 func TestBoardEscClosesTypedMessage(t *testing.T) {
 	w := closedRunBesideChat(t)
 	ctx := t.Context()
-	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'i'})
+	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'n'})
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyEnter})
 	w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'x'})
 	if !w.composing() || !strings.Contains(frameText(w, 80, 30), "to the Marshal › x") {

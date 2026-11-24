@@ -482,11 +482,15 @@ type boardUI struct {
 	stopArmed bool
 	// homeYesAt is when y last ran the home screen's safe action (homeYes).
 	homeYesAt time.Time
-	task      string // selected task
-	lane      string // selected lane's worker
-	ack       string // command answer already seen; the footer stops showing it
-	ackSeq    uint64 // output sequence when ack was taken: a repeated answer is new
-	note      string // run note last painted
+	// homePage is the page drawn in the home's place ("" the home itself:
+	// board_run_view.go) and homePageState its selection and scroll.
+	homePage      string
+	homePageState pageState
+	task          string // selected task
+	lane          string // selected lane's worker
+	ack           string // command answer already seen; the footer stops showing it
+	ackSeq        uint64 // output sequence when ack was taken: a repeated answer is new
+	note          string // run note last painted
 	// hostScroll is how far the Host view is scrolled down; hostMax is
 	// the furthest it could go at the last paint.
 	hostScroll, hostMax int

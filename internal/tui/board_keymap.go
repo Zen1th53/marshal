@@ -103,6 +103,9 @@ var boardKeymap = []boardKey{
 	{Group: "HOME", Keys: "Enter", What: "open the Marshal chat", Press: &KeyEvent{Type: KeyEnter}, Class: KeyOpen, ID: "home.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
 	{Group: "HOME", Keys: "y", What: "do the safe step From you names", Press: pressRune('y'), Class: KeyConfirm, ID: "task.retry", Hint: "yes", Core: true, CoreOrder: 3, CoreKey: "y", CoreLabel: "retry or continue", When: (*Workspace).homeYesReady, Why: reason("Nothing safe to continue now: decisions are made on the Web Board (w).")},
 	{Group: "HOME", Keys: "w", What: "open the Web Board: every card", Press: pressRune('w'), Class: KeyOpen, ID: "home.web", Hint: "web", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "r", What: "run: stages, lanes, tasks, Activity", Press: pressRune('r'), Class: KeyOpen, ID: "home.run", Hint: "run", When: homeShown, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "i", What: "inbox: everything waiting for you", Press: pressRune('i'), Class: KeyOpen, ID: "home.inbox", Hint: "inbox", When: homeShown, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "c", What: "readiness: checks, providers, limits", Press: pressRune('c'), Class: KeyOpen, ID: "home.ready", Hint: "checks", When: homeShown, Why: reason("Leave the view first: Esc.")},
 	{Group: "HOME", Keys: "e", What: "requirements: edit a line", Press: pressRune('e'), Class: KeyOpen, ID: "home.reqedit", When: func(w *Workspace) bool { return w.currentReq() != nil }, Why: reason("No requirements wait for you.")},
 	{Group: "HOME", Keys: "q", What: "quit Marshal", Press: pressRune('q'), Class: KeyConfirm, ID: "home.quit", Hint: "quit"},
 	{Group: "HOME", Keys: "Esc", What: "close a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
@@ -139,6 +142,9 @@ var boardKeymap = []boardKey{
 	{Group: "FUNCTION KEYS", Keys: "F10", What: "update: check or install", Press: &KeyEvent{Type: KeyF10}, Class: KeyConfirm, Direct: "spec: F-keys unchanged; it installs only the update its notice offered", ID: "fkey.update"},
 	{Group: "FUNCTION KEYS", Keys: "F12", What: "native Antigravity", Command: "/agy", Class: KeyOpen, ID: "fkey.agy"},
 }
+
+// homeShown reports whether the home, or one of its pages, is on screen.
+func homeShown(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }
 
 // boardStopWaiting reports whether a stopped run is waiting with an empty
 // inbox, the only time run.stopped's Enter arms what the stop suggests and a

@@ -1731,12 +1731,19 @@ features:
     name: Terminal Home and Run view projection of tasks, lanes, quota, Activity, steps, chat health and readiness
     editions: [default, governed]
     sources:
+      - internal/tui/board_run_view.go
       - internal/tui/board_home.go
       - internal/webboard/page/app.js
       - internal/tui/boardv2_flow.go
     tests:
       - internal/webboard.TestFrameMapsEveryField
-    docs: []
+      - internal/tui.TestHomeShowsWorkAndOwnerActionAt80x24
+      - internal/tui.TestRunViewReachableAndSelectionStable
+      - internal/tui.TestReadinessAndActivityVisibleWithoutWeb
+      - internal/tui.TestHomeRunProjectionFieldsAndHiddenKeys
+      - internal/tui.TestHostNoticeSurvivesOtherStatus
+    docs:
+      - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
         anchor: 'function renderLanes(f)'
@@ -1744,7 +1751,19 @@ features:
       - routeOrCommand: "#activity"
         anchor: 'function renderActivity(f)'
         kind: view
-    tui: []
+    tui:
+      - routeOrCommand: "1"
+        anchor: 'func hostAbnormal('
+        kind: view
+      - routeOrCommand: r
+        anchor: 'func runWorkLines('
+        kind: view
+      - routeOrCommand: i
+        anchor: 'func inboxPageLines('
+        kind: view
+      - routeOrCommand: c
+        anchor: 'func readyPageLines('
+        kind: view
 
   # ---- TUI cards and overlays ------------------------------------------------
   - id: TUI-CARD-paused
@@ -3690,9 +3709,6 @@ pending:
   - id: TUI-KEY-task-diff-D
     missing: both
     source: internal/tui/board_task_diff.go
-  - id: TUI-HOME-operational-projection
-    missing: tui
-    source: internal/tui/board_home.go
   - id: TUI-CARD-decision-web-only
     missing: tui
     source: internal/tui/boardv2_cards_owner.go
