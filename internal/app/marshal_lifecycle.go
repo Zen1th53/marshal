@@ -650,7 +650,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 		userApproval, err = s.ApprovalActor(ctx, runID, taskAcceptancePurpose(run, *t, attempt, h))
 		if err != nil {
-			return "", err
+			return "", awaitingApproval{err}
 		}
 	}
 	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
