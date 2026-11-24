@@ -15,9 +15,12 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -509,6 +512,61 @@ func TestChecksOnlyCloseFenceAndGitRecovery(t *testing.T) {
 		if got := countRunEvents(t, s, events.EventTypeMarshalRunClosed); got != 1 {
 			t.Fatalf("close acknowledged %d times", got)
 		}
+		if got := countRunEvents(t, s, events.EventTypeMarshalCloseFencePassed); got != 1 {
+			t.Fatalf("close fence passage events = %d, want 1", got)
+		}
+	})
+
+	t.Run("after-git-missing-fence-proof-held", func(t *testing.T) {
+		s, repo, _ := verified(t)
+		ctx := t.Context()
+		pending := pendingChecksOnlyClose(t, s)
+		// Advance the target to op.After without persisting a durable fence
+		// proof-of-passage record: recovery must refuse to complete the close
+		// and hold the intent for inspection.
+		marshalGit(t, repo, "update-ref", pending.Operation.Target, pending.Operation.After, pending.Operation.Before)
+		if _, err := s.Resume(ctx, "run"); err == nil || !strings.Contains(err.Error(), "missing durable close fence proof") {
+			t.Fatalf("recovery completed without durable fence proof: %v", err)
+		}
+		run, _ := s.Snapshot(ctx, "run")
+		if run.State == marshal.Closed || run.Operation == nil {
+			t.Fatalf("unproven advancement was not held: state=%s op=%+v", run.State, run.Operation)
+		}
+	})
+
+	t.Run("fence-marker-unchanged-target-unapplied-and-retired", func(t *testing.T) {
+		s, repo, _ := verified(t)
+		ctx := t.Context()
+		base := marshalGit(t, repo, "rev-parse", "refs/heads/main")
+		pending := pendingChecksOnlyClose(t, s)
+		if err := s.recordChecksOnlyCloseFence(ctx, "run", pending.Operation); err != nil {
+			t.Fatal(err)
+		}
+		run, err := s.Resume(ctx, "run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.Operation != nil || run.State == marshal.Closed || marshalGit(t, repo, "rev-parse", "refs/heads/main") != base {
+			t.Fatalf("unchanged target with fence marker did not clear as unapplied: %s %+v", run.State, run.Operation)
+		}
+		if got := countRunEvents(t, s, events.EventTypeMarshalCloseFencePassed); got != 1 {
+			t.Fatalf("fence marker audit evidence = %d, want 1", got)
+		}
+		// Once cleared as unapplied, the old operation's fence marker is
+		// ineligible for reuse even if replayed with Git later at op.After.
+		stored, err := s.Store.GetMarshalRun(ctx, s.ProjectID, "run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		replayed := stored.Value
+		replayed.Operation = pending.Operation
+		if _, err = s.Store.SetMarshalRun(ctx, s.ProjectID, "run", replayed, stored.Revision); err != nil {
+			t.Fatal(err)
+		}
+		marshalGit(t, repo, "update-ref", pending.Operation.Target, pending.Operation.After, pending.Operation.Before)
+		if _, err := s.Resume(ctx, "run"); err == nil || !strings.Contains(err.Error(), "missing durable close fence proof") {
+			t.Fatalf("retired fence marker was reused: %v", err)
+		}
 	})
 
 	t.Run("external-divergence-held", func(t *testing.T) {
@@ -524,6 +582,29 @@ func TestChecksOnlyCloseFenceAndGitRecovery(t *testing.T) {
 			t.Fatal("divergent journal was not held for inspection")
 		}
 	})
+}
+
+func seedChecksOnlyAcceptedReview(t *testing.T, r *Runtime, runID string, run marshal.Run) {
+	t.Helper()
+	for _, task := range run.Tasks {
+		review := marshal.Review{
+			ArchitectureVerdict: "conforms",
+			Verdict:             marshal.VerdictAccept,
+			Reviewer:            "marshal",
+			Independent: &marshal.IndependentReview{
+				ArchitectureVerdict: "conforms",
+				Verdict:             marshal.VerdictAccept,
+				Reviewer:            "cross-review:other",
+				Provider:            "other",
+				EvidenceRefs:        []string{"result:" + task.ResultCommit},
+				SessionID:           "independent-review",
+				FreshSession:        true,
+			},
+		}
+		if _, err := r.store.SetMarshalReview(t.Context(), runID, task.PlanTaskID, 1, review); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // At the required-context close fence a checks-only close presents its sealed
@@ -546,6 +627,7 @@ func checksOnlyRequiredContextCloseFence(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := stored.Value
+	seedChecksOnlyAcceptedReview(t, r, runID, run)
 	run.Settings.ReviewPolicy.FinalModel = marshal.FinalModelOff
 	run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.Settings.ReviewPolicy, "", "owner", time.Now().UTC())
 	if _, err = r.store.SetMarshalRun(ctx, r.ProjectID(), runID, run, stored.Revision); err != nil {
@@ -600,6 +682,9 @@ func checksOnlyRequiredContextCloseFence(t *testing.T) {
 	if after, _ := gitMarshal(ctx, r.ProjectRoot(), "rev-parse", op.Target); strings.TrimSpace(after) != source.head {
 		t.Fatal("target did not move to the bound head")
 	}
+	if passed, err := service.hasChecksOnlyCloseFence(ctx, runID, op); err != nil || !passed {
+		t.Fatalf("checks-only close fence did not persist proof-of-passage: passed=%v err=%v", passed, err)
+	}
 	if err = r.withRequiredContextCloseEffect(ctx, service, runID, source.marshalRun, op, effect); err == nil || called != 1 {
 		t.Fatal("checks-only capability replayed", err)
 	}
@@ -647,6 +732,7 @@ func TestCanonicalOptOutRuntimeWiredClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := stored.Value
+	seedChecksOnlyAcceptedReview(t, r, source.marshalRunID, run)
 	run.Settings.ReviewPolicy.FinalModel = marshal.FinalModelOff
 	run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.Settings.ReviewPolicy, "", "owner", time.Now().UTC())
 	run.Repository, err = service.repositoryIdentity(ctx)
@@ -693,5 +779,331 @@ func TestCanonicalOptOutRuntimeWiredClose(t *testing.T) {
 	}
 	if now != attested {
 		t.Fatal("checks-only close minted a canonical attestation")
+	}
+}
+
+// Turning cross-review off by itself (leaving final-model at its default)
+// selects checks-only proof when the approved policy allows it, in both
+// VerifyMerged and Close/Execute, with zero canonical attestations.
+func TestCrossReviewOffAloneSelectsChecksOnlyProof(t *testing.T) {
+	policy := marshal.ReviewPolicy{CrossReview: marshal.CrossReviewOff}
+	t.Run("execute-standing-close", func(t *testing.T) {
+		s, repo, dbPath, recorder := checksOnlyFixture(t, marshal.AcceptMarshal, policy)
+		s.CrossReview = nil
+		run, err := s.Execute(t.Context(), "run", marshalBrief, nil)
+		if err != nil {
+			t.Fatalf("execute with cross-review off: %v", err)
+		}
+		assertChecksOnlyDelivered(t, s, repo, dbPath, recorder, run)
+		if roles := strings.Join(run.ChecksOnly.OmittedRoles, ","); !strings.Contains(roles, "cross-review") {
+			t.Fatalf("omitted roles = %q, want cross-review listed", roles)
+		}
+	})
+	t.Run("verify-merged-and-owner-close", func(t *testing.T) {
+		s, repo, dbPath, recorder := checksOnlyFixture(t, marshal.AcceptMarshalThenUser, policy)
+		s.CrossReview = nil
+		ctx := t.Context()
+		run, err := s.Execute(ctx, "run", marshalBrief, nil)
+		if err != nil || run.State != marshal.Verifying {
+			t.Fatalf("execute: state=%s err=%v", run.State, err)
+		}
+		decision, err := s.VerifyMerged(ctx, "run", knownCharge())
+		if err != nil || decision != verification.ChecksOnlyPassed {
+			t.Fatalf("VerifyMerged = %s err=%v, want CHECKS_ONLY_PASSED", decision, err)
+		}
+		if err := s.Close(ctx, "run"); err != nil {
+			t.Fatalf("owner close: %v", err)
+		}
+		run, _ = s.Snapshot(ctx, "run")
+		assertChecksOnlyDelivered(t, s, repo, dbPath, recorder, run)
+	})
+}
+
+// Missing or disagreeing mandatory review (primary review, mandatory
+// independent cross-review, or mandatory architecture verdict) refuses
+// checks-only delivery without moving the target.
+func TestChecksOnlyRefusesMissingOrDisagreeingMandatoryReview(t *testing.T) {
+	t.Run("missing-or-disagreeing-task-review", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			mutate func(t *testing.T, s *MarshalService, dbPath string)
+		}{
+			{
+				name: "missing-review",
+				mutate: func(t *testing.T, _ *MarshalService, dbPath string) {
+					db, err := sql.Open("sqlite", dbPath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer db.Close()
+					if _, err := db.Exec(`DELETE FROM marshal_reviews WHERE run_id = 'run' AND task_id = 'a'`); err != nil {
+						t.Fatal(err)
+					}
+				},
+			},
+			{
+				name: "disagreeing-primary-review",
+				mutate: func(t *testing.T, s *MarshalService, dbPath string) {
+					db, err := sql.Open("sqlite", dbPath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer db.Close()
+					if _, err := db.Exec(`DELETE FROM marshal_reviews WHERE run_id = 'run' AND task_id = 'a'`); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := s.Store.SetMarshalReview(t.Context(), "run", "a", 1, marshal.Review{
+						Verdict:  marshal.VerdictReturn,
+						Reviewer: "marshal",
+						Reasons:  []string{"primary disagreed"},
+					}); err != nil {
+						t.Fatal(err)
+					}
+				},
+			},
+			{
+				name: "missing-mandatory-independent-review",
+				mutate: func(t *testing.T, s *MarshalService, dbPath string) {
+					db, err := sql.Open("sqlite", dbPath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer db.Close()
+					if _, err := db.Exec(`DELETE FROM marshal_reviews WHERE run_id = 'run' AND task_id = 'a'`); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := s.Store.SetMarshalReview(t.Context(), "run", "a", 1, marshal.Review{
+						Verdict:     marshal.VerdictAccept,
+						Reviewer:    "marshal",
+						Independent: nil,
+					}); err != nil {
+						t.Fatal(err)
+					}
+				},
+			},
+			{
+				name: "disagreeing-mandatory-independent-review",
+				mutate: func(t *testing.T, s *MarshalService, dbPath string) {
+					db, err := sql.Open("sqlite", dbPath)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer db.Close()
+					if _, err := db.Exec(`DELETE FROM marshal_reviews WHERE run_id = 'run' AND task_id = 'a'`); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := s.Store.SetMarshalReview(t.Context(), "run", "a", 1, marshal.Review{
+						Verdict:  marshal.VerdictAccept,
+						Reviewer: "marshal",
+						Independent: &marshal.IndependentReview{
+							Verdict:      marshal.VerdictReturn,
+							Reviewer:     "cross-review:other",
+							Provider:     "other",
+							EvidenceRefs: []string{"check:ok"},
+						},
+					}); err != nil {
+						t.Fatal(err)
+					}
+				},
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				s, repo, dbPath, _ := checksOnlyFixture(t, marshal.AcceptMarshalThenUser, finalModelOff)
+				ctx := t.Context()
+				if run, err := s.Execute(ctx, "run", marshalBrief, nil); err != nil || run.State != marshal.Verifying {
+					t.Fatalf("execute: state=%s err=%v", run.State, err)
+				}
+				base := marshalGit(t, repo, "rev-parse", "refs/heads/main")
+				tc.mutate(t, s, dbPath)
+				if decision, err := s.VerifyMerged(ctx, "run", knownCharge()); err == nil || decision == verification.ChecksOnlyPassed {
+					t.Fatalf("VerifyMerged passed with %s: decision=%s err=%v", tc.name, decision, err)
+				}
+				if _, err := s.Resume(ctx, "run"); err != nil {
+					t.Fatal(err)
+				}
+				if err := s.Close(ctx, "run"); err == nil {
+					t.Fatalf("Close delivered despite %s", tc.name)
+				}
+				if got := marshalGit(t, repo, "rev-parse", "refs/heads/main"); got != base {
+					t.Fatalf("target moved despite %s", tc.name)
+				}
+			})
+		}
+	})
+
+	t.Run("missing-or-disagreeing-mandatory-architecture-review", func(t *testing.T) {
+		for _, scenario := range []string{"missing-verdict", "mismatch-verdict"} {
+			t.Run(scenario, func(t *testing.T) {
+				r, ctx, _, _, id, _ := completionRuntimeFixture(t, "complete")
+				session, err := r.store.GetVerificationSession(ctx, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.requiredIntegrationSources.mu.Lock()
+				source := r.requiredIntegrationSources.byRun[session.Binding.RunID]
+				r.requiredIntegrationSources.mu.Unlock()
+				service := r.Marshal()
+				service.GovernedCheck = fixtureCheckRunner
+				runID := source.marshalRunID
+				stored, err := r.store.GetMarshalRun(ctx, r.ProjectID(), runID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				run := stored.Value
+				run.Settings.ReviewPolicy.FinalModel = marshal.FinalModelOff
+				run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.Settings.ReviewPolicy, "", "owner", time.Now().UTC())
+				if _, err = r.store.SetMarshalRun(ctx, r.ProjectID(), runID, run, stored.Revision); err != nil {
+					t.Fatal(err)
+				}
+				review := marshal.Review{
+					Verdict:  marshal.VerdictAccept,
+					Reviewer: "marshal",
+					Independent: &marshal.IndependentReview{
+						Verdict:      marshal.VerdictAccept,
+						Reviewer:     "cross-review:other",
+						Provider:     "other",
+						EvidenceRefs: []string{"result:" + run.Tasks[0].ResultCommit},
+					},
+				}
+				if scenario == "mismatch-verdict" {
+					review.ArchitectureVerdict = "mismatches"
+					review.ArchitectureMismatches = []string{"README.md:doc: disagrees with contract"}
+					review.Independent.ArchitectureVerdict = "conforms"
+				}
+				if _, err := r.store.SetMarshalReview(ctx, runID, run.Tasks[0].PlanTaskID, 1, review); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := service.runChecksOnlyReceipt(ctx, runID, run, source.head, "owner-close"); err == nil || !strings.Contains(err.Error(), "mandatory architecture review") {
+					t.Fatalf("expected mandatory architecture review refusal (%s), got %v", scenario, err)
+				}
+			})
+		}
+	})
+}
+
+// At the required-context close fence, any change to the owner or project
+// context (mandatory memory, freshness, context packet, or SQL authority)
+// between check and close refuses the checks-only close before any Git effect.
+func TestChecksOnlyCloseFenceRefusesChangedOwnerAndProjectContext(t *testing.T) {
+	scenarios := []string{
+		"foreign-owner-context",
+		"changed-owner-principal",
+		"revoked-memory",
+		"stale-memory",
+		"changed-sql-authority",
+		"changed-context-packet",
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario, func(t *testing.T) {
+			r, ctx, _, _, id, _ := completionRuntimeFixture(t, "complete")
+			session, err := r.store.GetVerificationSession(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.requiredIntegrationSources.mu.Lock()
+			source := r.requiredIntegrationSources.byRun[session.Binding.RunID]
+			r.requiredIntegrationSources.mu.Unlock()
+			service := r.Marshal()
+			service.GovernedCheck = fixtureCheckRunner
+			runID := source.marshalRunID
+			stored, err := r.store.GetMarshalRun(ctx, r.ProjectID(), runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			run := stored.Value
+			seedChecksOnlyAcceptedReview(t, r, runID, run)
+			run.Settings.ReviewPolicy.FinalModel = marshal.FinalModelOff
+			run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.Settings.ReviewPolicy, "", "owner", time.Now().UTC())
+			if _, err = r.store.SetMarshalRun(ctx, r.ProjectID(), runID, run, stored.Revision); err != nil {
+				t.Fatal(err)
+			}
+			if err = r.observeRequiredMarshalIntegrationSource(ctx, service, runID, run, source.head); err != nil {
+				t.Fatal(err)
+			}
+			r.requiredIntegrationSources.mu.Lock()
+			for _, candidate := range r.requiredIntegrationSources.byRun {
+				if candidate.marshalRunID == runID {
+					source = candidate
+				}
+			}
+			r.requiredIntegrationSources.mu.Unlock()
+			receipt, err := service.runChecksOnlyReceipt(ctx, runID, run, source.head, "owner-close")
+			if err != nil || !receipt.Passed() {
+				t.Fatalf("receipt: %v %+v", err, receipt)
+			}
+			if err = r.retainRequiredChecksOnlyCloseProof(ctx, runID, source.marshalRun, source.head, receipt); err != nil {
+				t.Fatal(err)
+			}
+			next := source.marshalRun
+			next.State, next.ChecksOnly, next.DeliveryKind = marshal.Closed, &receipt, verification.DeliveredChecksOnly
+			op := &marshal.LifecycleOperation{Kind: "close", Before: run.BaseCommit, After: source.head, Target: run.TargetRef, Next: &next, DeliveryKind: verification.DeliveredChecksOnly, ReceiptID: receipt.ID, ReceiptDigest: receipt.Digest, Event: events.Event{Type: events.EventTypeMarshalRunClosed}}
+			revision, err := service.beginOperation(ctx, runID, source.marshalRun, source.marshalRevision, op)
+			if err != nil {
+				t.Fatal(err)
+			}
+			op.Authorized = true
+			pending := source.marshalRun
+			pending.Operation = op
+			if err = service.save(ctx, runID, pending, revision); err != nil {
+				t.Fatal(err)
+			}
+			closeCtx := ctx
+			switch scenario {
+			case "foreign-owner-context":
+				closeCtx = t.Context()
+			case "changed-owner-principal":
+				r.requiredIntegrationSources.mu.Lock()
+				source.checksOnly.principal = "local-uid:other"
+				r.requiredIntegrationSources.mu.Unlock()
+			case "revoked-memory":
+				if _, err := r.store.UpdateMemory(t.Context(), r.ProjectID(), "MEM-required-resolver", 1, func(record *model.MemoryRecordV2) error {
+					record.ACLScope = "foreign"
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+			case "stale-memory":
+				if _, err := r.store.UpdateMemory(t.Context(), r.ProjectID(), "MEM-required-resolver", 1, func(record *model.MemoryRecordV2) error {
+					record.BranchName = "stale-branch"
+					record.HeadCommit = strings.Repeat("b", 40)
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+			case "changed-sql-authority":
+				owner, ok := auth.LocalFromContext(ctx)
+				if !ok {
+					t.Fatal("missing local owner in fixture context")
+				}
+				if err := r.store.PutCapabilityGrant(t.Context(), capability.Grant{
+					ID:        capability.GrantID("GRANT-late-checks-only"),
+					Subject:   capability.SubjectID(owner.ID()),
+					TaskID:    capability.TaskID(r.ProjectIdentity()),
+					Kind:      capability.KindFilesystemRead,
+					Scope:     capability.Scope{Resource: "README.md", Actions: []string{"read"}},
+					Issuer:    capability.SubjectID(owner.ID()),
+					IssuedAt:  time.Now().UTC().Add(-time.Minute),
+					ExpiresAt: time.Now().UTC().Add(time.Hour),
+				}); err != nil {
+					t.Fatal(err)
+				}
+			case "changed-context-packet":
+				r.requiredIntegrationSources.mu.Lock()
+				source.checksOnly.admissions[0].ExpectedPacketDigest = "sha256:" + strings.Repeat("0", 64)
+				r.requiredIntegrationSources.mu.Unlock()
+			}
+			called := false
+			err = r.withRequiredContextCloseEffect(closeCtx, service, runID, source.marshalRun, op, func() error {
+				called = true
+				return nil
+			})
+			if err == nil || called {
+				t.Fatalf("checks-only close passed despite %s: err=%v called=%v", scenario, err, called)
+			}
+			if after, gitErr := gitMarshal(t.Context(), r.ProjectRoot(), "rev-parse", op.Target); gitErr != nil || strings.TrimSpace(after) != op.Before {
+				t.Fatalf("target moved despite %s: after=%s err=%v", scenario, after, gitErr)
+			}
+		})
 	}
 }

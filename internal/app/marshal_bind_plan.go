@@ -123,6 +123,9 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		return marshal.Run{}, err
 	}
 	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value, Budget: settings.Value.Budget, ReviewPolicy: policySnap}
+	if err := validateRunDesignReview(run); err != nil {
+		return marshal.Run{}, err
+	}
 	bindPrivateProcess05Tier(&run, p)
 	if err := continuePriorTaskLanes(ctx, s, &run, goal, planProjectID); err != nil {
 		return marshal.Run{}, err
