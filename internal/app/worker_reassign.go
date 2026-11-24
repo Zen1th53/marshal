@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
+	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
@@ -220,4 +220,85 @@ func (r *Runtime) independentVerifierChoice(run marshal.Run) (provider string, w
 		}
 	}
 	return available[0], true, nil
+}
+
+// enabledRoleProviders is roleProviders without any provider the owner has
+// disabled in the project's current settings. It reads the settings at each
+// call, so a change takes effect for the next review of the same run.
+func (r *Runtime) enabledRoleProviders(ctx context.Context, s *MarshalService) []string {
+	policy := s.projectSettingsSnapshot(ctx, marshal.DefaultSettings())
+	var out []string
+	for _, provider := range r.roleProviders() {
+		if policy.ProviderEnabled(provider) {
+			out = append(out, provider)
+		}
+	}
+	return out
+}
+
+// reviewProviderFault says whether err is the provider's own failure to run
+// a review turn (sign-in needed, quota or rate limit, not installed, not
+// reachable, timed out) rather than anything the review concluded. It
+// returns a short plain reason.
+func (r *Runtime) reviewProviderFault(provider string, err error) (string, bool) {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return "", false
+	}
+	text := err.Error()
+	lower := strings.ToLower(text)
+	switch {
+	case isProviderAuthFailure(text):
+		return "authentication required", true
+	case r.noteProviderLimit(provider, text):
+		return "quota or rate limit", true
+	case errors.Is(err, exec.ErrNotFound) || strings.Contains(lower, "executable file not found") || strings.Contains(lower, "not installed") || strings.Contains(lower, "command not found"):
+		return "not installed", true
+	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(lower, "timed out") || strings.Contains(lower, "deadline exceeded"):
+		return "timed out", true
+	case strings.Contains(lower, "service unavailable") || strings.Contains(lower, "provider unavailable") || strings.Contains(lower, "overloaded") || strings.Contains(lower, "connection refused"):
+		return "provider unavailable", true
+	}
+	return "", false
+}
+
+// crossReviewFailover runs an independent cross-review turn on the best
+// reviewer provider. When that turn fails for a provider-side reason, in the
+// private edition, the review moves to another provider that is enabled, is
+// not the task's worker's and has not failed yet, and the move is recorded.
+// A turn that returns a review, whatever its verdict, is returned as is; with
+// no eligible alternative the original failure is returned.
+func (r *Runtime) crossReviewFailover(ctx context.Context, s *MarshalService, marshalProvider string, task marshal.Task, handin marshal.HandIn, turn func(provider string) (marshal.Review, error)) (marshal.Review, string, error) {
+	tried := []string{handin.Provider}
+	var lastErr error
+	for {
+		provider, err := crossReviewProvider(r.enabledRoleProviders(ctx, s), tried, marshalProvider, task.PlanTaskID)
+		if err != nil {
+			return marshal.Review{}, provider, err
+		}
+		if lastErr != nil && slices.Contains(tried, provider) {
+			return marshal.Review{}, provider, fmt.Errorf("%w; no other reviewer provider is eligible for task %s", lastErr, task.PlanTaskID)
+		}
+		review, err := turn(provider)
+		if err == nil || !providerLimitFallback || r == nil || ctx.Err() != nil || slices.Contains(tried, provider) {
+			return review, provider, err
+		}
+		reason, fault := r.reviewProviderFault(provider, err)
+		if !fault {
+			return review, provider, err
+		}
+		tried = append(tried, provider)
+		lastErr = err
+		line := providerHealthKey(provider) + " could not review (" + reason + "); I moved the review of task " + task.PlanTaskID + " to another provider."
+		if s != nil && s.RecordActivity != nil {
+			s.RecordActivity(line)
+		}
+		if r.store != nil {
+			if id, idErr := model.NewID("EVENT-"); idErr == nil {
+				_, _ = r.store.Append(ctx, events.Event{ID: id, Type: events.EventTypePolicyAllowed, Subject: "marshal-runtime", At: time.Now().UTC(), Data: map[string]any{
+					"decision": "cross-review moved off an unavailable provider", "role": "cross-review", "task": task.PlanTaskID, "from": provider, "reason": reason,
+					"decided_by": "marshal-runtime", "source": "marshal",
+				}})
+			}
+		}
+	}
 }

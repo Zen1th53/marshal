@@ -78,25 +78,14 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	// none of the work is preferred, and otherwise the worker's own provider
 	// reviews or verifies in a new session, recorded as such.
 	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, string, error) {
-		// In the private edition a reviewer that reports its own quota or
-		// rate limit is skipped and the next independent provider reviews.
-		tried := []string{handin.Provider}
-		for {
-			provider, err := crossReviewProvider(r.roleProviders(), tried, w.Provider, task.PlanTaskID)
-			if err != nil {
-				return marshal.Review{}, provider, err
-			}
+		return r.crossReviewFailover(ctx, s, w.Provider, task, handin, func(provider string) (marshal.Review, error) {
 			cli := s.knowledgeRoleCLI(provider, s.Repository)
 			fresh := cli.ConversationID == ""
 			review, err := cli.Review(ctx, task, handin, control)
 			review.Reviewer = "cross-review:" + provider
 			review.SessionID, review.FreshSession = cli.ConversationID, fresh
-			if err != nil && r.retryRoleAfterLimit(ctx, "cross-review", provider, err, tried) {
-				tried = append(tried, provider)
-				continue
-			}
-			return review, provider, err
-		}
+			return review, err
+		})
 	}
 	// Runtime checks and an independent model must both accept the integrated
 	// commit. A new model session is used for each verification decision.
