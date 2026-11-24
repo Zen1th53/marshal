@@ -8,6 +8,22 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
+type conformanceOutcome struct {
+	Policy    marshal.ConformancePolicy
+	Findings  []string
+	Omitted   bool
+	Mandatory bool
+}
+
+// EffectiveConformancePolicy returns the conformance policy in force for run
+// and reports whether a mandatory architecture binding locks it to enforce.
+func (s *MarshalService) EffectiveConformancePolicy(ctx context.Context, run marshal.Run) (marshal.ConformancePolicy, bool) {
+	if s.hasMandatoryArchitectureObligation(ctx, run) {
+		return marshal.ConformanceEnforce, true
+	}
+	return run.EffectiveReviewPolicy().Conformance, false
+}
+
 // architectureHandIn returns a hand-in whose code disagrees with the
 // accepted architecture (see architectureHandInEdition).
 func (s *MarshalService) architectureHandIn(ctx context.Context, t marshal.Task, h marshal.HandIn) error {
@@ -15,6 +31,13 @@ func (s *MarshalService) architectureHandIn(ctx context.Context, t marshal.Task,
 		return nil
 	}
 	return s.architectureHandInEdition(ctx, t, h)
+}
+
+func (s *MarshalService) architectureHandInForRun(ctx context.Context, run marshal.Run, t marshal.Task, h marshal.HandIn) (conformanceOutcome, error) {
+	if s == nil || s.runtime == nil || s.runtime.store == nil {
+		return conformanceOutcome{Policy: run.EffectiveReviewPolicy().Conformance}, nil
+	}
+	return s.architectureHandInForRunEdition(ctx, run, t, h)
 }
 
 // checkArchitectureReview refuses incomplete reviews and converts mismatches to returns.

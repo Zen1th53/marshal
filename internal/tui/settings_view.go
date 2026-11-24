@@ -135,7 +135,7 @@ func readSettingsView(ctx context.Context, st *store.Store, projectID, root stri
 	if len(changes) > 100 {
 		changes = changes[:100]
 	}
-	return settingscatalog.Snapshot{Revision: rec.Revision, Preset: "custom", Rows: rows, Changes: changes}, nil
+	return settingscatalog.Snapshot{Revision: rec.Revision, Preset: settingscatalog.PresetFor(rec.Value), Rows: rows, Changes: changes}, nil
 }
 
 func userSettingUsage(key string) (string, bool) {
@@ -213,15 +213,27 @@ func (w *Workspace) addSessionSettings(view *settingscatalog.Snapshot) {
 		}
 	}
 	if panel != nil && panel.run.State != "" && panel.run.State != marshal.Closed {
+		runSettings := panel.run.Settings
+		runSettings.ReviewPolicy = panel.run.EffectiveReviewPolicy()
+		conformanceLocked := false
+		if w.runtime != nil && w.runtime.Marshal() != nil {
+			if mode, locked := w.runtime.Marshal().EffectiveConformancePolicy(context.Background(), panel.run); locked {
+				runSettings.ReviewPolicy.Conformance = mode
+				conformanceLocked = true
+			}
+		}
 		for i := range view.Rows {
 			r := &view.Rows[i]
 			if r.Scope != "project" {
 				continue
 			}
-			if _, err := settingscatalog.Get(panel.run.Settings, r.Key); err == nil {
-				r.Effective = settingscatalog.Effective(panel.run.Settings, r.Key)
+			if _, err := settingscatalog.Get(runSettings, r.Key); err == nil {
+				r.Effective = settingscatalog.Effective(runSettings, r.Key)
 				r.Source = "approved run snapshot"
 				r.Applies = "next run"
+				if r.Key == "architecture-conformance" && conformanceLocked {
+					r.LockedReason = "mandatory architecture obligation on approved binding"
+				}
 			}
 		}
 	}

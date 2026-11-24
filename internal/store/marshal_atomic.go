@@ -44,6 +44,9 @@ func saveMarshalStateTx(ctx context.Context, tx *sql.Tx, projectID, runID string
 	if err := checkMarshalSlots(run); err != nil {
 		return err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return fmt.Errorf("%w: %w", model.ErrInvalid, err)
+	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return err
 	}

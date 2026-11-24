@@ -10,20 +10,21 @@ import (
 )
 
 type Descriptor struct {
-	Key        string   `json:"key"`
-	Label      string   `json:"label"`
-	Kind       string   `json:"kind"`
-	Units      string   `json:"units"`
-	Values     []string `json:"values"`
-	Default    string   `json:"default"`
-	Editions   []string `json:"editions"`
-	Scope      string   `json:"scope"`
-	Applies    string   `json:"applies"`
-	LockReason string   `json:"lockReason"`
-	Confirm    bool     `json:"confirm"`
-	Help       string   `json:"help"`
-	get        func(marshal.Settings) string
-	set        func(*marshal.Settings, string) error
+	Key          string            `json:"key"`
+	Label        string            `json:"label"`
+	Kind         string            `json:"kind"`
+	Units        string            `json:"units"`
+	Values       []string          `json:"values"`
+	Default      string            `json:"default"`
+	Editions     []string          `json:"editions"`
+	Scope        string            `json:"scope"`
+	Applies      string            `json:"applies"`
+	LockReason   string            `json:"lockReason"`
+	LockedValues map[string]string `json:"lockedValues,omitempty"`
+	Confirm      bool              `json:"confirm"`
+	Help         string            `json:"help"`
+	get          func(marshal.Settings) string
+	set          func(*marshal.Settings, string) error
 }
 
 func field[T ~string | ~int | ~int64](key, kind, units string, values []string, ptr func(*marshal.Settings) *T) Descriptor {
@@ -51,6 +52,10 @@ func Catalogue() []Descriptor {
 		field("execution-rights", "enum", "", []string{"read-only", "small-tasks"}, func(s *marshal.Settings) *marshal.ExecutionRights { return &s.ExecutionRights }),
 		field("acceptance-mode", "enum", "", []string{"marshal", "marshal-then-user", "user"}, func(s *marshal.Settings) *marshal.AcceptanceMode { return &s.AcceptanceMode }),
 		field("control", "enum", "", []string{"free", "strict"}, func(s *marshal.Settings) *marshal.Control { return &s.Control }),
+		field("cross-review", "enum", "", []string{"required", "off"}, func(s *marshal.Settings) *marshal.CrossReviewPolicy { return &s.ReviewPolicy.CrossReview }),
+		field("design-review", "enum", "", []string{"on-demand", "required", "off"}, func(s *marshal.Settings) *marshal.DesignReviewPolicy { return &s.ReviewPolicy.Design }),
+		field("architecture-conformance", "enum", "", []string{"enforce", "warn", "off"}, func(s *marshal.Settings) *marshal.ConformancePolicy { return &s.ReviewPolicy.Conformance }),
+		field("final-model", "enum", "", []string{"required", "off"}, func(s *marshal.Settings) *marshal.FinalModelPolicy { return &s.ReviewPolicy.FinalModel }),
 		field("rework-limit", "integer", "attempts", nil, func(s *marshal.Settings) *int { return &s.ReworkLimit }),
 		field("ultra-concurrency", "integer", "workers", nil, func(s *marshal.Settings) *int { return &s.UltraConcurrency }),
 		field("worker-stall-minutes", "integer", "minutes", nil, func(s *marshal.Settings) *int { return &s.WorkerStallMinutes }),
@@ -65,6 +70,10 @@ func Catalogue() []Descriptor {
 	for i := range rows {
 		if rows[i].Key == "control" {
 			rows[i].Default = string(marshal.DefaultSettings().EffectiveControl())
+		}
+		if rows[i].Key == "final-model" {
+			rows[i].LockReason = "canonical completion requires the independent verifier"
+			rows[i].Help = "Canonical completion requires the independent verifier; no settings edit alone authorizes delivery."
 		}
 		if strings.HasPrefix(rows[i].Key, "task-") || strings.HasPrefix(rows[i].Key, "plan-") {
 			rows[i].Help += " Zero leaves this ceiling unlimited."
@@ -119,7 +128,16 @@ func Apply(s marshal.Settings, key, value string) (marshal.Settings, error) {
 		return s, err
 	}
 	if d.LockReason != "" {
+		if isReviewPolicyKey(key) {
+			return s, fmt.Errorf("%s: %s: %w", key, d.LockReason, marshal.ErrReviewPolicyLocked)
+		}
 		return s, fmt.Errorf("%s: %s", key, d.LockReason)
+	}
+	if reason, locked := d.LockedValues[value]; locked {
+		if isReviewPolicyKey(key) {
+			return s, fmt.Errorf("%s=%s: %s: %w", key, value, reason, marshal.ErrReviewPolicyLocked)
+		}
+		return s, fmt.Errorf("%s=%s: %s", key, value, reason)
 	}
 	next := s
 	if key == "execution-rights" && value == "none" {
@@ -148,6 +166,16 @@ func Effective(s marshal.Settings, key string) string {
 	if key == "control" {
 		return string(s.EffectiveControl())
 	}
+	switch key {
+	case "cross-review":
+		return string(s.ReviewPolicy.Effective().CrossReview)
+	case "design-review":
+		return string(s.ReviewPolicy.Effective().Design)
+	case "architecture-conformance":
+		return string(s.ReviewPolicy.Effective().Conformance)
+	case "final-model":
+		return string(s.ReviewPolicy.Effective().FinalModel)
+	}
 	if v, ok := editionEffective(s, key); ok {
 		return v
 	}
@@ -168,6 +196,15 @@ type Row struct {
 	Scope        string `json:"scope"`
 }
 
+func isReviewPolicyKey(key string) bool {
+	switch key {
+	case "cross-review", "design-review", "architecture-conformance", "final-model":
+		return true
+	}
+	return false
+}
+
+// Rows returns the project setting rows for display.
 func Rows(s marshal.Settings, revision int64) []Row {
 	out := []Row{}
 	for _, d := range Catalogue() {

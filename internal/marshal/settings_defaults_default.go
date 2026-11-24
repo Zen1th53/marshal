@@ -3,5 +3,5 @@
 package marshal
 
 func buildDefaultSettings() Settings {
-	return Settings{ExecutionRights: RightsReadOnly, AcceptanceMode: AcceptMarshalThenUser, ReworkLimit: 2, UltraConcurrency: 3, Control: ControlFree}
+	return Settings{ExecutionRights: RightsReadOnly, AcceptanceMode: AcceptMarshalThenUser, ReworkLimit: 2, UltraConcurrency: 3, Control: ControlFree, ReviewPolicy: DefaultReviewPolicy()}
 }

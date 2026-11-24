@@ -12,7 +12,11 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
+	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
@@ -170,5 +174,232 @@ func TestRuntimeDesignReviewLeaseRevocationStopsReviewer(t *testing.T) {
 			t.Fatal("revocation did not stop reviewer")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestDesignReviewRequiredEndToEndThroughBroker(t *testing.T) {
+	ctx := t.Context()
+	w, l := runtimeRecoveryFixture(t)
+
+	bin := t.TempDir()
+	argsFile := filepath.Join(t.TempDir(), "args")
+	t.Setenv("MARSHAL_TEST_REVIEW_ARGS", argsFile)
+	script := `#!/bin/sh
+printf '%s\n' "$@" > "$MARSHAL_TEST_REVIEW_ARGS"
+printf '%s\n' '{"type":"result","session_id":"fresh-e2e-session","structured_output":{"findings":"Check failure handling on write."}}'
+`
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+
+	// 1. Configure design-review=required in project settings and draft a run.
+	rec, err := w.store.GetMarshalSettings(ctx, w.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqSettings, err := settingscatalog.Apply(rec.Value, "design-review", "required")
+	if err != nil {
+		t.Fatalf("Apply design-review=required: %v", err)
+	}
+	if _, _, err := w.store.CommitMarshalSettings(ctx, w.projectID, reqSettings, rec.Revision, "owner"); err != nil {
+		t.Fatal(err)
+	}
+
+	service := w.runtime.Marshal()
+	service.ApprovalActor = func(context.Context, string, string) (string, error) { return "user", nil }
+	makeDraft := func(planID, file, instructions string) app.MarshalDraft {
+		pt := plan.Task{
+			ID:           "t1",
+			Title:        "write " + file,
+			Criteria:     []string{file + " exists"},
+			Paths:        []string{file},
+			Instructions: instructions,
+			Mutating:     true,
+			Weight:       1,
+		}
+		graph, err := plan.BuildGraph([]plan.Task{pt})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return app.MarshalDraft{
+			Plan: plan.ExecutionPlan{
+				ID:        planID,
+				ProjectID: projectid.ID(w.runtime.ProjectIdentity()),
+				Goal:      plan.GoalBinding{GoalID: "GOAL-" + planID, Revision: 1},
+				Version:   1,
+				State:     plan.StateReady,
+				Mode:      plan.ModeStandard,
+				Tasks:     []plan.Task{pt},
+				Checks:    map[string][]string{"t1": {"test -f " + file}},
+				Graph:     graph,
+			},
+			Tasks: []marshal.Task{{
+				PlanTaskID:   "t1",
+				Title:        "write " + file,
+				Worker:       "worker",
+				Mode:         marshal.Native,
+				Files:        []string{file},
+				Criteria:     []string{file + " exists"},
+				Checks:       []marshal.Check{{Command: "test -f " + file, Criteria: []string{file + " exists"}}},
+				Instructions: instructions,
+			}},
+		}
+	}
+
+	draft1 := makeDraft("PLAN-e2e-1", "a.txt", "write a.txt safely")
+	if _, err := service.StartPlanningFromDraft(ctx, "run-e2e-1", "write a.txt", draft1, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.runID = "run-e2e-1"
+	m.service = service
+	m.mu.Unlock()
+
+	// Approval without design review must be refused.
+	if _, err := service.Approve(ctx, "run-e2e-1"); err == nil || !strings.Contains(err.Error(), "design review receipt") {
+		t.Fatalf("expected approval refusal before design review, got %v", err)
+	}
+
+	// 2. Flip LIVE project setting to design-review=off; ReviewDesign must still
+	// gate on the run's policy snapshot (required), not the live project setting.
+	rec2, err := w.store.GetMarshalSettings(ctx, w.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offSettings, err := settingscatalog.Apply(rec2.Value, "design-review", "off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.store.CommitMarshalSettings(ctx, w.projectID, offSettings, rec2.Revision, "owner"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Run design review through the real MCP broker path (without supplying run_id).
+	wantDigest, err := service.RunDesignDraftDigest(ctx, "run-e2e-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := json.RawMessage(`{"provider":"claude","draft":"Short caller draft note","reading_list":["README.md"]}`)
+	deadline := time.Now().Add(10 * time.Second)
+	var brokerResp struct {
+		State  string                 `json:"state"`
+		Result app.DesignReviewResult `json:"result"`
+		Reason string                 `json:"reason"`
+	}
+	for {
+		out, err := w.handleProposalMCP(ctx, l, "design_review", raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(out, &brokerResp); err != nil {
+			t.Fatal(err)
+		}
+		if brokerResp.State == "completed" {
+			break
+		}
+		if brokerResp.State == "failed" || time.Now().After(deadline) {
+			t.Fatalf("design review did not complete: %+v", brokerResp)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if brokerResp.Result.RunID != "run-e2e-1" || brokerResp.Result.DraftDigest != wantDigest {
+		t.Fatalf("broker result mismatch: %+v (want run=run-e2e-1 digest=%s)", brokerResp.Result, wantDigest)
+	}
+	if brokerResp.Result.DraftDigest == marshal.DesignDraftDigest("Short caller draft note") {
+		t.Fatal("broker stamped caller-supplied text digest instead of RunDesignDraftDigest")
+	}
+	argsText, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(argsText), "write a.txt safely") || !strings.Contains(string(argsText), wantDigest) {
+		t.Fatalf("reviewer prompt missing canonical run draft details: %s", argsText)
+	}
+
+	// 4. Approval now succeeds with the attached receipt.
+	approved, err := service.Approve(ctx, "run-e2e-1")
+	if err != nil {
+		t.Fatalf("Approve after broker design review: %v", err)
+	}
+	if approved.DesignReview == nil || approved.DesignReview.DraftDigest != wantDigest || approved.DesignReview.SessionID != "fresh-e2e-session" {
+		t.Fatalf("approved run missing attached design review receipt: %+v", approved.DesignReview)
+	}
+
+	// 5. A different draft's receipt must be refused.
+	rec3, err := w.store.GetMarshalSettings(ctx, w.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqAgain, err := settingscatalog.Apply(rec3.Value, "design-review", "required")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.store.CommitMarshalSettings(ctx, w.projectID, reqAgain, rec3.Revision, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	draft2 := makeDraft("PLAN-e2e-2", "b.txt", "write b.txt differently")
+	if _, err := service.StartPlanningFromDraft(ctx, "run-e2e-2", "write b.txt", draft2, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RecordDesignReview(ctx, "run-e2e-2", brokerResp.Result.Receipt()); err == nil {
+		t.Fatal("different draft's design review receipt was accepted")
+	}
+	if _, err := service.Approve(ctx, "run-e2e-2"); err == nil || !strings.Contains(err.Error(), "design review receipt") {
+		t.Fatalf("different draft approved without its own design review: %v", err)
+	}
+
+	// 6. A drafting run whose snapshot has design-review=off must refuse review
+	// even if live project settings are later changed to on-demand.
+	rec4, err := w.store.GetMarshalSettings(ctx, w.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offAgain, err := settingscatalog.Apply(rec4.Value, "design-review", "off")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.store.CommitMarshalSettings(ctx, w.projectID, offAgain, rec4.Revision, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	draft3 := makeDraft("PLAN-e2e-3", "c.txt", "write c.txt")
+	if _, err := service.StartPlanningFromDraft(ctx, "run-e2e-3", "write c.txt", draft3, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.runID = "run-e2e-3"
+	m.mu.Unlock()
+	rec5, err := w.store.GetMarshalSettings(ctx, w.projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onDemand, err := settingscatalog.Apply(rec5.Value, "design-review", "on-demand")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := w.store.CommitMarshalSettings(ctx, w.projectID, onDemand, rec5.Revision, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	offRaw := json.RawMessage(`{"provider":"claude","draft":"Review draft 3","reading_list":["README.md"]}`)
+	deadline = time.Now().Add(10 * time.Second)
+	for {
+		out, err := w.handleProposalMCP(ctx, l, "design_review", offRaw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(out, &brokerResp); err != nil {
+			t.Fatal(err)
+		}
+		if brokerResp.State == "failed" {
+			break
+		}
+		if brokerResp.State == "completed" || time.Now().After(deadline) {
+			t.Fatalf("expected run snapshot design-review=off refusal, got %+v", brokerResp)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(brokerResp.Reason, "disabled by run review policy") {
+		t.Fatalf("unexpected refusal reason: %+v", brokerResp)
 	}
 }

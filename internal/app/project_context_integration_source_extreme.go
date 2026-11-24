@@ -38,6 +38,7 @@ type requiredIntegrationSource struct {
 	workspace, head, tree, commonDir, observationID string
 	contract                                        projectcontext.ContractRef
 	completion                                      *requiredContextCloseProof
+	checksOnly                                      *requiredChecksOnlyCloseProof
 	verification                                    *requiredCanonicalVerifierProof
 }
 

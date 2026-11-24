@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 // Tier selects the run's worker and review policy.
@@ -69,6 +70,9 @@ type Settings struct {
 	// Control is empty in settings stored before it existed; that reads as
 	// ControlFree.
 	Control Control `json:",omitempty"`
+	// ReviewPolicy is empty in legacy settings; empty fields read as the
+	// shipped defaults.
+	ReviewPolicy ReviewPolicy `json:",omitempty"`
 	concurrencySettings
 	failoverSettings
 }
@@ -110,6 +114,9 @@ func (s Settings) Validate() error {
 		return err
 	}
 	if err := s.Budget.Validate(); err != nil {
+		return err
+	}
+	if err := s.ReviewPolicy.Validate(); err != nil {
 		return err
 	}
 	return nil
@@ -373,6 +380,11 @@ type LifecycleOperation struct {
 	Event                                        events.Event
 	HandIn                                       *HandIn `json:",omitempty"`
 	Attempt                                      int
+	// DeliveryKind, ReceiptID and ReceiptDigest bind a close to the proof
+	// it was authorized on. Empty is the full canonical proof.
+	DeliveryKind  string `json:",omitempty"`
+	ReceiptID     string `json:",omitempty"`
+	ReceiptDigest string `json:",omitempty"`
 }
 
 // RuntimeCompatibility records observed runtime provenance independently of proof.
@@ -426,6 +438,19 @@ type Run struct {
 	// Slots are the worker reservations of supervised launches, kept until
 	// the worker's exit is proved and its result committed.
 	Slots []WorkerSlot `json:",omitempty"`
+	// ReviewPolicy captures the policy snapshot bound to this run before
+	// approval. Legacy runs omit it and read as shipped defaults.
+	ReviewPolicy *ReviewPolicySnapshot `json:",omitempty"`
+	// DesignReview holds the draft-digest-bound independent design critique
+	// receipt for the current draft, invalidated on material amendment.
+	DesignReview *DesignReviewReceipt `json:",omitempty"`
+	// ChecksOnly is the current checks-only receipt of a run whose owner
+	// opted out of the final independent model check. Any amendment clears
+	// it; a close always takes a fresh one.
+	ChecksOnly *verification.ChecksOnlyReceipt `json:",omitempty"`
+	// DeliveryKind names how a closed run was proven before delivery.
+	// Empty is the full canonical proof.
+	DeliveryKind string `json:",omitempty"`
 }
 
 // PlanPack is what the Marshal gathered from the person, written as
@@ -475,8 +500,13 @@ const (
 
 // Review records a reviewer's recommendation and supporting evidence.
 type Review struct {
-	ArchitectureVerdict    string   `json:",omitempty"`
-	ArchitectureMismatches []string `json:",omitempty"`
+	ArchitectureVerdict    string            `json:",omitempty"`
+	ArchitectureMismatches []string          `json:",omitempty"`
+	CrossReviewPolicy      CrossReviewPolicy `json:",omitempty"`
+	CrossReviewOmitted     bool              `json:",omitempty"`
+	ConformancePolicy      ConformancePolicy `json:",omitempty"`
+	ConformanceFindings    []string          `json:",omitempty"`
+	ConformanceOmitted     bool              `json:",omitempty"`
 	Verdict                Verdict
 	Reviewer               string
 	Reasons                []string
@@ -523,9 +553,12 @@ type CheckResult struct {
 
 // HandIn separates runtime evidence from worker claims for gate review.
 type HandIn struct {
-	TreeDigest      string `json:",omitempty"`
-	BaseCommit      string
-	ResultCommit    string
+	TreeDigest          string            `json:",omitempty"`
+	ConformancePolicy   ConformancePolicy `json:",omitempty"`
+	ConformanceFindings []string          `json:",omitempty"`
+	ConformanceOmitted  bool              `json:",omitempty"`
+	BaseCommit          string
+	ResultCommit        string
 	Diff            string
 	FilesTouched    []string
 	Worker          string

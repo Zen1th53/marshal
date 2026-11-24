@@ -32,6 +32,9 @@ func configureWorkerMemory(service *MarshalService, runtime *Runtime) {
 	service.requiredCanonicalVerification = func(ctx context.Context, id string, run marshal.Run, head string) (verification.Session, verification.Binding, error) {
 		return runtime.verifyRequiredMarshalIntegration(ctx, service, id, run, head)
 	}
+	service.requiredChecksOnlyClose = func(ctx context.Context, id string, run marshal.Run, head string, receipt verification.ChecksOnlyReceipt) error {
+		return runtime.retainRequiredChecksOnlyCloseProof(ctx, id, run, head, receipt)
+	}
 	service.requiredContextCloseEffect = func(ctx context.Context, id string, run marshal.Run, op *marshal.LifecycleOperation, effect func() error) error {
 		return runtime.withRequiredContextCloseEffect(ctx, service, id, run, op, effect)
 	}

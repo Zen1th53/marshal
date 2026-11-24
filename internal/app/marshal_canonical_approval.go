@@ -114,7 +114,7 @@ func (s *MarshalService) canonicalBoundRun(ctx context.Context, runID string, p 
 	}
 	run := marshal.Run{Compatibility: old.Compatibility, ArtifactRevision: old.ArtifactRevision, PlanID: p.ID, Process05Bound: true, PlanVersion: old.PlanVersion + 1,
 		BaseCommit: old.BaseCommit, GoalBinding: goal.OriginalRequest,
-		State: marshal.Approved, Settings: old.Settings, Budget: old.Budget, Pack: old.Pack}
+		State: marshal.Approved, Settings: old.Settings, Budget: old.Budget, Pack: old.Pack, ReviewPolicy: old.ReviewPolicy, DesignReview: old.DesignReview}
 	bindPrivateProcess05Tier(&run, p)
 	for _, pt := range ordered {
 		if !marshal.Control(pt.Control).ValidTaskControl() {

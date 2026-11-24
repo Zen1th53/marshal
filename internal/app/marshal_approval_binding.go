@@ -23,6 +23,7 @@ type PlanApprovalSnapshot struct {
 	RouteSummary, TeamSummary, VerificationSummary, TaskCheckSummary string
 	AssignmentSummary                                                string
 	MarshalBudgetSummary, PlanningMode                               string
+	ReviewPolicySummary                                              string
 }
 
 func packDigest(pack *marshal.PlanPack) string {
@@ -52,6 +53,9 @@ func (s *MarshalService) PlanApprovalSnapshot(ctx context.Context, runID string)
 	if err != nil {
 		return PlanApprovalSnapshot{}, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return PlanApprovalSnapshot{}, err
+	}
 	pack, err := s.refreshPlanPack(runID, run)
 	if err != nil {
 		return PlanApprovalSnapshot{}, err
@@ -78,6 +82,8 @@ func (s *MarshalService) PlanApprovalSnapshot(ctx context.Context, runID string)
 	snapshot.PlanningMode = string(p.Mode)
 	marshalBudget, _ := json.Marshal(run.Budget)
 	snapshot.MarshalBudgetSummary = string(marshalBudget)
+	reviewPolicy, _ := json.Marshal(run.EffectiveReviewPolicy())
+	snapshot.ReviewPolicySummary = string(reviewPolicy)
 	if p.RequiredProjectContract != nil {
 		snapshot.ContractDigest = p.RequiredProjectContract.Digest
 	}
@@ -205,6 +211,9 @@ func (s *MarshalService) resolveApprovedDeliveryBinding(ctx context.Context, run
 }
 
 func (s *MarshalService) validateDelivery(ctx context.Context, run marshal.Run) error {
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return err
+	}
 	_, err := s.resolveApprovedDeliveryBinding(ctx, run, false)
 	return err
 }

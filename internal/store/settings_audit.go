@@ -30,7 +30,7 @@ func (s *Store) CommitMarshalSettings(ctx context.Context, projectID string, set
 		return 0, nil, fmt.Errorf("%w: missing settings identity", model.ErrInvalid)
 	}
 	if err := settings.Validate(); err != nil {
-		return 0, nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		return 0, nil, fmt.Errorf("%w: %w", model.ErrInvalid, err)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

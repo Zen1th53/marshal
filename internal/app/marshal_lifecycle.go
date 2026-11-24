@@ -51,6 +51,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return MarshalDispatch{}, err
+	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
 	if err != nil {
 		return MarshalDispatch{}, err
@@ -563,6 +566,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if err != nil {
 		return handin, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return handin, err
+	}
 	i := taskIndex(run, dispatch.TaskID)
 	if i < 0 || run.Tasks[i].State != marshal.Dispatched {
 		return handin, errors.New("task is not dispatched")
@@ -605,7 +611,11 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	// Code that disagrees with the accepted architecture is returned with
 	// the exact places, so the worker fixes it or the Marshal revises the
 	// architecture for the owner.
-	validationErr = errors.Join(validationErr, s.architectureHandIn(ctx, *t, handin))
+	conformance, confErr := s.architectureHandInForRun(ctx, run, *t, handin)
+	validationErr = errors.Join(validationErr, confErr)
+	handin.ConformancePolicy = conformance.Policy
+	handin.ConformanceFindings = append([]string(nil), conformance.Findings...)
+	handin.ConformanceOmitted = conformance.Omitted
 	attempt := 1 + t.EvidenceAttemptBase
 	attempt += taskReturns(*t)
 	// Stage the proved exit with the result; the completion below commits
@@ -635,6 +645,15 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	op.Attempt = attempt
 	op.Next = &run
 	op.Event.Data["result_commit"] = handin.ResultCommit
+	if conformance.Policy != "" {
+		op.Event.Data["conformance_policy"] = string(conformance.Policy)
+	}
+	if len(conformance.Findings) > 0 {
+		op.Event.Data["conformance_findings"] = conformance.Findings
+	}
+	if conformance.Omitted {
+		op.Event.Data["conformance_omitted"] = true
+	}
 	// The hand-in happened now, when the worker delivered it, not when the
 	// wait for it began at dispatch.
 	op.Event.At = s.clock()
@@ -723,6 +742,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return "", err
+	}
 	if err = unfinishedMarshalOperation(run); err != nil {
 		return "", err
 	}
@@ -772,10 +794,28 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
-	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: true, VerifierRequired: true}
+	reviewPolicy := run.EffectiveReviewPolicy()
+	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: reviewPolicy.CrossReview != marshal.CrossReviewOff, ReviewPolicy: reviewPolicy}
 	crossReviewerProvider := ""
 	crossReviewAccepted := false
-	crossReviewData := map[string]any{}
+	crossReviewData := map[string]any{
+		"cross_review_policy":  string(reviewPolicy.CrossReview),
+		"cross_review_omitted": !policy.CrossReviewRequired,
+	}
+	proposal.CrossReviewPolicy = reviewPolicy.CrossReview
+	proposal.CrossReviewOmitted = !policy.CrossReviewRequired
+	proposal.ConformancePolicy = h.ConformancePolicy
+	proposal.ConformanceFindings = append([]string(nil), h.ConformanceFindings...)
+	proposal.ConformanceOmitted = h.ConformanceOmitted
+	if h.ConformancePolicy != "" {
+		crossReviewData["conformance_policy"] = string(h.ConformancePolicy)
+	}
+	if len(h.ConformanceFindings) > 0 {
+		crossReviewData["conformance_findings"] = h.ConformanceFindings
+	}
+	if h.ConformanceOmitted {
+		crossReviewData["conformance_omitted"] = true
+	}
 	if policy.CrossReviewRequired {
 		if s.CrossReview == nil {
 			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, errors.New("independent cross-review is unavailable"))
@@ -1292,6 +1332,9 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
+	if run.State == marshal.Drafting {
+		run.DesignReview = nil
+	}
 	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
@@ -1372,6 +1415,9 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	resetInfraRetries(t)
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
+	}
+	if run.State == marshal.Drafting {
+		run.DesignReview = nil
 	}
 	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
@@ -1556,6 +1602,9 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	if err != nil {
 		return verification.Blocked, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return verification.Blocked, err
+	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
 	if err != nil {
 		return verification.Blocked, err
@@ -1573,6 +1622,11 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	}
 	if run.State != marshal.Verifying {
 		return verification.Blocked, errors.New("run is not ready for verification")
+	}
+	// An approved opt-out of the final model check is proven by the approved
+	// checks alone; the verifier's availability is never consulted.
+	if checksOnlyDelivery(run) {
+		return s.verifyChecksOnly(ctx, runID, run, rev, charge)
 	}
 	if s.Verify == nil {
 		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable"))
@@ -1664,6 +1718,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err != nil {
 		return closeVerificationStage(err)
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return closeVerificationStage(err)
+	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
 	if err != nil {
 		return closeVerificationStage(err)
@@ -1681,11 +1738,14 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
 		return err
 	}
-	if s.Verify == nil {
-		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
-	}
-	if err = s.requireIndependentVerifier(ctx, run); err != nil {
-		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	checksOnly := checksOnlyDelivery(run)
+	if !checksOnly {
+		if s.Verify == nil {
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
+		}
+		if err = s.requireIndependentVerifier(ctx, run); err != nil {
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+		}
 	}
 	project, err := s.Store.Project(ctx)
 	if err != nil {
@@ -1715,18 +1775,39 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 			return closeVerificationStage(err)
 		}
 	}
-	session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
-	if err != nil {
-		// Say why: a bare "not verified" hid a context or budget refusal
-		// behind a session that had in fact verified.
-		return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
-	}
-	if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
-		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
-	}
-	if s.requiredCanonicalVerification == nil {
-		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
-			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	var receipt *verification.ChecksOnlyReceipt
+	if checksOnly {
+		authority := "owner-close"
+		if run.ValidCloseAuthorization() {
+			authority = "standing-close-authorization"
+		}
+		observed, err := s.runChecksOnlyReceipt(ctx, runID, run, head, authority)
+		if err != nil {
+			return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", err))
+		}
+		if !observed.Passed() {
+			return &closeVerificationError{err: errors.New("integrated result is not verified"), result: verification.VerificationFailed, session: checksOnlySession(observed)}
+		}
+		if s.requiredChecksOnlyClose != nil {
+			if err = s.requiredChecksOnlyClose(ctx, runID, run, head, observed); err != nil {
+				return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", err))
+			}
+		}
+		receipt = &observed
+	} else {
+		session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
+		if err != nil {
+			// Say why: a bare "not verified" hid a context or budget refusal
+			// behind a session that had in fact verified.
+			return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
+		}
+		if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
+			return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
+		}
+		if s.requiredCanonicalVerification == nil {
+			if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
+				return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+			}
 		}
 	}
 	// What moves the target must be exactly the commit that was verified.
@@ -1759,6 +1840,17 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	next := run
 	next.State = marshal.Closed
 	op := &marshal.LifecycleOperation{Kind: "close", Before: old, After: head, Target: target, Next: &next, Event: events.Event{Type: events.EventTypeMarshalRunClosed, Data: map[string]any{"target": project.DefaultBranch, "commit": head, "checkpoint": checkpoint, "previous_commit": old}}}
+	if receipt != nil {
+		// The close, its checkpoint, event and next state all name the exact
+		// receipt it was authorized on.
+		next.ChecksOnly = receipt
+		next.DeliveryKind = verification.DeliveredChecksOnly
+		op.DeliveryKind, op.ReceiptID, op.ReceiptDigest = verification.DeliveredChecksOnly, receipt.ID, receipt.Digest
+		op.Event.Data["delivery_kind"] = verification.DeliveredChecksOnly
+		op.Event.Data["checks_only_receipt_id"] = receipt.ID
+		op.Event.Data["checks_only_receipt_digest"] = receipt.Digest
+		op.Event.Data["omitted_roles"] = strings.Join(receipt.OmittedRoles, ",")
+	}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return err
@@ -1893,6 +1985,9 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	if err != nil {
 		return MarshalDraft{}, false, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return MarshalDraft{}, false, err
+	}
 	if run.State == marshal.Closed {
 		return MarshalDraft{}, false, errAmendClosedRun
 	}
@@ -1920,10 +2015,15 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 		return MarshalDraft{}, false, err
 	}
 	_, err = p.AmendScoped(p.Version, reason, d.Plan)
-	return d, err != nil, nil
+	policyChanged := d.ReviewPolicy != nil && d.ReviewPolicy.Effective() != run.EffectiveReviewPolicy()
+	if d.ReviewPolicy != nil {
+		if policyErr := d.ReviewPolicy.Validate(); policyErr != nil {
+			return MarshalDraft{}, false, policyErr
+		}
+	}
+	return d, err != nil || policyChanged, nil
 }
 
-// ApplyAmendDraft rechecks the proposal against the current plan revision.
 func (s *MarshalService) ApplyAmendDraft(ctx context.Context, runID, reason string, d MarshalDraft) (marshal.Run, error) {
 	return s.ApplyAmendDraftBound(ctx, runID, reason, d, 0)
 }
@@ -1932,6 +2032,14 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
+	if d.ReviewPolicy != nil {
+		if err := d.ReviewPolicy.Validate(); err != nil {
+			return run, err
+		}
 	}
 	if err = unfinishedMarshalOperation(run); err != nil {
 		return run, err
@@ -1961,8 +2069,31 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if err = validateAmendRoutes(run, p, d); err != nil {
 		return run, err
 	}
+	beforeDraftDigest := runDesignDraftDigest(run)
 	amended, err := p.AmendScoped(p.Version, reason, d.Plan)
-	major := err != nil
+	policyChanged := d.ReviewPolicy != nil && d.ReviewPolicy.Effective() != run.EffectiveReviewPolicy()
+	requirementsChanged := d.Pack != nil && packDigest(d.Pack) != packDigest(run.Pack)
+	checksChanged := amendmentChangesChecks(run.Tasks, d.Tasks)
+	headChanged := false
+	if currentHead, headErr := gitMarshal(ctx, s.Repository, "rev-parse", "HEAD"); headErr == nil && run.BaseCommit != "" && strings.TrimSpace(currentHead) != run.BaseCommit {
+		headChanged = true
+	}
+	major := err != nil || policyChanged
+	if policyChanged {
+		run.Settings.ReviewPolicy = d.ReviewPolicy.Effective()
+		run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.Settings.ReviewPolicy, d.Plan.Graph.Digest, "", time.Time{})
+	}
+	if d.Pack != nil {
+		run.Pack = d.Pack
+	}
+	// Any amendment invalidates a checks-only receipt; a close takes a fresh one.
+	run.ChecksOnly = nil
+	if major || policyChanged || requirementsChanged || checksChanged || headChanged {
+		run.DesignReview = nil
+		if run.CloseAuthorization != nil {
+			run.CloseAuthorization.Voided = true
+		}
+	}
 	if major {
 		amended, err = p.Revise(p.Version, reason, s.clock())
 		if err != nil {
@@ -2073,6 +2204,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		if run.CloseAuthorization != nil && run.CloseAuthorization.ApprovalScopeDigest != run.ApprovalScopeDigest {
 			run.CloseAuthorization.Voided = true
 		}
+	}
+	if runDesignDraftDigest(run) != beforeDraftDigest {
+		run.DesignReview = nil
 	}
 	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
 	if err != nil {
@@ -2225,6 +2359,28 @@ func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, 
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, data)
 }
 
+func amendmentChangesChecks(previous, next []marshal.Task) bool {
+	if len(previous) != len(next) {
+		return true
+	}
+	for _, nt := range next {
+		idx := taskIndex(marshal.Run{Tasks: previous}, nt.PlanTaskID)
+		if idx < 0 {
+			return true
+		}
+		ot := previous[idx]
+		if len(ot.Checks) != len(nt.Checks) {
+			return true
+		}
+		for i := range ot.Checks {
+			if ot.Checks[i].Command != nt.Checks[i].Command || !slices.Equal(ot.Checks[i].Criteria, nt.Checks[i].Criteria) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Resume takes a paused or interrupted run on again. A resume that does not
 // go through keeps the run's pause and records a run notice naming why, so
 // the Marshal hears of it even when its chat is closed.
@@ -2263,6 +2419,9 @@ func (s *MarshalService) resume(ctx context.Context, runID string) (marshal.Run,
 	if err != nil {
 		return run, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
 	if err := s.executionAdmission(ctx, runID, "", run); err != nil {
 		return run, err
 	}
@@ -2295,6 +2454,15 @@ func (s *MarshalService) resume(ctx context.Context, runID string) (marshal.Run,
 			return run, err
 		}
 		return run, nil
+	}
+	// A retained checks-only receipt that no longer binds the current
+	// approval, revisions or policy is dropped; a close takes a fresh one.
+	if run.ChecksOnly != nil && run.State != marshal.Closed && !checksOnlyReceiptCurrent(run, *run.ChecksOnly) {
+		run.ChecksOnly = nil
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return run, err
+		}
+		rev++
 	}
 	if run.State == marshal.AwaitingUser {
 		if run.Pause != nil && run.Pause.Code == marshal.CodeStaleBase {

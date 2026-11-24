@@ -40,6 +40,8 @@ type MarshalDraft struct {
 	// Pack is the Markdown plan an interactive Marshal wrote beside the task
 	// list; a headless draft has none.
 	Pack *marshal.PlanPack `json:"pack,omitempty"`
+	// ReviewPolicy optionally proposes an updated review policy during amendment.
+	ReviewPolicy *marshal.ReviewPolicy `json:"review_policy,omitempty"`
 }
 
 type MarshalService struct {
@@ -128,6 +130,9 @@ type MarshalService struct {
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error
 	requiredCanonicalVerification func(context.Context, string, marshal.Run, string) (verification.Session, verification.Binding, error)
+	// requiredChecksOnlyClose retains the live one-shot capability a
+	// checks-only close presents at the required-context close fence.
+	requiredChecksOnlyClose func(context.Context, string, marshal.Run, string, verification.ChecksOnlyReceipt) error
 	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
 	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
 	process05WaitPause            func(context.Context, string) error
@@ -447,6 +452,9 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
+	if err := settings.Value.Validate(); err != nil {
+		return marshal.Run{}, err
+	}
 	if err := instructionsPresent(marshal.Run{Settings: settings.Value}, d.Tasks); err != nil {
 		return marshal.Run{}, err
 	}
@@ -454,7 +462,8 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
-	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack}
+	policySnap := marshal.NewReviewPolicySnapshot(settings.Value.ReviewPolicy, d.Plan.Graph.Digest, "", time.Time{})
+	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack, ReviewPolicy: policySnap}
 	for i := range run.Tasks {
 		run.Tasks[i].State = marshal.Queued
 		run.Tasks[i].BaseCommit = run.BaseCommit
@@ -494,6 +503,9 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return run, err
 	}
 	// A retry is a read of the existing approval, not another authorization.
@@ -553,6 +565,9 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 	}
 	run.Repository, run.TargetRef = snapshot.Repository, snapshot.TargetRef
 	run.Pack = pack
+	if err := validateRunDesignReview(run); err != nil {
+		return run, err
+	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
 		return run, err
@@ -576,6 +591,14 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 		}
 	}
 	run.PlanVersion = p.Version + 1
+	planDigest := approved.ApprovalScopeDigest
+	if planDigest == "" {
+		planDigest = approved.Graph.Digest
+	}
+	run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.EffectiveReviewPolicy(), planDigest, user, s.clock())
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
 	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run)
 	run.GoverningDigest, err = governingDigest(s.Repository)
 	if err != nil {
@@ -637,19 +660,106 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 		}
 		checks[task.PlanTaskID] = task.Checks
 	}
+	var reviewPolicy *marshal.ReviewPolicy
+	if rp := run.EffectiveReviewPolicy(); !rp.IsDefault() {
+		reviewPolicy = &rp
+	}
 	data, _ := json.Marshal(struct {
 		Plan                              string
 		Repository, BaseCommit, TargetRef string `json:",omitempty"`
 		Budget                            marshal.Budget
 		Control                           marshal.Control                    `json:",omitempty"`
+		ReviewPolicy                      *marshal.ReviewPolicy              `json:",omitempty"`
 		Pack                              string                             `json:",omitempty"`
 		Modes                             map[string]marshal.WorkerMode      `json:",omitempty"`
 		Checks                            map[string][]marshal.Check         `json:",omitempty"`
 		Imported                          map[string]*marshal.ImportedResult `json:",omitempty"`
 		Types                             map[string]marshal.TaskType        `json:",omitempty"`
-	}{planDigest, run.Repository, run.BaseCommit, run.TargetRef, run.Budget, control, pack, modes, checks, imported, types})
+	}{planDigest, run.Repository, run.BaseCommit, run.TargetRef, run.Budget, control, reviewPolicy, pack, modes, checks, imported, types})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func runDesignDraftDigest(run marshal.Run) string {
+	type taskSummary struct {
+		ID             string
+		Title          string
+		Type           marshal.TaskType
+		Worker         string
+		Mode           marshal.WorkerMode
+		Control        marshal.Control
+		Components     []string
+		DependsOn      []string
+		Files          []string
+		Criteria       []string
+		Checks         []marshal.Check
+		Instructions   string
+		ExpectedOutput string
+	}
+	tasks := make([]taskSummary, 0, len(run.Tasks))
+	for _, t := range run.Tasks {
+		tasks = append(tasks, taskSummary{
+			ID: t.PlanTaskID, Title: t.Title, Type: t.EffectiveType(),
+			Worker: t.Worker, Mode: t.Mode, Control: t.Control,
+			Components: t.Components, DependsOn: t.DependsOn,
+			Files: t.Files, Criteria: t.Criteria, Checks: t.Checks,
+			Instructions: t.Instructions, ExpectedOutput: t.ExpectedOutput,
+		})
+	}
+	packSum := ""
+	if run.Pack != nil {
+		packSum = planPackDigest(*run.Pack)
+	}
+	raw, _ := json.Marshal(struct {
+		Goal       string
+		BaseCommit string
+		PackDigest string `json:",omitempty"`
+		Tasks      []taskSummary
+	}{run.GoalBinding, run.BaseCommit, packSum, tasks})
+	return marshal.DesignDraftDigest(string(raw))
+}
+
+func validateRunDesignReview(run marshal.Run) error {
+	rp := run.EffectiveReviewPolicy()
+	if rp.Design == marshal.DesignReviewRequired && run.DesignReview == nil {
+		return errors.New("design review receipt is required before approval")
+	}
+	if run.DesignReview != nil {
+		if err := run.DesignReview.ValidateForDraft(runDesignDraftDigest(run)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RunDesignDraftDigest returns the canonical draft digest bound to design review receipts.
+func (s *MarshalService) RunDesignDraftDigest(ctx context.Context, runID string) (string, error) {
+	run, _, err := s.readRun(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	return runDesignDraftDigest(run), nil
+}
+
+// RecordDesignReview attaches a fresh-session design review receipt bound to the
+// run's exact current draft digest before approval.
+func (s *MarshalService) RecordDesignReview(ctx context.Context, runID string, receipt marshal.DesignReviewReceipt) (marshal.Run, error) {
+	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
+	if run.State != marshal.Drafting {
+		return run, errors.New("design review receipt can only be attached to a drafting run")
+	}
+	if err := receipt.ValidateForDraft(runDesignDraftDigest(run)); err != nil {
+		return run, err
+	}
+	copyReceipt := receipt
+	run.DesignReview = &copyReceipt
+	return run, s.save(ctx, runID, run, rev)
 }
 
 var marshalIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

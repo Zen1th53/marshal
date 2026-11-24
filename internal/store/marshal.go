@@ -133,6 +133,9 @@ func (s *Store) SetMarshalRun(ctx context.Context, projectID, runID string, run 
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return 0, fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return 0, fmt.Errorf("%w: %w", model.ErrInvalid, err)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -153,7 +156,14 @@ func (s *Store) SetMarshalRun(ctx context.Context, projectID, runID string, run 
 
 // GetMarshalRun loads the durable state needed to resume a run.
 func (s *Store) GetMarshalRun(ctx context.Context, projectID, runID string) (MarshalRecord[marshal.Run], error) {
-	return marshalRead[marshal.Run](ctx, s, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID})
+	out, err := marshalRead[marshal.Run](ctx, s, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID})
+	if err != nil {
+		return out, err
+	}
+	if err := out.Value.ValidateReviewPolicy(); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 // LatestMarshalRun returns the newest non-closed run for a project, falling
@@ -176,6 +186,9 @@ func (s *Store) LatestMarshalRun(ctx context.Context, projectID string) (string,
 			return "", MarshalRecord[marshal.Run]{}, fmt.Errorf("decode marshal run: %w", err)
 		}
 		if record.Value.State != marshal.Closed {
+			if err := record.Value.ValidateReviewPolicy(); err != nil {
+				return runID, record, err
+			}
 			return runID, record, nil
 		}
 		if closedID == "" {
@@ -187,6 +200,9 @@ func (s *Store) LatestMarshalRun(ctx context.Context, projectID string) (string,
 	}
 	if closedID == "" {
 		return "", MarshalRecord[marshal.Run]{}, fmt.Errorf("%w: marshal_runs", model.ErrNotFound)
+	}
+	if err := closed.Value.ValidateReviewPolicy(); err != nil {
+		return closedID, closed, err
 	}
 	return closedID, closed, nil
 }
@@ -239,7 +255,13 @@ func (s *Store) GetMarshalSettings(ctx context.Context, projectID string) (Marsh
 	if errors.Is(err, model.ErrNotFound) {
 		return MarshalRecord[marshal.Settings]{Value: marshal.DefaultSettings()}, nil
 	}
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	if err := out.Value.ReviewPolicy.Validate(); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 // SetMarshalSettings validates and updates project settings by revision.
