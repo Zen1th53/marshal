@@ -9835,6 +9835,11 @@
       "bytes": 1751
     },
     {
+      "path": "internal/projectcontext/source_anchor_delivery_test.go",
+      "sha256": "9324fd912b9618fcd5a3ce1062aaf4f676daf15bd7c9d6a86573194ee028cb18",
+      "bytes": 1314
+    },
+    {
       "path": "internal/projectid/collision_test.go",
       "sha256": "9146b1c09bc1ea61cfecf0a5d29512ddce69c22cfdb3510911bf141101e17eb4",
       "bytes": 3940
@@ -18036,7 +18041,7 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "3d86cec1c5a5f9d53fd3d7a0b81a7fb167941ad7e414dabe6fa23deaccaf74fc",
+      "sha256": "cda41c6783545b211be49262f3d470ef43b32b55bafde8e4b5858047762950d1",
       "bytes": 479269
     },
     {
