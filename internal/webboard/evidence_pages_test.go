@@ -249,3 +249,19 @@ func TestPausedDetailAlwaysReachable(t *testing.T) {
 		t.Error("POST /api/details was accepted")
 	}
 }
+
+// A source page larger than the old wire cap is not cut without a cursor.
+func TestLargeDiffPageIsNotCut(t *testing.T) {
+	e := &evidence{run: "run-a", commit: "c1", base: "m1"}
+	src := e.source()
+	big := strings.Repeat("+x\n", 1_200_000)
+	src.Diff = func(context.Context, string, string) (DiffPart, error) { return DiffPart{Text: big}, nil }
+	s := newEvidence(t, false, e)
+	s.ConfigureDetails(src)
+	var d DetailsReply
+	read(t, s, "/api/details", &d)
+	var out DiffReply
+	if read(t, s, page(d.Tasks[0].DiffID), &out) != 200 || out.Text != strings.TrimSpace(big) {
+		t.Errorf("a %d byte page came back as %d", len(big), len(out.Text))
+	}
+}

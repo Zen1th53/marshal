@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,6 +23,26 @@ import (
 
 // maxDetailAttempts bounds the hand-in attempts read per task.
 const maxDetailAttempts = 32
+
+// webSecret redacts what the terminal Board redacts: the detectors and the
+// secrets this workspace knows.
+func (w *Workspace) webSecret(text string) string {
+	return RedactContent(text, w.GetUIState().KnownSecrets)
+}
+
+func (w *Workspace) webSecrets(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		out = append(out, w.webSecret(s))
+	}
+	return out
+}
+
+// opaque conceals an internal identity while keeping it comparable.
+func opaque(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:8])
+}
 
 func (w *Workspace) webDetailsSource() webboard.DetailsSource {
 	return webboard.DetailsSource{
@@ -59,6 +81,9 @@ func latestAttempt(ctx context.Context, service *app.MarshalService, runID strin
 	n := 0
 	for attempt := t.EvidenceAttemptBase + 1; attempt <= t.EvidenceAttemptBase+maxDetailAttempts; attempt++ {
 		stored, err := service.Store.GetMarshalHandIn(ctx, runID, t.PlanTaskID, attempt)
+		if errors.Is(err, model.ErrNotFound) {
+			continue
+		}
 		if err != nil {
 			break
 		}
@@ -78,16 +103,16 @@ func limitLines(limits []model.Limit) []string {
 // webRunDetails is the run's details; with no run it still carries the MCP
 // failure.
 func (w *Workspace) webRunDetails(ctx context.Context) webboard.RunDetails {
-	d := webboard.RunDetails{MCP: w.mcpFailure()}
+	d := webboard.RunDetails{MCP: w.webSecret(w.mcpFailure())}
 	service, runID, run := w.webDetailRun(ctx)
 	if service == nil {
 		return d
 	}
 	d.Run, d.Scope = runID, runID
 	if p := run.Pause; p != nil && run.State == marshal.AwaitingUser {
-		d.Paused = &webboard.PausedDetail{Kind: p.Kind, Code: p.Code, Reason: p.Reason, Raw: p.Detail, Resolutions: p.Resolutions}
+		d.Paused = &webboard.PausedDetail{Kind: p.Kind, Code: p.Code, Reason: w.webSecret(p.Reason), Raw: w.webSecret(p.Detail), Resolutions: w.webSecrets(p.Resolutions)}
 		if p.Limit != nil {
-			d.Paused.Raw = strings.TrimSpace(d.Paused.Raw + "\n" + strings.Join(limitLines([]model.Limit{*p.Limit}), "\n"))
+			d.Paused.Raw = strings.TrimSpace(d.Paused.Raw + "\n" + w.webSecret(strings.Join(limitLines([]model.Limit{*p.Limit}), "\n")))
 		}
 	}
 	for _, t := range run.Tasks {
@@ -96,8 +121,8 @@ func (w *Workspace) webRunDetails(ctx context.Context) webboard.RunDetails {
 			e.Checks = append(e.Checks, c.Command)
 		}
 		if h, attempt, ok := latestAttempt(ctx, service, runID, t); ok {
-			e.Changed, e.Base, e.Result = h.FilesTouched, h.BaseCommit, h.ResultCommit
-			e.Limits = limitLines(h.Limits)
+			e.Changed, e.Base, e.Result = w.webSecrets(h.FilesTouched), h.BaseCommit, h.ResultCommit
+			e.Limits = w.webSecrets(limitLines(h.Limits))
 			e.Checks = e.Checks[:0]
 			for _, c := range h.CheckResults {
 				verdict := "failed"
@@ -110,9 +135,9 @@ func (w *Workspace) webRunDetails(ctx context.Context) webboard.RunDetails {
 				e.DiffSubject = t.PlanTaskID + "@" + h.ResultCommit
 			}
 			if r, err := service.Store.GetMarshalReview(ctx, runID, t.PlanTaskID, attempt); err == nil {
-				e.Verdict, e.Reviewer, e.Reasons = string(r.Value.Verdict), r.Value.Reviewer, r.Value.Reasons
+				e.Verdict, e.Reviewer, e.Reasons = string(r.Value.Verdict), r.Value.Reviewer, w.webSecrets(r.Value.Reasons)
 				if ind := r.Value.Independent; ind != nil {
-					e.Reasons = append(e.Reasons, "Independent review ("+string(ind.Verdict)+"): "+strings.Join(ind.Reasons, "; "))
+					e.Reasons = append(e.Reasons, "Independent review ("+string(ind.Verdict)+"): "+w.webSecret(strings.Join(ind.Reasons, "; ")))
 				}
 			}
 		}
@@ -140,7 +165,7 @@ func (w *Workspace) webTaskDiff(ctx context.Context, subject, cursor string) (we
 		if h.Diff == "" {
 			return webboard.DiffPart{Note: "The diff was not retained; inspect commit " + commit + " in the repository."}, nil
 		}
-		text, limit, err := pageTaskDiff(task, commit, h.Diff, cursor)
+		text, limit, err := pageTaskDiff(task, commit, w.webSecret(h.Diff), cursor)
 		if err != nil {
 			return webboard.DiffPart{}, errors.Join(webboard.ErrStaleDetails, err)
 		}
@@ -157,12 +182,12 @@ func (w *Workspace) webTaskDiff(ctx context.Context, subject, cursor string) (we
 // oldest first. Earlier history is not retained, and the page says so.
 func (w *Workspace) webRetainedMessages(context.Context) webboard.Retained {
 	state := w.GetUIState()
-	r := webboard.Retained{Session: state.SessionID, Unavailable: "Only the most recent messages are retained here; earlier conversation is not available."}
+	r := webboard.Retained{Session: opaque(state.SessionID), Unavailable: "Only the most recent messages are retained here; earlier conversation is not available."}
 	for _, m := range state.RecentMessages {
 		if r.Base == "" {
-			r.Base = m.ID
+			r.Base = opaque(m.ID)
 		}
-		r.Messages = append(r.Messages, webboard.Message{Role: m.From.String(), Text: m.Content, At: m.CreatedAt.UTC().Format(time.RFC3339)})
+		r.Messages = append(r.Messages, webboard.Message{Role: m.From.String(), Text: w.webSecret(m.Content), At: m.CreatedAt.UTC().Format(time.RFC3339)})
 	}
 	return r
 }

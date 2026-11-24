@@ -30,8 +30,9 @@ const (
 	TranscriptChars = 4000
 	// DetailChars caps one error or reason text.
 	DetailChars = 4000
-	// diffPageChars caps the redacted diff text of one page.
-	diffPageChars = 1 << 20
+	// diffPageChars caps the redacted diff text of one page. It is never
+	// smaller than a source page, so nothing is cut without a cursor.
+	diffPageChars = 5 << 20
 )
 
 // ErrStaleDetails is what a source returns for a subject that is not the

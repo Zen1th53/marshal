@@ -1593,7 +1593,9 @@
     if (d.text) into.appendChild(evPre(d.text));
     if (d.next) evMore("Next files", d.next, into, evDiff);
   }
-  function evTranscript(t, into, older) {
+  // evTranscript shows one page in place of the one before it.
+  function evTranscript(t, into) {
+    while (into.children.length > 2) into.removeChild(into.lastChild);
     var box = el("div", "ev-chat");
     (t.messages || []).forEach(function (m) {
       var row = el("div", "ev-msg");
@@ -1601,10 +1603,10 @@
       row.appendChild(el("span", null, m.text));
       box.appendChild(row);
     });
-    if (older) into.insertBefore(box, into.children[2] || null); else into.appendChild(box);
+    if (t.older) evMore("Earlier messages", t.older, into, evTranscript);
+    into.appendChild(box);
     if (t.unavailable) into.appendChild(el("p", "muted", "Earlier conversation unavailable: " + t.unavailable));
-    if (t.older) evMore("Earlier messages", t.older, into, function (d, w) { evTranscript(d, w, true); });
-    if (t.newer) evMore("Later messages", t.newer, into, function (d, w) { evTranscript(d, w, false); });
+    if (t.newer) evMore("Later messages", t.newer, into, evTranscript);
   }
   function evRender(d) {
     var out = $("ev-body");
@@ -1643,7 +1645,7 @@
     c.appendChild(el("h3", null, "Retained conversation"));
     c.appendChild(el("p", "muted", (d.transcript && d.transcript.note) || ""));
     out.appendChild(c);
-    evTranscript(d.transcript || {}, c, false);
+    evTranscript(d.transcript || {}, c);
   }
   function evLoad() {
     evStatus("Reading…");
