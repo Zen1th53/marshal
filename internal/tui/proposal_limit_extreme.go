@@ -32,22 +32,24 @@ func innerLimit(kind string, actual int, base error) error {
 
 // noteInnerLimit records the notice of a submission the live handler
 // refused at its inner cap. It runs after the broker's mutex is released
-// and before the refusal is answered.
-func (w *Workspace) noteInnerLimit(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage, runID string, err error) {
+// and before the refusal is answered. It reports whether the refusal is
+// one it owns the notice of, so no other notice is recorded for it.
+func (w *Workspace) noteInnerLimit(ctx context.Context, l *proposalMCPLease, method string, raw json.RawMessage, runID string, err error) bool {
 	limit, ok := model.LimitOf(err)
 	if !ok || (limit.Kind != proposalmcp.LimitKindProposal && limit.Kind != proposalmcp.LimitKindContract) {
-		return
+		return false
 	}
 	var args struct {
 		SubmissionID string `json:"submission_id"`
 	}
 	_ = json.Unmarshal(raw, &args)
 	if !validProposalID(args.SubmissionID) {
-		return
+		return false
 	}
 	if _, err := w.recordLimitNotice(ctx, l, method, args.SubmissionID, runID, limit); err != nil {
 		w.logTUIError("limit notice", err)
 	}
+	return true
 }
 
 // handleLimitNotice serves a limit notice: the live Marshal's MCP child

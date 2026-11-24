@@ -359,9 +359,9 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 	runID := w.currentRunID()
 	out, live, err := w.serveProposalMCP(ctx, l, method, raw)
 	if live {
-		w.noteInnerLimit(ctx, l, method, raw, runID, err)
+		inner := w.noteInnerLimit(ctx, l, method, raw, runID, err)
 		w.noteBrokerStep(l.id, l.provider, method, raw, out, err)
-		if err != nil {
+		if err != nil && !inner {
 			w.recordAdapterLimitError(ctx, "", method, err)
 		}
 	}

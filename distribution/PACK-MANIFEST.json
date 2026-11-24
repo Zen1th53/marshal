@@ -15316,8 +15316,8 @@
     },
     {
       "path": "internal/tui/proposal_limit_extreme.go",
-      "sha256": "10a17c505323322e64c5f2e55a3ae851ca62d14284525fec3a9f045fe887f23e",
-      "bytes": 5670
+      "sha256": "d9d60202e07a7f036e9d5bf8fd9ab47f9929cfc480dac60fa88b69b241b73fba",
+      "bytes": 5803
     },
     {
       "path": "internal/tui/proposal_limit_extreme_test.go",
@@ -15331,8 +15331,8 @@
     },
     {
       "path": "internal/tui/proposal_mcp_extreme.go",
-      "sha256": "52593dfdcd8b03fa6fa0c52802079c952170f63516fea156547d4639b8edcee1",
-      "bytes": 25997
+      "sha256": "7b46c8d397772ebd6a9093204da03f3ffc679aa61a63b2592bdd1d9030c39f2a",
+      "bytes": 26016
     },
     {
       "path": "internal/tui/proposal_mcp_extreme_test.go",
