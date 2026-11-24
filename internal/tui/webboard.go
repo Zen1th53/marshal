@@ -7,6 +7,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/webboard"
@@ -211,8 +212,20 @@ func (w *Workspace) marshalWeb() (string, error) {
 	if headlessDisplay() {
 		return url + what + " · no display here: open the link in a browser on this computer", nil
 	}
-	if err := w.openWebBrowser(url, url+what); err != nil {
+	failed, err := w.openWebBrowser(url, url+what)
+	if err != nil {
 		return "", err
+	}
+	// The browser's answer comes off the input loop, and the caller writes
+	// this response over whatever is shown once it returns: a launcher that
+	// fails at once is reported here, so "opening" is never written after
+	// the failure it would hide.
+	select {
+	case openErr := <-failed:
+		if openErr != nil {
+			return "", errors.New("your browser could not be opened. Open this link in a browser on this computer: " + url + what)
+		}
+	case <-time.After(webOpenGrace):
 	}
 	return "Web Board: opening in your browser (http://" + srv.Addr() + "/, this computer only). Each /marshal web opens a new link.", nil
 }
@@ -220,9 +233,14 @@ func (w *Workspace) marshalWeb() (string, error) {
 // openWebBrowser opens the one-use link url in the browser off the input
 // loop. When the browser cannot be opened, fallback (the link with its
 // warning, or "" to keep the link off screen) goes to the footer.
-func (w *Workspace) openWebBrowser(url, fallback string) error {
+//
+// The returned channel receives the opener's result once (nil on success).
+func (w *Workspace) openWebBrowser(url, fallback string) (<-chan error, error) {
+	result := make(chan error, 1)
 	if !w.startBackground(w.workers.context(), func(ctx context.Context) {
-		if err := webBoardOpen(ctx, url); err != nil {
+		err := webBoardOpen(ctx, url)
+		result <- err
+		if err != nil {
 			if fallback != "" {
 				w.setOutput("Your browser could not be opened. Open this link in a browser on this computer: "+fallback, true)
 			} else {
@@ -232,10 +250,14 @@ func (w *Workspace) openWebBrowser(url, fallback string) error {
 		}
 		w.noteWebOpened()
 	}) {
-		return errWorkspaceClosing
+		return nil, errWorkspaceClosing
 	}
-	return nil
+	return result, nil
 }
+
+// webOpenGrace is how long /marshal web waits for a launcher that fails at
+// once before it answers "opening".
+var webOpenGrace = 300 * time.Millisecond
 
 // openWebBoardKey is the Board's w: it opens the Web Board in the browser
 // on a fresh one-use link. The private link is shown only where there is
@@ -252,12 +274,14 @@ func (w *Workspace) openWebBoardKey() {
 	if err == nil {
 		url, err = srv.Link()
 	}
-	if err == nil {
-		err = w.openWebBrowser(url, "")
-	}
 	if err != nil {
 		w.recordCommandResult("/marshal web", "", err)
 		return
 	}
+	// Said before the opener runs: a failure it reports replaces this, and
+	// this never lands after the failure.
 	w.setOutput("Web Board: opening in your browser.", false)
+	if _, err := w.openWebBrowser(url, ""); err != nil {
+		w.recordCommandResult("/marshal web", "", err)
+	}
 }

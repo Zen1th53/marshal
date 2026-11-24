@@ -70,7 +70,7 @@ func (w *Workspace) handleV2DecisionKey(event KeyEvent, d v2Decision) bool {
 			w.openArchitectureReview()
 			return true
 		case isRune(event, 'c'):
-			w.copyCardLink(d.link)
+			w.copyCardLink(w.architectureLink())
 			return true
 		case isRune(event, 'k'):
 			w.openSay()
@@ -189,7 +189,10 @@ func (w *Workspace) copyCardLink(link string) {
 		w.memoryAnswer("Could not reach the clipboard here; the link is on the card.", true)
 		return
 	}
-	w.memoryAnswer("Copied the review link.", false)
+	// OSC 52 has no reply: the terminal may drop it (inside tmux it needs
+	// set-clipboard on), so the message says what was done, not that the
+	// clipboard holds the link.
+	w.memoryAnswer("Sent the review link to your terminal's clipboard. If paste finds nothing, copy it from the card (in tmux, set-clipboard must be on).", false)
 }
 
 func isRune(event KeyEvent, r rune) bool { return event.Type == KeyRune && event.Rune == r }

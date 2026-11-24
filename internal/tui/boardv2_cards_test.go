@@ -498,3 +498,30 @@ func TestSketchOfAFirstDraft(t *testing.T) {
 		t.Fatalf("sketch %+v covers %q", s, coversText(s.Covers))
 	}
 }
+
+// c asks the terminal for the clipboard and says only that: the answer never
+// claims the link is there, and says so when nothing could be asked.
+func TestCopyLinkClaimsOnlyWhatWasDone(t *testing.T) {
+	displaySeams(t, "darwin", nil)
+	w := architectureWorkspace(t)
+	waitCards(t, w, "the sketch", sketched)
+	withArchitectureLink(w)
+	orig := v2ClipboardWrite
+	t.Cleanup(func() { v2ClipboardWrite = orig })
+
+	var got string
+	v2ClipboardWrite = func(_ *Workspace, text string) bool { got = text; return true }
+	w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'c'})
+	if got != fixtureArchitectureLink {
+		t.Fatalf("copied %q", got)
+	}
+	if out := lastOutput(w); strings.HasPrefix(out, "Copied") || !strings.Contains(out, "set-clipboard") {
+		t.Fatalf("answer %q claims more than was done", out)
+	}
+
+	v2ClipboardWrite = func(*Workspace, string) bool { return false }
+	w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'c'})
+	if out := lastOutput(w); !strings.Contains(out, "Could not reach the clipboard") {
+		t.Fatalf("answer %q with no clipboard", out)
+	}
+}
