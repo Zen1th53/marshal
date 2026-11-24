@@ -261,13 +261,27 @@ func (s *MarshalService) pauseStageFailure(ctx context.Context, runID, stage str
 	return errors.Join(cause, s.record(wctx, runID, pause.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": pause.Reason, "summary": pause.Reason, "detail": pause.Detail, "code": pause.Code, "stage": stage}))
 }
 
+// awaitingApproval marks a step that stopped because the person has not
+// given an approval it needs yet. It keeps the approval source's own text.
+type awaitingApproval struct{ err error }
+
+func (e awaitingApproval) Error() string { return e.err.Error() }
+func (e awaitingApproval) Unwrap() error { return e.err }
+
 // presentedStop reports a stop that already carries its own cause and next
-// step for the person: a stop with a stated reason, an operation refusal, or
-// a task waiting for its approval. Those stop execution as they are.
+// step for the person: a stop with a stated reason, an operation refusal, a
+// task waiting for its approval, or a refusal of the project's required
+// context, which a retry cannot clear until the context is put right. Those
+// stop execution as they are.
 func presentedStop(err error) bool {
 	var known interface{ StopReason() (string, string) }
 	var refusal *marshal.RefusalError
-	return errors.As(err, &known) || errors.As(err, &refusal) || strings.Contains(err.Error(), "process 05:")
+	var waiting awaitingApproval
+	if errors.As(err, &known) || errors.As(err, &refusal) || errors.As(err, &waiting) || strings.Contains(err.Error(), "process 05:") {
+		return true
+	}
+	_, _, contextRefusal := plainContextVerificationStop(err)
+	return contextRefusal
 }
 
 func firstMarshalTask(run marshal.Run, state marshal.TaskState) string {
