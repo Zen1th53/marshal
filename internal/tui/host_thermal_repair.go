@@ -12,7 +12,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
 )
@@ -25,21 +24,18 @@ const (
 	legacyThermalReason = "halve lanes"
 )
 
-// thermalRepairStore is the part of the store the repair reads and writes.
+// thermalRepairStore is the audit history needed to identify suspect caps.
 type thermalRepairStore interface {
 	GetMarshalSettings(ctx context.Context, projectID string) (store.MarshalRecord[marshal.Settings], error)
 	MarshalSettingsChanges(ctx context.Context, projectID string) ([]store.SettingChange, error)
 	ListEvents(ctx context.Context) ([]model.Event, error)
-	CommitMarshalSettings(ctx context.Context, projectID string, settings marshal.Settings, expected int64, actor string) (int64, []store.SettingChange, error)
 }
 
-// repairLegacyThermalCap returns a global-cap that an earlier release saved
-// for the thermal guard to the value it replaced. It acts only when the
-// owner's thermal decision and the change it caused are the latest
-// global-cap facts and the settings are still at that change's revision;
-// the write is a compare-and-swap on that revision. A thermal value that
-// cannot be proved is kept and reported in notice; a later owner edit of
-// global-cap is kept without a notice.
+// repairLegacyThermalCap reports a global-cap that an earlier release may
+// have saved for the thermal guard. Legacy receipts do not link the settings
+// write to its permission decision, so matching values and timestamps cannot
+// authorize a restoration. Keep ambiguous values and let the user review them;
+// a later, distinct global-cap edit is kept without a notice.
 func repairLegacyThermalCap(ctx context.Context, st thermalRepairStore, projectID string) (restored bool, notice string, err error) {
 	rec, err := st.GetMarshalSettings(ctx, projectID)
 	if err != nil {
@@ -102,17 +98,10 @@ func repairLegacyThermalCap(ctx context.Context, st thermalRepairStore, projectI
 	if !thermal {
 		return false, "", nil
 	}
-	if latest.Revision != rec.Revision || latest.Actor != "owner" {
-		return false, notice, nil
-	}
-	next, err := settingscatalog.Apply(rec.Value, "global-cap", latest.Old)
-	if err != nil {
-		return false, notice, nil
-	}
-	if _, _, err := st.CommitMarshalSettings(ctx, projectID, next, rec.Revision, hostWatchActor); err != nil {
-		return false, notice, err
-	}
-	return true, "", nil
+	// Even a decision immediately before this receipt may have been followed
+	// by a crash and an independent settings command. The receipt records no
+	// decision identity, so it cannot prove which action wrote this value.
+	return false, notice, nil
 }
 
 // thermalRepairNoticePath remembers the settings revision whose repair
