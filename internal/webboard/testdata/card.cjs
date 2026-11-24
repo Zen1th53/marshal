@@ -13,3 +13,12 @@ for (const [start, end] of [['  function asksOwner(', '  // ---- small helpers']
 context.frame = { nowLine: { chatAsked: true }, decision: { kind: 'architecture', nodes: [], lines: [], title: 'Accept architecture' } };
 vm.runInContext('renderCard(frame)', context);
 assert.equal(card.hidden, true, 'architecture card hides the Marshal question');
+// Question choices and guard cancellation must remain server actions.
+vm.runInContext('var terminalOnly = {c:1,e:1,q:1,esc:1}; function cap(s) { return s; }', context);
+vm.runInContext(script.slice(script.indexOf('  function cardButtons('), script.indexOf('  function screenKey(')), context);
+context.frame = {decision:{kind:'ask', actions:[{key:'⏎',label:'Yes'},{key:'c',label:'Choice'},{key:'e',label:'Edit choice'},{key:'k',label:'Keep'}]}};
+let buttons = vm.runInContext('cardButtons(frame)', context);
+assert.equal(buttons.length, 4, 'question choices were dropped');
+assert.equal(buttons[3].local, false, 'choice became a local comment action');
+context.frame = {decision:{kind:'guard',actions:[{key:'⏎',label:'Undo'},{key:'esc',label:'Cancel'}]}};
+assert.equal(vm.runInContext('cardButtons(frame)', context).length, 2, 'guard cancel was hidden');

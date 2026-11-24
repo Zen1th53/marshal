@@ -275,13 +275,13 @@
   var terminalOnly = { "c": 1, "7": 1, "e": 1, "q": 1, "esc": 1 };
   function cardButtons(f) {
     var d = f.decision, p = f.paused, keys = d ? d.actions : p ? p.actions : [];
-    var out = [];
+    var out = [], choices = d && (d.kind === "ask" || d.kind === "guard");
     keys.forEach(function (k) {
-      if (terminalOnly[k.key]) return;
+      if (terminalOnly[k.key] && !choices) return;
       if (d && d.kind === "inbox" && k.key === "⏎") return; // details: the terminal's inspector
-      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" });
+      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" && !choices });
     });
-    if (out.length > 3) {
+    if (out.length > 3 && !choices) {
       // Keep the primary and the stop; the raw error is the first to go.
       var first = out[0], rest = out.slice(1).filter(function (b) { return b.key !== "d"; });
       out = [first].concat(rest.slice(0, 2));

@@ -52,6 +52,30 @@ features:
         anchor: 'func (w *Workspace) marshalRunCommand('
         kind: control
 
+  - id: attributable-question-answers
+    name: Question answers bound to the current question and durable delivery receipt
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_ask.go
+      - internal/tui/boardv2_cards_owner.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestStaleAskCannotAnswerNewQuestion
+      - internal/tui.TestAskAnswerAckReplaysOnce
+      - internal/tui.TestAskBrowserBindingChangesForIdenticalQuestions
+      - internal/tui.TestAskConcurrentReplayDeliversOnce
+      - internal/webboard.TestChatQuestionHidesStaleArchitectureCard
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function cardButtons('
+        kind: control
+    tui:
+      - routeOrCommand: ask choice
+        anchor: 'func (w *Workspace) answerAsk(i int)'
+        kind: control
+
   - id: authenticated-settings-actions
     name: Authenticated browser project settings and ULTRA execution changes with durable receipts
     editions: [default, governed]
@@ -278,6 +302,8 @@ features:
       - internal/marshal/domain.go
     tests:
       - internal/marshal.TestSettingsDefaultsAndEnums
+      - internal/tui.TestReadOnlyMarshalCannotCommitFromChat
+      - internal/tui.TestUnsupportedConfinementFallsBackToToolOnly
     docs:
       - docs/configuration.md
     web: []

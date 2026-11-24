@@ -16,6 +16,18 @@ import (
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
+// confinedChatArgs are the read-only launch settings a surviving Marshal chat
+// was started with under the workspace's execution rights; recovery adopts a
+// chat only when its saved command still carries them.
+func confinedChatArgs(t *testing.T, w *Workspace, provider, root string) []string {
+	t.Helper()
+	args, err := confineMarshalChat(provider, root, nil, w.marshalExecutionRights(t.Context()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return args
+}
+
 func TestMarshalChatCapturesDurableConversationAndRestarts(t *testing.T) {
 	w := realTmuxWorkspace(t)
 	home := t.TempDir()
@@ -114,7 +126,7 @@ func TestRecoveredChatPreservesHistoryProvenance(t *testing.T) {
 				}
 			}
 			write("old")
-			binding := chatBinding{Provider: "codex", Binary: "/bin/true"}
+			binding := chatBinding{Provider: "codex", Binary: "/bin/true", Args: confinedChatArgs(t, w, "codex", w.workDir)}
 			if durableBaseline {
 				binding.HistoryBaseline = []string{"old"}
 				write("new")
@@ -174,4 +186,27 @@ func TestAutomaticWindowCreationPreservesControlCentreFocus(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertControl()
+}
+
+func TestUnconfinedSurvivingChatIsRetired(t *testing.T) {
+	w := realTmuxWorkspace(t)
+	if err := saveChatBinding(w.workDir, chatBinding{Provider: "codex", Binary: "/bin/true"}); err != nil {
+		t.Fatal(err)
+	}
+	panes, err := tmux.ListPanes(context.Background(), w.tmuxSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", paneID: panes[0].PaneID, window: statepath.Name}
+	if err := saveAgentRecord(w.workDir, w.tmuxSession, a); err != nil {
+		t.Fatal(err)
+	}
+	w.tmuxMu.Lock()
+	w.adoptSurvivingWorkers(w.workDir)
+	adopted := w.tmuxActiveWins["marshal-chat"]
+	w.tmuxMu.Unlock()
+	if adopted != nil {
+		adopted.cancel()
+		t.Fatal("a chat saved without read-only launch settings was adopted")
+	}
 }

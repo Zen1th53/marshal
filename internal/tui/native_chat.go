@@ -45,19 +45,21 @@ type chatAsker interface {
 }
 
 type nativeChatState struct {
-	mu       sync.Mutex
-	view     chat.View
-	tr       chattransport.Transport
-	provider string
-	root     string
-	model    string
-	status   string
-	dir      *briefingDir
-	cleanup  func()
-	cancel   context.CancelFunc
-	asks     map[string]chattransport.PermissionAsk // inbox request key → ask
-	watch    *nativeHistoryWatch
-	syncing  atomic.Bool
+	launch           string
+	launchGeneration uint64
+	mu               sync.Mutex
+	view             chat.View
+	tr               chattransport.Transport
+	provider         string
+	root             string
+	model            string
+	status           string
+	dir              *briefingDir
+	cleanup          func()
+	cancel           context.CancelFunc
+	asks             map[string]chattransport.PermissionAsk // inbox request key → ask
+	watch            *nativeHistoryWatch
+	syncing          atomic.Bool
 
 	// runGrants are the operator's "allow for run" (A) answers: run id and
 	// tool name. Like the run egress allowlist they are keyed by the run and
@@ -305,7 +307,10 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 // attachNativeChat makes tr the docked chat and starts its pumps.
 func (w *Workspace) attachNativeChat(tr chattransport.Transport, root string, dir *briefingDir, watch *nativeHistoryWatch, cleanup func(), history []chat.Entry, note string, thinking bool) {
 	pumps, cancel := context.WithCancel(context.Background())
+	instance := w.workspaceInstanceID()
 	w.chat.mu.Lock()
+	w.chat.launchGeneration++
+	w.chat.launch = fmt.Sprintf("%s:%d", instance, w.chat.launchGeneration)
 	w.chat.tr, w.chat.provider, w.chat.root, w.chat.dir = tr, "claude", root, dir
 	w.chat.cleanup, w.chat.cancel, w.chat.watch = cleanup, cancel, watch
 	w.chat.asks = map[string]chattransport.PermissionAsk{}

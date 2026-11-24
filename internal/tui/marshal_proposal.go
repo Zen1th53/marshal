@@ -1061,6 +1061,9 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		sessionID := fmt.Sprintf("proposal-file:%s:%d:%x", name, info.ModTime().UnixNano(), sha256.Sum256(data))
 		fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", sessionID, 0, "", line)
 		id := fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
+		if proposal.action == "ask" {
+			id = legacyFileAskID(name, proposal.question, proposal.choices)
+		}
 		who := "Local request (unverified)"
 		if proposal.action == "architecture" && root == w.providerRoot() {
 			if bound := w.boundMarshalChatSession(); bound != "" {
@@ -1121,6 +1124,13 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 			(f.proposal.action == "requirements" && i < lastReq) ||
 			(f.proposal.action == "intake" && i < lastIntake)
 		if superseded || w.proposalCardAlreadyHandled(f.proposal, f.line, f.modTime) {
+			if f.proposal.action == "ask" {
+				_ = w.adoptLegacyFileAsk(f.id)
+			}
+			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, f.id, "superseded")
+			continue
+		}
+		if f.proposal.action == "ask" && !w.adoptLegacyFileAsk(f.id) {
 			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, f.id, "superseded")
 			continue
 		}

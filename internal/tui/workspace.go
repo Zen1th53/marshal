@@ -791,6 +791,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		return append(boardPaletteActions(ws), ws.registryPaletteActions()...)
 	}
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
+	ws.recoverOpenAsk()
 	return ws
 }
 
