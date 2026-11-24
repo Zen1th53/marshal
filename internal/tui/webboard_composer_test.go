@@ -112,6 +112,21 @@ func TestPlanCommentUsesScopedOwnerComposer(t *testing.T) {
 	}
 }
 
+func TestChatSendRefusesChangedLaunch(t *testing.T) {
+	w, c := composerWorkspace(t, "composer-launch")
+	send := runTestAction(t, w, mustRunCapability(t, w, "run/chat.send"), "e0112233445566778899aabbccddeeff", webboard.SettingPayload{Text: "hello"})
+	w.chat.mu.Lock()
+	w.chat.launch = "launch-2"
+	w.chat.mu.Unlock()
+	if r := w.webWorkCommand(send); r.Status != "refused" {
+		t.Fatalf("stale launch: %+v", r)
+	}
+	composerNothingSent(t, c)
+	if _, ok := runCapability(w, "run/architecture.comment"); ok {
+		t.Fatal("architecture comment offered with no review open")
+	}
+}
+
 func TestLegacySayAndTypedChatShareOutbox(t *testing.T) {
 	w, c := composerWorkspace(t, "composer-say")
 	typed := runTestAction(t, w, mustRunCapability(t, w, "run/chat.send"), "c0112233445566778899aabbccddeeff", webboard.SettingPayload{Text: "typed"})

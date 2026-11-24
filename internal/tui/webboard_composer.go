@@ -112,7 +112,7 @@ func webComposerText(op string, run marshal.Run, text string) string {
 	case "run/architecture.comment":
 		return "Owner comment on the architecture under review. This is a comment, not an approval: " + text
 	case "run/goal.intake":
-		return "Owner goal details (run " + run.PlanID + "). Propose any Goal change through the proposal tool; nothing is approved by this message: " + text
+		return "Owner goal details (plan " + run.PlanID + "). Propose any Goal change through the proposal tool; nothing is approved by this message: " + text
 	}
 	return text
 }
@@ -195,6 +195,9 @@ func (w *Workspace) webOwnerMessage(i store.WebIntent, run marshal.Run, text str
 		w.RecordActivity("From the web: a message to the Marshal (" + res.Status + ").")
 	}
 	effects := []string{"owner-message"}
+	if i.Op == "run/goal.amend.propose" {
+		effects = []string{"amendment-proposed"}
+	}
 	if status == "refused" {
 		effects = []string{}
 	}
