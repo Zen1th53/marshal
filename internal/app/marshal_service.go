@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
@@ -39,6 +40,8 @@ type MarshalDraft struct {
 	// Pack is the Markdown plan an interactive Marshal wrote beside the task
 	// list; a headless draft has none.
 	Pack *marshal.PlanPack `json:"pack,omitempty"`
+	// ReviewPolicy optionally proposes an updated review policy during amendment.
+	ReviewPolicy *marshal.ReviewPolicy `json:"review_policy,omitempty"`
 }
 
 type MarshalService struct {
@@ -71,7 +74,24 @@ type MarshalService struct {
 	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
 	// AfterLifecycleEffect injects a failure after the effect but before completion.
 	AfterLifecycleEffect func(kind, operationID string) error
-	RecordActivity       func(string)
+	// VerifyProcessExit optionally confirms whether an already-started worker
+	// process has exited before stale-base recovery releases its capacity.
+	VerifyProcessExit func(ctx context.Context, runID, taskID string) (bool, error)
+	// LaunchSupervisor, when set, holds each worker behind a durable launch
+	// receipt before it may start. Nil keeps the direct driver launch.
+	LaunchSupervisor *driver.LaunchSupervisor
+	// WorkerSlotCap fixes how many supervised workers one run may reserve at
+	// once; zero uses the settings' worker limit.
+	WorkerSlotCap int
+	// ProveWorkerExit, when set, replaces the owner's proof that a
+	// supervised worker exited (its receipt and reaped handle).
+	ProveWorkerExit func(marshal.WorkerSlot, *driver.Handle) (marshal.StagedExit, error)
+	// WorkerSlotReleased notifies the scheduler after a slot release is
+	// committed. It may be called again for the same release.
+	WorkerSlotReleased func(runID, launchKey string) error
+	// workerSlotFault injects a failure at a named slot transition in tests.
+	workerSlotFault func(point string) error
+	RecordActivity  func(string)
 	// QuotaLeft reports a provider's percent quota left and whether it is
 	// known, from the local limits reader. Failover ranks eligible workers
 	// by it; a nil hook leaves failover at the failover order.
@@ -82,6 +102,13 @@ type MarshalService struct {
 	// admission and failover decide on that model's limits instead of the
 	// provider's worst window (failover_model_extreme.go).
 	ModelQuotaLeft func(provider, model string) (left int, known bool)
+	// LaneCap is the global lane cap new admissions use given the
+	// configured one, lower while a temporary host lane cap holds. Nil
+	// keeps the configured cap.
+	LaneCap func(configured int) int
+	// admissionWait blocks until a held launch may be admitted. Nil waits
+	// on a timer; tests advance their clock instead.
+	admissionWait func(ctx context.Context, until time.Time) error
 	// HeldTask reports whether the owner's change is holding this plan task:
 	// a task the owner asked to pause while they decide a mid-run change.
 	// dispatchReady skips a held task that has not started yet, so it does
@@ -110,14 +137,21 @@ type MarshalService struct {
 	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
 	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error
 	requiredCanonicalVerification func(context.Context, string, marshal.Run, string) (verification.Session, verification.Binding, error)
-	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
-	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
-	process05WaitPause            func(context.Context, string) error
+	// requiredChecksOnlyClose retains the live one-shot capability a
+	// checks-only close presents at the required-context close fence.
+	requiredChecksOnlyClose    func(context.Context, string, marshal.Run, string, verification.ChecksOnlyReceipt) error
+	requiredContextCloseEffect func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
+	process05WaitReceipt       func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
+	process05WaitPause         func(context.Context, string) error
+	process05ClearExpiredWait  func(context.Context, string, string, time.Time) (*execution.RuntimeApproval, error)
 	// process05Paused reports whether part of the run's canonical execution
 	// is paused (the person paused it); process05Settle ends any part whose
 	// work all finished while it was paused (Runtime.settleProcess05).
 	process05Paused func(context.Context, marshal.Run) bool
-	process05Settle func(context.Context, marshal.Run) error
+	// process05RootRunning reports whether the root of the run's canonical
+	// execution is found and not paused (Runtime.process05RootRunning).
+	process05RootRunning func(context.Context, marshal.Run) bool
+	process05Settle      func(context.Context, marshal.Run) error
 	// process05CloseOrphanLane closes the task's current attempt when a
 	// restart interrupted it (Runtime.closeOrphanProcess05Lane), so its next
 	// attempt can open. Nil when this edition runs no task lanes.
@@ -168,8 +202,61 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 	if run.State == marshal.AwaitingUser && run.Pause == nil {
 		pauseMarshal(&run, marshal.Pause{Reason: "operator intervention required", Resolutions: []string{"resolve the escalation, suspension or security issue, or amend the plan"}, Code: marshal.CodeOperatorIntervention, Action: marshal.PauseResume})
 	}
-	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
+	if command, ok := ctx.Value(runCommandCommitKey{}).(marshal.RunCommand); ok {
+		if err := s.checkRunCommandAuthority(ctx, command); err != nil {
+			return err
+		}
+		if run.PlanID != command.PlanID || run.PlanVersion != command.PlanVersion || run.ApprovalScopeDigest != command.ScopeDigest {
+			return model.ErrConflict
+		}
+		task := taskIndex(run, command.TaskID)
+		for i := range run.Commands {
+			if task >= 0 && TaskCommandDigest(run.Tasks[task]) != command.TaskDigest && run.Commands[i].ID == command.ID && run.Commands[i].Actor == command.Actor && run.Commands[i].State == "applying" {
+				ctx = store.WithMarshalCommand(ctx, store.CommandRecord{ProjectID: command.AuthorityProject, Actor: command.Actor, Key: "marshal:" + runID + ":" + command.ID, Operation: "marshal." + command.Operation, SessionID: runID, TargetID: command.TaskID, ExpectedVersion: command.Revision, Digest: command.Digest, CapabilityGrantID: command.GrantID})
+				if command.Operation == "accept" && run.Tasks[task].State != marshal.Accepted {
+					run.Commands[i].State = "refused"
+					run.Commands[i].Detail = "acceptance refused by review gate"
+				} else {
+					run.Commands[i].State = "applied"
+					run.Commands[i].Detail = "task state committed"
+				}
+			}
+		}
+	}
+	return s.saveMarshalState(ctx, runID, run, revision, nil, nil, 0)
+}
 
+// saveMarshalState saves the run and, when it newly pauses, records the
+// pause's run notice after the pause is durable.
+func (s *MarshalService) saveMarshalState(ctx context.Context, runID string, run marshal.Run, revision int64, event *events.Event, handIn *marshal.HandIn, attempt int) error {
+	announce := s.assignPauseNotice(ctx, runID, &run)
+	var notices []store.NoticeWrite
+	if event != nil && event.Type == events.EventTypeMarshalTaskMerged {
+		i := taskIndex(run, event.TaskID)
+		if i < 0 || run.Tasks[i].State != marshal.Merged {
+			return errors.New("merge completion task is missing")
+		}
+		n := RunNotice{EventID: fmt.Sprintf("run:%s:task:%s:attempt:%d:%s:%s", runID, event.TaskID, slotAttempt(run.Tasks[i]), TaskNoticeMerged, event.ID),
+			RunID: runID, TaskID: event.TaskID, State: TaskNoticeMerged, Code: TaskNoticeMerged,
+			Summary: boundedRedacted("Task "+event.TaskID+" completed: it passed review and was merged.", 500), At: event.At}
+		payload, err := json.Marshal(n)
+		if err != nil {
+			return err
+		}
+		notices = append(notices, store.NoticeWrite{
+			Entry: store.NoticeOutboxEntry{EventID: n.EventID, ProjectID: s.noticeProjectID(), RunID: runID, TaskID: n.TaskID, Category: TaskNoticeCategory,
+				Transition: n.State, PhaseOrder: 1, Status: n.Code, Summary: n.Summary, PayloadJSON: string(payload), CreatedAt: n.At},
+			Event: model.Event{ID: n.EventID, Type: "marshal.run_notice", ProjectID: s.ProjectID, Timestamp: n.At,
+				Data: map[string]any{"run_id": runID, "task_id": n.TaskID, "state": n.State, "code": n.Code, "summary": n.Summary, "next": ""}},
+		})
+	}
+	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, event, handIn, attempt, notices...); err != nil {
+		return err
+	}
+	if announce {
+		s.announcePause(ctx, runID, *run.Pause)
+	}
+	return nil
 }
 
 // load is the lifecycle read boundary. Snapshot uses readRun instead so a
@@ -395,6 +482,9 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
+	if err := settings.Value.Validate(); err != nil {
+		return marshal.Run{}, err
+	}
 	if err := instructionsPresent(marshal.Run{Settings: settings.Value}, d.Tasks); err != nil {
 		return marshal.Run{}, err
 	}
@@ -402,7 +492,8 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
-	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack}
+	policySnap := marshal.NewReviewPolicySnapshot(settings.Value.ReviewPolicy, d.Plan.Graph.Digest, "", time.Time{})
+	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack, ReviewPolicy: policySnap}
 	for i := range run.Tasks {
 		run.Tasks[i].State = marshal.Queued
 		run.Tasks[i].BaseCommit = run.BaseCommit
@@ -442,6 +533,9 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return run, err
 	}
 	// A retry is a read of the existing approval, not another authorization.
@@ -501,6 +595,9 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 	}
 	run.Repository, run.TargetRef = snapshot.Repository, snapshot.TargetRef
 	run.Pack = pack
+	if err := validateRunDesignReview(run); err != nil {
+		return run, err
+	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
 		return run, err
@@ -524,6 +621,14 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 		}
 	}
 	run.PlanVersion = p.Version + 1
+	planDigest := approved.ApprovalScopeDigest
+	if planDigest == "" {
+		planDigest = approved.Graph.Digest
+	}
+	run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.EffectiveReviewPolicy(), planDigest, user, s.clock())
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
 	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run)
 	run.GoverningDigest, err = governingDigest(s.Repository)
 	if err != nil {
@@ -585,19 +690,106 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 		}
 		checks[task.PlanTaskID] = task.Checks
 	}
+	var reviewPolicy *marshal.ReviewPolicy
+	if rp := run.EffectiveReviewPolicy(); !rp.IsDefault() {
+		reviewPolicy = &rp
+	}
 	data, _ := json.Marshal(struct {
 		Plan                              string
 		Repository, BaseCommit, TargetRef string `json:",omitempty"`
 		Budget                            marshal.Budget
 		Control                           marshal.Control                    `json:",omitempty"`
+		ReviewPolicy                      *marshal.ReviewPolicy              `json:",omitempty"`
 		Pack                              string                             `json:",omitempty"`
 		Modes                             map[string]marshal.WorkerMode      `json:",omitempty"`
 		Checks                            map[string][]marshal.Check         `json:",omitempty"`
 		Imported                          map[string]*marshal.ImportedResult `json:",omitempty"`
 		Types                             map[string]marshal.TaskType        `json:",omitempty"`
-	}{planDigest, run.Repository, run.BaseCommit, run.TargetRef, run.Budget, control, pack, modes, checks, imported, types})
+	}{planDigest, run.Repository, run.BaseCommit, run.TargetRef, run.Budget, control, reviewPolicy, pack, modes, checks, imported, types})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func runDesignDraftDigest(run marshal.Run) string {
+	type taskSummary struct {
+		ID             string
+		Title          string
+		Type           marshal.TaskType
+		Worker         string
+		Mode           marshal.WorkerMode
+		Control        marshal.Control
+		Components     []string
+		DependsOn      []string
+		Files          []string
+		Criteria       []string
+		Checks         []marshal.Check
+		Instructions   string
+		ExpectedOutput string
+	}
+	tasks := make([]taskSummary, 0, len(run.Tasks))
+	for _, t := range run.Tasks {
+		tasks = append(tasks, taskSummary{
+			ID: t.PlanTaskID, Title: t.Title, Type: t.EffectiveType(),
+			Worker: t.Worker, Mode: t.Mode, Control: t.Control,
+			Components: t.Components, DependsOn: t.DependsOn,
+			Files: t.Files, Criteria: t.Criteria, Checks: t.Checks,
+			Instructions: t.Instructions, ExpectedOutput: t.ExpectedOutput,
+		})
+	}
+	packSum := ""
+	if run.Pack != nil {
+		packSum = planPackDigest(*run.Pack)
+	}
+	raw, _ := json.Marshal(struct {
+		Goal       string
+		BaseCommit string
+		PackDigest string `json:",omitempty"`
+		Tasks      []taskSummary
+	}{run.GoalBinding, run.BaseCommit, packSum, tasks})
+	return marshal.DesignDraftDigest(string(raw))
+}
+
+func validateRunDesignReview(run marshal.Run) error {
+	rp := run.EffectiveReviewPolicy()
+	if rp.Design == marshal.DesignReviewRequired && run.DesignReview == nil {
+		return errors.New("design review receipt is required before approval")
+	}
+	if run.DesignReview != nil {
+		if err := run.DesignReview.ValidateForDraft(runDesignDraftDigest(run)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RunDesignDraftDigest returns the canonical draft digest bound to design review receipts.
+func (s *MarshalService) RunDesignDraftDigest(ctx context.Context, runID string) (string, error) {
+	run, _, err := s.readRun(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	return runDesignDraftDigest(run), nil
+}
+
+// RecordDesignReview attaches a fresh-session design review receipt bound to the
+// run's exact current draft digest before approval.
+func (s *MarshalService) RecordDesignReview(ctx context.Context, runID string, receipt marshal.DesignReviewReceipt) (marshal.Run, error) {
+	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
+	if run.State != marshal.Drafting {
+		return run, errors.New("design review receipt can only be attached to a drafting run")
+	}
+	if err := receipt.ValidateForDraft(runDesignDraftDigest(run)); err != nil {
+		return run, err
+	}
+	copyReceipt := receipt
+	run.DesignReview = &copyReceipt
+	return run, s.save(ctx, runID, run, rev)
 }
 
 var marshalIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

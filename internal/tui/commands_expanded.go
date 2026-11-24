@@ -456,6 +456,7 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 	if err := saveInjectChannel(root, channel); err != nil {
 		return "", fmt.Errorf("save injection channel: %w", err)
 	}
+	h.ws.publishFileSetting(injectChannelPath(root), "memory-channel")
 	var providers, notes []string
 	for _, provider := range []string{"claude", "codex", "opencode", "antigravity"} {
 		resolved, note := resolveInjectChannel(provider, channel)
@@ -922,10 +923,25 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 // handleUltra reports ULTRA status and switches ULTRA Execution.
 //
 // No argument grants anything: entitlement is not a thing the client decides.
-// /ultra start and /ultra stop change only the person's preference in the
-// governed build, which does nothing without a verified entitlement. The
-// shipped build returns its fixed answer before reaching this path.
-func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
+// /ultra start and /ultra stop persist the project execution preference.
+func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (out string, retErr error) {
+	if !editionExtreme && (len(args) == 0 || (len(args) == 1 && args[0] == "status")) {
+		defer func() {
+			state := "UNKNOWN"
+			o, found, err := h.ws.readUltraRequest(ctx)
+			if err == nil && found {
+				switch strings.ToLower(requestPresentation(o, found).State) {
+				case "active", "approved":
+					state = "APPROVED"
+				case "denied", "refused":
+					state = "DENIED"
+				case "pending", "accepted":
+					state = "PENDING"
+				}
+			}
+			out += "\nEntitlement request: " + state + ". A request does not activate a lease."
+		}()
+	}
 	if !ultraSwitchable {
 		return ultraFixedAnswer, nil
 	}
@@ -942,17 +958,22 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 		// server or not at all.
 		return h.requestUltra(ctx)
 	case len(args) == 1 && sub == "start":
-		return h.startUltra(), nil
+		return h.startUltra(ctx)
 	case len(args) == 1 && sub == "stop":
 		return h.askStopUltra(), nil
 	case confirming:
 		if !asked {
 			return h.askStopUltra(), nil
 		}
-		h.ws.setUltraExecution(false)
+		if err := h.ws.SetUltraExecution(ctx, false); err != nil {
+			return "", err
+		}
 		return "ULTRA Execution is off. The session behaves like Standard; /ultra start turns it on again.", nil
 	case len(args) == 0 || (len(args) == 1 && sub == "status"):
 	default:
+		if editionExtreme {
+			return "Usage: /ultra [status|start|stop]", nil
+		}
 		return "Usage: /ultra [status|start|stop|request]", nil
 	}
 	gate, executionEnabled := h.ws.ultraGate()
@@ -977,7 +998,7 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 				"  The session is running as Standard. Try again shortly.", nil
 		}
 		return "ULTRA status: INACTIVE — no cryptographically verified entitlement is active.\n" +
-			"  Use /ultra request to request one from marshal.blackhat.uz.", nil
+			"  Use /ultra request to request entitlement.", nil
 	}
 
 	expiry, _ := gate.ExpiresAt()
@@ -999,28 +1020,30 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 
 // startUltra turns ULTRA Execution on for this session. Without a verified
 // entitlement it changes nothing and says how to get one.
-func (h *CommandHandler) startUltra() string {
+func (h *CommandHandler) startUltra(ctx context.Context) (string, error) {
 	gate, _ := h.ws.ultraGate()
 	if !gate.Entitled() {
 		if gate.Failure() != nil {
-			return "ULTRA connection or lease renewal lost; session is running as Standard. Restart MARSHAL to reconnect."
+			return "ULTRA connection or lease renewal lost; session is running as Standard. Restart MARSHAL to reconnect.", nil
 		}
 		if err := h.ws.ultraError(); err != nil {
 			if errors.Is(err, cloud.ErrEntitlementUnavailable) {
 				return "ULTRA was not started: this installation has no ULTRA entitlement.\n" +
-					"  The session is running as Standard."
+					"  The session is running as Standard.", nil
 			}
 			return "ULTRA was not started: activation failed: " + err.Error() + "\n" +
-				"  The session is running as Standard. Try again shortly."
+				"  The session is running as Standard. Try again shortly.", nil
 		}
 		return "ULTRA was not started: no cryptographically verified entitlement is active.\n" +
-			"  Use /ultra request to request one from marshal.blackhat.uz."
+			"  Use /ultra request to request entitlement.", nil
 	}
-	h.ws.setUltraExecution(true)
+	if err := h.ws.SetUltraExecution(ctx, true); err != nil {
+		return "", err
+	}
 	if !gate.Capability(cloud.CapabilityDelegation) {
-		return "ULTRA Execution is on. Delegation is unavailable, so confirmations are still required."
+		return "ULTRA Execution is on. Delegation is unavailable, so confirmations are still required.", nil
 	}
-	return "ULTRA Execution is on — delegation is enabled. /ultra stop turns it off."
+	return "ULTRA Execution is on — delegation is enabled. /ultra stop turns it off.", nil
 }
 
 // askStopUltra asks the person to confirm before execution is switched off:

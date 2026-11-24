@@ -15,7 +15,7 @@ import (
 
 // SaveMarshalState commits the run, its task projections, optional hand-in and
 // completion decision together. A failed write leaves every record unchanged.
-func (s *Store) SaveMarshalState(ctx context.Context, projectID, runID string, run marshal.Run, expected int64, event *events.Event, handin *marshal.HandIn, attempt int) error {
+func (s *Store) SaveMarshalState(ctx context.Context, projectID, runID string, run marshal.Run, expected int64, event *events.Event, handin *marshal.HandIn, attempt int, notices ...NoticeWrite) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -24,12 +24,33 @@ func (s *Store) SaveMarshalState(ctx context.Context, projectID, runID string, r
 	if err = saveMarshalStateTx(ctx, tx, projectID, runID, run, expected, event, handin, attempt); err != nil {
 		return err
 	}
+	for _, notice := range notices {
+		if _, err = s.recordNoticeWithEventTx(ctx, tx, notice.Entry, notice.Event); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
 func saveMarshalStateTx(ctx context.Context, tx *sql.Tx, projectID, runID string, run marshal.Run, expected int64, event *events.Event, handin *marshal.HandIn, attempt int) error {
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
+	}
+	if command, ok := ctx.Value(marshalCommandAdmissionKey{}).(CommandRecord); ok {
+		if err := bindMarshalCommandTx(ctx, tx, command); err != nil {
+			return err
+		}
+	}
+	if command, ok := ctx.Value(marshalCommandKey{}).(CommandRecord); ok {
+		if err := insertCommandReceipt(ctx, tx, command, expected+1); err != nil {
+			return err
+		}
+	}
+	if err := checkMarshalSlots(run); err != nil {
+		return err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return fmt.Errorf("%w: %w", model.ErrInvalid, err)
 	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return err

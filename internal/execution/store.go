@@ -124,6 +124,9 @@ func cloneExecutionRun(run ExecutionRun) (ExecutionRun, error) {
 type FileRunStore struct {
 	baseDir string
 	mem     *MemoryRunStore
+	// overflow holds the history segment references of each compacted lane
+	// snapshot on disk, guarded by mem.mu like the runs themselves.
+	overflow map[string][]laneOverflowRef
 }
 
 // NewFileRunStore creates a durable file-backed run store.
@@ -132,8 +135,9 @@ func NewFileRunStore(baseDir string) (*FileRunStore, error) {
 		return nil, fmt.Errorf("failed to create run store directory: %w", err)
 	}
 	store := &FileRunStore{
-		baseDir: baseDir,
-		mem:     NewMemoryRunStore(),
+		baseDir:  baseDir,
+		mem:      NewMemoryRunStore(),
+		overflow: map[string][]laneOverflowRef{},
 	}
 
 	// Load existing runs from disk
@@ -148,8 +152,15 @@ func NewFileRunStore(baseDir string) (*FileRunStore, error) {
 			if err != nil {
 				continue
 			}
-			var run ExecutionRun
-			if err := json.Unmarshal(data, &run); err == nil && run.RunID != "" {
+			var stored storedRun
+			if err := json.Unmarshal(data, &stored); err == nil && stored.RunID != "" {
+				run := stored.ExecutionRun
+				if len(stored.LaneOverflow) > 0 {
+					if run, err = store.rehydrateLane(stored); err != nil {
+						return nil, err
+					}
+					store.overflow[run.RunID] = stored.LaneOverflow
+				}
 				store.mem.runs[run.RunID] = run
 			}
 		}
@@ -222,5 +233,21 @@ func (f *FileRunStore) persistRun(run ExecutionRun) error {
 	}
 
 	destPath := filepath.Join(f.baseDir, run.RunID+".json")
-	return writeRunSnapshot(destPath, data)
+	refs := f.overflow[run.RunID]
+	if run.ParentRunID != "" && (len(refs) > 0 || len(data) > laneSummaryLimit) {
+		// A task lane's snapshot stays bounded: its older history moves to
+		// immutable segments, written before the snapshot naming them.
+		if data, refs, err = f.encodeLane(run, refs); err != nil {
+			return fmt.Errorf("failed to compact lane run: %w", err)
+		}
+	}
+	if err := writeRunSnapshot(destPath, data); err != nil {
+		return err
+	}
+	if len(refs) > 0 {
+		f.overflow[run.RunID] = refs
+	} else {
+		delete(f.overflow, run.RunID)
+	}
+	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/redaction"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
@@ -26,10 +27,13 @@ const Version = 1
 // Frame is one Board frame as the browser reads it. Times are RFC 3339 with
 // their zone ("" when unknown), durations whole seconds (0 when unknown).
 type Frame struct {
+	SettingsActions *SettingsState `json:"settingsActions,omitempty"`
+
 	LastRun bool     `json:"lastRun"`
 	V       int      `json:"v"`
 	Screen  string   `json:"screen"`
 	Now     string   `json:"now"`
+	Mode    Mode     `json:"mode"`
 	Top     TopBar   `json:"top"`
 	NowLine NowLine  `json:"nowLine"`
 	Marshal Marshal  `json:"marshal"`
@@ -37,6 +41,13 @@ type Frame struct {
 	Lanes   Lanes    `json:"lanes"`
 	Tasks   []Task   `json:"tasks"`
 	Workers []Worker `json:"workers"`
+	// Waiting is why the run does not move, null while it moves; Approvals
+	// is every approval awaiting an answer or just expired. Both added in
+	// version 1 without a version change.
+	Waiting   *Waiting   `json:"waiting"`
+	Approvals []Approval `json:"approvals"`
+
+	Settings settingscatalog.Snapshot `json:"settings"`
 	// Limits is every provider's limit rows and dispatch state; added in
 	// version 1 without a version change (a reader that ignores it is
 	// unaffected).
@@ -169,6 +180,83 @@ type Lane struct {
 	LastSignal int64  `json:"lastSignalSec"`
 	Stale      bool   `json:"stale"`
 	Selected   bool   `json:"selected"`
+	Process    string `json:"process,omitempty"`
+	Turn       string `json:"turn,omitempty"`
+	ModelWait  int64  `json:"modelWaitSec,omitempty"`
+	Note       string `json:"note,omitempty"`
+	// Signal is the last worker signal: its observed time, so the page
+	// ticks its age, and its state as the server judged it.
+	Signal  Signal   `json:"signal"`
+	Waiting *Waiting `json:"waiting"`
+}
+
+// Signal is a lane's last worker signal. State is live, quiet, stale,
+// unverifiable, exited or none; only the server says stale, unverifiable
+// or exited, and unverifiable is never shown as exited.
+type Signal struct {
+	At    string `json:"at"`
+	State string `json:"state"`
+	Label string `json:"label"`
+}
+
+// Waiting is why a run, task, lane or approval waits: a code ("unknown"
+// when no cause is known), a label, what blocks it and when it may move
+// again ("" when unknown), where the reason came from and where to look.
+type Waiting struct {
+	Code      string `json:"code"`
+	Label     string `json:"label"`
+	BlockerID string `json:"blockerId,omitempty"`
+	RetryAt   string `json:"retryAt,omitempty"`
+	Source    string `json:"source"`
+	Inspect   string `json:"inspect"`
+}
+
+// Approval is one approval awaiting an answer. createdAt and expiresAt let
+// the page tick its age; ageSec is its age when the frame was made (0 when
+// the frame has no clock). reason is redacted and capped. actions are the
+// owner's bound answers, empty when it cannot be answered from here.
+type Approval struct {
+	ID          string   `json:"id"`
+	TaskID      string   `json:"taskId"`
+	Awaiting    string   `json:"awaiting"`
+	CreatedAt   string   `json:"createdAt"`
+	ExpiresAt   string   `json:"expiresAt"`
+	AgeSec      int64    `json:"ageSec"`
+	Status      string   `json:"status"`
+	Reason      string   `json:"reason"`
+	Destination string   `json:"destination"`
+	Command     string   `json:"command"`
+	Actions     []Key    `json:"actions"`
+	Waiting     *Waiting `json:"waiting"`
+}
+
+// ReasonMax is the most of an approval's reason a frame carries.
+const ReasonMax = 160
+
+func waiting(w *vm.Waiting) *Waiting {
+	if w == nil {
+		return nil
+	}
+	return &Waiting{Code: w.Code, Label: redaction.RedactAll(w.Label), BlockerID: w.BlockerID, RetryAt: stamp(w.RetryAt),
+		Source: w.Source, Inspect: redaction.RedactAll(w.Inspect)}
+}
+
+func approvals(in []vm.Approval, now time.Time) []Approval {
+	out := make([]Approval, 0, len(in))
+	for _, a := range in {
+		reason := strings.TrimSpace(redaction.RedactAll(a.Reason))
+		if r := []rune(reason); len(r) > ReasonMax {
+			reason = string(r[:ReasonMax]) + "…"
+		}
+		row := Approval{ID: a.ID, TaskID: a.TaskID, Awaiting: a.Awaiting, CreatedAt: stamp(a.CreatedAt), ExpiresAt: stamp(a.ExpiresAt),
+			Status: a.Status, Reason: reason, Destination: redaction.RedactAll(a.Destination), Command: redaction.RedactAll(a.Command),
+			Actions: keys(a.Actions), Waiting: waiting(a.Waiting)}
+		if !now.IsZero() && !a.CreatedAt.IsZero() {
+			row.AgeSec = secs(now.Sub(a.CreatedAt))
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 type Lanes struct {
@@ -184,6 +272,8 @@ type Task struct {
 	Reviewer string `json:"reviewer"`
 	State    string `json:"state"`
 	Note     string `json:"note"`
+	// Waiting is why the task does not move, null while it builds or is done.
+	Waiting *Waiting `json:"waiting"`
 }
 
 type Worker struct {
@@ -282,6 +372,7 @@ type Setting struct {
 }
 
 type Readiness struct {
+	SessionLabel string    `json:"sessionLabel"`
 	Checks       []Check   `json:"checks"`
 	Ready        int       `json:"ready"`
 	Total        int       `json:"total"`
@@ -316,6 +407,7 @@ type Link struct {
 // Decision is the owner card. The review link is never sent: it carries the
 // architecture review's private token, which is the owner's Accept.
 type Decision struct {
+	Binding      string     `json:"binding,omitempty"`
 	Kind         string     `json:"kind"`
 	Title        string     `json:"title"`
 	Corner       string     `json:"corner"`
@@ -328,6 +420,63 @@ type Decision struct {
 	SelfApproval string     `json:"selfApproval"`
 	Actions      []Key      `json:"actions"`
 	Links        []Link     `json:"links"`
+	// Revision is what a typed choice binds; Choices every action of the
+	// card by typed id; Plan the drafted plan an approval binds (nil for
+	// other cards).
+	Revision string       `json:"revision"`
+	Choices  []Choice     `json:"choices"`
+	Plan     *PlanPreview `json:"plan,omitempty"`
+}
+
+// Choice is one typed action of a decision card.
+type Choice struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Local bool   `json:"local"`
+}
+
+// PlanPreview is the drafted plan, redacted, with the digest its approval
+// must carry.
+type PlanPreview struct {
+	ID      string     `json:"id"`
+	Version int64      `json:"version"`
+	Digest  string     `json:"digest"`
+	Tasks   []PlanTask `json:"tasks"`
+}
+
+type PlanTask struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	DependsOn []string `json:"dependsOn"`
+	Files     []string `json:"files"`
+	Criteria  []string `json:"criteria"`
+	Checks    []string `json:"checks"`
+}
+
+// planLines is ss redacted, at most 50 of them.
+func planLines(ss []string) []string {
+	out := []string{}
+	for i, x := range ss {
+		if i == 50 {
+			out = append(out, "…")
+			break
+		}
+		out = append(out, redaction.RedactAll(x))
+	}
+	return out
+}
+
+func planPreview(p *vm.PlanPreview) *PlanPreview {
+	if p == nil {
+		return nil
+	}
+	out := &PlanPreview{ID: p.ID, Version: p.Version, Digest: p.Digest, Tasks: []PlanTask{}}
+	for _, t := range p.Tasks {
+		out.Tasks = append(out.Tasks, PlanTask{ID: redaction.RedactAll(t.ID), Title: redaction.RedactAll(t.Title), DependsOn: planLines(t.DependsOn), Files: planLines(t.Files), Criteria: planLines(t.Criteria), Checks: planLines(t.Checks)})
+	}
+	return out
 }
 
 type PausedTask struct {
@@ -392,7 +541,9 @@ func limits(in []vm.ProviderLimits) []ProviderLimits {
 // an empty list, never null.
 func FromBoard(b vm.Board) Frame {
 	f := Frame{
-		LastRun: b.LastRun, V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
+		Settings: b.Settings,
+		LastRun:  b.LastRun, V: Version, Screen: string(b.Screen), Now: stamp(b.Now),
+		Mode: mode(b.Mode),
 		Top: TopBar{Version: b.Top.Version, Project: b.Top.Project, Run: b.Top.Run, State: b.Top.State, StateTone: string(b.Top.StateTone),
 			Workers: b.Top.Workers, Inbox: b.Top.Inbox, Clock: stamp(b.Top.Clock)},
 		NowLine: NowLine{Marshal: b.NowLine.Marshal, Work: b.NowLine.Work, FromYou: b.NowLine.FromYou, FromYouOK: b.NowLine.FromYouOK, ChatAsked: b.NowLine.ChatAsked},
@@ -403,17 +554,19 @@ func FromBoard(b vm.Board) Frame {
 		Plan: Plan{Title: b.Plan.Title, Accepted: b.Plan.Accepted, Stages: []Stage{}, Done: b.Plan.Done, Active: b.Plan.Active,
 			Waiting: b.Plan.Waiting, Total: b.Plan.Total, ETA: secs(b.Plan.ETA), Throughput: append([]int{}, b.Plan.Throughput...),
 			MergedPerHr: b.Plan.MergedPerHr, Reworked: b.Plan.Reworked, Tokens: b.Plan.Tokens},
-		Lanes:    Lanes{Items: []Lane{}, Limits: b.Lanes.Limits},
-		Tasks:    []Task{},
-		Workers:  []Worker{},
-		Limits:   limits(b.Limits),
-		Inbox:    Inbox{Count: b.Inbox.Count, Lines: append([]string{}, b.Inbox.Lines...), Next: b.Inbox.Next},
-		Activity: []Event{},
-		Steps:    Steps{Items: []Step{}, Quiet: secs(b.Steps.Quiet), Model: b.Steps.Model},
-		Requests: []Request{},
+		Lanes:     Lanes{Items: []Lane{}, Limits: b.Lanes.Limits},
+		Tasks:     []Task{},
+		Waiting:   waiting(b.Waiting),
+		Approvals: approvals(b.Approvals, b.Now),
+		Workers:   []Worker{},
+		Limits:    limits(b.Limits),
+		Inbox:     Inbox{Count: b.Inbox.Count, Lines: append([]string{}, b.Inbox.Lines...), Next: b.Inbox.Next},
+		Activity:  []Event{},
+		Steps:     Steps{Items: []Step{}, Quiet: secs(b.Steps.Quiet), Model: b.Steps.Model},
+		Requests:  []Request{},
 		Chat: Chat{Bound: b.Chat.Bound, Restarts: b.Chat.Restarts, ReboundAt: stamp(b.Chat.ReboundAt), Resent: b.Chat.Resent,
 			InputClear: b.Chat.InputClear, InputKnown: b.Chat.InputKnown, Answered: b.Chat.Answered, Stage: b.Chat.Stage},
-		Ready: Readiness{Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
+		Ready: Readiness{SessionLabel: b.Ready.SessionLabel, Checks: []Check{}, Ready: b.Ready.Ready, Total: b.Ready.Total, TelemetryOn: b.Ready.TelemetryOn,
 			TelemetryAsk: b.Ready.TelemetryAsk, Defaults: []Setting{}, Checked: stamp(b.Ready.Checked), Actions: keys(b.Ready.Actions)},
 		Keys: keys(b.Keys),
 		System: System{CPUPct: b.System.CPUPct, MemPct: b.System.MemPct, DiskPct: b.System.DiskPct, TempC: b.System.TempC,
@@ -426,10 +579,12 @@ func FromBoard(b vm.Board) Frame {
 	}
 	for _, l := range b.Lanes.Items {
 		f.Lanes.Items = append(f.Lanes.Items, Lane{Name: l.Name, Provider: l.Provider, Model: l.Model, Task: l.Task, Step: l.Step,
-			Reviewing: l.Reviewing, Elapsed: secs(l.Elapsed), LastSignal: secs(l.LastSignal), Stale: l.Stale, Selected: l.Selected})
+			Reviewing: l.Reviewing, Elapsed: secs(l.Elapsed), LastSignal: secs(l.LastSignal), Stale: l.Stale, Selected: l.Selected,
+			Process: l.Process, Turn: l.Turn, ModelWait: secs(l.ModelWait), Note: l.Note,
+			Signal: Signal{At: stamp(l.Signal.At), State: l.Signal.State, Label: l.Signal.Label}, Waiting: waiting(l.Waiting)})
 	}
 	for _, t := range b.Tasks {
-		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note})
+		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note, Waiting: waiting(t.Waiting)})
 	}
 	for _, w := range b.Workers {
 		f.Workers = append(f.Workers, Worker{Provider: w.Provider, Glyph: w.Glyph, LeftPct: w.LeftPct, Tag: w.Tag, TagTone: string(w.TagTone),
@@ -451,9 +606,12 @@ func FromBoard(b vm.Board) Frame {
 		f.Ready.Defaults = append(f.Ready.Defaults, Setting{Name: d[0], Value: d[1]})
 	}
 	if d := b.Decision; d != nil {
-		c := &Decision{Kind: d.Kind, Title: d.Title, Corner: d.Corner, Summary: d.Summary, ChangedNote: d.ChangedNote,
+		c := &Decision{Binding: d.Binding, Kind: d.Kind, Title: d.Title, Corner: d.Corner, Summary: d.Summary, ChangedNote: d.ChangedNote,
 			Nodes: []Node{}, Lines: []CardLine{}, HasLink: d.Link != "", NoDisplay: d.NoDisplay, SelfApproval: d.SelfApproval,
-			Actions: keys(d.Actions), Links: []Link{}}
+			Actions: keys(d.Actions), Links: []Link{}, Revision: d.Revision, Choices: []Choice{}, Plan: planPreview(d.Plan)}
+		for _, x := range d.Choices {
+			c.Choices = append(c.Choices, Choice{ID: x.ID, Value: x.Value, Key: x.Key, Label: x.Label, Local: x.Local})
+		}
 		for _, n := range d.Nodes {
 			c.Nodes = append(c.Nodes, Node{Name: n.Name, Sub: n.Sub, Changed: n.Changed})
 		}
@@ -472,6 +630,12 @@ func FromBoard(b vm.Board) Frame {
 			c.Tasks = append(c.Tasks, PausedTask{Title: t.Title, Progress: t.Progress, Kept: t.Kept})
 		}
 		f.Paused = c
+	}
+	if f.Settings.Rows == nil {
+		f.Settings.Rows = []settingscatalog.Row{}
+	}
+	if f.Settings.Changes == nil {
+		f.Settings.Changes = []settingscatalog.Change{}
 	}
 	return f
 }
@@ -501,4 +665,26 @@ func encodeFrame(f Frame) ([]byte, error) {
 func changeKey(b vm.Board) ([]byte, error) {
 	b.Now, b.Top.Clock = time.Time{}, time.Time{}
 	return Encode(b)
+}
+
+// Mode contains only presentation observations, never authorization material.
+type Mode struct {
+	Edition          string   `json:"edition"`
+	Entitlement      string   `json:"entitlement"`
+	RequestStatus    string   `json:"requestStatus"`
+	Delegation       *bool    `json:"delegation"`
+	ExecutionEnabled *bool    `json:"executionEnabled"`
+	EffectiveTier    string   `json:"effectiveTier"`
+	RecordedRunTier  string   `json:"recordedRunTier"`
+	PlanParallel     *bool    `json:"planParallel"`
+	Active           *int     `json:"active"`
+	EffectiveCap     *int     `json:"effectiveCap"`
+	Reasons          []string `json:"reasons"`
+}
+
+func mode(m vm.Mode) Mode {
+	return Mode{Edition: m.Edition, Entitlement: m.Entitlement, RequestStatus: m.RequestStatus,
+		Delegation: m.Delegation, ExecutionEnabled: m.ExecutionEnabled, EffectiveTier: m.EffectiveTier,
+		RecordedRunTier: m.RecordedRunTier, PlanParallel: m.PlanParallel, Active: m.Active,
+		EffectiveCap: m.EffectiveCap, Reasons: append([]string{}, m.Reasons...)}
 }

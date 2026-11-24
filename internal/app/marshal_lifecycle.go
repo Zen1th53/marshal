@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 )
 
 type MarshalDispatch struct {
+	Tier     marshal.Tier
 	Driver   driver.Driver
 	Handle   *driver.Handle
 	TaskID   string
@@ -34,6 +37,9 @@ type MarshalDispatch struct {
 }
 
 func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief string) (MarshalDispatch, error) {
+	gate, release := reserveExecution(s.Gate)
+	ctx = context.WithValue(ctx, admissionGateKey{}, gate)
+	release()
 	return s.dispatchWithBrief(ctx, runID, taskID, brief, nil)
 }
 
@@ -47,11 +53,21 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return MarshalDispatch{}, err
+	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
 
+	if run.State == marshal.AwaitingUser && run.Pause != nil && run.Pause.Code == marshal.CodeStaleBase {
+		if idx := taskIndex(run, taskID); idx >= 0 {
+			if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[idx], launchBasePinFromOp(run.Operation, taskID)); baseErr != nil {
+				return MarshalDispatch{}, baseErr
+			}
+		}
+	}
 	if run.State != marshal.Approved && run.State != marshal.Dispatching && run.State != marshal.Reviewing && run.State != marshal.Merging {
 		return MarshalDispatch{}, errors.New("dispatch is paused")
 	}
@@ -81,11 +97,17 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 			return MarshalDispatch{}, err
 		}
 	}
-	for _, dep := range t.DependsOn {
-		j := taskIndex(run, dep)
-		if j < 0 || run.Tasks[j].State != marshal.Merged {
-			return MarshalDispatch{}, errors.New("dependency is not merged")
-		}
+	if adm, blocked := unmergedDependencyAdmission(run, *t); blocked {
+		return MarshalDispatch{}, &DispatchAdmissionError{Admission: adm}
+	}
+	// Validate delivery target, repository, plan/scope, authority, merged
+	// dependencies, and private integration head before any failover mutation,
+	// worktree preparation, or process launch.
+	if _, err := s.admitLaunchBase(ctx, runID, run, *t, nil); err != nil {
+		return MarshalDispatch{}, err
+	}
+	if err := s.admitPriorResult(ctx, runID, run, *t); err != nil {
+		return MarshalDispatch{}, err
 	}
 	rev, err = s.admitProviderDispatch(ctx, runID, &run, rev, i, brief)
 	if err != nil {
@@ -105,10 +127,20 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		}
 		return MarshalDispatch{}, fmt.Errorf("dispatch paused at budget boundary: %s", reason)
 	}
-	policy := marshal.TierPolicy(s.Gate, run.Settings)
-	if err := checkDispatchAdmission(s.Gate, run, *t, i); err != nil {
+	policy := marshal.TierPolicy(s.admissionGate(ctx), run.Settings)
+	if err := checkDispatchAdmission(s.admissionGate(ctx), run, *t, i); err != nil {
 		return MarshalDispatch{}, err
 	}
+	undoRecovery, err := s.reserveRecoveryStart(ctx, run, *t)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+	keepRecovery := false
+	defer func() {
+		if !keepRecovery {
+			undoRecovery()
+		}
+	}()
 	d := s.Drivers[t.Worker]
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		d = s.GovernedDrivers[t.Worker]
@@ -140,11 +172,12 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	// previous worker had returned twice; so does a task lane rework (Extreme).
 	brief = providerFailoverBrief(*t, brief)
 	fresh := (t.State == marshal.Reassigned || reworkInTaskLane(run, *t)) && (t.ResultCommit != "" || t.FailedAttemptCommit != "")
-	resolvedTask, err := s.resolveDispatchTaskBase(ctx, runID, run, *t)
+	prevTaskBase := t.BaseCommit
+	pin, err := s.admitLaunchBase(ctx, runID, run, *t, nil)
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
-	t.BaseCommit = resolvedTask.BaseCommit
+	t.BaseCommit = pin.AdmittedBaseCommit
 	if builder != nil {
 		// Admission can reassign a cooling provider. Recall only for the final
 		// admitted actor and the frozen execution base, never an earlier brief.
@@ -152,12 +185,32 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		if err != nil {
 			return MarshalDispatch{}, err
 		}
-		brief = builder(*t, bc)
+		brief, err = fitWorkerBrief(*t, bc, builder, marshalWorkerBriefBytes)
+		if err != nil {
+			return MarshalDispatch{}, err
+		}
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
+	next.Tasks[i].ExecutionTier = policy.Tier
+	if s.LaunchSupervisor != nil && !s.supervisesLaunch(d) {
+		// A driver that cannot hold its worker launches directly, unslotted.
+		t.LaunchKey = ""
+		next.Tasks[i].LaunchKey = ""
+	} else if s.LaunchSupervisor != nil {
+		// Reuse the key of a launch recovery proved never started.
+		if t.LaunchKey == "" {
+			key, err := model.NewID("marshal-launch-")
+			if err != nil {
+				return MarshalDispatch{}, err
+			}
+			t.LaunchKey = key
+		}
+		next.Tasks[i].LaunchKey = t.LaunchKey
+	}
+	t.ExecutionTier = policy.Tier
 	finishProviderFailoverDispatch(&next.Tasks[i])
 	if fresh {
 		next.Tasks[i].ResultCommit = ""
@@ -168,7 +221,52 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		next.Tier = policy.Tier
 	}
 	briefSum := sha256.Sum256([]byte(brief))
-	op := &marshal.LifecycleOperation{Kind: "launch", TaskID: taskID, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskDispatched, Data: map[string]any{"tier": string(policy.Tier), "worker": t.Worker, "brief": brief, "brief_sha256": hex.EncodeToString(briefSum[:])}}}
+	launchPin := cloneLaunchBasePin(&pin)
+	launchPin.ProcessStarted = false
+	opDir := filepath.Join(s.Worktrees, taskArtifactID(runID, *t))
+	eventData := map[string]any{
+		"tier":                 string(policy.Tier),
+		"worker":               t.Worker,
+		"brief":                brief,
+		"brief_sha256":         hex.EncodeToString(briefSum[:]),
+		"delivery_ref":         launchPin.DeliveryRef,
+		"delivery_commit":      launchPin.DeliveryCommit,
+		"approved_base_commit": launchPin.ApprovedBaseCommit,
+		"admitted_base_commit": launchPin.AdmittedBaseCommit,
+	}
+	if launchPin.IntegrationHead != "" {
+		eventData["integration_head"] = launchPin.IntegrationHead
+	}
+	if len(launchPin.MergedDependencyHeads) > 0 {
+		eventData["merged_dependency_heads"] = launchPin.MergedDependencyHeads
+	}
+	// The approved base and the attempt base stay separate; a returned
+	// attempt names the verified prior result it carries forward.
+	eventData["attempt"] = 1 + t.EvidenceAttemptBase + taskReturns(*t)
+	eventData["attempt_base"] = t.BaseCommit
+	eventData["plan_digest"] = run.ApprovalScopeDigest
+	if !fresh && t.State == marshal.Returned && t.ResultCommit != "" && t.FailedAttemptCommit == "" {
+		eventData["prior_result"] = t.ResultCommit
+		eventData["prior_result_ref"] = priorResultRef(runID, t.PlanTaskID, t.ResultCommit)
+	}
+	op := &marshal.LifecycleOperation{
+		Kind:       "launch",
+		TaskID:     taskID,
+		Dir:        opDir,
+		Before:     launchPin.DeliveryCommit,
+		After:      launchPin.AdmittedBaseCommit,
+		Target:     launchPin.DeliveryRef,
+		LaunchBase: launchPin,
+		Next:       &next,
+		Event:      events.Event{Type: events.EventTypeMarshalTaskDispatched, Data: eventData},
+	}
+	if err := s.slotFault("reserve"); err != nil {
+		return MarshalDispatch{}, err
+	}
+	// The worker slot is reserved in the same write as the launch intent.
+	if err := s.reserveWorkerSlot(&next, next.Tasks[i], rev); err != nil {
+		return MarshalDispatch{}, err
+	}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return MarshalDispatch{}, err
@@ -181,6 +279,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 			}
 		}
 	}()
+	if err := s.slotFault("reserved"); err != nil {
+		return MarshalDispatch{}, err
+	}
 
 	wt := worktree.New(s.Repository, s.Worktrees)
 	request := model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit}
@@ -204,6 +305,11 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 			err = restartTaskBranch(ctx, s.Repository, runID, t, tree.Path)
 		}
 	} else {
+		if prevTaskBase != "" && prevTaskBase != t.BaseCommit {
+			if err := advanceCleanUnusedTaskWorktree(ctx, wt, s.Repository, opDir, t.Branch, prevTaskBase, run.BaseCommit, t.BaseCommit); err != nil {
+				return MarshalDispatch{}, err
+			}
+		}
 		tree, err = wt.Prepare(ctx, request)
 	}
 	if err != nil {
@@ -224,7 +330,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		if err != nil {
 			return MarshalDispatch{}, err
 		}
-		brief += "\n" + knowledge
+		brief = appendOptionalWorkerKnowledge(brief, knowledge, marshalWorkerBriefBytes)
 		fullEvent, err := s.marshalEventWithBrief(op.Event, brief)
 		if err != nil {
 			return MarshalDispatch{}, err
@@ -254,14 +360,49 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	if err := s.boundMarshalEvent(&op.Event); err != nil {
 		return MarshalDispatch{}, err
 	}
-	handle, err := d.Launch(dispatchCtx, driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName})
-	if err != nil {
-		// A canceled or timed-out acknowledgement does not prove that launch
-		// was refused. Retain the intent so recovery cannot dispatch it again.
-		retainOperation = errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	if _, err := s.admitLaunchBase(ctx, runID, run, *t, op.LaunchBase); err != nil {
 		return MarshalDispatch{}, err
 	}
+	if op.LaunchBase != nil {
+		op.LaunchBase.ProcessStarted = true
+		pending := run
+		pending.Operation = op
+		if err := s.save(ctx, runID, pending, rev); err != nil {
+			return MarshalDispatch{}, err
+		}
+		rev++
+	}
+	req := driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName}
+	var handle *driver.Handle
+	if s.LaunchSupervisor == nil || t.LaunchKey == "" {
+		handle, err = d.Launch(dispatchCtx, req)
+	} else {
+		handle, err = s.LaunchSupervisor.Launch(dispatchCtx, t.LaunchKey, d, req, func(ctx context.Context) error {
+			_, err := s.admitLaunchBase(ctx, runID, run, *t, op.LaunchBase)
+			return err
+		})
+	}
+	if err != nil {
+		// A canceled or timed-out acknowledgement does not prove that launch
+		// was refused. Retain the intent so recovery cannot dispatch it again;
+		// so does a held launch whose worker may exist.
+		var held *driver.LaunchHeldError
+		retainOperation = errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &held) && held.ProcessMayExist)
+		keepRecovery = retainOperation
+		return MarshalDispatch{}, err
+	}
+	keepRecovery = true
 	retainOperation = true
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" && handle.Unheld() {
+		// The worker never reached a startup barrier: it runs as a direct
+		// launch, without a key or slot.
+		dropWorkerSlot(op.Next, t.LaunchKey)
+		op.Next.Tasks[i].LaunchKey = ""
+		t.LaunchKey = ""
+	}
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
+		markSlotRunning(op.Next, t.LaunchKey)
+	}
 	if err = s.afterOperationEffect(op); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
@@ -270,11 +411,23 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
+		// Adopt only the worker the receipt names, with its recorded session.
+		receipt, ok := handle.LaunchReceipt()
+		if !ok || receipt.Key != t.LaunchKey {
+			_ = d.Cancel(handle)
+			return MarshalDispatch{}, &driver.LaunchHeldError{Key: t.LaunchKey, Disposition: driver.LaunchAmbiguous, Reason: "worker handle carries no receipt for its launch key", Recovery: "inspect the worker before adopting its result", ProcessMayExist: true}
+		}
+		if err = s.LaunchSupervisor.Attached(t.LaunchKey, receipt.SessionID); err != nil {
+			_ = d.Cancel(handle)
+			return MarshalDispatch{}, err
+		}
+	}
 	if _, err = s.Charge(ctx, runID, taskID, "dispatch", marshal.Charge{Tokens: marshal.Amount{}, Money: marshal.Amount{}}); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	return MarshalDispatch{Driver: d, Handle: handle, TaskID: taskID, Started: s.clock(), Deadline: deadline}, nil
+	return MarshalDispatch{Tier: policy.Tier, Driver: d, Handle: handle, TaskID: taskID, Started: s.clock(), Deadline: deadline}, nil
 }
 
 // restartTaskBranch sets a task's branch and worktree back to its base for a
@@ -302,6 +455,71 @@ func restartTaskBranch(ctx context.Context, repository, runID string, t *marshal
 	return nil
 }
 
+// priorResultRef pins a returned attempt's result for the attempt that
+// carries it forward. It is keyed by the commit, so a retry that renumbers
+// attempts never collides with an earlier pin.
+func priorResultRef(runID, taskID, commit string) string {
+	return "refs/" + statepath.RefName + "/" + runID + "/prior/" + taskID + "/" + commit
+}
+
+// pinPriorResult keeps a returned attempt's result reachable until the run
+// is recovered or closed. An existing pin must name the same commit.
+func pinPriorResult(ctx context.Context, repository, runID, taskID, commit string) error {
+	if !marshalCommitPattern.MatchString(commit) {
+		return fmt.Errorf("pin prior result: invalid commit %q", commit)
+	}
+	ref := priorResultRef(runID, taskID, commit)
+	if saved, err := gitMarshal(ctx, repository, "rev-parse", "--verify", ref); err == nil {
+		if saved != commit {
+			return errors.New("pinned prior result identity differs; inspect it before retry")
+		}
+		return nil
+	}
+	if _, err := gitMarshal(ctx, repository, "update-ref", ref, commit, strings.Repeat("0", len(commit))); err != nil {
+		return fmt.Errorf("pin prior result: %w", err)
+	}
+	return nil
+}
+
+// admitPriorResult checks that a returned attempt resuming at its prior
+// result still starts from verified work: the result exists, is pinned, was
+// not quarantined, and descends from the approved base. A failure is a
+// stale_base refusal; nothing is reset and the pinned result stays.
+func (s *MarshalService) admitPriorResult(ctx context.Context, runID string, run marshal.Run, t marshal.Task) error {
+	if t.State != marshal.Returned || t.ResultCommit == "" || t.FailedAttemptCommit != "" || reworkInTaskLane(run, t) {
+		return nil
+	}
+	refuse := func(reason string) error {
+		return newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+			TaskID:         t.PlanTaskID,
+			ApprovedRef:    run.TargetRef,
+			ApprovedCommit: run.BaseCommit,
+			Route:          "inspect the pinned prior result, then refresh the task base or replan",
+			Reason:         fmt.Sprintf("stale_base: %s (attempt base %s, prior result %s)", reason, firstNonEmpty(t.BaseCommit, "unknown"), t.ResultCommit),
+			NextCommands:   []string{"/marshal status", "/marshal amend", "/marshal use-plan"},
+		})
+	}
+	if !marshalCommitPattern.MatchString(t.ResultCommit) {
+		return refuse("prior result is not a commit")
+	}
+	if _, err := gitMarshal(ctx, s.Repository, "cat-file", "-e", t.ResultCommit+"^{commit}"); err != nil {
+		return refuse("prior result is missing from the repository")
+	}
+	if err := pinPriorResult(ctx, s.Repository, runID, t.PlanTaskID, t.ResultCommit); err != nil {
+		return refuse(err.Error())
+	}
+	if t.QuarantinedRef != "" {
+		return refuse("prior result was quarantined")
+	}
+	if run.BaseCommit == "" {
+		return refuse("approved base is unknown")
+	}
+	if _, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", run.BaseCommit, t.ResultCommit); err != nil {
+		return refuse("prior result does not descend from the approved base")
+	}
+	return nil
+}
+
 func returnedTaskRef(runID string, t marshal.Task) string {
 	return fmt.Sprintf("refs/"+statepath.RefName+"/%s/returned/%s/attempt-%d", runID, t.PlanTaskID, t.EvidenceAttemptBase+taskReturns(t))
 }
@@ -322,6 +540,18 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
+	launchKey := ""
+	if i := taskIndex(initial, dispatch.TaskID); i >= 0 {
+		launchKey = initial.Tasks[i].LaunchKey
+	}
+	// A late, duplicate or foreign result is refused before anything is
+	// recorded, so it neither ends the current attempt nor counts as rework.
+	if err := s.matchAssignedDispatch(runID, initial, dispatch); err != nil {
+		return marshal.HandIn{}, err
+	}
+	if s.LaunchSupervisor != nil && launchKey != "" && s.LaunchSupervisor.Quarantined(launchKey) {
+		return marshal.HandIn{}, &driver.LaunchHeldError{Key: launchKey, Disposition: driver.LaunchAmbiguous, Reason: "output from an ambiguous launch is quarantined", Recovery: "inspect the worker process and its worktree, then resolve the held launch", ProcessMayExist: true}
+	}
 	op := &marshal.LifecycleOperation{Kind: "hand-in", TaskID: dispatch.TaskID, Dir: dispatch.Handle.Worktree(), Event: events.Event{Type: events.EventTypeMarshalTaskHandedIn}}
 	if _, err = s.beginOperation(ctx, runID, initial, initialRev, op); err != nil {
 		return marshal.HandIn{}, err
@@ -333,8 +563,23 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 			return handin, errors.Join(err, loadErr)
 		}
 		pending.Operation = nil
+		// A worker that exited without a result frees its slot in the same
+		// write; one whose exit is unproven keeps it.
+		released := ""
+		if j := pending.SlotIndex(launchKey); j >= 0 && s.LaunchSupervisor != nil {
+			if k := taskIndex(pending, dispatch.TaskID); k >= 0 {
+				if _, slot, stageErr := s.stageWorkerResult(pending, pending.Slots[j], pending.Tasks[k], dispatch.Handle, nil, false, op.ID); stageErr == nil {
+					pending.Slots[j] = slot
+					released = launchKey
+				}
+			}
+		}
 		if saveErr := s.save(context.WithoutCancel(ctx), runID, pending, pendingRev); saveErr != nil {
 			return handin, errors.Join(err, saveErr)
+		}
+		if released != "" {
+			// Recovery repeats an acknowledgement that fails here.
+			_ = s.ackWorkerSlot(context.WithoutCancel(ctx), runID, released)
 		}
 	}
 	if errors.Is(err, worker.ErrHoneypot) {
@@ -361,6 +606,15 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	}
 	if handled, parkErr := s.parkPausedTask(ctx, runID, dispatch, err); handled {
 		return handin, parkErr
+	}
+	exitAttempt := slotAttempt(dispatch.Handle.Request().Task)
+	if err == nil {
+		s.announceTask(ctx, runID, dispatch.TaskID, exitAttempt, TaskNoticeWorkerExited, op.ID, "The worker for task "+dispatch.TaskID+" exited; its hand-in is being checked.", "")
+	} else if !errors.Is(err, context.Canceled) {
+		s.announceTask(ctx, runID, dispatch.TaskID, exitAttempt, TaskNoticeWorkerExited, op.ID, "The worker for task "+dispatch.TaskID+" exited without a hand-in.", "")
+	}
+	if errors.Is(err, ErrStaleBase) {
+		return handin, err
 	}
 	if isGovernedHarnessMismatch(err) {
 		return marshal.HandIn{}, errors.Join(s.escalateGovernedHarnessMismatch(context.WithoutCancel(ctx), runID, dispatch.TaskID))
@@ -428,11 +682,32 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if err != nil {
 		return handin, err
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return handin, err
+	}
 	i := taskIndex(run, dispatch.TaskID)
 	if i < 0 || run.Tasks[i].State != marshal.Dispatched {
 		return handin, errors.New("task is not dispatched")
 	}
 	t := &run.Tasks[i]
+	if t.StaleProcessExitUnverified {
+		// The process was flagged as running on a stale base and has now
+		// exited. Quarantine its output, release capacity, and refuse promotion.
+		if handin.ResultCommit != "" {
+			t.ResultCommit = handin.ResultCommit
+		}
+		staleErr := newStaleBaseRefusal(marshal.EffectsPartial, LaunchBaseRefusalError{
+			TaskID:         t.PlanTaskID,
+			ApprovedRef:    run.TargetRef,
+			ApprovedCommit: run.BaseCommit,
+			Route:          "review and approve a plan on the current delivery base",
+			Reason:         "stale_base: started process exited after approved base became stale; output quarantined",
+			NextCommands:   []string{"/marshal amend", "/marshal use-plan"},
+		})
+		s.clearDispatchLive(runID, dispatch.TaskID)
+		_, _, recErr := s.reconcileStartedStaleLaunch(context.WithoutCancel(ctx), runID, run, rev, i, dispatch.Handle.Worktree(), staleErr)
+		return marshal.HandIn{}, recErr
+	}
 	if handin.Worker != t.Worker || handin.BaseCommit != t.BaseCommit || handin.Mode != t.Mode {
 		return handin, errors.New("hand-in identity differs from dispatch")
 	}
@@ -452,10 +727,31 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	// Code that disagrees with the accepted architecture is returned with
 	// the exact places, so the worker fixes it or the Marshal revises the
 	// architecture for the owner.
-	validationErr = errors.Join(validationErr, s.architectureHandIn(ctx, *t, handin))
+	conformance, confErr := s.architectureHandInForRun(ctx, run, *t, handin)
+	validationErr = errors.Join(validationErr, confErr)
+	handin.ConformancePolicy = conformance.Policy
+	handin.ConformanceFindings = append([]string(nil), conformance.Findings...)
+	handin.ConformanceOmitted = conformance.Omitted
 	attempt := 1 + t.EvidenceAttemptBase
 	attempt += taskReturns(*t)
+	// Stage the proved exit with the result; the completion below commits
+	// the result and frees the slot in one write.
+	var stagedSlots []marshal.WorkerSlot
+	if j := run.SlotIndex(launchKey); j >= 0 && s.LaunchSupervisor != nil {
+		staged, released, stageErr := s.stageWorkerResult(run, run.Slots[j], *t, dispatch.Handle, &handin, validationErr == nil, op.ID)
+		if stageErr != nil {
+			return handin, s.holdWorkerSlot(ctx, runID, launchKey, op.ID, stageErr)
+		}
+		if err = s.slotFault("stage"); err != nil {
+			return handin, err
+		}
+		stagedSlots = append([]marshal.WorkerSlot(nil), run.Slots...)
+		stagedSlots[j] = staged
+		run.Slots = append([]marshal.WorkerSlot(nil), run.Slots...)
+		run.Slots[j] = released
+	}
 	t.ResultCommit = handin.ResultCommit
+	t.LaunchKey = ""
 	if validationErr == nil {
 		t.State = marshal.HandedIn
 		run.State = marshal.Reviewing
@@ -465,12 +761,24 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	op.Attempt = attempt
 	op.Next = &run
 	op.Event.Data["result_commit"] = handin.ResultCommit
+	if conformance.Policy != "" {
+		op.Event.Data["conformance_policy"] = string(conformance.Policy)
+	}
+	if len(conformance.Findings) > 0 {
+		op.Event.Data["conformance_findings"] = conformance.Findings
+	}
+	if conformance.Omitted {
+		op.Event.Data["conformance_omitted"] = true
+	}
 	// The hand-in happened now, when the worker delivered it, not when the
 	// wait for it began at dispatch.
 	op.Event.At = s.clock()
 	// Persist the observed hand-in as the receipt before recording completion.
 	pending := initial
 	pending.Operation = op
+	if stagedSlots != nil {
+		pending.Slots = stagedSlots
+	}
 	if err = s.save(ctx, runID, pending, rev); err != nil {
 		return handin, err
 	}
@@ -478,8 +786,23 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if err = s.afterOperationEffect(op); err != nil {
 		return handin, err
 	}
+	if err = s.slotFault("apply"); err != nil {
+		return handin, err
+	}
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return handin, err
+	}
+	if validationErr == nil {
+		s.announceTask(ctx, runID, dispatch.TaskID, attempt, TaskNoticeHandedIn, op.ID, "Task "+dispatch.TaskID+" was handed in and waits for review; it is not complete yet.", "")
+	}
+	if s.LaunchSupervisor != nil && launchKey != "" {
+		if stagedSlots != nil {
+			// The release is committed; recovery repeats a failed notice.
+			_ = s.ackWorkerSlot(context.WithoutCancel(ctx), runID, launchKey)
+		} else {
+			// The result is adopted; a leftover record only costs disk.
+			_ = s.LaunchSupervisor.Finish(launchKey)
+		}
 	}
 	elapsed := s.clock().Sub(dispatch.Started)
 	if elapsed < 0 {
@@ -533,9 +856,41 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	return handin, nil
 }
 
+// ErrUnassignedHandIn refuses a result that is not from the task's current
+// dispatch: another run, task, worker or attempt, or a launch the runtime
+// did not record for it.
+var ErrUnassignedHandIn = errors.New("hand-in does not match the assigned dispatch")
+
+// matchAssignedDispatch binds a collection to the task's current dispatch
+// by what the runtime observed at launch: the handle's own request and, for
+// a supervised launch, its receipt. Nothing the worker reports is trusted.
+func (s *MarshalService) matchAssignedDispatch(runID string, run marshal.Run, dispatch MarshalDispatch) error {
+	i := taskIndex(run, dispatch.TaskID)
+	if i < 0 {
+		return fmt.Errorf("%w: task %s is not in run %s", ErrUnassignedHandIn, dispatch.TaskID, runID)
+	}
+	t := run.Tasks[i]
+	if t.State != marshal.Dispatched {
+		return fmt.Errorf("%w: task %s is %s, not dispatched", ErrUnassignedHandIn, t.PlanTaskID, t.State)
+	}
+	req := dispatch.Handle.Request()
+	if req.RunID != runID || req.Task.PlanTaskID != t.PlanTaskID || req.Task.Worker != t.Worker || req.Task.BaseCommit != t.BaseCommit || slotAttempt(req.Task) != slotAttempt(t) {
+		return fmt.Errorf("%w: task %s attempt %d", ErrUnassignedHandIn, t.PlanTaskID, slotAttempt(t))
+	}
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
+		if receipt, ok := dispatch.Handle.LaunchReceipt(); !ok || receipt.Key != t.LaunchKey {
+			return fmt.Errorf("%w: task %s launch %s", ErrUnassignedHandIn, t.PlanTaskID, t.LaunchKey)
+		}
+	}
+	return nil
+}
+
 func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charge marshal.Charge) (marshal.Verdict, error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return "", err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return "", err
 	}
 	if err = unfinishedMarshalOperation(run); err != nil {
@@ -569,6 +924,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
+	marshalReasons := append([]string(nil), proposal.Reasons...)
 	if err := checkArchitectureReview(&proposal, architectureRequired); err != nil {
 		return "", err
 	}
@@ -587,10 +943,28 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
-	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: true, VerifierRequired: true}
+	reviewPolicy := run.EffectiveReviewPolicy()
+	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: reviewPolicy.CrossReview != marshal.CrossReviewOff, ReviewPolicy: reviewPolicy}
 	crossReviewerProvider := ""
 	crossReviewAccepted := false
-	crossReviewData := map[string]any{}
+	crossReviewData := map[string]any{
+		"cross_review_policy":  string(reviewPolicy.CrossReview),
+		"cross_review_omitted": !policy.CrossReviewRequired,
+	}
+	proposal.CrossReviewPolicy = reviewPolicy.CrossReview
+	proposal.CrossReviewOmitted = !policy.CrossReviewRequired
+	proposal.ConformancePolicy = h.ConformancePolicy
+	proposal.ConformanceFindings = append([]string(nil), h.ConformanceFindings...)
+	proposal.ConformanceOmitted = h.ConformanceOmitted
+	if h.ConformancePolicy != "" {
+		crossReviewData["conformance_policy"] = string(h.ConformancePolicy)
+	}
+	if len(h.ConformanceFindings) > 0 {
+		crossReviewData["conformance_findings"] = h.ConformanceFindings
+	}
+	if h.ConformanceOmitted {
+		crossReviewData["conformance_omitted"] = true
+	}
 	if policy.CrossReviewRequired {
 		if s.CrossReview == nil {
 			return "", s.pauseUnavailableCrossReviewer(ctx, runID, run, rev, errors.New("independent cross-review is unavailable"))
@@ -644,7 +1018,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 		userApproval, err = s.ApprovalActor(ctx, runID, taskAcceptancePurpose(run, *t, attempt, h))
 		if err != nil {
-			return "", err
+			return "", awaitingApproval{err}
 		}
 	}
 	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
@@ -686,6 +1060,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		eventData[key] = value
 	}
 	if result != marshal.VerdictAccept {
+		if proposal.Independent != nil && (proposal.Verdict == marshal.VerdictAccept) != (proposal.Independent.Verdict == marshal.VerdictAccept) {
+			t.ReviewDisagreement = noteReviewDisagreement(t.ReviewDisagreement, *t, attempt, proposal, marshalReasons, failing)
+		}
 		return s.finishMarshalReturn(ctx, runID, run, rev, i, proposal, eventData)
 	}
 	if _, err = s.Store.SetMarshalReview(ctx, runID, taskID, attempt, proposal); err != nil {
@@ -695,7 +1072,11 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return "", err
 	}
-	return result, s.record(ctx, runID, taskID, events.EventTypeMarshalTaskAccepted, eventData)
+	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskAccepted, eventData); err != nil {
+		return result, err
+	}
+	s.announceTask(ctx, runID, taskID, attempt, TaskNoticeReviewAccepted, fmt.Sprint(rev), "Task "+taskID+" passed review and waits for merge; it is not complete yet.", "")
+	return result, nil
 }
 
 // acceptanceRefusal names why the gate refused a hand-in the Marshal
@@ -713,6 +1094,99 @@ func acceptanceRefusal(reason constitution.ReasonCode, independent *marshal.Inde
 	return "acceptance refused: " + string(reason)
 }
 
+// noteReviewDisagreement records a hand-in on which exactly one of the
+// Marshal and the independent reviewer accepted. The key groups materially
+// equivalent conflicts by task, reviewer roles, verdict direction and failing
+// criteria and normalized findings from the rejecting reviewer.
+func noteReviewDisagreement(prev *marshal.ReviewDisagreement, t marshal.Task, attempt int, review marshal.Review, marshalReasons, failing []string) *marshal.ReviewDisagreement {
+	direction := "marshal-accepts"
+	if review.Verdict != marshal.VerdictAccept {
+		direction = "independent-accepts"
+	}
+	criteria := append([]string(nil), failing...)
+	sort.Strings(criteria)
+	reasons := marshalReasons
+	mismatches := review.ArchitectureMismatches
+	if review.Verdict == marshal.VerdictAccept {
+		reasons = review.Independent.Reasons
+		mismatches = review.Independent.ArchitectureMismatches
+	}
+	findings := make(map[string]bool)
+	for _, reason := range append(append([]string(nil), reasons...), mismatches...) {
+		if finding := strings.ToLower(strings.Join(strings.Fields(reason), " ")); finding != "" {
+			findings[finding] = true
+		}
+	}
+	identities := make([]string, 0, len(findings))
+	for finding := range findings {
+		identities = append(identities, finding)
+	}
+	sort.Strings(identities)
+	identity, _ := json.Marshal([]any{t.PlanTaskID, "marshal", "independent", direction, criteria, identities})
+	sum := sha256.Sum256(identity)
+	d := &marshal.ReviewDisagreement{
+		Key:                 hex.EncodeToString(sum[:]),
+		Count:               1,
+		Attempt:             attempt,
+		MarshalReviewer:     review.Reviewer,
+		MarshalVerdict:      review.Verdict,
+		MarshalReasons:      marshalReasons,
+		IndependentReviewer: firstNonEmpty(review.Independent.Provider, review.Independent.Reviewer),
+		IndependentVerdict:  review.Independent.Verdict,
+		IndependentReasons:  append([]string(nil), review.Independent.Reasons...),
+		FailingCriteria:     criteria,
+	}
+	if prev != nil && prev.Key == d.Key {
+		d.Count = prev.Count
+		if prev.Attempt < attempt {
+			d.Count++
+		}
+	}
+	return d
+}
+
+func reviewDisagreementSummary(d marshal.ReviewDisagreement) string {
+	return fmt.Sprintf("the reviewers disagree. Marshal (%s): %s %s. Independent reviewer (%s): %s %s",
+		d.MarshalReviewer, d.MarshalVerdict, strings.Join(d.MarshalReasons, "; "),
+		d.IndependentReviewer, d.IndependentVerdict, strings.Join(d.IndependentReasons, "; "))
+}
+
+func reviewDisagreementData(t marshal.Task, d marshal.ReviewDisagreement) map[string]any {
+	next := "rework " + t.PlanTaskID + " against both reviewers' reasons; to decide yourself, /marshal cancel " + t.PlanTaskID + " or /marshal amend"
+	if d.Count >= 2 {
+		next = reviewDisagreementResolution(t)
+	}
+	return map[string]any{
+		"key":                  d.Key,
+		"count":                d.Count,
+		"attempt":              d.Attempt,
+		"marshal_reviewer":     d.MarshalReviewer,
+		"marshal_verdict":      string(d.MarshalVerdict),
+		"marshal_reasons":      d.MarshalReasons,
+		"independent_reviewer": d.IndependentReviewer,
+		"independent_verdict":  string(d.IndependentVerdict),
+		"independent_reasons":  d.IndependentReasons,
+		"failing_criteria":     d.FailingCriteria,
+		"next_action":          next,
+	}
+}
+
+func reviewDisagreementResolution(t marshal.Task) string {
+	return "Read both verdicts, then decide: give " + t.PlanTaskID + " a targeted attempt (/marshal retry " + t.PlanTaskID + ", then /marshal resume), amend the plan (/marshal amend), or cancel the task (/marshal cancel " + t.PlanTaskID + "). Neither verdict replaces a failing one; the Marshal does not retry it on its own."
+}
+
+// reviewDisagreementPause is the one durable escalation for a repeated
+// reviewer conflict. It carries both verdicts and the owner's next action.
+func reviewDisagreementPause(t marshal.Task, d marshal.ReviewDisagreement) marshal.Pause {
+	return marshal.Pause{
+		Reason:      "reviewers disagreed again on " + t.PlanTaskID + ": " + reviewDisagreementSummary(d),
+		Resolutions: []string{reviewDisagreementResolution(t)},
+		Code:        marshal.CodeReviewDisagreement,
+		Action:      marshal.PauseRetryTask,
+		TaskID:      t.PlanTaskID,
+	}
+}
+
 // finishMarshalReturn records the attempt's reasons and applies the rework
 // policy for validation, review, budget and merge failures. Private governed
 // Process05 bindings pause for a fresh approved plan instead of replaying the
@@ -724,7 +1198,29 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	if len(review.Reasons) == 0 {
 		review.Reasons = []string{"the review did not accept the hand-in"}
 	}
+	if t.ResultCommit != "" {
+		// The returned result stays pinned for the attempt that carries it
+		// forward, and for recovery if that attempt is refused.
+		if err := pinPriorResult(ctx, s.Repository, runID, t.PlanTaskID, t.ResultCommit); err != nil {
+			return "", err
+		}
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
 	result := applyMarshalReturn(&run, t)
+	if d := t.ReviewDisagreement; d != nil && d.Attempt == attempt {
+		data["review_disagreement"] = reviewDisagreementData(*t, *d)
+		if d.Count >= 2 && t.State != marshal.Escalated {
+			// The same conflict again: stop automatic rework. The pause names
+			// the owner's next action; neither verdict is replaced.
+			t.State = marshal.Escalated
+			t.EscalationReason = "the reviewers disagreed again on the same finding"
+			t.EscalationCode = marshal.CodeReviewDisagreement
+			pauseMarshal(&run, reviewDisagreementPause(*t, *d))
+			result = marshal.VerdictEscalate
+		}
+	}
 	pauseReturnedProcess05Task(&run, *t)
 	if review.Verdict == "" {
 		review.Verdict = marshal.VerdictReturn
@@ -742,9 +1238,6 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	} else if result == marshal.VerdictEscalate {
 		kind = events.EventTypeMarshalEscalated
 	}
-	if data == nil {
-		data = map[string]any{}
-	}
 	data["reason"] = strings.Join(review.Reasons, "; ")
 	data["return_attempt"] = fmt.Sprint(attempt)
 	reasons := append([]string(nil), review.Reasons...)
@@ -758,6 +1251,11 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	if err := s.save(ctx, runID, run, revision); err != nil {
 		return "", err
 	}
+	notice := "Task " + t.PlanTaskID + " was returned: " + strings.Join(review.Reasons, "; ")
+	if d := t.ReviewDisagreement; d != nil && d.Attempt == attempt {
+		notice = "Task " + t.PlanTaskID + " was returned: " + reviewDisagreementSummary(*d)
+	}
+	s.announceTask(ctx, runID, t.PlanTaskID, attempt, TaskNoticeReviewReturned, fmt.Sprint(revision), notice, "")
 	_, err := s.Charge(ctx, runID, t.PlanTaskID, "return", zeroMarshalCharge())
 	return result, err
 }
@@ -1082,6 +1580,10 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	if marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
 		return errors.New("cannot reassign to the same harness")
 	}
+	policy := s.projectSettingsSnapshot(ctx, run.Settings)
+	if !policy.ProviderEnabled(worker) {
+		return fmt.Errorf("provider %s is disabled by project settings", worker)
+	}
 	previous := t.Worker
 	providerSwitch, err := s.governedProviderSwitch(ctx, run, *t, worker, operatorReason != "")
 	if err != nil {
@@ -1106,6 +1608,9 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	retireWorkerReturns(t, worker)
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
+	}
+	if run.State == marshal.Drafting {
+		run.DesignReview = nil
 	}
 	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
@@ -1141,17 +1646,32 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 		return errors.New("task not found")
 	}
 	t := &run.Tasks[i]
+	if handled, retryErr := s.retryExpiredApprovalWait(ctx, runID, run, rev, i); handled {
+		return retryErr
+	}
 	if t.State != marshal.Escalated && t.State != marshal.Returned {
 		if t.State == marshal.HandedIn {
 			return fmt.Errorf("task is %s; use /marshal return %s <reason> to request rework", t.State, taskID)
 		}
 		return fmt.Errorf("task is %s; /marshal retry applies to returned or escalated tasks; use /marshal resume to continue", t.State)
 	}
+	// Check retained work before changing counters or the retry state.
+	if t.ResultCommit != "" && t.FailedAttemptCommit == "" && !reworkInTaskLane(run, *t) {
+		if t.QuarantinedRef != "" || !marshalCommitPattern.MatchString(t.ResultCommit) {
+			return ErrStaleBase
+		}
+		if _, err := gitMarshal(ctx, s.Repository, "cat-file", "-e", t.ResultCommit+"^{commit}"); err != nil {
+			return ErrStaleBase
+		}
+		if _, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", run.BaseCommit, t.ResultCommit); err != nil {
+			return ErrStaleBase
+		}
+	}
 	wasEscalated := t.State == marshal.Escalated
 	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
 	}
-	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
+	hasOtherWorker := s.otherWorkerFor(ctx, run.Settings, t.Worker, t.Mode) != ""
 	// Zero means no bound (Extreme); Community bounds fresh-session retries.
 	maxFresh := buildMaxFreshSessionRetries()
 	if !hasOtherWorker {
@@ -1184,6 +1704,9 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	resetInfraRetries(t)
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
+	}
+	if run.State == marshal.Drafting {
+		run.DesignReview = nil
 	}
 	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
@@ -1241,10 +1764,8 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if i < 0 || run.Tasks[i].State != marshal.Accepted {
 		return errors.New("task is not accepted")
 	}
-	for j := 0; j < i; j++ {
-		if run.Tasks[j].State != marshal.Merged {
-			return errors.New("merge order violation")
-		}
+	if reason := mergeBlocked(run, i); reason != "" {
+		return errors.New(reason)
 	}
 	accepted := run.Tasks[i].ResultCommit
 	if err := s.checkHoneypotAdmission(ctx, run.Tasks[i], accepted); err != nil {
@@ -1264,12 +1785,43 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	}
 	branch := integrationBranch(runID, run)
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
-	before := run.BaseCommit
-	if i > 0 {
-		before, err = gitMarshal(ctx, dir, "rev-parse", "HEAD")
-		if err != nil {
-			return err
+	anyMerged := false
+	for _, t := range run.Tasks {
+		if t.State == marshal.Merged {
+			anyMerged = true
 		}
+	}
+	before := run.BaseCommit
+	existingIntegration := false
+	if head, exists, obsErr := s.observeIntegrationHead(ctx, runID, run); obsErr != nil {
+		return obsErr
+	} else if exists && head != "" {
+		if _, ancErr := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", run.BaseCommit, head); ancErr != nil {
+			return errors.New("private integration head is not a descendant of approved base")
+		}
+		before = head
+		existingIntegration = true
+	} else if anyMerged {
+		return errors.New("private integration head is missing")
+	}
+	// A merge driver named in .gitattributes runs a configured command during
+	// the merge. A hand-in that adds one is returned instead of merged, so a
+	// worker cannot choose code for the runtime to run.
+	if sets, derr := marshalSetsMergeDriverFrom(ctx, s.Repository, before, accepted); derr != nil {
+		return derr
+	} else if sets {
+		return s.returnUnmergeable(ctx, runID, run, rev, i, before, "merge refused: the hand-in declares a merge driver in .gitattributes", nil)
+	}
+	intent, refusal, err := s.stageMergeCandidate(ctx, runID, run, rev, i, before, dir)
+	if err != nil {
+		return err
+	}
+	if refusal != "" {
+		data := map[string]any{}
+		if strings.HasPrefix(refusal, ErrStaleBase.Error()) {
+			data["merge_refusal"] = ErrStaleBase.Error()
+		}
+		return s.returnUnmergeable(ctx, runID, run, rev, i, before, refusal, data)
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
@@ -1284,7 +1836,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if all {
 		next.State = marshal.Verifying
 	}
-	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged}}
+	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged, Data: map[string]any{"candidate": intent.Candidate, "candidate_tree": intent.CandidateTree, "expected_head": intent.ExpectedHead, "revalidated": intent.Revalidated}}, Merge: intent}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return err
@@ -1298,47 +1850,36 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 		}
 	}()
 
-	if i == 0 {
-		if _, err = worktree.New(s.Repository, s.Worktrees).Prepare(ctx, model.WorktreeRequest{TaskID: integrationTaskID(runID, run), Branch: branch, BaseCommit: run.BaseCommit}); err != nil {
+	if !anyMerged {
+		wm := worktree.New(s.Repository, s.Worktrees)
+		if existingIntegration {
+			if _, err = wm.Resume(ctx, model.WorktreeRequest{TaskID: integrationTaskID(runID, run), Branch: branch, BaseCommit: before}); err != nil {
+				return err
+			}
+		} else if _, err = wm.Prepare(ctx, model.WorktreeRequest{TaskID: integrationTaskID(runID, run), Branch: branch, BaseCommit: run.BaseCommit}); err != nil {
 			return err
 		}
 	}
-	// A merge driver named in .gitattributes runs a configured command during
-	// the merge. A hand-in that adds one is returned instead of merged, so a
-	// worker cannot choose code for the runtime to run.
-	if sets, derr := marshalSetsMergeDriver(ctx, dir, accepted); derr != nil {
-		return derr
-	} else if sets {
-		err = errors.New("the hand-in declares a merge driver in .gitattributes")
-	} else {
-		_, err = gitMarshal(ctx, dir, "merge", "--no-ff", "-m", "marshal: merge "+taskID, accepted)
-	}
-	if err != nil {
-		_, _ = gitMarshal(ctx, dir, "merge", "--abort")
-		head, headErr := gitMarshal(ctx, dir, "rev-parse", "HEAD")
-		if headErr != nil {
-			return headErr
-		}
-		run.Tasks[i].BaseCommit = head
-		run.State = marshal.Reviewing
-		attempt := 1 + run.Tasks[i].EvidenceAttemptBase
-		attempt += taskReturns(run.Tasks[i])
-		stored, reviewErr := s.Store.GetMarshalReview(ctx, runID, taskID, attempt)
-		if reviewErr != nil {
-			return reviewErr
-		}
-		review := stored.Value
-		review.Reasons = append(review.Reasons, "merge refused: "+err.Error())
-		_, err = s.finishMarshalReturn(ctx, runID, run, rev, i, review, map[string]any{"base_commit": head})
+	// The checkout must be the clean, run-owned integration source at the
+	// expected head before it moves; otherwise nothing was published.
+	if err = s.checkIntegrationCheckout(ctx, intent, op.Target, before, ""); err != nil {
 		return err
 	}
+	// From here the checkout may have moved: the journal is held for
+	// recovery rather than abandoned.
 	effectCompleted = true
+	if err = s.publishMergeCandidate(ctx, intent, op.Target); err != nil {
+		return err
+	}
 	// The merge commit is made under the accepted architecture.
 	s.recordArchitectureCommit(ctx, dir, "", "merged", taskID)
 	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
-	return s.completeOperation(ctx, runID, rev, op)
+	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge marshal.Charge) (decision verification.Decision, retErr error) {
@@ -1351,6 +1892,9 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	}()
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return verification.Blocked, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return verification.Blocked, err
 	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
@@ -1370,6 +1914,11 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	}
 	if run.State != marshal.Verifying {
 		return verification.Blocked, errors.New("run is not ready for verification")
+	}
+	// An approved opt-out of the final model check is proven by the approved
+	// checks alone; the verifier's availability is never consulted.
+	if checksOnlyDelivery(run) {
+		return s.verifyChecksOnly(ctx, runID, run, rev, charge)
 	}
 	if s.Verify == nil {
 		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable"))
@@ -1461,6 +2010,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err != nil {
 		return closeVerificationStage(err)
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return closeVerificationStage(err)
+	}
 	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
 	if err != nil {
 		return closeVerificationStage(err)
@@ -1478,11 +2030,14 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
 		return err
 	}
-	if s.Verify == nil {
-		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
-	}
-	if err = s.requireIndependentVerifier(ctx, run); err != nil {
-		return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	checksOnly := checksOnlyDelivery(run)
+	if !checksOnly {
+		if s.Verify == nil {
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, errors.New("verifier is unavailable")))
+		}
+		if err = s.requireIndependentVerifier(ctx, run); err != nil {
+			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+		}
 	}
 	project, err := s.Store.Project(ctx)
 	if err != nil {
@@ -1512,18 +2067,39 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 			return closeVerificationStage(err)
 		}
 	}
-	session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
-	if err != nil {
-		// Say why: a bare "not verified" hid a context or budget refusal
-		// behind a session that had in fact verified.
-		return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
-	}
-	if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
-		return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
-	}
-	if s.requiredCanonicalVerification == nil {
-		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
-			return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	var receipt *verification.ChecksOnlyReceipt
+	if checksOnly {
+		authority := "owner-close"
+		if run.ValidCloseAuthorization() {
+			authority = "standing-close-authorization"
+		}
+		observed, err := s.runChecksOnlyReceipt(ctx, runID, run, head, authority)
+		if err != nil {
+			return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", err))
+		}
+		if !observed.Passed() {
+			return &closeVerificationError{err: errors.New("integrated result is not verified"), result: verification.VerificationFailed, session: checksOnlySession(observed)}
+		}
+		if s.requiredChecksOnlyClose != nil {
+			if err = s.requiredChecksOnlyClose(ctx, runID, run, head, observed); err != nil {
+				return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", err))
+			}
+		}
+		receipt = &observed
+	} else {
+		session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
+		if err != nil {
+			// Say why: a bare "not verified" hid a context or budget refusal
+			// behind a session that had in fact verified.
+			return closeVerificationStage(fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err)))
+		}
+		if result := verification.Evaluate(session, binding, s.clock()); result != verification.VerifiedComplete {
+			return &closeVerificationError{err: errors.New("integrated result is not verified"), result: result, session: session}
+		}
+		if s.requiredCanonicalVerification == nil {
+			if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
+				return closeVerificationStage(s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+			}
 		}
 	}
 	// What moves the target must be exactly the commit that was verified.
@@ -1556,6 +2132,17 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	next := run
 	next.State = marshal.Closed
 	op := &marshal.LifecycleOperation{Kind: "close", Before: old, After: head, Target: target, Next: &next, Event: events.Event{Type: events.EventTypeMarshalRunClosed, Data: map[string]any{"target": project.DefaultBranch, "commit": head, "checkpoint": checkpoint, "previous_commit": old}}}
+	if receipt != nil {
+		// The close, its checkpoint, event and next state all name the exact
+		// receipt it was authorized on.
+		next.ChecksOnly = receipt
+		next.DeliveryKind = verification.DeliveredChecksOnly
+		op.DeliveryKind, op.ReceiptID, op.ReceiptDigest = verification.DeliveredChecksOnly, receipt.ID, receipt.Digest
+		op.Event.Data["delivery_kind"] = verification.DeliveredChecksOnly
+		op.Event.Data["checks_only_receipt_id"] = receipt.ID
+		op.Event.Data["checks_only_receipt_digest"] = receipt.Digest
+		op.Event.Data["omitted_roles"] = strings.Join(receipt.OmittedRoles, ",")
+	}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return err
@@ -1624,6 +2211,11 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 		if err != nil {
 			return err
 		}
+		if receipt != nil {
+			if err = s.ensureChecksOnlyCloseFence(ctx, runID, op); err != nil {
+				return err
+			}
+		}
 		if checkedOut != "" {
 			// Git's fast-forward merge updates the branch, index and files
 			// together and refuses divergence and worktree conflicts; hooks
@@ -1663,6 +2255,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	// The run's own merged worktrees and branches are done with; a failure
 	// keeps them and never undoes the close.
 	_ = s.cleanupDeliveredRun(ctx, runID, next, target)
+	if s.runtime != nil {
+		_, _ = s.runtime.CloseRunApprovals(ctx, runID, next, "marshal run closed", s.clock())
+	}
 	return nil
 }
 
@@ -1685,6 +2280,9 @@ func (s *MarshalService) Amend(ctx context.Context, runID, reason string) (marsh
 func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string) (MarshalDraft, bool, error) {
 	run, _, err := s.load(ctx, runID)
 	if err != nil {
+		return MarshalDraft{}, false, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return MarshalDraft{}, false, err
 	}
 	if run.State == marshal.Closed {
@@ -1714,10 +2312,15 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 		return MarshalDraft{}, false, err
 	}
 	_, err = p.AmendScoped(p.Version, reason, d.Plan)
-	return d, err != nil, nil
+	policyChanged := d.ReviewPolicy != nil && d.ReviewPolicy.Effective() != run.EffectiveReviewPolicy()
+	if d.ReviewPolicy != nil {
+		if policyErr := d.ReviewPolicy.Validate(); policyErr != nil {
+			return MarshalDraft{}, false, policyErr
+		}
+	}
+	return d, err != nil || policyChanged, nil
 }
 
-// ApplyAmendDraft rechecks the proposal against the current plan revision.
 func (s *MarshalService) ApplyAmendDraft(ctx context.Context, runID, reason string, d MarshalDraft) (marshal.Run, error) {
 	return s.ApplyAmendDraftBound(ctx, runID, reason, d, 0)
 }
@@ -1726,6 +2329,14 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return run, err
+	}
+	if d.ReviewPolicy != nil {
+		if err := d.ReviewPolicy.Validate(); err != nil {
+			return run, err
+		}
 	}
 	if err = unfinishedMarshalOperation(run); err != nil {
 		return run, err
@@ -1755,8 +2366,31 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if err = validateAmendRoutes(run, p, d); err != nil {
 		return run, err
 	}
+	beforeDraftDigest := runDesignDraftDigest(run)
 	amended, err := p.AmendScoped(p.Version, reason, d.Plan)
-	major := err != nil
+	policyChanged := d.ReviewPolicy != nil && d.ReviewPolicy.Effective() != run.EffectiveReviewPolicy()
+	requirementsChanged := d.Pack != nil && packDigest(d.Pack) != packDigest(run.Pack)
+	checksChanged := amendmentChangesChecks(run.Tasks, d.Tasks)
+	headChanged := false
+	if currentHead, headErr := gitMarshal(ctx, s.Repository, "rev-parse", "HEAD"); headErr == nil && run.BaseCommit != "" && strings.TrimSpace(currentHead) != run.BaseCommit {
+		headChanged = true
+	}
+	major := err != nil || policyChanged
+	if policyChanged {
+		run.Settings.ReviewPolicy = d.ReviewPolicy.Effective()
+		run.ReviewPolicy = marshal.NewReviewPolicySnapshot(run.Settings.ReviewPolicy, d.Plan.Graph.Digest, "", time.Time{})
+	}
+	if d.Pack != nil {
+		run.Pack = d.Pack
+	}
+	// Any amendment invalidates a checks-only receipt; a close takes a fresh one.
+	run.ChecksOnly = nil
+	if major || policyChanged || requirementsChanged || checksChanged || headChanged {
+		run.DesignReview = nil
+		if run.CloseAuthorization != nil {
+			run.CloseAuthorization.Voided = true
+		}
+	}
 	if major {
 		amended, err = p.Revise(p.Version, reason, s.clock())
 		if err != nil {
@@ -1867,6 +2501,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		if run.CloseAuthorization != nil && run.CloseAuthorization.ApprovalScopeDigest != run.ApprovalScopeDigest {
 			run.CloseAuthorization.Voided = true
 		}
+	}
+	if runDesignDraftDigest(run) != beforeDraftDigest {
+		run.DesignReview = nil
 	}
 	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
 	if err != nil {
@@ -2019,15 +2656,77 @@ func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, 
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, data)
 }
 
+func amendmentChangesChecks(previous, next []marshal.Task) bool {
+	if len(previous) != len(next) {
+		return true
+	}
+	for _, nt := range next {
+		idx := taskIndex(marshal.Run{Tasks: previous}, nt.PlanTaskID)
+		if idx < 0 {
+			return true
+		}
+		ot := previous[idx]
+		if len(ot.Checks) != len(nt.Checks) {
+			return true
+		}
+		for i := range ot.Checks {
+			if ot.Checks[i].Command != nt.Checks[i].Command || !slices.Equal(ot.Checks[i].Criteria, nt.Checks[i].Criteria) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Resume takes a paused or interrupted run on again. A resume that does not
+// go through keeps the run's pause and records a run notice naming why, so
+// the Marshal hears of it even when its chat is closed.
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
+	run, err := s.resume(ctx, runID)
+	if err != nil {
+		s.noteResumeFailure(ctx, runID, err)
+	}
+	return run, err
+}
+
+func (s *MarshalService) resume(ctx context.Context, runID string) (marshal.Run, error) {
+	if id := s.ActiveExecution(runID); id != "" {
+		run, err := s.Snapshot(ctx, runID)
+		if err == nil {
+			run.ExecutionID = id
+		}
+		return run, err
+	}
+	w := s.runWriter(runID)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if id := w.activeID(); id != "" {
+		run, err := s.Snapshot(ctx, runID)
+		if err == nil {
+			run.ExecutionID = id
+		}
+		return run, err
+	}
+	// The person's resume may apply a result staged while the run was paused.
+	ctx = withAuthorizedResume(ctx)
+	if err := s.drainRunCommands(ctx, runID); err != nil {
+		return marshal.Run{}, err
+	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return run, err
+	}
+	if err := run.ValidateReviewPolicy(); err != nil {
 		return run, err
 	}
 	if err := s.executionAdmission(ctx, runID, "", run); err != nil {
 		return run, err
 	}
 	run, rev, err = s.recoverOperation(ctx, runID, run, rev)
+	if err != nil {
+		return run, err
+	}
+	run, rev, err = s.reconcileWorkerSlots(ctx, runID, run, rev, false)
 	if err != nil {
 		return run, err
 	}
@@ -2053,7 +2752,50 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 		}
 		return run, nil
 	}
+	// A retained checks-only receipt that no longer binds the current
+	// approval, revisions or policy is dropped; a close takes a fresh one.
+	if run.ChecksOnly != nil && run.State != marshal.Closed && !checksOnlyReceiptCurrent(run, *run.ChecksOnly) {
+		run.ChecksOnly = nil
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return run, err
+		}
+		rev++
+	}
 	if run.State == marshal.AwaitingUser {
+		if run.Pause != nil && run.Pause.Code == marshal.CodeStaleBase {
+			for i := range run.Tasks {
+				if run.Tasks[i].StaleProcessExitUnverified || run.Tasks[i].State == marshal.Dispatched {
+					_, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[i], launchBasePinFromOp(run.Operation, run.Tasks[i].PlanTaskID))
+					if baseErr == nil {
+						baseErr = newStaleBaseRefusal(marshal.EffectsUnknown, LaunchBaseRefusalError{
+							TaskID:         run.Tasks[i].PlanTaskID,
+							ApprovedRef:    run.TargetRef,
+							ApprovedCommit: run.BaseCommit,
+							Route:          "review and approve a plan on the current delivery base",
+							Reason:         run.Pause.Reason,
+							NextCommands:   staleBaseResolutions(nil),
+						})
+					}
+					run, rev, err = s.reconcileStartedStaleLaunch(ctx, runID, run, rev, i, "", baseErr)
+					return run, err
+				}
+			}
+			if run.Pause.TaskID != "" {
+				if idx := taskIndex(run, run.Pause.TaskID); idx >= 0 {
+					if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[idx], launchBasePinFromOp(run.Operation, run.Pause.TaskID)); baseErr != nil {
+						return run, baseErr
+					}
+				}
+			}
+			return run, newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+				TaskID:         run.Pause.TaskID,
+				ApprovedRef:    run.TargetRef,
+				ApprovedCommit: run.BaseCommit,
+				Route:          "review and approve a plan on the current delivery base",
+				Reason:         run.Pause.Reason,
+				NextCommands:   run.Pause.Resolutions,
+			})
+		}
 		if run.Pause != nil && run.Pause.ResumeState == "" && run.Pause.Code == marshal.CodeRunStalled && !hasEscalatedTask(run) {
 			// A stall with no escalated task has nothing else to resolve:
 			// the person's resume takes the run on again. A run that still
@@ -2071,6 +2813,7 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			}
 		}
 		run.State = run.Pause.ResumeState
+		run.CommandFence = ""
 		run.Pause = nil
 		if err = s.save(ctx, runID, run, rev); err != nil {
 			return run, err
@@ -2087,8 +2830,37 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			}
 		}
 		// A parallel worker this process launched and is still collecting
-		// was not interrupted: resuming the run must not return it.
+		// was not interrupted: resuming the run must not return it unless its
+		// approved base became stale, in which case capacity stays held until
+		// verified exit.
+		if t.State == marshal.Dispatched || t.StaleProcessExitUnverified {
+			if _, baseErr := s.admitLaunchBase(ctx, runID, run, *t, nil); baseErr != nil || t.StaleProcessExitUnverified {
+				if baseErr == nil {
+					baseErr = newStaleBaseRefusal(marshal.EffectsUnknown, LaunchBaseRefusalError{
+						TaskID:         t.PlanTaskID,
+						ApprovedRef:    run.TargetRef,
+						ApprovedCommit: run.BaseCommit,
+						Route:          "review and approve a plan on the current delivery base",
+						Reason:         "stale_base: started process requires verified exit and quarantine",
+						NextCommands:   []string{"/marshal amend", "/marshal use-plan"},
+					})
+				}
+				run, rev, err = s.reconcileStartedStaleLaunch(ctx, runID, run, rev, i, "", baseErr)
+				return run, err
+			}
+		}
 		if t.State == marshal.Dispatched && !s.dispatchLive(runID, t.PlanTaskID) {
+			if s.requeueGovernedApprovalTask(ctx, run, *t) {
+				run.Tasks[i].State = marshal.Queued
+				if err = s.save(ctx, runID, run, rev); err != nil {
+					return run, err
+				}
+				run, rev, err = s.load(ctx, runID)
+				if err != nil {
+					return run, err
+				}
+				continue
+			}
 			if infraRetryApplies(run, *t) {
 				// Observe the failed attempt before preparing a base checkout.
 				// Its branch may legitimately have advanced before hand-in.
@@ -2144,7 +2916,12 @@ var marshalMergeAttr = regexp.MustCompile(`(^|\s)merge=`)
 // marshalSetsMergeDriver reports whether branch changes a .gitattributes file,
 // relative to the integration head, so that it names a merge driver.
 func marshalSetsMergeDriver(ctx context.Context, dir, branch string) (bool, error) {
-	names, err := gitMarshal(ctx, dir, "diff", "--no-ext-diff", "--no-textconv", "--name-only", "HEAD..."+branch)
+	return marshalSetsMergeDriverFrom(ctx, dir, "HEAD", branch)
+}
+
+// marshalSetsMergeDriverFrom is marshalSetsMergeDriver against base.
+func marshalSetsMergeDriverFrom(ctx context.Context, dir, base, branch string) (bool, error) {
+	names, err := gitMarshal(ctx, dir, "diff", "--no-ext-diff", "--no-textconv", "--name-only", base+"..."+branch)
 	if err != nil {
 		return false, err
 	}
@@ -2225,6 +3002,11 @@ func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispa
 	run.Tasks[i].State = marshal.Queued
 	if s.HeldTask != nil && s.HeldTask(runID, dispatch.TaskID) {
 		// This session's pause holds the task: Execute waits for the hold.
+		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+	}
+	if s.process05RootRunning != nil && s.process05RootRunning(context.WithoutCancel(ctx), run) {
+		// The person resumed the run before this task's stop was collected:
+		// nothing ran, and the next dispatch continues its lane.
 		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 	}
 	// No pause hold of this session waits for the person's resume (a

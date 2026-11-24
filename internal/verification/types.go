@@ -4,6 +4,8 @@
 package verification
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -176,4 +178,73 @@ type IntegrationAttestation struct {
 	Gaps                                                         []string
 	IssuedAt                                                     time.Time
 	Digest                                                       string
+}
+
+// ChecksOnlyPassed is the decision for a run whose owner opted out of the
+// final independent model check: every approved check passed on the exact
+// integrated head. It is not VerifiedComplete and mints no attestation.
+const ChecksOnlyPassed Decision = "CHECKS_ONLY_PASSED"
+
+// DeliveredChecksOnly labels a delivery proven only by approved checks.
+const DeliveredChecksOnly = "delivered_checks_only"
+
+// ChecksOnlyObservation is one approved check as the runtime observed it on
+// the bound head, in approved order.
+type ChecksOnlyObservation struct {
+	ID           string `json:"id"`
+	Task         string `json:"task"`
+	Command      string `json:"command"`
+	Status       Status `json:"status"`
+	ExitCode     int    `json:"exit_code"`
+	OutputDigest string `json:"output_digest,omitempty"`
+}
+
+// ChecksOnlyReceipt is the runtime-owned record that an opted-out run's
+// approved checks all passed on the head it delivers. Digest covers every
+// other field.
+type ChecksOnlyReceipt struct {
+	ID                   string                  `json:"id"`
+	ProjectID            string                  `json:"project_id"`
+	RunID                string                  `json:"run_id"`
+	GoalID               string                  `json:"goal_id"`
+	PlanID               string                  `json:"plan_id"`
+	PlanVersion          int64                   `json:"plan_version"`
+	ArtifactRevision     int64                   `json:"artifact_revision"`
+	PlanDigest           string                  `json:"plan_digest"`
+	PolicyDigest         string                  `json:"policy_digest"`
+	TargetRef            string                  `json:"target_ref"`
+	TargetBefore         string                  `json:"target_before"`
+	Head                 string                  `json:"head"`
+	Tree                 string                  `json:"tree"`
+	ChecksDigest         string                  `json:"checks_digest"`
+	Observations         []ChecksOnlyObservation `json:"observations"`
+	Actor                string                  `json:"actor,omitempty"`
+	Authority            string                  `json:"authority,omitempty"`
+	ContextEvidence      []string                `json:"context_evidence,omitempty"`
+	ArchitectureEvidence []string                `json:"architecture_evidence,omitempty"`
+	OmittedRoles         []string                `json:"omitted_roles"`
+	CreatedAt            time.Time               `json:"created_at"`
+	Digest               string                  `json:"digest"`
+}
+
+// ComputeDigest returns the digest of every field but Digest.
+func (r ChecksOnlyReceipt) ComputeDigest() string {
+	r.Digest = ""
+	data, _ := json.Marshal(r)
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// Passed reports whether the receipt is sealed, non-empty and every
+// observation passed. Failed, skipped or unknown observations block.
+func (r ChecksOnlyReceipt) Passed() bool {
+	if r.ID == "" || r.Head == "" || r.Tree == "" || len(r.Observations) == 0 || r.Digest == "" || r.Digest != r.ComputeDigest() {
+		return false
+	}
+	for _, o := range r.Observations {
+		if o.Status != StatusPass || o.ExitCode != 0 {
+			return false
+		}
+	}
+	return true
 }

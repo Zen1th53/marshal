@@ -32,7 +32,7 @@ type livenessTracker struct {
 }
 
 func newLivenessTracker(cfg *adapter.Liveness) *livenessTracker {
-	if cfg == nil || (cfg.Classify == nil && cfg.IdleTimeout <= 0 && cfg.StallAfter <= 0) {
+	if cfg == nil || (cfg.Classify == nil && cfg.IdleTimeout <= 0 && cfg.StallAfter <= 0 && cfg.Progress == nil) {
 		return nil
 	}
 	t := &livenessTracker{cfg: *cfg, last: time.Now(), tick: time.Second}
@@ -50,12 +50,27 @@ func newLivenessTracker(cfg *adapter.Liveness) *livenessTracker {
 	return t
 }
 
+// started reports the start of the provider request to Progress.
+func (t *livenessTracker) started() {
+	if t != nil && t.cfg.Progress != nil {
+		t.cfg.Progress(adapter.SignalRequestStart)
+	}
+}
+
 func (t *livenessTracker) observe(p []byte, stdout bool) {
 	if t == nil || len(p) == 0 {
 		return
 	}
+	var signals []adapter.StreamSignal
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	defer func() {
+		t.mu.Unlock()
+		if t.cfg.Progress != nil {
+			for _, s := range signals {
+				t.cfg.Progress(s)
+			}
+		}
+	}()
 	t.last = time.Now()
 	t.stalled = false
 	if !stdout || t.cfg.Classify == nil {
@@ -68,7 +83,11 @@ func (t *livenessTracker) observe(p []byte, stdout bool) {
 			break
 		}
 		line := t.pending[:i]
-		switch t.cfg.Classify(line) {
+		signal := t.cfg.Classify(line)
+		if len(signals) < 64 {
+			signals = append(signals, signal)
+		}
+		switch signal {
 		case adapter.SignalToolStart:
 			t.inflight++
 		case adapter.SignalToolEnd:

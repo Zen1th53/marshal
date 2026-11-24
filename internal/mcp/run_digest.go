@@ -3,7 +3,10 @@ package mcp
 import (
 	"context"
 	"errors"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -22,9 +25,26 @@ type runDigest struct {
 	PauseAction     string           `json:"pause_action,omitempty"`
 	PauseTask       string           `json:"pause_task,omitempty"`
 	CloseAuthorized bool             `json:"close_authorized"`
-	Tasks           []runDigestTask  `json:"tasks"`
-	EventsCursor    string           `json:"events_cursor,omitempty"`
-	NoRun           bool             `json:"no_run,omitempty"`
+	// ReviewPolicy is the review policy bound to the run when it was approved.
+	ReviewPolicy *marshal.ReviewPolicySnapshot `json:"review_policy,omitempty"`
+	Tasks        []runDigestTask               `json:"tasks"`
+	// ActiveOperation is the lifecycle operation the run has in progress.
+	ActiveOperation  *runDigestOperation `json:"active_operation,omitempty"`
+	PendingApprovals int                 `json:"pending_approvals,omitempty"`
+	ExpiredApprovals int                 `json:"expired_approvals,omitempty"`
+	Approvals        []runDigestApproval `json:"approvals,omitempty"`
+	EventsCursor     string              `json:"events_cursor,omitempty"`
+	NoRun            bool                `json:"no_run,omitempty"`
+}
+
+type runDigestApproval struct {
+	ApprovalID   string                   `json:"approval_id"`
+	TaskID       string                   `json:"task"`
+	Status       execution.ApprovalStatus `json:"status"`
+	Authority    string                   `json:"authority"`
+	Command      string                   `json:"command,omitempty"`
+	ExpiresAt    *time.Time               `json:"expires_at,omitempty"`
+	WhoCanAnswer string                   `json:"who_can_answer,omitempty"`
 }
 
 type runDigestTask struct {
@@ -32,6 +52,15 @@ type runDigestTask struct {
 	Title  string            `json:"title,omitempty"`
 	Worker string            `json:"worker,omitempty"`
 	State  marshal.TaskState `json:"state"`
+	// Attempt is the task's current attempt.
+	Attempt int `json:"attempt"`
+	// Liveness is what Marshal can verify of the task's worker attempt.
+	Liveness *app.WorkerLiveness `json:"liveness,omitempty"`
+}
+
+type runDigestOperation struct {
+	Kind   string `json:"kind"`
+	TaskID string `json:"task,omitempty"`
 }
 
 func (s *Server) runDigest(ctx context.Context) (runDigest, error) {
@@ -65,8 +94,39 @@ func (s *Server) runDigest(ctx context.Context) (runDigest, error) {
 		out.PauseCode, out.PauseAction, out.PauseTask = run.Pause.Code, string(run.Pause.Action), run.Pause.TaskID
 	}
 	out.CloseAuthorized = run.ValidCloseAuthorization()
+	out.ReviewPolicy = run.ReviewPolicy
+	if op := run.Operation; op != nil {
+		out.ActiveOperation = &runDigestOperation{Kind: op.Kind, TaskID: op.TaskID}
+	}
+	liveness := map[string]app.WorkerLiveness{}
+	for _, l := range s.runtime.RunLiveness(id, run) {
+		liveness[l.TaskID] = l
+	}
 	for _, t := range run.Tasks {
-		out.Tasks = append(out.Tasks, runDigestTask{ID: t.PlanTaskID, Title: t.Title, Worker: t.Worker, State: t.State})
+		row := runDigestTask{ID: t.PlanTaskID, Title: t.Title, Worker: t.Worker, State: t.State, Attempt: app.TaskAttempt(t)}
+		// A worker's own session reads only its own task's liveness.
+		if l, ok := liveness[t.PlanTaskID]; ok && (s.role != "worker" || t.PlanTaskID == s.workerTaskID) {
+			row.Liveness = &l
+		}
+		out.Tasks = append(out.Tasks, row)
+	}
+	if views, _, projErr := s.runtime.ApprovalProjection(ctx, id, run, false); projErr == nil && len(views) > 0 {
+		for _, v := range views {
+			if v.Status == execution.ApprovalRequested {
+				out.PendingApprovals++
+			} else if v.Expired || v.Status == execution.ApprovalExpired {
+				out.ExpiredApprovals++
+			}
+			out.Approvals = append(out.Approvals, runDigestApproval{
+				ApprovalID:   v.ApprovalID,
+				TaskID:       v.TaskID,
+				Status:       v.Status,
+				Authority:    v.Authority,
+				Command:      v.Command,
+				ExpiresAt:    v.ExpiresAt,
+				WhoCanAnswer: v.WhoCanAnswer,
+			})
+		}
 	}
 	return out, nil
 }

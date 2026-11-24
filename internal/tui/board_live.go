@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -133,6 +134,26 @@ func (w *Workspace) workerBeats(runID string) []app.WorkerBeat {
 	return w.beatRuntime.Load().WorkerBeats(runID)
 }
 
+// workerLiveness is what the runtime can verify of each worker attempt of
+// runID still in flight, by task.
+func (w *Workspace) workerLiveness(runID string) map[string]boardmodel.WorkerLiveness {
+	if w.beatSource != nil {
+		return nil
+	}
+	out := map[string]boardmodel.WorkerLiveness{}
+	for _, l := range w.beatRuntime.Load().WorkerLiveness(runID) {
+		if l.Process == app.ProcessExited {
+			continue
+		}
+		x := boardmodel.WorkerLiveness{Process: l.Process, Turn: l.Turn, LastAction: l.LastAction, Note: l.Note}
+		if l.ModelWaitSince != nil {
+			x.ModelWaitSince = *l.ModelWaitSince
+		}
+		out[l.TaskID] = x
+	}
+	return out
+}
+
 // boardWorkers lists the live worker invocations of a run from the tmux
 // windows the workspace already tracks. Workers are named by provider and
 // numbered in task order, as the lanes show them.
@@ -155,6 +176,7 @@ func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 		}
 	}
 	w.tmuxMu.Unlock()
+	liveness := w.workerLiveness(runID)
 	for _, b := range w.workerBeats(runID) {
 		if !windowed[b.TaskID] {
 			agents = append(agents, agent{provider: providerName(b.Worker), task: b.TaskID, beat: &b})
@@ -188,6 +210,7 @@ func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 		x := boardmodel.Worker{ID: fmt.Sprintf("%s-%d", a.provider, seen[a.provider]), Provider: a.provider, TaskID: a.task, Pane: a.pane, Last: last, Status: status}
 		if a.beat != nil {
 			x.Heartbeat, x.Started, x.Beat = true, a.beat.Started, a.beat.Beat
+			x.Liveness = liveness[a.task]
 		}
 		out = append(out, x)
 	}
@@ -214,6 +237,10 @@ func workersFingerprint(ws []boardmodel.Worker, now time.Time) string {
 		fmt.Fprintf(&b, "%s|%s|%s|%s|%s;", x.ID, x.TaskID, x.Pane, x.Status, x.Last)
 		if x.Heartbeat {
 			fmt.Fprintf(&b, "beat %d %t;", x.Beat.UnixNano(), now.Sub(x.Beat) > boardmodel.WorkerBeatGrace)
+			if l := x.Liveness; l.Process != "" {
+				waitLong := !l.ModelWaitSince.IsZero() && now.Sub(l.ModelWaitSince) >= app.ModelWaitNoticeAfter
+				fmt.Fprintf(&b, "%s %s %d %t;", l.Process, l.Turn, l.ModelWaitSince.UnixNano(), waitLong)
+			}
 		}
 	}
 	return b.String()
@@ -336,6 +363,7 @@ func (w *Workspace) followBoard(ctx context.Context) {
 			continue
 		case <-t.C:
 		}
+		w.signalModelWaits(ctx)
 		w.refreshBoard(ctx)
 		w.noteRunControl(ctx)
 	}
@@ -376,7 +404,44 @@ func (w *Workspace) refreshBoard(ctx context.Context) bool {
 	if service == nil || service.Store == nil || p == nil || p.RunID != runID {
 		return false
 	}
-	return w.refreshBoardFrom(ctx, service.Store, p)
+	next, waits := w.refreshBoardWaits(service, p)
+	return w.refreshBoardFrom(ctx, service.Store, next) || waits
+}
+
+// noteRunWaits reads onto p what the Board says the run waits on beyond
+// its own record: the approvals awaiting an answer and the launch the
+// dispatcher holds.
+func (w *Workspace) noteRunWaits(service *app.MarshalService, runID string, p *MarshalPanel) {
+	p.approvals, p.hold = nil, nil
+	if rt := w.runtime; rt != nil && runID != "" {
+		if views, _, err := rt.ApprovalProjection(context.Background(), runID, p.run, false); err == nil && len(views) > 0 {
+			p.approvals = views
+		}
+	}
+	if hold, ok := service.AdmissionHold(runID); ok {
+		p.hold = &hold
+	}
+}
+
+// refreshBoardWaits publishes p again when its approvals or admission hold
+// changed since it was published, and returns the panel now published.
+func (w *Workspace) refreshBoardWaits(service *app.MarshalService, p *MarshalPanel) (*MarshalPanel, bool) {
+	next := *p
+	w.noteRunWaits(service, p.RunID, &next)
+	if reflect.DeepEqual(next.approvals, p.approvals) && reflect.DeepEqual(next.hold, p.hold) {
+		return p, false
+	}
+	w.mu.Lock()
+	current := w.state.Marshal == p
+	if current {
+		w.state.Marshal = &next
+	}
+	w.mu.Unlock()
+	if !current {
+		return p, false
+	}
+	w.requestRepaint()
+	return &next, true
 }
 
 func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p *MarshalPanel) bool {
@@ -417,11 +482,20 @@ type boardUI struct {
 	stopArmed bool
 	// homeYesAt is when y last ran the home screen's safe action (homeYes).
 	homeYesAt time.Time
-	task      string // selected task
-	lane      string // selected lane's worker
-	ack       string // command answer already seen; the footer stops showing it
-	ackSeq    uint64 // output sequence when ack was taken: a repeated answer is new
-	note      string // run note last painted
+	// homePage is the page drawn in the home's place ("" the home itself:
+	// board_run_view.go) and homePageState its selection and scroll.
+	homePage      string
+	homePageState pageState
+	// decisionFocus is the card decision focus rests on ("" none) and
+	// decisionRev the revision its keys are bound to; decisionStop is an
+	// armed stop of the paused run (board_decisions_view.go).
+	decisionFocus, decisionRev string
+	decisionStop               bool
+	task                       string // selected task
+	lane                       string // selected lane's worker
+	ack                        string // command answer already seen; the footer stops showing it
+	ackSeq                     uint64 // output sequence when ack was taken: a repeated answer is new
+	note                       string // run note last painted
 	// hostScroll is how far the Host view is scrolled down; hostMax is
 	// the furthest it could go at the last paint.
 	hostScroll, hostMax int
@@ -801,6 +875,15 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	w.mu.RLock()
 	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
 	w.mu.RUnlock()
+	// Explicit decision focus takes the keys its card documents before the
+	// home and the views; the editor still wins (composing).
+	if w.boardUI.decisionFocus != "" && !w.composing() && !w.anyBodyView() {
+		if w.handleDecisionFocusKey(event) || event.Type == KeyEnter {
+			// Enter acts here or does nothing: it never opens the chat
+			// from a focused card.
+			return true
+		}
+	}
 	if w.inboxView.Confirming() || w.composing() {
 		return false
 	}

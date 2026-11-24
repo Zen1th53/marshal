@@ -8,6 +8,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
+	"github.com/Zen1th53/marshal/internal/plan"
 )
 
 // countingDriver records each launch, so a test can prove a worker never started.
@@ -30,6 +31,13 @@ func TestApprovedPlanOnOneProviderDispatchesEveryIndependentTask(t *testing.T) {
 	t.Cleanup(ResetProviderCooldowns)
 	s, _ := marshalFixture(t, 4)
 	s.Gate = marshalTestGate(true)
+	model := s.Model.(marshalFakeModel)
+	for i := range model.draft.Tasks {
+		model.draft.Tasks[i].DependsOn = nil
+		model.draft.Plan.Tasks[i].DependsOn = nil
+	}
+	model.draft.Plan.Graph, _ = plan.BuildGraph(model.draft.Plan.Tasks)
+	s.Model = model
 	if _, err := s.StartPlanning(t.Context(), "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}

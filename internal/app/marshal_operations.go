@@ -6,13 +6,21 @@ import (
 	"fmt"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
+
+// ErrUnfinishedLifecycleOperation reports that a journaled lifecycle
+// operation is still active or interrupted and must be reconciled before
+// starting another lifecycle change.
+var ErrUnfinishedLifecycleOperation = errors.New("unfinished lifecycle operation")
 
 func (s *MarshalService) beginOperation(ctx context.Context, runID string, run marshal.Run, rev int64, op *marshal.LifecycleOperation) (int64, error) {
 	if run.Operation != nil {
-		return rev, errors.New("unfinished lifecycle operation; /marshal resume to reconcile it")
+		return rev, unfinishedOperationRefusal(runID, run.Operation)
 	}
 	if _, reserved := op.Event.Data["event_artifact"]; reserved {
 		return rev, fmt.Errorf("%w: reserved event_artifact key in inline intent", errMarshalEventArtifact)
@@ -56,7 +64,7 @@ func (s *MarshalService) completeOperation(ctx context.Context, runID string, re
 	}
 	next := *op.Next
 	next.Operation = nil
-	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, next, rev, &op.Event, op.HandIn, op.Attempt)
+	return s.saveMarshalState(ctx, runID, next, rev, &op.Event, op.HandIn, op.Attempt)
 }
 func (s *MarshalService) afterOperationEffect(op *marshal.LifecycleOperation) error {
 	if s.AfterLifecycleEffect != nil {
@@ -78,10 +86,82 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	}
 	op.Event.Data = copyMarshalEventData(op.Event.Data)
 	completed := false
+	unapplied := false
 	switch op.Kind {
 	case "launch":
 		op.HandIn = nil
 		op.Attempt = 0
+		launchKey := ""
+		if op.Next != nil {
+			if i := taskIndex(*op.Next, op.TaskID); i >= 0 {
+				launchKey = op.Next.Tasks[i].LaunchKey
+			}
+		}
+		launchDisposition := driver.LaunchDisposition("")
+		if s.LaunchSupervisor != nil && launchKey != "" && op.LaunchBase != nil && op.LaunchBase.ProcessStarted {
+			var inspectErr error
+			if launchDisposition, inspectErr = s.LaunchSupervisor.Inspect(launchKey); inspectErr != nil {
+				launchDisposition = driver.LaunchAmbiguous
+			}
+			if launchDisposition == driver.LaunchAbsent {
+				// The launch receipt proves no worker ran: treat it as an intent
+				// that never reached the driver, keeping its key for the retry.
+				op.LaunchBase.ProcessStarted = false
+			}
+		}
+		if op.LaunchBase != nil && !op.LaunchBase.ProcessStarted {
+			i := taskIndex(run, op.TaskID)
+			if i < 0 {
+				return run, rev, model.ErrNotFound
+			}
+			if launchDisposition == driver.LaunchAbsent {
+				run.Tasks[i].LaunchKey = launchKey
+			}
+			if _, baseErr := s.admitLaunchBase(ctx, runID, run, run.Tasks[i], op.LaunchBase); baseErr != nil {
+				if !errors.Is(baseErr, ErrStaleBase) {
+					return run, rev, baseErr
+				}
+				// No process started, so the intent is safe to drop. Keep the
+				// stale-base pause and evidence, and clear the operation so
+				// amend and use-plan are not blocked by it.
+				run.Operation = nil
+				pauseMarshal(&run, staleBasePause(baseErr, op.TaskID))
+				op.Event.Type = events.EventTypeMarshalEscalated
+				op.Event.Data["launch_outcome"] = "interrupted before launch; stale base; intent cleared"
+				op.Event.Data["reason"] = run.Pause.Reason
+				op.Next = &run
+				if err := s.boundMarshalEvent(&op.Event); err != nil {
+					return run, rev, err
+				}
+				if err := s.completeOperation(ctx, runID, rev, op); err != nil {
+					return run, rev, err
+				}
+				return run, rev + 1, baseErr
+			}
+			// No driver process started and the base/dependencies remain valid:
+			// clear the saved intent so first execution validates fresh base
+			// admission and prepares the worktree cleanly.
+			run.Operation = nil
+			op.Event.Type = events.EventTypeMarshalEscalated
+			op.Event.Data["launch_outcome"] = "interrupted before launch; intent cleared"
+			op.Event.Data["reason"] = "interrupted launch intent cleared before process start"
+			op.Next = &run
+			completed = true
+			break
+		}
+		if op.LaunchBase != nil || run.BaseCommit != "" {
+			checkRun := run
+			if op.Next != nil && taskIndex(checkRun, op.TaskID) < 0 {
+				checkRun = *op.Next
+			}
+			i := taskIndex(checkRun, op.TaskID)
+			if i < 0 {
+				return run, rev, model.ErrNotFound
+			}
+			if _, baseErr := s.admitLaunchBase(ctx, runID, checkRun, checkRun.Tasks[i], op.LaunchBase); baseErr != nil {
+				return s.reconcileStartedStaleLaunch(ctx, runID, checkRun, rev, i, op.Dir, baseErr)
+			}
+		}
 		// A launch may have reached the driver even without a receipt. Treat it
 		// as interrupted, never as queued work that Execute could launch again.
 		if op.Next != nil {
@@ -94,10 +174,28 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		op.Event.Data["launch_outcome"] = "interrupted; driver completion unknown"
 		run.Tasks[i].State = marshal.Dispatched
 		run.State = marshal.Dispatching
+		// The started worker keeps the slot reserved for its launch.
+		markSlotRunning(&run, launchKey)
+		if j := run.SlotIndex(launchKey); j >= 0 && launchDisposition == driver.LaunchAmbiguous {
+			run.Slots[j].State = marshal.SlotHeld
+			run.Slots[j].Reason = "worker launch is ambiguous"
+		}
+		if launchDisposition == driver.LaunchAmbiguous {
+			// The worker may still run: keep its slot and quarantine its output.
+			op.Event.Data["launch_outcome"] = "interrupted; launch ambiguous; output quarantined"
+			pauseMarshal(&run, marshal.Pause{Reason: "worker launch " + launchKey + " is ambiguous; its slot stays held and its output is quarantined", Resolutions: []string{"inspect the worker process and its worktree before resolving the held launch"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume, TaskID: op.TaskID})
+		}
 		op.Next = &run
 		completed = true
 	case "hand-in":
 		completed = op.HandIn != nil && op.Next != nil
+		if completed {
+			// A paused run keeps the staged result and its reservation until
+			// the person resumes it.
+			if held, heldRev, err := s.quarantineStagedExit(ctx, runID, &run, rev, op); held || err != nil {
+				return run, heldRev, err
+			}
+		}
 		if completed {
 			if err := s.repairRetainedHandInAttempt(ctx, runID, op); err != nil {
 				return run, rev, err
@@ -115,6 +213,13 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			}
 		}
 	case "merge":
+		if op.Merge != nil && op.Merge.Candidate != "" {
+			var holdErr error
+			if completed, holdErr = s.recoverMergeIntent(ctx, runID, run, op); holdErr != nil {
+				return run, rev, holdErr
+			}
+			break
+		}
 		ref := op.Target
 		if ref == "" {
 			ref = "refs/heads/" + integrationBranch(runID, run)
@@ -138,20 +243,34 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			completed = ancestorErr == nil
 		}
 		if !completed && head != op.Before {
-			return run, rev, fmt.Errorf("unfinished merge %s: integration moved; inspect retained worktree %s", op.ID, op.Dir)
+			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished merge %s: integration moved; inspect retained worktree %s", op.ID, op.Dir), []string{"/marshal status", "/marshal amend"})
+		}
+		// A legacy merge is acknowledged only from a clean integration
+		// checkout at the proven commit.
+		if completed {
+			if observed, _, obsErr := s.observeIntegrationHead(ctx, runID, run); obsErr != nil || observed != head {
+				return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished merge %s: integration checkout does not match the merged commit; inspect retained worktree %s", op.ID, op.Dir), []string{"/marshal status", "/marshal amend"})
+			}
 		}
 	case "close":
 		repository, err := s.repositoryIdentity(ctx)
 		if err != nil || repository != run.Repository {
-			return run, rev, errors.New("unfinished close: approved repository changed; inspect retained operation")
+			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsUnknown, "unfinished close: approved repository changed; inspect retained operation", []string{"/marshal status"})
 		}
 		head, err := gitMarshal(ctx, s.Repository, "rev-parse", op.Target)
 		if err != nil {
 			return run, rev, err
 		}
+		if op.DeliveryKind != "" {
+			completed, unapplied, err = s.recoverChecksOnlyClose(ctx, runID, op, head)
+			if err != nil {
+				return run, rev, err
+			}
+			break
+		}
 		completed = op.Authorized && head == op.After
 		if !completed && head != op.Before {
-			return run, rev, fmt.Errorf("unfinished close %s: target moved; inspect %s", op.ID, op.Target)
+			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished close %s: target moved; inspect %s", op.ID, op.Target), []string{"/marshal status"})
 		}
 	default:
 		return run, rev, fmt.Errorf("unknown lifecycle operation %s", op.Kind)
@@ -173,6 +292,17 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	// durable explanation; an operator may amend or approve a fresh attempt.
 	run.Operation = nil
 	pauseMarshal(&run, marshal.Pause{Reason: "interrupted " + op.Kind + " operation " + op.ID, Resolutions: []string{"inspect retained artifacts and amend the plan before retrying"}, Code: marshal.CodeInterruptedOperation, Action: marshal.PauseResume})
+	if unapplied {
+		// The target never moved: the intent is cleared as unapplied and the
+		// run resumes at verification, where a fresh close takes a new
+		// operation, current proof and current authority. The checkpoint and
+		// receipt stay as audit evidence.
+		run.Pause.ResumeState = marshal.Verifying
+		run.Pause.Resolutions = []string{"press Enter to verify and deliver again"}
+		op.Event.Data["close_outcome"] = "unapplied"
+		op.Event.Data["unapplied_operation_id"] = op.ID
+		op.Event.Data["cause"] = "interrupted before the target moved"
+	}
 	op.Event.Type = events.EventTypeMarshalEscalated
 	op.Event.Data["reason"] = run.Pause.Reason
 	op.Next = &run
@@ -218,7 +348,7 @@ func (s *MarshalService) abandonOperationBecause(ctx context.Context, runID stri
 	if err := s.boundMarshalEvent(&event); err != nil {
 		return fmt.Errorf("bound escalated lifecycle event for abandonment: %w", err)
 	}
-	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, stored.Revision, &event, nil, 0); err != nil {
+	if err := s.saveMarshalState(ctx, runID, run, stored.Revision, &event, nil, 0); err != nil {
 		return fmt.Errorf("save lifecycle abandonment: %w", err)
 	}
 	return nil
@@ -237,20 +367,52 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 	}
 	var failures []error
 	for _, id := range ids {
+		w := s.runWriter(id)
+		if w.isActive() {
+			continue
+		}
+		w.mu.Lock()
+		if w.isActive() {
+			w.mu.Unlock()
+			continue
+		}
 		run, rev, err := s.load(ctx, id)
 		if err == nil {
-			_, _, err = s.recoverOperation(ctx, id, run, rev)
+			run, rev, err = s.recoverOperation(ctx, id, run, rev)
+		}
+		if err == nil {
+			run, rev, err = s.reconcileWorkerSlots(ctx, id, run, rev, false)
 		}
 		if errors.Is(err, errMarshalEventArtifact) {
 			failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, err))
+			w.mu.Unlock()
 			continue
 		}
+		if err == nil {
+			err = s.drainRunCommands(ctx, id)
+		}
 		if err != nil {
-			pauseMarshal(&run, marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume})
+			if fresh, freshRev, loadErr := s.load(ctx, id); loadErr == nil {
+				run, rev = fresh, freshRev
+			}
+			if run.State == marshal.AwaitingUser && run.Pause != nil && run.Pause.Code == marshal.CodeStaleBase {
+				w.mu.Unlock()
+				continue
+			}
+			pause := marshal.Pause{Reason: err.Error(), Resolutions: []string{"inspect the retained operation and Git references before resolving it"}, Code: marshal.CodeOperationRecovery, Action: marshal.PauseResume}
+			if errors.Is(err, ErrStaleBase) {
+				taskID := ""
+				if run.Operation != nil {
+					taskID = run.Operation.TaskID
+				}
+				pause = staleBasePause(err, taskID)
+			}
+			pauseMarshal(&run, pause)
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
 				failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, errors.Join(err, saveErr)))
 			}
 		}
+		w.mu.Unlock()
 	}
 	s.cleanupClosedRuns(ctx)
 	return errors.Join(failures...)
@@ -276,9 +438,52 @@ func (s *MarshalService) cleanupClosedRuns(ctx context.Context) {
 
 func unfinishedMarshalOperation(run marshal.Run) error {
 	if run.Operation != nil {
-		return errors.New("unfinished lifecycle operation; /marshal resume to reconcile it")
+		return unfinishedOperationRefusal(run.Operation.Event.RunID, run.Operation)
 	}
 	return nil
+}
+
+func unfinishedOperationRefusal(runID string, op *marshal.LifecycleOperation) error {
+	effects := marshal.EffectsUnknown
+	if op != nil && op.HandIn != nil {
+		effects = marshal.EffectsPartial
+	}
+	return interruptedOperationRefusal(runID, op, effects, "unfinished lifecycle operation; /marshal resume to reconcile it", []string{"/marshal resume"})
+}
+
+func interruptedOperationRefusal(runID string, op *marshal.LifecycleOperation, effects marshal.RefusalEffects, message string, next []string) error {
+	if effects == marshal.EffectsNone || effects == "" {
+		effects = marshal.EffectsUnknown
+	}
+	var holder *marshal.OperationHolder
+	if op != nil {
+		opRunID := runID
+		if opRunID == "" {
+			opRunID = op.Event.RunID
+		}
+		title := "Unfinished " + op.Kind + " operation"
+		if op.Kind == "" {
+			title = "Unfinished lifecycle operation"
+		}
+		if op.TaskID != "" {
+			title += " for task " + op.TaskID
+		}
+		holder = &marshal.OperationHolder{
+			ID:        op.ID,
+			RunID:     opRunID,
+			TaskID:    op.TaskID,
+			Kind:      op.Kind,
+			Title:     title,
+			StartedAt: op.Event.At,
+		}
+	}
+	return marshal.NewRefusalError(marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeInterruptedOp,
+		Blocker:      holder,
+		Effects:      effects,
+		NextCommands: next,
+		Message:      message,
+	}, ErrUnfinishedLifecycleOperation)
 }
 
 func copyMarshalEventData(data map[string]any) map[string]any {
@@ -321,4 +526,65 @@ func (s *MarshalService) repairRetainedHandInAttempt(ctx context.Context, runID 
 	}
 	op.Attempt = want
 	return nil
+}
+
+// staleBasePause is the owner pause for a launch refused on a stale base.
+func staleBasePause(err error, taskID string) marshal.Pause {
+	return marshal.Pause{
+		Reason:      err.Error(),
+		Resolutions: staleBaseResolutions(err),
+		Code:        marshal.CodeStaleBase,
+		Action:      marshal.PauseUsePlan,
+		TaskID:      taskID,
+	}
+}
+
+// recoverChecksOnlyClose observes an interrupted checks-only close. Git at
+// the recorded after commit finishes the stored close only with the matching
+// authorized operation, checkpoint, durable fence record and sealed receipt;
+// Git still at the recorded before commit, with no partial checkout update,
+// clears the intent as unapplied. When before equals after, ref equality
+// proves nothing, so the close is unapplied. Anything else is held for
+// inspection.
+func (s *MarshalService) recoverChecksOnlyClose(ctx context.Context, runID string, op *marshal.LifecycleOperation, head string) (completed, unapplied bool, err error) {
+	if op.DeliveryKind != verification.DeliveredChecksOnly {
+		return false, false, fmt.Errorf("unfinished close %s: unknown delivery kind %q; inspect retained operation", op.ID, op.DeliveryKind)
+	}
+	if head == op.After && op.Before != op.After {
+		next := op.Next
+		if !op.Authorized || next == nil || next.State != marshal.Closed || next.DeliveryKind != op.DeliveryKind || next.ChecksOnly == nil || next.ChecksOnly.ID != op.ReceiptID || next.ChecksOnly.Digest != op.ReceiptDigest || !next.ChecksOnly.Passed() || next.ChecksOnly.Head != op.After || next.ChecksOnly.TargetBefore != op.Before {
+			return false, false, fmt.Errorf("unfinished close %s: target advanced without a matching authorized proof; inspect %s", op.ID, op.Target)
+		}
+		checkpoint, _ := op.Event.Data["checkpoint"].(string)
+		if checkpoint == "" {
+			return false, false, fmt.Errorf("unfinished close %s: missing close checkpoint; inspect %s", op.ID, op.Target)
+		}
+		cpCommit, cpErr := gitMarshal(ctx, s.Repository, "rev-parse", "--verify", checkpoint)
+		if cpErr != nil || cpCommit != op.Before {
+			return false, false, fmt.Errorf("unfinished close %s: close checkpoint %s does not match before commit; inspect %s", op.ID, checkpoint, op.Target)
+		}
+		passed, fenceErr := s.hasChecksOnlyCloseFence(ctx, runID, op)
+		if fenceErr != nil {
+			return false, false, fenceErr
+		}
+		if !passed {
+			return false, false, fmt.Errorf("unfinished close %s: missing durable close fence proof; inspect %s", op.ID, op.Target)
+		}
+		return true, false, nil
+	}
+	if head != op.Before {
+		return false, false, fmt.Errorf("unfinished close %s: target moved; inspect %s", op.ID, op.Target)
+	}
+	checkedOut, err := marshalTargetWorktree(ctx, s.Repository, op.Target)
+	if err != nil {
+		return false, false, fmt.Errorf("unfinished close %s: checkout unreadable; inspect %s: %w", op.ID, op.Target, err)
+	}
+	if checkedOut != "" {
+		current, headErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
+		status, statusErr := gitMarshalStdout(ctx, checkedOut, "status", "--porcelain=v1", "--untracked-files=all")
+		if headErr != nil || statusErr != nil || current != op.Before || len(hostgit.SourceStatusChanges(status)) != 0 {
+			return false, false, fmt.Errorf("unfinished close %s: checkout of %s may be partly updated; inspect it", op.ID, op.Target)
+		}
+	}
+	return false, true, nil
 }

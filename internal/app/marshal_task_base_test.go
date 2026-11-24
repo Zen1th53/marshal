@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -108,5 +109,40 @@ func TestMarshalReassignedWorkerStartsFresh(t *testing.T) {
 	}
 	if got := marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/returned/a/attempt-2"); got != rejected {
 		t.Fatalf("returned attempt ref = %s, want %s", got, rejected)
+	}
+}
+
+func TestStartedProcessExitPropagatesLaneReconciliationErrors(t *testing.T) {
+	for _, cause := range []error{errors.New("lane storage unavailable"), context.Canceled, execution.ErrRunBlocked} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			s, _ := marshalFixture(t, 1)
+			run, err := s.StartPlanning(t.Context(), "run", "write", marshal.Budget{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err = s.Approve(t.Context(), "run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			run.Process05Bound, run.Process05Parallel = true, true
+			run.Tasks[0].Mode = marshal.Governed
+			s.process05CloseOrphanLane = func(context.Context, marshal.Run, marshal.Task) error { return cause }
+			exited, err := s.verifyStartedProcessExited(t.Context(), "run", run, run.Tasks[0])
+			if exited || !errors.Is(err, cause) {
+				t.Fatalf("exit=%v error=%v, want reconciliation error %v", exited, err, cause)
+			}
+			_, rev, err := s.load(t.Context(), "run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			held, _, err := s.reconcileStartedStaleLaunch(t.Context(), "run", run, rev, 0, "", errors.New("delivery base changed"))
+			if err == nil || !held.Tasks[0].StaleProcessExitUnverified || held.Tasks[0].State != marshal.Dispatched || held.Tasks[0].QuarantinedRef != "" {
+				t.Fatalf("failed reconciliation released reservation: %+v %v", held.Tasks[0], err)
+			}
+			s.process05CloseOrphanLane = func(context.Context, marshal.Run, marshal.Task) error { return nil }
+			if exited, err := s.verifyStartedProcessExited(t.Context(), "run", held, held.Tasks[0]); !exited || err != nil {
+				t.Fatalf("successful reconciliation: %v %v", exited, err)
+			}
+		})
 	}
 }

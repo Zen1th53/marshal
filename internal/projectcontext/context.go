@@ -612,7 +612,10 @@ func RenderWithPrefix(m Manifest, prefix string, capBytes int) (Packet, error) {
 	}
 	text := prefix + packetHeader + string(raw) + "\n"
 	if len(text) > capBytes || len(text) != envelope.Bytes {
-		return Packet{}, fmt.Errorf("%w: complete packet requires %d bytes (cap %d)", ErrBudget, len(text), capBytes)
+		// Mandatory context is never shortened: only a narrower scope fits.
+		return Packet{}, model.NewLimitError(fmt.Errorf("%w: complete packet requires %d bytes (cap %d)", ErrBudget, len(text), capBytes), model.Limit{
+			Kind: "required_context", Subject: "required project context", ActualBytes: int64(len(text)), CapBytes: int64(capBytes),
+			Action: "Ask the owner to approve splitting the work into a narrower scope; the required project context is always sent whole."})
 	}
 	sum := sha256.Sum256([]byte(text))
 	return Packet{Text: text, Digest: "sha256:" + hex.EncodeToString(sum[:]), ManifestDigest: manifestDigest, Bytes: len(text), Loaded: loaded}, nil

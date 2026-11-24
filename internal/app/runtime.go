@@ -54,6 +54,7 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
+	noticeDeliveryMu sync.Mutex
 	// projectIdentity* cache ProjectIdentity for projectIdentityTTL.
 	projectIdentityMu    sync.Mutex
 	projectIdentityAt    time.Time
@@ -111,6 +112,8 @@ type Runtime struct {
 
 	// workerBeats are the governed worker attempts in flight (worker_liveness.go).
 	workerBeats workerBeatRegistry
+	// launchSupervision is built once per runtime (marshal_launch_supervision.go).
+	launchSupervision launchSupervisionState
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
@@ -1178,7 +1181,7 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 		}
 		request.Command = resolved
 	}
-	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, verificationTimeout, 8<<20)
+	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, r.effectiveVerificationTimeout(ctx), 8<<20)
 	if err != nil {
 		return VerifyResult{}, err
 	}
@@ -2407,10 +2410,13 @@ func (r *Runtime) Marshal() *MarshalService {
 	service := &MarshalService{runtime: r, Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
 	configureWorkerMemory(service, r)
 	service.process05Paused = r.process05Paused
+	service.process05RootRunning = r.process05RootRunning
 	service.process05Settle = r.settleProcess05
 	service.process05CloseOrphanLane = r.closeOrphanProcess05Lane
 	service.process05ResumePaused = r.resumePausedProcess05
 	r.bindMarshalProjectKnowledge(service)
+	service.LaunchSupervisor = r.marshalLaunchSupervisor()
+	service.VerifyProcessExit = r.verifyMarshalWorkerExit
 	// Open assigns an instance ID and manages project lifecycle ownership.
 	// Services composed directly over a store have no runtime lifecycle to own.
 	if r.runtimeInstanceID != "" {

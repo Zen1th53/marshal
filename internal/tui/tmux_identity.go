@@ -132,6 +132,15 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	defer func() { a.cleanupMu.Lock(); defer a.cleanupMu.Unlock(); a.cleaning = false }()
 	w.tmuxMu.Lock()
 	pane, id := a.paneID, a.id
+	runID := a.runID
+	if runID == "" {
+		runID = a.executionRunID
+	}
+	launchID := a.mcpLaunchID
+	if launchID == "" {
+		launchID = a.paneID
+	}
+	actor := a.provider
 	w.tmuxMu.Unlock()
 	if strings.TrimSpace(pane) == "" {
 		return fmt.Errorf("agent %s has no pane target", id)
@@ -158,13 +167,23 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	} else {
 		// A governed result view replaces the raw pane transcript. Keep its full
 		// relay output in the canonical retained evidence as well as the relay file.
-		raw, readErr := os.ReadFile(filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt"))
+		relayPath := filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt")
+		if err := statepath.CheckPath(root, relayPath); err != nil {
+			return fmt.Errorf("relay evidence path for %s: %w", id, err)
+		}
+		raw, readErr := os.ReadFile(relayPath)
 		if readErr == nil {
 			evidence += "\nFull relay output:\n" + string(raw)
 		} else if !os.IsNotExist(readErr) {
 			return fmt.Errorf("read relay evidence for %s: %w", id, readErr)
 		}
-		if err = saveAgentEvidence(root, id, evidence); err != nil {
+		if _, err = writeRuntimeEvidence(root, id, evidence, runtimeEvidenceMeta{
+			RunID:    runID,
+			LaunchID: launchID,
+			Event:    "agent-retain:" + outcome,
+			Source:   "tmux-identity",
+			Actor:    actor,
+		}); err != nil {
 			return fmt.Errorf("retain evidence for %s: %w", id, err)
 		}
 	}

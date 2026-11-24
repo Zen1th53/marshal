@@ -31,7 +31,10 @@ func TestExtremeRunParallelCrossReviewAndVerifier(t *testing.T) {
 	var reviews atomic.Int32
 	var verified atomic.Bool
 	s.CrossReview = func(_ context.Context, t marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
-		reviews.Add(1)
+		// A restaged merge candidate is reviewed afresh; count hand-ins.
+		if !isMarshalMergeCommit(s.Repository, h.ResultCommit) {
+			reviews.Add(1)
+		}
 		ref := "check:test -f " + t.PlanTaskID + ".txt"
 		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{ref}}, "test", nil
 	}
@@ -144,11 +147,12 @@ func TestExtremeRunParallelCrossReviewAndVerifier(t *testing.T) {
 		if err != nil {
 			t.Fatalf("execute failed: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	// A merge onto an advanced head reruns its checks and review.
+	case <-time.After(15 * time.Second):
 		t.Fatal("execute timed out after releasing task a")
 	}
 
-	// Both tasks should now be merged in plan order
+	// Both tasks should now be merged
 	finalRun, _, err := s.load(ctx, "run-ultra")
 	if err != nil {
 		t.Fatal(err)
@@ -406,7 +410,7 @@ func TestExtremeGlobalCap(t *testing.T) {
 				} else {
 					select {
 					case <-globalGate:
-					case <-time.After(5 * time.Second):
+					case <-time.After(30 * time.Second):
 					}
 				}
 				activeGlobal.Add(-1)

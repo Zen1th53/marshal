@@ -1,0 +1,4025 @@
+version: 1
+features:
+  - id: attributable-question-answers
+    name: Question answers bound to the current question and durable delivery receipt
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_ask.go
+      - internal/tui/boardv2_cards_owner.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestStaleAskCannotAnswerNewQuestion
+      - internal/tui.TestAskAnswerAckReplaysOnce
+      - internal/tui.TestAskBrowserBindingChangesForIdenticalQuestions
+      - internal/tui.TestAskConcurrentReplayDeliversOnce
+      - internal/webboard.TestChatQuestionHidesStaleArchitectureCard
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function cardButtons('
+        kind: control
+    tui:
+      - routeOrCommand: ask choice
+        anchor: 'func (w *Workspace) answerAsk(i int)'
+        kind: control
+
+  - id: authenticated-settings-actions
+    name: Authenticated browser project settings and ULTRA execution changes with durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/settings.go
+      - internal/webboard/page/app.js
+      - internal/tui/webboard_settings.go
+      - internal/store/web_settings.go
+    tests:
+      - internal/webboard.TestCmdRejectsCrossOriginAndReplay
+      - internal/webboard.TestCmdConfirmationBindsExactPayload
+      - internal/webboard.TestConcurrentTabsSpendTokenOnce
+      - internal/webboard.TestReceiptLookupAfterLostApplyReply
+      - internal/tui.TestWebSettingRejectsStaleRevisionAndLockedKey
+      - internal/tui.TestWebTargetChangeBeforeDequeueRefuses
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'function previewSetting('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: browser-entitlement-request
+    name: Browser entitlement requests with tracked outcomes and interrupted request reconciliation
+    editions: [governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/webboard_settings_request.go
+      - internal/webboard/page/app.js
+      - internal/app/ultra_requests.go
+    tests:
+      - internal/tui.TestWebRequestReceiptPreservesUnknownOutcome
+      - internal/app.TestObserveEntitlementCommandAcrossWorkspaceSessions
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: '"Request ULTRA entitlement"'
+        kind: control
+    tui:
+      - routeOrCommand: /ultra request
+        anchor: 'case "/ultra":'
+        kind: control
+
+  # ---- Web Board features ---------------------------------------------------
+  - id: F01
+    name: ULTRA supervision mode, entitlement and execution switch
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/statusline.go
+      - internal/cloud/gate.go
+    tests:
+      - internal/tui.TestModeLabelFollowsTheLiveGate
+      - internal/cloud.TestExecutionPreferenceIsNotAuthority
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /mode
+        anchor: 'case "/mode":'
+        kind: control
+      - routeOrCommand: /ultra
+        anchor: 'case "/ultra":'
+        kind: control
+
+  - id: execution-mode-display
+    name: Effective execution mode and serial work explanations on home screens
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/tui/boardv2_collect.go
+      - internal/tui/ultra_request_read.go
+      - internal/app/marshal_dispatch_policy.go
+      - internal/webboard/frame.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestBoardModeReportsEffectiveTierSeparately
+      - internal/webboard.TestModeFrameDoesNotExposeLease
+      - internal/webboard.TestFrameMapsEveryField
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'setText("execution-mode"'
+        kind: view
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Session label"'
+        kind: view
+    tui:
+      - routeOrCommand: home
+        anchor: 'func homeMode('
+        kind: view
+
+  - id: F02
+    name: Effective worker concurrency and per-provider lane limits
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_flow.go
+      - internal/tui/boardv2_collect_marshal.go
+    tests:
+      - internal/tui.TestExtremeSettingsApplyAndFormat
+      - internal/webboard.TestFrameMapsEveryField
+    docs:
+      - docs/configuration.md
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'kv(dl, "Lane caps"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F03
+    name: Final model verifier and verification proof status
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/app/marshal_lifecycle.go
+      - internal/marshal/tier.go
+    tests:
+      - internal/marshal.TestTierPolicyMarshalLeaseUsesSettings
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: "5"
+        anchor: 'What: "verify: claims and their evidence"'
+        kind: view
+
+  - id: F04
+    name: Independent cross-review per task hand-in
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_collect_marshal.go
+      - internal/webboard/page/app.js
+      - internal/app/marshal_lifecycle.go
+      - internal/marshal/tier.go
+    tests:
+      - internal/marshal.TestCrossReviewNeedsAReviewerNotAnotherProvider
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'kv(facts, "Reviewer"'
+        kind: view
+    tui:
+      - routeOrCommand: "4"
+        anchor: '[2]string{"review", "other provider"}'
+        kind: view
+
+  - id: F05
+    name: Independent design review of a draft before plan approval
+    editions: [default]
+    sources:
+      - internal/tui/design_review_extreme.go
+      - internal/app/design_review.go
+      - internal/architecturereview/server.go
+    tests:
+      - internal/app.TestRuntimeDesignReviewerFreshHostLaunch
+    docs: []
+    web: []
+    tui: []
+
+  - id: F06
+    name: Architecture conformance check on task hand-in
+    editions: [default]
+    sources:
+      - internal/app/architecture_conformance_extreme.go
+      - internal/architecturereview/server.go
+    tests:
+      - internal/app.TestHandInThatUsesAnUndeclaredPartIsReturned
+    docs: []
+    web: []
+    tui: []
+
+  - id: F07
+    name: Task instruction control mode (free or strict)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/marshal/domain.go
+      - internal/app/marshal_service.go
+    tests:
+      - internal/marshal.TestRunTaskControl
+    docs:
+      - docs/configuration.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal settings control
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F08
+    name: Task and close acceptance mode (marshal, marshal-then-user, user)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_collect_marshal.go
+      - internal/marshal/domain.go
+    tests:
+      - internal/marshal.TestSettingsDefaultsAndEnums
+    docs:
+      - docs/configuration.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Approval mode"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings acceptance-mode
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F09
+    name: Marshal chat execution rights (none, read-only, small-tasks)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/marshal_confine.go
+      - internal/marshal/domain.go
+    tests:
+      - internal/marshal.TestSettingsDefaultsAndEnums
+      - internal/tui.TestReadOnlyMarshalCannotCommitFromChat
+      - internal/tui.TestUnsupportedConfinementFallsBackToToolOnly
+    docs:
+      - docs/configuration.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal settings execution-rights
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F10
+    name: Task rework limit before reassignment or escalation
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/marshal/domain.go
+      - internal/app/marshal_lifecycle.go
+    tests:
+      - internal/marshal.TestReworkPolicy
+    docs:
+      - docs/configuration.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal settings rework-limit
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F11
+    name: Provider quota windows and dispatch eligibility
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_collect_limits.go
+    tests:
+      - internal/webboard.TestEncodeLimits
+      - internal/webboard.TestFrameCarriesLimitsAndSystem
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'function limitRows(rows, who)'
+        kind: view
+    tui:
+      - routeOrCommand: "4"
+        anchor: 'What: "providers: harness health"'
+        kind: view
+
+  - id: F12
+    name: Global worker concurrency cap across providers
+    editions: [default]
+    sources:
+      - internal/tui/settings_extreme.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_flow.go
+      - internal/marshal/settings_concurrency_extreme.go
+    tests:
+      - internal/tui.TestExtremeSettingsApplyAndFormat
+      - internal/marshal.TestExtremeConcurrencySettingsRoundTripAndValidation
+    docs:
+      - docs/configuration.md
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'kv(dl, "Lane caps"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings global-cap
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F13
+    name: Provider failover order on quota exhaustion
+    editions: [default]
+    sources:
+      - internal/tui/failover_extreme.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_collect_marshal.go
+      - internal/marshal/failover_settings_extreme.go
+    tests:
+      - internal/marshal.TestExtremeFailoverSettingsRoundTrip
+    docs:
+      - docs/configuration.md
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings failover-order
+        anchor: 'func handleFailoverSetting('
+        kind: control
+
+  - id: F14
+    name: Task and plan budget ceilings (tokens, money, wall time)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/commands_budget.go
+      - internal/marshal/budget.go
+    tests:
+      - internal/marshal.TestBudgetUnknownAndCeilings
+      - internal/marshal.TestBudgetWallTimeBoundary
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Tokens this run"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: F15
+    name: Host thermal guard and lane cap reduction request
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/webboard/page/app.js
+      - internal/tui/host_guard.go
+      - internal/tui/host_watch.go
+    tests:
+      - internal/tui.TestHostLaneGuardLowersAndRestores
+      - internal/webboard.TestFrameCarriesLimitsAndSystem
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Thermal cap"'
+        kind: view
+    tui:
+      - routeOrCommand: "2"
+        anchor: 'What: "host: temperature, disk, guards"'
+        kind: view
+
+  - id: F16
+    name: Worker liveness heartbeat and stale lane signal
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_liveness.go
+      - internal/webboard/page/app.js
+      - internal/app/worker_liveness.go
+    tests:
+      - internal/webboard.TestEncodeRunningFrame
+      - internal/webboard.TestUnverifiableWorkerNeverRendersDead
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function signalView(x, add)'
+        kind: view
+    tui:
+      - routeOrCommand: "1"
+        anchor: 'not running: no worker for '
+        kind: view
+
+  - id: F17
+    name: Task and run waiting reason diagnosis
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_flow.go
+    tests:
+      - internal/webboard.TestEncodeRunningFrame
+      - internal/tui.TestBoardExplainsEveryWaitingState
+      - internal/tui.TestAllBlockedEntitiesHaveWaitReasonAndDestination
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;'
+        kind: view
+    tui:
+      - routeOrCommand: /why
+        anchor: 'case "/why":'
+        kind: view
+
+  - id: F18
+    name: Pending approvals inbox, age and decision controls
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_cards_decision.go
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestApprovalFrameIncludesAgeAndRedactsReason
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'inbox: "a request waiting in the inbox"'
+        kind: control
+      - routeOrCommand: "#home"
+        anchor: 'function renderInbox(f)'
+        kind: view
+    tui:
+      - routeOrCommand: /approvals
+        anchor: 'case "/approvals":'
+        kind: view
+      - routeOrCommand: /approve
+        anchor: 'case "/approve":'
+        kind: control
+
+  - id: F19
+    name: Paused and stopped run cause, raw error and recovery action
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_cards_paused.go
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'setText("card-summary", [p.cause, p.resets].filter(Boolean).join(" · "));'
+        kind: control
+    tui:
+      - routeOrCommand: y
+        anchor: 'if !w.handleV2CardKey(KeyEvent{Type: KeyEnter})'
+        kind: control
+
+  - id: F20
+    name: Memory review queue, candidate decisions and retention view
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/tui/memory_view_live.go
+      - internal/tui/memory_review_extreme.go
+    tests:
+      - internal/app.TestOperatorMemoryReadCannotBeForgedTransferredOrExpired
+    docs:
+      - docs/board-and-keys.md
+      - docs/memory-and-mcp.md
+    web: []
+    tui:
+      - routeOrCommand: "3"
+        anchor: 'What: "memory: review queue"'
+        kind: view
+      - routeOrCommand: a
+        anchor: 'What: "memory: keep, reject, evidence"'
+        kind: control
+
+  - id: F21
+    name: Security view, enforcement claims and permission decisions
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/tui/security_view_live.go
+      - internal/tui/claims_extreme.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: "6"
+        anchor: 'ID: "view.security"'
+        kind: view
+      - routeOrCommand: a
+        anchor: 'What: "security: allow, deny, then Enter"'
+        kind: control
+
+  - id: F22
+    name: Verify view for claims, evidence and claim return
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/tui/verify_view_live.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: "5"
+        anchor: 'What: "verify: claims and their evidence"'
+        kind: view
+      - routeOrCommand: x
+        anchor: 'What: "verify: return claims, then Enter"'
+        kind: control
+
+  - id: F23
+    name: Task diff viewer and reviewer verdict details
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/tui/diff_view.go
+      - internal/tui/commands.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: d
+        anchor: 'Command: "/diff"'
+        kind: view
+      - routeOrCommand: F2
+        anchor: 'Command: "/review"'
+        kind: view
+
+  - id: F24
+    name: Earlier-session discovery and granted continuation import
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/session_inventory.go
+      - internal/tui/launch_scan.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /sessions
+        anchor: 'case "/sessions":'
+        kind: view
+      - routeOrCommand: /continue
+        anchor: 'case "/continue":'
+        kind: control
+
+  - id: F25
+    name: Requirements card review, line editing and confirmation
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/webboard/page/app.js
+      - internal/tui/board_requirements.go
+    tests:
+      - internal/webboard.TestRequirementLinesAreVisibleOutsideDisclosure
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: '$("card-lines").appendChild(el("dt", "", l.label || l.key || ""));'
+        kind: control
+    tui:
+      - routeOrCommand: e
+        anchor: 'return w.handleRequirementsKey(event)'
+        kind: control
+
+  - id: F26
+    name: Plan summary inspection and plan approval gate
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_cards_decision.go
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'plan: "the plan"'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal approve
+        anchor: 'case "approve":'
+        kind: control
+
+  - id: F27
+    name: Settings presets (Fast, Balanced, Strict) with diff preview
+    editions: [default, governed]
+    sources:
+      - internal/marshal/domain.go
+      - internal/settingscatalog/presets.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: F28
+    name: Run-end and owner-attention notifications
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/board_attention.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /notify
+        anchor: 'case "/notify":'
+        kind: control
+
+  # ---- /marshal subcommands and top-level commands ---------------------------
+  - id: TUI-CMD-marshal
+    name: Start goal planning or display Marshal run status and usage
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/index.html
+    tests:
+      - internal/webboard.TestActSay
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'id="say-text"'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal
+        anchor: 'return w.marshalStart(ctx, strings.Join(args, " "))'
+        kind: control
+
+  - id: TUI-CMD-marshal-chat
+    name: Open or focus the Marshal provider chat
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/index.html
+    tests:
+      - internal/webboard.TestFrameMarshalSays
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'id="marshal-says"'
+        kind: view
+      - routeOrCommand: "#home"
+        anchor: 'id="say-send"'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal chat
+        anchor: 'case "chat":'
+        kind: control
+
+  - id: TUI-CMD-marshal-architecture
+    name: Open the accepted or proposed project architecture in the browser
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/marshal_architecture.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal architecture
+        anchor: 'case "architecture":'
+        kind: control
+
+  - id: TUI-CMD-marshal-web
+    name: Open the Web Board on a fresh one-use loopback link
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/webboard.go
+    tests:
+      - internal/webboard.TestStartBindsLoopbackWithStrongToken
+      - internal/webboard.TestLinkWorksOnceAndASecondUseShutsPagesOut
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function spendLink(next)'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal web
+        anchor: 'case "web":'
+        kind: control
+
+  - id: TUI-CMD-marshal-draft-discard
+    name: Discard an unimported plan draft and reopen chat
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal draft discard
+        anchor: 'case "draft":'
+        kind: control
+
+  - id: TUI-CMD-marshal-help
+    name: Display Marshal subcommand usage text
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/index.html
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'id="docs-link"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal help
+        anchor: 'case "help":'
+        kind: view
+
+  - id: TUI-CMD-marshal-status
+    name: Print Marshal run state, tasks, criteria, budget and completion report
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/marshal_status.go
+      - internal/tui/marshal_panel.go
+    tests:
+      - internal/webboard.TestEncodeRunningFrame
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function renderWork(f)'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal status
+        anchor: 'case "status":'
+        kind: view
+
+  - id: TUI-CMD-marshal-model
+    name: Switch the Marshal chat provider and persist for the project
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/board_marshal_picker.go
+    tests:
+      - internal/tui.TestMarshalModelSwitchPersistsAndRestarts
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal model
+        anchor: 'case "model":'
+        kind: control
+
+  - id: TUI-CMD-marshal-approve
+    name: Review exact plan scope and approve eligible work
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'plan: "the plan"'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal approve
+        anchor: 'case "approve":'
+        kind: control
+
+  - id: TUI-CMD-marshal-use-plan
+    name: Run the current approved Process 04 plan through Process 05
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal use-plan
+        anchor: 'case "use-plan":'
+        kind: control
+
+  - id: TUI-CMD-marshal-approve-task
+    name: Approve a Process 05 task paused for the owner
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal approve-task
+        anchor: 'case "approve-task":'
+        kind: control
+
+  - id: TUI-CMD-marshal-import
+    name: Import a finished CLI task through approval and merge
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal import
+        anchor: 'case "import":'
+        kind: control
+
+  - id: TUI-CMD-marshal-accept
+    name: Apply result acceptance through the run writer when idle or during execution
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal accept
+        anchor: 'case "accept":'
+        kind: control
+
+  - id: TUI-CMD-marshal-return
+    name: Return a handed-in task through the run writer when idle or during execution
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal return
+        anchor: 'case "return":'
+        kind: control
+
+  - id: TUI-CMD-marshal-retry
+    name: Retry a bound returned or escalated attempt through the run writer
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/board_retry.go
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestQueuedRetryRetainsFreshSession
+      - internal/tui.TestActiveRunQueuesRetryAndNamesExecution
+      - internal/tui.TestLegacyTaskCommandUsesBoundWriter
+      - internal/tui.TestTaskProposalReplaysWriterReceipt
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal retry
+        anchor: 'case "retry":'
+        kind: control
+
+  - id: TUI-CMD-marshal-reassign
+    name: Reassign an escalated or queued task to another worker provider
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal reassign
+        anchor: 'case "reassign":'
+        kind: control
+
+  - id: TUI-CMD-marshal-cancel
+    name: Cancel an escalated task and hold the run for plan review
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestRunCommandsUseSingleWriter
+      - internal/app.TestTaskActionEligibilityMatrix
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal cancel
+        anchor: 'case "cancel":'
+        kind: control
+
+  - id: TUI-CMD-marshal-close
+    name: Close a verified run and deliver changes to the target branch
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests:
+      - internal/marshal.TestCloseAuthorizationRequiresExactDeliveryBinding
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal close
+        anchor: 'case "close":'
+        kind: control
+
+  - id: TUI-CMD-marshal-stop
+    name: Cancel the running Marshal operation while preserving run state
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/app/marshal_run_commands.go
+    tests:
+      - internal/app.TestPriorityPauseFencesNewStarts
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal stop
+        anchor: 'case "stop":'
+        kind: control
+
+  - id: TUI-CMD-marshal-resume
+    name: Continue a stopped or interrupted Marshal run
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal resume
+        anchor: 'case "resume":'
+        kind: control
+
+  - id: TUI-CMD-marshal-amend
+    name: Propose, approve or deny a Marshal plan amendment
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal amend
+        anchor: 'case "amend":'
+        kind: control
+
+  - id: TUI-CMD-marshal-settings
+    name: List effective settings or modify a value with usage errors and project recovery hints
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_extreme.go
+      - internal/tui/failover_extreme.go
+    tests:
+      - internal/tui.TestExtremeSettingsApplyAndFormat
+      - internal/tui.TestSettingsMissingValueDoesNotWrite
+      - internal/tui.TestSettingsWithoutProjectGivesRecoveryHint
+      - internal/tui.TestSettingsReadbackShowsCanonicalValueAndUnits
+    docs:
+      - docs/configuration.md
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'case "settings":'
+        kind: control
+
+  - id: TUI-CMD-mode
+    name: View or switch session supervision mode label (/mode)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+    tests:
+      - internal/tui.TestModeLabelFollowsTheLiveGate
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /mode
+        anchor: 'case "/mode":'
+        kind: control
+
+  - id: TUI-CMD-ultra
+    name: View ULTRA status, switch ULTRA execution or request entitlement (/ultra)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+    tests:
+      - internal/tui.TestUltraRequestCommandRoutesThroughTrackedService
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /ultra
+        anchor: 'case "/ultra":'
+        kind: control
+
+  - id: TUI-CMD-task-model
+    name: Open model picker for an individual task (/task-model)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/board_task_model.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /task-model
+        anchor: 'case "/task-model":'
+        kind: control
+
+  - id: TUI-CMD-pause
+    name: Pause active execution runs and hold Marshal dispatch (/pause)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_runcontrol.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /pause
+        anchor: 'case "/pause":'
+        kind: control
+
+  - id: TUI-CMD-resume
+    name: Resume paused execution runs and release dispatch hold (/resume)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_runcontrol.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /resume
+        anchor: 'case "/resume":'
+        kind: control
+
+  - id: TUI-CMD-cancel
+    name: Cancel an execution run and its provider turns (/cancel)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_runcontrol.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /cancel
+        anchor: 'case "/cancel":'
+        kind: control
+
+  - id: TUI-CMD-stop-all
+    name: Stop all background worker sessions while keeping Marshal active (/stop all)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/app.js
+      - internal/tui/tmux_native.go
+    tests:
+      - internal/webboard.TestActScreenKeys
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers", stopAllWarn)'
+        kind: control
+    tui:
+      - routeOrCommand: /stop all
+        anchor: 'case "/stop":'
+        kind: control
+
+  - id: TUI-CMD-models
+    name: List available models for the active or specified provider (/models)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/provider_neutral.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /models
+        anchor: 'case "/models":'
+        kind: view
+
+  - id: TUI-CMD-model
+    name: View or select execution model preferences per provider (/model)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+    tests: []
+    docs:
+      - docs/providers.md
+    web: []
+    tui:
+      - routeOrCommand: /model
+        anchor: 'case "/model":'
+        kind: control
+
+  - id: TUI-CMD-effort
+    name: Configure reasoning effort for future runs (/effort)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /effort
+        anchor: 'case "/effort":'
+        kind: control
+
+  - id: TUI-CMD-budget
+    name: Display budget consumption or propose goal budget limits (/budget)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_budget.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /budget
+        anchor: 'case "/budget":'
+        kind: control
+
+  - id: TUI-CMD-notify
+    name: Configure bell and desktop notifications per project (/notify)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/board_attention.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /notify
+        anchor: 'case "/notify":'
+        kind: control
+
+  - id: TUI-CMD-view
+    name: Switch Board/classic views and control tmux worker panes (/view, /focus, /takeover)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/tmux_native.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /view
+        anchor: 'case "/view":'
+        kind: control
+      - routeOrCommand: /takeover
+        anchor: 'case "/takeover", "/take-over":'
+        kind: control
+
+  - id: TUI-CMD-help
+    name: Display command overview and full reference (/help, /?)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/index.html
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'id="docs-link"'
+        kind: view
+    tui:
+      - routeOrCommand: /help
+        anchor: 'case "/help", "/?":'
+        kind: view
+
+  - id: TUI-CMD-quit
+    name: Exit the terminal workspace (/quit, /exit)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: /quit
+        anchor: 'case "/quit", "/exit":'
+        kind: control
+
+  - id: TUI-CMD-goal
+    name: Create, edit, inspect or cancel project goals and constraints (/goal)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_goal.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /goal
+        anchor: 'case "/goal":'
+        kind: control
+
+  - id: TUI-CMD-status
+    name: Display canonical session status (/status)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/app.js
+      - internal/tui/commands_control.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function renderTop(f)'
+        kind: view
+    tui:
+      - routeOrCommand: /status
+        anchor: 'case "/status":'
+        kind: view
+
+  - id: TUI-CMD-verification-review
+    name: Inspect verification sessions and run native review (/verification, /review)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_control.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /verification
+        anchor: 'case "/verification":'
+        kind: view
+      - routeOrCommand: /review
+        anchor: 'case "/review":'
+        kind: view
+
+  - id: TUI-CMD-learning-reports
+    name: Inspect learning, optimization, provenance, trust, fingerprints, playbooks and replay index
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_learning.go
+      - internal/tui/commands_optimization.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /learning
+        anchor: 'case "/learning":'
+        kind: view
+      - routeOrCommand: /optimization
+        anchor: 'case "/optimization":'
+        kind: view
+      - routeOrCommand: /memory-search
+        anchor: 'case "/memory-search":'
+        kind: view
+      - routeOrCommand: /provenance
+        anchor: 'case "/provenance":'
+        kind: view
+
+  - id: TUI-CMD-inspect
+    name: Inspect claim, evidence, checkpoint, task, handoff or approval records (/inspect)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_control.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /inspect
+        anchor: 'case "/inspect":'
+        kind: view
+
+  - id: TUI-CMD-approvals
+    name: List, inspect and decide pending authenticated approvals (/approvals, /approval, /approve, /reject)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_approvals.go
+      - internal/tui/commands_missing.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /approvals
+        anchor: 'case "/approvals":'
+        kind: view
+      - routeOrCommand: /approval
+        anchor: 'case "/approval":'
+        kind: view
+      - routeOrCommand: /approve
+        anchor: 'case "/approve":'
+        kind: control
+      - routeOrCommand: /reject
+        anchor: 'case "/reject":'
+        kind: control
+
+  - id: TUI-CMD-claims-evidence
+    name: View advisory routing, agent roster, claims and evidence records (/route, /agents, /claims, /evidence)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_evidence.go
+      - internal/tui/commands_control.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /route
+        anchor: 'case "/route":'
+        kind: view
+      - routeOrCommand: /agents
+        anchor: 'case "/agents", "/roster":'
+        kind: view
+      - routeOrCommand: /claims
+        anchor: 'case "/claims":'
+        kind: view
+      - routeOrCommand: /evidence
+        anchor: 'case "/evidence":'
+        kind: view
+
+  - id: TUI-CMD-collaboration
+    name: Send team session messages and handoffs (/msg, /say, /handoff)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/app.js
+      - internal/tui/commands_collaboration.go
+    tests:
+      - internal/webboard.TestActSay
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function send()'
+        kind: control
+    tui:
+      - routeOrCommand: /msg
+        anchor: 'case "/msg", "/say":'
+        kind: control
+      - routeOrCommand: /handoff
+        anchor: 'case "/handoff":'
+        kind: control
+
+  - id: TUI-CMD-checkpoint-rollback
+    name: Create, inspect and restore checkpoints and backups (/checkpoint, /rollback, /backup)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_checkpoint.go
+      - internal/tui/commands_expanded.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /checkpoint
+        anchor: 'case "/checkpoint":'
+        kind: control
+      - routeOrCommand: /rollback
+        anchor: 'case "/rollback":'
+        kind: control
+      - routeOrCommand: /backup
+        anchor: 'case "/backup":'
+        kind: control
+
+  - id: TUI-CMD-doctor
+    name: Run workspace and provider setup diagnostics (/doctor)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /doctor
+        anchor: 'case "/doctor":'
+        kind: control
+
+  - id: TUI-CMD-tasks
+    name: List, inspect and control runtime tasks (/tasks, /task)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_tasks.go
+      - internal/tui/commands_expanded.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /tasks
+        anchor: 'case "/tasks", "/task":'
+        kind: control
+
+  - id: TUI-CMD-low-level-reports
+    name: Inspect policy, sandbox, runtime, fingerprint, reinjection, termination, context and blind status
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+      - internal/tui/commands_fingerprint.go
+      - internal/tui/commands_missing.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /policy
+        anchor: 'case "/policy":'
+        kind: view
+      - routeOrCommand: /sandbox
+        anchor: 'case "/sandbox":'
+        kind: view
+      - routeOrCommand: /context
+        anchor: 'case "/context":'
+        kind: view
+      - routeOrCommand: /blind
+        anchor: 'case "/blind":'
+        kind: view
+
+  - id: TUI-CMD-memory
+    name: List, search, review, promote and configure project memory (/memory)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+      - internal/tui/memory_review_extreme.go
+    tests:
+      - internal/app.TestOperatorMemoryReadCannotBeForgedTransferredOrExpired
+    docs:
+      - docs/memory-and-mcp.md
+    web: []
+    tui:
+      - routeOrCommand: /memory
+        anchor: 'case "/memory":'
+        kind: control
+
+  - id: TUI-CMD-providers-harness
+    name: Probe and select provider harnesses (/provider, /providers, /harness)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+      - internal/tui/provider_neutral.go
+    tests: []
+    docs:
+      - docs/providers.md
+    web: []
+    tui:
+      - routeOrCommand: /providers
+        anchor: 'case "/provider", "/providers":'
+        kind: control
+      - routeOrCommand: /harness
+        anchor: 'case "/harness":'
+        kind: control
+
+  - id: TUI-CMD-permissions-egress
+    name: Manage read grants, credentials, continuation and per-run egress (/permission, /continue, /egress)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/permissions.go
+      - internal/tui/commands_egress.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /permission
+        anchor: 'case "/permission":'
+        kind: control
+      - routeOrCommand: /continue
+        anchor: 'case "/continue":'
+        kind: control
+      - routeOrCommand: /egress
+        anchor: 'case "/egress":'
+        kind: control
+
+  - id: TUI-CMD-store-export-alignment
+    name: Check store integrity, export evidence bundles and inspect alignment (/store, /export, /alignment)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+      - internal/tui/commands_alignment.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /store
+        anchor: 'case "/store":'
+        kind: control
+      - routeOrCommand: /export
+        anchor: 'case "/export":'
+        kind: control
+      - routeOrCommand: /alignment
+        anchor: 'case "/alignment":'
+        kind: view
+
+  - id: TUI-CMD-diff
+    name: Inspect bounded git diff inventory (/diff)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/diff_view.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /diff
+        anchor: 'case "/diff":'
+        kind: view
+
+  - id: TUI-CMD-update
+    name: Check for or install Marshal software updates (/update)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_update.go
+    tests: []
+    docs:
+      - docs/upgrading.md
+    web: []
+    tui:
+      - routeOrCommand: /update
+        anchor: 'case "/update":'
+        kind: control
+
+  - id: TUI-CMD-provider-native
+    name: Invoke native provider control planes and neutral operations (/codex, /claude, /opencode, /agy, /mcp, /skills, /login, /logout)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_codex.go
+      - internal/tui/commands_claude.go
+      - internal/tui/commands_opencode.go
+      - internal/tui/commands_antigravity.go
+    tests: []
+    docs:
+      - docs/providers.md
+    web: []
+    tui:
+      - routeOrCommand: /codex
+        anchor: 'case "/codex":'
+        kind: control
+      - routeOrCommand: /claude
+        anchor: 'case "/claude":'
+        kind: control
+      - routeOrCommand: /agy
+        anchor: 'case "/agy", "/antigravity":'
+        kind: control
+      - routeOrCommand: /mcp
+        anchor: 'case "/mcp":'
+        kind: control
+
+  - id: TUI-CMD-sessions
+    name: List native provider conversations and governed runs (/sessions)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/session_inventory.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /sessions
+        anchor: 'case "/sessions":'
+        kind: view
+
+  # ---- TUI key bindings and action palette -----------------------------------
+  - id: TUI-KEY-home-core
+    name: Board home primary keys (Enter chat, y safe action, w Web Board, s say, q quit, a architecture)
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/webboard/page/index.html
+      - internal/tui/board_keymap.go
+    tests:
+      - internal/webboard.TestActSay
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'id="you-pill"'
+        kind: control
+    tui:
+      - routeOrCommand: Enter
+        anchor: 'w.focusChatFromBoard(ctx)'
+        kind: control
+      - routeOrCommand: y
+        anchor: 'w.homeYes(ctx)'
+        kind: control
+      - routeOrCommand: w
+        anchor: 'w.openWebBoardKey()'
+        kind: control
+      - routeOrCommand: s
+        anchor: 'w.openSay()'
+        kind: control
+
+  - id: TUI-KEY-first-run-prompts
+    name: First-run From-you prompt keys (t telemetry disable, g agy sign-in, y provider check)
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/tui/boardv2_ready_keys.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: t
+        anchor: 'w.chooseTelemetry(ctx, false)'
+        kind: control
+      - routeOrCommand: g
+        anchor: 'w.openAgySignIn(ctx)'
+        kind: control
+
+  - id: TUI-KEY-body-views
+    name: Board views (1–8, h, b) and in-view provider verify (v) and route-around (r) keys
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/tui/board_live.go
+    tests:
+      - internal/tui.TestHostViewKeys
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: "2"
+        anchor: 'ID: "view.host"'
+        kind: view
+      - routeOrCommand: "4"
+        anchor: 'ID: "view.providers"'
+        kind: view
+      - routeOrCommand: v
+        anchor: 'ID: "providers.verify"'
+        kind: control
+      - routeOrCommand: r
+        anchor: 'ID: "providers.route"'
+        kind: control
+      - routeOrCommand: "7"
+        anchor: 'ID: "view.plan"'
+        kind: view
+      - routeOrCommand: "8"
+        anchor: 'ID: "view.architecture"'
+        kind: view
+
+  - id: TUI-KEY-shortcuts-and-fkeys
+    name: Action palette (Space/Ctrl+K), help overlay (?), Marshal picker (m), stop workers (Ctrl+X) and F1–F12
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/webboard/page/app.js
+      - internal/tui/workspace.go
+    tests:
+      - internal/webboard.TestActScreenKeys
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'screenKey(f, "ctrl+x")'
+        kind: control
+    tui:
+      - routeOrCommand: m
+        anchor: 'ID: "marshal.pick"'
+        kind: control
+      - routeOrCommand: Space
+        anchor: 'ID: "palette"'
+        kind: control
+      - routeOrCommand: "?"
+        anchor: 'ID: "help"'
+        kind: view
+      - routeOrCommand: Ctrl+X
+        anchor: 'ID: "workers.stop"'
+        kind: control
+      - routeOrCommand: F6
+        anchor: 'ID: "fkey.mcp"'
+        kind: view
+      - routeOrCommand: F10
+        anchor: 'ID: "fkey.update"'
+        kind: control
+
+  - id: TUI-KEY-task-diff-D
+    name: Task diff against base overlay key (D) and mouse hit regions
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_task_diff.go
+      - internal/tui/board_keymap.go
+      - internal/tui/board_mouse.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui: []
+
+  # ---- TUI home screen rendering ---------------------------------------------
+  - id: TUI-HOME-minimal-screen
+    name: Terminal Board home header, Now, From you, Web status, key bar, footer and dock strip
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/webboard/page/app.js
+      - internal/tui/marshal_dockstrip.go
+    tests:
+      - internal/tui.TestHostNoticeNeverDisplacesRunNote
+      - internal/webboard.TestEncodeRunningFrame
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function renderHome(f)'
+        kind: view
+    tui:
+      - routeOrCommand: "1"
+        anchor: 'func renderHome('
+        kind: view
+
+  - id: TUI-HOME-operational-projection
+    name: Terminal Home and Run view projection of tasks, lanes, quota, Activity, steps, chat health and readiness
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_run_view.go
+      - internal/tui/board_home.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_flow.go
+    tests:
+      - internal/webboard.TestFrameMapsEveryField
+      - internal/tui.TestHomeShowsWorkAndOwnerActionAt80x24
+      - internal/tui.TestRunViewReachableAndSelectionStable
+      - internal/tui.TestReadinessAndActivityVisibleWithoutWeb
+      - internal/tui.TestHomeRunProjectionFieldsAndHiddenKeys
+      - internal/tui.TestHostNoticeSurvivesOtherStatus
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function renderLanes(f)'
+        kind: view
+      - routeOrCommand: "#activity"
+        anchor: 'function renderActivity(f)'
+        kind: view
+    tui:
+      - routeOrCommand: "1"
+        anchor: 'func hostAbnormal('
+        kind: view
+      - routeOrCommand: r
+        anchor: 'func runWorkLines('
+        kind: view
+      - routeOrCommand: i
+        anchor: 'func inboxPageLines('
+        kind: view
+      - routeOrCommand: c
+        anchor: 'func readyPageLines('
+        kind: view
+
+  # ---- TUI cards and overlays ------------------------------------------------
+  - id: TUI-CARD-paused
+    name: Paused run cards (quota, auth, orphan, timeout, lease, interrupted, stalled, stopped, new_plan)
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_cards_paused.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_cards_keys.go
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'setText("card-title", p.title);'
+        kind: control
+    tui:
+      - routeOrCommand: y
+        anchor: 'func (w *Workspace) v2PauseNow('
+        kind: control
+
+  - id: TUI-CARD-decision-architecture
+    name: Architecture decision card and owner-only browser review link
+    editions: [default]
+    sources:
+      - internal/tui/boardv2_cards_keys.go
+      - internal/tui/boardv2_cards_decision.go
+      - internal/webboard/page/app.js
+      - internal/architecturereview/server.go
+    tests:
+      - internal/webboard.TestChatQuestionHidesStaleArchitectureCard
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#architecture"
+        anchor: 'Open the architecture map'
+        kind: control
+    tui:
+      - routeOrCommand: a
+        anchor: 'w.openArchitectureReview()'
+        kind: control
+      - routeOrCommand: Enter
+        anchor: 'if !boardAcceptsArchitecture {'
+        kind: locked
+        reason: "Only you can accept the architecture, in the browser: a opens it, c copies its link."
+
+  - id: TUI-CARD-decision-web-only
+    name: Bound terminal rendering and actions for plan, inbox, guard, what-next, ask and goal-change cards
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_cards_owner.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_cards_decision.go
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function renderCard(f)'
+        kind: control
+    tui: []
+
+  - id: TUI-CARD-unreachable-inspector
+    name: Terminal task inspector and lane Enter worker-pane jump
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_live.go
+      - internal/webboard/page/app.js
+      - internal/tui/board_mouse.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function renderDrawer(f)'
+        kind: view
+    tui: []
+
+  - id: TUI-CARD-overlays
+    name: Terminal KEYS help overlay, Marshal provider picker, task-model picker and classic transcript screen
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_marshal_picker.go
+      - internal/webboard/page/app.js
+      - internal/tui/board_task_model.go
+      - internal/tui/board_keymap.go
+    tests:
+      - internal/tui.TestMarshalModelSwitchPersistsAndRestarts
+    docs:
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'function renderTeam(f)'
+        kind: view
+    tui:
+      - routeOrCommand: m
+        anchor: 'func (w *Workspace) openMarshalPicker('
+        kind: control
+
+  # ---- TUI popups and prompts ------------------------------------------------
+  - id: TUI-POPUP-permissions
+    name: Permission request popup and inbox routing for read, credential, network, memory and marshal-command
+    editions: [default, governed]
+    sources:
+      - internal/tui/permissions.go
+      - internal/webboard/page/app.js
+      - internal/permission/popup.go
+    tests:
+      - internal/webboard.TestActPressesTheCardsKey
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'inbox: "a request waiting in the inbox"'
+        kind: control
+    tui:
+      - routeOrCommand: A
+        anchor: 'func (w *Workspace) runPermissionQueue('
+        kind: control
+
+  - id: TUI-POPUP-onboarding-and-auth
+    name: Provider auth preflight, launch Marshal picker, opening animation and Blocked screen
+    editions: [default, governed]
+    sources:
+      - internal/tui/auth_preflight.go
+      - internal/webboard/page/app.js
+      - internal/tui/board_picker.go
+      - internal/tui/board_blocked.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function firstRun(f)'
+        kind: view
+    tui:
+      - routeOrCommand: r
+        anchor: 'func (w *Workspace) preflightProviderAuth('
+        kind: view
+
+  - id: TUI-POPUP-composer-and-views
+    name: Multi-line answer overlay, command completion menu, diff viewer and MCP failure report
+    editions: [default, governed]
+    sources:
+      - internal/tui/mcp_fault.go
+      - internal/tui/completion_popup.go
+      - internal/tui/board_answer.go
+      - internal/tui/diff_view.go
+    tests: []
+    docs:
+      - docs/board-and-keys.md
+    web: []
+    tui:
+      - routeOrCommand: F6
+        anchor: 'func (w *Workspace) showMCPFailure('
+        kind: view
+
+  # ---- Notices sent into the Marshal chat ------------------------------------
+  - id: TUI-NOTICE-runtime-chat
+    name: Runtime notices to the Marshal chat on run close, recovered review, plan draft, guard and architecture events
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_next.go
+      - internal/webboard/page/app.js
+      - internal/tui/marshal_plan_stall.go
+      - internal/tui/marshal_draft_reject.go
+      - internal/tui/board_guard.go
+      - internal/tui/architecture_requests.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#activity"
+        anchor: 'function eventRow(e)'
+        kind: view
+    tui:
+      - routeOrCommand: Enter
+        anchor: 'func runClosedNotice('
+        kind: view
+
+  - id: TUI-NOTICE-pause-and-offline-replay
+    name: Durable chat and Board notices for pauses, approval outcomes, resume failures and offline replay
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/board_next.go
+      - internal/tui/marshal_plan_stall.go
+      - internal/app/approval_notices.go
+      - internal/store/approval_outbox.go
+      - internal/tui/native_liveinbox.go
+    tests:
+      - internal/app.TestApprovalTerminalNoticeRecovery
+      - internal/app.TestApprovalNoticeConcurrentDelivery
+      - internal/tui.TestApprovalNoticeInboxDeduplication
+    docs: []
+    web: []
+    tui: []
+
+  # ---- Settings and policy ---------------------------------------------------
+  - id: session-mode
+    name: Per-session supervision mode label (manual, auto, ultra)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/statusline.go
+      - internal/tui/view.go
+    tests:
+      - internal/tui.TestModeLabelFollowsTheLiveGate
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /mode
+        anchor: 'Operating mode switched to '
+        kind: control
+
+  - id: ultra-entitlement-gate
+    name: ULTRA entitlement authorization gate (capability ultra.marshal)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/cloud/gate.go
+      - internal/marshal/tier.go
+    tests:
+      - internal/cloud.TestGateStartsUnentitled
+      - internal/cloud.TestGateAdoptsValidLease
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /mode
+        anchor: 'ULTRA entitled: %t'
+        kind: locked
+        reason: "ULTRA is unavailable: no cryptographically verified entitlement is active."
+
+  - id: ultra-execution
+    name: Independent project ULTRA execution preference (parallel vs standard execution)
+    editions: [default, governed]
+    sources:
+      - internal/store/ultra_preference.go
+      - internal/app/marshal_preference.go
+      - internal/tui/commands_expanded.go
+      - internal/tui/ultra_default.go
+      - internal/tui/ultra_extreme.go
+      - internal/tui/workspace.go
+    tests:
+      - internal/store.TestUltraPreferenceIsIndependentOfSettings
+      - internal/store.TestUltraOffWaitsForConcurrentSettingsWrite
+      - internal/store.TestUltraPreferenceMigrationPreservesStoredChoice
+      - internal/tui.TestDefaultSessionExecutionStartsOff
+      - internal/tui.TestUltraPreferenceSurvivesRestart
+      - internal/tui.TestUltraPreferenceOffDrainsWithoutRebinding
+      - internal/tui.TestUltraStartWriteFailureLeavesGateUnchanged
+      - internal/tui.TestUltraPreferenceReadErrorRecoversWithoutLosingActivationError
+      - internal/tui.TestNativePlanningChatPopupApprovesExactCanonicalPlan
+      - internal/tui.TestUltraStopWriteFailureClosesAdmission
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /ultra
+        anchor: 'func (h *CommandHandler) handleUltra('
+        kind: control
+
+  - id: ultra-request
+    name: Community cloud ULTRA entitlement request (/ultra request)
+    editions: [governed]
+    sources:
+      - internal/tui/commands_expanded.go
+      - internal/tui/workspace.go
+    tests:
+      - internal/tui.TestUltraRequestCommandRoutesThroughTrackedService
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /ultra request
+        anchor: 'func (h *CommandHandler) requestUltra('
+        kind: control
+
+  - id: ultra-delegation
+    name: ULTRA goal-confirmation delegation capability (ultra.delegate)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_expanded.go
+      - internal/cloud/gate.go
+      - internal/goalintake/confirmation.go
+    tests:
+      - internal/cloud.TestPolicyRequiresDelegationCapability
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /ultra status
+        anchor: 'delegation is enabled'
+        kind: locked
+        reason: "ULTRA status: ACTIVE — delegation is unavailable; confirmations are still required."
+
+  - id: tier-policy
+    name: Dispatch tier policy (Standard vs Ultra concurrency evaluation)
+    editions: [default, governed]
+    sources:
+      - internal/tui/marshal_panel.go
+      - internal/marshal/tier.go
+      - internal/app/marshal_lifecycle.go
+    tests:
+      - internal/marshal.TestTierPolicyNoLeaseUsesStandard
+      - internal/marshal.TestTierPolicyExecutionDisabledUsesStandard
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal status
+        anchor: 'func newMarshalPanel('
+        kind: view
+
+  - id: cross-review-required
+    name: Independent cross-review requirement policy
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/boardv2_collect_marshal.go
+      - internal/webboard/page/app.js
+      - internal/marshal/tier.go
+      - internal/marshal/review_policy.go
+      - internal/settingscatalog/catalog.go
+      - internal/app/marshal_lifecycle.go
+    tests:
+      - internal/marshal.TestCrossReviewNeedsAReviewerNotAnotherProvider
+    docs: []
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings cross-review
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: verifier-required
+    name: Final model verifier policy switch and checks-only proof selection
+    editions: [default, governed]
+    sources:
+      - internal/marshal/tier.go
+      - internal/app/marshal_lifecycle.go
+    tests:
+      - internal/marshal.TestTierPolicyMarshalLeaseUsesSettings
+    docs: []
+    web: []
+    tui: []
+
+  - id: setting-control
+    name: Project setting control (free or strict task instructions)
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/marshal/domain.go
+      - internal/app/marshal_service.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestRunTaskControl
+    docs:
+      - docs/configuration.md#settings-reference
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings control
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-acceptance-mode
+    name: Project setting acceptance-mode (marshal, marshal-then-user, user)
+    editions: [default, governed]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/boardv2_collect_marshal.go
+      - internal/marshal/domain.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestSettingsDefaultsAndEnums
+    docs:
+      - docs/configuration.md#settings-reference
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Approval mode"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings acceptance-mode
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-execution-rights
+    name: Project setting execution-rights (none, read-only, small-tasks)
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/marshal_confine.go
+      - internal/marshal/domain.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestSettingsDefaultsAndEnums
+    docs:
+      - docs/configuration.md#settings-reference
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings execution-rights
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-rework-limit
+    name: Project setting rework-limit
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/marshal/domain.go
+      - internal/app/marshal_lifecycle.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestReworkPolicy
+    docs:
+      - docs/configuration.md#settings-reference
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings rework-limit
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-ultra-concurrency
+    name: Project setting ultra-concurrency
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/boardv2_flow_default.go
+      - internal/marshal/domain.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestTierPolicyMarshalLeaseUsesSettings
+    docs:
+      - docs/configuration.md#concurrency
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings ultra-concurrency
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-provider-limits
+    name: Project settings codex-limit, claude-limit, agy-limit and opencode-limit
+    editions: [default]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/settings_extreme.go
+      - internal/webboard/page/app.js
+      - internal/marshal/settings_concurrency_extreme.go
+      - internal/app/marshal_dispatch_extreme.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/tui.TestExtremeSettingsApplyAndFormat
+      - internal/marshal.TestExtremeConcurrencySettingsRoundTripAndValidation
+    docs:
+      - docs/configuration.md#concurrency
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'kv(dl, "Lane caps"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings codex-limit
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-global-cap
+    name: Project setting global-cap
+    editions: [default]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/settings_extreme.go
+      - internal/webboard/page/app.js
+      - internal/marshal/settings_concurrency_extreme.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/tui.TestExtremeSettingsApplyAndFormat
+    docs:
+      - docs/configuration.md#concurrency
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'kv(dl, "Lane caps"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings global-cap
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-failover-order
+    name: Project setting failover-order
+    editions: [default]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/failover_extreme.go
+      - internal/webboard/page/app.js
+      - internal/marshal/failover_settings_extreme.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestExtremeFailoverSettingsRoundTrip
+    docs:
+      - docs/configuration.md#concurrency
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings failover-order
+        anchor: 'func handleFailoverSetting('
+        kind: control
+
+  - id: setting-provider-enablement
+    name: Project settings codex-enabled, claude-enabled, agy-enabled and opencode-enabled
+    editions: [default, governed]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/settingscatalog/catalog_default.go
+      - internal/marshal/domain.go
+      - internal/app/marshal_execute.go
+      - internal/app/failover_extreme.go
+      - internal/app/failover_default.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/settingscatalog.TestProviderAndRuntimeLimitRowsExposeEffectiveValues
+      - internal/app.TestProviderDisableAppliesToNextAdmission
+      - internal/app.TestGovernedProviderDisableRefusesWithoutFailover
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings codex-enabled
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-worker-stall-minutes
+    name: Project setting worker stall window (WorkerStallMinutes)
+    editions: [default]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/marshal/domain.go
+      - internal/app/worker_stall_extreme.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/app.TestExtremeWorkerStallClassifiesAsProviderFailure
+      - internal/app.TestStallOffRetainsSignals
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings worker-stall-minutes
+        anchor: 'func (w *Workspace) marshalSettings('
+        kind: control
+
+  - id: setting-budget-tokens
+    name: Project settings task-tokens and plan-tokens
+    editions: [default, governed]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/marshal/budget.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestBudgetUnknownAndCeilings
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Tokens this run"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings task-tokens
+        anchor: 'settingscatalog.Apply('
+        kind: control
+      - routeOrCommand: /marshal settings plan-tokens
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-budget-money
+    name: Project settings task-money and plan-money
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/marshal/budget.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestBudgetUnknownAndCeilings
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings task-money
+        anchor: 'settingscatalog.Apply('
+        kind: control
+      - routeOrCommand: /marshal settings plan-money
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: setting-budget-wall-time
+    name: Project settings task-wall-seconds and plan-wall-seconds
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/tui/commands_marshal.go
+      - internal/marshal/budget.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/marshal.TestBudgetWallTimeBoundary
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings task-wall-seconds
+        anchor: 'settingscatalog.Apply('
+        kind: control
+      - routeOrCommand: /marshal settings plan-wall-seconds
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: goal-budget-limits
+    name: Goal revision budget limits (/budget set calls, duration, tokens, cost, handoffs, reserve)
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/tui/commands_budget.go
+      - internal/tui/commands.go
+      - internal/tui/settings_view.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /budget set
+        anchor: 'func (h *CommandHandler) handleBudgetSet('
+        kind: control
+
+  - id: thermal-guard
+    name: Host CPU thermal guard and temporary lane-cap overlay
+    editions: [default, governed]
+    sources:
+      - internal/tui/host_guard.go
+      - internal/webboard/page/app.js
+      - internal/tui/host_watch.go
+      - internal/hostwatch/policy.go
+    tests:
+      - internal/tui.TestHostLaneGuardLowersAndRestores
+      - internal/tui.TestThermalOverlayClearsWithoutPersistingCap
+      - internal/tui.TestLegacyThermalCapMigrationPreservesOwnerEdits
+      - internal/hostwatch.TestPolicyHysteresis
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Thermal cap"'
+        kind: view
+    tui:
+      - routeOrCommand: "2"
+        anchor: 'type hostLaneGuard struct'
+        kind: view
+
+  - id: host-watch-rules
+    name: Host advisory health rules (disk, memory, CPU throttle, GPU and NVMe temperature)
+    editions: [default, governed]
+    sources:
+      - internal/tui/host_watch.go
+      - internal/webboard/page/app.js
+      - internal/hostwatch/policy.go
+    tests:
+      - internal/hostwatch.TestPolicyDiskAndMemoryRules
+      - internal/tui.TestHostPolicyEdgesLogAndNotice
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Host load"'
+        kind: view
+    tui:
+      - routeOrCommand: "2"
+        anchor: 'func newHostWatcher('
+        kind: view
+
+  - id: owner-plan-gate
+    name: Owner plan approval gate (governed edition)
+    editions: [governed]
+    sources:
+      - internal/tui/board_gates.go
+      - internal/tui/board_gates_default.go
+    tests:
+      - internal/tui.TestOwnerGateRepliesReachTheChatExactly
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal approve
+        anchor: 'const gateReplyPlan = "approve the plan"'
+        kind: control
+
+  - id: marshal-self-approves-plan
+    name: The Marshal approves the plan itself (default edition)
+    editions: [default]
+    sources:
+      - internal/tui/board_gates.go
+      - internal/tui/board_gates_extreme.go
+    tests:
+      - internal/tui.TestNoOwnerPlanGateInShippedBuild
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: activity note
+        anchor: 'The Marshal approved the plan itself (ultra mode). Press 7 to see it.'
+        kind: view
+
+  - id: architecture-owner-accept
+    name: Owner-only architecture acceptance in the private browser review
+    editions: [default]
+    sources:
+      - internal/tui/boardv2_cards_keys.go
+      - internal/tui/boardv2_cards_decision.go
+      - internal/webboard/page/index.html
+      - internal/architecturereview/server.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#architecture"
+        anchor: 'Accept happens only there'
+        kind: locked
+        reason: "The map opens on its own review page in a new tab; Accept happens only there, never on this page."
+    tui:
+      - routeOrCommand: Enter
+        anchor: 'if !boardAcceptsArchitecture {'
+        kind: locked
+        reason: "Only you can accept the architecture, in the browser: a opens it, c copies its link."
+
+  - id: permission-decision-authority
+    name: Permission decision authority shown in /marshal status (default edition)
+    editions: [default]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/permissions.go
+      - internal/tui/authority_extreme.go
+      - internal/tui/authority_default.go
+    tests:
+      - internal/app.TestExtremeBoundProbeCredentialAppliesAutomatically
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal status
+        anchor: 'return w.decorateMarshalStatus(ctx, status), err'
+        kind: view
+
+  - id: permission-operator-popup
+    name: Operator permission popup decides (governed edition)
+    editions: [governed]
+    sources:
+      - internal/tui/permissions.go
+      - internal/tui/authority_default.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: permission popup
+        anchor: 'func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string)'
+        kind: control
+
+  - id: session-import-continuation
+    name: Automatic launch scan and consent for earlier-session import ("granted continuation")
+    editions: [default, governed]
+    sources:
+      - internal/tui/launch_scan.go
+      - internal/webboard/page/app.js
+      - internal/tui/permissions.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/constitution.TestContinuationProtocolSafety
+    docs: []
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'r.checks.forEach(function (c)'
+        kind: view
+    tui:
+      - routeOrCommand: /continue
+        anchor: 'Load earlier '
+        kind: control
+
+  - id: design-review
+    name: On-demand and policy-configured independent design review
+    editions: [default]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
+      - internal/webboard/page/app.js
+      - internal/tui/design_review_extreme.go
+      - internal/app/design_review.go
+      - internal/marshal/review_policy.go
+      - internal/settingscatalog/catalog.go
+    tests:
+      - internal/app.TestRuntimeDesignReviewerFreshHostLaunch
+      - internal/app.TestDesignReviewReceiptBoundToDraft
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings design-review
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: architecture-conformance
+    name: Hand-in architecture conformance enforcement policy
+    editions: [default]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/app/architecture_conformance_extreme.go
+      - internal/app/marshal_lifecycle.go
+      - internal/tui/settings_view.go
+      - internal/marshal/review_policy.go
+      - internal/settingscatalog/catalog.go
+    tests:
+      - internal/app.TestHandInThatUsesAnUndeclaredPartIsReturned
+      - internal/app.TestConformanceWarnKeepsFindings
+      - internal/app.TestArchitectureObligationSurvivesOptionalReviewOff
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings architecture-conformance
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: memory-candidate-review
+    name: Edition memory candidate complete-read review and promotion rules
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_expanded.go
+      - internal/tui/memory_review_extreme.go
+      - internal/tui/memory_review_default.go
+      - internal/app/memory_review_extreme.go
+      - internal/app/memory_review_default.go
+    tests:
+      - internal/app.TestOperatorMemoryReadCannotBeForgedTransferredOrExpired
+      - internal/app.TestPromotionUsesReviewedRevisionAtCAS
+    docs:
+      - docs/memory-and-mcp.md
+    web: []
+    tui:
+      - routeOrCommand: /memory review
+        anchor: 'if text, handled, err := h.handleOperatorMemoryReview(ctx, args); handled {'
+        kind: control
+      - routeOrCommand: /memory allow
+        anchor: 'return h.handleMemoryReview(ctx, args)'
+        kind: control
+
+  - id: memory-inject-channel
+    name: Native session memory briefing injection channel (/memory inject)
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/tui/commands_expanded.go
+      - internal/tui/native_briefing.go
+      - internal/tui/settings_view.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /memory inject
+        anchor: 'func (h *CommandHandler) handleMemoryInject('
+        kind: control
+
+  - id: flexible-worker-models
+    name: Edition policy for flexible verified worker models on a plan provider
+    editions: [default, governed]
+    sources:
+      - internal/app/model_flex_extreme.go
+      - internal/app/model_flex_default.go
+    tests:
+      - internal/app.TestFlexibleModelsChoosesAnotherVerifiedModel
+    docs: []
+    web: []
+    tui: []
+
+  - id: provider-limit-fallback
+    name: Edition policy for reviewer and verifier fallback off quota-limited providers
+    editions: [default, governed]
+    sources:
+      - internal/app/project_context_marshal_extreme.go
+      - internal/app/project_context_marshal_default.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: governed-provider-switch
+    name: Edition policy for moving a queued governed task to another provider
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/app/marshal_dispatch_extreme.go
+      - internal/app/marshal_dispatch_default.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal reassign
+        anchor: 'case "reassign":'
+        kind: control
+
+  - id: marshal-knowledge-via-recall
+    name: Edition policy for Marshal knowledge fallback to scoped MCP recall
+    editions: [default, governed]
+    sources:
+      - internal/app/project_context_marshal_extreme.go
+      - internal/app/project_context_marshal_default.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: automatic-credential-decision
+    name: Edition policy for automatic runtime provider credential grants
+    editions: [default, governed]
+    sources:
+      - internal/app/credential_auto_extreme.go
+      - internal/app/credential_auto_default.go
+    tests:
+      - internal/app.TestExtremeBoundProbeCredentialAppliesAutomatically
+    docs: []
+    web: []
+    tui: []
+
+  - id: automatic-outside-reads
+    name: Edition policy for automatic reads outside the project root
+    editions: [default, governed]
+    sources:
+      - internal/app/unrestricted_extreme.go
+      - internal/app/unrestricted_default.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: verification-timeout
+    name: Repository final verification wall-clock timeout policy
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/settingscatalog/catalog_default.go
+      - internal/app/verification_timeout_extreme.go
+      - internal/app/verification_timeout_default.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/app.TestExtremeVerificationHasNoWallClockLimit
+      - internal/app.TestRuntimeLimitsDistinguishAbsentAndZero
+      - internal/app.TestGovernedVerificationTimeoutRemainsFixedAt15Minutes
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings verification-timeout-seconds
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: infra-retry-bounds
+    name: Infrastructure retry limit and provider cooldown policy before hand-in
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/settingscatalog/catalog_default.go
+      - internal/app/marshal_infra_retry_extreme.go
+      - internal/app/marshal_infra_retry_default.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
+    tests:
+      - internal/app.TestExtremeInfraFailuresDoNotSpendRework
+      - internal/app.TestInfraRetriesExtendExecutionRoundAllowance
+      - internal/app.TestCommunityHasNoInfraRetry
+      - internal/app.TestRuntimeLimitsDistinguishAbsentAndZero
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings infra-retry-limit
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
+  - id: worker-candidate-writes
+    name: Edition policy for worker candidate memory and design writes
+    editions: [default, governed]
+    sources:
+      - internal/mcp/worker_candidates_extreme.go
+      - internal/mcp/worker_candidates_default.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: memory-redacts-secrets
+    name: Edition policy for secret redaction vs stop in memory content
+    editions: [default, governed]
+    sources:
+      - internal/memory/security/edition_extreme.go
+      - internal/memory/security/edition_default.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: worker-host-and-egress-claims
+    name: Edition worker host environment filtering and network isolation claims
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_egress.go
+      - internal/tui/claims_extreme.go
+      - internal/tui/claims_default.go
+      - internal/workerenv/host_extreme.go
+      - internal/workerenv/host_default.go
+    tests:
+      - internal/tui.TestShippedClaimsMatchTheBuild
+      - internal/workerenv.TestHostFiltersInDefaultEdition
+      - internal/workerenv.TestHostUnchangedInGovernedEdition
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /egress
+        anchor: 'b.WriteString(egressStatusHeader)'
+        kind: view
+
+  - id: egress-enforcement-refusal
+    name: Network work refused without isolation (governed edition)
+    editions: [governed]
+    sources:
+      - internal/tui/commands_egress.go
+      - internal/tui/claims_default.go
+    tests:
+      - internal/tui.TestShippedClaimsMatchTheBuild
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /egress
+        anchor: 'if egressReportsEnforcement && !app.EgressEnforcementAvailable() {'
+        kind: locked
+        reason: "Network work is refused here: bubblewrap network isolation or the trusted socat bridge is unavailable."
+
+  - id: edition-constants-misc
+    name: Compiled edition identity and launch confinement constants (About this build)
+    editions: [default, governed]
+    sources:
+      - internal/tui/edition_extreme.go
+      - internal/tui/edition_default.go
+      - internal/statepath/variant_extreme.go
+      - internal/statepath/variant_default.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: marshal-model
+    name: Marshal chat provider and model selection (/marshal model, m picker)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/webboard/page/app.js
+      - internal/tui/board_marshal_picker.go
+    tests:
+      - internal/tui.TestMarshalModelSwitchPersistsAndRestarts
+    docs: []
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'head.appendChild(el("span", "tc-role", "Marshal"));'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal model
+        anchor: 'func (w *Workspace) marshalSetModel('
+        kind: control
+
+  - id: notify
+    name: Project attention notification preference (.marshal/notify, /notify)
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/tui/board_attention.go
+      - internal/tui/commands.go
+      - internal/tui/settings_view.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /notify
+        anchor: 'func (w *Workspace) notifyCommand('
+        kind: control
+
+  - id: telemetry
+    name: Anonymous operational telemetry preference and CLI control
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/webboard/page/app.js
+      - internal/cli/telemetry.go
+      - internal/cloud/telemetry.go
+    tests:
+      - internal/cloud.TestEventCarriesNoFreeFormField
+    docs:
+      - docs/telemetry.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'kv(dl, "Usage counts (telemetry)"'
+        kind: view
+    tui:
+      - routeOrCommand: t
+        anchor: 'w.chooseTelemetry(ctx, false)'
+        kind: control
+
+  - id: update-check
+    name: Background release update check and install (MARSHAL_NO_UPDATE_CHECK, /update, F10)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_update.go
+      - internal/webboard/page/app.js
+      - internal/update/update.go
+    tests: []
+    docs:
+      - docs/upgrading.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 's.updateAvailable'
+        kind: view
+    tui:
+      - routeOrCommand: /update
+        anchor: 'func (w *Workspace) checkForUpdateInBackground('
+        kind: control
+
+  - id: web-auto-open
+    name: Web Board browser auto-open at Board startup (MARSHAL_WEB_OPEN)
+    editions: [default, governed]
+    sources:
+      - internal/webboard/page/app.js
+      - internal/tui/webboard.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
+    tests: []
+    docs:
+      - docs/configuration.md
+      - docs/board-and-keys.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: w
+        anchor: 'func webOpenAtStart() bool'
+        kind: control
+
+  - id: env-switches
+    name: Display and diagnostic environment overrides (MARSHAL_PROVIDER_PATH_ONLY, MARSHAL_NO_USAGE_PROBES, MARSHAL_REDUCED_MOTION, BOARD_TRUECOLOR, NO_COLOR)
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_opening.go
+      - internal/tui/boardv2_marshal_state.go
+      - internal/project/layout.go
+    tests: []
+    docs:
+      - docs/configuration.md
+    web: []
+    tui: []
+
+  - id: board-defaults-rows
+    name: Readiness project defaults summary rows (workers, fallback, review, approval)
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_collect_marshal.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/webboard.TestFrameMapsEveryField
+    docs: []
+    web:
+      - routeOrCommand: "#team"
+        anchor: 'f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });'
+        kind: view
+    tui:
+      - routeOrCommand: "1"
+        anchor: 'func v2Defaults('
+        kind: view
+
+  - id: protocol-and-inventory-dependencies
+    name: Compiled protocol digests and side-effect inventory verification
+    editions: [default, governed]
+    sources:
+      - internal/constitution/marshal_protocol.go
+      - internal/constitution/protocol_extreme.go
+      - tools/effect-inventory/sites.csv
+    tests:
+      - internal/constitution.TestMarshalProtocolMatchesItsDigest
+    docs: []
+    web: []
+    tui: []
+
+  - id: docs-configuration-disagreements
+    name: Configuration and workflow documentation generated from settings catalogue
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - docs/configuration.md
+      - docs/troubleshooting.md
+    tests: []
+    docs:
+      - docs/configuration.md
+      - docs/troubleshooting.md
+      - docs/board-and-keys.md
+      - docs/design/web-board.md
+    web: []
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'usage: /marshal settings <key> <value>'
+        kind: view
+
+  # ---- Size caps and recovery paths ------------------------------------------
+  - id: CAP-required-context-packet
+    name: Required project context packet byte cap (112 KiB MaximumPacketBytes)
+    editions: [default]
+    sources:
+      - internal/projectcontext/context.go
+      - internal/app/project_context_resolver_extreme.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-provider-envelope
+    name: Provider JSON envelope byte cap for Marshal role turns (112 KiB)
+    editions: [default]
+    sources:
+      - internal/app/project_context_provider_extreme.go
+      - internal/app/project_context_marshal_extreme.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-review-prompt
+    name: Review prompt budget compaction and limited notice delivery
+    editions: [default, governed]
+    sources:
+      - internal/app/marshal_model.go
+      - internal/app/project_context_marshal_extreme.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-worker-brief
+    name: Worker brief byte cap compaction with return reasons
+    editions: [default]
+    sources:
+      - internal/app/project_context_execution_extreme.go
+      - internal/app/marshal_lifecycle.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-marshal-knowledge-reserve
+    name: Marshal inline knowledge reserve (16 KiB) with recall fallback
+    editions: [default]
+    sources:
+      - internal/app/project_context_marshal_extreme.go
+      - internal/app/marshal_model.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-verifier-prompt
+    name: Final check verifier prompt budget (40 KiB) and proof paging
+    editions: [default]
+    sources:
+      - internal/app/verifier_proof_files_extreme.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-amendment-packet
+    name: Plan amendment packet byte cap (12 KiB) and summary trimming
+    editions: [default, governed]
+    sources:
+      - internal/app/marshal_amend_packet.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-driver-output-stream
+    name: Worker and check captured output (64 KiB) and JSON stream (8 MiB) bounds
+    editions: [default, governed]
+    sources:
+      - internal/marshal/driver/driver.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-git-diff-output
+    name: Git command and hand-in diff output cap (16 MiB ErrHandInTooLarge)
+    editions: [default, governed]
+    sources:
+      - internal/marshal/driver/driver.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-plan-pack-file
+    name: Plan pack file size limit (64 KiB marshalPackFileLimit)
+    editions: [default, governed]
+    sources:
+      - internal/app/marshal_pack.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-native-planning-context
+    name: Native planning context caps (96 KiB total, 12 KiB page, 32 KiB RPC)
+    editions: [default]
+    sources:
+      - internal/tui/native_planning_context_extreme.go
+      - internal/projectcontext/native_planning_delivery_extreme.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-contract-submission
+    name: Project contract submission (64 KiB) and live MCP proposal frame (4 KiB / 16 KiB) limits
+    editions: [default]
+    sources:
+      - internal/tui/proposal_mcp_extreme.go
+      - internal/projectcontext/context.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-process05-question-batch
+    name: Batched Process 05 transport question packet cap (16 KiB, 8 items)
+    editions: [default]
+    sources:
+      - internal/tui/process05_question_batch_extreme.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-marshal-inbox-view
+    name: Marshal live inbox view byte cap (64 KiB viewMaxBytes)
+    editions: [default, governed]
+    sources:
+      - internal/tui/native_liveinbox.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-board-task-diff
+    name: Board task diff display byte cap (4 MiB taskDiffLimit)
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_task_diff.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: CAP-mcp-paging-and-wire
+    name: MCP tool wire and paging caps (events_list, knowledge max_bytes, memory_recall, code_evidence, design_record)
+    editions: [default, governed]
+    sources:
+      - internal/mcp/events_page.go
+      - internal/mcp/knowledge.go
+      - internal/mcp/memory_recall_extreme.go
+      - internal/codeevidence/codeevidence.go
+      - internal/app/design_memory.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  # ---- MCP tools (internal/mcp) ----------------------------------------------
+  - id: MCP-marshal-status-and-digest
+    name: Marshal run status, digest, approvals and event stream MCP tools (marshal_status, run_digest, marshal_approvals, events_list)
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_steps.go
+      - internal/webboard/page/index.html
+      - internal/mcp/server.go
+      - internal/mcp/run_digest.go
+      - internal/mcp/marshal_approvals.go
+      - internal/cli/cli_mcp_default.go
+      - internal/cli/cli_mcp_extreme.go
+      - internal/mcp/events_page.go
+    tests: []
+    docs:
+      - docs/memory-and-mcp.md
+    web:
+      - routeOrCommand: "#activity"
+        anchor: 'id="tab-steps"'
+        kind: view
+    tui: []
+
+  - id: MCP-runtime-tasks-and-verification
+    name: Runtime task, agent, artifact and verification MCP tools (tasks_list, task_get, task_claim, task_release, task_run, agents_list, artifacts_list, verification_status, process06_status)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/webboard/page/index.html
+      - internal/mcp/server.go
+      - internal/mcp/task_reference.go
+    tests: []
+    docs:
+      - docs/memory-and-mcp.md
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'id="task-rows"'
+        kind: view
+    tui:
+      - routeOrCommand: /tasks
+        anchor: 'case "/tasks", "/task":'
+        kind: view
+
+  - id: MCP-proposal-submit
+    name: Live Marshal proposal submission and receipt MCP tools (marshal_proposal_submit, marshal_proposal_receipt)
+    editions: [default]
+    sources:
+      - internal/tui/proposal_mcp_extreme.go
+      - internal/tui/marshal_proposal.go
+      - internal/mcp/proposal_extreme.go
+    tests: []
+    docs:
+      - docs/memory-and-mcp.md
+    web: []
+    tui: []
+
+  - id: MCP-permission-prompt
+    name: Marshal chat permission prompt callback MCP tool (marshal_permission_prompt)
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_collect_chat.go
+      - internal/webboard/page/index.html
+      - internal/mcp/chat_permission.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#activity"
+        anchor: 'id="tab-req"'
+        kind: view
+    tui: []
+
+  - id: MCP-project-contract-and-architecture
+    name: Project contract and architecture MCP tools (marshal_project_contract_*, marshal_architecture_*)
+    editions: [default]
+    sources:
+      - internal/tui/project_contract_mcp_extreme.go
+      - internal/webboard/page/index.html
+      - internal/mcp/proposal_extreme.go
+    tests: []
+    docs: []
+    web:
+      - routeOrCommand: "#architecture"
+        anchor: 'id="s-architecture"'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal architecture
+        anchor: 'func (w *Workspace) projectContractMCP('
+        kind: view
+
+  - id: MCP-design-and-memory
+    name: Design and memory MCP tools (marshal_design_review, design_record, marshal_memory_*, memory_*, task_memory_*, memory_handoff_*, process07_*, process08_*)
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_keymap.go
+      - internal/mcp/server.go
+      - internal/mcp/design_memory.go
+      - internal/mcp/memory_recall_extreme.go
+    tests: []
+    docs:
+      - docs/memory-and-mcp.md
+    web: []
+    tui:
+      - routeOrCommand: "3"
+        anchor: 'What: "memory: review queue"'
+        kind: view
+
+  - id: MCP-knowledge-and-code-evidence
+    name: Project knowledge and worker code-evidence MCP tools (project_*, find_symbol, references, related_files, code_context, code_expand, code_validate)
+    editions: [default, governed]
+    sources:
+      - internal/tui/boardv2_steps.go
+      - internal/webboard/page/index.html
+      - internal/mcp/knowledge.go
+      - internal/mcp/code_evidence_extreme.go
+    tests: []
+    docs:
+      - docs/memory-and-mcp.md
+    web:
+      - routeOrCommand: "#activity"
+        anchor: 'id="tp-steps"'
+        kind: view
+    tui: []
+
+  - id: MCP-tool-error-diagnostics
+    name: Structured MCP tool error codes and limit/change detail reporting (toolError)
+    editions: [default, governed]
+    sources:
+      - internal/mcp/tool_error.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  # ---- Proposed rows (stay in pending until approved) ------------------------
+  - id: L07
+    name: Headless Web Board hosting without an open terminal Board (WEB-G18)
+    editions: [default, governed]
+    sources:
+      - internal/tui/webboard.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /marshal web
+        anchor: 'func (w *Workspace) marshalWeb()'
+        kind: control
+
+  - id: L08
+    name: Enforce declared task state transition table across all runtime moves (RUN-G15)
+    editions: [default, governed]
+    sources:
+      - internal/marshal/domain.go
+      - internal/app/marshal_lifecycle.go
+    tests:
+      - internal/marshal.TestStateTransitions
+    docs: []
+    web: []
+    tui: []
+
+  - id: L09
+    name: Unify goal revision budget and run settings budget units and authorities (SET-G9)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_budget.go
+      - internal/marshal/budget.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: L10
+    name: Browser-native provider terminal operations (quit, pane attach, provider CLI trust/TTY prompts)
+    editions: [default, governed]
+    sources:
+      - internal/tui/board_home.go
+      - internal/tui/webboard_act.go
+      - internal/tui/tmux_native.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: q
+        anchor: 'w.requestExit()'
+        kind: control
+
+  - id: L11
+    name: Browser equivalents for shell-level diagnostics and maintenance (checkpoint, rollback, store, export, update install)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+      - internal/tui/commands_expanded.go
+    tests: []
+    docs: []
+    web: []
+    tui:
+      - routeOrCommand: /doctor
+        anchor: 'case "/doctor":'
+        kind: control
+
+  - id: L12
+    name: Expand low-level runtime and verification reports (/blind, /sandbox, /context)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_expanded.go
+      - internal/tui/commands_missing.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: L13
+    name: Optional per-project supervision behavior for manual and auto modes beyond session label (SET-G16)
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: L14
+    name: True no-read execution-rights none mode with required evidence compatibility (SET-G10)
+    editions: [default, governed]
+    sources:
+      - internal/tui/marshal_confine.go
+    tests: []
+    docs: []
+    web: []
+    tui: []
+
+  - id: settings-catalogue-and-history
+    name: Scoped settings, effective sources, edition policies and committed actor history
+    editions: [default, governed]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/preferences.go
+      - internal/tui/settings_view.go
+      - internal/tui/commands_marshal.go
+      - internal/store/settings_audit.go
+      - internal/store/ultra_preference.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/settingscatalog.TestEditionDefaultsAndApplyBoundaries
+      - internal/tui.TestSettingsViewShowsLocksAndActor
+      - internal/tui.TestSettingsScopePrecedenceAndFailedWrites
+      - internal/tui.TestSettingsMissingValueDoesNotWrite
+      - internal/tui.TestCatalogueEveryKeyResolvesStoreOverrideAndFailedWrite
+      - internal/tui.TestMarshalSettingAuditReachesHomeAndChat
+      - internal/store.TestSettingsCASAuditsOnce
+      - internal/store.TestExecutionPreferenceAuditsAtomically
+    docs:
+      - docs/configuration.md
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: view
+    tui:
+      - routeOrCommand: /marshal settings
+        anchor: 'func formatSettingsView('
+        kind: view
+      - routeOrCommand: /marshal settings web-auto-open
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings update-check
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-enabled
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-trigger
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-release
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings thermal-window
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings display-theme
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings display-animation
+        anchor: 'func userSettingUsage('
+        kind: control
+      - routeOrCommand: /marshal settings notifications
+        anchor: 'func projectFileSetting('
+        kind: control
+      - routeOrCommand: /marshal settings memory-channel
+        anchor: 'func projectFileSetting('
+        kind: control
+      - routeOrCommand: /marshal settings session-import
+        anchor: 'func projectFileSetting('
+        kind: control
+
+  - id: bound-browser-run-controls
+    name: Browser run pause, stop, resume, worker stop and amendment denial with plan bindings and durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/webboard_run_actions.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/commands.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestWebRunControlsRespectApprovalAndHold
+      - internal/tui.TestLegacyStopAndTypedStopUseBoundWriter
+      - internal/tui.TestWebRunOpReceiptMatrix
+      - internal/webboard.TestRunCommandTargetBindsSelectedRun
+      - internal/webboard.TestRunControlTokenIsBoundAndSingleUse
+      - internal/webboard.TestWorkControlsPreserveTypedBindings
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function renderRunControls('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal stop
+        anchor: 'func (w *Workspace) webRunCommand('
+        kind: control
+
+  - id: bound-browser-work-actions
+    name: Browser task and worker actions with attempt bindings and durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/webboard_commands.go
+      - internal/tui/webboard_lanes.go
+      - internal/webboard/commands.go
+      - internal/webboard/settings.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/webboard.TestCmdTokenCannotCrossTargetOrOp
+      - internal/webboard.TestWorkControlsPreserveTypedBindings
+      - internal/tui.TestTaskCommandStaleAttemptRefused
+      - internal/tui.TestSkipRequiresReplan
+      - internal/tui.TestWebOpMatrixUsesExistingAuthorityAndPayload
+      - internal/tui.TestWebLaneMutationRechecksAttemptAtDequeue
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function renderWorkControls('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal retry
+        anchor: 'func (w *Workspace) marshalRunCommand('
+        kind: control
+
+  - id: typed-web-decisions
+    name: Browser decision cards with typed choices bound to the card revision, plan digest approval and requirement line edits
+    editions: [default, governed]
+    sources:
+      - internal/tui/webboard_decisions.go
+      - internal/tui/webboard_act.go
+      - internal/webboard/act.go
+      - internal/webboard/frame.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/tui.TestChangeKeepActionUsesDecisionID
+      - internal/tui.TestRequirementsEditVersioned
+      - internal/tui.TestPlanApproveRequiresViewedCurrentDigest
+      - internal/tui.TestDecisionAuthorityAndRevisionMatrix
+      - internal/tui.TestLegacyActionUsesTypedAuthority
+      - internal/webboard.TestDecisionRendersAllAvailableActions
+    docs: []
+    web:
+      - routeOrCommand: "#home"
+        anchor: 'function decide('
+        kind: control
+    tui:
+      - routeOrCommand: decision card keys
+        anchor: 'func (w *Workspace) webDecide('
+        kind: control
+
+pending:
+  # Web Board features with incomplete surface coverage
+  - id: F01
+    missing: web
+    source: internal/tui/commands.go
+  - id: F03
+    missing: web
+    source: internal/webboard/page/index.html
+    existingStub: true
+  - id: F05
+    missing: both
+    source: internal/tui/design_review_extreme.go
+  - id: F06
+    missing: both
+    source: internal/app/architecture_conformance_extreme.go
+  - id: F07
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: F09
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: F10
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: F20
+    missing: web
+    source: internal/webboard/page/index.html
+    existingStub: true
+  - id: F21
+    missing: web
+    source: internal/webboard/page/index.html
+    existingStub: true
+  - id: F22
+    missing: web
+    source: internal/webboard/page/index.html
+    existingStub: true
+  - id: F23
+    missing: web
+    source: internal/webboard/page/app.js
+  - id: F24
+    missing: web
+    source: internal/tui/launch_scan.go
+  - id: F27
+    missing: both
+    source: internal/marshal/domain.go
+  - id: F28
+    missing: web
+    source: internal/tui/board_attention.go
+
+  # Slash commands without Web paths yet
+  - id: TUI-CMD-marshal-architecture
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-draft-discard
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-model
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-use-plan
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-approve-task
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-import
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-accept
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-return
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-retry
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-reassign
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-cancel
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-close
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-stop
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-resume
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-amend
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-marshal-settings
+    missing: web
+    source: internal/tui/commands_marshal.go
+  - id: TUI-CMD-mode
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-ultra
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-task-model
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-pause
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-resume
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-cancel
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-models
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-model
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-effort
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-budget
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-notify
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-view
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-quit
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-goal
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-verification-review
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-learning-reports
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-inspect
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-approvals
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-claims-evidence
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-checkpoint-rollback
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-doctor
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-tasks
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-low-level-reports
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-memory
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-providers-harness
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-permissions-egress
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-store-export-alignment
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-diff
+    missing: web
+    source: internal/tui/commands.go
+  - id: TUI-CMD-update
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-provider-native
+    missing: web
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: TUI-CMD-sessions
+    missing: web
+    source: internal/tui/commands.go
+
+  # TUI keys, home projections, cards, popups and notices
+  - id: TUI-KEY-first-run-prompts
+    missing: web
+    source: internal/tui/board_home.go
+  - id: TUI-KEY-body-views
+    missing: web
+    source: internal/tui/board_keymap.go
+  - id: TUI-KEY-task-diff-D
+    missing: both
+    source: internal/tui/board_task_diff.go
+  - id: TUI-CARD-decision-web-only
+    missing: tui
+    source: internal/tui/boardv2_cards_owner.go
+  - id: TUI-CARD-unreachable-inspector
+    missing: tui
+    source: internal/tui/board_live.go
+  - id: TUI-POPUP-composer-and-views
+    missing: web
+    source: internal/tui/mcp_fault.go
+  - id: TUI-NOTICE-pause-and-offline-replay
+    missing: both
+    source: internal/tui/commands_marshal.go
+
+  # Settings and policy items with incomplete surface coverage
+  - id: session-mode
+    missing: web
+    source: internal/tui/commands.go
+  - id: ultra-entitlement-gate
+    missing: web
+    source: internal/cloud/gate.go
+  - id: ultra-execution
+    missing: web
+    source: internal/tui/commands_expanded.go
+  - id: ultra-request
+    missing: web
+    source: internal/tui/commands_expanded.go
+  - id: ultra-delegation
+    missing: web
+    source: internal/cloud/gate.go
+  - id: tier-policy
+    missing: web
+    source: internal/marshal/tier.go
+  - id: verifier-required
+    missing: both
+    source: internal/marshal/tier.go
+  - id: permission-decision-authority
+    missing: web
+    source: internal/tui/permissions.go
+  - id: memory-candidate-review
+    missing: web
+    source: internal/tui/memory_review_extreme.go
+  - id: flexible-worker-models
+    missing: both
+    source: internal/app/model_flex_extreme.go
+  - id: provider-limit-fallback
+    missing: both
+    source: internal/app/project_context_marshal_extreme.go
+  - id: governed-provider-switch
+    missing: web
+    source: internal/app/marshal_dispatch_extreme.go
+  - id: marshal-knowledge-via-recall
+    missing: both
+    source: internal/app/project_context_marshal_extreme.go
+  - id: automatic-credential-decision
+    missing: both
+    source: internal/app/credential_auto_extreme.go
+  - id: automatic-outside-reads
+    missing: both
+    source: internal/app/unrestricted_extreme.go
+  - id: worker-candidate-writes
+    missing: both
+    source: internal/mcp/worker_candidates_extreme.go
+  - id: memory-redacts-secrets
+    missing: both
+    source: internal/memory/security/edition_extreme.go
+  - id: worker-host-and-egress-claims
+    missing: web
+    source: internal/tui/claims_extreme.go
+  - id: edition-constants-misc
+    missing: both
+    source: internal/tui/edition_extreme.go
+  - id: env-switches
+    missing: both
+    source: internal/tui/board_opening.go
+  - id: protocol-and-inventory-dependencies
+    missing: both
+    source: internal/constitution/marshal_protocol.go
+  - id: docs-configuration-disagreements
+    missing: web
+    source: docs/configuration.md
+
+  # Size caps and MCP tools
+  - id: CAP-required-context-packet
+    missing: both
+    source: internal/projectcontext/context.go
+  - id: CAP-provider-envelope
+    missing: both
+    source: internal/app/project_context_provider_extreme.go
+  - id: CAP-review-prompt
+    missing: both
+    source: internal/app/marshal_model.go
+  - id: CAP-worker-brief
+    missing: both
+    source: internal/app/project_context_execution_extreme.go
+  - id: CAP-marshal-knowledge-reserve
+    missing: both
+    source: internal/app/project_context_marshal_extreme.go
+  - id: CAP-verifier-prompt
+    missing: both
+    source: internal/app/verifier_proof_files_extreme.go
+  - id: CAP-amendment-packet
+    missing: both
+    source: internal/app/marshal_amend_packet.go
+  - id: CAP-driver-output-stream
+    missing: both
+    source: internal/marshal/driver/driver.go
+  - id: CAP-git-diff-output
+    missing: both
+    source: internal/marshal/driver/driver.go
+  - id: CAP-plan-pack-file
+    missing: both
+    source: internal/app/marshal_pack.go
+  - id: CAP-native-planning-context
+    missing: both
+    source: internal/tui/native_planning_context_extreme.go
+  - id: CAP-contract-submission
+    missing: both
+    source: internal/tui/proposal_mcp_extreme.go
+  - id: CAP-process05-question-batch
+    missing: both
+    source: internal/tui/process05_question_batch_extreme.go
+  - id: CAP-marshal-inbox-view
+    missing: both
+    source: internal/tui/native_liveinbox.go
+  - id: CAP-board-task-diff
+    missing: both
+    source: internal/tui/board_task_diff.go
+  - id: CAP-mcp-paging-and-wire
+    missing: both
+    source: internal/mcp/events_page.go
+  - id: MCP-marshal-status-and-digest
+    missing: tui
+    source: internal/mcp/run_digest.go
+  - id: MCP-proposal-submit
+    missing: both
+    source: internal/mcp/proposal_extreme.go
+  - id: MCP-permission-prompt
+    missing: tui
+    source: internal/mcp/chat_permission.go
+  - id: MCP-design-and-memory
+    missing: web
+    source: internal/mcp/server.go
+  - id: MCP-knowledge-and-code-evidence
+    missing: tui
+    source: internal/mcp/knowledge.go
+  - id: MCP-tool-error-diagnostics
+    missing: both
+    source: internal/mcp/tool_error.go
+
+  # Proposed rows (remain pending until approved)
+  - id: L07
+    missing: web
+    source: internal/tui/webboard.go
+    pendingScopeDecision: true
+  - id: L08
+    missing: both
+    source: internal/marshal/domain.go
+    pendingScopeDecision: true
+  - id: L09
+    missing: both
+    source: internal/tui/commands_budget.go
+    pendingScopeDecision: true
+  - id: L10
+    missing: web
+    source: internal/tui/webboard_act.go
+    pendingScopeDecision: true
+  - id: L11
+    missing: web
+    source: internal/tui/commands_expanded.go
+    pendingScopeDecision: true
+  - id: L12
+    missing: both
+    source: internal/tui/commands_expanded.go
+    pendingScopeDecision: true
+  - id: L13
+    missing: both
+    source: internal/tui/commands.go
+    pendingScopeDecision: true
+  - id: L14
+    missing: both
+    source: internal/tui/marshal_confine.go
+    pendingScopeDecision: true
+  - id: owner-plan-gate
+    missing: web
+    source: internal/tui/board_gates.go
+  - id: marshal-self-approves-plan
+    missing: web
+    source: internal/tui/board_gates.go
+  - id: permission-operator-popup
+    missing: web
+    source: internal/tui/permissions.go
+  - id: egress-enforcement-refusal
+    missing: web
+    source: internal/tui/commands_egress.go
+
+later:
+  - id: L01
+    decision: "Deferred: per-lane run timeline Gantt view using durable attempt and review timestamps."
+  - id: L02
+    decision: "Deferred: worker detail paged log and authenticated steer box."
+  - id: L03
+    decision: "Deferred: inline diff review line notes."
+  - id: L04
+    decision: "Deferred: Web command palette (Cmd+K) and keyboard help overlay (?)."
+  - id: L05
+    decision: "Deferred: phone approval push notifications requiring reachable HTTPS and separate auth design."

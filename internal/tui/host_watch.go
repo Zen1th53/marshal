@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -90,7 +92,7 @@ type hostWatcher struct {
 func newHostWatcher(s hostSampler) *hostWatcher {
 	return &hostWatcher{
 		sampler: s,
-		policy:  hostwatch.DefaultPolicy(),
+		policy:  userHostPolicy(),
 		ring:    hostwatch.NewRing(hostRingSize),
 		every:   hostSampleEvery,
 		now:     time.Now,
@@ -104,6 +106,10 @@ func newHostWatcher(s hostSampler) *hostWatcher {
 func (h *hostWatcher) run(ctx context.Context) {
 	defer close(h.done)
 	defer h.wg.Wait()
+	if h.guard != nil {
+		// A temporary cap never outlives the watcher that asked for it.
+		defer h.guard.stop()
+	}
 	h.addLog("info", fmt.Sprintf("watching every %s · GPU every %s · policy below", shortDur(h.every), shortDur(hostGPUEvery)))
 	t := time.NewTicker(h.every)
 	defer t.Stop()
@@ -174,15 +180,15 @@ func (h *hostWatcher) act(a hostwatch.Action, window []hostwatch.Sample) {
 	trigger := a.Kind == hostwatch.ActionTrigger
 	switch a.Rule {
 	case ruleThermal:
-		avg, _ := avgPackage(window, 30*time.Second)
+		avg, _ := avgPackage(window, h.policy.ThermalWindow())
 		var msg, outcome string
 		if trigger {
-			msg = fmt.Sprintf("GUARD · package 30 s avg %.1f °C > %s", avg, trimFloat(h.policy.PackageTempTriggerC))
+			msg = fmt.Sprintf("GUARD · package %d s avg %.1f °C > %s", int(h.policy.ThermalWindow()/time.Second), avg, trimFloat(h.policy.PackageTempTriggerC))
 			if h.guard != nil {
 				outcome = h.guard.trigger(avg)
 			}
 		} else {
-			msg = fmt.Sprintf("RELEASE · package 30 s avg %.1f °C < %s", avg, trimFloat(h.policy.PackageTempReleaseC))
+			msg = fmt.Sprintf("RELEASE · package %d s avg %.1f °C < %s", int(h.policy.ThermalWindow()/time.Second), avg, trimFloat(h.policy.PackageTempReleaseC))
 			if h.guard != nil {
 				outcome = h.guard.release()
 			}
@@ -212,6 +218,20 @@ func (h *hostWatcher) act(a hostwatch.Action, window []hostwatch.Sample) {
 		}
 	default:
 		h.addLog(ruleKind(a.Rule), degrees(a.Reason))
+	}
+}
+
+// thermalRepairRule keys the notice about a lane cap an earlier session
+// may have saved for the thermal guard.
+const thermalRepairRule = "thermal_cap_repair"
+
+func (h *hostWatcher) noteThermalRepair(msg string) {
+	if msg == "" {
+		return
+	}
+	h.addLog("thermal", msg)
+	if strings.HasPrefix(msg, "global-cap ") {
+		h.setNotice(thermalRepairRule, "host: "+msg)
 	}
 }
 
@@ -353,7 +373,7 @@ func (h *hostWatcher) snapshot() hostSnapshot {
 		s.Active[k] = v
 	}
 	s.Log = append([]hostLogEntry(nil), h.log...)
-	for _, rule := range []string{ruleThermal, ruleDisk, ruleMemory} {
+	for _, rule := range []string{ruleThermal, ruleDisk, ruleMemory, thermalRepairRule} {
 		if n := h.notices[rule]; n != "" {
 			s.Notice = n
 			break
@@ -519,5 +539,30 @@ func (w *Workspace) startHostWatchWith(ctx context.Context, h *hostWatcher) bool
 		}
 	}
 	w.hostWatch.Store(h)
-	return w.startBackground(ctx, h.run)
+	return w.startBackground(ctx, func(ctx context.Context) {
+		h.noteThermalRepair(w.repairThermalCap(ctx))
+		h.run(ctx)
+	})
+}
+
+func userHostPolicy() hostwatch.Policy {
+	p := hostwatch.DefaultPolicy()
+	p.PackageTempTriggerC, _ = strconv.ParseFloat(settingscatalog.UserPreference("thermal-trigger"), 64)
+	p.PackageTempReleaseC, _ = strconv.ParseFloat(settingscatalog.UserPreference("thermal-release"), 64)
+	p.PackageTempWindowSeconds, _ = strconv.Atoi(settingscatalog.UserPreference("thermal-window"))
+	p.ThermalDisabled = settingscatalog.UserPreference("thermal-enabled") == "off"
+	return validHostPolicy(p)
+}
+
+// validHostPolicy keeps the default thermal thresholds when the saved ones
+// are unusable: release must be below trigger and the window positive.
+func validHostPolicy(p hostwatch.Policy) hostwatch.Policy {
+	d := hostwatch.DefaultPolicy()
+	if p.PackageTempTriggerC <= 0 || p.PackageTempReleaseC <= 0 || p.PackageTempReleaseC >= p.PackageTempTriggerC {
+		p.PackageTempTriggerC, p.PackageTempReleaseC = d.PackageTempTriggerC, d.PackageTempReleaseC
+	}
+	if p.PackageTempWindowSeconds <= 0 || p.PackageTempWindowSeconds > 60 {
+		p.PackageTempWindowSeconds = d.PackageTempWindowSeconds
+	}
+	return p
 }

@@ -29,6 +29,8 @@ func (w *Workspace) collectV2Flow(b *vm.Board) {
 	b.Plan = flowPlan(in)
 	b.Lanes = flowLanes(in)
 	b.Tasks = flowTasks(in)
+	b.Waiting = runWaiting(in)
+	b.Approvals = flowApprovals(in)
 	b.Inbox = flowInbox(in)
 	b.Activity = flowActivity(in)
 	b.Steps = stepsView(in.steps, in.lastCall, in.stepsModel, in.now)

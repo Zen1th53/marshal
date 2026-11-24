@@ -1,6 +1,9 @@
 package hostwatch
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // ActionKind indicates whether a rule is triggered or released.
 type ActionKind string
@@ -28,8 +31,10 @@ type State struct {
 // Policy defines threshold rules evaluated on a sliding window of samples.
 type Policy struct {
 	// Thermal hysteresis rules for package temp (deg C)
-	PackageTempTriggerC float64 // default 90.0
-	PackageTempReleaseC float64 // default 85.0
+	ThermalDisabled          bool
+	PackageTempWindowSeconds int
+	PackageTempTriggerC      float64 // default 90.0
+	PackageTempReleaseC      float64 // default 85.0
 
 	// Thresholds
 	DiskFreeThresholdGB      float64 // triggers if free disk < threshold GB (1 GB = 1e9 bytes)
@@ -104,7 +109,7 @@ func (p Policy) Evaluate(window []Sample, prev State) (State, []Action) {
 	}
 
 	// Filter window to last 30 seconds for package temp average
-	windowCutoff := latest.At.Add(-30 * 1000 * 1000 * 1000) // 30s
+	windowCutoff := latest.At.Add(-p.ThermalWindow())
 	var tempSum float64
 	var tempCount int
 	for _, s := range window {
@@ -122,19 +127,19 @@ func (p Policy) Evaluate(window []Sample, prev State) (State, []Action) {
 	if tempCount > 0 {
 		avgTemp := tempSum / float64(tempCount)
 		wasActive := prev.ActiveRules != nil && prev.ActiveRules[ruleThermal]
-		if !wasActive && avgTemp > pkgTempTrigger {
+		if !p.ThermalDisabled && !wasActive && avgTemp > pkgTempTrigger {
 			next.ActiveRules[ruleThermal] = true
 			actions = append(actions, Action{
 				Rule:   ruleThermal,
 				Kind:   ActionTrigger,
-				Reason: fmt.Sprintf("CPU package temp 30s average %.1f C > trigger threshold %.1f C", avgTemp, pkgTempTrigger),
+				Reason: fmt.Sprintf("CPU package temp %ds average %.1f C > trigger threshold %.1f C", int(p.ThermalWindow()/time.Second), avgTemp, pkgTempTrigger),
 			})
-		} else if wasActive && avgTemp < pkgTempRelease {
+		} else if wasActive && (p.ThermalDisabled || avgTemp < pkgTempRelease) {
 			next.ActiveRules[ruleThermal] = false
 			actions = append(actions, Action{
 				Rule:   ruleThermal,
 				Kind:   ActionRelease,
-				Reason: fmt.Sprintf("CPU package temp 30s average %.1f C < release threshold %.1f C", avgTemp, pkgTempRelease),
+				Reason: fmt.Sprintf("CPU package temp %ds average %.1f C < release threshold %.1f C", int(p.ThermalWindow()/time.Second), avgTemp, pkgTempRelease),
 			})
 		}
 	}
@@ -307,4 +312,13 @@ func (p Policy) Evaluate(window []Sample, prev State) (State, []Action) {
 	}
 
 	return next, actions
+}
+
+// ThermalWindow is the averaging window, retaining the earlier default when unset.
+func (p Policy) ThermalWindow() time.Duration {
+	seconds := p.PackageTempWindowSeconds
+	if seconds <= 0 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
 }

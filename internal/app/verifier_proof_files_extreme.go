@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
@@ -226,6 +227,7 @@ func (f *verifierProofFiles) compactVerifierInput(head string, criteria []requir
 	for _, name := range names {
 		files = append(files, f.files[name])
 	}
+	smallest := 0
 	for _, budget := range []struct{ output, command int }{{160, 400}, {80, 240}, {40, 160}, {0, 120}} {
 		checks := make([]verifierCheckSummary, 0, len(proof.Checks))
 		for _, check := range proof.Checks {
@@ -256,8 +258,13 @@ func (f *verifierProofFiles) compactVerifierInput(head string, criteria []requir
 		if len(input) <= verifierPromptBudget {
 			return input, nil
 		}
+		smallest = len(input)
 	}
-	return nil, fmt.Errorf("%w: verifier summary of %d checks exceeds %d bytes", errVerifierProofFile, len(proof.Checks), verifierPromptBudget)
+	// Criterion and check IDs and the binding cannot be shortened; output
+	// is already only a reference. Only a smaller final check fits.
+	return nil, model.NewLimitError(fmt.Errorf("%w: verifier summary of %d checks exceeds %d bytes", errVerifierProofFile, len(proof.Checks), verifierPromptBudget), model.Limit{
+		Kind: "verifier_prompt", Subject: fmt.Sprintf("final check summary of %d criteria and %d checks", len(criteria), len(proof.Checks)), ActualBytes: int64(smallest), CapBytes: verifierPromptBudget,
+		EvidenceRef: verifierProofFileName, Action: "Split the final check: amend the plan so its criteria and checks are spread over smaller tasks, approve it, then /marshal use-plan. Checking the same result again would not fit."})
 }
 
 var verifierCitationPattern = regexp.MustCompile(`(` + regexp.QuoteMeta(verifierProofFileName) + `|` + regexp.QuoteMeta(verifierDiffFileName) + `):([0-9]+)`)

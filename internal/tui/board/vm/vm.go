@@ -5,7 +5,10 @@
 // every collector is wired.
 package vm
 
-import "time"
+import (
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
+	"time"
+)
 
 // Screen is which Board v2 layout is drawn.
 type Screen string
@@ -35,29 +38,37 @@ const (
 
 // Board is one frame of data.
 type Board struct {
+	Settings settingscatalog.Snapshot
 	// LastRun marks a finished result shown while waiting for a new goal.
-	LastRun  bool
-	Screen   Screen
-	Now      time.Time
-	Top      TopBar
-	NowLine  NowLine
-	Marshal  Marshal
-	Plan     Plan
-	Lanes    Lanes
-	Tasks    []Task
-	Workers  []Worker
-	Limits   []ProviderLimits
-	Inbox    Inbox
-	Activity []Event
-	Steps    Steps
-	Requests []Request
-	Chat     Chat
-	Ready    Readiness
-	Decision *Decision // non-nil: the decision card is shown over the Board
-	Paused   *Paused   // non-nil: the paused card is shown
-	Keys     []Key
-	System   System
-	Web      Web
+	LastRun bool
+	Screen  Screen
+	Now     time.Time
+	Mode    Mode
+	Top     TopBar
+	NowLine NowLine
+	Marshal Marshal
+	Plan    Plan
+	Lanes   Lanes
+	Tasks   []Task
+	// Waiting is why the run as a whole does not move (a pause, a lease,
+	// admission); nil while it moves.
+	Waiting *Waiting
+	// Approvals is every approval of the run that awaits an answer or has
+	// just expired, oldest first.
+	Approvals []Approval
+	Workers   []Worker
+	Limits    []ProviderLimits
+	Inbox     Inbox
+	Activity  []Event
+	Steps     Steps
+	Requests  []Request
+	Chat      Chat
+	Ready     Readiness
+	Decision  *Decision // non-nil: the decision card is shown over the Board
+	Paused    *Paused   // non-nil: the paused card is shown
+	Keys      []Key
+	System    System
+	Web       Web
 	// MarshalSays is the Marshal chat's last turn to the owner.
 	MarshalSays MarshalSays
 }
@@ -79,7 +90,7 @@ type System struct {
 	TempC                   int
 	LowDisk                 bool
 	ThermalGuard            bool   // the thermal rule is active
-	ThermalCap              int    // lane cap the guard asked for while active; 0 none
+	ThermalCap              int    // temporary lane cap the owner approved for the guard; 0 none
 	Notice                  string // the host watcher's notice: "host: thermal guard · …"
 	UpdateAvailable         string // tag of a newer release; "" none or not checked
 	MCPFailed               bool   // MCP failed in this session (the reason stays in the terminal, F6)
@@ -171,6 +182,82 @@ type Lane struct {
 	LastSignal time.Duration // since the last heartbeat; Stale beyond 60s
 	Stale      bool
 	Selected   bool
+	// Process (live, exited, unverifiable) and Turn (working, at_rest,
+	// gone, unknown) are what Marshal can verify of a heartbeat worker,
+	// empty for a window. ModelWait is how long it has waited on its model.
+	Process, Turn string
+	ModelWait     time.Duration
+	Note          string // why the worker cannot be verified, or waits long
+	// Signal is the lane's last worker signal as observed; Waiting is why
+	// the lane does not move, nil while it works.
+	Signal  Signal
+	Waiting *Waiting
+}
+
+// Signal states. Quiet is known quiet past a minute (amber); stale is a
+// heartbeat that stopped (red); unverifiable is a worker Marshal cannot see,
+// which is never shown as exited; exited is a confirmed exit.
+const (
+	SignalLive         = "live"
+	SignalQuiet        = "quiet"
+	SignalStale        = "stale"
+	SignalUnverifiable = "unverifiable"
+	SignalExited       = "exited"
+	SignalNone         = "none" // a worker window: no heartbeat to read
+)
+
+// Signal is a lane's last worker signal. At is when it was observed (zero:
+// none observed), so a page can tick its age itself; Label says what the
+// state means in plain words.
+type Signal struct {
+	At    time.Time
+	State string
+	Label string
+}
+
+// Wait codes: why a run, task, lane, review or approval waits. A wait with
+// no known cause is WaitUnknown and still names its Source and Inspect.
+const (
+	WaitPause        = "pause"
+	WaitLease        = "lease"
+	WaitAdmission    = "admission"
+	WaitDependency   = "dependency"
+	WaitOverlap      = "overlap"
+	WaitProvider     = "provider"
+	WaitCapacity     = "capacity"
+	WaitSignal       = "signal"
+	WaitReviewRole   = "review_role"
+	WaitReviewQueue  = "review_queue"
+	WaitVerification = "verification"
+	WaitOwner        = "owner"
+	WaitAuthority    = "approval_authority"
+	WaitExpiry       = "approval_expiry"
+	WaitUnknown      = "unknown"
+)
+
+// Waiting is why something waits. BlockerID is what it waits on (a task,
+// an approval) when one is known; RetryAt is the earliest it may move again
+// (zero unknown); Source is where the reason was read; Inspect is where to
+// look or answer ("/marshal status", "Inbox", a command).
+type Waiting struct {
+	Code, Label, BlockerID string
+	RetryAt                time.Time
+	Source, Inspect        string
+}
+
+// Approval is one approval that awaits an answer. Awaiting is who can
+// answer it (owner or marshal); Status is requested, expired or superseded;
+// Reason is redacted. Actions are the bound answers the owner can give, as
+// commands, and are empty when the row cannot be answered (expired,
+// superseded, or the Marshal's to answer). Destination says where it is
+// answered.
+type Approval struct {
+	ID, TaskID, Awaiting string
+	CreatedAt, ExpiresAt time.Time
+	Status, Reason       string
+	Destination, Command string
+	Actions              []Key
+	Waiting              *Waiting
 }
 
 // Lanes is the Lanes pane.
@@ -184,6 +271,8 @@ type Task struct {
 	ID, Title, Files, Writer, Reviewer string
 	State                              string // merged, review, building, waiting
 	Note                               string // "waits T03"
+	// Waiting is why the task does not move; nil while it builds or is done.
+	Waiting *Waiting
 }
 
 // Worker is one provider row of the Workers pane.
@@ -298,6 +387,7 @@ type Check struct {
 
 // Readiness is the first-open checklist.
 type Readiness struct {
+	SessionLabel string
 	Checks       []Check
 	Ready, Total int
 	TelemetryOn  bool
@@ -315,6 +405,7 @@ type Node struct {
 
 // Decision is the card over the Board when the owner must act.
 type Decision struct {
+	Binding      string // opaque lifecycle binding for owner actions
 	Kind         string // architecture, plan, inbox, ask, requirements, change, next, guard: what the card decides
 	Title        string // "Accept architecture · rev 1"
 	Corner       string // the card's top-right note; empty: "esc later"
@@ -328,6 +419,41 @@ type Decision struct {
 	Actions      []Key
 	Refs         []string // per action, what a click on it reaches ("" for its key); the collector's own ids
 	Links        []Link   // arrows between Nodes on the sketch (4 per row)
+	// Revision is the bound identity of what the card decides: a typed
+	// choice must name it, and a changed card has a new one.
+	Revision string
+	// Choices are the card's actions by typed id, each with the key that
+	// presses it on the terminal Board.
+	Choices []Choice
+	// Plan is the drafted plan the card approves, nil for other cards.
+	Plan *PlanPreview
+}
+
+// Choice is one action of a decision card: ID is the typed action
+// ("change.keep", "plan.approve", "card.choose"), Value what it chooses
+// ("ask:3", "deny"), Key the terminal key and Local set when it only changes
+// what the page shows (a comment box, the plan text).
+type Choice struct {
+	ID, Value, Key, Label string
+	Local                 bool
+}
+
+// PlanPreview is a drafted plan as the owner reads it before approving:
+// its tasks with their exact checks, and the digest an approval binds.
+type PlanPreview struct {
+	ID      string
+	Version int64
+	Digest  string
+	Tasks   []PlanTask
+}
+
+// PlanTask is one task of a plan preview.
+type PlanTask struct {
+	ID, Title string
+	DependsOn []string
+	Files     []string
+	Criteria  []string
+	Checks    []string
 }
 
 // CardLine is one row of a card's content: a requirement line ("a", "scope",
@@ -366,3 +492,19 @@ type Paused struct {
 
 // Key is one key hint.
 type Key struct{ Key, Label string }
+
+// Mode separates current authorization and preference from recorded run facts.
+// Nil observations have not been collected yet.
+type Mode struct {
+	Edition          string
+	Entitlement      string
+	RequestStatus    string
+	Delegation       *bool
+	ExecutionEnabled *bool
+	EffectiveTier    string
+	RecordedRunTier  string
+	PlanParallel     *bool
+	Active           *int
+	EffectiveCap     *int
+	Reasons          []string
+}

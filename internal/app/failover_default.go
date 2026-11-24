@@ -40,18 +40,42 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 	return handin, errors.Join(fmt.Errorf("provider limit: %s", reason), alertErr)
 }
 
-// GetEffectiveFailoverOrder returns default providers in default build.
-func GetEffectiveFailoverOrder(_ marshal.Settings) []string {
-	return MarshalProviders()
+// GetEffectiveFailoverOrder returns enabled default providers in governed build.
+func GetEffectiveFailoverOrder(s marshal.Settings) []string {
+	var out []string
+	for _, p := range MarshalProviders() {
+		if s.ProviderEnabled(p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
+
+func orderReassignCandidates(_ marshal.Settings, names []string) []string { return names }
 
 func isProviderFailover(t marshal.Task) bool                    { return false }
 func providerFailoverBrief(t marshal.Task, brief string) string { return brief }
 
 func finishProviderFailoverDispatch(t *marshal.Task) {}
 
-func (s *MarshalService) admitProviderDispatch(_ context.Context, _ string, _ *marshal.Run, rev int64, _ int, _ string) (int64, error) {
+func (s *MarshalService) admitProviderDispatch(ctx context.Context, _ string, run *marshal.Run, rev int64, index int, _ string) (int64, error) {
+	policy := s.projectSettingsSnapshot(ctx, run.Settings)
+	if !policy.ProviderEnabled(run.Tasks[index].Worker) {
+		return rev, &ProviderDisabledError{Provider: run.Tasks[index].Worker}
+	}
 	return rev, nil
 }
 
 func providerFailoverPending(marshal.Task) bool { return false }
+
+// recoveryAdmission admits every launch the batch dispatcher allows: this
+// edition keeps its quota pause and does not pace a recovery.
+func (s *MarshalService) recoveryAdmission(_ context.Context, _ marshal.CapabilityGate, _ marshal.Run, t marshal.Task, _ []MarshalDispatch, _ time.Time) (DispatchAdmission, []string, int) {
+	return DispatchAdmission{Allowed: true, TaskID: safeAdmissionTaskID(t.PlanTaskID)}, nil, 0
+}
+
+func (s *MarshalService) takeRecoveryStarts([]string, time.Time, int) func() { return func() {} }
+
+func (s *MarshalService) reserveRecoveryStart(context.Context, marshal.Run, marshal.Task) (func(), error) {
+	return func() {}, nil
+}

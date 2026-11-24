@@ -32,7 +32,7 @@ func retryTarget(w *Workspace) (string, string) {
 		}
 		id, cid := row.ID, cleanBoard(row.ID)
 		if slices.ContainsFunc(inbox, func(it boardmodel.InboxItem) bool { return it.Request.TaskID == id }) {
-			why = cid + " has a decision waiting: answer it on the Web Board (w)."
+			why = cid + " has a decision waiting: answer it here (o) or on the Web Board (w)."
 			continue
 		}
 		if canonicalTaskState(p, id) == marshal.Reassigned {
@@ -126,8 +126,12 @@ func retryContinuation(w *Workspace, id string, resume func() error) (string, er
 // holds the run, resumes it, returning the operator's answer. It is a package
 // var so a test can stand in for the Marshal calls it makes.
 var boardRetry = func(w *Workspace, ctx context.Context, id string) (string, error) {
-	if _, err := w.marshalRetry(ctx, []string{id, "fresh-session"}); err != nil {
+	answer, err := w.marshalRetry(ctx, []string{id, "fresh-session"})
+	if err != nil {
 		return "", err
+	}
+	if strings.Contains(answer, "queued (") {
+		return answer, nil
 	}
 	return retryContinuation(w, id, func() error { _, err := w.marshalResume(ctx); return err })
 }
@@ -139,6 +143,9 @@ func (w *Workspace) retryAndContinue(ctx context.Context, id string) {
 	w.runCommandFunc(ctx, "retry "+id, func(ctx context.Context) (string, error) {
 		answer, err := boardRetry(w, ctx, id)
 		if err != nil {
+			if _, ok := marshal.RefusalOf(err); ok {
+				return "", err
+			}
 			return w.plainRetryError(id, err), nil
 		}
 		return answer, nil
@@ -149,6 +156,9 @@ func (w *Workspace) retryAndContinue(ctx context.Context, id string) {
 // raw error is logged to Activity only for the ones with nothing to tell the
 // operator.
 func (w *Workspace) plainRetryError(id string, err error) string {
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		return RedactContent(receipt.Summary(), nil)
+	}
 	msg := err.Error()
 	id = cleanBoard(id)
 	switch {

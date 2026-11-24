@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -24,9 +25,10 @@ func TestBusyAmendGovernedKeepsApprovalPath(t *testing.T) {
 	w.change.busyFn = func() bool { called = true; return false }
 	w.change.amendFn = func(context.Context, string) (bool, error) { called = true; return false, nil }
 	w.change.resumeFn = func(context.Context) (string, error) { called = true; return "", nil }
-	// With no bound run the old path refuses exactly as before the change.
+	// With no bound run the old path refuses as before the change, now as a
+	// typed refusal that names the next step.
 	err := w.queueMarshalRunProposal(marshalProposal{action: "amend", reason: "switch to OAuth"})
-	if err == nil || err.Error() != "no matching active plan" {
+	if err == nil || !strings.HasPrefix(err.Error(), "no matching active plan") {
 		t.Fatalf("the amend did not take the old path: %v", err)
 	}
 	if called {

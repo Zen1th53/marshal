@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
@@ -214,7 +217,25 @@ func (w *Workspace) recoverSurvivingWorkers(projectRoot string) {
 		var saved chatBinding
 		var chatRecoveryErr error
 		if record.Role == "marshal-chat" {
+			rights := w.marshalExecutionRights(agentCtx)
+			w.noteMarshalWrites(agent.provider, rights)
+			decision := w.enforceMarshalLaunchConfinement(agentCtx, surfaceWorkspaceNativeReattach, agent.provider, projectRoot, rights)
+			// A surviving process has no fresh isolation proof. Retire it and rebuild
+			// its command through the normal confined launch path.
+			if !decision.Allowed || decision.ToolOnlyFallback || decision.Mechanism == confinementOSBwrap {
+				_ = tmux.KillPane(agentCtx, agent.paneID)
+				cancel()
+				w.RecordActivity("Previous chat retired; a confined launch is required.")
+				continue
+			}
 			saved = loadChatBinding(projectRoot)
+			checked, checkErr := confineMarshalChat(agent.provider, projectRoot, slices.Clone(saved.Args), rights)
+			if checkErr != nil || !slices.Equal(checked, saved.Args) {
+				_ = tmux.KillPane(agentCtx, agent.paneID)
+				cancel()
+				w.RecordActivity("Previous chat retired; current read-only settings are required.")
+				continue
+			}
 			agent.mcpLaunchID = saved.MCPLaunchID
 			agent.binary = saved.Binary
 			agent.args = saved.Args
@@ -300,7 +321,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	}
 
 	winName := tmux.ChatWindowName(projectRoot)
-	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
+	brief, err := w.currentMarshalRoleBriefing(ctx, provider)
 	if err != nil {
 		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}
@@ -321,6 +342,8 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, base, w.marshalContinuityBriefing(projectRoot, brief), resume, rights)
 	if err == nil {
 		w.noteMarshalWrites(provider, rights)
+		decision := w.enforceMarshalLaunchConfinement(ctx, surfaceTmuxExecution, provider, projectRoot, rights)
+		env = append(env, marshalConfinementEnv(decision)...)
 	}
 	if err == nil {
 		args, env, dir, err = w.prepareProposalMCP(provider, projectRoot, args, env, dir)
@@ -362,12 +385,18 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	if err := saveChatBinding(projectRoot, chatBinding{Provider: provider, Binary: binary, Args: args, Env: env, SessionID: saved.SessionID, HistoryPath: saved.HistoryPath, RunID: runID, HistoryBaseline: baseline}); err != nil {
 		return err
 	}
-	cmd := marshalChatCommand(binary, args)
+	cmd, err := confineMarshalCommand(ctx, provider, projectRoot, rights, marshalChatCommand(binary, args))
+	if err != nil {
+		return marshalNotStarted(provider, err)
+	}
 
 	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
 		return marshalNotStarted(provider, fmt.Errorf("tmux window not opened: %w", redactedCause{err}))
 	}
 	launched = true
+	// Notices that could not be delivered while the chat was closed are
+	// replayed now; each is admitted once by its event ID.
+	w.replayMarshalNotices(ctx)
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, false) // F3: normal operator input
 
@@ -505,7 +534,7 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 		agent.binary = bin
 	}
 
-	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
+	brief, err := w.currentMarshalRoleBriefing(ctx, provider)
 	if err != nil {
 		return marshalNotStarted(provider, errors.New("protocol unavailable"))
 	}
@@ -521,6 +550,8 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief), sessionID != "", rights)
 	if err == nil {
 		w.noteMarshalWrites(provider, rights)
+		decision := w.enforceMarshalLaunchConfinement(ctx, surfaceTmuxExecution, provider, root, rights)
+		env = append(env, marshalConfinementEnv(decision)...)
 	}
 	if err == nil {
 		resumeArgs, env, dir, err = w.prepareProposalMCP(provider, root, resumeArgs, env, dir)
@@ -552,13 +583,17 @@ func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAge
 	cmd = append(cmd, env...)
 	cmd = append(cmd, bin)
 	cmd = append(cmd, resumeArgs...)
+	cmd, err = confineMarshalCommand(ctx, provider, root, rights, cmd)
+	if err != nil {
+		return marshalNotStarted(provider, err)
+	}
 	// The restarted chat keeps its role: its lease retires so the launch
 	// minted above takes over its open requests and submissions.
 	w.retireProposalMCPForResume(original)
 	w.chatRestarted()
 	err = tmux.RespawnPaneIn(ctx, agent.paneID, root, cmd)
 	if err != nil && allowNewWindow {
-		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, marshalChatCommand(bin, resumeArgs))
+		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, cmd)
 	}
 	if err != nil {
 		dir.remove()
@@ -729,7 +764,11 @@ func hostRelayCommand(ctx context.Context, socket string) ([]string, error) {
 		// A governed task can host more than one process; retain all relay output.
 		path := filepath.Join(view.root, statepath.DirName, "evidence", view.id+"-relay-latest.txt")
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if err := saveAgentEvidence(view.root, view.id+"-relay", ""); err != nil {
+			if _, err := writeRuntimeEvidence(view.root, view.id+"-relay", "", runtimeEvidenceMeta{
+				LaunchID: view.id,
+				Event:    "relay-bootstrap",
+				Source:   "tmux-relay",
+			}); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
@@ -885,7 +924,13 @@ func (w *Workspace) runNativeAgentInTmux(
 	var sessionReference processgroup.Reference
 	var hostedPane string
 	if isChat {
-		if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, briefingEnv, marshalChatCommand(binary, args), &hostedPane); err != nil {
+		command := marshalChatCommand(binary, args)
+		var err error
+		command, err = confineMarshalCommand(ctx, provider, root, w.marshalExecutionRights(ctx), command)
+		if err != nil {
+			return "", marshalNotStarted(provider, err)
+		}
+		if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, briefingEnv, command, &hostedPane); err != nil {
 			return "", err
 		}
 	} else {
@@ -1827,24 +1872,146 @@ func (w *Workspace) handleTakeoverCommand(ctx context.Context, args ...string) (
 	return fmt.Sprintf("Takeover: input enabled for %s. You can now type directly into the session. Press F11 to return to MARSHAL.", active.label), nil
 }
 
-func saveAgentEvidence(root, identifier, evidence string) error {
+// runtimeEvidenceMeta identifies the runtime context of one retained evidence
+// write under state storage.
+type runtimeEvidenceMeta struct {
+	RunID    string `json:"run_id,omitempty"`
+	LaunchID string `json:"launch_id,omitempty"`
+	Event    string `json:"event,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Actor    string `json:"actor,omitempty"`
+}
+
+// runtimeEvidenceReceipt is the redacted metadata written beside timestamped
+// and latest evidence files under the state/evidence root.
+type runtimeEvidenceReceipt struct {
+	Identifier  string `json:"identifier"`
+	RunID       string `json:"run_id,omitempty"`
+	LaunchID    string `json:"launch_id,omitempty"`
+	Event       string `json:"event,omitempty"`
+	Source      string `json:"source,omitempty"`
+	Actor       string `json:"actor,omitempty"`
+	Digest      string `json:"digest"`
+	Timestamp   string `json:"timestamp"`
+	Timestamped string `json:"timestamped_file"`
+	Latest      string `json:"latest_file"`
+	Bytes       int    `json:"bytes"`
+}
+
+func validEvidenceIdentifier(identifier string) bool {
+	if identifier == "" || strings.ContainsAny(identifier, "/\\") || strings.Contains(identifier, "..") {
+		return false
+	}
+	return !strings.ContainsFunc(identifier, unicode.IsControl)
+}
+
+// writeRuntimeEvidence is the single runtime writer for retained evidence under
+// the project's state/evidence root. It redacts evidence content and metadata,
+// records run/launch/event and an opaque SHA-256 digest, writes timestamped and
+// latest files for reader compatibility, and never creates a Git commit.
+func writeRuntimeEvidence(root, identifier, evidence string, meta runtimeEvidenceMeta) (runtimeEvidenceReceipt, error) {
+	if strings.TrimSpace(root) == "" {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("missing evidence root")
+	}
+	if !validEvidenceIdentifier(identifier) {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("invalid evidence identity")
+	}
 	dir := filepath.Join(root, statepath.DirName, "evidence")
-	if strings.ContainsAny(identifier, "/\\") || identifier == "" {
-		return fmt.Errorf("invalid evidence identity")
+	if err := statepath.CheckPath(root, dir); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("evidence directory refused: %w", err)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create evidence directory: %w", err)
+		return runtimeEvidenceReceipt{}, fmt.Errorf("create evidence directory: %w", err)
 	}
-	timestamp := time.Now().UTC().Format("20060102-150405")
-	path := filepath.Join(dir, fmt.Sprintf("%s-%s.txt", identifier, timestamp))
-	if err := os.WriteFile(path, []byte(evidence), 0o600); err != nil {
-		return fmt.Errorf("write evidence file: %w", err)
+	fs, err := os.OpenRoot(dir)
+	if err != nil {
+		return runtimeEvidenceReceipt{}, err
 	}
-	latest := filepath.Join(dir, fmt.Sprintf("%s-latest.txt", identifier))
-	if err := os.WriteFile(latest, []byte(evidence), 0o600); err != nil {
-		return fmt.Errorf("write latest evidence file: %w", err)
+	defer fs.Close()
+	redacted := RedactContent(evidence, nil)
+	sum := sha256.Sum256([]byte(redacted))
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+
+	now := time.Now().UTC()
+	timestamp := now.Format("20060102-150405.000000000")
+	timestampedName := fmt.Sprintf("%s-%s.txt", identifier, timestamp)
+	latestName := fmt.Sprintf("%s-latest.txt", identifier)
+	path := filepath.Join(dir, timestampedName)
+	latest := filepath.Join(dir, latestName)
+	if err := statepath.CheckPath(root, path); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("evidence file refused: %w", err)
 	}
-	return nil
+	if err := statepath.CheckPath(root, latest); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("latest evidence file refused: %w", err)
+	}
+	if err := fs.WriteFile(timestampedName, []byte(redacted), 0o600); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("write evidence file: %w", err)
+	}
+	if err := fs.WriteFile(latestName, []byte(redacted), 0o600); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("write latest evidence file: %w", err)
+	}
+
+	receipt := runtimeEvidenceReceipt{
+		Identifier:  identifier,
+		RunID:       RedactContent(strings.TrimSpace(meta.RunID), nil),
+		LaunchID:    RedactContent(strings.TrimSpace(meta.LaunchID), nil),
+		Event:       RedactContent(strings.TrimSpace(meta.Event), nil),
+		Source:      RedactContent(strings.TrimSpace(meta.Source), nil),
+		Actor:       RedactContent(strings.TrimSpace(meta.Actor), nil),
+		Digest:      digest,
+		Timestamp:   now.Format(time.RFC3339Nano),
+		Timestamped: timestampedName,
+		Latest:      latestName,
+		Bytes:       len(redacted),
+	}
+	metaJSON, err := json.MarshalIndent(receipt, "", "  ")
+	if err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("encode evidence metadata: %w", err)
+	}
+	metaPath := filepath.Join(dir, fmt.Sprintf("%s-%s.meta.json", identifier, timestamp))
+	latestMetaPath := filepath.Join(dir, fmt.Sprintf("%s-latest.meta.json", identifier))
+	if err := statepath.CheckPath(root, metaPath); err != nil {
+		return runtimeEvidenceReceipt{}, err
+	}
+	if err := statepath.CheckPath(root, latestMetaPath); err != nil {
+		return runtimeEvidenceReceipt{}, err
+	}
+	if err := fs.WriteFile(filepath.Base(metaPath), metaJSON, 0o600); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("write evidence metadata: %w", err)
+	}
+	if err := fs.WriteFile(filepath.Base(latestMetaPath), metaJSON, 0o600); err != nil {
+		return runtimeEvidenceReceipt{}, fmt.Errorf("write latest evidence metadata: %w", err)
+	}
+	return receipt, nil
+}
+
+func saveAgentEvidence(root, identifier, evidence string) error {
+	_, err := writeRuntimeEvidence(root, identifier, evidence, runtimeEvidenceMeta{
+		Event:  "agent-evidence",
+		Source: "runtime",
+	})
+	return err
+}
+
+// recordOutsideRunEvidence persists redacted out-of-run evidence under state
+// storage through the single runtime evidence writer, never via a Git commit.
+func (w *Workspace) recordOutsideRunEvidence(root, identifier, evidence string, meta runtimeEvidenceMeta) (runtimeEvidenceReceipt, error) {
+	if root == "" {
+		root = w.providerRoot()
+	}
+	if meta.RunID == "" {
+		meta.RunID = w.activeMarshalRunID()
+	}
+	if meta.LaunchID == "" {
+		meta.LaunchID = w.currentAskLaunchID(marshalProposal{})
+	}
+	if meta.Event == "" {
+		meta.Event = "outside-run-evidence"
+	}
+	if meta.Source == "" {
+		meta.Source = "runtime"
+	}
+	return writeRuntimeEvidence(root, identifier, evidence, meta)
 }
 
 // watchMarshalDraft imports every draft the Marshal publishes while its chat
@@ -2198,26 +2365,11 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 			}
 		}
 		t.w.updateTmuxStatusLine(context.Background())
-		state := "done"
-		message := "Task " + taskID + " completed."
-		if waiting {
-			state = "waiting"
-			message = taskApprovalNotice(taskID, approvalID)
-		} else if err != nil {
-			state = "failed"
-			message = "Task " + taskID + " failed: " + err.Error()
-		} else {
-			for _, record := range handin.RuntimeObserved {
-				if record.ExitCode != 0 {
-					state = "failed"
-					message = "Task " + taskID + " failed."
-					break
-				}
-			}
+		authMessage := ""
+		if authFailed {
+			authMessage = providerNotSignedInMessage(worker)
 		}
-		if authFailed && state == "failed" {
-			message = "Task " + taskID + " failed: " + providerNotSignedInMessage(worker)
-		}
+		state, message := taskExitAnnouncement(taskID, app.TaskAttempt(h.Request().Task), approvalID, waiting, err, hasFailure, authMessage)
 		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, ParentRunID: h.Request().RunID, TaskID: taskID, Worker: worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
 			err = errors.Join(err, alertErr)
 		}

@@ -14,6 +14,9 @@ import (
 	"strconv"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 // Owner actions (phase 2). The page sends POST /api/act; the server checks
@@ -23,6 +26,9 @@ import (
 
 // Action is one owner action from the page.
 type Action struct {
+	Command *store.WebIntent
+	Commit  func(func() Result) Result
+
 	// Kind is "key" (a button of the card on screen) or "say" (a message
 	// to the Marshal, as the Board's s composer sends it).
 	Kind string
@@ -35,6 +41,11 @@ type Action struct {
 	Text string
 	// Confirmed is set on the second click of a two-step action.
 	Confirmed bool
+	// Choice and Value name a decision card's typed choice for "decide";
+	// Revision is the card's bound revision the page saw, Digest the plan
+	// digest the owner read, Line the requirement line an edit changes and
+	// Reason a return's reason.
+	Choice, Value, Revision, Digest, Line, Reason string
 }
 
 // Result is what happened, for the page to say.
@@ -51,6 +62,25 @@ type Result struct {
 	// Confirm is set when the key armed a second step (the plan's reply,
 	// the inbox's allow or deny): the page shows a Confirm button.
 	Confirm *Confirm `json:"confirm,omitempty"`
+	// Typed refusal metadata when Status is "refused" (or queued behind a blocker).
+	Code         string                   `json:"code,omitempty"`
+	Blocker      *marshal.OperationHolder `json:"blocker,omitempty"`
+	Effects      marshal.RefusalEffects   `json:"effects,omitempty"`
+	NextCommands []string                 `json:"nextCommands,omitempty"`
+	EscalationID string                   `json:"escalationId,omitempty"`
+	Attempt      int                      `json:"attempt,omitempty"`
+}
+
+// WithRefusal attaches a sanitized RefusalReceipt to the Web action reply.
+func (r Result) WithRefusal(receipt marshal.RefusalReceipt) Result {
+	s := receipt.Sanitized()
+	r.Code = s.Code
+	r.Blocker = s.Blocker
+	r.Effects = s.Effects
+	r.NextCommands = s.NextCommands
+	r.EscalationID = s.EscalationID
+	r.Attempt = s.Attempt
+	return r
 }
 
 // Confirm is a second step the Board waits for.
@@ -106,12 +136,18 @@ func CardID(f Frame) string {
 	switch {
 	case f.Decision != nil:
 		d := f.Decision
+		plan := ""
+		if d.Plan != nil {
+			plan = d.Plan.Digest
+		}
 		return "decision:" + cardDigest(struct {
-			Kind, Title, Corner, Summary, Changed, Self string
-			Nodes                                       []Node
-			Lines                                       []CardLine
-			Actions                                     []Key
-		}{d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions})
+			Binding, Kind, Title, Corner, Summary, Changed, Self string
+			Nodes                                                []Node
+			Lines                                                []CardLine
+			Actions                                              []Key
+			Revision, Plan                                       string
+			Choices                                              []Choice
+		}{d.Binding, d.Kind, d.Title, d.Corner, d.Summary, d.ChangedNote, d.SelfApproval, d.Nodes, d.Lines, d.Actions, d.Revision, plan, d.Choices})
 	case f.Paused != nil:
 		p := f.Paused
 		titles := make([]string, 0, len(p.Tasks))
@@ -141,7 +177,13 @@ func actionKeys(ks []Key) []string {
 func ActionKeys(f Frame) []string {
 	switch {
 	case f.Decision != nil:
-		return append(actionKeys(f.Decision.Actions), "esc")
+		out := append(actionKeys(f.Decision.Actions), "esc")
+		for _, c := range f.Decision.Choices {
+			if !c.Local {
+				out = append(out, ChoiceToken(c.ID, c.Value))
+			}
+		}
+		return out
 	case f.Paused != nil:
 		return actionKeys(f.Paused.Actions)
 	}
@@ -149,6 +191,9 @@ func ActionKeys(f Frame) []string {
 	// (retry the stuck task, stop all workers).
 	return actionKeys(f.Keys)
 }
+
+// ChoiceToken is the token name of a decision card's typed choice.
+func ChoiceToken(id, value string) string { return "choice:" + id + "/" + value }
 
 // actToken is the token for action on card at epoch.
 func (s *Server) actToken(card string, epoch uint64, action string) string {
@@ -179,12 +224,21 @@ func (s *Server) originAllowed(origin string) bool {
 
 // actRequest is the body of POST /api/act.
 type actRequest struct {
+	Command
+
 	Action    string `json:"action"` // "key" or "say"
 	Card      string `json:"card"`
 	Key       string `json:"key"`
 	Text      string `json:"text"`
 	Token     string `json:"token"`
 	Confirmed bool   `json:"confirmed"`
+	// A decision card's typed choice ("decide").
+	Choice       string `json:"choice"`
+	Value        string `json:"value"`
+	CardRevision string `json:"cardRevision"`
+	PlanDigest   string `json:"planDigest"`
+	Line         string `json:"line"`
+	Reason       string `json:"reason"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -233,6 +287,10 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 		refuse(w, http.StatusForbidden, "This Board is read-only.")
 		return
 	}
+	if req.Action == "cmd" {
+		s.serveCommand(w, q, req)
+		return
+	}
 	a := Action{Card: req.Card, Text: req.Text, Confirmed: req.Confirmed}
 	name := req.Key
 	switch req.Action {
@@ -241,6 +299,13 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 		a.Key = req.Key
 		if utf8.RuneCountInString(req.Text) > 200 {
 			refuse(w, http.StatusRequestEntityTooLarge, "The typed text is too long.")
+			return
+		}
+	case "decide":
+		a.Kind, a.Choice, a.Value, a.Revision, a.Digest, a.Line, a.Reason = "decide", req.Choice, req.Value, req.CardRevision, req.PlanDigest, req.Line, req.Reason
+		name = ChoiceToken(req.Choice, req.Value)
+		if utf8.RuneCountInString(req.Text) > 200 || utf8.RuneCountInString(req.Reason) > 2000 || len(req.Choice) > 64 || len(req.Value) > 64 || len(req.Line) > 1 {
+			refuse(w, http.StatusRequestEntityTooLarge, "The choice is too large.")
 			return
 		}
 	case "say":
@@ -258,7 +323,16 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 	// shows now and spent before the action runs, so a replay or a second
 	// tab acting on the same frame is refused.
 	s.actMu.Lock()
-	defer s.actMu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			s.actMu.Unlock()
+		}
+	}()
+	if !s.authorized(q) {
+		refuse(w, http.StatusUnauthorized, "Reopen the Board to authenticate.")
+		return
+	}
 	f, epoch, err := s.currentFrame()
 	if err != nil {
 		refuse(w, http.StatusServiceUnavailable, "The Board frame could not be built.")
@@ -278,6 +352,8 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 		return
 	}
 	s.spend()
+	s.actMu.Unlock()
+	locked = false
 	ctx, cancel := context.WithTimeout(q.Context(), actWait)
 	defer cancel()
 	res := s.sink(ctx, a)

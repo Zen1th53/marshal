@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -697,11 +698,37 @@ func (g ultraGate) Capability(name string) bool { return name == marshal.Capabil
 func (g ultraGate) ExecutionEnabled() bool      { return g.enabled }
 
 func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
+	testAdmittedUltraCollector(t, false)
+}
+
+func testAdmittedUltraCollector(t *testing.T, turnOff bool, beforeLaunch ...bool) {
 	ctx := context.Background()
-	s, _ := marshalFixture(t, 2)
-	s.Gate = ultraGate{enabled: true}
+	count := 2
+	if turnOff {
+		count = 3
+	}
+	s, _ := marshalFixture(t, count)
+	gate := &collectorPreferenceGate{}
+	gate.enabled.Store(true)
+	s.Gate = gate
+	if len(beforeLaunch) > 0 && beforeLaunch[0] {
+		s.ClaimDispatch = func(string, string) (func(), bool) {
+			gate.mu.Lock()
+			gate.enabled.Store(false)
+			gate.mu.Unlock()
+			return func() {}, true
+		}
+	}
 	s.ModelProvider = "test"
+	// A merge onto an advanced head reviews the restaged candidate afresh;
+	// each reviewed commit is still reviewed once.
+	reviews := map[string]int{}
+	reviewed := map[string]int{}
 	s.CrossReview = func(_ context.Context, t marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
+		reviewed[t.PlanTaskID+"@"+h.ResultCommit]++
+		if reviewed[t.PlanTaskID+"@"+h.ResultCommit] > reviews[t.PlanTaskID] {
+			reviews[t.PlanTaskID] = reviewed[t.PlanTaskID+"@"+h.ResultCommit]
+		}
 		ref := "check:test -f " + t.PlanTaskID + ".txt"
 		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{ref}}, "test", nil
 	}
@@ -747,6 +774,9 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	}
 
 	releaseA := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseA) }) }
+	t.Cleanup(release)
 	bHandedIn := make(chan struct{})
 
 	// Task a waits for releaseA
@@ -758,8 +788,10 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 				<-releaseA
 				_ = os.WriteFile(filepath.Join(req.Worktree, "a.txt"), []byte("a\n"), 0600)
 			} else {
-				_ = os.WriteFile(filepath.Join(req.Worktree, "b.txt"), []byte("b\n"), 0600)
-				close(bHandedIn)
+				_ = os.WriteFile(filepath.Join(req.Worktree, req.Task.PlanTaskID+".txt"), []byte("done\n"), 0600)
+				if req.Task.PlanTaskID == "b" {
+					close(bHandedIn)
+				}
 			}
 			return nil, nil
 		},
@@ -767,7 +799,13 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, execErr := s.Execute(ctx, "run-ultra", marshalBrief, nil)
+		_, execErr := s.Execute(ctx, "run-ultra", marshalBrief, func(run marshal.Run) {
+			if turnOff && len(run.Tasks) >= 2 && run.Tasks[0].State == marshal.Dispatched && run.Tasks[1].State == marshal.Dispatched {
+				gate.mu.Lock()
+				gate.enabled.Store(false)
+				gate.mu.Unlock()
+			}
+		})
 		done <- execErr
 	}()
 
@@ -785,7 +823,7 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 		r, _, err := s.load(ctx, "run-ultra")
 		if err == nil {
 			run = r
-			if len(r.Tasks) == 2 && r.Tasks[1].State == marshal.Accepted {
+			if len(r.Tasks) >= 2 && r.Tasks[1].State == marshal.Accepted {
 				break
 			}
 		}
@@ -812,17 +850,18 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	}
 
 	// Release task a so it can complete
-	close(releaseA)
+	release()
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("execute failed: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	// A merge onto an advanced head reruns its checks and review.
+	case <-time.After(15 * time.Second):
 		t.Fatal("execute timed out after releasing task a")
 	}
 
-	// Both tasks should now be merged in plan order
+	// Both tasks should now be merged
 	finalRun, _, err := s.load(ctx, "run-ultra")
 	if err != nil {
 		t.Fatal(err)
@@ -830,7 +869,26 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	if finalRun.Tasks[0].State != marshal.Merged || finalRun.Tasks[1].State != marshal.Merged {
 		t.Fatalf("both tasks should be merged: %+v", finalRun.Tasks)
 	}
+	for _, task := range finalRun.Tasks {
+		if reviews[task.PlanTaskID] != 1 {
+			t.Fatalf("task %s reviewed %d times", task.PlanTaskID, reviews[task.PlanTaskID])
+		}
+	}
+	if turnOff && (finalRun.Tasks[2].ExecutionTier != marshal.Standard || finalRun.Tier != marshal.Ultra) {
+		t.Fatalf("serial admission lost mode history: %+v", finalRun)
+	}
 	if s.dispatchLive("run-ultra", "a") {
 		t.Fatal("collected worker still registered as live")
 	}
 }
+
+type collectorPreferenceGate struct {
+	mu      sync.Mutex
+	enabled atomic.Bool
+}
+
+func (g *collectorPreferenceGate) Capability(name string) bool {
+	return name == marshal.CapabilityMarshal
+}
+func (g *collectorPreferenceGate) ExecutionEnabled() bool { return g.enabled.Load() }
+func (g *collectorPreferenceGate) LockAdmission() func()  { g.mu.Lock(); return g.mu.Unlock }

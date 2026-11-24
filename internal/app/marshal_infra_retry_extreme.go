@@ -22,14 +22,14 @@ import (
 // for an infrastructure, provider, transport or tool failure. They do not
 // spend the governed rework limit (bug #23), so they have this bound of
 // their own: past it the task escalates with the last failure.
-const infraRetryLimit = 6
+const infraRetryLimit = marshal.DefaultInfraRetryLimit
 
 // infraFailoverStreak is how many consecutive such failures one provider may
 // have on a task before it cools down for infraFailureCooldown, so the next
 // attempt fails over to another provider of the approved order.
-const infraFailoverStreak = 2
+const infraFailoverStreak = marshal.DefaultInfraFailoverStreak
 
-const infraFailureCooldown = 10 * time.Minute
+const infraFailureCooldown = time.Duration(marshal.DefaultInfraCooldownSeconds) * time.Second
 
 // infraRetryApplies reports whether a worker attempt that ended without a
 // hand-in is retried outside the rework limit: governed tasks of a parallel
@@ -88,15 +88,24 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	} else if err != nil {
 		return err
 	}
+	retryLimit := run.Settings.EffectiveInfraRetryLimit()
+	failoverStreak := run.Settings.EffectiveInfraFailoverStreak()
+	cooldown := time.Duration(run.Settings.EffectiveInfraCooldownSeconds()) * time.Second
+	retryProgress := fmt.Sprintf("Retrying (%d of %d)", t.InfraRetries, retryLimit)
+	retryLimitLabel := fmt.Sprint(retryLimit)
+	if retryLimit == 0 {
+		retryProgress = fmt.Sprintf("Retrying (%d, unlimited)", t.InfraRetries)
+		retryLimitLabel = "unlimited"
+	}
 	data := map[string]any{
 		"reason":                note,
-		"summary":               fmt.Sprintf("%s: %s. Retrying (%d of %d); this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), infraFailurePhrase(ProviderDisplayName(t.Worker), kind), t.InfraRetries, infraRetryLimit) + " " + reason,
+		"summary":               fmt.Sprintf("%s: %s. %s; this doesn't count against the task.", firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID), infraFailurePhrase(ProviderDisplayName(t.Worker), kind), retryProgress) + " " + reason,
 		"return_attempt":        fmt.Sprint(attempt),
 		"return_reasons":        []string{note},
 		"counted":               false,
 		"infra_failure":         kind,
 		"infra_retry":           fmt.Sprint(t.InfraRetries),
-		"infra_retry_limit":     fmt.Sprint(infraRetryLimit),
+		"infra_retry_limit":     retryLimitLabel,
 		"worker":                t.Worker,
 		"failed_attempt_commit": t.FailedAttemptCommit,
 	}
@@ -125,7 +134,7 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		pauseMarshal(&run, marshal.Pause{Reason: plain, Resolutions: []string{resolution}, Detail: machine, Code: marshal.CodeInfraRetry, Action: marshal.PauseRetryTask, TaskID: t.PlanTaskID})
 		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
-	} else if t.InfraRetries > infraRetryLimit {
+	} else if retryLimit > 0 && t.InfraRetries > retryLimit {
 		t.State = marshal.Escalated
 		machine := fmt.Sprintf("%s: %d attempts ended without a hand-in; last on %s (%s): %s", infraRetryEscalation, t.InfraRetries, t.Worker, kind, reason)
 		t.EscalationReason = machine
@@ -140,8 +149,8 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		// Only a failure that says something about the provider cools it;
 		// a crash, an expired lease or a lost connection to Marshal's tools
 		// would otherwise park the run as waiting on a quota it still has.
-		if t.InfraStreak >= infraFailoverStreak && infraKindCoolsProvider(kind) && s.otherWorker(t.Worker, t.Mode) != "" {
-			until := s.clock().Add(infraFailureCooldown)
+		if failoverStreak > 0 && t.InfraStreak >= failoverStreak && infraKindCoolsProvider(kind) && cooldown > 0 && s.otherWorkerFor(ctx, run.Settings, t.Worker, t.Mode) != "" {
+			until := s.clock().Add(cooldown)
 			providerHealth.Mark(t.Worker, "infrastructure failure ("+kind+"): "+reason, until)
 			data["provider_cooldown_until"] = until.UTC().Format(time.RFC3339)
 			t.InfraStreakWorker, t.InfraStreak = "", 0
@@ -192,4 +201,12 @@ func retireWorkerAuthLane(run marshal.Run, t *marshal.Task) {
 	if reworkFailedLaneWorker(run, *t) {
 		t.LaneReworkBase++
 	}
+}
+
+func infraRetryRounds(run marshal.Run) int {
+	rounds := 0
+	for _, t := range run.Tasks {
+		rounds += t.InfraRetries * 3
+	}
+	return rounds
 }

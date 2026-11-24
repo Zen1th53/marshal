@@ -170,6 +170,9 @@ func (r *Runtime) wirePrivateProcess05Wait(s *MarshalService) {
 		}
 		return nil
 	}
+	s.process05ClearExpiredWait = func(ctx context.Context, executionID, taskID string, now time.Time) (*execution.RuntimeApproval, error) {
+		return r.Execution().Engine().ClearExpiredTaskApproval(ctx, executionID, taskID, now)
+	}
 }
 
 func process05ApprovalWaitBaseBound(actual execution.ExecutionRun, run marshal.Run, task marshal.Task, value execution.TaskExecution) bool {
@@ -310,6 +313,11 @@ func (s *MarshalService) reworkExpiredProcess05Approval(ctx context.Context, run
 	}
 
 	attempt := 1 + t.EvidenceAttemptBase + taskReturns(*t)
+	if s.runtime != nil && t.Process05WaitApprovalID != "" {
+		if _, _, err := s.runtime.ExpireApproval(ctx, runID, t.Process05WaitApprovalID, s.clock()); err != nil {
+			return err
+		}
+	}
 	if s.process05WaitPause != nil && t.Process05WaitRunID != "" {
 		if err := s.process05WaitPause(ctx, t.Process05WaitRunID); err != nil {
 			return err
@@ -480,8 +488,80 @@ func (s *MarshalService) clearExpiredProcess05Waits(ctx context.Context, runID s
 	}
 	for _, id := range cleared {
 		if i := taskIndex(run, id); i >= 0 {
+			if s.runtime != nil && run.Tasks[i].Process05WaitApprovalID != "" {
+				if _, _, err := s.runtime.ExpireApproval(ctx, runID, run.Tasks[i].Process05WaitApprovalID, s.clock()); err != nil {
+					return true, err
+				}
+			}
 			run.Tasks[i].Process05WaitRunID, run.Tasks[i].Process05WaitApprovalID = "", ""
 		}
 	}
 	return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+}
+
+// retryExpiredApprovalWait lets an explicit owner retry clear an expired
+// unanswered Process 05 approval wait (including a serial wait) without
+// charging worker rework. The next dispatch requests a fresh ticket through
+// the normal authority, and execution resumes only after a valid decision.
+func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID string, run marshal.Run, rev int64, taskIdx int) (bool, error) {
+	t := &run.Tasks[taskIdx]
+	if t.State != marshal.Queued || t.Process05WaitApprovalID == "" || s.process05WaitReceipt == nil {
+		return false, nil
+	}
+	_, err := s.process05WaitReceipt(ctx, run, *t, t.Process05WaitRunID, t.Process05WaitApprovalID)
+	expired, ok := isProcess05ApprovalExpired(err, t.Process05WaitApprovalID)
+	if !ok {
+		return false, nil
+	}
+	if reworkFailedLaneWorker(run, *t) {
+		if err := s.reworkExpiredProcess05Approval(ctx, run, *t, expired); err != nil {
+			return true, err
+		}
+		after, nextRev, err := s.load(ctx, runID)
+		if err != nil {
+			return true, err
+		}
+		if after.State == marshal.AwaitingUser {
+			after.State = marshal.Dispatching
+			after.Pause = nil
+			return true, s.save(ctx, runID, after, nextRev)
+		}
+		return true, nil
+	}
+	executionID := t.Process05WaitRunID
+	reason := expiredApprovalReason(expired.approvalID, expired.expiresAt)
+	if s.runtime != nil {
+		if _, _, err := s.runtime.ExpireApproval(ctx, runID, expired.approvalID, s.clock()); err != nil {
+			return true, err
+		}
+	}
+	t.Process05WaitRunID = ""
+	t.Process05WaitApprovalID = ""
+	t.State = marshal.Queued
+	if run.State == marshal.AwaitingUser {
+		run.State = marshal.Dispatching
+		run.Pause = nil
+	}
+	if err := s.save(ctx, runID, run, rev); err != nil {
+		return true, err
+	}
+	if s.process05ClearExpiredWait != nil && executionID != "" {
+		if _, err := s.process05ClearExpiredWait(ctx, executionID, t.PlanTaskID, s.clock()); err != nil {
+			return true, err
+		}
+	}
+	eventData := map[string]any{
+		"reason":           reason,
+		"expired_approval": expired.approvalID,
+		"owner_retry":      true,
+		"rework_charged":   false,
+	}
+	if !expired.expiresAt.IsZero() {
+		eventData["expires_at"] = expired.expiresAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+	}
+	return true, s.record(ctx, runID, t.PlanTaskID, events.EventTypeMarshalTaskReturned, eventData)
+}
+
+func (s *MarshalService) requeueGovernedApprovalTask(context.Context, marshal.Run, marshal.Task) bool {
+	return false
 }

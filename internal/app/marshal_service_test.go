@@ -324,6 +324,9 @@ func TestM09ReturnTwiceReassignThenEscalate(t *testing.T) {
 	}
 	draft := s.Model.(marshalFakeModel).draft
 	s.Model = marshalFakeModel{draft: draft, review: marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "marshal"}}
+	// Both reviewers return it, so the rework limit applies rather than a
+	// reviewer disagreement.
+	setCrossReview(s, marshal.VerdictReturn, "not done")
 	for attempt := 0; attempt < 2; attempt++ {
 		d, err := s.Dispatch(ctx, "run", "a", "write")
 		if err != nil {
@@ -761,6 +764,9 @@ func TestM09MergeConflictReturnsAtIntegrationHead(t *testing.T) {
 	if _, err := s.Approve(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
+	// Both independent tasks start before either merges into integration so
+	// launch admission sees the clean base, then merging a before b exercises
+	// Merge's conflict return at the integration head.
 	for _, id := range []string{"a", "b"} {
 		d, err := s.Dispatch(ctx, "run", id, "write")
 		if err != nil {
@@ -773,7 +779,9 @@ func TestM09MergeConflictReturnsAtIntegrationHead(t *testing.T) {
 		if err != nil || v != marshal.VerdictAccept {
 			t.Fatalf("review: %s %v", v, err)
 		}
-		if err = s.Merge(ctx, "run", id); err != nil {
+	}
+	for _, id := range []string{"a", "b"} {
+		if err := s.Merge(ctx, "run", id); err != nil {
 			t.Fatal(err)
 		}
 	}

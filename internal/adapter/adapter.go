@@ -43,12 +43,16 @@ type Request struct {
 	StallAfter  time.Duration
 	IdleTimeout time.Duration
 	Stalled     func(idle time.Duration)
+	// Progress, when set, receives SignalRequestStart once the worker
+	// process has started and the class of every provider stdout line after
+	// it. A provider whose output is not a stream of events leaves it unset.
+	Progress func(StreamSignal)
 }
 
 // WorkerLiveness builds the command liveness policy for a request.
 func WorkerLiveness(request Request, classify func([]byte) StreamSignal) *Liveness {
 	return &Liveness{Classify: classify, DoneGrace: DefaultDoneGrace,
-		StallAfter: request.StallAfter, IdleTimeout: request.IdleTimeout, Stalled: request.Stalled}
+		StallAfter: request.StallAfter, IdleTimeout: request.IdleTimeout, Stalled: request.Stalled, Progress: request.Progress}
 }
 
 type Command struct {
@@ -81,6 +85,9 @@ const (
 	SignalToolStart
 	SignalToolEnd
 	SignalDone
+	// SignalRequestStart marks the start of the provider request: the
+	// worker process has started and its model has not answered yet.
+	SignalRequestStart
 )
 
 // DefaultDoneGrace is how long a worker may keep running after its final
@@ -94,6 +101,7 @@ type Liveness struct {
 	StallAfter  time.Duration
 	IdleTimeout time.Duration
 	Stalled     func(idle time.Duration)
+	Progress    func(StreamSignal)
 }
 
 type ProcessResult struct {

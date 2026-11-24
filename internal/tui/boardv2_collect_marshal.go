@@ -7,6 +7,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/usage"
@@ -28,6 +29,13 @@ func (w *Workspace) collectV2Marshal(b *vm.Board) {
 	b.Workers = buildV2Workers(in)
 	b.Limits = buildV2Limits(in)
 	b.Ready = buildV2Ready(in)
+	b.Settings = in.Probe.SettingsView
+	b.Settings.Rows = append([]settingscatalog.Row(nil), b.Settings.Rows...)
+	b.Settings.Changes = append([]settingscatalog.Change(nil), b.Settings.Changes...)
+	if b.Settings.Rows == nil {
+		b.Settings.Rows = settingscatalog.Rows(marshal.DefaultSettings(), 0)
+	}
+	w.addSessionSettings(&b.Settings)
 	w.addV2ReadyActions(&b.Ready)
 }
 
@@ -422,7 +430,11 @@ func buildV2Workers(in v2MarshalIn) []vm.Worker {
 func buildV2Ready(in v2MarshalIn) vm.Readiness {
 	var r vm.Readiness
 	add := func(c vm.Check) { r.Checks = append(r.Checks, c) }
-	limits, globalCap := app.WorkerConcurrency(in.Probe.Settings)
+	settings := in.Probe.Settings
+	if !in.Probe.HasSettings {
+		settings = marshal.DefaultSettings()
+	}
+	limits, globalCap := app.WorkerConcurrency(settings)
 
 	// The Marshal.
 	if prov := in.marshalProvider(); prov == "" {
@@ -563,14 +575,14 @@ func v2EarlierSessions(ss []scanSessions) string {
 // v2Defaults is the project's defaults as the checklist lists them.
 func v2Defaults(in v2MarshalIn, limits map[string]int, globalCap int) [][2]string {
 	s := in.Probe.Settings
-	if !in.Probed {
-		return nil
+	if !in.Probe.HasSettings {
+		s = marshal.DefaultSettings()
 	}
 	var rows [][2]string
 	if len(limits) > 0 {
 		var parts []string
 		for _, name := range v2ProviderOrder {
-			if in.provider(name).Installed && limits[name] > 0 {
+			if (!in.Probed || in.provider(name).Installed) && limits[name] > 0 {
 				parts = append(parts, fmt.Sprintf("%s %d", name, limits[name]))
 			}
 		}

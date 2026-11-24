@@ -63,8 +63,16 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 			return nil, err
 		}
-		if !validProposalID(args.SubmissionID) || len(args.Proposal) > projectcontext.MaximumContractSubmissionBytes {
+		if !validProposalID(args.SubmissionID) {
 			return nil, projectcontext.ErrBudget
+		}
+		if len(args.Proposal) > projectcontext.MaximumContractSubmissionBytes {
+			return nil, innerLimit(proposalmcp.LimitKindContract, len(args.Proposal), projectcontext.ErrBudget)
+		}
+		// The shape is checked first, so a mistyped, missing or unknown field
+		// is named by its path before any content or coverage rule runs.
+		if err := proposalmcp.ValidateContractSubmission(args.Proposal); err != nil {
+			return nil, fmt.Errorf("%w: %v", projectcontext.ErrInvalid, err)
 		}
 		var sub store.ProjectContractSubmission
 		if err := proposalmcp.DecodeStrict(args.Proposal, &sub); err != nil {
@@ -79,25 +87,28 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 			sub.Contract.Project = binding
 		}
 		if sub.Contract.Project != binding {
-			return nil, fmt.Errorf("%w: contract.project must be {\"canonical_id\":%q,\"storage_id\":%q}, the project in marshal_project_contract_inventory, or be left out", projectcontext.ErrInvalid, binding.CanonicalID, binding.StorageID)
+			return nil, fmt.Errorf("%w: proposal.contract.project: must be {\"canonical_id\":%q,\"storage_id\":%q}, the project in marshal_project_contract_inventory, or be left out", projectcontext.ErrInvalid, binding.CanonicalID, binding.StorageID)
 		}
 		// A secret in the draft is removed before the draft is journaled, so
 		// registration never refuses it and the secret is never kept.
 		if err := redactProjectContractSubmission(&sub); err != nil {
 			return nil, err
 		}
-		// Quality rules first, so a thin draft is told exactly what to fill in
-		// (a blank responsibility or carries also cannot be drawn):
-		// responsibilities, described connections, coverage.
+		// Content before coverage: blank responsibilities and undescribed
+		// connections, then whether the owner can open the draft, and only
+		// then whether the requirements are covered.
+		if err := app.ValidateContractQuality(sub.Contract, nil); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		// Refuse now, with the reason, what the owner could not open later.
+		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
+			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
 		requirements, err := w.activeContractRequirements(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("cannot check architecture coverage: %w; retry submission", err)
 		}
 		if err := app.ValidateContractQuality(sub.Contract, requirements); err != nil {
-			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
-		}
-		// Refuse now, with the reason, what the owner could not open later.
-		if err := app.ValidateContractDrawable(sub.Contract); err != nil {
 			return nil, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
 		// Whole-project revision rules: the next revision keeps every accepted
@@ -195,12 +206,21 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		}
 		ownerContext := authority.localControl.Context(ctx)
 		principal := authz.Principal{ID: l.owner, Role: authz.Role{Name: "marshal", Authorities: []authz.Authority{authz.AuthorityPolicyAdmin}}}
+		// A page too large for the wire is read again with fewer items at the
+		// same revision, so the reader gets a smaller complete page and its
+		// cursor instead of a refusal; only one item that cannot fit refuses.
 		if method == "project_contract_inventory" {
-			page, err := w.runtime.InspectProjectContractInventory(ownerContext, principal, args.After, args.Limit)
-			if err != nil {
-				return nil, err
+			for {
+				page, err := w.runtime.InspectProjectContractInventory(ownerContext, principal, args.After, args.Limit)
+				if err != nil {
+					return nil, err
+				}
+				raw, err := boundedProjectContractJSON(page)
+				if !errors.Is(err, projectcontext.ErrBudget) || args.Limit == 1 {
+					return raw, err
+				}
+				args.Limit /= 2
 			}
-			return boundedProjectContractJSON(page)
 		}
 		accepted, err := w.store.ReadAcceptedProjectContract(ctx, w.runtime.ProjectContractBinding())
 		if err != nil {
@@ -209,42 +229,58 @@ func (w *Workspace) projectContractMCP(ctx context.Context, l *proposalMCPLease,
 		// This is current accepted architecture inspection, not a qualified
 		// execution packet. Reference bodies are retrieved separately through
 		// authorized exact memory reads and ALL applicable refs enter admission.
-		contract := accepted.Contract
-		all := contract.Required
-		contract.Required = []projectcontext.MemoryRef{}
-		next := ""
-		for _, ref := range all {
-			if ref.ID <= args.After {
-				continue
+		for {
+			raw, err := w.projectContractReadPage(ownerContext, principal, accepted, args.After, args.Limit)
+			if !errors.Is(err, projectcontext.ErrBudget) || args.Limit == 1 {
+				return raw, err
 			}
-			// The contract is owner inspection; an inaccessible private reference
-			// must not disclose even its existence to this native reader.
-			if ref.ProjectID != w.projectID {
-				return nil, projectcontext.Changed("project_contract_mcp_extreme.go:143")
-			}
-			if _, readErr := w.runtime.InspectProjectContractMemory(ownerContext, principal, ref.ID); readErr != nil {
-				if errors.Is(readErr, authz.ErrUnauthorized) {
-					continue
-				}
-				return nil, readErr
-			}
-			if len(contract.Required) == args.Limit {
-				next = contract.Required[len(contract.Required)-1].ID
-				break
-			}
-			contract.Required = append(contract.Required, ref)
+			args.Limit /= 2
 		}
-		return boundedProjectContractJSON(struct {
-			Contract  projectcontext.Contract `json:"contract"`
-			Version   int64                   `json:"version"`
-			Digest    string                  `json:"digest"`
-			Next      string                  `json:"next_after_id,omitempty"`
-			Qualified bool                    `json:"qualified"`
-		}{contract, accepted.Version, accepted.Digest, next, false})
 	default:
 		return nil, errors.New("unknown project contract method")
 	}
 }
+
+// projectContractReadPage reads up to limit required references after the
+// cursor from one accepted contract revision.
+func (w *Workspace) projectContractReadPage(ownerContext context.Context, principal authz.Principal, accepted store.AcceptedProjectContract, after string, limit int) (json.RawMessage, error) {
+	contract := accepted.Contract
+	all := contract.Required
+	contract.Required = []projectcontext.MemoryRef{}
+	next := ""
+	for _, ref := range all {
+		if ref.ID <= after {
+			continue
+		}
+		// The contract is owner inspection; an inaccessible private reference
+		// must not disclose even its existence to this native reader.
+		if ref.ProjectID != w.projectID {
+			return nil, projectcontext.Changed("project_contract_mcp_extreme.go:143")
+		}
+		if _, readErr := w.runtime.InspectProjectContractMemory(ownerContext, principal, ref.ID); readErr != nil {
+			if errors.Is(readErr, authz.ErrUnauthorized) {
+				continue
+			}
+			return nil, readErr
+		}
+		if len(contract.Required) == limit {
+			next = contract.Required[len(contract.Required)-1].ID
+			break
+		}
+		contract.Required = append(contract.Required, ref)
+	}
+	return boundedProjectContractJSON(struct {
+		Contract  projectcontext.Contract `json:"contract"`
+		Version   int64                   `json:"version"`
+		Digest    string                  `json:"digest"`
+		Next      string                  `json:"next_after_id,omitempty"`
+		Qualified bool                    `json:"qualified"`
+	}{contract, accepted.Version, accepted.Digest, next, false})
+}
+
+// projectContractPageBytes bounds one local inspection page; the JSON-RPC
+// envelope around it stays inside the 4 KiB contract wire bound.
+const projectContractPageBytes = 3072
 
 func boundedProjectContractJSON(v any) (json.RawMessage, error) {
 	raw, err := json.Marshal(v)
@@ -253,8 +289,17 @@ func boundedProjectContractJSON(v any) (json.RawMessage, error) {
 	}
 	// Bound the local inspection projection. The MCP child MUST separately
 	// measure the entire escaped JSON-RPC response, including its actual ID.
-	if len(raw) > 3072 {
-		return nil, fmt.Errorf("%w: inspection page is too large; reduce limit", projectcontext.ErrBudget)
+	if len(raw) > projectContractPageBytes {
+		return nil, model.NewLimitError(
+			fmt.Errorf("%w: inspection page is too large; reduce limit (%d bytes, page bound %d)", projectcontext.ErrBudget, len(raw), projectContractPageBytes),
+			model.Limit{
+				Kind:        "contract_page",
+				Subject:     "project contract inspection page",
+				ActualBytes: int64(len(raw)),
+				CapBytes:    projectContractPageBytes,
+				Action:      "Read a smaller page of the same revision: pass a lower limit, or a component, and continue with the returned cursor.",
+			},
+		)
 	}
 	return raw, nil
 }

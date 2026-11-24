@@ -234,7 +234,7 @@
     switch (t.state) {
       case "building": word = n ? "sent back " + n + "×, building" : "building"; break;
       case "review": word = t.note === "merging" ? "accepted, merging" : "in review"; break;
-      case "waiting": word = t.note ? t.note.replace(/^waits /, "waits ") : "waiting"; break;
+      case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;
       default: word = t.state || "–";
     }
     var c = el("span", "chip " + toneClass(n ? "warn" : /stuck/.test(t.note || "") ? "bad" : taskTone[t.state]), word);
@@ -275,19 +275,29 @@
   var terminalOnly = { "c": 1, "7": 1, "e": 1, "q": 1, "esc": 1 };
   function cardButtons(f) {
     var d = f.decision, p = f.paused, keys = d ? d.actions : p ? p.actions : [];
-    var out = [];
-    keys.forEach(function (k) {
-      if (terminalOnly[k.key]) return;
-      if (d && d.kind === "inbox" && k.key === "⏎") return; // details: the terminal's inspector
-      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" });
-    });
-    if (out.length > 3) {
-      // Keep the primary and the stop; the raw error is the first to go.
-      var first = out[0], rest = out.slice(1).filter(function (b) { return b.key !== "d"; });
-      out = [first].concat(rest.slice(0, 2));
+    if (d && d.choices && d.choices.length) {
+      // Every typed choice the card offers, each by its own id: a key
+      // means only what its choice says.
+      return d.choices.map(function (c) { return { key: c.key, label: cap(c.label), local: !!c.local, choice: c }; });
     }
+    var out = [], choices = d && (d.kind === "ask" || d.kind === "guard");
+    keys.forEach(function (k) {
+      if (terminalOnly[k.key] && !choices) return;
+      if (d && d.kind === "inbox" && k.key === "⏎") return; // details: the terminal's inspector
+      out.push({ key: k.key, label: cap(k.label), local: k.key === "k" && !choices && !!d && (d.kind === "architecture" || d.kind === "plan") });
+    });
     return out;
   }
+  // decide sends a typed choice of the card on screen, bound to the revision
+  // and plan digest the page shows.
+  function decide(c, extra, label) {
+    var d = frame && frame.decision;
+    if (!d) return Promise.resolve();
+    var body = { action: "decide", choice: c.id, value: c.value || "", cardRevision: d.revision, planDigest: d.plan ? d.plan.digest : "" };
+    Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+    return act(body, label || cap(c.label));
+  }
+  var planOpen = "", editing = null;
   function screenKey(f, key) {
     if (f.decision || f.paused || !f.act || !f.act.tokens[key]) return null;
     for (var i = 0; i < f.keys.length; i++) if (f.keys[i].key === key) return f.keys[i];
@@ -310,6 +320,15 @@
     setTimeout(function () { if (armed === id) { armed = null; render(frame); } }, 6000);
   }
   function twoStep(cls, key, label, warn) {
+    if (key === "r" && frame) {
+      var retry = workCapabilities(frame, retryTask(frame)).find(function (c) { return c.op === "task/retry"; });
+      if (retry) { var typed = el("button", cls, label); typed.type = "button"; typed.onclick = function () { previewSetting(newWorkRequest(retry, {})); }; return typed; }
+    }
+    if (key === "ctrl+x" && frame) {
+      // The screen's stop key takes the same bound request as the run control.
+      var workers = runCapabilities(frame).find(function (c) { return c.op === "run/stop-workers"; });
+      if (workers) { var bound = el("button", cls, label); bound.type = "button"; bound.onclick = function () { previewSetting(newWorkRequest(workers, {})); }; return bound; }
+    }
     var id = (frame.act ? frame.act.card : "") + "|" + key;
     var on = armed === id;
     return button(cls + (on ? " danger" : ""), on ? "Click again to " + label : cap(label), function () {
@@ -333,7 +352,7 @@
     var card = $("card"), d = f.decision, p = f.paused;
     var cardID = f.act ? f.act.card : "";
     if (confirmStep && confirmStep.card !== cardID && !pending) confirmStep = null;
-    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop])) return;
+    if (!changed("card", [cardID, !!f.act, d, p, pending, confirmStep, armedStop, planOpen, !!editing])) return;
     if ((!d && !p) || (asksOwner(f) && d && d.kind === "architecture")) { card.hidden = true; confirmStep = null; return; }
     card.hidden = false;
     card.className = "card" + (p && !d ? " paused" : "");
@@ -361,6 +380,7 @@
         if (l.note) dd.appendChild(el("span", "muted", " · " + l.note));
         $("card-lines").appendChild(dd);
       });
+      renderPlanPreview(d);
       setText("card-extra", "");
       more = !!(d.changedNote || d.nodes.length || d.lines.length);
     } else {
@@ -397,6 +417,7 @@
       prim.addEventListener("click", function () {
         var text = confirmStep.text ? typed.value.trim() : "";
         if (confirmStep.text && !text) { feedback("bad", "Type what the Board asks for first."); typed.focus(); return; }
+        if (confirmStep.choice) { decide(confirmStep.choice, { confirmed: true, text: text }, "Confirm"); return; }
         act({ action: "key", key: "⏎", text: text }, "Confirm");
       });
       if (frame && frame.act && frame.act.tokens.esc) {
@@ -418,13 +439,16 @@
       return;
     }
     if (!bs.length) { prim.hidden = true; return; }
+    if (editing && d && d.kind === "requirements") { renderEdit(d, prim, sec); return; }
     prim.hidden = false;
     bs.forEach(function (b, i) {
       var stop = !!f.paused && b.key === "x";
       var on = stop && armedStop === (f.act && f.act.card);
       var text = on ? "Click again to stop the run" : b.label;
       var go = function () {
-        if (b.local) { location.hash = "#home"; $("say-text").focus(); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (b.local) { location.hash = "#home"; openComposer(d && d.kind === "architecture" ? "run/architecture.comment" : d && d.kind === "plan" ? "run/plan.comment" : "run/chat.send"); feedback("wait", "Write what to change in \"Tell the Marshal\" and press Send."); return; }
+        if (b.choice && b.choice.id === "requirements.edit") { editing = { line: "", text: "" }; sigs.card = ""; render(frame); return; }
+        if (b.choice) { armedStop = null; decide(b.choice); return; }
         if (stop && !on) {
           armedStop = f.act && f.act.card;
           feedback("wait", "Stopping keeps the run and its work; /marshal resume continues it. Click again to stop.");
@@ -442,6 +466,46 @@
       } else {
         sec.appendChild(button("linkbtn" + (on ? " danger" : ""), text, go));
       }
+    });
+  }
+
+  // renderEdit is the requirements card's line edit: the line and its new
+  // text, sent as one typed choice bound to the card's revision.
+  function renderEdit(d, prim, sec) {
+    var c = null;
+    d.choices.forEach(function (x) { if (x.id === "requirements.edit") c = x; });
+    var pick = el("select"), text = el("input");
+    pick.setAttribute("aria-label", "Line to edit");
+    text.setAttribute("aria-label", "New text");
+    text.maxLength = 200;
+    d.lines.forEach(function (l) { if (!l.key) return; var o = el("option", "", l.key + " · " + (l.label || "")); o.value = l.key; pick.appendChild(o); });
+    pick.onchange = function () { d.lines.forEach(function (l) { if (l.key === pick.value) text.value = l.text === "—" ? "" : l.text; }); };
+    pick.onchange();
+    sec.appendChild(pick); sec.appendChild(text);
+    prim.hidden = false;
+    prim.textContent = "Send the edit";
+    prim.addEventListener("click", function () {
+      if (!c) return;
+      if (!text.value.trim()) { feedback("bad", "Write the line's new text first."); text.focus(); return; }
+      decide(c, { line: pick.value, text: text.value.trim() }, "Edit line " + pick.value);
+    });
+    sec.appendChild(button("linkbtn", "Cancel", function () { editing = null; sigs.card = ""; render(frame); }));
+  }
+  // renderPlan draws the drafted plan the card approves, once the owner
+  // opened it: each task with its exact checks.
+  function renderPlanPreview(d) {
+    if (!d.plan || planOpen !== d.plan.digest) return;
+    var box = $("card-lines");
+    box.appendChild(el("dt", "", "plan"));
+    box.appendChild(el("dd", "muted", d.plan.id + " · version " + d.plan.version + " · " + d.plan.tasks.length + " tasks"));
+    d.plan.tasks.forEach(function (t) {
+      box.appendChild(el("dt", "", t.id));
+      var dd = el("dd", "", t.title);
+      if (t.dependsOn.length) dd.appendChild(el("div", "muted", "after " + t.dependsOn.join(", ")));
+      if (t.files.length) dd.appendChild(el("div", "muted", "files " + t.files.join(", ")));
+      t.criteria.forEach(function (x) { dd.appendChild(el("div", "", "done when " + x)); });
+      t.checks.forEach(function (x) { dd.appendChild(el("code", "", x)); });
+      box.appendChild(dd);
     });
   }
 
@@ -489,6 +553,16 @@
   }
   function renderHome(f) {
     setText("now", heroSentence(f));
+    var m = f.mode || {};
+    var flag = function (v) { return v == null ? "unknown" : v ? "on" : "off"; };
+    var number = function (v) { return v == null ? "unknown" : String(v); };
+    setText("execution-mode", (m.edition || "unknown") + " · entitlement " + (m.entitlement || "unknown") +
+      " · preference " + flag(m.executionEnabled) + " · effective " + (m.effectiveTier || "unknown") +
+      " · active " + number(m.active) + " / cap " + number(m.effectiveCap) +
+      " · plan " + (m.planParallel == null ? "unknown" : m.planParallel ? "parallel" : "serial") +
+      " · recorded " + (m.recordedRunTier || "unknown") + " · delegation " + flag(m.delegation) +
+      " · request " + (m.requestStatus || "unknown"));
+    setText("execution-reasons", (m.reasons || []).join("; "));
     var p = f.plan, nums = clear($("nums"));
     var bits = [];
     if (p.total) bits.push([p.done + " of " + p.total, " merged"]);
@@ -699,13 +773,14 @@
     if (!id) { dr.hidden = true; sigs.drawer = ""; return; }
     var l = t ? laneFor(f, t.id) : null, rl = t ? reviewLaneFor(f, t.id) : null;
     var rt = retryTask(f);
-    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused])) return;
+    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step, l.lane.process, l.lane.note, l.lane.signal.state], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused, workCapabilities(f, id)])) return;
     dr.hidden = false;
     var facts = clear($("dr-facts")), acts = clear($("dr-acts"));
     setText("dr-note", "");
     if (!t && !pt) {
       setText("dr-title", id);
       clear($("dr-state")).textContent = "This task is not on the Board now.";
+      renderWorkControls(f, id, acts);
       return;
     }
     if (pt) {
@@ -715,6 +790,7 @@
       kv(facts, "Kept", pt.kept);
       setText("dr-note", "The choice for this task is on Home, in the paused card.");
       acts.appendChild(link("#home", "Go to the paused card"));
+      renderWorkControls(f, id, acts);
       return;
     }
     setText("dr-title", t.id + " · " + t.title);
@@ -724,6 +800,8 @@
     kv(facts, "Worker", [t.writer, l && l.lane.name, l && l.lane.model].filter(Boolean).join(" · ") || "not assigned yet");
     if (l) {
       kv(facts, "Step", l.lane.step);
+      if (l.lane.process) kv(facts, "Worker process", l.lane.process + (l.lane.turn ? " · turn " + l.lane.turn.replace("_", " ") : ""));
+      if (l.lane.note) kv(facts, "Liveness", l.lane.note);
       var run = el("span", "el"); run.dataset.lane = l.i; kv(facts, "Running for", run);
       var sig = el("span", "sig"); sig.dataset.lane = l.i; kv(facts, "Last signal", sig);
     }
@@ -732,8 +810,8 @@
     kv(facts, "Attempt", n ? "attempt " + (n + 1) + ": the reviewer sent it back " + plural(n, "time") : t.state === "building" || t.state === "review" ? "first attempt" : "");
     if (n) kv(facts, "Why sent back", "The reviewer's reason is not sent to this page yet; the terminal Board's task inspector shows it.", "muted");
     if (t.note && !n) kv(facts, "Note", t.note);
-    if (rt === t.id) acts.appendChild(twoStep("ghost", "r", "retry " + t.id + " from scratch", retryWarn));
-    else setText("dr-note", "No action for this task from here: the Board offers Retry only for a stuck task, and moving work to another provider only on a paused card.");
+    if (t.waiting) kv(facts, "Waits", waitText(t.waiting) + " (" + (t.waiting.code === "unknown" ? "cause unknown, from " : "from ") + t.waiting.source + ")");
+    renderWorkControls(f, t.id, acts);
     tickLanes();
   }
   function renderPlan(f) {
@@ -767,7 +845,7 @@
   function renderLanes(f) {
     var l = f.lanes;
     show("w-lanes", l.items.length > 0 || !!f.top.run);
-    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected]; }))) { tickLanes(); return; }
+    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected, x.process, x.turn, x.note, x.signal, x.waiting]; }))) { tickLanes(); return; }
     var tb = clear($("la-rows"));
     l.items.forEach(function (x, i) {
       var tr = el("tr");
@@ -775,7 +853,7 @@
       tr.appendChild(el("td", "", x.name));
       tr.appendChild(el("td", "muted", x.model || x.provider));
       tr.appendChild(el("td", x.reviewing ? "tone-vio" : "", x.task));
-      tr.appendChild(el("td", "", x.step));
+      tr.appendChild(el("td", "", x.waiting ? x.step + " · " + waitText(x.waiting) : x.note ? x.step + " · " + x.note : x.step));
       var e = el("td", "num el"); e.dataset.lane = i; tr.appendChild(e);
       var s = el("td", "num sig"); s.dataset.lane = i; tr.appendChild(s);
       tb.appendChild(tr);
@@ -784,6 +862,46 @@
     $("la-rows").closest(".tablewrap").hidden = l.items.length === 0;
     tickLanes();
   }
+  // ---- liveness: pure helpers, read by testdata/liveness.cjs
+  // signalView is a lane's last signal as the page says it, add seconds
+  // after the frame came. Stale, unverifiable and exited are the server's
+  // judgement only; unverifiable reads "cannot verify", never exited. The
+  // local clock only turns a known signal amber after 60 s of quiet.
+  function signalView(x, add) {
+    var s = x.signal || {};
+    switch (s.state) {
+      case "stale": return { text: s.label || "no heartbeat: cannot verify the worker", tone: "bad" };
+      case "unverifiable": return { text: /^cannot verify/.test(s.label || "") ? s.label : "cannot verify" + (s.label ? ": " + s.label : ""), tone: "warn" };
+      case "exited": return { text: s.label || "the worker exited", tone: "muted" };
+      case "live": case "quiet": break;
+      default: return { text: s.label || "–", tone: "" };
+    }
+    if (!s.at) return { text: "–", tone: "" };
+    var sec = x.lastSignalSec + add, quiet = s.state === "quiet" || sec > 60;
+    return { text: dur(sec) + " ago" + (quiet ? " · quiet" : ""), tone: quiet ? "warn" : "" };
+  }
+  // waitText is a wait in one line: its label and where to look.
+  function waitText(w) {
+    if (!w) return "";
+    var t = w.label || (w.code === "unknown" ? "waits, cause unknown" : w.code);
+    if (w.retryAt) t += " · retry " + hm(w.retryAt);
+    if (w.inspect) t += " · see " + w.inspect;
+    return t;
+  }
+  // approvalAge is an approval's age and time left, add seconds after a
+  // frame made at nowIso.
+  function approvalAge(a, nowIso, add) {
+    var age = (a.ageSec || 0) + add, out = "waiting " + dur(age);
+    if (a.status !== "requested") return out + " · " + a.status + ", cannot be answered";
+    var exp = parse(a.expiresAt), now = parse(nowIso);
+    if (exp && now) {
+      var left = (exp - now) / 1000 - add;
+      out += left > 0 ? " · expires in " + dur(left) : " · expired, cannot be answered";
+    }
+    return out;
+  }
+  // ---- end liveness
+
   // tickLanes moves every running clock on the page by the time since the
   // frame came.
   function tickLanes() {
@@ -792,10 +910,70 @@
     Array.prototype.forEach.call(document.querySelectorAll("[data-lane]"), function (n) {
       var x = frame.lanes.items[+n.dataset.lane];
       if (!x) return;
-      var sig = x.lastSignalSec + add, stale = x.stale || sig > 60;
-      if (n.tagName === "TR") { n.classList.toggle("stale", stale); return; }
+      var sv = signalView(x, add);
+      if (n.tagName === "TR") { n.classList.toggle("stale", sv.tone === "bad"); n.classList.toggle("quiet", sv.tone === "warn"); return; }
       if (n.classList.contains("el")) n.textContent = dur(x.elapsedSec + add);
-      else if (n.classList.contains("sig")) n.textContent = dur(sig) + " ago" + (stale ? " · no signal for a while" : "");
+      else if (n.classList.contains("sig")) { n.textContent = sv.text; n.className = n.className.replace(/ ?tone-\w+/g, "") + (sv.tone ? " " + toneClass(sv.tone) : ""); }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-approval-age]"), function (n) {
+      var a = null;
+      (frame.approvals || []).forEach(function (x) { if (x.id === n.dataset.approvalAge) a = x; });
+      if (a) n.textContent = approvalAge(a, frame.now, add);
+    });
+  }
+
+  // renderInbox draws what waits for the owner: the run's wait, the inbox
+  // lines and the approvals. Approvals are keyed by id and updated in
+  // place, so a focused button or its age survives a new frame.
+  function renderInbox(f) {
+    var ib = f.inbox || { lines: [] }, aps = f.approvals || [];
+    setText("ib-count", (ib.count || 0) + aps.filter(function (a) { return a.status === "requested"; }).length || "");
+    var rw = $("run-wait");
+    rw.hidden = !f.waiting;
+    rw.textContent = f.waiting ? "The run waits: " + waitText(f.waiting) : "";
+    if (changed("inbox", [ib.lines, ib.next])) {
+      var ul = clear($("ib-lines"));
+      ib.lines.forEach(function (l) { ul.appendChild(el("li", "", l)); });
+      setText("ib-next", ib.next ? "Next ask: " + ib.next : "");
+    }
+    show("ib-empty", ib.lines.length === 0 && aps.length === 0 && !f.waiting && f.nowLine.fromYouOK);
+    // Rows that left go first, so the rows that stay are not moved and
+    // keep their focus.
+    var box = $("ib-approvals"), have = {}, ids = {};
+    aps.forEach(function (a) { ids[a.id] = true; });
+    Array.prototype.slice.call(box.children).forEach(function (n) {
+      if (ids[n.dataset.id]) have[n.dataset.id] = n; else box.removeChild(n);
+    });
+    aps.forEach(function (a, i) {
+      var li = have[a.id];
+      if (!li) {
+        li = el("li", "approval");
+        li.dataset.id = a.id;
+        li.appendChild(el("b", "ap-title"));
+        li.appendChild(el("span", "muted ap-age")).dataset.approvalAge = a.id;
+        li.appendChild(el("p", "ap-wait"));
+        li.appendChild(el("p", "muted ap-reason"));
+        li.appendChild(el("span", "acts ap-acts"));
+      }
+      if (box.children[i] !== li) box.insertBefore(li, box.children[i] || null);
+      li.querySelector(".ap-title").textContent = (a.taskId ? a.taskId + ": " : "") + "approval " + a.id + " · " + (a.awaiting === "owner" ? "you answer" : "the Marshal answers") + " ";
+      li.querySelector(".ap-wait").textContent = a.waiting ? waitText(a.waiting) : "";
+      li.querySelector(".ap-reason").textContent = a.reason || "";
+      var acts = li.querySelector(".ap-acts"), sig = JSON.stringify([a.status, a.actions, a.destination]);
+      if (acts.dataset.sig !== sig) {
+        acts.dataset.sig = sig;
+        clear(acts);
+        if (a.actions.length) {
+          a.actions.forEach(function (k) {
+            acts.appendChild(button("ghost", "Copy " + k.label + " command", function () {
+              if (navigator.clipboard) navigator.clipboard.writeText(k.key);
+              feedback("ok", "Copied: " + k.key + " (run it in the terminal).");
+            }));
+          });
+        } else if (a.status === "requested") {
+          acts.appendChild(el("span", "muted", "Answered at " + (a.destination || "the Marshal") + "."));
+        }
+      }
     });
   }
 
@@ -833,6 +1011,11 @@
       if (n.sub) li.appendChild(el("small", "", n.sub));
       if (n.changed) li.appendChild(el("small", "tone-info", "changed by this goal"));
       ol.appendChild(li);
+    });
+    var links = d && d.links ? d.links : [];
+    links.forEach(function (k) {
+      if (!parts[k.from] || !parts[k.to]) return;
+      ol.appendChild(el("li", "link" + (k.changed ? " changed" : ""), parts[k.from].name + (k.both ? " ⇄ " : " → ") + parts[k.to].name + (k.changed ? " (changed)" : "")));
     });
   }
 
@@ -882,10 +1065,11 @@
       if (m.contextPct >= 0) {
         var cl = el("ul", "limits"), ci = el("li");
         ci.appendChild(el("span", "what", "context used"));
-        ci.appendChild(el("span", "num", m.contextPct + "%" + (m.contextWindow ? " of " + compact(m.contextWindow) : "")));
+        ci.appendChild(el("span", "num", m.contextPct + "%" + (m.contextWindow ? " of " + compact(m.contextWindow) : "") + (m.contextUsed ? " · " + compact(m.contextUsed) + " used" : "")));
         ci.appendChild(newBar("Marshal context used", m.contextPct, m.contextPct >= 85 ? "bad" : m.contextPct >= 65 ? "warn" : ""));
         cl.appendChild(ci); li.appendChild(cl);
       }
+      if (m.inputKnown) li.appendChild(el("p", "muted", m.inputClear ? "Chat input is clear" : "Chat input has unsent text: the Board waits before it sends"));
       var bound = m.chatBound || f.chat.bound;
       li.appendChild(el("p", bound ? "muted" : "reason", bound ? "Chat bound" + (f.chat.restarts ? " · " + plural(f.chat.restarts, "restart") : "") : "⚠ Chat not bound"));
       ul.appendChild(li);
@@ -936,7 +1120,7 @@
       if (c.hint) li.appendChild(el("span", "hint", c.hint));
       cl2.appendChild(li);
     });
-    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Check again from the terminal Board." : "");
+    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Recheck a provider under Provider actions, or from the terminal Board." : "");
   }
 
   // ---- Activity ------------------------------------------------------------------
@@ -1013,7 +1197,7 @@
   function renderSettings(f) {
     var r = f.ready;
     var s = f.system || {};
-    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, f.plan.tokens, f.v, s])) return;
+    if (!changed("settings", [f.top.version, f.top.project, f.top.run, r.telemetryAsk, r.telemetryOn, r.defaults, r.sessionLabel, f.plan.tokens, f.v, s, f.settings, ((f.settingsActions || {}).capabilities || []).map(function (c) { return [c.op, c.target, c.revision]; })])) return;
     var dl = clear($("set-facts"));
     kv(dl, "Version", (f.top.version || "unknown") + (s.updateAvailable ? " · " + s.updateAvailable + " is available (F10 or /update in the terminal)" : ""),
       s.updateAvailable ? "tone-warn" : "");
@@ -1021,12 +1205,13 @@
     var host = [pct(s.cpuPct, "CPU"), pct(s.memPct, "memory used"), pct(s.diskPct, "disk used") + (s.lowDisk ? " (low on space)" : ""),
       s.tempC >= 0 ? s.tempC + " °C" : ""].filter(Boolean).join(" · ");
     kv(dl, "Host load", host);
-    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; lane cap " + s.thermalCap + " asked for" : "") : "off", s.thermalGuard ? "tone-warn" : "");
+    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; temporary lane cap " + s.thermalCap + " for new lanes" : "") : "off", s.thermalGuard ? "tone-warn" : "");
     if (s.notice) kv(dl, "Host note", s.notice);
     kv(dl, "MCP", s.mcpFailed ? "failed in this session · F6 in the terminal shows why" : "working", s.mcpFailed ? "tone-bad" : "");
     var approval = "";
     r.defaults.forEach(function (d) { if (d.name === "approval") approval = d.value; });
     kv(dl, "Approval mode", approval || "not reported to this page yet");
+    kv(dl, "Session label", (r.sessionLabel || "unknown") + " (supervision label)");
     kv(dl, "Project", f.top.project || "–");
     kv(dl, "Run", f.top.run || "no run");
     // Telemetry is known once the Board probed this computer (the checks
@@ -1034,14 +1219,238 @@
     var probed = r.checks.length > 0 || r.defaults.length > 0;
     kv(dl, "Usage counts (telemetry)", probed ? (r.telemetryOn ? "on · marshal telemetry disable turns it off" : "off") : "not checked yet · marshal telemetry status");
     if (f.plan.tokens) kv(dl, "Tokens this run", compact(f.plan.tokens));
+    var settings = f.settings || {rows: [], changes: []};
+    kv(dl, "Project settings revision", String(settings.revision || 0));
+    var about = false;
+    var controls = clear($("settings-controls"));
+    ((f.settingsActions || {}).capabilities || []).forEach(function (cap) {
+      if (cap.op !== "settings/ultra.request") return;
+      var requestButton = el("button", "", "Request ULTRA entitlement"); requestButton.type = "button";
+      requestButton.onclick = function () { previewSetting(newSettingRequest(cap, "")); };
+      controls.appendChild(requestButton);
+    });
+    (settings.rows || []).forEach(function (row) {
+      if (row.scope === "build" && !about) { kv(dl, "About this build", "Fixed edition policies"); about = true; }
+      kv(dl, row.key, row.effective + (row.units ? " " + row.units : "") +
+        " · " + row.scope + " · " + row.source + " · " + row.applies +
+        (row.value !== row.effective ? " · configured: " + row.value : "") +
+        (row.lockedReason ? " · locked: " + row.lockedReason : "") +
+        (row.help ? " · " + row.help : ""));
+      var cap = settingCapability(f, row.key);
+      if (cap && !row.lockedReason) {
+        var group = el("div", "setting-control");
+        var label = el("label", "", row.key + " ");
+        var input = el(cap.values && cap.values.length ? "select" : "input");
+        input.setAttribute("aria-label", row.key);
+        if (cap.values && cap.values.length) cap.values.forEach(function (value) { var option = el("option", "", value); option.value = value; input.appendChild(option); });
+        input.value = row.key === "ultra-execution" ? (row.next === "on" || row.next === "true" ? "on" : "off") : row.value;
+        label.appendChild(input); group.appendChild(label);
+        var button = el("button", "", "Preview change"); button.type = "button";
+        button.onclick = function () { previewSetting(newSettingRequest(cap, input.value)); };
+        group.appendChild(button); controls.appendChild(group);
+      }
+    });
+    kv(dl, "Budget usage", "Unknown usage is not zero and does not bypass quota. Run ceilings use tokens, minor currency units and seconds. Goal ceilings belong to the approved goal revision.");
+    (settings.changes || []).forEach(function (c) {
+      kv(dl, "Change r" + c.revision, c.key + ": " + c.old + " → " + c.new + " · " + c.actor + " · " + c.at);
+    });
     kv(dl, "This page", "private link for this computer only · frame format " + f.v);
   }
 
+  var settingStorage = "marshal-board-setting-request";
+  var settingReceiptTimer = null;
+  function workCapabilities(f, id) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) {
+      return c.target.kind === "task" && c.target.id === id || c.target.kind === "lane" && c.taskId === id;
+    });
+  }
+  function newWorkRequest(capability, payload) {
+    var body = newSettingRequest(capability, "");
+    body.runId = capability.runId; body.attemptId = capability.attemptId; body.payload = payload;
+    return body;
+  }
+  function renderWorkControls(f, id, box) {
+    var labels = {"task/retry": "Retry", "task/retry.debug": "Retry in a fresh session with diagnostics", "task/reassign": "Reassign", "task/model.set": "Change task model", "task/skip": "Skip and require a revised plan", "task/accept": "Accept task", "task/return": "Return for rework", "task/approve-task": "Approve task", "lane/nudge": "Request worker status", "lane/restart": "Restart this worker"};
+    workCapabilities(f, id).forEach(function (c) {
+      var row = el("div", "acts"), provider, reason;
+      if (c.op === "task/reassign" || c.op === "task/model.set") {
+        provider = el("input"); provider.placeholder = "Provider"; provider.setAttribute("aria-label", "Task provider"); row.appendChild(provider);
+      }
+      if (c.op === "task/return" || c.op === "task/reassign") {
+        reason = el("input"); reason.placeholder = "Reason"; reason.maxLength = 2000; reason.setAttribute("aria-label", "Action reason"); row.appendChild(reason);
+      }
+      var button = el("button", "ghost", labels[c.op]); button.type = "button";
+      button.onclick = function () {
+        var payload = {};
+        if (provider) payload.provider = provider.value.trim();
+        if (reason) payload.reason = reason.value.trim();
+        if (c.approvalId) payload.approvalId = c.approvalId;
+        previewSetting(newWorkRequest(c, payload));
+      };
+      row.appendChild(button); box.appendChild(row);
+    });
+  }
+  var composerOps = {"run/chat.send": "Message the Marshal", "run/plan.comment": "Comment on the plan", "run/architecture.comment": "Comment on the architecture", "run/goal.intake": "Add goal details", "run/goal.amend.propose": "Propose a goal change"};
+  function composerCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run" && composerOps[c.op]; });
+  }
+  function runCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "run" && !composerOps[c.op]; });
+  }
+  // renderComposerScopes lists what a message can be bound to now; the
+  // choice names the plan, review, launch or goal the words are sent against.
+  function renderComposerScopes(f) {
+    var caps = composerCapabilities(f), sel = $("say-scope");
+    if (!changed("say-scope", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
+    var keep = sel.value; clear(sel); sel.hidden = !caps.length;
+    caps.forEach(function (c) { var o = el("option", "", composerOps[c.op]); o.value = c.op; sel.appendChild(o); });
+    if (caps.some(function (c) { return c.op === keep; })) sel.value = keep;
+  }
+  function openComposer(op) {
+    var sel = $("say-scope");
+    if (op && Array.prototype.some.call(sel.options, function (o) { return o.value === op; })) sel.value = op;
+    $("say-text").focus();
+  }
+  // Run-wide controls sit above every route, so they stay reachable with a
+  // card or a drawer open; each one previews and confirms its bound request.
+  function renderRunControls(f) {
+    var labels = {"run/pause": "Pause the run", "run/stop": "Stop the run", "run/resume": "Resume the run", "run/stop-workers": "Stop the run's workers", "run/amend.deny": "Deny the amendment"};
+    renderComposerScopes(f);
+    var caps = runCapabilities(f), box = $("run-controls");
+    if (!changed("run-controls", caps.map(function (c) { return [c.op, c.revision, c.attemptId]; }))) return;
+    clear(box); box.hidden = !caps.length;
+    if (!caps.length) return;
+    var reason = el("input"); reason.placeholder = "Reason (optional)"; reason.maxLength = 2000; reason.setAttribute("aria-label", "Run action reason");
+    box.appendChild(reason);
+    caps.forEach(function (c) {
+      var b = el("button", c.op === "run/resume" ? "ghost" : "ghost danger", labels[c.op] || c.op); b.type = "button";
+      b.onclick = function () { var payload = {}; if (reason.value.trim()) payload.reason = reason.value.trim(); previewSetting(newWorkRequest(c, payload)); };
+      box.appendChild(b);
+    });
+  }
+  function teamCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "team"; });
+  }
+  // Team actions: each button previews and confirms its bound request. A
+  // provider's sign-in only opens the provider's own terminal window; no
+  // credential is typed on this page.
+  var teamLabels = {"team/provider.verify": "Recheck", "team/provider.route-around": "Route its tasks around it", "team/provider.signin.start": "Open its sign-in window", "team/session.import.request": "Load an earlier session source", "team/architecture.open": "Open the accepted architecture map (read only)"};
+  function teamPayload(c, value) {
+    if (c.op === "team/telemetry.choose") return {value: value};
+    return c.op.indexOf("team/provider.") === 0 ? {provider: c.target.id} : {};
+  }
+  function teamButton(c, label, value) {
+    var b = el("button", "ghost", label); b.type = "button";
+    b.onclick = function () { previewSetting(newWorkRequest(c, teamPayload(c, value))); };
+    return b;
+  }
+  function renderTeamActions(f) {
+    var caps = teamCapabilities(f);
+    if (!changed("team-acts", caps.map(function (c) { return [c.op, c.target.id, c.attemptId]; }))) return;
+    var box = clear($("tm-acts")), open = clear($("ar-open")), n = 0;
+    show("tm-acts-box", false);
+    caps.forEach(function (c) {
+      if (c.op === "team/architecture.open") { open.appendChild(teamButton(c, teamLabels[c.op] + (c.revision ? " · revision " + c.revision : ""))); return; }
+      var row = el("div", "acts");
+      if (c.op === "team/telemetry.choose") {
+        row.appendChild(el("span", "", "Usage counts"));
+        row.appendChild(teamButton(c, "Keep usage counts on", "keep")); row.appendChild(teamButton(c, "Turn them off", "off"));
+      } else {
+        var what = c.op === "team/session.import.request" ? "Earlier sessions " + (++n) : c.target.id;
+        row.appendChild(el("span", "", what));
+        row.appendChild(teamButton(c, teamLabels[c.op] || c.op));
+      }
+      box.appendChild(row);
+    });
+    show("tm-acts-box", !!box.firstChild);
+  }
+  function commandPanel(body) { return $(body && body.target.kind === "team" ? "team-confirm" : body && body.target.kind === "run" ? "run-confirm" : body && (body.target.kind === "task" || body.target.kind === "lane") ? "work-confirm" : "settings-confirm"); }
+  function settingCapability(f, key) {
+    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key && c.target.kind !== "task" && c.target.kind !== "lane" && c.target.kind !== "run" && c.target.kind !== "team"; });
+  }
+  function newSettingRequest(cap, value) {
+    var bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
+    var id = Array.from(bytes).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+    return {action: "cmd", requestId: id, target: cap.target, op: cap.op, projectId: frame.settingsActions.projectId,
+      revision: cap.revision, payload: cap.op === "settings/ultra.request" ? {} : cap.op === "settings/ultra.set" ? {enabled: value === "on"} : {key: cap.target.id, value: value}};
+  }
+  function rememberSetting(body) {
+    var saved = Object.assign({}, body); delete saved.token; delete saved.preview;
+    sessionStorage.setItem(settingStorage, JSON.stringify(saved));
+  }
+  function settingPost(body) {
+    var cap = ((frame.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === body.target.id && c.target.kind === body.target.kind && c.op === body.op; });
+    if (!cap || cap.op !== body.op || cap.revision !== body.revision || (cap.runId || "") !== (body.runId || "") || (cap.attemptId || "") !== (body.attemptId || "") || frame.settingsActions.projectId !== body.projectId) return Promise.reject(new Error("The project or settings changed. Refresh and preview again."));
+    var headers = auth(); headers["Content-Type"] = "application/json";
+    return fetch("/api/act", {method: "POST", headers: headers, credentials: "omit", cache: "no-store",
+      body: JSON.stringify(Object.assign({}, body, {token: cap.token}))}).then(function (r) {
+      return r.json().then(function (result) { if (!r.ok) throw new Error(result.text || "The change was refused."); return result; });
+    });
+  }
+  function settingReceipt(body) {
+    return fetch("/api/act/receipts/" + body.requestId, {headers: auth(), credentials: "omit", cache: "no-store"}).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error("Reopen the Board to check this request.");
+      return r.json();
+    });
+  }
+  function showSettingReceipt(r) {
+    var body; try { body = JSON.parse(sessionStorage.getItem(settingStorage)); } catch (e) {}
+    feedback(r.status === "applied" ? "ok" : r.status === "queued" || r.status === "applying" ? "wait" : "bad",
+      r.status + ": " + (r.result || r.code) + " · revision " + r.revision);
+    clearTimeout(settingReceiptTimer);
+    if (r.status === "queued" || r.status === "applying") settingReceiptTimer = setTimeout(recoverSetting, 1000);
+    if (r.status === "applied" || r.status === "refused") { sessionStorage.removeItem(settingStorage + "-submitted"); sessionStorage.removeItem(settingStorage); clear(commandPanel(body)); }
+    if (r.status === "interrupted") {
+      var panel = clear(commandPanel(body));
+      var check = el("button", "", "Check previous outcome"); check.type = "button"; check.onclick = recoverSetting; panel.appendChild(check);
+    }
+    return refresh();
+  }
+  function previewSetting(body) {
+    var unresolved = sessionStorage.getItem(settingStorage + "-submitted");
+    if (unresolved && unresolved !== body.requestId) { feedback("bad", "Check the previous settings receipt before starting another change."); recoverSetting(); return; }
+    try { rememberSetting(body); } catch (e) { feedback("bad", "Browser storage is unavailable; enable it before changing settings."); return; }
+    feedback("wait", "Preparing confirmation…");
+    settingReceipt(body).then(function (r) {
+      if (r) return showSettingReceipt(r);
+      return refresh().then(function () { return settingPost(Object.assign({}, body, {preview: true, confirmation: undefined})); }).then(function (r) {
+        body.confirmation = r.confirmation; rememberSetting(body);
+        var panel = clear(commandPanel(body));
+        var work = body.target.kind === "task" || body.target.kind === "lane" || body.target.kind === "run" || body.target.kind === "team";
+        var detail = work ? JSON.stringify(body.payload) : (body.payload.value === undefined ? (body.payload.enabled ? "on" : "off") : body.payload.value);
+        panel.appendChild(el("p", "", "Confirm " + body.op + " for " + body.target.id + ": " + detail + ". This preview expires in one minute."));
+        var button = el("button", "", "Confirm change"); button.type = "button"; panel.appendChild(button);
+        button.onclick = function () {
+          button.disabled = true;
+          sessionStorage.setItem(settingStorage + "-submitted", body.requestId);
+          refresh().then(function () { return settingPost(body); }).then(showSettingReceipt).catch(function (e) {
+            feedback("wait", "Checking the receipt…");
+            settingReceipt(body).then(function (r) { if (r) return showSettingReceipt(r); feedback("bad", e.message + " Preview again to retry this same request."); }).catch(function () { feedback("bad", "Outcome unknown. Check this request before retrying."); });
+          });
+        };
+        feedback("ok", "Preview ready; no change has been made.");
+      });
+    }).catch(function (e) { feedback("bad", e.message); });
+  }
+  function recoverSetting() {
+    var body; try { body = JSON.parse(sessionStorage.getItem(settingStorage)); } catch (e) { return; }
+    if (!body) return;
+    settingReceipt(body).then(function (r) {
+      if (r) { showSettingReceipt(r); return; }
+      var panel = clear(commandPanel(body));
+      panel.appendChild(el("p", "", "A previous settings change has no receipt. Preview it again to retry with the same request identity."));
+      var button = el("button", "", "Preview previous change"); button.type = "button"; button.onclick = function () { previewSetting(body); }; panel.appendChild(button);
+    }).catch(function () { feedback("bad", "A previous settings outcome is unknown; reconnect to check its receipt."); });
+  }
+
   // ---- render ------------------------------------------------------------------
+  var settingsRecovered = false;
   function render(f) {
     if (!f) return;
-    renderTop(f); renderCard(f); renderHome(f); renderWork(f); renderArchitecture(f);
-    renderTeam(f); renderActivity(f); renderSettings(f);
+    if (!settingsRecovered) { settingsRecovered = true; recoverSetting(); }
+    renderTop(f); renderCard(f); renderInbox(f); renderHome(f); renderWork(f); renderArchitecture(f);
+    renderTeam(f); renderTeamActions(f); renderActivity(f); renderSettings(f); renderRunControls(f);
   }
 
   function feedback(kind, text) {
@@ -1063,7 +1472,7 @@
   function act(body, label) {
     if (pending) return Promise.resolve();
     if (!frame || !frame.act) { feedback("bad", "Not connected to the Board yet."); return Promise.resolve(); }
-    var name = body.action === "say" ? "say" : body.key;
+    var name = body.action === "say" ? "say" : body.action === "decide" ? "choice:" + body.choice + "/" + body.value : body.key;
     var tok = frame.act.tokens[name];
     if (!tok) { feedback("bad", "Refused: that button is not on the Board now."); return Promise.resolve(); }
     body.card = frame.act.card;
@@ -1084,7 +1493,9 @@
         if (x.code === 401) { feedback("bad", "Refused: this link has expired. Run /marshal web in the Board for a new one."); return false; }
         if (x.code === 409) { confirmStep = null; feedback("bad", "Refused: " + (text || "the Board changed.")); return false; }
         if (x.code !== 200 || res.status === "refused") { feedback("bad", "Refused: " + (text || "the Board answered " + x.code + ".")); return false; }
-        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card } : null;
+        confirmStep = res.confirm ? { label: res.confirm.label, text: !!res.confirm.text, card: frame.act.card, choice: body.action === "decide" ? { id: body.choice, value: body.value } : null } : null;
+        if (body.action === "decide" && body.choice === "plan.read" && frame.decision && frame.decision.plan) planOpen = frame.decision.plan.digest;
+        if (body.action === "decide" && body.choice === "requirements.edit") editing = null;
         var word = res.status === "sent" ? "Sent" : res.status === "queued" ? "Queued" : res.status === "started" ? "Started" : "Done";
         feedback("ok", !text ? word + "." : text.indexOf(word) === 0 ? text : word + ": " + text);
         if (res.link) {
@@ -1109,6 +1520,8 @@
     if (!text) { box.focus(); return; }
     var max = frame && frame.act ? frame.act.sayMax : 2000;
     if (text.length > max) { feedback("bad", "Too long: at most " + max + " characters."); return; }
+    var sel = $("say-scope"), cap = sel && !sel.hidden && composerCapabilities(frame).find(function (c) { return c.op === sel.value; });
+    if (cap) { previewSetting(newWorkRequest(cap, {text: text})); return; }
     act({ action: "say", text: text }, "Send").then(function (ok) { if (ok) box.value = ""; });
   }
 
@@ -1158,7 +1571,7 @@
   // bearer header, and reconnects with backoff when the stream ends.
   function connect() {
     retryTimer = null;
-    if (!token) { disconnected("Open the link the Board printed (/marshal web)."); return; }
+    if (!token) { disconnected("Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal."); return; }
     live("wait", retry ? "reconnecting…" : "connecting…");
     var ctrl = typeof AbortController === "function" ? new AbortController() : null;
     var watchdog = null, ended = false;
@@ -1206,6 +1619,106 @@
     });
   }
 
+
+  // ---- run details: a read, never an action ------------------------------
+  // Everything below is drawn with textContent; the ids are opaque and are
+  // sent back as the server gave them.
+  function evGet(path) {
+    return fetch(path, { headers: auth(), cache: "no-store", credentials: "omit" }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, code: r.status, d: d || {} }; });
+    });
+  }
+  function evStatus(text) { $("ev-status").textContent = text || ""; }
+  function evPre(text) { var p = el("pre", "ev-pre"); p.textContent = text; return p; }
+  function evList(title, items) {
+    var box = el("div", "ev-list");
+    box.appendChild(el("h4", null, title));
+    var ul = el("ul", "plain");
+    items.forEach(function (t) { ul.appendChild(el("li", null, t)); });
+    box.appendChild(ul);
+    return box;
+  }
+  function evMore(label, id, into, draw) {
+    var b = el("button", null, label);
+    b.type = "button";
+    b.addEventListener("click", function () {
+      b.disabled = true;
+      evGet("/api/details/page?id=" + encodeURIComponent(id)).then(function (x) {
+        if (!x.ok) { evStatus(x.d.text || "That page is out of date; show the details again."); b.disabled = false; return; }
+        b.remove();
+        draw(x.d, into);
+      }).catch(function () { evStatus("The Board is not answering."); b.disabled = false; });
+    });
+    into.appendChild(b);
+  }
+  function evDiff(d, into) {
+    if (d.note) into.appendChild(el("p", "muted", d.note));
+    if (d.text) into.appendChild(evPre(d.text));
+    if (d.next) evMore("Next files", d.next, into, evDiff);
+  }
+  // evTranscript shows one page in place of the one before it.
+  function evTranscript(t, into) {
+    while (into.children.length > 2) into.removeChild(into.lastChild);
+    var box = el("div", "ev-chat");
+    (t.messages || []).forEach(function (m) {
+      var row = el("div", "ev-msg");
+      row.appendChild(el("b", null, "Claims to be " + m.role + (m.at ? " · " + m.at : "") + ": "));
+      row.appendChild(el("span", null, m.text));
+      box.appendChild(row);
+    });
+    if (t.older) evMore("Earlier messages", t.older, into, evTranscript);
+    into.appendChild(box);
+    if (t.unavailable) into.appendChild(el("p", "muted", "Earlier conversation unavailable: " + t.unavailable));
+    if (t.newer) evMore("Later messages", t.newer, into, evTranscript);
+  }
+  function evRender(d) {
+    var out = $("ev-body");
+    out.textContent = "";
+    if (d.paused) {
+      var p = el("div", "ev-block");
+      p.appendChild(el("h3", null, "Why the run is paused"));
+      p.appendChild(el("p", null, d.paused.reason));
+      if (d.paused.code) p.appendChild(el("p", "muted", "Code: " + d.paused.code));
+      if (d.paused.raw) p.appendChild(evPre(d.paused.raw));
+      if ((d.paused.resolutions || []).length) p.appendChild(evList("Ways forward", d.paused.resolutions));
+      out.appendChild(p);
+    }
+    if (d.mcp) {
+      var m = el("div", "ev-block");
+      m.appendChild(el("h3", null, "MCP failure"));
+      m.appendChild(evPre(d.mcp));
+      out.appendChild(m);
+    }
+    (d.tasks || []).forEach(function (t) {
+      var b = el("div", "ev-block");
+      b.appendChild(el("h3", null, t.task + " · " + t.title + " · " + t.state));
+      if (t.verdict) b.appendChild(el("p", null, "Review: " + t.verdict + (t.reviewer ? " by " + t.reviewer : "")));
+      [["Reasons", t.reasons], ["Checks", t.checks], ["Task scope", t.scope], ["Changed paths", t.changed], ["Limits", t.limits]].forEach(function (x) {
+        if ((x[1] || []).length) b.appendChild(evList(x[0], x[1]));
+      });
+      if (t.base || t.result) b.appendChild(el("p", "muted", "Reviewed " + (t.base || "?") + " to " + (t.result || "?")));
+      if (t.diffId) {
+        var holder = el("div", "ev-diff");
+        b.appendChild(holder);
+        evMore("Show the reviewed diff", t.diffId, holder, evDiff);
+      }
+      out.appendChild(b);
+    });
+    var c = el("div", "ev-block");
+    c.appendChild(el("h3", null, "Retained conversation"));
+    c.appendChild(el("p", "muted", (d.transcript && d.transcript.note) || ""));
+    out.appendChild(c);
+    evTranscript(d.transcript || {}, c);
+  }
+  function evLoad() {
+    evStatus("Reading…");
+    evGet("/api/details").then(function (x) {
+      if (!x.ok) { evStatus(x.d.text || "Details are not available."); return; }
+      evStatus("");
+      evRender(x.d);
+    }).catch(function () { evStatus("The Board is not answering."); });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     $("docs-link").href = docsURL;
     applyRoute(false);
@@ -1229,6 +1742,7 @@
     tick();
     setInterval(tick, 1000);
     $("say-send").addEventListener("click", send);
+    $("ev-load").addEventListener("click", evLoad);
     $("say-text").addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });

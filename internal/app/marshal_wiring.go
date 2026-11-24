@@ -57,10 +57,13 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	if w.Approver == nil {
 		return nil, errors.New("marshal: an approval source is required")
 	}
-	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID()), runtime: r, requiredGoalSession: w.SessionID, ProjectContext: s.ProjectContext, ConfigureKnowledgeMCP: s.ConfigureKnowledgeMCP}
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
+	if _, live := w.Gate.(interface{ ExecutionEnabled() bool }); !live {
+		s.Gate = projectExecutionGate{CapabilityGate: w.Gate, service: s}
+	}
+	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID()), runtime: r, service: s, Gate: s.Gate, requiredGoalSession: w.SessionID, ProjectContext: s.ProjectContext, ConfigureKnowledgeMCP: s.ConfigureKnowledgeMCP}
 	s.ApprovalActor = w.Approver
 	s.ProbeWorker = func(ctx context.Context, worker string) error {
 		_, err := r.VerifyMarshalWorker(ctx, worker, "")
@@ -139,14 +142,14 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	}
 	governedRun := r.marshalGovernedRun(s)
 	s.GovernedDrivers = map[string]driver.Driver{
-		"codex":    driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck},
-		"claude":   driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck},
-		"opencode": driver.Governed{Provider: "opencode", Run: governedRun, Check: r.governedHandInCheck},
+		"codex":    driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck, Held: true},
+		"claude":   driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck, Held: true},
+		"opencode": driver.Governed{Provider: "opencode", Run: governedRun, Check: r.governedHandInCheck, Held: true},
 	}
 	// AGY is offered only where its native OAuth source and governed adapter
 	// are supported. Registration itself never supplies a verified profile.
 	if privateAGYEnabled() {
-		s.GovernedDrivers["agy"] = driver.Governed{Provider: "agy", Run: governedRun, Check: r.governedHandInCheck}
+		s.GovernedDrivers["agy"] = driver.Governed{Provider: "agy", Run: governedRun, Check: r.governedHandInCheck, Held: true}
 	}
 	s.GovernedDrivers["claude-code"] = s.GovernedDrivers["claude"]
 	s.GateState = s.observedGateState

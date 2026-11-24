@@ -35,6 +35,10 @@ type reqCard struct {
 	Lines   [8]reqLine
 	editing bool
 	At      time.Time
+	// edits counts the owner's line edits sent from this card: each one
+	// moves the card's revision, so an edit made against an older view is
+	// refused.
+	edits int
 }
 
 // errReqCard is what every parseRequirementsCard error wraps: the proposal is

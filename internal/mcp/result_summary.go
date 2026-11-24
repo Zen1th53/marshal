@@ -122,7 +122,7 @@ func toolResultSummary(name, text string) string {
 			}
 			return fmt.Sprintf("Verification failed with exit status %d.", int(exit))
 		}
-		return "Verification completed."
+		return "Verification has no result yet."
 	case "process06_status":
 		return "Verification session read."
 	case "process07_memory_commit":
@@ -174,7 +174,7 @@ func marshalStatusSummary(v map[string]any) string {
 		for _, t := range tasks {
 			task, _ := t.(map[string]any)
 			switch s, _ := task["state"].(string); marshal.TaskState(s) {
-			case marshal.Accepted, marshal.Merged:
+			case marshal.Merged: // accepted work still waits for merge
 				done++
 			}
 		}
@@ -207,7 +207,7 @@ func runDigestSummary(v map[string]any) string {
 	for _, t := range tasks {
 		task, _ := t.(map[string]any)
 		switch state, _ := task["state"].(string); marshal.TaskState(state) {
-		case marshal.Accepted, marshal.Merged:
+		case marshal.Merged: // accepted work still waits for merge
 			done++
 		}
 	}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h 
 			return
 		case <-h.Done():
 			record, err, _ := h.Outcome()
-			state := "done"
+			state := "exited"
 			if err != nil || record.ExitCode != 0 {
 				state = "failed"
 			}
@@ -54,7 +55,11 @@ func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h 
 				}
 			}
 			w.tmuxMu.Unlock()
-			message := "Task " + taskID + " worker " + state + "."
+			label := fmt.Sprintf("Task %s attempt %d worker", taskID, app.TaskAttempt(h.Request().Task))
+			message := label + " exited; its hand-in waits for review."
+			if state == "failed" {
+				message = label + " failed."
+			}
 			if waiting {
 				message = taskApprovalNotice(taskID, approvalID)
 			}
@@ -106,6 +111,26 @@ func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h 
 			}
 		}
 	}
+}
+
+// taskExitAnnouncement is what a worker's exit tells the Marshal and the
+// status line. An exit never completes a task: a clean exit is a hand-in
+// that waits for review, and the task completes only after review and merge.
+// The attempt keeps a later attempt's identical exit from being taken as a
+// repeat of an earlier one.
+func taskExitAnnouncement(taskID string, attempt int, approvalID string, waiting bool, err error, failed bool, authMessage string) (state, message string) {
+	label := fmt.Sprintf("Task %s attempt %d", taskID, attempt)
+	switch {
+	case waiting:
+		return "waiting", taskApprovalNotice(taskID, approvalID)
+	case (err != nil || failed) && authMessage != "":
+		return "failed", label + " failed: " + authMessage
+	case err != nil:
+		return "failed", label + " failed: " + err.Error()
+	case failed:
+		return "failed", label + " failed."
+	}
+	return "handed_in", label + " handed in; it waits for review and is not complete yet."
 }
 
 // Caller holds tmuxMu. A wait belongs to this exact orchestration handle and

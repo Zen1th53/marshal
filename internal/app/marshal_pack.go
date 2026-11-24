@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // MarshalPackRelativePath is where an interactive Marshal writes the plan
@@ -138,7 +139,9 @@ func readPackFile(dir, name string) (string, error) {
 		return "", fmt.Errorf("plan pack: %s is not a regular file", name)
 	}
 	if info.Size() > marshalPackFileLimit {
-		return "", fmt.Errorf("plan pack: %s is larger than %d bytes", name, marshalPackFileLimit)
+		return "", model.NewLimitError(fmt.Errorf("plan pack: %s is larger than %d bytes", name, marshalPackFileLimit), model.Limit{
+			Kind: "pack_file", Subject: "plan pack file " + name, ActualBytes: info.Size(), CapBytes: marshalPackFileLimit,
+			Action: "Shorten " + name + " or split it into several task notes, each within the limit; nothing from this pack was taken."})
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

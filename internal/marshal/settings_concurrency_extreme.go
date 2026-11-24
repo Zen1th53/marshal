@@ -23,3 +23,18 @@ func (s Settings) validateConcurrencySettings() error {
 	}
 	return nil
 }
+
+// EffectiveWorkerLimits is the dispatch capacity, including unconfigured defaults.
+func EffectiveWorkerLimits(s Settings) (map[string]int, int) {
+	limits := map[string]int{"codex": 4, "claude": 2, "agy": 4, "opencode": 4}
+	for p, n := range map[string]int{"codex": s.ProviderLimits.Codex, "claude": s.ProviderLimits.Claude, "agy": s.ProviderLimits.Agy, "opencode": s.ProviderLimits.OpenCode} {
+		if n > 0 {
+			limits[p] = n
+		}
+	}
+	cap := s.GlobalCap
+	if cap == 0 {
+		cap = 12
+	}
+	return limits, cap
+}

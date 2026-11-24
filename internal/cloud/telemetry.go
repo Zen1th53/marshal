@@ -116,6 +116,12 @@ type Reporter struct {
 	// reported to nobody: it exists so a test can prove the bound holds.
 	dropped int
 
+	// wakes counts the times Run woke from its wait, and sends the batches
+	// handed to the client. Both exist so a test can prove an idle reporter
+	// sleeps instead of polling.
+	wakes int
+	sends int
+
 	stop chan struct{}
 	done chan struct{}
 	now  func() time.Time
@@ -203,6 +209,7 @@ func (r *Reporter) Flush(ctx context.Context) error {
 		batch := make([]Event, n)
 		copy(batch, r.queue[:n])
 		r.queue = r.queue[n:]
+		r.sends++
 		r.mu.Unlock()
 
 		if err := r.client.SendTelemetry(ctx, batch); err != nil {
@@ -244,6 +251,9 @@ func (r *Reporter) Run(ctx context.Context) {
 		case <-r.stop:
 			return
 		case <-ticker.C:
+			r.mu.Lock()
+			r.wakes++
+			r.mu.Unlock()
 			// A failed flush is not reported. Telemetry that complained when it
 			// could not be delivered would be worse than telemetry that stays
 			// quiet, because the person cannot act on it either way.
@@ -291,6 +301,13 @@ func (r *Reporter) Queued() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.queue)
+}
+
+// idleCounts reports how often Run woke and how many batches were sent.
+func (r *Reporter) idleCounts() (wakes, sends int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.wakes, r.sends
 }
 
 // Dropped reports how many events the bound discarded.

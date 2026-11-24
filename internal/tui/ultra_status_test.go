@@ -105,6 +105,7 @@ func TestUltraActivationErrors(t *testing.T) {
 			t.Fatalf("/ultra status: %v", errStatus)
 		}
 		wantStatus := "ULTRA status: INACTIVE — this installation has no ULTRA entitlement.\n  The session is running as Standard."
+		wantStatus += "\nEntitlement request: UNKNOWN. A request does not activate a lease."
 		if status != wantStatus {
 			t.Fatalf("/ultra status = %q, want %q", status, wantStatus)
 		}
@@ -147,6 +148,7 @@ func TestUltraActivationErrors(t *testing.T) {
 			t.Fatalf("/ultra status: %v", err)
 		}
 		wantStatus := "ULTRA status: INACTIVE — this installation has no ULTRA entitlement.\n  The session is running as Standard."
+		wantStatus += "\nEntitlement request: UNKNOWN. A request does not activate a lease."
 		if status != wantStatus {
 			t.Fatalf("/ultra status = %q, want %q", status, wantStatus)
 		}
@@ -173,6 +175,7 @@ func TestUltraActivationErrors(t *testing.T) {
 			t.Fatalf("/ultra status: %v", errStatus)
 		}
 		wantStatus := "ULTRA status: INACTIVE — activation failed: connection reset by peer\n  The session is running as Standard. Try again shortly."
+		wantStatus += "\nEntitlement request: UNKNOWN. A request does not activate a lease."
 		if status != wantStatus {
 			t.Fatalf("/ultra status = %q, want %q", status, wantStatus)
 		}

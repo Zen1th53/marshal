@@ -26,3 +26,29 @@ func requestPresentation(o cloud.RequestObservation, found bool) EntitlementRequ
 	}
 	return result
 }
+
+// readUltraRequest shares the durable request observation with command status.
+func (w *Workspace) readUltraRequest(ctx context.Context) (cloud.RequestObservation, bool, error) {
+	w.mu.RLock()
+	source, runtime := w.controlOverride, w.runtime
+	w.mu.RUnlock()
+	if source != nil {
+		if a, ok := source.Authority.(PersistedEntitlementRequestReader); ok {
+			return a.PersistedEntitlementRequest(ctx)
+		}
+	}
+	if runtime != nil {
+		if service := runtime.WorkspaceEntitlementRequests(); service != nil {
+			return service.Read(ctx)
+		}
+	}
+	client, state, session := w.ultraRequester()
+	if client == nil {
+		return cloud.RequestObservation{}, false, nil
+	}
+	dir, err := cloud.MachineStateDir("")
+	if err != nil {
+		return cloud.RequestObservation{}, false, err
+	}
+	return cloud.NewRequestStore(dir).Read(ctx, cloud.RequestKey{Endpoint: client.Endpoint(), InstallationID: state.InstallationID, SessionID: session})
+}

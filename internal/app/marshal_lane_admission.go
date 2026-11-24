@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/execution"
@@ -170,4 +171,77 @@ func (s *MarshalService) retryLaneAdmissionOnce(ctx context.Context, runID strin
 		s.RecordActivity(summary)
 	}
 	return s.record(ctx, runID, t.PlanTaskID, events.EventTypeMarshalTaskReturned, map[string]any{"reason": machine, "summary": summary, "counted": false, "retry": true, "lane_admission_retry": true})
+}
+
+// admissionHolds keeps, per repository and run, the last launch the
+// dispatcher held this round without a time to retry, so a run that cannot
+// move says why instead of a generic stop.
+var admissionHolds sync.Map
+
+func (s *MarshalService) noteAdmissionHold(runID string, held []DispatchAdmission) {
+	key := s.Repository + "\x00" + runID
+	if len(held) == 0 {
+		admissionHolds.Delete(key)
+		return
+	}
+	admissionHolds.Store(key, held[0])
+}
+
+func (s *MarshalService) admissionHold(runID string) (DispatchAdmission, bool) {
+	v, ok := admissionHolds.Load(s.Repository + "\x00" + runID)
+	if !ok {
+		return DispatchAdmission{}, false
+	}
+	return v.(DispatchAdmission), true
+}
+
+// AdmissionHold is the launch the dispatcher last held for runID without a
+// time to retry, for the Board to say why the run waits.
+func (s *MarshalService) AdmissionHold(runID string) (DispatchAdmission, bool) {
+	if s == nil {
+		return DispatchAdmission{}, false
+	}
+	return s.admissionHold(runID)
+}
+
+// waitAdmission blocks until until, when a held launch may be admitted.
+func (s *MarshalService) waitAdmission(ctx context.Context, until time.Time) error {
+	if s.admissionWait != nil {
+		return s.admissionWait(ctx, until)
+	}
+	d := until.Sub(s.clock())
+	if d <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// AdmissionHoldError is a run that cannot move because admission holds its
+// remaining tasks; Admission says which and why.
+type AdmissionHoldError struct {
+	RunID     string
+	Admission DispatchAdmission
+}
+
+func (e *AdmissionHoldError) Error() string {
+	return "marshal run " + e.RunID + " cannot progress: " + e.Admission.Reason
+}
+
+// StopReason is the stop as the Board shows it.
+func (e *AdmissionHoldError) StopReason() (string, string) {
+	task := firstNonEmpty(e.Admission.TaskID, "A task")
+	switch e.Admission.Code {
+	case AdmissionQuotaUnknown:
+		return task + " is waiting: " + e.Admission.Provider + "'s usage limit can't be read after its reset, so nothing new starts on it.", "Refresh the provider's usage, or approve a plan change that moves the task, then press Enter."
+	case AdmissionCapacity:
+		return task + " is waiting: every lane new work may use is taken.", "Answer the waiting approvals or wait for the host lane cap to lift, then press Enter."
+	}
+	return task + " is waiting: " + e.Admission.Reason + ".", "Press Enter to try again."
 }

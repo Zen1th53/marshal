@@ -157,7 +157,7 @@ func TestChatMCPRuntimeRestartFailureIsVisible(t *testing.T) {
 	if err := tmux.NewWindow(t.Context(), w.tmuxSession, win, root, nil, []string{"codex"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := saveChatBinding(root, chatBinding{Provider: "codex", Binary: "codex"}); err != nil {
+	if err := saveChatBinding(root, chatBinding{Provider: "codex", Binary: "codex", Args: confinedChatArgs(t, w, "codex", root)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := saveAgentRecord(root, w.tmuxSession, &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", paneID: "%1", window: win, pid: 101}); err != nil {

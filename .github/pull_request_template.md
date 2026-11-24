@@ -27,3 +27,9 @@ dependencies, deployment, or trust boundaries. Write `None` only after review.
 - [ ] Documentation matches implemented behavior.
 - [ ] No secrets, private runtime state, or generated junk is included.
 - [ ] QA/AppSec evidence is provided when required by role authority.
+- [ ] Context fit: requirements and scope are identified.
+- [ ] Feature inventory updated with coverage IDs and pending work.
+- [ ] Effect inventory reviewed and updated where needed.
+- [ ] Manifest regenerated, or deferred explicitly to integration.
+- [ ] Both editions built and tested; commands and results are recorded above.
+- [ ] Fresh-context review completed; reviewer and findings are recorded.

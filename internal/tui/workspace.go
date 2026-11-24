@@ -22,6 +22,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/harness"
 	"github.com/Zen1th53/marshal/internal/hostgit"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -32,6 +33,7 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	settingNotices map[string]bool
 	// marshalLive is marshal once it exists, for lock-free readers.
 	marshalLive        atomic.Pointer[marshalSession]
 	taskDiff           taskDiffOverlay
@@ -72,6 +74,8 @@ type Workspace struct {
 	palette    *CommandPalette
 	diffViewer *DiffViewer
 
+	webAuthority uint64 // Invalidates settings actions when the runtime target changes.
+
 	// runtime is the canonical mutation authority Control submits through.
 	// It is nil in a store-only workspace, in which case every Control action
 	// refuses with that reason rather than writing anything locally.
@@ -99,6 +103,7 @@ type Workspace struct {
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
+	ultraAdmission sync.Mutex
 	// ultraStopAsked records that /ultra stop asked the person to confirm;
 	// only /ultra stop confirm straight after it turns execution off.
 	ultraStopAsked bool
@@ -118,6 +123,8 @@ type Workspace struct {
 	// and the second one leaves a user retyping a password that was never
 	// wrong.
 	ultraErr error
+	// ultraPreferenceErr is cleared after a successful preference reload.
+	ultraPreferenceErr error
 
 	// screen owns in-place frame painting. Without it every redraw appended to
 	// scrollback, so each keystroke left another prompt banner behind.
@@ -294,6 +301,7 @@ type Workspace struct {
 	// by outputSeq.
 	answer        string
 	answerIsError bool
+	lastRefusal   *marshal.RefusalReceipt
 	// chatTypeMu is held while anything types into the tmux chat pane, so
 	// two writers never interleave in its composer.
 	chatTypeMu sync.Mutex
@@ -348,6 +356,7 @@ type Workspace struct {
 	provView   atomic.Bool
 	prov       providerViewState
 	provWake   chan struct{}
+	webTeam    webTeamState
 	provSource providerViewSource
 	// verView is set while the Verify view is painted in the Board's body;
 	// ver is its data and selection, verWake wakes its follower, and
@@ -413,12 +422,14 @@ func (w *Workspace) AttachULTRASession(a cloud.Authorization) {
 // asks. That is what makes "every entry path is gated" a property of the code
 // rather than a convention someone has to remember.
 func (w *Workspace) AttachULTRA(gate *cloud.Gate, executionEnabled bool) {
+	w.ultraAdmission.Lock()
+	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.ultra = gate
-	w.ultraExecution = executionEnabled
+	w.loadUltraPreferenceLocked(executionEnabled)
 	w.state.UltraEntitled = gate.Entitled()
-	w.state.UltraExecution = executionEnabled
+	w.state.UltraExecution = w.ultraExecution
 }
 
 // AttachULTRARequester supplies what asking for an entitlement needs.
@@ -458,7 +469,7 @@ func (w *Workspace) AttachULTRAError(err error) {
 func (w *Workspace) ultraError() error {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.ultraErr
+	return errors.Join(w.ultraErr, w.ultraPreferenceErr)
 }
 
 // ultraRequester returns what is needed to ask for an entitlement.
@@ -469,6 +480,12 @@ func (w *Workspace) ultraRequester() (*cloud.Client, cloud.State, string) {
 }
 
 // ultraGate returns the gate under the workspace lock.
+func (w *Workspace) ultraPreferenceReadErr() error {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.ultraPreferenceErr
+}
+
 func (w *Workspace) ultraGate() (*cloud.Gate, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -484,11 +501,79 @@ func (w *Workspace) ULTRAExecutionEnabled() bool {
 
 // setUltraExecution records the person's ULTRA Execution preference and
 // withdraws any pending stop question.
-func (w *Workspace) setUltraExecution(enabled bool) {
+func (w *Workspace) setUltraExecution(enabled bool) error {
+	return w.SetUltraExecution(context.Background(), enabled)
+}
+
+// SetUltraExecution persists starts before publishing them to admissions.
+// Stops always close local admission and report any persistence failure.
+func (w *Workspace) SetUltraExecution(ctx context.Context, enabled bool) error {
+	changed := false
+	defer func() {
+		if changed {
+			mode := "Standard"
+			if enabled {
+				mode = "ULTRA when current entitlement permits"
+			}
+			w.tellMarshal("Execution preference updated: " + mode + ". Apply it at the next admission. Already admitted workers drain with their original collection and review policy; the approved scope and lane binding remain in force.")
+			w.mu.RLock()
+			st, project := w.store, w.ultraProjectLocked()
+			w.mu.RUnlock()
+			if st != nil {
+				if changes, err := st.MarshalSettingsChanges(ctx, project); err == nil {
+					for _, c := range changes {
+						if c.Key == "ultra-execution" {
+							w.publishSettingChange(c)
+							break
+						}
+					}
+				}
+			}
+
+		}
+	}()
+	w.ultraAdmission.Lock()
+	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if enabled && !w.ultra.Entitled() {
+		return errors.New("ULTRA execution requires current entitlement")
+	}
+	var persistErr error
+	if w.store != nil {
+		persistErr = w.store.SetUltraExecutionPreference(ctx, w.ultraProjectLocked(), enabled)
+		if persistErr != nil && enabled {
+			return persistErr
+		}
+	}
+	// Off always closes local admission, even when persistence is unavailable.
+	changed = w.ultraExecution != enabled && persistErr == nil
 	w.ultraExecution = enabled
+	w.state.UltraExecution = enabled
 	w.ultraStopAsked = false
+	return persistErr
+}
+
+func (w *Workspace) ultraProjectLocked() string {
+	if w.runtime != nil && w.runtime.Marshal() != nil {
+		return w.runtime.Marshal().ProjectID
+	}
+	return w.projectID
+}
+
+func (w *Workspace) loadUltraPreferenceLocked(fallback bool) {
+	w.ultraExecution = fallback
+	w.ultraPreferenceErr = nil
+	if w.store != nil {
+		preference, err := w.store.GetUltraExecutionPreference(context.Background(), w.ultraProjectLocked())
+		if err != nil {
+			w.ultraExecution = false
+			w.ultraPreferenceErr = err
+		} else if preference != nil {
+			w.ultraExecution = *preference
+		}
+	}
+	w.state.UltraExecution = w.ultraExecution
 }
 
 // askUltraStop records that the person was asked to confirm /ultra stop.
@@ -565,7 +650,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks", "/task",
 			"/policy", "/sandbox", "/memory", "/provider", "/providers", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
-			"/reinjection", "/alignment", "/optimization", "/verification", "/notify", "/diff", "/review",
+			"/blind", "/reinjection", "/alignment", "/optimization", "/verification", "/notify", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -596,7 +681,10 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/memory inject preview"] = []string{"claude", "codex", "opencode", "agy", "antigravity"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	if ultraSwitchable {
-		compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
+		compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop"}
+		if !editionExtreme {
+			compCtx.Subcommands["/ultra"] = append(compCtx.Subcommands["/ultra"], "request")
+		}
 		compCtx.Subcommands["/ultra stop"] = []string{"confirm"}
 	}
 	compCtx.Subcommands["/provider"] = []string{"status", "use", "config"}
@@ -611,10 +699,10 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/marshal"] = marshalSubcommands
 	compCtx.Subcommands["/marshal model"] = app.MarshalProviders()
 	compCtx.Subcommands["/marshal amend"] = []string{"approve", "deny"}
-	compCtx.Subcommands["/marshal settings"] = []string{"execution-rights", "acceptance-mode", "rework-limit", "ultra-concurrency", "control"}
-	compCtx.Subcommands["/marshal settings execution-rights"] = []string{"none", "read-only", "small-tasks"}
-	compCtx.Subcommands["/marshal settings acceptance-mode"] = []string{"marshal", "marshal-then-user", "user"}
-	compCtx.Subcommands["/marshal settings control"] = []string{"free", "strict"}
+	configureSettingsCompletion(&compCtx)
+	compCtx.Subcommands["/marshal draft"] = []string{"discard"}
+	compCtx.Subcommands["/goal cancel"] = []string{"confirm"}
+
 	for _, reader := range []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"} {
 		compCtx.Subcommands["/memory peers "+reader] = []string{"all", "none", "claude", "codex", "opencode", "agy", "antigravity"}
 		if reader == "participants" {
@@ -694,6 +782,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			Participants:       participants,
 		},
 	}
+	ws.loadUltraPreferenceLocked(cloud.ExecutionOnAtStartup)
 	ws.completer.ctx.InstallableSkills = ws.readInstallableSkills
 	ws.cmd = NewCommandHandler(ws)
 	// The palette ranks by the Board's focus and selection as it opens, and
@@ -703,6 +792,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		return append(boardPaletteActions(ws), ws.registryPaletteActions()...)
 	}
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
+	ws.recoverOpenAsk()
 	return ws
 }
 
@@ -1315,8 +1405,8 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		w.renderFullView()
 		return false
 	}
-	// Inbox decisions (allow, deny, a gate's confirmation) are made on the
-	// Web Board: no terminal key reaches them (board_home.go).
+	// Inbox decisions (allow, deny, a gate's confirmation) are made from
+	// explicit decision focus (board_decisions_view.go) or on the Web Board.
 	// Space and Ctrl+K open the one palette (P5-04). Ctrl+K edits text while
 	// the composer holds some; Space is a space anywhere but the bare Board.
 	if event.Type == KeyCtrlK && (w.palette.IsOpen() || !w.composing()) {
@@ -1807,6 +1897,12 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 		w.state.LastOutput = activityTail(w.state.LastOutput)
 	}
 	w.answer, w.answerIsError = w.state.LastOutput, w.state.LastOutputIsError
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		cp := receipt.Clone()
+		w.lastRefusal = &cp
+	} else {
+		w.lastRefusal = nil
+	}
 	w.state.LastCommand = RedactContent(cmd, w.state.KnownSecrets)
 	w.lastCommandError = ""
 	if err != nil {
@@ -2123,8 +2219,30 @@ func (w *Workspace) setOutput(text string, isError bool) {
 	w.state.LastOutput = text
 	w.state.LastOutputIsError = isError
 	w.answer, w.answerIsError = text, isError
+	w.lastRefusal = nil
 	w.mu.Unlock()
 	w.renderFullView()
+}
+
+func (w *Workspace) setOutputWithRefusal(text string, isError bool, receipt marshal.RefusalReceipt) {
+	cp := receipt.Sanitized()
+	w.mu.Lock()
+	w.outputSeq.Add(1)
+	w.state.LastOutput = text
+	w.state.LastOutputIsError = isError
+	w.answer, w.answerIsError = text, isError
+	w.lastRefusal = &cp
+	w.mu.Unlock()
+	w.renderFullView()
+}
+
+func (w *Workspace) lastOperationRefusal() (marshal.RefusalReceipt, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if w.lastRefusal == nil {
+		return marshal.RefusalReceipt{}, false
+	}
+	return w.lastRefusal.Clone(), true
 }
 
 // AttachRuntime wires the canonical mutation authority into the workspace.
@@ -2133,13 +2251,22 @@ func (w *Workspace) setOutput(text string, isError bool) {
 // screens still render, and every action refuses with the reason — which is
 // the truthful behaviour for a workspace that cannot reach an authority.
 func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
+	unlockWeb := w.lockWebSettingsTarget()
+	defer unlockWeb()
 	releaseMemoryReads := w.cmd.prepareOperatorMemoryRuntimeAttach()
 	defer releaseMemoryReads()
+	w.ultraAdmission.Lock()
+	defer w.ultraAdmission.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.webAuthority++
 	w.runtime = runtime
 	w.beatRuntime.Store(runtime)
 	w.projectIdentity = identity
+	if runtime != nil {
+		w.store = runtime.Store()
+	}
+	w.loadUltraPreferenceLocked(cloud.ExecutionOnAtStartup)
 	if runtime != nil {
 		runtime.SetEgressAlertSink(w.deliverEgressAlert)
 		runtime.SetPermissionSink(w.queuePermission)
@@ -2427,14 +2554,7 @@ func (w *Workspace) controlSource() *ControlSource {
 				defer w.mu.RUnlock()
 				return w.mode
 			},
-			setPreference: func(enabled bool) error {
-				w.mu.Lock()
-				defer w.mu.Unlock()
-				// This is a preference, never an authority: the gate is
-				// untouched, so with no entitlement it changes nothing.
-				w.ultraExecution = enabled
-				return nil
-			},
+			setPreference: w.setUltraExecution,
 			preference: func() bool {
 				w.mu.RLock()
 				defer w.mu.RUnlock()
@@ -2452,8 +2572,11 @@ func (w *Workspace) controlSource() *ControlSource {
 				return w.exitRequested
 			},
 			replaceRuntime: func(reopened *app.Runtime) {
+				unlockWeb := w.lockWebSettingsTarget()
+				defer unlockWeb()
 				w.mu.Lock()
 				defer w.mu.Unlock()
+				w.webAuthority++
 				w.runtime = reopened
 				w.beatRuntime.Store(reopened)
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)

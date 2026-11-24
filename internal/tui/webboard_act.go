@@ -4,11 +4,10 @@ import (
 	"context"
 	"slices"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
@@ -56,13 +55,21 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 		if !claimed.CompareAndSwap(false, true) {
 			return
 		}
+		if a.Kind == "cmd" && a.Command != nil && webWorkOp(a.Command.Op) {
+			go func() { done <- webActed{res: w.webWorkCommand(a)} }()
+			return
+		}
+		if a.Kind == "cmd" && a.Command != nil && webboard.IsTeamOp(a.Command.Op) {
+			go func() { done <- webActed{res: w.webTeamCommand(a)} }()
+			return
+		}
 		done <- w.webAct(a)
 	}
 	wait, cancel := context.WithTimeout(ctx, webActWait)
 	defer cancel()
 	if !w.postUI(wait, run) {
 		if claimed.CompareAndSwap(false, true) {
-			return webboard.Result{Status: "refused", Text: "The Board is busy; nothing was done. Try again."}
+			return w.webBusyResult("The Board is busy; nothing was done. Try again.")
 		}
 	}
 	var r webActed
@@ -70,7 +77,7 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 	case r = <-done:
 	case <-wait.Done():
 		if claimed.CompareAndSwap(false, true) {
-			return webboard.Result{Status: "refused", Text: "The Board is busy; nothing was done. Try again."}
+			return w.webBusyResult("The Board is busy; nothing was done. Try again.")
 		}
 		r = <-done
 	}
@@ -78,6 +85,17 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 		return r.res
 	}
 	return w.webCommandResult(ctx, r)
+}
+
+func (w *Workspace) webBusyResult(text string) webboard.Result {
+	receipt := marshal.RefusalReceipt{
+		Code:         marshal.RefusalCodeCommandBusy,
+		Blocker:      w.marshalSession().currentBlocker(),
+		Effects:      marshal.EffectsNone,
+		NextCommands: []string{"/marshal status"},
+		Message:      text,
+	}
+	return webboard.Result{Status: "refused", Text: text}.WithRefusal(receipt)
 }
 
 // webCommandResult waits, off the loop, for the command a key started and
@@ -99,10 +117,14 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 	if w.outputSeq.Load() != r.seq {
 		w.mu.RLock()
 		text, isErr := w.answer, w.answerIsError
+		refusal := w.lastRefusal
 		w.mu.RUnlock()
 		res.Text = text
 		if isErr {
 			res.Status = "refused"
+		}
+		if refusal != nil {
+			res = res.WithRefusal(refusal.Clone())
 		}
 	}
 	return res
@@ -111,6 +133,15 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 // webAct is one action on the input loop: the page must have acted on the
 // card the Board shows now.
 func (w *Workspace) webAct(a webboard.Action) webActed {
+	if a.Kind == "cmd" {
+		if a.Command != nil && webWorkOp(a.Command.Op) {
+			return webActed{res: w.webWorkCommand(a)}
+		}
+		if a.Command != nil && webboard.IsTeamOp(a.Command.Op) {
+			return webActed{res: w.webTeamCommand(a)}
+		}
+		return webActed{res: w.webSetting(a)}
+	}
 	if a.Kind == "key" && (a.Key == webKeyRetry || a.Key == webKeyStopAll) {
 		return w.webScreenAct(a)
 	}
@@ -129,12 +160,34 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 	switch a.Kind {
 	case "say":
 		return w.webSay(a.Text), false, 0
+	case "decide":
+		return w.webDecide(f, a), false, 0
 	case "key":
 	default:
 		return refused("Unknown action."), false, 0
 	}
 	if !slices.Contains(webboard.ActionKeys(f), a.Key) {
 		return refused("That button is not on the Board now."), false, 0
+	}
+	if typed, ok := w.legacyChoice(f, a.Key); ok {
+		// A card's key is its typed choice, under the same checks.
+		typed.Confirmed, typed.Text = a.Confirmed, a.Text
+		return w.webDecide(f, typed), false, 0
+	}
+	if f.Decision != nil && f.Decision.Kind == decisionAsk {
+		card := w.currentAsk()
+		if card == nil {
+			return refused("The question is no longer open."), false, 0
+		}
+		key := a.Key
+		if key == "⏎" || key == "click" {
+			key = "enter"
+		}
+		r := w.answerAskBound(context.Background(), askAnswerBinding{Project: card.Project, ID: card.ID, Launch: card.Launch, Revision: card.Revision, Actor: "owner:web", Key: key})
+		if r.Err != nil {
+			return webboard.Result{Status: r.Status, Text: r.Err.Error()}, false, 0
+		}
+		return webboard.Result{Status: "done", Text: "Answer recorded."}, false, 0
 	}
 	label, title := webActionLabel(f, a.Key), webCardTitle(f)
 	switch {
@@ -144,7 +197,14 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 		return refused("Press Stop the run again to confirm."), false, 0
 	}
 	if w.commandBusy.Load() {
-		return refused("A command is still running on the Board; try again when it finishes."), false, 0
+		return w.webBusyResult("A command is still running on the Board; try again when it finishes."), false, 0
+	}
+	if f.Paused != nil && a.Key == "⏎" {
+		if z, ok := w.v2PauseNow(boardNow()); ok && !z.wait && z.enter.action != marshal.PauseUsePlan {
+			if busyErr := w.marshalSession().busyErrorIfBusy("paused_enter"); busyErr != nil {
+				return refusedErr(busyErr), false, 0
+			}
+		}
 	}
 	before := w.outputSeq.Load()
 	took := false
@@ -181,12 +241,17 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 	if seq != before {
 		w.mu.RLock()
 		text, isErr := w.answer, w.answerIsError
+		refusal := w.lastRefusal
 		w.mu.RUnlock()
 		res.Text = text
 		// The raw error is shown as an error on purpose; any other error
 		// answer means the key did not do what the button says.
 		if isErr && a.Key != "d" {
-			return refused(text), false, 0
+			out := refused(text)
+			if refusal != nil {
+				out = out.WithRefusal(refusal.Clone())
+			}
+			return out, false, 0
 		}
 	}
 	switch {
@@ -210,6 +275,13 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 
 func refused(text string) webboard.Result {
 	return webboard.Result{Status: "refused", Text: text}
+}
+
+func refusedErr(err error) webboard.Result {
+	if receipt, ok := marshal.RefusalOf(err); ok {
+		return webboard.Result{Status: "refused", Text: RedactContent(receipt.Summary(), nil)}.WithRefusal(receipt)
+	}
+	return refused(RedactContent(err.Error(), nil))
 }
 
 // webActionLabel is the button's label on the card.
@@ -275,41 +347,6 @@ func (w *Workspace) clickOwnerRef(ref string) bool {
 	return true
 }
 
-// webSay is "Tell the Marshal…": the message goes the way the Board's s
-// composer sends it (sayToMarshal), as the owner's words, never as a
-// command, even when it starts with "/".
-func (w *Workspace) webSay(text string) webboard.Result {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return refused("Write something to send.")
-	}
-	if utf8.RuneCountInString(text) > webboard.SayMax {
-		return refused("The message is too long: at most " + strconv.Itoa(webboard.SayMax) + " characters.")
-	}
-	w.chat.mu.Lock()
-	native := w.chat.tr != nil
-	w.chat.mu.Unlock()
-	if !native && w.sayPane() == "" {
-		// sayAs would put the text back into the terminal's composer;
-		// from the web nothing is sent and the page keeps the text.
-		return refused("No Marshal chat is open, so nothing was sent. /marshal chat in the terminal starts one.")
-	}
-	w.sayToMarshal(w.workers.context(), text)
-	res := webboard.Result{Status: "sent", Text: "Sent to the Marshal."}
-	if echo := w.sayEchoList(); len(echo) > 0 {
-		switch echo[0].State {
-		case sayQueued, saySending:
-			if !native {
-				res = webboard.Result{Status: "queued", Text: "Queued: the Marshal's chat gets it as soon as it is free; Activity shows when it is in."}
-			}
-		case sayFailed:
-			res = refused("Not sent: " + echo[0].Why + ".")
-		}
-	}
-	w.RecordActivity("From the web: a message to the Marshal (" + res.Status + ").")
-	return res
-}
-
 // The two Board keys the page offers when no card is shown: r (retry the
 // stuck task under the keyboard) and Ctrl+X (stop all workers, never the
 // Marshal). They go in the frame's key list (webScreenKeys), so they get
@@ -328,7 +365,9 @@ func (w *Workspace) webScreenKeys() []vm.Key {
 	if id := w.webRetryShown(); id != "" {
 		keys = append(keys, vm.Key{Key: webKeyRetry, Label: "retry " + cleanBoard(id)})
 	}
-	if w.marshalPanel() != nil {
+	if p := w.marshalPanel(); p != nil && (w.runtime == nil || len(w.webRunLanes(p.RunID)) > 0) {
+		// With a runtime the page sends the bound stop-workers request, so
+		// the key is offered only while the run has workers to bind.
 		keys = append(keys, vm.Key{Key: webKeyStopAll, Label: "stop all workers"})
 	}
 	return keys
@@ -382,12 +421,18 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 		return out(refused("Press " + label + " again to confirm."))
 	}
 	if w.commandBusy.Load() {
-		return out(refused("A command is still running on the Board; try again when it finishes."))
+		return out(w.webBusyResult("A command is still running on the Board; try again when it finishes."))
 	}
 	before := w.outputSeq.Load()
 	r := webActed{res: webboard.Result{Status: "done"}}
 	switch a.Key {
 	case webKeyRetry:
+		if w.runtime != nil {
+			return out(refused("Refresh the page and use the bound task retry control."))
+		}
+		if busyErr := w.marshalSession().busyErrorIfBusy("retry"); busyErr != nil {
+			return out(refusedErr(busyErr))
+		}
 		id, why := retryTarget(w)
 		if why != "" {
 			return out(refused(why))
@@ -399,6 +444,11 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 		w.handleRetryKey(KeyEvent{Type: KeyEnter})
 		r.started = w.commandBusy.Load()
 	case webKeyStopAll:
+		if w.runtime != nil {
+			// The same admission as the typed control: the run's workers
+			// are stopped only through the bound stop-workers op.
+			return out(refused("Refresh the page and use the bound stop-workers control."))
+		}
 		w.runCommand(w.workers.context(), "/stop all")
 		r.output = w.uiEvents != nil && w.outputSeq.Load() == before
 	}
@@ -406,9 +456,14 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 	if r.seq != before {
 		w.mu.RLock()
 		text, isErr := w.answer, w.answerIsError
+		refusal := w.lastRefusal
 		w.mu.RUnlock()
 		if isErr {
-			return out(refused(text))
+			res := refused(text)
+			if refusal != nil {
+				res = res.WithRefusal(refusal.Clone())
+			}
+			return out(res)
 		}
 		r.res.Text = text
 	}

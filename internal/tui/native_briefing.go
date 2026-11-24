@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
@@ -406,11 +407,11 @@ func injectChannelPath(root string) string {
 }
 
 func loadInjectChannel(root string) injectChannel {
-	data, err := os.ReadFile(injectChannelPath(root))
+	p, err := settingscatalog.ReadScopedPreference(injectChannelPath(root), "memory-channel")
 	if err != nil {
 		return injectAuto
 	}
-	channel, err := parseInjectChannel(string(data))
+	channel, err := parseInjectChannel(settingscatalog.Preference(p, "memory-channel"))
 	if err != nil {
 		return injectAuto
 	}
@@ -422,7 +423,8 @@ func saveInjectChannel(root string, channel injectChannel) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(string(channel)+"\n"), 0600)
+	_, err := settingscatalog.WriteScopedPreference(path, "memory-channel", string(channel), "owner")
+	return err
 }
 
 // resolveInjectChannel maps the operator's setting onto what the provider can

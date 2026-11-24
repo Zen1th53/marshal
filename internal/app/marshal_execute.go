@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -113,7 +115,7 @@ func (s *MarshalService) taskReturnReasons(ctx context.Context, runID string, t 
 }
 
 // Execute drives an approved run to the next point that needs a person:
-// merge accepted work in plan order, review hand-ins, dispatch ready tasks
+// merge accepted work by dependency order, review hand-ins, dispatch ready tasks
 // under the tier policy, and verify the integrated result.
 //
 // Workers run in parallel: a round launches every ready task the tier
@@ -129,6 +131,26 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 	if brief == nil {
 		return marshal.Run{}, fmt.Errorf("marshal execute: no brief for workers")
 	}
+	w := s.runWriter(runID)
+	executionID, _ := model.NewID("execution-")
+	if activeID, started := w.startExecution(executionID); !started {
+		run, err := s.Snapshot(ctx, runID)
+		if err == nil && activeID != "" {
+			run.ExecutionID = activeID
+		}
+		return run, err
+	}
+	w.mu.Lock()
+	defer func() { w.endExecution(); w.mu.Unlock() }()
+	ctx = context.WithValue(ctx, runWriterContextKey{}, w)
+	if run, rev, err := s.load(ctx, runID); err == nil {
+		run.ExecutionID = executionID
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return run, err
+		}
+	} else {
+		return run, err
+	}
 	current := func() (marshal.Run, error) {
 		run, _, err := s.load(ctx, runID)
 		if err == nil && observe != nil {
@@ -137,14 +159,19 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		return run, err
 	}
 	for round := 0; ; round++ {
+		if err := s.runCommandSafePoint(ctx, runID); err != nil {
+			err = s.pauseStageFailure(ctx, runID, "commands", err)
+			run, _, _ := s.readRun(context.WithoutCancel(ctx), runID)
+			return run, err
+		}
 		run, err := current()
 		if err != nil {
 			return run, err
 		}
-		// Every round either changes a task's state or stops, and a task can
-		// only be returned a bounded number of times, so a healthy run ends
-		// well within this bound. Reaching it means something loops; the run
-		// is handed to the user rather than left to spend its budget.
+		// Every round either changes a task's state or stops. The bound
+		// includes recorded infrastructure failures, whose retries have
+		// their own policy. Reaching it means something else loops; the
+		// run is handed to the user instead of spending more budget.
 		if round > marshalMaxRounds(run) {
 			if err := s.escalateWithDetail(ctx, runID, "", marshal.CodeRunStalled, "the run stopped making progress", stalledRunDetail(run, round)); err != nil {
 				return run, err
@@ -171,6 +198,10 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		progressed, err := s.mergeAccepted(ctx, runID, run)
 		if err != nil || progressed {
 			if err != nil {
+				err = s.pauseStageFailure(ctx, runID, "merge", err)
+				if after, readErr := current(); readErr == nil {
+					run = after
+				}
 				return run, err
 			}
 			continue
@@ -178,6 +209,10 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		progressed, err = s.reviewHandedIn(ctx, runID, run)
 		if err != nil || progressed {
 			if err != nil {
+				err = s.pauseStageFailure(ctx, runID, "review", err)
+				if after, readErr := current(); readErr == nil {
+					run = after
+				}
 				return run, err
 			}
 			continue
@@ -196,7 +231,8 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if err != nil {
 			// Workers already launched in this round are still running;
 			// collect them so none is left without a hand-in.
-			err = errors.Join(err, s.collectAll(ctx, runID, launched, observe, current))
+			err = errors.Join(err, s.collectAdmitted(ctx, runID, launched, observe, current, nil))
+			err = s.pauseStageFailure(ctx, runID, "dispatch", err)
 			after, _ := current()
 			return after, err
 		}
@@ -224,6 +260,9 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 				round--
 				continue
 			}
+			if adm, ok := s.admissionHold(runID); ok {
+				return run, &AdmissionHoldError{RunID: runID, Admission: adm}
+			}
 			return run, fmt.Errorf("marshal run %s cannot progress: no task is ready, handed in or accepted", runID)
 		}
 		// The launched tasks are dispatched now: show them working while
@@ -231,79 +270,172 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if observe != nil {
 			_, _ = current()
 		}
-		policy := marshal.TierPolicy(s.Gate, run.Settings)
-		if policy.Tier == marshal.Ultra && len(launched) > 1 {
-			if err := s.collectAndReviewUltra(ctx, runID, launched, observe, current); err != nil {
-				after, _ := current()
-				return after, err
-			}
-		} else {
-			if err := s.collectAll(ctx, runID, launched, observe, current); err != nil {
-				after, _ := current()
-				return after, err
-			}
+		if err := s.collectAdmitted(ctx, runID, launched, observe, current, s.rollingRefill(runID, brief, launched)); err != nil {
+			err = s.pauseStageFailure(ctx, runID, "dispatch", err)
+			after, _ := current()
+			return after, err
 		}
 	}
 }
 
-// collectAndReviewUltra collects and reviews each launched worker in ULTRA as soon
-// as it is ready. State writes to the run and store are serialized.
-func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
-	var (
-		mu   sync.Mutex
-		wg   sync.WaitGroup
-		errs []error
-	)
-	for _, d := range launched {
-		wg.Add(1)
-		go func(dispatch MarshalDispatch) {
-			defer wg.Done()
-			if dispatch.Handle != nil && dispatch.Handle.Done() != nil {
-				select {
-				case <-dispatch.Handle.Done():
-				case <-ctx.Done():
-				}
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			defer s.clearDispatchLive(runID, dispatch.TaskID)
-			if _, err := s.CollectHandIn(ctx, runID, dispatch); err != nil {
-				errs = append(errs, fmt.Errorf("collect %s: %w", dispatch.TaskID, err))
-			} else {
-				if err := s.reviewCollectedDispatch(ctx, runID, dispatch.TaskID); err != nil {
-					errs = append(errs, fmt.Errorf("review %s: %w", dispatch.TaskID, err))
-				}
-			}
-			if observe != nil {
-				_, _ = current()
-			}
-		}(d)
+// collectAdmitted uses the mode reserved before launch, even after a preference change.
+// refill, when set, starts newly eligible work as each worker's slot is freed.
+func (s *MarshalService) collectAdmitted(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), refill rollingRefill) error {
+	if len(launched) > 0 && launched[0].Tier == marshal.Ultra {
+		return s.collectAndReviewUltra(ctx, runID, launched, observe, current, refill)
 	}
-	wg.Wait()
-	return errors.Join(errs...)
+	return s.collectAll(ctx, runID, launched, observe, current)
 }
 
-// collectAll collects every launched worker, even after one collection
-// fails, so no worker is left running without its hand-in recorded. Every
-// failure is reported.
+// collectAndReviewUltra collects and reviews each launched worker in ULTRA as soon
+// as it is ready. State writes to the run and store are serialized.
+func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), refill rollingRefill) error {
+	return s.collectBatchCommands(ctx, runID, launched, observe, current, true, refill)
+}
+
 func (s *MarshalService) collectAll(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
-	var errs []error
+	return s.collectBatchCommands(ctx, runID, launched, observe, current, false, nil)
+}
+
+// rollingRefill admits and launches work into worker slots freed during
+// collection. It returns the workers it started, which join collection.
+type rollingRefill func(ctx context.Context) ([]MarshalDispatch, error)
+
+// rollingRefill returns the refill for an admitted ULTRA batch, or nil when
+// rolling dispatch is not available for it. Refill admits only while ULTRA
+// is still on; turning it off lets live workers drain through this collector
+// before the next round admits serially.
+func (s *MarshalService) rollingRefill(runID string, brief MarshalBrief, launched []MarshalDispatch) rollingRefill {
+	if len(launched) == 0 || launched[0].Tier != marshal.Ultra || !s.rollingRefillAvailable() {
+		return nil
+	}
+	// Refill counts freed worker slots; a batch with a worker whose driver
+	// cannot hold its launch keeps batch dispatch.
 	for _, d := range launched {
+		if !s.supervisesLaunch(d.Driver) {
+			return nil
+		}
+	}
+	return func(ctx context.Context) ([]MarshalDispatch, error) {
+		run, _, err := s.load(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		if run.State == marshal.AwaitingUser || run.CommandFence != "" || s.pauseHolds(runID, run) {
+			return nil, nil
+		}
+		if marshal.TierPolicy(s.Gate, run.Settings).Tier != marshal.Ultra {
+			return nil, nil
+		}
+		// Refill counts freed worker slots, so every live worker must hold
+		// one; while a directly launched worker runs, the batch stays a batch.
+		for _, t := range run.Tasks {
+			if t.State == marshal.Dispatched && t.LaunchKey == "" {
+				return nil, nil
+			}
+		}
+		more, err := s.dispatchReady(context.WithValue(ctx, rollingRefillKey{}, true), runID, run, brief)
+		s.markDispatchLive(runID, more)
+		return more, err
+	}
+}
+
+// rollingRefillKey marks a dispatch round started during collection: it
+// never waits for a provider's recovery pace, since that would delay
+// collecting the workers still running.
+type rollingRefillKey struct{}
+
+// Only driver completion waits happen outside the writer. Collection, review
+// and queued task effects all execute here in one ordered stream.
+func (s *MarshalService) collectBatchCommands(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error), review bool, refill rollingRefill) error {
+	var errs []error
+	pending := append([]MarshalDispatch(nil), launched...)
+	for len(pending) > 0 {
+		if err := s.runCommandSafePoint(ctx, runID); err != nil {
+			errs = append(errs, err)
+		}
+		cases := []reflect.SelectCase{{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())}}
+		w, _ := ctx.Value(runWriterContextKey{}).(*runWriter)
+		var wake <-chan struct{}
+		if w != nil {
+			wake = w.wake
+		}
+		cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(wake)})
+		count := len(pending)
+		if !review {
+			count = 1
+		}
+		immediate := -1
+		for i := 0; i < count; i++ {
+			if pending[i].Handle == nil || pending[i].Handle.Done() == nil {
+				immediate = i
+				break
+			}
+			cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(pending[i].Handle.Done())})
+		}
+		index := immediate
+		if index < 0 {
+			if w != nil {
+				w.mu.Unlock()
+			}
+			chosen, _, _ := reflect.Select(cases)
+			if w != nil {
+				w.mu.Lock()
+			}
+			if chosen == 1 {
+				continue
+			}
+			if chosen == 0 {
+				index = 0
+			} else {
+				index = chosen - 2
+			}
+		}
+		// A queued decision gets a safe point before the next collection write.
+		if err := s.drainRunCommands(ctx, runID); err != nil {
+			errs = append(errs, err)
+		}
+		d := pending[index]
+		pending = append(pending[:index], pending[index+1:]...)
 		_, err := s.CollectHandIn(ctx, runID, d)
 		s.clearDispatchLive(runID, d.TaskID)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("collect %s: %w", d.TaskID, err))
+		} else if review {
+			// The collected worker's slot is free: start eligible work in it
+			// before this result's review, so a slow review or a slow sibling
+			// does not hold capacity idle.
+			if refill != nil && len(errs) == 0 {
+				more, refillErr := refill(ctx)
+				pending = append(pending, more...)
+				if refillErr != nil {
+					errs = append(errs, fmt.Errorf("refill: %w", refillErr))
+				}
+				if observe != nil && len(more) > 0 {
+					_, _ = current()
+				}
+			}
+			if err = s.reviewCollectedDispatch(ctx, runID, d.TaskID); err != nil {
+				errs = append(errs, fmt.Errorf("review %s: %w", d.TaskID, err))
+			}
 		}
 		if observe != nil {
 			_, _ = current()
 		}
 	}
+	if err := s.drainRunCommands(context.WithoutCancel(ctx), runID); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
-// mergeAccepted merges accepted tasks in plan order, stopping at the first
-// task that is not yet accepted: merge order is plan order.
+// mergeAccepted merges accepted tasks. A run that merges in plan order stops
+// at the first task that is not yet accepted; any other run merges each
+// accepted task whose dependencies are merged.
 func (s *MarshalService) mergeAccepted(ctx context.Context, runID string, run marshal.Run) (bool, error) {
+	if !mergeInPlanOrder(run) {
+		return s.mergeReady(ctx, runID, run)
+	}
 	progressed := false
 	for _, t := range run.Tasks {
 		if t.State == marshal.Merged || t.State == marshal.Cancelled {
@@ -346,8 +478,80 @@ func (s *MarshalService) reviewHandedIn(ctx context.Context, runID string, run m
 // with the governance reasons instead.
 func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run marshal.Run, brief MarshalBrief) ([]MarshalDispatch, error) {
 	var launched []MarshalDispatch
+	var ready []marshal.Task
 	for _, t := range run.Tasks {
-		canLaunch, stop := canLaunchCandidate(s.Gate, run, t, launched)
+		if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
+			continue
+		}
+		if !marshalDepsMerged(run, t) {
+			continue
+		}
+		if waiting, err := s.privateProcess05WaitPending(ctx, run, t); err != nil {
+			return nil, err
+		} else if waiting {
+			continue
+		}
+		ready = append(ready, t)
+	}
+	gate, release := reserveExecution(s.Gate)
+	// Reserve the batch before launching any worker. The owner can acknowledge
+	// off immediately afterwards; every reserved attempt retains this mode.
+	var candidates []marshal.Task
+	var reserved []MarshalDispatch
+	for _, t := range ready {
+		if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
+			continue
+		}
+		if !marshalDepsMerged(run, t) || (s.HeldTask != nil && s.HeldTask(runID, t.PlanTaskID)) {
+			continue
+		}
+		can, stop := canLaunchCandidate(gate, run, t, reserved)
+		if stop {
+			break
+		}
+		if !can {
+			continue
+		}
+		candidates = append(candidates, t)
+		reserved = append(reserved, MarshalDispatch{TaskID: t.PlanTaskID})
+		if shouldStopAfterLaunchGate(gate, run, t) {
+			break
+		}
+	}
+	release()
+	ctx = context.WithValue(ctx, admissionGateKey{}, gate)
+	// A launch held by a provider's recovery pace goes to the end of the
+	// round with its retry time; on its next turn the round waits for that
+	// time, then rechecks everything below before it launches. The round
+	// keeps one wait at a time: the earliest held launch comes first.
+	waitUntil := map[string]time.Time{}
+	var held []DispatchAdmission
+	defer func() { s.noteAdmissionHold(runID, held) }()
+	for idx := 0; idx < len(candidates); idx++ {
+		t := candidates[idx]
+		admitAt := waitUntil[t.PlanTaskID]
+		if !admitAt.IsZero() {
+			if err := s.waitAdmission(ctx, admitAt); err != nil {
+				return launched, err
+			}
+		}
+		if err := s.runCommandSafePoint(ctx, runID); err != nil {
+			return launched, err
+		}
+		if fresh, _, err := s.load(ctx, runID); err != nil {
+			return launched, err
+		} else if !slices.Equal(run.Commands, fresh.Commands) {
+			// Keep the reserved round's admission snapshot unless an operator
+			// command changed it. Dispatch itself updates persisted task states.
+			run = fresh
+		}
+		if run.CommandFence != "" || run.State == marshal.AwaitingUser {
+			break
+		}
+		if i := taskIndex(run, t.PlanTaskID); i >= 0 {
+			t = run.Tasks[i]
+		}
+		canLaunch, stop := canLaunchCandidate(gate, run, t, launched)
 		if stop {
 			break
 		}
@@ -374,7 +578,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		// Only a worker that used up its returns is moved on here; a task
 		// the operator already moved (its new worker has none) keeps it.
 		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 && t.ReturnsByAgent[t.Worker] > 0 && !isProviderFailover(t) {
-			next := s.otherWorker(t.Worker, t.Mode)
+			next := s.otherWorkerFor(ctx, run.Settings, t.Worker, t.Mode)
 			if next == "" {
 				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
 				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeNoReassignWorker, reason))
@@ -386,7 +590,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			if i := taskIndex(run, t.PlanTaskID); i >= 0 {
 				run.Tasks[i].Worker = next
 			}
-			canLaunch, stop = canLaunchCandidate(s.Gate, run, t, launched)
+			canLaunch, stop = canLaunchCandidate(gate, run, t, launched)
 			if stop {
 				break
 			}
@@ -394,7 +598,8 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				continue
 			}
 		}
-		if s.InstalledVersion != nil {
+		admissionPolicy := s.projectSettingsSnapshot(ctx, run.Settings)
+		if s.InstalledVersion != nil && admissionPolicy.ProviderEnabled(t.Worker) {
 			if (t.Mode == marshal.Governed || t.Worker == "agy") && s.ProbeWorker != nil && !s.workerTaskGovernance(ctx, t).Governed() {
 				if err := s.ProbeWorker(ctx, t.Worker); err != nil {
 					return launched, fmt.Errorf("governed worker verification failed: %w", err)
@@ -419,10 +624,29 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		d, err := s.dispatchWithBrief(ctx, runID, t.PlanTaskID, "", brief)
 		end()
 		if err != nil {
-			return launched, err
+			var blocked *DispatchAdmissionError
+			if !errors.As(err, &blocked) {
+				return launched, err
+			}
+			adm := blocked.Admission
+			if refilling, _ := ctx.Value(rollingRefillKey{}).(bool); refilling && adm.RetryAt != nil {
+				// The next round waits for the pace; refill does not.
+				continue
+			}
+			if adm.RetryAt != nil && adm.RetryAt.After(admitAt) {
+				if admitAt.IsZero() && s.RecordActivity != nil {
+					s.RecordActivity(firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID) + " is waiting: " + adm.Reason + ".")
+				}
+				waitUntil[t.PlanTaskID] = *adm.RetryAt
+				candidates = append(candidates, t)
+				continue
+			}
+			held = append(held, adm)
+			continue
 		}
 		launched = append(launched, d)
-		if shouldStopAfterLaunchGate(s.Gate, run, t) {
+		s.markDispatchLive(runID, []MarshalDispatch{d})
+		if shouldStopAfterLaunchGate(gate, run, t) {
 			break
 		}
 	}
@@ -456,12 +680,7 @@ func (s *MarshalService) waitPausedExecution(ctx context.Context, runID string, 
 	if !s.pauseHolds(runID, run) || !s.process05Paused(ctx, run) {
 		return false, nil
 	}
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-changed:
-		return true, nil
-	}
+	return s.waitRunChange(ctx, runID, changed)
 }
 
 // settleFinishedExecution ends each part of the run's canonical execution
@@ -498,12 +717,7 @@ func (s *MarshalService) waitHeldTasks(ctx context.Context, runID string, run ma
 	if !held {
 		return false, nil
 	}
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-changed:
-		return true, nil
-	}
+	return s.waitRunChange(ctx, runID, changed)
 }
 
 // finish verifies the integrated result and, when the user granted a
@@ -606,19 +820,41 @@ func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {
 	return true
 }
 
+// projectSettingsSnapshot reads the saved project settings snapshot for
+// admission-time provider eligibility and failover policy, falling back to
+// the run's snapshot when no project settings record has been written yet.
+func (s *MarshalService) projectSettingsSnapshot(ctx context.Context, fallback marshal.Settings) marshal.Settings {
+	if s == nil || s.Store == nil || s.ProjectID == "" {
+		return fallback
+	}
+	rec, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
+	if err != nil || rec.Revision == 0 {
+		return fallback
+	}
+	return rec.Value
+}
+
 // otherWorker picks a configured worker other than current, in a stable order.
 func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) string {
+	return s.otherWorkerFor(context.Background(), marshal.DefaultSettings(), current, mode)
+}
+
+// otherWorkerFor picks an eligible configured worker other than current using
+// the project settings snapshot for provider enablement and failover order.
+func (s *MarshalService) otherWorkerFor(ctx context.Context, fallback marshal.Settings, current string, mode marshal.WorkerMode) string {
 	drivers := s.Drivers
 	if mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
+	policy := s.projectSettingsSnapshot(ctx, fallback)
 	names := make([]string, 0, len(drivers))
 	for name, d := range drivers {
-		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode {
+		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode && policy.ProviderEnabled(name) {
 			names = append(names, name)
 		}
 	}
 	sort.Strings(names)
+	names = orderReassignCandidates(policy, names)
 	if len(names) == 0 {
 		return ""
 	}
@@ -627,7 +863,7 @@ func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) st
 	// leaves the reassigned task stalled.
 	if s.Store != nil {
 		for _, name := range names {
-			if s.workerGovernance(context.Background(), name).Governed() {
+			if s.workerGovernance(ctx, name).Governed() {
 				return name
 			}
 		}
@@ -637,13 +873,14 @@ func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) st
 
 // marshalMaxRounds bounds Execute's loop by the work a run can legitimately
 // need: every task dispatched, reviewed and merged across all its allowed
-// returns and one reassignment, plus verification.
+// returns and one reassignment, plus verification. Infrastructure attempts
+// extend the allowance only as failures are recorded, including unlimited retries.
 func marshalMaxRounds(run marshal.Run) int {
 	limit := run.Settings.ReworkLimit
 	if limit < 1 {
 		limit = 1
 	}
-	return len(run.Tasks)*(limit+2)*3 + 10
+	return len(run.Tasks)*(limit+2)*3 + 10 + infraRetryRounds(run)
 }
 
 // unknownMarshalCharge is usage the runtime could not measure.

@@ -40,7 +40,7 @@ func TestProjectContractMCPRequiresExactLiveParentAndPreservesDraft(t *testing.T
 	cfg.ProjectID, cfg.ProjectRoot = rt.ProjectID(), rt.ProjectRoot()
 	live := NewExtremeServer(rt, "marshal", "")
 	live.ConfigureProposalMCP(cfg)
-	args := `{"submission_id":"architecture-1","proposal": {"action":"project-contract","expected_version":0,"contract":{"purpose":"Preserve exact approved decisions"}}}`
+	args := `{"submission_id":"architecture-1","proposal": {"action":"project-contract","expected_version":0,"contract":{"format_version":1,"id":"c","revision":1,"purpose":"Preserve exact approved decisions","components":[{"id":"a","responsibility":"r","paths":["a"]}],"invariants":["i"],"reviewed_inventory_digest":"d"}}}`
 	params := json.RawMessage(`{"name":"marshal_project_contract_submit","arguments":` + args + `,"_meta":{"progressToken":7}}`)
 	response := live.handleStdioRequest(t.Context(), jsonRPCRequest{ID: 1, Method: "tools/call", Params: params})
 	if response.Error != nil || calls.Load() != 1 || method != "project_contract_submit" || string(received) != args {

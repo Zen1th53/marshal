@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 // Tier selects the run's worker and review policy.
@@ -60,7 +62,8 @@ const (
 
 // Settings captures the policy approved for a run.
 type Settings struct {
-	WorkerStallMinutes int `json:",omitempty"`
+	WorkerStallMinutes int  `json:",omitempty"`
+	WorkerStallOff     bool `json:"worker_stall_off,omitempty"`
 	ExecutionRights    ExecutionRights
 	AcceptanceMode     AcceptanceMode
 	ReworkLimit        int
@@ -69,8 +72,91 @@ type Settings struct {
 	// Control is empty in settings stored before it existed; that reads as
 	// ControlFree.
 	Control Control `json:",omitempty"`
+	// ReviewPolicy is empty in legacy settings; empty fields read as the
+	// shipped defaults.
+	ReviewPolicy ReviewPolicy `json:",omitempty"`
+	// DisabledProviders is a comma-separated list of canonical provider IDs
+	// excluded from worker admission. Empty leaves every provider enabled.
+	DisabledProviders string `json:"disabled_providers,omitempty"`
 	concurrencySettings
 	failoverSettings
+	runtimeLimitSettings
+}
+
+// CanonicalProviderID normalizes provider names and aliases.
+func CanonicalProviderID(name string) string {
+	id := strings.ToLower(strings.TrimSpace(name))
+	if id == "antigravity" {
+		return "agy"
+	}
+	return id
+}
+
+// WorkerStallDisabled reports whether the worker stall watchdog was explicitly disabled.
+func (s Settings) WorkerStallDisabled() bool {
+	return s.WorkerStallOff
+}
+
+// EffectiveWorkerStallMinutes returns the active stall window in minutes.
+// Zero means the watchdog is disabled; absent legacy values default to 15.
+func (s Settings) EffectiveWorkerStallMinutes() int {
+	if s.WorkerStallOff {
+		return 0
+	}
+	if s.WorkerStallMinutes > 0 {
+		return s.WorkerStallMinutes
+	}
+	return 15
+}
+
+// DisabledProviderList parses the comma-separated DisabledProviders setting.
+func (s Settings) DisabledProviderList() []string {
+	if strings.TrimSpace(s.DisabledProviders) == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(s.DisabledProviders, ",") {
+		if id := CanonicalProviderID(part); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// ProviderEnabled reports whether provider is eligible for worker admission.
+func (s Settings) ProviderEnabled(provider string) bool {
+	id := CanonicalProviderID(provider)
+	for _, disabled := range s.DisabledProviderList() {
+		if disabled == id {
+			return false
+		}
+	}
+	return true
+}
+
+// SetProviderEnabled enables or disables a known provider for worker admission.
+func (s *Settings) SetProviderEnabled(provider string, enabled bool) error {
+	id := CanonicalProviderID(provider)
+	switch id {
+	case "codex", "claude", "agy", "opencode":
+	default:
+		return fmt.Errorf("unknown provider %q", provider)
+	}
+	seen := map[string]bool{}
+	var next []string
+	for _, cp := range s.DisabledProviderList() {
+		if cp == id || seen[cp] {
+			continue
+		}
+		seen[cp] = true
+		next = append(next, cp)
+	}
+	if !enabled {
+		next = append(next, id)
+	}
+	slices.Sort(next)
+	s.DisabledProviders = strings.Join(next, ",")
+	return nil
 }
 
 // DefaultSettings returns the Marshal role's agreed defaults.
@@ -109,8 +195,36 @@ func (s Settings) Validate() error {
 	if err := s.validateFailoverSettings(); err != nil {
 		return err
 	}
+	if err := s.validateDisabledProviders(); err != nil {
+		return err
+	}
+	if err := s.validateRuntimeLimitSettings(); err != nil {
+		return err
+	}
 	if err := s.Budget.Validate(); err != nil {
 		return err
+	}
+	if err := s.ReviewPolicy.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s Settings) validateDisabledProviders() error {
+	if s.DisabledProviders != "" && len(s.DisabledProviderList()) == 0 {
+		return errors.New("disabled providers cannot be blank")
+	}
+	seen := map[string]bool{}
+	for _, id := range s.DisabledProviderList() {
+		switch id {
+		case "codex", "claude", "agy", "opencode":
+		default:
+			return fmt.Errorf("invalid disabled provider: %s", id)
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate disabled provider: %s", id)
+		}
+		seen[id] = true
 	}
 	return nil
 }
@@ -204,6 +318,7 @@ type WorkerSelection struct {
 }
 
 type Task struct {
+	ExecutionTier       Tier   `json:",omitempty"`
 	ArchitectureContext string `json:",omitempty"`
 	failoverTask
 	WorkerSelection  *WorkerSelection `json:",omitempty"`
@@ -246,6 +361,35 @@ type Task struct {
 	// canonical approval receipt before returning this task to dispatch.
 	Process05WaitRunID      string `json:",omitempty"`
 	Process05WaitApprovalID string `json:",omitempty"`
+	// QuarantinedRef records the preserved ref holding output from an
+	// already-started attempt whose base became stale before acceptance.
+	QuarantinedRef string `json:",omitempty"`
+	// StaleProcessExitUnverified holds worker capacity while an already-started
+	// attempt on a stale base has not yet reached verified exit.
+	StaleProcessExitUnverified bool `json:",omitempty"`
+	// LaunchKey names the supervised launch of the current attempt. Recovery
+	// reuses it and never mints a new one for an unclear launch.
+	LaunchKey string `json:",omitempty"`
+	// ReviewDisagreement is the latest hand-in on which the Marshal and the
+	// independent reviewer reached different verdicts.
+	ReviewDisagreement *ReviewDisagreement `json:",omitempty"`
+}
+
+// ReviewDisagreement keeps both verdicts of a hand-in the two reviewers
+// disagreed on. Key groups materially equivalent conflicts: the same task,
+// reviewer roles, verdict direction and failing criteria. Count is how many
+// of the task's attempts reached that same conflict.
+type ReviewDisagreement struct {
+	Key                 string
+	Count               int
+	Attempt             int
+	MarshalReviewer     string
+	MarshalVerdict      Verdict
+	MarshalReasons      []string `json:",omitempty"`
+	IndependentReviewer string
+	IndependentVerdict  Verdict
+	IndependentReasons  []string `json:",omitempty"`
+	FailingCriteria     []string `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.
@@ -271,6 +415,13 @@ type Pause struct {
 	// Until is the earliest a provider limit is expected to free up, for a
 	// "quota" pause; zero when unknown.
 	Until time.Time `json:",omitempty"`
+	// NoticeID is the stable event ID of the run notice announcing this
+	// pause. It is saved with the pause, so a notice that failed to record
+	// is recorded again on restart and a re-saved pause never repeats it.
+	NoticeID string `json:",omitempty"`
+	// Limit is the byte cap behind a "limit_exceeded" pause: what reached
+	// it, the sizes and the supported split or inspection.
+	Limit *model.Limit `json:",omitempty"`
 }
 
 // PauseAction is what moves a paused run on. The Board's Enter key and the
@@ -290,6 +441,9 @@ const (
 	CodeFailedAttemptRecovery = "failed_attempt_recovery"
 	CodeSecurity              = "security"
 	CodeReworkLimit           = "rework_limit"
+	// CodeReviewDisagreement stops automatic rework when the Marshal and the
+	// independent reviewer reach the same conflicting verdicts again.
+	CodeReviewDisagreement    = "review_disagreement"
 	CodeTaskCancelled         = "task_cancelled"
 	CodeVerificationFailed    = "verification_failed"
 	CodeVerificationStopped   = "verification_stopped"
@@ -322,17 +476,82 @@ const (
 	// CodeHandInNotRecorded stops a task whose worker finished but whose
 	// hand-in MARSHAL could not record; re-running the worker cannot help.
 	CodeHandInNotRecorded = "hand_in_not_recorded"
+	// CodeStaleBase stops launch or recovery when the approved delivery base,
+	// private integration head, or merged dependency heads are stale or unproven.
+	CodeStaleBase = "stale_base"
+
+	// A stage of the run failed for a reason a retry may clear: the
+	// attempt is kept and the run waits for the person to resume it.
+	CodeReviewFailed    = "review_failed"
+	CodeDispatchFailed  = "dispatch_failed"
+	CodeMergeFailed     = "merge_failed"
+	CodeCommandsBlocked = "commands_blocked"
+
+	// CodeLimitExceeded stops a step whose input cannot fit one of the
+	// runtime's byte caps even after optional material is dropped. The
+	// same input would not fit again, so the pause names a split instead.
+	CodeLimitExceeded = "limit_exceeded"
 )
+
+// LaunchBasePin records the observed delivery ref, private integration head,
+// admitted attempt base, and exact merged dependency heads at launch admission.
+type LaunchBasePin struct {
+	Repository              string            `json:",omitempty"`
+	DeliveryRef             string            `json:",omitempty"`
+	DeliveryCommit          string            `json:",omitempty"`
+	ApprovedBaseCommit      string            `json:",omitempty"`
+	IntegrationRef          string            `json:",omitempty"`
+	IntegrationHead         string            `json:",omitempty"`
+	AdmittedBaseCommit      string            `json:",omitempty"`
+	MergedDependencyHeads   map[string]string `json:",omitempty"`
+	DisjointAdvanceAdmitted bool              `json:",omitempty"`
+	ProcessStarted          bool              `json:",omitempty"`
+}
 
 // LifecycleOperation is written before an external effect. Its completion
 // snapshot and audit event commit in the same transaction.
 type LifecycleOperation struct {
 	ID, Kind, TaskID, Dir, Before, After, Target string
-	Authorized                                   bool `json:",omitempty"`
-	Next                                         *Run `json:",omitempty"`
+	Authorized                                   bool           `json:",omitempty"`
+	LaunchBase                                   *LaunchBasePin `json:",omitempty"`
+	Next                                         *Run           `json:",omitempty"`
 	Event                                        events.Event
 	HandIn                                       *HandIn `json:",omitempty"`
 	Attempt                                      int
+	// DeliveryKind, ReceiptID and ReceiptDigest bind a close to the proof
+	// it was authorized on. Empty is the full canonical proof.
+	DeliveryKind  string `json:",omitempty"`
+	ReceiptID     string `json:",omitempty"`
+	ReceiptDigest string `json:",omitempty"`
+	// Merge binds a merge to the inputs it was staged from and the exact
+	// candidate it publishes. Empty is a merge journaled by an earlier build.
+	Merge *MergeIntent `json:",omitempty"`
+}
+
+// MergeIntent is a merge's durable binding. The candidate commit is staged
+// on a private ref before the intent is written, so the integration checkout
+// is untouched until the intent exists, and only the exact candidate is ever
+// published.
+type MergeIntent struct {
+	Run, Task string
+	Attempt   int
+	// PlanDigest is the approved scope; FenceRevision is the run revision the
+	// intent was written over.
+	PlanDigest    string
+	FenceRevision int64
+	// ExpectedHead is the integration head before the merge; AttemptBase is
+	// the base the accepted attempt was built on; Result is its commit.
+	ExpectedHead, AttemptBase, Result string
+	DependencyHeads                   map[string]string `json:",omitempty"`
+	ApprovedChecksDigest              string
+	AcceptedEvidenceDigest            string
+	// Candidate, CandidateTree and StagingRef name the staged merge commit;
+	// Worktree and CommonDir name the authoritative integration checkout.
+	Candidate, CandidateTree, StagingRef string
+	Worktree, CommonDir                  string
+	// Revalidated is set when the head advanced past the attempt's base and
+	// the approved checks and review ran again on the candidate.
+	Revalidated bool `json:",omitempty"`
 }
 
 // RuntimeCompatibility records observed runtime provenance independently of proof.
@@ -345,7 +564,22 @@ type RuntimeCompatibility struct {
 }
 
 // Run binds plan approval, settings, tasks, and close authority.
+// RunCommand retains an immutable request and its durable outcome.
+type RunCommand struct {
+	FreshSession                                           bool `json:",omitempty"`
+	ID, Actor, GrantID, AuthorityProject, Resource, Digest string
+	Operation, TaskID, Worker, Reason                      string
+	Revision                                               int64
+	PlanID                                                 string
+	PlanVersion                                            int64
+	ScopeDigest, TaskDigest, Purpose                       string
+	State, Detail                                          string
+}
+
 type Run struct {
+	Commands              []RunCommand          `json:",omitempty"`
+	CommandFence          string                `json:",omitempty"`
+	ExecutionID           string                `json:",omitempty"`
 	Compatibility         *RuntimeCompatibility `json:",omitempty"`
 	GoverningDigest       string                `json:",omitempty"`
 	Repository, TargetRef string
@@ -368,6 +602,22 @@ type Run struct {
 	// Pack is the plan as the person read it before approving; runs drafted
 	// without one, such as headless drafts, leave it nil.
 	Pack *PlanPack `json:",omitempty"`
+	// Slots are the worker reservations of supervised launches, kept until
+	// the worker's exit is proved and its result committed.
+	Slots []WorkerSlot `json:",omitempty"`
+	// ReviewPolicy captures the policy snapshot bound to this run before
+	// approval. Legacy runs omit it and read as shipped defaults.
+	ReviewPolicy *ReviewPolicySnapshot `json:",omitempty"`
+	// DesignReview holds the draft-digest-bound independent design critique
+	// receipt for the current draft, invalidated on material amendment.
+	DesignReview *DesignReviewReceipt `json:",omitempty"`
+	// ChecksOnly is the current checks-only receipt of a run whose owner
+	// opted out of the final independent model check. Any amendment clears
+	// it; a close always takes a fresh one.
+	ChecksOnly *verification.ChecksOnlyReceipt `json:",omitempty"`
+	// DeliveryKind names how a closed run was proven before delivery.
+	// Empty is the full canonical proof.
+	DeliveryKind string `json:",omitempty"`
 }
 
 // PlanPack is what the Marshal gathered from the person, written as
@@ -417,8 +667,13 @@ const (
 
 // Review records a reviewer's recommendation and supporting evidence.
 type Review struct {
-	ArchitectureVerdict    string   `json:",omitempty"`
-	ArchitectureMismatches []string `json:",omitempty"`
+	ArchitectureVerdict    string            `json:",omitempty"`
+	ArchitectureMismatches []string          `json:",omitempty"`
+	CrossReviewPolicy      CrossReviewPolicy `json:",omitempty"`
+	CrossReviewOmitted     bool              `json:",omitempty"`
+	ConformancePolicy      ConformancePolicy `json:",omitempty"`
+	ConformanceFindings    []string          `json:",omitempty"`
+	ConformanceOmitted     bool              `json:",omitempty"`
 	Verdict                Verdict
 	Reviewer               string
 	Reasons                []string
@@ -465,19 +720,25 @@ type CheckResult struct {
 
 // HandIn separates runtime evidence from worker claims for gate review.
 type HandIn struct {
-	TreeDigest      string `json:",omitempty"`
-	BaseCommit      string
-	ResultCommit    string
-	Diff            string
-	FilesTouched    []string
-	Worker          string
-	Provider        string
-	Model           string
-	Mode            WorkerMode
-	RuntimeObserved []CommandRecord
-	WorkerReported  []CommandRecord
-	CheckResults    []CheckResult
-	Claims          []string
+	TreeDigest          string            `json:",omitempty"`
+	ConformancePolicy   ConformancePolicy `json:",omitempty"`
+	ConformanceFindings []string          `json:",omitempty"`
+	ConformanceOmitted  bool              `json:",omitempty"`
+	BaseCommit          string
+	ResultCommit        string
+	Diff                string
+	FilesTouched        []string
+	Worker              string
+	Provider            string
+	Model               string
+	Mode                WorkerMode
+	RuntimeObserved     []CommandRecord
+	WorkerReported      []CommandRecord
+	CheckResults        []CheckResult
+	Claims              []string
+	// Limits lists the parts of the hand-in kept out of it because they
+	// reached a byte cap, each with a pointer to the complete evidence.
+	Limits []model.Limit `json:",omitempty"`
 }
 
 // ValidateHandIn checks scope and completeness of re-run evidence, regardless of pass status.
@@ -668,3 +929,67 @@ type VerifierEvidence struct {
 	Findings     []string
 	InputDigest  string
 }
+
+// DefaultProviderOrder is the fallback preference shared by every runtime role.
+func DefaultProviderOrder() []string { return []string{"codex", "claude", "agy", "opencode"} }
+
+// TaskMoves returns a copy of the task lifecycle table TransitionTask checks.
+func TaskMoves() map[TaskState][]TaskState {
+	out := make(map[TaskState][]TaskState, len(taskMoves))
+	for from, to := range taskMoves {
+		out[from] = slices.Clone(to)
+	}
+	return out
+}
+
+// RollingPhase is where one rolling dispatch attempt is.
+type RollingPhase string
+
+const (
+	// RollingReserved: a worker slot is committed; the launch has no receipt yet.
+	RollingReserved RollingPhase = "reserved"
+	// RollingRunning: the launch receipt proves the worker started.
+	RollingRunning RollingPhase = "running"
+	// RollingExited: the worker's exit is proved; its result is not staged yet.
+	RollingExited RollingPhase = "exited"
+	// RollingStaged: a verified exit and its result wait for review.
+	RollingStaged RollingPhase = "staged"
+	// RollingReview: the result holds a review seat.
+	RollingReview RollingPhase = "review"
+	// RollingDone: merged, returned or cancelled; its file scope is free.
+	RollingDone RollingPhase = "done"
+	// RollingQuarantined: kept for inspection; never replayed.
+	RollingQuarantined RollingPhase = "quarantined"
+)
+
+// RollingAttempt is one attempt the rolling dispatcher owns, bound to the
+// exact plan, lease and launch it was admitted under.
+type RollingAttempt struct {
+	Run             string
+	Task            string
+	Attempt         int
+	Revision        int64
+	PlanDigest      string
+	LeaseGeneration int64
+	LaunchKey       string
+	Base            string
+	DependencyHeads map[string]string `json:",omitempty"`
+	Provider        string
+	Files           []string `json:",omitempty"`
+	// Reservation reports that the attempt holds a worker slot.
+	Reservation bool
+	Phase       RollingPhase
+	// AwaitingApproval parks the attempt on an approval. With a live worker
+	// the approval keeps its slot; after a verified exit it holds none.
+	AwaitingApproval bool `json:",omitempty"`
+	// ProcessReceipt names the launch receipt that proved the start.
+	ProcessReceipt string `json:",omitempty"`
+	// ResultReceipt is the staged result adopted for this attempt.
+	ResultReceipt *StagedExit `json:",omitempty"`
+	Outcome       TaskState   `json:",omitempty"`
+	Reason        string      `json:",omitempty"`
+}
+
+// ScopeHeld reports whether the attempt still fences its file scope: until
+// merge, return or cancel, and while quarantined for inspection.
+func (a RollingAttempt) ScopeHeld() bool { return a.Phase != RollingDone }

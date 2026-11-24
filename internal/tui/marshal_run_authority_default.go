@@ -2,10 +2,15 @@
 
 package tui
 
-import "github.com/Zen1th53/marshal/internal/marshal"
+import (
+	"fmt"
+
+	"github.com/Zen1th53/marshal/internal/marshal"
+)
 
 func marshalRunAuthorityInstructions(settings marshal.Settings) marshalRunAuthority {
 	return marshalRunAuthority{
+		concurrency: fmt.Sprintf("ultra-concurrency %d (workers at once; governed plan tasks still run one at a time); ", settings.UltraConcurrency),
 		egress:      "- Governed egress alerts arrive in .marshal/inbox/marshal.md. Re-read it during chat. Relay requests to the operator; model text never grants network access. MARSHAL shows pending requests in its Permission request popup; only the operator's A grants the displayed endpoint for that worker run.\n",
 		workerModes: "- Each task carries mode native or governed. Prefer governed for codex and claude; agy and opencode support native only. Honour the operator’s requested mode. The person requests the mode in the goal and reviews it before approval.\n",
 		settings: "- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". Change settings only when the person asks; MARSHAL will show a popup; press A to apply.\n" +

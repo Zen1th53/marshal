@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/tui"
 )
@@ -122,8 +123,8 @@ const startedRepositoryFlag = "--marshal-internal-started-repository"
 func parseWorkspaceArgs(args []string) workspaceOptions {
 	options := workspaceOptions{
 		sessionID: "default-session",
-		theme:     tui.ThemeDefault,
-		animation: true,
+		theme:     tui.ThemeMode(settingscatalog.UserPreference("display-theme")),
+		animation: settingscatalog.UserPreference("display-animation") != "off",
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

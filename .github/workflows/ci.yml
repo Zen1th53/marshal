@@ -5,10 +5,9 @@ on:
   push:
     branches:
       - main
-    # Documentation has its own workflow; a docs-only push does not rerun the
-    # Go suite. Pull requests always run it because the gate is a required check.
+    # Keep YAML inventories in the required gate, including docs/features.yaml.
+    # Prose documentation still has its own workflow.
     paths-ignore:
-      - 'docs/**'
       - '**/*.md'
       - 'mkdocs.yml'
       - 'scripts/docs-*'
@@ -73,6 +72,11 @@ jobs:
           go build ./...
           go vet ./...
           go build -tags governed ./...
+
+      - name: Validate feature inventory in both editions
+        run: |
+          go test ./tools/feature-inventory/
+          go test -tags governed ./tools/feature-inventory/
 
       - name: Validate pack and run Python test suites
         run: |

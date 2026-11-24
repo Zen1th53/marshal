@@ -173,3 +173,7 @@ tmux pane over a WebSocket on the same origin, with the phase 2 rules (bearer
 token, Origin, per-connection token). This puts the prompt and transcript on the
 page, so it is a separate opt-in from the read-only Board, off by default,
 and never available from the phase 1 link alone.
+
+## Settings guidance
+
+The Web Settings page and the terminal command `/marshal settings` read the same catalogue, so they show the same keys, units, defaults, edition locks and when a change applies. The generated tables in [configuration](../configuration.md#settings-reference) are produced from that catalogue and checked in CI. The classic Board is removed; the Web page and the terminal Board are the two views of one run.

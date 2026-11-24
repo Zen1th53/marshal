@@ -56,8 +56,9 @@ func (r *Runtime) prepareProcess05ProviderFailover(ctx context.Context, s *Marsh
 		if canonical.PlanID != run.PlanID || canonical.PlanVersion != run.PlanVersion || canonical.ProjectID != s.CanonicalPlanProjectID() || canonical.GoalID == "" || current.TaskID != req.Task.PlanTaskID || current.CanonicalTaskID == "" || !sameStrings(current.TargetFiles, req.Task.Files) || !sameStrings(current.Dependencies, req.Task.DependsOn) {
 			return errors.New("process 05: provider failover changed canonical plan or task scope")
 		}
+		policy := s.projectSettingsSnapshot(ctx, run.Settings)
 		allowed := false
-		for _, provider := range GetEffectiveFailoverOrder(run.Settings) {
+		for _, provider := range GetEffectiveFailoverOrder(policy) {
 			if marshalHarnessName(provider) == marshalHarnessName(req.Task.Worker) {
 				allowed = true
 			}

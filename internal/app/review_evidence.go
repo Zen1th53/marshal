@@ -189,11 +189,21 @@ func (s *MarshalService) checkVerifierFreshSession(record marshal.VerifierEviden
 }
 
 // A missing reviewer leaves the hand-in pending until an independent session can review it.
+// The person's stop or a shutdown during the review is not a failure: the
+// hand-in stays pending and the run is not paused.
 func (s *MarshalService) pauseUnavailableCrossReviewer(ctx context.Context, runID string, run marshal.Run, revision int64, cause error) error {
+	if ctx.Err() != nil || errors.Is(cause, context.Canceled) {
+		return cause
+	}
 	ctx = context.WithoutCancel(ctx)
-	pauseMarshal(&run, marshal.Pause{Reason: "Independent cross-review is unavailable: " + cause.Error(), Resolutions: []string{"Make a reviewer available, then /marshal resume to retry the hand-in review."}, ResumeState: run.State, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume})
+	task := firstMarshalTask(run, marshal.HandedIn)
+	reason := "Independent cross-review is unavailable."
+	if task != "" {
+		reason = "Independent cross-review of task " + task + " is unavailable."
+	}
+	pauseMarshal(&run, marshal.Pause{Reason: reason, Detail: boundedRedacted("review: "+cause.Error(), runNoticeDetailLimit), TaskID: task, Resolutions: []string{"Make a reviewer available, then /marshal resume to retry the hand-in review."}, ResumeState: run.State, Code: marshal.CodeReviewFailed, Action: marshal.PauseResume})
 	if err := s.save(ctx, runID, run, revision); err != nil {
 		return errors.Join(cause, err)
 	}
-	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": cause.Error(), "role": "independent-cross-reviewer"}))
+	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": RedactApprovalText(cause.Error()), "summary": reason, "role": "independent-cross-reviewer"}))
 }

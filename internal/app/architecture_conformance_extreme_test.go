@@ -146,3 +146,56 @@ func TestTaskArchitectureAcceptedSlice(t *testing.T) {
 		t.Fatal("accepted architecture not required")
 	}
 }
+
+func TestRestagedCandidateRequiresArchitectureReview(t *testing.T) {
+	r, _ := conformanceRuntime(t, true)
+	s, _ := integrationOrderFixture(t, 1, filepath.Join(t.TempDir(), "state.db"), nil, false)
+	acceptTask(t, s, "a")
+	s.runtime = r
+	run := loadRun(t, s)
+	run.Tasks[0].Checks = nil
+	run.Tasks[0].Files = []string{"internal/api/h.go"}
+	architecture, required := s.taskArchitecture(t.Context(), run.Tasks[0])
+	if !required {
+		t.Fatal("accepted architecture not required")
+	}
+	for _, tc := range []struct {
+		name       string
+		verdict    string
+		mismatches []string
+		wantError  bool
+		wantReturn bool
+	}{
+		{name: "missing verdict", wantError: true},
+		{name: "invalid verdict", verdict: "unknown", wantError: true},
+		{name: "invalid mismatch", mismatches: []string{"unowned file"}, wantError: true},
+		{name: "mismatch", verdict: "conforms", mismatches: []string{"internal/api/h.go:api: undeclared dependency"}, wantReturn: true},
+		{name: "conforms", verdict: "conforms"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := &marshal.MergeIntent{Attempt: 1, ExpectedHead: "advanced-head", Candidate: "candidate", AcceptedEvidenceDigest: "previous-evidence"}
+			called := false
+			s.CrossReview = func(_ context.Context, task marshal.Task, h marshal.HandIn, control marshal.Control) (marshal.Review, string, error) {
+				called = true
+				if task.ArchitectureContext != architecture {
+					t.Fatalf("architecture context = %q, want %q", task.ArchitectureContext, architecture)
+				}
+				if h.BaseCommit != in.ExpectedHead || h.ResultCommit != in.Candidate {
+					t.Fatalf("review received wrong candidate: %+v", h)
+				}
+				return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "independent", EvidenceRefs: []string{"candidate-evidence"}, ArchitectureVerdict: tc.verdict, ArchitectureMismatches: tc.mismatches}, "test", nil
+			}
+			reason, err := s.revalidateMergeCandidate(t.Context(), "run", run, 0, in)
+			if !called || (err != nil) != tc.wantError || (reason != "") != tc.wantReturn {
+				t.Fatalf("called=%v reason=%q err=%v", called, reason, err)
+			}
+			if tc.wantError || tc.wantReturn {
+				if in.AcceptedEvidenceDigest != "previous-evidence" {
+					t.Fatal("rejected review replaced accepted evidence")
+				}
+			} else if in.AcceptedEvidenceDigest == "previous-evidence" {
+				t.Fatal("conforming review did not update evidence")
+			}
+		})
+	}
+}

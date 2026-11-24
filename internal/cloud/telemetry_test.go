@@ -369,3 +369,37 @@ func TestCloseFlushesAndReturns(t *testing.T) {
 	// A second Close must be safe.
 	r.Close(context.Background())
 }
+
+// An idle reporter must sleep on its timer: no wake, no request and no
+// queue work while nothing happens. A recorded heartbeat is still delivered,
+// and Close returns promptly.
+func TestIdleTelemetryWaitsWithoutSpin(t *testing.T) {
+	sink, client := newTelemetrySink(t)
+	r := NewReporter(client, testInstallation, testSession, "1.0.0", nil)
+	done := make(chan struct{})
+	go func() { r.Run(context.Background()); close(done) }()
+
+	time.Sleep(300 * time.Millisecond)
+	if wakes, sends := r.idleCounts(); wakes != 0 || sends != 0 {
+		t.Fatalf("idle reporter woke %d times and sent %d batches; it should wait on its timer", wakes, sends)
+	}
+	if sink.count() != 0 {
+		t.Fatalf("idle reporter reached the server %d times", sink.count())
+	}
+
+	r.Record(KindHeartbeat, TelemetryUltra, "")
+	closed := make(chan struct{})
+	go func() { r.Close(context.Background()); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not return")
+	}
+	<-done
+	if sink.count() != 1 {
+		t.Fatalf("server received %d heartbeat events, want 1", sink.count())
+	}
+	if wakes, sends := r.idleCounts(); wakes != 0 || sends != 1 {
+		t.Fatalf("after close: %d wakes, %d sends; want 0 wakes and one final send", wakes, sends)
+	}
+}

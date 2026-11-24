@@ -93,7 +93,7 @@ func (s *MarshalService) observeMarshalCompatibility(ctx context.Context, runID 
 		return run, rev, err
 	}
 	// Classification and its explanation commit together in the run payload.
-	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, rev, &event, nil, 0); err != nil {
+	if err := s.saveMarshalState(ctx, runID, run, rev, &event, nil, 0); err != nil {
 		return run, rev, err
 	}
 	rev++

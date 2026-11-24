@@ -16,8 +16,8 @@ const paletteGoldenName = "palette"
 // budget, goal, team, policy…) cannot creep back.
 var shippedPaletteAllowList = []string{
 	"view.board", "view.host", "view.memory", "view.providers", "view.verify", "view.security", "view.plan", "view.architecture",
-	"home.chat", "task.retry", "home.web", "home.reqedit", "home.quit", "board.close", "task.diff", "architecture.browse",
-	"memory.decide", "memory.scroll", "providers.verify", "providers.route", "verify.return", "security.decide", "plan.inspect", "arch.open",
+	"home.chat", "task.retry", "home.web", "home.decide", "home.run", "home.inbox", "home.ready", "home.reqedit", "home.quit", "board.close", "task.diff", "architecture.browse",
+	"memory.decide", "memory.scroll", "providers.verify", "providers.route", "verify.return", "security.decide", "arch.open",
 	"marshal.pick", "marshal.chat", "marshal.say", "command.line", "palette", "help", "workers.stop", "interrupt",
 	"fkey.help", "fkey.review", "fkey.diff", "fkey.status", "fkey.models", "fkey.mcp", "fkey.codex", "fkey.claude", "fkey.opencode", "fkey.update", "fkey.agy",
 	"run.pause", "run.resume", "web.open", "app.doctor", "app.quit",

@@ -68,8 +68,15 @@ type Server struct {
 	sink   Sink
 	// actKey signs the action tokens; epoch counts the actions taken, so a
 	// token works once.
-	actKey []byte
-	actMu  sync.Mutex
+	actKey       []byte
+	actMu        sync.Mutex
+	settings     settingsPointer
+	commandSpent map[string]int64
+	// settingsTokens caches minted settings action tokens by binding.
+	settingsTokMu  sync.Mutex
+	settingsTokens map[string]cachedSettingsToken
+	previews       map[string]Confirmation
+	details        detailsPointer
 
 	listener net.Listener
 	http     *http.Server
@@ -165,7 +172,9 @@ func (s *Server) Close() {
 		return
 	}
 	s.closeOnce.Do(func() {
+		s.actMu.Lock()
 		s.cancel()
+		s.actMu.Unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = s.http.Shutdown(ctx)
@@ -246,6 +255,8 @@ func (s *Server) serveSession(w http.ResponseWriter, q *http.Request) {
 		refuse(w, http.StatusForbidden, "Open the Web Board from its own link.")
 		return
 	}
+	s.actMu.Lock()
+	defer s.actMu.Unlock()
 	presented := bearer(q)
 	s.tokenMu.Lock()
 	switch {
@@ -262,15 +273,17 @@ func (s *Server) serveSession(w http.ResponseWriter, q *http.Request) {
 	case presented != "" && s.spent[presented]:
 		if fresh, err := randomToken(32); err == nil {
 			s.token = fresh
+			s.previews = nil
 		}
 		s.tokenMu.Unlock()
+		s.spend()
 		w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-		refuse(w, http.StatusUnauthorized, "This link was already used, so to be safe the Web Board closed every open page. Run /marshal web for a new link.")
+		refuse(w, http.StatusUnauthorized, "This link was already used, so to be safe the Web Board closed every open page. Press w on the Board or run /marshal web for a new one-time link.")
 		return
 	}
 	s.tokenMu.Unlock()
 	w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-	refuse(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+	refuse(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
 }
 
 // hostAllowed is the DNS-rebinding guard: the Host header must name this
@@ -325,10 +338,14 @@ func (s *Server) Handler() http.Handler {
 			}
 			if !s.authorized(q) {
 				h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-				refuse(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+				refuse(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
 				return
 			}
 			s.serveAct(w, q)
+			return
+		}
+		if strings.HasPrefix(q.URL.Path, "/api/act/receipts/") && q.Method == http.MethodGet {
+			s.serveReceipt(w, q)
 			return
 		}
 		if q.Method != http.MethodGet {
@@ -340,17 +357,21 @@ func (s *Server) Handler() http.Handler {
 			s.serveFile(w, f.name, f.contentType)
 			return
 		}
-		if q.URL.Path != "/api/board" && q.URL.Path != "/api/events" {
+		if q.URL.Path != "/api/board" && q.URL.Path != "/api/events" && q.URL.Path != "/api/details" && q.URL.Path != "/api/details/page" {
 			deny(w, http.StatusNotFound, "Not found.")
 			return
 		}
 		if !s.authorized(q) {
 			h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-			deny(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+			deny(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
 			return
 		}
 		if q.URL.Path == "/api/events" {
 			s.serveEvents(w, q)
+			return
+		}
+		if q.URL.Path == "/api/details" || q.URL.Path == "/api/details/page" {
+			s.serveDetails(w, q)
 			return
 		}
 		body, _, err := s.frame()
@@ -390,6 +411,7 @@ func (s *Server) frame() ([]byte, uint64, error) {
 		return nil, 0, err
 	}
 	f := FromBoard(b)
+	f.SettingsActions = s.settingsFrame()
 	if s.sink != nil {
 		f.Act = s.mint(f, s.epoch)
 	}
@@ -403,6 +425,7 @@ func (s *Server) frame() ([]byte, uint64, error) {
 	kb.Now, kb.Top.Clock = time.Time{}, time.Time{}
 	kf := FromBoard(kb)
 	kf.Act = f.Act
+	kf.SettingsActions = f.SettingsActions
 	key, err := encodeFrame(kf)
 	if err != nil {
 		return nil, 0, err
@@ -549,11 +572,17 @@ func (s *Server) serveEvents(w http.ResponseWriter, q *http.Request) {
 		case <-s.ctx.Done():
 			return
 		case <-beat.C:
+			if !s.authorized(q) {
+				return
+			}
 			if _, err := w.Write([]byte(": heartbeat\n\n")); err != nil {
 				return
 			}
 			flusher.Flush()
 		case <-ch:
+			if !s.authorized(q) {
+				return
+			}
 			body, seq, err := s.frame()
 			if err != nil || seq == sent {
 				continue

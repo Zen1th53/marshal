@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -63,6 +64,9 @@ func (w *Workspace) pendingProcess05Approval(ctx context.Context, run marshal.Ru
 	// never re-present a transport question for a resolved or expired approval.
 	pending, err := service.Engine().ApprovalManager().GetApproval(approvalID)
 	if err != nil || pending.Status != execution.ApprovalRequested {
+		return false
+	}
+	if pending.ExpiresAt != nil && !time.Now().UTC().Before(*pending.ExpiresAt) {
 		return false
 	}
 	runs, err := service.ListRuns(ctx)

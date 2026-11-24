@@ -732,7 +732,10 @@ esac
 	if err := saveAgentRecord(workDir, session, &activeTmuxAgent{id: "claude", role: "worker", provider: "claude", window: claudeWin, paneID: "%1"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := saveAgentRecord(workDir, session, &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", window: chatWin, paneID: "%2"}); err != nil {
+	if err := saveAgentRecord(workDir, session, &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", window: chatWin, paneID: "%2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveChatBinding(workDir, chatBinding{Provider: "codex", Binary: "codex", Args: confinedChatArgs(t, ws, "codex", workDir)}); err != nil {
 		t.Fatal(err)
 	}
 	cleanupTmuxWorkspace(t, ws)

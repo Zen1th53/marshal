@@ -210,7 +210,7 @@ func TestV2MarshalNothingKnownYet(t *testing.T) {
 			t.Fatalf("row before any lookup %+v", r)
 		}
 	}
-	if r := buildV2Ready(v2MarshalIn{Now: time.Now()}); len(r.Checks) != 0 || r.Defaults != nil {
+	if r := buildV2Ready(v2MarshalIn{Now: time.Now()}); len(r.Checks) != 0 || len(r.Defaults) == 0 {
 		t.Fatalf("checklist before the first probe %+v", r)
 	}
 }

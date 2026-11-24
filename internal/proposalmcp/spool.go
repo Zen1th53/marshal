@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -112,11 +111,7 @@ func (s *server) handleSpooled(id, path string) {
 		resp = s.serve(ctx, data)
 		cancel()
 	}
-	out, err := json.Marshal(resp)
-	if err != nil {
-		out = []byte(`{"error":"internal transport error"}`)
-	}
-	_ = writeSpoolFile(s.spool, id, ".rtmp", ".resp", out)
+	_ = writeSpoolFile(s.spool, id, ".rtmp", ".resp", encodeResponse(resp))
 }
 
 // readSpoolFile reads one frame: a regular file, never through a symlink,

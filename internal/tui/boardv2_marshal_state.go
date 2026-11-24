@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/usage"
 	"github.com/Zen1th53/marshal/internal/worker"
 )
@@ -61,29 +62,31 @@ type v2Repo struct {
 
 // v2Probe is one off-paint reading.
 type v2Probe struct {
-	Lead        string
-	Installed   map[string]bool
-	Settings    marshal.Settings
-	HasSettings bool
-	Repo        v2Repo
-	PlatformOK  bool
-	Platform    string
-	PlatformWhy string
-	Browser     bool
-	BrowserWhy  string
-	TelemetryOn bool
-	Told        bool
-	Session     usage.Session
-	HasSession  bool
+	SettingsView settingscatalog.Snapshot
+	Lead         string
+	Installed    map[string]bool
+	Settings     marshal.Settings
+	HasSettings  bool
+	Repo         v2Repo
+	PlatformOK   bool
+	Platform     string
+	PlatformWhy  string
+	Browser      bool
+	BrowserWhy   string
+	TelemetryOn  bool
+	Told         bool
+	Session      usage.Session
+	HasSession   bool
 }
 
 // v2ProbeInput is what a probe reads besides the workspace's own state.
 type v2ProbeInput struct {
-	Root     string
-	Chat     v2Chat
-	Probing  bool // provider CLIs may be asked (a screen is up, not a test)
-	Workdir  string
-	Settings func(context.Context) (marshal.Settings, bool)
+	SettingsView func(context.Context) (settingscatalog.Snapshot, error)
+	Root         string
+	Chat         v2Chat
+	Probing      bool // provider CLIs may be asked (a screen is up, not a test)
+	Workdir      string
+	Settings     func(context.Context) (marshal.Settings, bool)
 }
 
 // v2ProbeParts are the probes; tests replace them so no git, store or
@@ -184,11 +187,17 @@ func (w *Workspace) v2ProbeInput(chat v2Chat) v2ProbeInput {
 	switch {
 	case rt != nil && rt.Marshal() != nil:
 		svc := rt.Marshal()
+		in.SettingsView = func(ctx context.Context) (settingscatalog.Snapshot, error) {
+			return readSettingsView(ctx, svc.Store, svc.ProjectID, in.Root)
+		}
 		in.Settings = func(ctx context.Context) (marshal.Settings, bool) {
 			rec, err := svc.Store.GetMarshalSettings(ctx, svc.ProjectID)
 			return rec.Value, err == nil
 		}
 	case st != nil && projectID != "":
+		in.SettingsView = func(ctx context.Context) (settingscatalog.Snapshot, error) {
+			return readSettingsView(ctx, st, projectID, in.Root)
+		}
 		in.Settings = func(ctx context.Context) (marshal.Settings, bool) {
 			rec, err := st.GetMarshalSettings(ctx, projectID)
 			return rec.Value, err == nil
@@ -201,6 +210,13 @@ func (w *Workspace) v2ProbeInput(chat v2Chat) v2ProbeInput {
 func (w *Workspace) refreshV2Marshal(ctx context.Context, in v2ProbeInput) {
 	parts := v2ProbeParts
 	var p v2Probe
+	if in.SettingsView != nil {
+		var err error
+		p.SettingsView, err = in.SettingsView(ctx)
+		if err != nil {
+			p.SettingsView = settingscatalog.Snapshot{Rows: []settingscatalog.Row{{Key: "settings", Effective: "unavailable", Help: err.Error()}}, Changes: []settingscatalog.Change{}}
+		}
+	}
 	p.Lead = parts.lead(in.Root)
 	p.Installed = map[string]bool{}
 	for _, name := range v2ProviderOrder {

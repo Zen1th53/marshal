@@ -133,11 +133,17 @@ func (s *Store) SetMarshalRun(ctx context.Context, projectID, runID string, run 
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return 0, fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
 	}
+	if err := run.ValidateReviewPolicy(); err != nil {
+		return 0, fmt.Errorf("%w: %w", model.ErrInvalid, err)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
+	if err := checkMarshalSlots(run); err != nil {
+		return 0, err
+	}
 	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
 		return 0, err
 	}
@@ -150,7 +156,14 @@ func (s *Store) SetMarshalRun(ctx context.Context, projectID, runID string, run 
 
 // GetMarshalRun loads the durable state needed to resume a run.
 func (s *Store) GetMarshalRun(ctx context.Context, projectID, runID string) (MarshalRecord[marshal.Run], error) {
-	return marshalRead[marshal.Run](ctx, s, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID})
+	out, err := marshalRead[marshal.Run](ctx, s, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID})
+	if err != nil {
+		return out, err
+	}
+	if err := out.Value.ValidateReviewPolicy(); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 // LatestMarshalRun returns the newest non-closed run for a project, falling
@@ -173,6 +186,9 @@ func (s *Store) LatestMarshalRun(ctx context.Context, projectID string) (string,
 			return "", MarshalRecord[marshal.Run]{}, fmt.Errorf("decode marshal run: %w", err)
 		}
 		if record.Value.State != marshal.Closed {
+			if err := record.Value.ValidateReviewPolicy(); err != nil {
+				return runID, record, err
+			}
 			return runID, record, nil
 		}
 		if closedID == "" {
@@ -184,6 +200,9 @@ func (s *Store) LatestMarshalRun(ctx context.Context, projectID string) (string,
 	}
 	if closedID == "" {
 		return "", MarshalRecord[marshal.Run]{}, fmt.Errorf("%w: marshal_runs", model.ErrNotFound)
+	}
+	if err := closed.Value.ValidateReviewPolicy(); err != nil {
+		return closedID, closed, err
 	}
 	return closedID, closed, nil
 }
@@ -236,18 +255,18 @@ func (s *Store) GetMarshalSettings(ctx context.Context, projectID string) (Marsh
 	if errors.Is(err, model.ErrNotFound) {
 		return MarshalRecord[marshal.Settings]{Value: marshal.DefaultSettings()}, nil
 	}
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	if err := out.Value.ReviewPolicy.Validate(); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 // SetMarshalSettings validates and updates project settings by revision.
 func (s *Store) SetMarshalSettings(ctx context.Context, projectID string, settings marshal.Settings, expected int64) (int64, error) {
-	if projectID == "" {
-		return 0, fmt.Errorf("%w: missing project", model.ErrInvalid)
-	}
-	if err := settings.Validate(); err != nil {
-		return 0, fmt.Errorf("%w: %v", model.ErrInvalid, err)
-	}
-	return marshalWrite(ctx, s, "marshal_settings", []string{"project_id"}, []any{projectID}, settings, expected)
+	return s.SetMarshalSettingsAs(ctx, projectID, settings, expected, "system")
 }
 
 // MarshalLastAttempt keeps replacement revisions from overwriting archived evidence.
@@ -257,8 +276,19 @@ func (s *Store) MarshalLastAttempt(ctx context.Context, runID, taskID string) (i
 	return attempt, err
 }
 
+// checkMarshalSlots refuses worker slot accounting that releases capacity or
+// stages a result without a proved exit.
+func checkMarshalSlots(run marshal.Run) error {
+	if err := run.ValidateSlots(); err != nil {
+		return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+	}
+	return nil
+}
+
+// MarshalUnfinishedRuns lists runs with a lifecycle operation, a pending
+// command, an active worker slot, or an unacknowledged worker release.
 func (s *Store) MarshalUnfinishedRuns(ctx context.Context, projectID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND json_extract(r.data_json,'$.Operation') IS NOT NULL ORDER BY r.rowid`, projectID)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND (json_extract(r.data_json,'$.Operation') IS NOT NULL OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Commands') command WHERE json_extract(command.value,'$.State') IN ('queued','applying','reconciling')) OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Slots') slot WHERE json_extract(slot.value,'$.State') IN ('reserved','running','held','staged') OR (json_extract(slot.value,'$.State')='released' AND COALESCE(json_extract(slot.value,'$.Acked'),0)=0))) ORDER BY r.rowid`, projectID)
 	if err != nil {
 		return nil, err
 	}

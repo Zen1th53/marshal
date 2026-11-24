@@ -151,7 +151,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		}
 		if p05.State == execution.RunReady {
 			if err := service.SetPreserveBranch(ctx, p05.RunID, executionBase); err != nil {
-				return nil, err
+				return nil, process05PauseConflict(ctx, service, p05.RunID, err)
 			}
 		} else if p05.Delivery != execution.DeliveryPreserveBranch || p05.BaseCommit != executionBase {
 			return nil, errors.New("process 05: resumed run has a different branch binding")
@@ -161,6 +161,8 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if errors.Is(err, execution.ErrInvalidStateTransition) && strings.Contains(err.Error(), "already executing") {
 			// A provider-native approval resumes its bound turn in the background.
 			// The Marshal resume command waits for that same task's durable result.
+			// No worker process starts here, so a supervised launch is unheld.
+			driver.LaunchWithoutHold(ctx)
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
 			for {
@@ -173,6 +175,16 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				case <-ticker.C:
+				}
+			}
+		}
+		if errors.Is(err, execution.ErrRunConflict) {
+			// The person's pause can win the lane's write while the lane is
+			// still starting. Nothing ran, so the task waits as paused instead
+			// of counting as a failed attempt.
+			if observed, getErr := service.GetRun(ctx, p05.RunID); getErr == nil && observed.State == execution.RunPaused {
+				if task := observed.Tasks[req.Task.PlanTaskID]; task.NativeTurn == nil && task.State != execution.TaskRunning && task.State != execution.TaskCompletedPendingVerify && !task.State.IsTerminal() {
+					return nil, ErrProcess05Paused
 				}
 			}
 		}
@@ -197,6 +209,11 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			}
 		}
 		if completed.State == execution.RunNeedsApproval && result.ApprovalID != "" {
+			if approval, getErr := service.Engine().ApprovalManager().GetApproval(result.ApprovalID); getErr == nil && approval != nil {
+				if err := r.RecordApprovalOpened(ctx, req.RunID, *approval); err != nil {
+					return nil, err
+				}
+			}
 			return nil, process05ApprovalRequired(completed.RunID, req.Task.PlanTaskID, result.ApprovalID)
 		}
 		if (completed.State != execution.RunDonePendingVerification && completed.State != execution.RunPaused) || result.State != execution.TaskCompletedPendingVerify || result.ResultCommit == "" || result.WorktreePath == "" {
@@ -286,6 +303,19 @@ func (r *Runtime) process05Runs(ctx context.Context, run marshal.Run) ([]executi
 	return parts, nil
 }
 
+// A pause can win the state write between branch binding and task start.
+// Keep that admitted attempt parked rather than counting it as a worker crash.
+func process05PauseConflict(ctx context.Context, service *ExecutionService, runID string, cause error) error {
+	if !errors.Is(cause, execution.ErrRunConflict) || !strings.Contains(cause.Error(), "version mismatch") {
+		return cause
+	}
+	current, err := service.GetRun(ctx, runID)
+	if err == nil && current.State == execution.RunPaused {
+		return ErrProcess05Paused
+	}
+	return cause
+}
+
 // process05Paused reports whether the person left part of the run's
 // canonical execution paused.
 func (r *Runtime) process05Paused(ctx context.Context, run marshal.Run) bool {
@@ -299,6 +329,14 @@ func (r *Runtime) process05Paused(ctx context.Context, run marshal.Run) bool {
 		}
 	}
 	return false
+}
+
+// process05RootRunning reports whether the root of the run's canonical
+// execution exists and is not paused. A task lane left paused under such a
+// root is continued by the Marshal's own dispatch.
+func (r *Runtime) process05RootRunning(ctx context.Context, run marshal.Run) bool {
+	parts, err := r.process05Runs(ctx, run)
+	return err == nil && len(parts) > 0 && parts[0].State != execution.RunPaused
 }
 
 // resumePausedProcess05 resumes the root of the run's canonical execution

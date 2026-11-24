@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	providerspec "github.com/Zen1th53/marshal/internal/adapter/provider"
-	"path/filepath"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -21,59 +20,7 @@ func normalizeProvider(p string) string {
 }
 
 func extremeProviderLimits(s marshal.Settings) (map[string]int, int) {
-	limits := map[string]int{
-		"codex":    4,
-		"claude":   2,
-		"agy":      4,
-		"opencode": 4,
-	}
-	globalCap := 12
-	if s.GlobalCap > 0 {
-		globalCap = s.GlobalCap
-	}
-	if s.ProviderLimits.Codex > 0 {
-		limits["codex"] = s.ProviderLimits.Codex
-	}
-	if s.ProviderLimits.Claude > 0 {
-		limits["claude"] = s.ProviderLimits.Claude
-	}
-	if s.ProviderLimits.Agy > 0 {
-		limits["agy"] = s.ProviderLimits.Agy
-	}
-	if s.ProviderLimits.OpenCode > 0 {
-		limits["opencode"] = s.ProviderLimits.OpenCode
-	}
-	return limits, globalCap
-}
-
-// Missing, root, escaping and wildcard scopes cannot establish independence.
-// Treat them as repository-wide until concrete file scopes are available.
-func broadFileScope(path string) bool {
-	path = strings.TrimSpace(path)
-	clean := filepath.Clean(path)
-	return path == "" || clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") || strings.ContainsAny(path, "*?[")
-}
-
-func pathsOverlap(a, b string) bool {
-	if broadFileScope(a) || broadFileScope(b) {
-		return true
-	}
-	a, b = filepath.Clean(strings.TrimSpace(a)), filepath.Clean(strings.TrimSpace(b))
-	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
-}
-
-func taskFilesOverlap(files1, files2 []string) bool {
-	if len(files1) == 0 || len(files2) == 0 {
-		return true
-	}
-	for _, f1 := range files1 {
-		for _, f2 := range files2 {
-			if pathsOverlap(f1, f2) {
-				return true
-			}
-		}
-	}
-	return false
+	return marshal.EffectiveWorkerLimits(s)
 }
 
 // holdsWorkerSlot reports whether another task occupies a worker slot. A
@@ -85,13 +32,211 @@ func holdsWorkerSlot(other, candidate marshal.Task) bool {
 	if other.PlanTaskID == candidate.PlanTaskID {
 		return false
 	}
-	return other.State == marshal.Dispatched || (other.State == marshal.Queued && other.Process05WaitApprovalID != "")
+	return other.State == marshal.Dispatched || other.StaleProcessExitUnverified || (other.State == marshal.Queued && other.Process05WaitApprovalID != "")
+}
+
+func activeDispatchTasks(run marshal.Run, candidate marshal.Task, launched []MarshalDispatch) []marshal.Task {
+	seen := make(map[string]bool, len(launched)+1)
+	seen[candidate.PlanTaskID] = true
+	var active []marshal.Task
+	for _, other := range run.Tasks {
+		if (other.State != marshal.Dispatched && !other.StaleProcessExitUnverified) || seen[other.PlanTaskID] {
+			continue
+		}
+		seen[other.PlanTaskID] = true
+		active = append(active, other)
+	}
+	for _, d := range launched {
+		if seen[d.TaskID] {
+			continue
+		}
+		seen[d.TaskID] = true
+		if idx := taskIndex(run, d.TaskID); idx >= 0 {
+			active = append(active, run.Tasks[idx])
+		} else {
+			active = append(active, marshal.Task{PlanTaskID: d.TaskID})
+		}
+	}
+	return active
+}
+
+func extremeProviderLimit(run marshal.Run, limits map[string]int, normWorker string) int {
+	limit, ok := limits[normWorker]
+	if !ok || limit <= 0 {
+		if run.Settings.UltraConcurrency > 0 {
+			limit = run.Settings.UltraConcurrency
+		} else {
+			limit = 4
+		}
+	}
+	return limit
+}
+
+// EvaluateDispatchAdmission evaluates whether candidate task t can launch
+// concurrently under gate, returning a typed serial blocker when it cannot.
+func EvaluateDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIdx int, launched ...MarshalDispatch) DispatchAdmission {
+	taskID := safeAdmissionTaskID(t.PlanTaskID)
+	if adm, blocked := unmergedDependencyAdmission(run, t); blocked {
+		return adm
+	}
+	if taskIdx < 0 {
+		taskIdx = taskIndex(run, t.PlanTaskID)
+	}
+
+	active := activeDispatchTasks(run, t, launched)
+	activeIDs := make([]string, 0, len(active))
+	for _, other := range active {
+		activeIDs = append(activeIDs, other.PlanTaskID)
+	}
+
+	// Only an immutable approved ULTRA plan uses isolated task lanes. Older and
+	// Standard Process05 runs retain their serial dispatch and merge ordering.
+	if run.Process05Bound && !run.Process05Parallel && t.Mode == marshal.Governed {
+		if len(active) > 0 {
+			return DispatchAdmission{
+				Allowed:         false,
+				Code:            AdmissionSerialPlan,
+				Reason:          "governed plan tasks dispatch one at a time",
+				TaskID:          taskID,
+				BlockingTaskIDs: safeAdmissionTaskIDs(activeIDs),
+			}
+		}
+		if taskIdx > 0 {
+			var earlier []string
+			for j := 0; j < taskIdx && j < len(run.Tasks); j++ {
+				if run.Tasks[j].State != marshal.Merged {
+					earlier = append(earlier, run.Tasks[j].PlanTaskID)
+				}
+			}
+			if len(earlier) > 0 {
+				return DispatchAdmission{
+					Allowed:         false,
+					Code:            AdmissionSerialPlan,
+					Reason:          "earlier governed task must be merged before dispatch",
+					TaskID:          taskID,
+					BlockingTaskIDs: safeAdmissionTaskIDs(earlier),
+				}
+			}
+		}
+	}
+
+	if marshal.TierPolicy(gate, run.Settings).Tier != marshal.Ultra {
+		if len(active) >= 1 {
+			return DispatchAdmission{
+				Allowed:         false,
+				Code:            AdmissionStandardTier,
+				Reason:          "dispatch concurrency reached (standard tier)",
+				TaskID:          taskID,
+				BlockingTaskIDs: safeAdmissionTaskIDs(activeIDs),
+			}
+		}
+		return DispatchAdmission{Allowed: true, TaskID: taskID}
+	}
+
+	limits, globalCap := extremeProviderLimits(run.Settings)
+	activeProvider := 0
+	normWorker := normalizeProvider(t.Worker)
+	var broadBlockers, overlapBlockers []string
+	for _, other := range active {
+		if normalizeProvider(other.Worker) == normWorker {
+			activeProvider++
+		}
+		switch taskScopeConflict(t.Files, other.Files) {
+		case AdmissionScopeBroad:
+			broadBlockers = append(broadBlockers, other.PlanTaskID)
+		case AdmissionScopeOverlap:
+			overlapBlockers = append(overlapBlockers, other.PlanTaskID)
+		}
+	}
+
+	if len(broadBlockers) > 0 {
+		blocking := safeAdmissionTaskIDs(broadBlockers)
+		reason := "broad file scope forces serial dispatch (use exact project-relative file paths for parallel dispatch)"
+		if len(blocking) > 0 {
+			reason = "broad file scope forces serial dispatch while " + strings.Join(blocking, ", ") + " active (use exact project-relative file paths for parallel dispatch)"
+		}
+		return DispatchAdmission{
+			Allowed:         false,
+			Code:            AdmissionScopeBroad,
+			Reason:          reason,
+			TaskID:          taskID,
+			BlockingTaskIDs: blocking,
+		}
+	}
+	if len(overlapBlockers) > 0 {
+		blocking := safeAdmissionTaskIDs(overlapBlockers)
+		reason := "conflicting file scope already active"
+		if len(blocking) > 0 {
+			reason += ": overlaps " + strings.Join(blocking, ", ")
+		}
+		return DispatchAdmission{
+			Allowed:         false,
+			Code:            AdmissionScopeOverlap,
+			Reason:          reason,
+			TaskID:          taskID,
+			BlockingTaskIDs: blocking,
+		}
+	}
+
+	if len(active) >= globalCap {
+		return DispatchAdmission{
+			Allowed:         false,
+			Reason:          "dispatch global cap reached",
+			TaskID:          taskID,
+			BlockingTaskIDs: safeAdmissionTaskIDs(activeIDs),
+		}
+	}
+
+	if activeProvider >= extremeProviderLimit(run, limits, normWorker) {
+		return DispatchAdmission{
+			Allowed:         false,
+			Reason:          fmt.Sprintf("provider %s dispatch limit reached", t.Worker),
+			TaskID:          taskID,
+			BlockingTaskIDs: safeAdmissionTaskIDs(activeIDs),
+		}
+	}
+
+	return DispatchAdmission{Allowed: true, TaskID: taskID}
 }
 
 func canLaunchCandidate(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, launched []MarshalDispatch) (bool, bool) {
+	if run.Process05Bound && !run.Process05Parallel && t.Mode == marshal.Governed {
+		if len(launched) > 0 {
+			return false, true
+		}
+		for _, other := range run.Tasks {
+			if holdsWorkerSlot(other, t) {
+				return false, true
+			}
+		}
+		if idx := taskIndex(run, t.PlanTaskID); idx > 0 {
+			for j := 0; j < idx; j++ {
+				if run.Tasks[j].State != marshal.Merged {
+					return false, true
+				}
+			}
+		}
+	}
+
+	// A refreshed run already contains launches from this round. Count only
+	// reservations that have not yet appeared in the persisted task states.
+	pending := make([]MarshalDispatch, 0, len(launched))
+	for _, d := range launched {
+		i := taskIndex(run, d.TaskID)
+		if i < 0 || !holdsWorkerSlot(run.Tasks[i], t) {
+			pending = append(pending, d)
+		}
+	}
+	launched = pending
 	if marshal.TierPolicy(gate, run.Settings).Tier != marshal.Ultra {
 		policy := marshal.TierPolicy(gate, run.Settings)
-		if len(launched) >= policy.Concurrency {
+		active := len(launched)
+		for _, other := range run.Tasks {
+			if holdsWorkerSlot(other, t) {
+				active++
+			}
+		}
+		if active >= policy.Concurrency {
 			return false, true
 		}
 		return true, false
@@ -125,32 +270,13 @@ func canLaunchCandidate(gate marshal.CapabilityGate, run marshal.Run, t marshal.
 		}
 	}
 
-	limit, ok := limits[normWorker]
-	if !ok || limit <= 0 {
-		if run.Settings.UltraConcurrency > 0 {
-			limit = run.Settings.UltraConcurrency
-		} else {
-			limit = 4
-		}
-	}
-	if activeProvider >= limit {
+	if activeProvider >= extremeProviderLimit(run, limits, normWorker) {
 		return false, false
 	}
 
-	for _, other := range run.Tasks {
-		if other.State == marshal.Dispatched {
-			if taskFilesOverlap(t.Files, other.Files) {
-				return false, false
-			}
-		}
-	}
-	for _, d := range launched {
-		idx := taskIndex(run, d.TaskID)
-		if idx >= 0 {
-			if taskFilesOverlap(t.Files, run.Tasks[idx].Files) {
-				return false, false
-			}
-		}
+	adm := EvaluateDispatchAdmission(gate, run, t, taskIndex(run, t.PlanTaskID), launched...)
+	if !adm.Allowed {
+		return false, false
 	}
 
 	return true, false
@@ -160,68 +286,11 @@ func shouldStopAfterLaunch(run marshal.Run, t marshal.Task) bool {
 	return run.Process05Bound && t.Mode == marshal.Governed && !run.Process05Parallel
 }
 
-func checkDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIndex int) error {
-	// Only an immutable approved ULTRA plan uses isolated task lanes. Older and
-	// Standard Process05 runs retain their serial dispatch and merge ordering.
-	if serialProcess05Base(gate, run) && t.Mode == marshal.Governed {
-		for _, other := range run.Tasks {
-			if other.State == marshal.Dispatched {
-				return errors.New("governed plan tasks dispatch one at a time")
-			}
-		}
-		for j := 0; j < taskIndex; j++ {
-			if run.Tasks[j].State != marshal.Merged {
-				return errors.New("earlier governed task must be merged before dispatch")
-			}
-		}
+func checkDispatchAdmission(gate marshal.CapabilityGate, run marshal.Run, t marshal.Task, taskIdx int) error {
+	adm := EvaluateDispatchAdmission(gate, run, t, taskIdx)
+	if !adm.Allowed {
+		return &DispatchAdmissionError{Admission: adm}
 	}
-
-	if marshal.TierPolicy(gate, run.Settings).Tier != marshal.Ultra {
-		active := 0
-		for _, other := range run.Tasks {
-			if other.State == marshal.Dispatched {
-				active++
-			}
-		}
-		if active >= 1 {
-			return errors.New("dispatch concurrency reached")
-		}
-		return nil
-	}
-
-	limits, globalCap := extremeProviderLimits(run.Settings)
-	activeTotal := 0
-	activeProvider := 0
-	normWorker := normalizeProvider(t.Worker)
-
-	for _, other := range run.Tasks {
-		if other.State == marshal.Dispatched {
-			activeTotal++
-			if normalizeProvider(other.Worker) == normWorker {
-				activeProvider++
-			}
-			if taskFilesOverlap(t.Files, other.Files) {
-				return errors.New("conflicting file scope already active")
-			}
-		}
-	}
-
-	if activeTotal >= globalCap {
-		return errors.New("dispatch global cap reached")
-	}
-
-	limit, ok := limits[normWorker]
-	if !ok || limit <= 0 {
-		if run.Settings.UltraConcurrency > 0 {
-			limit = run.Settings.UltraConcurrency
-		} else {
-			limit = 4
-		}
-	}
-	if activeProvider >= limit {
-		return fmt.Errorf("provider %s dispatch limit reached", t.Worker)
-	}
-
 	return nil
 }
 
@@ -269,8 +338,15 @@ func pauseReturnedProcess05Task(run *marshal.Run, task marshal.Task) {
 			Resolutions: []string{reworkLimitResolution(task.PlanTaskID)}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
 		return
 	}
+	// The bound lane cannot rerun under its spent authority. The retained
+	// result stays pinned and is named beside the approved and attempt bases,
+	// so a scoped new plan can replay it before fresh checks and review.
+	detail := ""
+	if task.ResultCommit != "" {
+		detail = "retained result " + task.ResultCommit + " on attempt base " + task.BaseCommit + " (approved base " + run.BaseCommit + ")"
+	}
 	pauseMarshal(run, marshal.Pause{Reason: "returned governed task " + task.PlanTaskID + " requires a new approved Process 04 plan",
-		Resolutions: []string{"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
+		Resolutions: []string{"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID, Detail: detail})
 }
 
 // reworkLimitResolution is the working way on from a rework-limit stop: the
@@ -341,3 +417,10 @@ func retireWorkerReturns(t *marshal.Task, worker string) {
 // governedProviderSwitchAllowed reports whether the operator may switch a
 // governed Process 05 task to another provider within its plan version.
 const governedProviderSwitchAllowed = true
+
+// mergeInPlanOrder keeps serial governed runs merging in plan order. Other
+// runs merge each accepted task once its dependencies are merged, so an
+// independent task never waits behind unrelated slow work.
+func mergeInPlanOrder(run marshal.Run) bool {
+	return run.Process05Bound && !run.Process05Parallel
+}

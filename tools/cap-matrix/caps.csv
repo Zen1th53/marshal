@@ -1,0 +1,22 @@
+producer,cap_bytes,status,owner,fixtures,recovery
+required project context packet,114688,covered,,internal/projectcontext:TestRequiredPacketLimitAtCap,mandatory context stays whole; the refusal names the packet and asks for an approved scope split
+Marshal model request envelope,114688,covered,,internal/app:TestProviderEnvelopeLimitAtCap,typed limit after measuring the encoded request; otherwise a stage pause naming the split
+Marshal review and worker brief,114688,covered,,internal/app:TestMarshalReviewBudgetCompactsOptionalSections;internal/app:TestWorkerBriefCompactsOptionalSections,keep the newest return and mandatory instructions; older reasons compact to a bound artifact pointer
+Marshal knowledge reserve,16384,covered,,internal/app:TestMarshalKnowledgeReserveAtCap,optional knowledge moves to scoped recall; mandatory context stays inline
+verifier proof summary,40960,covered,,internal/app:TestIrreducibleVerifierContextSuggestsSplit,output is referenced by checked proof files; an irreducible summary pauses for a plan split without a same-input retry
+amendment packet,12288,covered,,internal/app:TestAmendmentPacketLimitAtCap,optional summary dropped; otherwise the amendment is refused with the field named and the plan kept
+driver output,65536,covered,,internal/marshal/driver:TestOutputLimitAtCap,bounded output with the dropped byte count stated
+driver worker stream,8388608,covered,,internal/marshal/driver:TestBoundedStreamPreservesTerminalReceipt,bounded head plus the separately kept final record; an overlong or malformed final record is a typed incomplete hand-in
+driver git diff,16777216,covered,,internal/marshal/driver:TestGitOutputLimitAtCap;internal/marshal/driver:TestOversizedDiffHandInKeepsPointer;internal/app:TestOversizedDiffKeepsFullScopeValidation,verified base and result pointer with per-file reads; scope still covers every changed path
+plan pack file,65536,covered,,internal/app:TestPackFileLimitAtCap,the pack is refused whole with the file and sizes named and a split suggested
+Marshal tool limit errors,0,covered,,internal/mcp:TestToolErrorPreservesLimitAndChangedDetails,old codes kept with the structured limit and changed-read detail in the error data
+live ordinary proposal,4096,covered,,internal/tui:TestProposalInner;internal/mcp:TestProposalInnerLimitReachesTool,typed refusal and persisted notice with a compact or split action
+live contract proposal,65536,covered,,internal/tui:TestContractInner;internal/mcp:TestProposalInnerLimitReachesTool,typed refusal and persisted notice with a compact or split action
+live proposal frame,16384,covered,,internal/mcp:TestProposalFrameSocket;internal/mcp:TestProposalFrameSpool;internal/proposalmcp:TestLiveProposalFrameLimitAtCap;internal/proposalmcp:TestFrameReadersAgreeAtCap;internal/tui:TestProposalFrameNoticeRecordedOnce,typed refusal and persisted notice with a compact or split action
+native planning context,98304,covered,,internal/tui:TestNativePlanningLimitAtCap,page optional material; mandatory context kept; otherwise a field-specific split
+decision questions,16384,covered,,internal/tui:TestProcess05QuestionsLimitAtCap,fewer questions in order with the same IDs; only a single question over the bound is refused
+native live inbox,65536,covered,,internal/tui:TestInboxViewLimitAtCap,durable entries with a bounded tail and cursor; unanswered items listed first and note counts toward the bound
+Board diff,4194304,covered,,internal/tui:TestBoardDiffLimitAtCap,scoped file pages or an authorized commit view
+Marshal events knowledge and recall reads,65536,covered,,internal/mcp:TestEventsPageLimitAtCap;internal/mcp:TestKnowledgePageLimitAtCap;internal/mcp:TestRecallPageLimitAtCap,revision-bound cursor and remaining count or a named error with a detail path
+code evidence reads,8192,covered,,internal/mcp:TestCodeContextBudgetAtCap;internal/mcp:TestCodeExpandBudgetAtCap;internal/mcp:TestCodeValidateTextAtCap,receipt-bound paging keeping evidence identity
+design record and contract reads,1048576,covered,,internal/mcp:TestDesignRecordLimitAtCap;internal/mcp:TestContractWireLimitAtCap,design refused whole with a smaller-artifact action; contract reads page at the same revision

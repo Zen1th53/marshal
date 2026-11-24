@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -19,37 +18,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
 )
-
-// marshalKnowledgeViaRecall: a Marshal turn whose observed project knowledge
-// would push it past the required-context envelope reads that knowledge
-// through MCP recall instead of being refused.
-const marshalKnowledgeViaRecall = true
-
-// marshalKnowledgePacketReserve is left for the mandatory packet when deciding
-// whether observed knowledge still fits inline.
-const marshalKnowledgePacketReserve = 16 << 10
-
-// marshalKnowledgeFits reports whether a prompt carrying the observed
-// knowledge, escaped as the envelope check measures it, leaves room for the
-// mandatory packet.
-func (m *MarshalCLI) marshalKnowledgeFits(prompt, schema string) bool {
-	wire, err := json.Marshal(struct{ Provider, Prompt, Schema string }{m.Provider, marshalStructuredResultPrompt(m.Provider, prompt, schema), schema})
-	return err == nil && len(wire)+marshalKnowledgePacketReserve <= requiredProviderEnvelopeBytes
-}
-
-// Account for the schema and JSON string escaping as well as the complete
-// mandatory prompt. This bounds our model input envelope; it does not claim
-// knowledge of a provider's hidden system prompt or exact token billing.
-func (m *MarshalCLI) validateRequiredMarshalModelEnvelope(prompt, schema string) error {
-	wire, err := json.Marshal(struct{ Provider, Prompt, Schema string }{m.Provider, prompt, schema})
-	if err != nil {
-		return err
-	}
-	if len(wire) > requiredProviderEnvelopeBytes {
-		return projectcontext.ErrBudget
-	}
-	return nil
-}
 
 // Trusted wiring installs runtime, never caller JSON. Standalone private CLI
 // turns cannot bypass the accepted context boundary. These model turns retain

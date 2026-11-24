@@ -42,6 +42,9 @@ type v2CardState struct {
 	refusedSeen map[string]time.Time
 	// planArmed is the plan decision whose Enter waits for a second Enter.
 	planArmed string
+	// planViewed is the plan digest the owner opened from the Web Board;
+	// a Web approval binds it (webboard_decisions.go).
+	planViewed string
 	// shown is the v2 screen the last Board paint drew; "" when the
 	// classic Board or a view drew it (boardv2_paint.go).
 	shown vm.Screen

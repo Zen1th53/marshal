@@ -60,6 +60,17 @@ type Worker struct {
 	// began and Beat its last sign of life.
 	Heartbeat     bool
 	Started, Beat time.Time
+	// Liveness is what the runtime can verify of a heartbeat worker:
+	// Process live, exited or unverifiable; Turn working, at_rest, gone or
+	// unknown; ModelWaitSince when it waits on its model, zero otherwise.
+	// Note explains a worker that cannot be verified or waits long.
+	Liveness WorkerLiveness
+}
+
+// WorkerLiveness is a heartbeat worker's verified liveness.
+type WorkerLiveness struct {
+	Process, Turn, LastAction, Note string
+	ModelWaitSince                  time.Time
 }
 
 // Board is the read model. Fields that come from the snapshot change only
@@ -271,6 +282,8 @@ type Lane struct {
 	// Beat is the last one.
 	Heartbeat bool
 	Beat      time.Time
+	// Liveness is the heartbeat worker's, zero for a window.
+	Liveness WorkerLiveness
 }
 
 // newLane is NewLane judged at now. A heartbeat worker's own beats say what
@@ -279,7 +292,7 @@ type Lane struct {
 func newLane(w Worker, tasks []TaskRow, now time.Time) Lane {
 	l := Lane{Worker: w.ID, Provider: w.Provider, TaskID: w.TaskID, Pane: w.Pane, Last: w.Last, Status: w.Status, State: LaneIdle}
 	if w.Heartbeat {
-		l.Heartbeat, l.Beat, l.Started, l.State = true, w.Beat, w.Started, LaneWorking
+		l.Heartbeat, l.Beat, l.Started, l.State, l.Liveness = true, w.Beat, w.Started, LaneWorking, w.Liveness
 		if !now.IsZero() && now.Sub(w.Beat) > WorkerBeatGrace {
 			l.State = LaneLost
 		}

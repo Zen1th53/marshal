@@ -38,7 +38,7 @@ func TestGovernedTmuxInvokesCanonicalRunner(t *testing.T) {
 	w.tmuxMu.Lock()
 	state := w.tmuxAlerts[":governed"]
 	w.tmuxMu.Unlock()
-	if state != "worker done: done" {
+	if state != "worker exited: exited" {
 		t.Fatalf("cancel returned before notification delivery: %q", state)
 	}
 }

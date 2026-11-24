@@ -46,6 +46,9 @@ func TestLiveToolsHTTPUseExplicitCapabilitiesAndRawDispatch(t *testing.T) {
 		for _, supplied := range []auth.Capability{cap, auth.CapStatusRead} {
 			called, got = "", ""
 			raw := `{"submission_id":"exact", "proposal":{"action":"resume"}}`
+			if tool.Name == "marshal_project_contract_submit" {
+				raw = `{"submission_id":"exact", "proposal":{"action":"project-contract","expected_version":0,"contract":{"format_version":1,"id":"c","revision":1,"purpose":"p","components":[{"id":"a","responsibility":"r","paths":["a"]}],"invariants":["i"],"reviewed_inventory_digest":"d"}}}`
+			}
 			body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, tool.Name, raw)
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))

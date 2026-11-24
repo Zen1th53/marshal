@@ -126,7 +126,10 @@ func TestExtremeInvalidCollectionRetriesBeforeReview(t *testing.T) {
 		return nil, os.WriteFile(filepath.Join(req.Worktree, req.Task.PlanTaskID+".txt"), []byte("done\n"), 0600)
 	}}
 	s.CrossReview = func(_ context.Context, task marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
-		reviews.Add(1)
+		// A restaged merge candidate is reviewed afresh; count hand-ins.
+		if !isMarshalMergeCommit(s.Repository, h.ResultCommit) {
+			reviews.Add(1)
+		}
 		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f " + task.PlanTaskID + ".txt"}}, "test", nil
 	}
 	if _, err := s.StartPlanning(ctx, "invalid-collection", "write files", marshal.Budget{}); err != nil {

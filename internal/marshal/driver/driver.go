@@ -17,10 +17,12 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
@@ -78,7 +80,13 @@ type Handle struct {
 	observed        marshal.CommandRecord
 	reported        []marshal.CommandRecord
 	runtimeObserved []marshal.CommandRecord
+	limits          []model.Limit
 	runErr          error
+	// receipt is set when a supervised launch recorded this worker.
+	receipt *LaunchReceipt
+	// unheld is set when a supervised launch's worker never reached a
+	// startup barrier, so it ran without a launch key or slot.
+	unheld bool
 }
 
 func (h *Handle) Worktree() string { return h.req.Worktree }
@@ -181,11 +189,30 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 		return marshal.HandIn{}, err
 	}
 	tree = strings.TrimSpace(tree)
+	var limits []model.Limit
 	diff, err := git(ctx, wt, "diff", "--no-ext-diff", "--no-textconv", req.Task.BaseCommit, result)
+	if limit, ok := model.LimitOf(err); ok && errors.Is(err, ErrHandInTooLarge) {
+		// A change too large to carry inline is handed in by reference: the
+		// verified base and result commits stay the evidence, the changed
+		// paths are enumerated separately below and scope is still checked
+		// against every one of them. The diff is never cut short.
+		diff, err = "", nil
+		limit.Kind = "git_diff"
+		limit.Subject = "diff of the hand-in"
+		limit.EvidenceRef = "result:" + result
+		limit.Action = "Read the change one file at a time: git diff " + req.Task.BaseCommit + " " + result + " -- <path>, for each path the hand-in lists."
+		limits = append(limits, limit)
+	}
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
 	names, err := git(ctx, wt, "diff", "--no-ext-diff", "--no-textconv", "--name-only", req.Task.BaseCommit, result)
+	if limit, ok := model.LimitOf(err); ok {
+		limit.Kind = "git_paths"
+		limit.Subject = "list of changed paths"
+		limit.Action = "Split the task so each part changes fewer files, then approve the amended plan."
+		err = model.NewLimitError(err, limit)
+	}
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
@@ -217,6 +244,7 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 		RuntimeObserved: observed,
 		WorkerReported:  reported,
 		CheckResults:    checks,
+		Limits:          limits,
 	}, nil
 }
 
@@ -352,12 +380,14 @@ func (b *capBuffer) Write(p []byte) (int, error) {
 // Bytes returns what was kept.
 func (b *capBuffer) Bytes() []byte { return b.buf.Bytes() }
 
-// String returns what was kept and states how much was dropped.
+// String returns what was kept without splitting a UTF-8 rune, and states how
+// many bytes were dropped and how to inspect the full output.
 func (b *capBuffer) String() string {
 	if b.dropped == 0 {
 		return b.buf.String()
 	}
-	return b.buf.String() + fmt.Sprintf("\n[truncated: %d bytes dropped]", b.dropped)
+	kept, extra := trimIncompleteTrailingUTF8(b.buf.Bytes())
+	return string(kept) + fmt.Sprintf("\n[truncated: %d bytes dropped; inspect the worker log or rerun the command for full output]", b.dropped+extra)
 }
 
 // git runs git in dir. Its output is bounded while it is produced; output
@@ -376,7 +406,8 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	if stdout.dropped > 0 {
-		return "", fmt.Errorf("%w: git %s produced more than %d bytes", ErrHandInTooLarge, strings.Join(args, " "), maxGitOutput)
+		err := fmt.Errorf("%w: git %s produced more than %d bytes", ErrHandInTooLarge, strings.Join(args, " "), maxGitOutput)
+		return "", model.NewLimitError(err, model.Limit{Kind: "git_output", Subject: "git " + args[0], ActualBytes: int64(stdout.buf.Len()) + stdout.dropped, CapBytes: maxGitOutput})
 	}
 	return stdout.buf.String(), nil
 }
@@ -391,12 +422,49 @@ func lines(s string) []string {
 	return out
 }
 
-// bound keeps the head of an output and says how much was dropped.
+// bound keeps a UTF-8-safe head of an output and states how much was kept and
+// dropped, plus how to obtain the complete output.
 func bound(s string) string {
 	if len(s) <= maxOutput {
 		return s
 	}
-	return s[:maxOutput] + fmt.Sprintf("\n[truncated: %d of %d bytes kept]", maxOutput, len(s))
+	kept := trimValidUTF8Prefix(s, maxOutput)
+	dropped := len(s) - len(kept)
+	return kept + fmt.Sprintf("\n[truncated: %d of %d bytes kept, %d bytes dropped; inspect the worker log or rerun the command for full output]", len(kept), len(s), dropped)
+}
+
+func trimValidUTF8Prefix(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	if maxBytes <= 0 {
+		return ""
+	}
+	end := maxBytes
+	for back := 0; back < utf8.UTFMax && end > 0 && !utf8.RuneStart(s[end]); back++ {
+		end--
+	}
+	if end < maxBytes {
+		r, size := utf8.DecodeRuneInString(s[end:])
+		if r != utf8.RuneError && end+size > maxBytes {
+			return s[:end]
+		}
+	}
+	return s[:maxBytes]
+}
+
+func trimIncompleteTrailingUTF8(b []byte) ([]byte, int64) {
+	end := len(b)
+	for back := 1; back < utf8.UTFMax && back <= end; back++ {
+		start := end - back
+		if utf8.RuneStart(b[start]) {
+			if !utf8.FullRune(b[start:end]) {
+				return b[:start], int64(back)
+			}
+			break
+		}
+	}
+	return b, 0
 }
 
 // GovernedRunner runs one task through Process 05 in preserve-branch mode and
@@ -411,6 +479,10 @@ type Governed struct {
 	Run          GovernedRunner
 	Provider     string
 	CheckTimeout time.Duration
+	// Held lets a supervised launch hold the run's provider worker process
+	// at its startup barrier until the launch receipt records it. It takes
+	// effect only where this platform and edition have such a barrier.
+	Held bool
 }
 
 func (Governed) Mode() marshal.WorkerMode { return marshal.Governed }

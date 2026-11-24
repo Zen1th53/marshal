@@ -21,6 +21,7 @@ func (w *Workspace) collectV2Cards(b *vm.Board) {
 	}
 	if d, ok := w.v2DecisionNow(now); ok && !(b.NowLine.ChatAsked && d.kind == decisionArchitecture) {
 		card := d.card
+		card.Revision, card.Choices = w.decisionRevision(d), decisionChoices(d)
 		b.Decision = &card
 	}
 	if z, ok := w.v2PauseNow(now); ok {

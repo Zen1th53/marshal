@@ -98,6 +98,9 @@ func (r *Runtime) PrepareNativeMarshalDraft(ctx context.Context, sessionID strin
 		decision.SelectedModel = built.Routes[decision.Task].Model
 		built.RevisionReason += decision.String() + "\n"
 	}
+	if warnings := DraftFileScopeWarnings(draft.Tasks); len(warnings) > 0 {
+		built.MarshalWarnings = append(built.MarshalWarnings, warnings...)
+	}
 	draft.Plan = built
 	return draft, nil
 }
