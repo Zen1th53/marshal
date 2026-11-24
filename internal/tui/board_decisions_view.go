@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strings"
@@ -27,14 +29,16 @@ const (
 )
 
 // pausedRevision is the identity of paused card z a key is bound to: its
-// cause, the tasks it names and its reset, not the text that fills in later.
+// cause, the tasks it names, what Enter does (wait or move, where, the
+// commands) and its reset, not the text that fills in later.
 func pausedRevision(z v2Pause) string {
 	var ids []string
 	for _, t := range z.tasks {
 		ids = append(ids, t.PlanTaskID)
 	}
 	slices.Sort(ids)
-	return "paused:" + z.cause + ":" + strings.Join(ids, ",")
+	act := sha256.Sum256([]byte(fmt.Sprintf("%t|%s|%d|%s", z.wait, z.target, z.until.Unix(), strings.Join(z.enter.commands, ";"))))
+	return "paused:" + z.cause + ":" + strings.Join(ids, ",") + "#" + hex.EncodeToString(act[:4])
 }
 
 // decisionFocusReady reports whether a card waits that o can focus.
@@ -92,6 +96,9 @@ func (w *Workspace) closeDecisionFocus() {
 	w.v2CardState().mu.Lock()
 	w.v2CardState().planArmed = ""
 	w.v2CardState().mu.Unlock()
+	// Keys armed on a card die with the focus.
+	w.guardDisarm()
+	w.setReqEditing(false)
 	w.requestRepaint()
 }
 
@@ -148,6 +155,8 @@ func (w *Workspace) handleDecisionFocusKey(event KeyEvent) bool {
 			return true
 		case event.Type == KeyTab:
 			if _, ok := w.v2PauseNow(now); ok {
+				w.guardDisarm()
+				w.setReqEditing(false)
 				w.openDecisionFocus(focusPaused)
 			}
 			return true
@@ -174,6 +183,8 @@ func (w *Workspace) handleDecisionFocusKey(event KeyEvent) bool {
 		return true
 	case event.Type == KeyTab:
 		if _, ok := w.v2DecisionNow(now); ok {
+			w.guardDisarm()
+			w.setReqEditing(false)
 			w.openDecisionFocus(focusDecision)
 		}
 		return true

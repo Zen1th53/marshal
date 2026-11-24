@@ -72,18 +72,18 @@ func (w *Workspace) webComposerBinding(op string, run marshal.Run, revision int6
 		if run.PlanID == "" || len(run.Tasks) == 0 || !w.webChatReachable() {
 			return 0, "", false
 		}
-		return 0, webBindingHash("plan", run.PlanID, planPreviewOf(run).Digest), true
+		return 0, webBindingHash("plan", run.PlanID, planPreviewOf(run).Digest, w.currentAskLaunchID(marshalProposal{})), true
 	case "run/architecture.comment":
 		d, ok := w.v2DecisionNow(time.Now())
 		if !ok || d.kind != decisionArchitecture || !w.webChatReachable() {
 			return 0, "", false
 		}
-		return 0, webBindingHash("architecture", d.key, w.decisionRevision(d)), true
+		return 0, webBindingHash("architecture", d.key, w.decisionRevision(d), w.currentAskLaunchID(marshalProposal{})), true
 	case "run/goal.intake":
 		if !w.webChatReachable() {
 			return 0, "", false
 		}
-		return revision, webBindingHash("goal", run.GoalBinding, run.PlanID), true
+		return revision, webBindingHash("goal", run.GoalBinding, run.PlanID, w.currentAskLaunchID(marshalProposal{})), true
 	case "run/goal.amend.propose":
 		if run.PlanID == "" || run.State == marshal.Drafting {
 			return 0, "", false
@@ -162,16 +162,23 @@ func (w *Workspace) webDeliverChat(text string) webboard.Result {
 	if !native && w.sayPane() == "" {
 		return refused("No Marshal chat is open, so nothing was sent. /marshal chat in the terminal starts one.")
 	}
-	w.sayToMarshal(w.workers.context(), text)
-	if echo := w.sayEchoList(); len(echo) > 0 {
-		switch echo[0].State {
+	id := w.sayToMarshal(w.workers.context(), text)
+	if id == 0 {
+		return refused("Nothing was sent: the message has no text the chat can take.")
+	}
+	for _, e := range w.sayEchoList() {
+		if e.id != id {
+			continue
+		}
+		switch e.State {
 		case sayQueued, saySending:
 			if !native {
 				return webboard.Result{Status: "queued", Text: "Queued: the Marshal's chat gets it as soon as it is free; Activity shows when it is in."}
 			}
 		case sayFailed:
-			return refused("Not sent: " + echo[0].Why + ".")
+			return refused("Not sent: " + w.webSecret(e.Why) + ".")
 		}
+		break
 	}
 	return webboard.Result{Status: "sent", Text: "Sent to the Marshal."}
 }
@@ -222,7 +229,10 @@ func (w *Workspace) webSay(text string) webboard.Result {
 		// Nothing is sent and the page keeps the text.
 		return refused("No Marshal chat is open, so nothing was sent. /marshal chat in the terminal starts one.")
 	}
-	i, ok := w.webLegacyIntent(text)
+	i, ok, refusal := w.webLegacyIntent(text)
+	if refusal != nil {
+		return *refusal
+	}
 	if !ok {
 		res := w.webDeliverChat(text)
 		w.RecordActivity("From the web: a message to the Marshal (" + res.Status + ").")
@@ -232,13 +242,18 @@ func (w *Workspace) webSay(text string) webboard.Result {
 }
 
 // webLegacyIntent journals a legacy message under the chat's current launch.
-func (w *Workspace) webLegacyIntent(text string) (store.WebIntent, bool) {
+// With a journal it never delivers unjournaled: a failure is a refusal.
+func (w *Workspace) webLegacyIntent(text string) (store.WebIntent, bool, *webboard.Result) {
 	if w.store == nil || w.runtime == nil {
-		return store.WebIntent{}, false
+		return store.WebIntent{}, false, nil
+	}
+	unjournaled := func() (store.WebIntent, bool, *webboard.Result) {
+		r := refused("The message journal could not be recorded, so nothing was sent.")
+		return store.WebIntent{}, false, &r
 	}
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
-		return store.WebIntent{}, false
+		return unjournaled()
 	}
 	m := w.marshalSession()
 	m.mu.Lock()
@@ -249,14 +264,18 @@ func (w *Workspace) webLegacyIntent(text string) (store.WebIntent, bool) {
 	project, epoch := w.ultraProjectLocked(), webboard.SettingsEpoch(w.webSettingsFenceLocked())
 	w.mu.RUnlock()
 	binding := webBindingHash("chat", w.currentAskLaunchID(marshalProposal{}))
-	i := store.WebIntent{ProjectID: project, ProjectEpoch: epoch, Owner: "owner", Session: "browser", RequestID: hex.EncodeToString(id[:]), Digest: binding + string(payload), Op: "run/chat.send", Key: runID, TargetKind: "run", Value: string(payload), RunID: runID, AttemptID: binding}
+	i := store.WebIntent{ProjectID: project, ProjectEpoch: epoch, Owner: "owner", Session: "browser", RequestID: hex.EncodeToString(id[:]), Digest: webBindingHash(binding, string(payload)), Op: "run/chat.send", Key: runID, TargetKind: "run", Value: string(payload), RunID: runID, AttemptID: binding}
 	if _, err := w.store.AdmitWebSetting(context.Background(), i); err != nil {
-		return store.WebIntent{}, false
+		return unjournaled()
 	}
+	// Live before it starts, so a reconcile never takes it for cut off.
+	webMessagesInFlight.Store(i.RequestID, true)
 	if err := w.store.StartWebRequest(context.Background(), i, binding); err != nil {
-		return store.WebIntent{}, false
+		webMessagesInFlight.Delete(i.RequestID)
+		_, _ = w.store.RefuseWebSetting(context.Background(), i, "writer_refused")
+		return unjournaled()
 	}
-	return i, true
+	return i, true, nil
 }
 
 // reconcileWebMessage holds a message whose delivery was started but never

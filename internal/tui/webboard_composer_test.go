@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -152,7 +153,7 @@ func TestLegacySayAndTypedChatShareOutbox(t *testing.T) {
 	if err != nil || len(left) != 0 {
 		t.Fatalf("unfinished: %+v %v", left, err)
 	}
-	i, ok := w.webLegacyIntent("again")
+	i, ok, _ := w.webLegacyIntent("again")
 	if !ok {
 		t.Fatal("a legacy message was not journaled")
 	}
@@ -201,4 +202,80 @@ func TestComposerLostReplyReconcilesWithoutResend(t *testing.T) {
 		t.Fatalf("held receipt: %+v", r)
 	}
 	composerNothingSent(t, c)
+}
+
+func TestLegacyReceiptDigestDoesNotHoldTheMessage(t *testing.T) {
+	w, c := composerWorkspace(t, "composer-digest")
+	i, ok, refusal := w.webLegacyIntent("the vault word is swordfish")
+	if !ok || refusal != nil {
+		t.Fatalf("not journaled: %v", refusal)
+	}
+	if strings.Contains(i.Digest, "swordfish") || len(i.Digest) != 64 {
+		t.Fatalf("digest holds the message: %q", i.Digest)
+	}
+	if _, live := webMessagesInFlight.Load(i.RequestID); !live {
+		t.Fatal("a started message is not live before its delivery")
+	}
+	w.reconcileWebMessage(t.Context(), i)
+	if left, _ := w.store.UnfinishedWebRequests(t.Context(), i.ProjectID); len(left) != 1 {
+		t.Fatalf("a live message was reconciled: %+v", left)
+	}
+	w.webOwnerMessage(i, marshal.Run{}, "x", w.webDeliverChat)
+	composerSent(t, c)
+}
+
+func TestLegacySayRefusesWhenJournalFails(t *testing.T) {
+	w, c := composerWorkspace(t, "composer-nojournal")
+	first, ok, _ := w.webLegacyIntent("first")
+	if !ok {
+		t.Fatal("first not journaled")
+	}
+	// A message already in flight for the run holds the slot.
+	if r := w.webSay("second"); r.Status != "refused" {
+		t.Fatalf("an unjournaled message was delivered: %+v", r)
+	}
+	composerNothingSent(t, c)
+	webMessagesInFlight.Delete(first.RequestID)
+}
+
+func TestComposerCommentsBindTheChatLaunch(t *testing.T) {
+	w, c := composerWorkspace(t, "composer-bind")
+	for _, op := range []string{"run/plan.comment", "run/goal.intake"} {
+		cmd := runTestAction(t, w, mustRunCapability(t, w, op), "f0112233445566778899aabbccdd"+map[string]string{"run/plan.comment": "0001", "run/goal.intake": "0002"}[op], webboard.SettingPayload{Text: "hi"})
+		w.chat.mu.Lock()
+		w.chat.launch = "launch-" + op
+		w.chat.mu.Unlock()
+		if r := w.webWorkCommand(cmd); r.Status != "refused" {
+			t.Fatalf("%s on a new launch: %+v", op, r)
+		}
+	}
+	composerNothingSent(t, c)
+}
+
+func TestWebDeliverChatRefusesControlOnlyText(t *testing.T) {
+	w, c := composerWorkspace(t, "composer-control")
+	if r := w.webDeliverChat("\x07\x08"); r.Status != "refused" {
+		t.Fatalf("control-only text: %+v", r)
+	}
+	composerNothingSent(t, c)
+}
+
+func TestRunDetailsRedactKnownSecrets(t *testing.T) {
+	w, _ := receiptTestWorkspace(t, "composer-details")
+	m := w.marshalSession()
+	m.mu.Lock()
+	m.runID = "work"
+	m.mu.Unlock()
+	seedMarshalRunForReceiptTest(t, w, "work", marshal.Run{State: marshal.Dispatching, PlanID: "plan-1", PlanVersion: 1, Tasks: []marshal.Task{{PlanTaskID: "one", Title: "Rotate hunter2zz", Worker: "codex", State: marshal.Queued, Files: []string{"hunter2zz.txt"}, Checks: []marshal.Check{{Command: "echo hunter2zz"}}}}})
+	w.mu.Lock()
+	w.state.KnownSecrets = []string{"hunter2zz"}
+	w.mu.Unlock()
+	d := w.webRunDetails(t.Context())
+	if len(d.Tasks) != 1 {
+		t.Fatalf("tasks: %+v", d.Tasks)
+	}
+	raw, _ := json.Marshal(d)
+	if strings.Contains(string(raw), "hunter2zz") {
+		t.Fatalf("a known secret reached the details: %s", raw)
+	}
 }
