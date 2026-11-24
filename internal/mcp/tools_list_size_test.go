@@ -21,7 +21,7 @@ func TestMarshalToolsListByteSize(t *testing.T) {
 	t.Logf("tools/list tools=%d before=%d wire_bytes=%d result_bytes=%d reduction=%.1f%%",
 		len(srv.listTools()), marshalToolsListBeforeBytes, len(wire), len(result), reduction)
 	if len(wire) > marshalToolsListMaxBytes {
-		t.Fatalf("tools/list wire size = %d bytes (before %d), exceeds max %d (need >=40%% reduction)",
+		t.Fatalf("tools/list wire size = %d bytes (before %d), exceeds max %d",
 			len(wire), marshalToolsListBeforeBytes, marshalToolsListMaxBytes)
 	}
 }

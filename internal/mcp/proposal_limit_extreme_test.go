@@ -117,7 +117,11 @@ func TestProposalInnerLimitReachesTool(t *testing.T) {
 		{"marshal_project_contract_submit", model.NewLimitError(errors.New("REQUIRED_CONTEXT_BUDGET_EXCEEDED"), model.Limit{Kind: proposalmcp.LimitKindContract, Subject: "proposal", ActualBytes: 65537, CapBytes: proposalmcp.MaxContractProposalBytes, Action: proposalmcp.ContractLimitAction}), proposalmcp.LimitKindContract},
 	} {
 		s, _, _ := liveLimitServer(t, tc.err)
-		resp := callTool(t, s, tc.tool, `{"submission_id":"s-1","proposal":{"action":"intake"}}`)
+		proposal := `{"action":"intake","language":"en"}`
+		if tc.tool == "marshal_project_contract_submit" {
+			proposal = `{"action":"project-contract","expected_version":0,"contract":{"format_version":1,"id":"c","revision":1,"purpose":"p","components":[{"id":"a","responsibility":"r","paths":["a"]}],"invariants":["i"],"reviewed_inventory_digest":"d"}}`
+		}
+		resp := callTool(t, s, tc.tool, `{"submission_id":"s-1","proposal":`+proposal+`}`)
 		if resp.Error == nil || resp.Error.Data == nil || resp.Error.Data.Limit == nil || resp.Error.Data.Limit.Kind != tc.kind {
 			t.Fatalf("%s: %+v", tc.tool, resp.Error)
 		}

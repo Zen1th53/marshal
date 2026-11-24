@@ -434,6 +434,11 @@ func (w *Workspace) serveLiveProposalMCP(ctx context.Context, l *proposalMCPLeas
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	// The typed shape is checked before the parser, so a mistyped, missing
+	// or unknown field is named; the parser stays the authority on values.
+	if err := proposalmcp.ValidateProposal(args.Proposal); err != nil {
+		return nil, proposalParseRefusal(err)
+	}
 	var probe struct {
 		Action string `json:"action"`
 	}

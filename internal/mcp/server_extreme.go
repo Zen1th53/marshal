@@ -55,6 +55,10 @@ func (s *Server) callStdioProposal(ctx context.Context, req jsonRPCRequest) (jso
 			resp.Error = &rpcErr{Code: -32602, Message: "native context response ID must be a string or number encoded within 128 bytes"}
 			return resp, true
 		}
+		if err := checkLiveSubmission(rawParams.Name, rawParams.Arguments); err != nil {
+			resp.Error = toolError(rawParams.Name, err)
+			return resp, true
+		}
 		result, err := s.proposalCall(ctx, rawParams.Name, rawParams.Arguments)
 		if err != nil {
 			resp.Error = toolError(rawParams.Name, err)
