@@ -1206,18 +1206,18 @@
     },
     {
       "path": "internal/app/approval_lifecycle_test.go",
-      "sha256": "7a67d62e3c316924656188e83b139a4e1041f6d76d4b35db77eab0b5ff35aff0",
-      "bytes": 28141
+      "sha256": "b2e786ab5532548a3aaaae5c8814eb9364d40a202a099d62f96dfe77b0c9a650",
+      "bytes": 28097
     },
     {
       "path": "internal/app/approval_notice_recovery_test.go",
-      "sha256": "3675cd6be7fb9e4d6489ff3cc807289dc5add45dba6ee3704a887dd86299f61c",
-      "bytes": 5170
+      "sha256": "e59bf82ce088e3c96f53490e7b600010fd6ec8674787d320a30ffcad9fd05b95",
+      "bytes": 7303
     },
     {
       "path": "internal/app/approval_notices.go",
-      "sha256": "45f59c3b85793954052fa0adffee3a12c3c5ddb27a116017ac55f1cc9b74c1d4",
-      "bytes": 22650
+      "sha256": "2a5c6bd44b0f4da593c4c863bb6f104b76987afd1119b993c198d4d513f1a530",
+      "bytes": 22645
     },
     {
       "path": "internal/app/approved_plan_grant_default.go",
