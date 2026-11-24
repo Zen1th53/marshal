@@ -555,3 +555,22 @@ func TestLiveMCPMemoryRecoveryClosedOrChangedNativeOwner(t *testing.T) {
 		})
 	}
 }
+
+// A chat agent that fills project_id with a guess (a name or slug) must be told
+// which field failed and what the bound project is; padded title/body whitespace
+// is not a refusal.
+func TestLiveMCPMemoryRefusalNamesFieldAndTrimsPadding(t *testing.T) {
+	w, _, cfg := liveMCPFixture(t)
+	c := memoryChild(t, w.runtime.ProjectRoot(), &cfg)
+	msg := c.call(t, "memory_remember", map[string]any{"project_id": "my-project", "title": "t", "body": "b"}, false)
+	if !strings.Contains(msg, "project_id") || !strings.Contains(msg, w.projectID) || strings.Contains(msg, "scope") {
+		t.Fatalf("unhelpful refusal: %s", msg)
+	}
+	if msg := c.call(t, "memory_remember", map[string]any{"title": "line one\nline two", "body": "b"}, false); !strings.Contains(msg, "title") {
+		t.Fatalf("title refusal not named: %s", msg)
+	}
+	if msg := c.call(t, "memory_remember", map[string]any{"title": "t", "body": strings.Repeat("x", 4097)}, false); !strings.Contains(msg, "body") {
+		t.Fatalf("body refusal not named: %s", msg)
+	}
+	c.call(t, "memory_remember", map[string]any{"submission_id": "padded", "title": "  padded title\n", "body": "\nnote body\n"}, true)
+}
