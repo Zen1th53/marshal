@@ -176,6 +176,12 @@ type Lane struct {
 	LastSignal time.Duration // since the last heartbeat; Stale beyond 60s
 	Stale      bool
 	Selected   bool
+	// Process (live, exited, unverifiable) and Turn (working, at_rest,
+	// gone, unknown) are what Marshal can verify of a heartbeat worker,
+	// empty for a window. ModelWait is how long it has waited on its model.
+	Process, Turn string
+	ModelWait     time.Duration
+	Note          string // why the worker cannot be verified, or waits long
 }
 
 // Lanes is the Lanes pane.
