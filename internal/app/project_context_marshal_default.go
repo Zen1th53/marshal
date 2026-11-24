@@ -24,17 +24,9 @@ func (*MarshalCLI) prepareRequiredMarshalModelTurn(ctx context.Context, prompt s
 	return ctx, prompt, func() error { return nil }, nil
 }
 
-func (*MarshalCLI) validateRequiredMarshalModelEnvelope(string, string) error { return nil }
-
 // requiredVerifierAttributionGap: Community records the independent verifier's
 // own evidence and needs no native model identity from it.
 func requiredVerifierAttributionGap(string) string { return "" }
-
-// marshalKnowledgeViaRecall: Community has no required-context envelope, so
-// observed project knowledge always stays inline.
-const marshalKnowledgeViaRecall = false
-
-func (*MarshalCLI) marshalKnowledgeFits(string, string) bool { return true }
 
 // providerLimitFallback: Community keeps its role provider choice unchanged.
 const providerLimitFallback = false

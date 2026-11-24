@@ -1,11 +1,11 @@
 producer,cap_bytes,status,owner,fixtures,recovery
 required project context packet,114688,covered,,internal/projectcontext:TestRequiredPacketLimitAtCap,mandatory context stays whole; the refusal names the packet and asks for an approved scope split
-Marshal model request envelope,114688,pending,runtime prompt work,internal/app:ProviderEnvelope,typed limit after measuring the encoded request; otherwise a stage pause naming the split
-Marshal review and worker brief,114688,pending,runtime prompt work,internal/app:Review;internal/app:WorkerBrief,keep the newest return and mandatory instructions; older reasons compact to a bound artifact pointer
-Marshal knowledge reserve,16384,pending,runtime prompt work,internal/app:RoleKnowledge,optional knowledge moves to scoped recall; mandatory context stays inline
+Marshal model request envelope,114688,covered,,internal/app:TestProviderEnvelopeLimitAtCap,typed limit after measuring the encoded request; otherwise a stage pause naming the split
+Marshal review and worker brief,114688,covered,,internal/app:TestMarshalReviewBudgetCompactsOptionalSections;internal/app:TestWorkerBriefCompactsOptionalSections,keep the newest return and mandatory instructions; older reasons compact to a bound artifact pointer
+Marshal knowledge reserve,16384,covered,,internal/app:TestMarshalKnowledgeReserveAtCap,optional knowledge moves to scoped recall; mandatory context stays inline
 verifier proof summary,40960,covered,,internal/app:TestIrreducibleVerifierContextSuggestsSplit,output is referenced by checked proof files; an irreducible summary pauses for a plan split without a same-input retry
-amendment packet,12288,pending,runtime prompt work,internal/app:Amendment,optional summary dropped; otherwise the amendment is refused with the field named and the plan kept
-driver output,65536,pending,runtime prompt work,internal/marshal/driver:Output,bounded output with the dropped byte count stated
+amendment packet,12288,covered,,internal/app:TestAmendmentPacketLimitAtCap,optional summary dropped; otherwise the amendment is refused with the field named and the plan kept
+driver output,65536,covered,,internal/marshal/driver:TestOutputLimitAtCap,bounded output with the dropped byte count stated
 driver worker stream,8388608,covered,,internal/marshal/driver:TestBoundedStreamPreservesTerminalReceipt,bounded head plus the separately kept final record; an overlong or malformed final record is a typed incomplete hand-in
 driver git diff,16777216,covered,,internal/marshal/driver:TestGitOutputLimitAtCap;internal/marshal/driver:TestOversizedDiffHandInKeepsPointer;internal/app:TestOversizedDiffKeepsFullScopeValidation,verified base and result pointer with per-file reads; scope still covers every changed path
 plan pack file,65536,covered,,internal/app:TestPackFileLimitAtCap,the pack is refused whole with the file and sizes named and a split suggested

@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
@@ -374,12 +375,14 @@ func (b *capBuffer) Write(p []byte) (int, error) {
 // Bytes returns what was kept.
 func (b *capBuffer) Bytes() []byte { return b.buf.Bytes() }
 
-// String returns what was kept and states how much was dropped.
+// String returns what was kept without splitting a UTF-8 rune, and states how
+// many bytes were dropped and how to inspect the full output.
 func (b *capBuffer) String() string {
 	if b.dropped == 0 {
 		return b.buf.String()
 	}
-	return b.buf.String() + fmt.Sprintf("\n[truncated: %d bytes dropped]", b.dropped)
+	kept, extra := trimIncompleteTrailingUTF8(b.buf.Bytes())
+	return string(kept) + fmt.Sprintf("\n[truncated: %d bytes dropped; inspect the worker log or rerun the command for full output]", b.dropped+extra)
 }
 
 // git runs git in dir. Its output is bounded while it is produced; output
@@ -414,12 +417,49 @@ func lines(s string) []string {
 	return out
 }
 
-// bound keeps the head of an output and says how much was dropped.
+// bound keeps a UTF-8-safe head of an output and states how much was kept and
+// dropped, plus how to obtain the complete output.
 func bound(s string) string {
 	if len(s) <= maxOutput {
 		return s
 	}
-	return s[:maxOutput] + fmt.Sprintf("\n[truncated: %d of %d bytes kept]", maxOutput, len(s))
+	kept := trimValidUTF8Prefix(s, maxOutput)
+	dropped := len(s) - len(kept)
+	return kept + fmt.Sprintf("\n[truncated: %d of %d bytes kept, %d bytes dropped; inspect the worker log or rerun the command for full output]", len(kept), len(s), dropped)
+}
+
+func trimValidUTF8Prefix(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	if maxBytes <= 0 {
+		return ""
+	}
+	end := maxBytes
+	for back := 0; back < utf8.UTFMax && end > 0 && !utf8.RuneStart(s[end]); back++ {
+		end--
+	}
+	if end < maxBytes {
+		r, size := utf8.DecodeRuneInString(s[end:])
+		if r != utf8.RuneError && end+size > maxBytes {
+			return s[:end]
+		}
+	}
+	return s[:maxBytes]
+}
+
+func trimIncompleteTrailingUTF8(b []byte) ([]byte, int64) {
+	end := len(b)
+	for back := 1; back < utf8.UTFMax && back <= end; back++ {
+		start := end - back
+		if utf8.RuneStart(b[start]) {
+			if !utf8.FullRune(b[start:end]) {
+				return b[:start], int64(back)
+			}
+			break
+		}
+	}
+	return b, 0
 }
 
 // GovernedRunner runs one task through Process 05 in preserve-branch mode and
