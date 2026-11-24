@@ -60,9 +60,23 @@ func (r *Runtime) selectProcess05TaskLane(ctx context.Context, s *MarshalService
 		return nil, fmt.Errorf("%w: execution run %s is paused, so no lane opened for %s", ErrProcess05Paused, parent.RunID, req.Task.PlanTaskID)
 	}
 	if err := r.Execution().Engine().SetTaskLaneParent(ctx, parent.RunID, run.BaseCommit); err != nil {
-		return nil, err
+		return nil, process05PausedSince(ctx, r, parent.RunID, req.Task.PlanTaskID, err)
 	}
-	return r.Execution().Engine().OpenTaskLaneRework(ctx, parent.RunID, req.Task.PlanTaskID, req.Task.BaseCommit, taskLaneRework(req.Task))
+	lane, err := r.Execution().Engine().OpenTaskLaneRework(ctx, parent.RunID, req.Task.PlanTaskID, req.Task.BaseCommit, taskLaneRework(req.Task))
+	if err != nil {
+		return nil, process05PausedSince(ctx, r, parent.RunID, req.Task.PlanTaskID, err)
+	}
+	return lane, nil
+}
+
+// process05PausedSince reports a lane that could not open because the person
+// paused the run after it was read as the same paused stop as above: no lane
+// ran, so the attempt is not a worker failure.
+func process05PausedSince(ctx context.Context, r *Runtime, parentID, taskID string, cause error) error {
+	if current, err := r.Execution().GetRun(ctx, parentID); err == nil && current.State == execution.RunPaused {
+		return fmt.Errorf("%w: execution run %s was paused, so no lane opened for %s (%v)", ErrProcess05Paused, parentID, taskID, cause)
+	}
+	return cause
 }
 
 // closeOrphanProcess05Lane closes the task's current lane attempt when a
