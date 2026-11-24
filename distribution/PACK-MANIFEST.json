@@ -14356,8 +14356,8 @@
     },
     {
       "path": "internal/tui/marshal_confine_test.go",
-      "sha256": "0cf3ad31f57fca4be559e35ee403fc01d433419719d64c866640b11a9bd59901",
-      "bytes": 9196
+      "sha256": "9fd914ca6ab6f1abee382dd9fed0690fe0782d03dbd12314b75f479bfd317c3f",
+      "bytes": 10488
     },
     {
       "path": "internal/tui/marshal_dock.go",
@@ -14461,7 +14461,7 @@
     },
     {
       "path": "internal/tui/marshal_idle_accept_test.go",
-      "sha256": "64463d4b814b755cd3abcb0cffc095089a955da3be30f15e37e55439b49c309a",
+      "sha256": "0efae7a84646f202b5d0ab0def31f5d5756c32252859ab77dbf03a944d349af3",
       "bytes": 3326
     },
     {
@@ -14501,8 +14501,8 @@
     },
     {
       "path": "internal/tui/marshal_mcp.go",
-      "sha256": "6872d12b4020f38bfac2ed71a5ca1e544e7a1ddd935099138c51a2949357600d",
-      "bytes": 24235
+      "sha256": "c2cb213c2382fa6de267a5c47911c677f2fc65b577ca293bb3927caecec27b4a",
+      "bytes": 24508
     },
     {
       "path": "internal/tui/marshal_mcp_default.go",

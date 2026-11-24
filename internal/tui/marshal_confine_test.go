@@ -222,3 +222,31 @@ func TestGuardNeutralWhenTheMarshalCannotWrite(t *testing.T) {
 		t.Fatalf("told %q", told)
 	}
 }
+
+// A read-only Claude chat ends its options with "--" before the opening cue.
+// The MCP flags added after that must still land before the separator, or
+// Claude reads them as prompt text and starts without MARSHAL's tools.
+func TestConfinedClaudeChatKeepsMCPFlagsBeforeSeparator(t *testing.T) {
+	root := t.TempDir()
+	args, err := confineMarshalChat("claude", root, marshalKickoffArgs("claude"), marshal.RightsReadOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpFlags := append(claudeMarshalToolAllowFlags(), "--mcp-config", filepath.Join(root, "claude_mcp.json"))
+	got := insertBeforeKickoff("claude", root, args, mcpFlags)
+	sep := slices.Index(got, "--")
+	if sep < 0 {
+		t.Fatalf("no option separator before the cue: %q", got)
+	}
+	for _, flag := range []string{"--mcp-config", "--allowedTools", "--tools", "--permission-mode"} {
+		if i := slices.Index(got, flag); i < 0 || i > sep {
+			t.Fatalf("%s is not an option (index %d, separator at %d): %q", flag, i, sep, got)
+		}
+	}
+	if n := strings.Count(strings.Join(got, "\x00"), "\x00--\x00"); n != 1 {
+		t.Fatalf("want exactly one separator, got %d: %q", n, got)
+	}
+	if !slices.Equal(got[sep+1:], marshalKickoffArgs("claude")[len(marshalKickoffArgs("claude"))-1:]) {
+		t.Fatalf("cue is not the only positional argument: %q", got[sep+1:])
+	}
+}

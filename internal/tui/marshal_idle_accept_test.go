@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/app"
-	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/memory/importer"
 )
 
 type idleReviewModel struct{ reviews int }

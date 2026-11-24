@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -47,6 +48,11 @@ func insertBeforeKickoff(provider, _ string, args, flags []string) []string {
 	// The cue was chosen once, when the launch appended it; read it back.
 	if kickoff := trailingMarshalCue(provider, args); kickoff != nil {
 		prefix := append([]string(nil), args[:len(args)-len(kickoff)]...)
+		// A "--" already in front of the cue ends the options: new flags
+		// must go before it, or the provider reads them as prompt text.
+		if n := len(prefix); n > 0 && prefix[n-1] == "--" {
+			return slices.Concat(prefix[:n-1], flags, []string{"--"}, kickoff)
+		}
 		if provider == "claude" && len(flags) >= 2 && flags[len(flags)-2] == "--mcp-config" {
 			flags = append(append([]string(nil), flags...), "--")
 		}
