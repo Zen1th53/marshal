@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -1081,8 +1082,7 @@ func acceptanceRefusal(reason constitution.ReasonCode, independent *marshal.Inde
 // noteReviewDisagreement records a hand-in on which exactly one of the
 // Marshal and the independent reviewer accepted. The key groups materially
 // equivalent conflicts by task, reviewer roles, verdict direction and failing
-// criteria; free-text reasons are kept but never keyed, so rewording a
-// finding does not reset the count.
+// criteria and normalized findings from the rejecting reviewer.
 func noteReviewDisagreement(prev *marshal.ReviewDisagreement, t marshal.Task, attempt int, review marshal.Review, marshalReasons, failing []string) *marshal.ReviewDisagreement {
 	direction := "marshal-accepts"
 	if review.Verdict != marshal.VerdictAccept {
@@ -1090,7 +1090,25 @@ func noteReviewDisagreement(prev *marshal.ReviewDisagreement, t marshal.Task, at
 	}
 	criteria := append([]string(nil), failing...)
 	sort.Strings(criteria)
-	sum := sha256.Sum256([]byte(strings.Join(append([]string{t.PlanTaskID, "marshal", "independent", direction}, criteria...), "\x00")))
+	reasons := marshalReasons
+	mismatches := review.ArchitectureMismatches
+	if review.Verdict == marshal.VerdictAccept {
+		reasons = review.Independent.Reasons
+		mismatches = review.Independent.ArchitectureMismatches
+	}
+	findings := make(map[string]bool)
+	for _, reason := range append(append([]string(nil), reasons...), mismatches...) {
+		if finding := strings.ToLower(strings.Join(strings.Fields(reason), " ")); finding != "" {
+			findings[finding] = true
+		}
+	}
+	identities := make([]string, 0, len(findings))
+	for finding := range findings {
+		identities = append(identities, finding)
+	}
+	sort.Strings(identities)
+	identity, _ := json.Marshal([]any{t.PlanTaskID, "marshal", "independent", direction, criteria, identities})
+	sum := sha256.Sum256(identity)
 	d := &marshal.ReviewDisagreement{
 		Key:                 hex.EncodeToString(sum[:]),
 		Count:               1,
@@ -1834,7 +1852,6 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return err
 	}
-	s.announceTask(ctx, runID, taskID, slotAttempt(run.Tasks[i]), TaskNoticeMerged, op.ID, "Task "+taskID+" completed: it passed review and was merged.", "")
 	return nil
 }
 

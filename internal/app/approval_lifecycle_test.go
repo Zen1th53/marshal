@@ -519,8 +519,7 @@ func TestApprovalOutboxAckReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Replay: first event is already in accepting inbox (deduped, NOT delivered a second time!),
-	// second event is delivered once, and BOTH are acked!
+	// Replay both unacknowledged events; the destination deduplicates by event ID.
 	var delivered []string
 	var deliveredEntries []store.NoticeOutboxEntry
 	acked, err := r.DeliverPendingNotices(ctx, "marshal-chat", "RUN-outbox", func(entry store.NoticeOutboxEntry, rendered string) error {
@@ -534,8 +533,8 @@ func TestApprovalOutboxAckReplay(t *testing.T) {
 	if acked != 2 {
 		t.Fatalf("expected 2 acked on replay, got %d", acked)
 	}
-	if len(delivered) != 1 || deliveredEntries[0].EventID != pending[1].EventID {
-		t.Fatalf("expected dedup of already-admitted event 0 and delivery of event 1 only; got entries=%+v", deliveredEntries)
+	if len(delivered) != 2 || deliveredEntries[0].EventID != pending[0].EventID || deliveredEntries[1].EventID != pending[1].EventID {
+		t.Fatalf("expected both unacknowledged events in order; got entries=%+v", deliveredEntries)
 	}
 
 	// Second consumer (fresh accepting inbox) receives BOTH in order, and opened
