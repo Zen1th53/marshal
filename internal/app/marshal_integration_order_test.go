@@ -304,6 +304,10 @@ func TestMergeRevalidatesEvidenceWhenHeadAdvances(t *testing.T) {
 			}
 			cross := s.CrossReview
 			s.CrossReview = func(ctx context.Context, tk marshal.Task, h marshal.HandIn, c marshal.Control) (marshal.Review, string, error) {
+				architecture, _ := s.taskArchitecture(ctx, tk)
+				if tk.ArchitectureContext != architecture {
+					t.Fatalf("review architecture context = %q, want %q", tk.ArchitectureContext, architecture)
+				}
 				reviewed = append(reviewed, h.ResultCommit)
 				return cross(ctx, tk, h, c)
 			}
