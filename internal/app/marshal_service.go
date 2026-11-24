@@ -139,11 +139,11 @@ type MarshalService struct {
 	requiredCanonicalVerification func(context.Context, string, marshal.Run, string) (verification.Session, verification.Binding, error)
 	// requiredChecksOnlyClose retains the live one-shot capability a
 	// checks-only close presents at the required-context close fence.
-	requiredChecksOnlyClose func(context.Context, string, marshal.Run, string, verification.ChecksOnlyReceipt) error
-	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
-	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
-	process05WaitPause            func(context.Context, string) error
-	process05ClearExpiredWait     func(context.Context, string, string, time.Time) (*execution.RuntimeApproval, error)
+	requiredChecksOnlyClose    func(context.Context, string, marshal.Run, string, verification.ChecksOnlyReceipt) error
+	requiredContextCloseEffect func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
+	process05WaitReceipt       func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
+	process05WaitPause         func(context.Context, string) error
+	process05ClearExpiredWait  func(context.Context, string, string, time.Time) (*execution.RuntimeApproval, error)
 	// process05Paused reports whether part of the run's canonical execution
 	// is paused (the person paused it); process05Settle ends any part whose
 	// work all finished while it was paused (Runtime.settleProcess05).
@@ -230,7 +230,27 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 // pause's run notice after the pause is durable.
 func (s *MarshalService) saveMarshalState(ctx context.Context, runID string, run marshal.Run, revision int64, event *events.Event, handIn *marshal.HandIn, attempt int) error {
 	announce := s.assignPauseNotice(ctx, runID, &run)
-	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, event, handIn, attempt); err != nil {
+	var notices []store.NoticeWrite
+	if event != nil && event.Type == events.EventTypeMarshalTaskMerged {
+		i := taskIndex(run, event.TaskID)
+		if i < 0 || run.Tasks[i].State != marshal.Merged {
+			return errors.New("merge completion task is missing")
+		}
+		n := RunNotice{EventID: fmt.Sprintf("run:%s:task:%s:attempt:%d:%s:%s", runID, event.TaskID, slotAttempt(run.Tasks[i]), TaskNoticeMerged, event.ID),
+			RunID: runID, TaskID: event.TaskID, State: TaskNoticeMerged, Code: TaskNoticeMerged,
+			Summary: boundedRedacted("Task "+event.TaskID+" completed: it passed review and was merged.", 500), At: event.At}
+		payload, err := json.Marshal(n)
+		if err != nil {
+			return err
+		}
+		notices = append(notices, store.NoticeWrite{
+			Entry: store.NoticeOutboxEntry{EventID: n.EventID, ProjectID: s.noticeProjectID(), RunID: runID, TaskID: n.TaskID, Category: TaskNoticeCategory,
+				Transition: n.State, PhaseOrder: 1, Status: n.Code, Summary: n.Summary, PayloadJSON: string(payload), CreatedAt: n.At},
+			Event: model.Event{ID: n.EventID, Type: "marshal.run_notice", ProjectID: s.ProjectID, Timestamp: n.At,
+				Data: map[string]any{"run_id": runID, "task_id": n.TaskID, "state": n.State, "code": n.Code, "summary": n.Summary, "next": ""}},
+		})
+	}
+	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, event, handIn, attempt, notices...); err != nil {
 		return err
 	}
 	if announce {
