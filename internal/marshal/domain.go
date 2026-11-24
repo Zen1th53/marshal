@@ -718,3 +718,64 @@ type VerifierEvidence struct {
 
 // DefaultProviderOrder is the fallback preference shared by every runtime role.
 func DefaultProviderOrder() []string { return []string{"codex", "claude", "agy", "opencode"} }
+
+// TaskMoves returns a copy of the task lifecycle table TransitionTask checks.
+func TaskMoves() map[TaskState][]TaskState {
+	out := make(map[TaskState][]TaskState, len(taskMoves))
+	for from, to := range taskMoves {
+		out[from] = slices.Clone(to)
+	}
+	return out
+}
+
+// RollingPhase is where one rolling dispatch attempt is.
+type RollingPhase string
+
+const (
+	// RollingReserved: a worker slot is committed; the launch has no receipt yet.
+	RollingReserved RollingPhase = "reserved"
+	// RollingRunning: the launch receipt proves the worker started.
+	RollingRunning RollingPhase = "running"
+	// RollingExited: the worker's exit is proved; its result is not staged yet.
+	RollingExited RollingPhase = "exited"
+	// RollingStaged: a verified exit and its result wait for review.
+	RollingStaged RollingPhase = "staged"
+	// RollingReview: the result holds a review seat.
+	RollingReview RollingPhase = "review"
+	// RollingDone: merged, returned or cancelled; its file scope is free.
+	RollingDone RollingPhase = "done"
+	// RollingQuarantined: kept for inspection; never replayed.
+	RollingQuarantined RollingPhase = "quarantined"
+)
+
+// RollingAttempt is one attempt the rolling dispatcher owns, bound to the
+// exact plan, lease and launch it was admitted under.
+type RollingAttempt struct {
+	Run             string
+	Task            string
+	Attempt         int
+	Revision        int64
+	PlanDigest      string
+	LeaseGeneration int64
+	LaunchKey       string
+	Base            string
+	DependencyHeads map[string]string `json:",omitempty"`
+	Provider        string
+	Files           []string `json:",omitempty"`
+	// Reservation reports that the attempt holds a worker slot.
+	Reservation bool
+	Phase       RollingPhase
+	// AwaitingApproval parks the attempt on an approval. With a live worker
+	// the approval keeps its slot; after a verified exit it holds none.
+	AwaitingApproval bool `json:",omitempty"`
+	// ProcessReceipt names the launch receipt that proved the start.
+	ProcessReceipt string `json:",omitempty"`
+	// ResultReceipt is the staged result adopted for this attempt.
+	ResultReceipt *StagedExit `json:",omitempty"`
+	Outcome       TaskState   `json:",omitempty"`
+	Reason        string      `json:",omitempty"`
+}
+
+// ScopeHeld reports whether the attempt still fences its file scope: until
+// merge, return or cancel, and while quarantined for inspection.
+func (a RollingAttempt) ScopeHeld() bool { return a.Phase != RollingDone }
