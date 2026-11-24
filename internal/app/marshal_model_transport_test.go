@@ -36,7 +36,7 @@ func TestMarshalModelPromptTransportCodex(t *testing.T) {
 			if session != "" {
 				name = "resume/small"
 			}
-			if size > 128*1024 {
+			if size > 1024 {
 				name = strings.Replace(name, "small", "large", 1)
 			}
 			t.Run(name, func(t *testing.T) {

@@ -1,9 +1,9 @@
-+- ACTIONS  type to search all 52 -----------------------------------------+|
++- ACTIONS  type to search all 51 -----------------------------------------+|
 | > _                                                                      ||
 +--------------------------------------------------------------------------+|
 | > s       say to the Marshal           p       pause everything          ||
 |   a       open the architecture        Ctrl+X  stop all workers          ||
 |   y       retry or continue            l       limits and workers        ||
 |   m       change model or provider     ?       help                      ||
-|   -- 44 more . type a word, e.g. "retry", "budget", "telemetry"          ||
+|   -- 43 more . type a word, e.g. "retry", "budget", "telemetry"          ||
 +- Enter run . Up/Dn choose . type to filter . Esc close ------------------+|

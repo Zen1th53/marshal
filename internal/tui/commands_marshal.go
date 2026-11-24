@@ -2464,7 +2464,7 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	if busyErr != nil && (service == nil || service.ActiveExecution(runID) == "") {
 		return "", busyErr
 	}
-	if w.runtime != nil && service != nil {
+	if w.runtime != nil && service != nil && service.ActiveExecution(runID) != "" {
 		return w.marshalRunCommand(context.Background(), service, runID, app.RunCommandInput{Operation: "accept", TaskID: args[0]})
 	}
 	if busyErr != nil {
@@ -2821,6 +2821,16 @@ func (w *Workspace) marshalRunCommand(ctx context.Context, service *app.MarshalS
 	}
 	if receipt.State == "queued" {
 		return fmt.Sprintf("Run action %s: queued (%s), execution %s.", receipt.Operation, receipt.ID, service.ActiveExecution(runID)), nil
+	}
+	if receipt.State == "applied" {
+		switch receipt.Operation {
+		case "retry":
+			return fmt.Sprintf("Run action retry: applied (%s). Task %s starts again; the run continues when you resume it.", receipt.ID, input.TaskID), nil
+		case "reassign":
+			return fmt.Sprintf("Run action reassign: applied (%s). Task %s will run on %s; the run continues when you resume it.", receipt.ID, input.TaskID, input.Worker), nil
+		case "cancel":
+			return fmt.Sprintf("Run action cancel: applied (%s). Task %s cancelled; /marshal resume to continue.", receipt.ID, input.TaskID), nil
+		}
 	}
 	return fmt.Sprintf("Run action %s: %s (%s).", receipt.Operation, receipt.State, receipt.ID), nil
 }

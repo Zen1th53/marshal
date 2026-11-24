@@ -710,7 +710,7 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			p.reviewed = &snapshot
 		}
 		var request marshalRunRequest
-		journaledTask := w.runtime != nil && (p.action == "accept" || p.action == "return" || p.action == "retry" || p.action == "reassign")
+		journaledTask := w.runtime != nil && (p.action == "return" || p.action == "retry" || p.action == "reassign" || (p.action == "accept" && service.ActiveExecution(runID) != ""))
 		if journaledTask {
 			if req.ApprovalBinding == "" {
 				return proposalStaleBindingRefusal(errors.New("task request binding is missing"))

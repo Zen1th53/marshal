@@ -64,7 +64,7 @@ func oversizedEventFixture(t *testing.T, databasePath ...string) *MarshalService
 }
 func oversizedEventBrief(t *testing.T) string {
 	t.Helper()
-	brief := strings.Repeat("exact context <>&\n", 5000)
+	brief := strings.Repeat("exact context <>&\n", 2200)
 	e := events.Event{Type: events.EventTypeMarshalTaskDispatched, Data: map[string]any{"brief": brief}}
 	if !errors.Is(e.Validate(), events.ErrEventDataInvalid) {
 		t.Fatal("fixture does not exceed Event.Validate limit")
