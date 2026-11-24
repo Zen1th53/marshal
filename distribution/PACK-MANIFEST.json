@@ -2746,8 +2746,8 @@
     },
     {
       "path": "internal/app/marshal_launch_supervision_test.go",
-      "sha256": "9bb45dfc9216f445fb09c61fb0cc3dc9a1735bd527b09947849e93b43ecc4138",
-      "bytes": 13132
+      "sha256": "f52944e78b8e54a8bd154539c10730d78328e640511cf7b5a7d7965efb92abb0",
+      "bytes": 16117
     },
     {
       "path": "internal/app/marshal_legacy_branch_test.go",
@@ -3106,13 +3106,13 @@
     },
     {
       "path": "internal/app/marshal_task_base.go",
-      "sha256": "a9687ffe9371b4612da72d3a7b4e6a436defb552cf48619aad2e20b3d2143be0",
-      "bytes": 40838
+      "sha256": "77d5d36ca13c0a9cbd4e4c9437a0d418981a999254b51483748cbe84107d62e5",
+      "bytes": 41341
     },
     {
       "path": "internal/app/marshal_task_base_test.go",
-      "sha256": "2b48904fe16347b0f81a276d923c2bc49e22180dbe05c48fb90b9b696baf80cd",
-      "bytes": 4087
+      "sha256": "cffdff1f80908de73faf819732a448c5f539cee38a823919d4a12d28f053aa5d",
+      "bytes": 5772
     },
     {
       "path": "internal/app/marshal_task_lane_default.go",
@@ -3191,8 +3191,8 @@
     },
     {
       "path": "internal/app/marshal_worker_slots_test.go",
-      "sha256": "204e8b2a0edc82a15fd76200056f9cf9b864dd24e89e44873654b66343812b73",
-      "bytes": 13318
+      "sha256": "33c434d00c927ac7f91ed5d0b2a31a561e8fa01917a190ad453ba41c122849e6",
+      "bytes": 14819
     },
     {
       "path": "internal/app/memory_actions.go",
@@ -10901,8 +10901,8 @@
     },
     {
       "path": "internal/store/marshal.go",
-      "sha256": "aac104d55153809b2658aacbca1943dec2b990c3db61936a85729ad6890020ab",
-      "bytes": 11551
+      "sha256": "fd847c5c2e35b73c43ae90a5f571c8f9d88a937a57c627783c61f929e74216ab",
+      "bytes": 11587
     },
     {
       "path": "internal/store/marshal_approval_authority_default.go",
@@ -10971,8 +10971,8 @@
     },
     {
       "path": "internal/store/marshal_recovery_test.go",
-      "sha256": "dd8587ab083522362f84f3edf545867293f51a72ed071387f0cd4fd36d88642b",
-      "bytes": 5627
+      "sha256": "cae2b667e389bffd36807c44632b75936659dc83874b716f8f44a7c2ac8d762d",
+      "bytes": 7104
     },
     {
       "path": "internal/store/marshal_run_commands.go",

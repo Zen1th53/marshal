@@ -264,9 +264,9 @@ func checkMarshalSlots(run marshal.Run) error {
 }
 
 // MarshalUnfinishedRuns lists runs with a lifecycle operation, a pending
-// command, or a worker exit that is staged or not yet acknowledged.
+// command, an active worker slot, or an unacknowledged worker release.
 func (s *Store) MarshalUnfinishedRuns(ctx context.Context, projectID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND (json_extract(r.data_json,'$.Operation') IS NOT NULL OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Commands') command WHERE json_extract(command.value,'$.State') IN ('queued','applying','reconciling')) OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Slots') slot WHERE json_extract(slot.value,'$.State')='staged' OR (json_extract(slot.value,'$.State')='released' AND COALESCE(json_extract(slot.value,'$.Acked'),0)=0))) ORDER BY r.rowid`, projectID)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND (json_extract(r.data_json,'$.Operation') IS NOT NULL OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Commands') command WHERE json_extract(command.value,'$.State') IN ('queued','applying','reconciling')) OR EXISTS (SELECT 1 FROM json_each(r.data_json,'$.Slots') slot WHERE json_extract(slot.value,'$.State') IN ('reserved','running','held','staged') OR (json_extract(slot.value,'$.State')='released' AND COALESCE(json_extract(slot.value,'$.Acked'),0)=0))) ORDER BY r.rowid`, projectID)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -388,4 +389,80 @@ func TestLaunchCrashWindowsNeverDuplicateWorker(t *testing.T) {
 		f.host.reboot()
 		f.expectHeldWorker(t, f.crashedKey(t), driver.LaunchExited)
 	})
+}
+
+func TestStaleLaunchRecoveryRequiresProvenProcessExit(t *testing.T) {
+	f := newLaunchFixture(t)
+	f.s.AfterLifecycleEffect = func(kind, _ string) error {
+		if kind == "launch" {
+			return context.Canceled
+		}
+		return nil
+	}
+	if _, err := f.s.Dispatch(t.Context(), "run", "a", "write"); !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	key := f.crashedKey(t)
+	commitFileOnBranch(t, f.s.Repository, "main", "advance.txt", "changed\n", "advance delivery base")
+	run := f.restart(t)
+	if !run.Tasks[0].StaleProcessExitUnverified || run.Tasks[0].State != marshal.Dispatched || run.Tasks[0].QuarantinedRef != "" || run.Operation == nil {
+		t.Fatalf("live worker lost its reservation or worktree protection: %+v", run)
+	}
+	rec, ok, err := f.journal.Load(key)
+	if err != nil || !ok {
+		t.Fatalf("receipt: %v %v", ok, err)
+	}
+	if err := f.host.Stop(rec.Process); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.s.Resume(t.Context(), "run")
+	run, err = f.s.Snapshot(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Tasks[0].StaleProcessExitUnverified || run.Tasks[0].State != marshal.Escalated || run.Operation != nil {
+		t.Fatalf("proven exit did not release reservation: %+v", run)
+	}
+}
+
+func TestStartedProcessExitRequiresLaunchReceiptProof(t *testing.T) {
+	for _, name := range []string{"running", "exited", "absent", "unreadable", "unverifiable", "supervisor unavailable", "operation key"} {
+		t.Run(name, func(t *testing.T) {
+			host := &launchHost{boot: "boot-1"}
+			journal := driver.FileLaunchJournal{Dir: t.TempDir()}
+			id := driver.ProcessIdentity{BootID: host.boot, PID: 1, Start: "start"}
+			host.procs = []*launchProc{{id: id, key: "launch", alive: name != "exited"}}
+			rec := driver.LaunchReceipt{Key: "launch", Stage: driver.LaunchReceipted, Process: id}
+			if name == "unverifiable" {
+				rec.Process = driver.ProcessIdentity{}
+			}
+			if name != "absent" {
+				if err := journal.Store(rec); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if name == "unreadable" {
+				journal.Dir = filepath.Join(journal.Dir, "invalid")
+				if err := os.WriteFile(journal.Dir, []byte("invalid"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s := &MarshalService{LaunchSupervisor: &driver.LaunchSupervisor{Journal: journal, Processes: host}}
+			if name == "supervisor unavailable" {
+				s.LaunchSupervisor = nil
+			}
+			// An optional callback cannot override durable evidence of a live worker.
+			s.VerifyProcessExit = func(context.Context, string, string) (bool, error) { return true, nil }
+			task := marshal.Task{PlanTaskID: "a", LaunchKey: "launch"}
+			run := marshal.Run{Tasks: []marshal.Task{task}}
+			if name == "operation key" {
+				run.Operation = &marshal.LifecycleOperation{Kind: "launch", TaskID: "a", Next: &marshal.Run{Tasks: []marshal.Task{task}}}
+				task.LaunchKey = ""
+			}
+			exited, err := s.verifyStartedProcessExited(t.Context(), "run", run, task)
+			if exited != (name == "exited") {
+				t.Fatalf("exit=%v error=%v", exited, err)
+			}
+		})
+	}
 }
