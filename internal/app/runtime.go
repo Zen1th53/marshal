@@ -2408,6 +2408,7 @@ func (r *Runtime) Marshal() *MarshalService {
 	service := &MarshalService{runtime: r, Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
 	configureWorkerMemory(service, r)
 	service.process05Paused = r.process05Paused
+	service.process05RootRunning = r.process05RootRunning
 	service.process05Settle = r.settleProcess05
 	service.process05CloseOrphanLane = r.closeOrphanProcess05Lane
 	service.process05ResumePaused = r.resumePausedProcess05
