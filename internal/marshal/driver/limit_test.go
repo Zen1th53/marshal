@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -120,5 +121,56 @@ func TestOversizedDiffHandInKeepsPointer(t *testing.T) {
 	if len(out.Limits) != 1 || out.Limits[0].Kind != "git_diff" || out.Limits[0].EvidenceRef != "result:"+out.ResultCommit ||
 		out.Limits[0].ActualBytes <= maxGitOutput || !strings.Contains(out.Limits[0].Action, out.ResultCommit+" -- <path>") || strings.Contains(out.Limits[0].Action, wt) {
 		t.Fatalf("limits = %+v", out.Limits)
+	}
+}
+
+// Driver output at its 64 KiB cap is kept whole; one byte over keeps a
+// UTF-8-safe head, states the exact dropped byte count and how to inspect the
+// full output, and records a driver_output limit on the hand-in.
+func TestOutputLimitAtCap(t *testing.T) {
+	exact := strings.Repeat("x", maxOutput)
+	// capBuffer at exact cap and 1 byte over.
+	at := &capBuffer{limit: maxOutput}
+	_, _ = at.Write([]byte(exact))
+	if at.String() != exact || strings.Contains(at.String(), "[truncated:") {
+		t.Fatalf("capBuffer at exact cap was truncated: len=%d", len(at.String()))
+	}
+	over := &capBuffer{limit: maxOutput}
+	_, _ = over.Write([]byte(exact + "y"))
+	if !strings.HasPrefix(over.String(), exact) || !strings.Contains(over.String(), "1 bytes dropped") || !strings.Contains(over.String(), "full output") {
+		t.Fatalf("capBuffer 1 byte over cap: %q", over.String()[maxOutput-10:])
+	}
+
+	// bound() at exact cap and 1 byte over.
+	if got := bound(exact); got != exact {
+		t.Fatalf("bound at exact cap changed output: len=%d", len(got))
+	}
+	if got := bound(exact + "y"); !strings.HasPrefix(got, exact) || !strings.Contains(got, "1 bytes dropped") || !strings.Contains(got, "full output") {
+		t.Fatalf("bound 1 byte over cap: %q", got[maxOutput-10:])
+	}
+
+	// UTF-8 multi-byte rune straddling maxOutput is never split mid-rune.
+	straddle := strings.Repeat("a", maxOutput-1) + "é" // maxOutput+1 bytes total
+	utfBuf := &capBuffer{limit: maxOutput}
+	_, _ = utfBuf.Write([]byte(straddle))
+	if got := utfBuf.String(); !utf8.ValidString(got) || !strings.Contains(got, "2 bytes dropped") {
+		t.Fatalf("capBuffer split UTF-8 rune or miscounted drops: valid=%v tail=%q", utf8.ValidString(got), got[maxOutput-10:])
+	}
+	if got := bound(straddle); !utf8.ValidString(got) || !strings.Contains(got, "2 bytes dropped") {
+		t.Fatalf("bound split UTF-8 rune or miscounted drops: valid=%v tail=%q", utf8.ValidString(got), got[maxOutput-10:])
+	}
+
+	// Native worker emitting > maxOutput bytes on stderr records a driver_output limit.
+	task, wt := newTask(t)
+	script := filepath.Join(t.TempDir(), "noisy-worker")
+	body := "#!/bin/sh\nhead -c 65537 /dev/zero | tr '\\0' 'e' >&2\n"
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	n := Native{Provider: "test", Binary: script, Args: func(Request) []string { return nil }, Parse: parseNone}
+	out := handIn(t, n, Request{Task: task, Worktree: wt, Brief: "run"})
+	if len(out.Limits) != 1 || out.Limits[0].Kind != "driver_output" || !out.Limits[0].Limited ||
+		out.Limits[0].ActualBytes != maxOutput+1 || out.Limits[0].CapBytes != maxOutput || out.Limits[0].Action == "" {
+		t.Fatalf("native stderr over cap limits = %+v", out.Limits)
 	}
 }
