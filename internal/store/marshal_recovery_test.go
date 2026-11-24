@@ -9,6 +9,40 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+func TestMarshalUnfinishedRunsIncludesWorkerSlots(t *testing.T) {
+	for _, state := range []marshal.SlotState{marshal.SlotReserved, marshal.SlotRunning, marshal.SlotHeld, marshal.SlotStaged, marshal.SlotReleased} {
+		for _, acked := range []bool{false, true} {
+			t.Run(string(state)+map[bool]string{false: "/unacknowledged", true: "/acknowledged"}[acked], func(t *testing.T) {
+				s := openTestStore(t)
+				marshalTestProject(t, s)
+				slot := marshal.WorkerSlot{LaunchKey: "launch", TaskID: "a", State: state, Acked: acked}
+				if state == marshal.SlotStaged || state == marshal.SlotReleased {
+					slot.Exit = &marshal.StagedExit{Proof: marshal.ExitProofExited, ExitDigest: "exit"}
+				}
+				run := marshal.Run{PlanID: "plan", PlanVersion: 1, State: marshal.Dispatching, Settings: marshal.DefaultSettings(), Slots: []marshal.WorkerSlot{slot}}
+				if _, err := s.SetMarshalRun(t.Context(), "p", "run", run, 0); err != nil {
+					t.Fatal(err)
+				}
+				ids, err := s.MarshalUnfinishedRuns(t.Context(), "p")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if state == marshal.SlotReleased && acked {
+					if len(ids) != 0 {
+						t.Fatalf("acknowledged release selected: %v", ids)
+					}
+				} else if len(ids) != 1 || ids[0] != "run" {
+					t.Fatalf("unfinished slot omitted: %v", ids)
+				}
+				ids, err = s.MarshalUnfinishedRuns(t.Context(), "other")
+				if err != nil || len(ids) != 0 {
+					t.Fatalf("selected another project's run: %v %v", ids, err)
+				}
+			})
+		}
+	}
+}
+
 func TestMarshalRetryRetainsSupersededAttemptAtomically(t *testing.T) {
 	s := openTestStore(t)
 	marshalTestProject(t, s)
