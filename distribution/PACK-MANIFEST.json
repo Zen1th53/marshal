@@ -12386,8 +12386,8 @@
     },
     {
       "path": "internal/tui/board_change_default_test.go",
-      "sha256": "48ceb1ee1d39f904facf43aeb4d2beb71f8625d96753065a250ca6680ef78e78",
-      "bytes": 1364
+      "sha256": "3e6a7012a0dc5133baf846017d8dc2607b03ab4592c0bfc953bc8ce7a573b9f9",
+      "bytes": 1438
     },
     {
       "path": "internal/tui/board_change_extreme_test.go",
@@ -13111,8 +13111,8 @@
     },
     {
       "path": "internal/tui/chat_mcp_reconnect_extreme_test.go",
-      "sha256": "5785d3bdbca7d0bdd2f3f1c9e77f80ba03d0ae8dd98e2130745f36044b3a0f37",
-      "bytes": 6812
+      "sha256": "f57016150550c41aa10f84a64103c91153660eaeb4142d2c9ac5024283004bc6",
+      "bytes": 6857
     },
     {
       "path": "internal/tui/chat_mcp_reconnect_test.go",
@@ -15771,8 +15771,8 @@
     },
     {
       "path": "internal/tui/tmux_chat_test.go",
-      "sha256": "fc786a75dceb7f7406ed71245c7b92e2056889a178187d880a85c580b6d6587d",
-      "bytes": 6133
+      "sha256": "e49607df9b88b342c7dae8fc24ccb107d5cc7a239aa0f80f5b52185f501715ad",
+      "bytes": 7402
     },
     {
       "path": "internal/tui/tmux_completion_test.go",
@@ -15821,8 +15821,8 @@
     },
     {
       "path": "internal/tui/tmux_native_test.go",
-      "sha256": "7f6e975e28ee70dacdc6db1bdec543ddc73924109c2d8478179a9aa4e0e31876",
-      "bytes": 40173
+      "sha256": "f8b571069617f85416534be363c8741e0965b9d04c946799953e06c2b036dc2e",
+      "bytes": 40358
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",
