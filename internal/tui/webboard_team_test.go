@@ -216,20 +216,29 @@ func TestWebSessionImportUsesAuthorizedCandidate(t *testing.T) {
 	if r := w.webTeamCommand(granted); r.Status != "done" {
 		t.Fatalf("granted import: %+v", r)
 	}
-	if !slices.Equal(loaded, []string{"claude /earlier/claude-folder"}) || len(asked) != 0 {
+	// A stored grant is read directly where reads are not queued, and goes
+	// through the owner's permission queue where they are.
+	if launchEarlierWorkThroughQueue {
+		if len(loaded) != 0 || !slices.Equal(asked, []string{"claude /earlier/claude-folder"}) {
+			t.Fatalf("granted: loaded %v asked %v", loaded, asked)
+		}
+	} else if !slices.Equal(loaded, []string{"claude /earlier/claude-folder"}) || len(asked) != 0 {
 		t.Fatalf("granted: loaded %v asked %v", loaded, asked)
 	}
+	loadedBefore, askedBefore := len(loaded), len(asked)
 	ungranted := runTestAction(t, w, imports[1], "41112233445566778899aabbccddeeff", webboard.SettingPayload{})
 	r := w.webTeamCommand(ungranted)
-	if len(loaded) != 1 {
+	if len(loaded) != loadedBefore {
 		t.Fatalf("an import without a grant read the folder: %v", loaded)
 	}
+	// Without a grant the queueing edition leaves the owner's denial alone;
+	// the other asks for the read.
 	if launchEarlierWorkThroughQueue {
-		if r.Status != "done" || !slices.Equal(asked, []string{"codex /earlier/codex-folder"}) {
+		if r.Status != "refused" || len(asked) != askedBefore {
 			t.Fatalf("ungranted: %+v asked %v", r, asked)
 		}
-	} else if r.Status != "refused" || len(asked) != 0 {
-		t.Fatalf("ungranted without a stored grant: %+v asked %v", r, asked)
+	} else if r.Status != "done" || !slices.Equal(asked, []string{"codex /earlier/codex-folder"}) {
+		t.Fatalf("ungranted: %+v asked %v", r, asked)
 	}
 	for _, text := range []string{r.Text, teamReceipt(t, w, ungranted).Result} {
 		if strings.Contains(text, "/earlier/") {
@@ -239,7 +248,7 @@ func TestWebSessionImportUsesAuthorizedCandidate(t *testing.T) {
 	// A candidate that is no longer offered is not imported.
 	candidates = candidates[1:]
 	again := runTestAction(t, w, imports[0], "42112233445566778899aabbccddeeff", webboard.SettingPayload{})
-	if r := w.webTeamCommand(again); r.Status != "refused" || len(loaded) != 1 {
+	if r := w.webTeamCommand(again); r.Status != "refused" || len(loaded) != loadedBefore {
 		t.Fatalf("withdrawn candidate: %+v loaded %v", r, loaded)
 	}
 }
@@ -252,7 +261,7 @@ func TestFirstRunMarshalModelEffortAndTelemetry(t *testing.T) {
 		SignedIn:  map[string]bool{"codex": true}, Installed: map[string]bool{"codex": true},
 		Probe: v2Probe{Installed: map[string]bool{"codex": true}, TelemetryOn: true}}
 	ready := buildV2Ready(in)
-	if len(ready.Checks) == 0 || !strings.Contains(ready.Checks[0].Text, "high effort") || !ready.TelemetryAsk {
+	if m := buildV2Marshal(in); m.Provider != "codex" || m.Effort != "high" || len(ready.Checks) == 0 || !strings.Contains(ready.Checks[0].Text, "codex") || !ready.TelemetryAsk {
 		t.Fatalf("first-run checklist: %+v", ready)
 	}
 

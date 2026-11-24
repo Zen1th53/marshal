@@ -184,3 +184,64 @@ func TestTeamCommandPayloadsCarryNoPath(t *testing.T) {
 		}
 	}
 }
+
+// A team action goes through the same token, preview and confirmation as
+// every other command, bound to the state it was offered for and to its
+// payload, and runs once.
+func TestTeamActionTokenIsBoundAndSingleUse(t *testing.T) {
+	h := newSettingsHarness(t)
+	caps := []SettingCapability{
+		{Op: "team/provider.verify", Target: Target{Kind: "team", ID: "claude"}, AttemptID: "state-a"},
+		{Op: "team/architecture.open", Target: Target{Kind: "team", ID: "architecture"}, Revision: 0, AttemptID: "digest-a"},
+	}
+	h.s.settings.Load().Source = func() SettingsState {
+		return SettingsState{ProjectID: "project", Fence: "session", Capabilities: append([]SettingCapability(nil), caps...)}
+	}
+	calls := 0
+	h.s.sink = func(_ context.Context, a Action) Result {
+		return a.Commit(func() Result {
+			calls++
+			if err := h.st.StartWebRequest(context.Background(), *a.Command, a.Command.AttemptID); err != nil {
+				return Result{Status: "refused"}
+			}
+			_ = h.st.FinishWebRequest(context.Background(), *a.Command, store.WebReceipt{RequestID: a.Command.RequestID, Status: "applied", Code: "applied", Effects: []string{"provider-verify"}})
+			return Result{Status: "done"}
+		})
+	}
+	cap := h.s.settingsFrame().Capabilities[0]
+	req := actRequest{Action: "cmd", Token: cap.Token, Command: Command{RequestID: "b0112233445566778899aabbccddeeff", ProjectID: "project", Target: cap.Target, Op: cap.Op, AttemptID: "state-a", Payload: SettingPayload{Provider: "claude"}, Preview: true}}
+	for _, bad := range []actRequest{
+		func() actRequest { r := req; r.Op = "team/architecture.open"; return r }(),
+		func() actRequest { r := req; r.AttemptID = "state-b"; return r }(),
+		func() actRequest { r := req; r.Target.ID = "codex"; return r }(),
+	} {
+		if response := h.send(bad, "http://"+h.s.addr); response.Code != 409 && response.Code != 400 {
+			t.Fatalf("unbound team action: %d %s", response.Code, response.Body.String())
+		}
+	}
+	pathy := req
+	pathy.Payload = SettingPayload{Provider: "claude", Value: "/home/someone"}
+	if response := h.send(pathy, "http://"+h.s.addr); response.Code != 400 {
+		t.Fatalf("a payload with a path: %d %s", response.Code, response.Body.String())
+	}
+	response := h.send(req, "http://"+h.s.addr)
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	var result struct {
+		Confirmation Confirmation `json:"confirmation"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	req.Preview, req.Confirmation = false, &result.Confirmation
+	req.Token = h.s.settingsFrame().Capabilities[0].Token
+	for range 2 {
+		if response = h.send(req, "http://"+h.s.addr); response.Code != 200 {
+			t.Fatal(response.Body.String())
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("team action ran %d times", calls)
+	}
+}

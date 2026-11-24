@@ -1120,7 +1120,7 @@
       if (c.hint) li.appendChild(el("span", "hint", c.hint));
       cl2.appendChild(li);
     });
-    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Check again from the terminal Board." : "");
+    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Recheck a provider under Provider actions, or from the terminal Board." : "");
   }
 
   // ---- Activity ------------------------------------------------------------------

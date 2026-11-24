@@ -117,3 +117,44 @@ func TestArchitectureProgressUsesDeliveredChangedPaths(t *testing.T) {
 		t.Fatalf("built parts: %s %v", raw, err)
 	}
 }
+
+// The accepted architecture opens on its own read-only review for the digest
+// the owner was shown, refuses a different one, and offers no write.
+func TestStartAcceptedArchitectureReviewIsReadOnlyAndBound(t *testing.T) {
+	r := architectureServerRuntime(t)
+	requiredAcceptedContextFixture(t, r)
+	revision, digest := r.AcceptedArchitecture(t.Context())
+	if revision < 1 || digest == "" {
+		t.Fatalf("accepted architecture %d %q", revision, digest)
+	}
+	if _, err := r.StartAcceptedArchitectureReview(t.Context(), "", "", "another-digest", ArchitectureReviewHooks{}); err == nil {
+		t.Fatal("a different accepted digest opened")
+	}
+	session, err := r.StartAcceptedArchitectureReview(t.Context(), "", "", digest, ArchitectureReviewHooks{})
+	if err != nil || session == nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer session.Close()
+	if session.SourceContractDigest != digest {
+		t.Fatalf("session is built from %q, not %q", session.SourceContractDigest, digest)
+	}
+	state := architectureServerGET(t, session)
+	if state["current"] != true || state["read_only"] != true || state["approved"] != false {
+		t.Fatalf("state %+v", state)
+	}
+	location, _ := url.Parse(session.URL)
+	q, _ := http.NewRequest(http.MethodPost, "http://"+location.Host+"/api/review", strings.NewReader(`{}`))
+	q.Header.Set("Authorization", "Bearer "+location.Query().Get("token"))
+	response, err := http.DefaultClient.Do(q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("a write to the accepted review: %d", response.StatusCode)
+	}
+	// While it is open no second review is started over it.
+	if _, err := r.StartAcceptedArchitectureReview(t.Context(), "", "", digest, ArchitectureReviewHooks{}); err == nil {
+		t.Fatal("a second review started over the open one")
+	}
+}

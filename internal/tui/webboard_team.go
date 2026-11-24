@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +16,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
@@ -64,25 +67,29 @@ func init() {
 		if err != nil {
 			return nil
 		}
-		w.prov.mu.Lock()
-		installed := slices.Clone(w.prov.snap.Installed)
-		w.prov.mu.Unlock()
-		for _, p := range installed {
-			if !slices.ContainsFunc(rows, func(r store.ProviderStatus) bool { return providerWorker(r.Provider) == providerWorker(p.Provider) }) {
-				rows = append(rows, p)
-			}
-		}
-		return rows
+		// As the Providers view reads them: installed providers never
+		// verified are rows too, so a fresh install can be checked.
+		return append(slices.Clone(rows), installedRows(rows, w.installedProviders())...)
 	}
 	webTeamParts.candidates = func(ctx context.Context, w *Workspace) []webImportCandidate {
 		if w.runtime == nil {
 			return nil
 		}
+		root := w.runtime.ProjectRoot()
+		if prefs, err := settingscatalog.ReadScopedPreference(filepath.Join(root, ".marshal", "session-import"), "session-import"); err == nil && settingscatalog.Preference(prefs, "session-import") == "off" {
+			return nil
+		}
 		var out []webImportCandidate
 		for _, provider := range []string{"claude", "codex"} {
-			if folder := w.runtime.EarlierWorkFolder(provider); folder != "" {
-				out = append(out, webImportCandidate{provider, folder, w.runtime.HasReadGrant(folder)})
+			folder := w.runtime.EarlierWorkFolder(provider)
+			if folder == "" {
+				continue
 			}
+			granted := w.runtime.HasReadGrant(folder)
+			if _, err := os.Stat(folder); err != nil && !granted {
+				continue
+			}
+			out = append(out, webImportCandidate{provider, folder, granted})
 		}
 		return out
 	}
@@ -95,7 +102,7 @@ func init() {
 		if w.permissions.continuations == nil {
 			w.permissions.continuations = make(map[string]string)
 		}
-		w.permissions.continuations[folder] = provider
+		w.permissions.continuations[filepath.Clean(folder)] = provider
 		w.permissions.mu.Unlock()
 		w.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "Marshal", Reason: "Load earlier " + provider + " work for this project", ContinuationProvider: provider})
 	}
@@ -109,6 +116,16 @@ func init() {
 		if w.runtime == nil {
 			return errNoRuntime
 		}
+		// One review at a time holds the lease: the page's own earlier
+		// map is closed first; a pending review the owner has open keeps it
+		// and the open is refused.
+		w.webTeam.mu.Lock()
+		old := w.webTeam.review
+		w.webTeam.review = nil
+		w.webTeam.mu.Unlock()
+		if old != nil {
+			_ = old.Close()
+		}
 		session, err := w.runtime.StartAcceptedArchitectureReview(ctx, "", w.sessionID, digest, app.ArchitectureReviewHooks{})
 		if err != nil {
 			return err
@@ -120,12 +137,8 @@ func init() {
 			return err
 		}
 		w.webTeam.mu.Lock()
-		old := w.webTeam.review
 		w.webTeam.review = session
 		w.webTeam.mu.Unlock()
-		if old != nil {
-			_ = old.Close()
-		}
 		return nil
 	}
 }
@@ -134,6 +147,18 @@ func init() {
 type webTeamState struct {
 	mu     sync.Mutex
 	review *app.ArchitectureReviewSession
+}
+
+// closeWebTeamReview ends the accepted architecture's read-only review the
+// Architecture page opened.
+func (w *Workspace) closeWebTeamReview() {
+	w.webTeam.mu.Lock()
+	old := w.webTeam.review
+	w.webTeam.review = nil
+	w.webTeam.mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
 }
 
 func teamDigest(parts ...string) string {
@@ -350,10 +375,17 @@ func (w *Workspace) webTeamEffect(ctx context.Context, i store.WebIntent, p webb
 		}
 		return webboard.Result{Status: "done", Text: fmt.Sprintf("Routed %s from %s to %s; /marshal resume to continue.", strings.Join(moved, ", "), i.Key, to)}, "provider-route"
 	case "team/provider.signin.start":
-		w.openAgySignIn(ctx)
+		answer, started, _ := w.startAgySignIn(ctx)
+		if !started {
+			return refused(RedactContent(answer, nil)), ""
+		}
 		return webboard.Result{Status: "done", Text: "agy opened in its own terminal window: sign in there; the Board checks agy again when it closes. " + signInHint("agy") + "."}, "provider-signin-window"
 	case "team/telemetry.choose":
-		w.chooseTelemetry(ctx, p.Value == "keep")
+		keep := p.Value == "keep"
+		w.markTelemetryChoice(keep)
+		if err := w.saveTelemetryChoice(ctx, keep); err != nil {
+			return refused("Could not save the usage counts choice: " + RedactContent(err.Error(), nil)), ""
+		}
 		return webboard.Result{Status: "done", Text: "Usage counts choice saved: " + p.Value + "."}, "telemetry-choice"
 	case "team/session.import.request":
 		project := w.webProjectID()
@@ -361,17 +393,22 @@ func (w *Workspace) webTeamEffect(ctx context.Context, i store.WebIntent, p webb
 			if webCandidateID(project, c) != i.Key {
 				continue
 			}
+			// As the launch scan decides, per edition: a stored grant is
+			// read directly where reads are not queued and goes through the
+			// owner's permission queue where they are; with no grant the
+			// queueing edition leaves the owner's denial alone and the
+			// other asks for the read.
 			switch {
-			case c.Granted:
+			case c.Granted && !launchEarlierWorkThroughQueue:
 				if err := webTeamParts.load(ctx, w, c.Provider, c.Folder); err != nil {
 					return refused("Earlier " + c.Provider + " work could not be loaded: " + RedactContent(err.Error(), nil)), ""
 				}
 				return webboard.Result{Status: "done", Text: "Loaded earlier " + c.Provider + " sessions under the read grant."}, "earlier-session-read"
-			case launchEarlierWorkThroughQueue:
+			case c.Granted || !launchEarlierWorkThroughQueue:
 				webTeamParts.request(w, c.Provider, c.Folder)
-				return webboard.Result{Status: "done", Text: "Asked for the read grant on earlier " + c.Provider + " sessions. Answer it in the terminal; nothing was read."}, "read-grant-request"
+				return webboard.Result{Status: "done", Text: "Asked the permission queue about earlier " + c.Provider + " sessions. Answer it in the terminal; nothing was read yet."}, "read-grant-request"
 			}
-			return refused("Earlier " + c.Provider + " sessions need the operator's stored read grant first; nothing was read."), ""
+			return refused("Earlier " + c.Provider + " sessions have no read grant and none is asked for here; nothing was read."), ""
 		}
 		return refused("That earlier-session source is no longer offered."), ""
 	case "team/architecture.open":
