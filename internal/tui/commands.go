@@ -769,6 +769,7 @@ func (h *CommandHandler) helpText() string {
   /effort [<level>|default]  Show or set the reasoning effort future Codex runs request
   /provider [status|use <name>|config <name>]  Probe availability, choose the default provider (/providers alias)
   /policy [network|sandbox|capability|scope|write|audit]  Enforcement NOT VERIFIED
+  /blind [resolve]         Blind interpretation: not available in this build
   /sandbox [read-only|workspace-write]  No args: NOT VERIFIED; mode: open native Codex
   /backup [create|restore <backup_path> [confirm <digest>]]  Create a verified snapshot; preview, then restore one
   /fingerprint             Report per-run fingerprint history unavailable
@@ -794,7 +795,7 @@ func (h *CommandHandler) helpText() string {
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)
   /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
-  /view [chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
+  /view [board|classic|chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
   /takeover, /take-over    Enable interactive typing in the active worker pane
   /task-model <task>       Choose the model a task runs on
   /stop all                Stop all worker sessions while keeping MARSHAL active
@@ -823,7 +824,15 @@ Composer:
 	if editionExtreme {
 		help = strings.Replace(help, "  /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement\n", "  /ultra [status|start|stop]  Show local ULTRA entitlement or save the execution preference\n", 1)
 	}
-	return help
+	return help + `
+More /marshal commands (/marshal help lists all):
+  /marshal retry <task>    Retry a returned or escalated task
+  /marshal reassign <task> <worker>  Reassign an escalated task
+  /marshal cancel <task>   Cancel an escalated task
+  /marshal draft discard   Discard an unimported draft
+  /marshal import <TASK-id> <check>  Review a finished CLI task
+  Guidance only: /marshal pause, models, deliver and plan-* name the real command paths and run nothing.
+`
 }
 
 // plainTextRunsNothing explains why a bare line did nothing, and names the ways

@@ -5,6 +5,7 @@ package tui
 import (
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -379,15 +380,15 @@ func TestPTYMarshalCompletionSelectionAndFinishedGoal(t *testing.T) {
 	s.send("\x1b[A") // Up selects the last candidate without changing the draft.
 	s.send("\r")
 	time.Sleep(400 * time.Millisecond)
-	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal approve-task" {
+	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal "+marshalSubcommands[len(marshalSubcommands)-1] {
 		t.Fatalf("Enter ignored explicit selection: %q", got)
 	}
 	s.send("\x15")
 	s.send("/marshal ")
 	time.Sleep(300 * time.Millisecond)
-	// chat is first; eleven Tabs reach settings in the declared order
-	// (marshalSubcommands: chat, architecture, web, ..., model, settings).
-	s.send(strings.Repeat("\t", 11))
+	// chat is first; one Tab per word after it reaches settings in the
+	// order of marshalSubcommands.
+	s.send(strings.Repeat("\t", slices.Index(marshalSubcommands, "settings")+1))
 	s.send("\r")
 	time.Sleep(400 * time.Millisecond)
 	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal settings" {

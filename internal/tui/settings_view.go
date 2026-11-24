@@ -295,3 +295,32 @@ func (w *Workspace) publishFileSetting(path, key string) {
 	c := p.Changes[len(p.Changes)-1]
 	w.publishSettingChange(store.SettingChange{ID: c.ID, Revision: c.Revision, Key: c.Key, Old: c.Old, New: c.New, Actor: c.Actor, At: c.At, Scope: "project file", Applies: "next chat or launch"})
 }
+
+// configureSettingsCompletion uses the same descriptors as settings validation.
+func configureSettingsCompletion(ctx *CompletionContext) {
+	ctx.Subcommands["/marshal settings"] = nil
+	if ctx.Descriptions == nil {
+		ctx.Descriptions = make(map[string]string)
+	}
+	for _, d := range settingscatalog.Catalogue() {
+		ctx.Subcommands["/marshal settings"] = append(ctx.Subcommands["/marshal settings"], d.Key)
+		path := "/marshal settings " + d.Key
+		ctx.Descriptions[path] = "default: " + d.Default + " · " + d.Applies + " · " + d.Help
+		if d.LockReason != "" {
+			ctx.Descriptions[path] += " · locked: " + d.LockReason
+			continue
+		}
+		ctx.Subcommands[path] = append([]string(nil), d.Values...)
+		if d.Key == "execution-rights" {
+			ctx.Subcommands[path] = append(ctx.Subcommands[path], "none")
+		}
+	}
+	for _, r := range settingscatalog.UserRows(settingscatalog.Preferences{}, os.Getenv) {
+		ctx.Subcommands["/marshal settings"] = append(ctx.Subcommands["/marshal settings"], r.Key)
+	}
+	for _, key := range []string{"earlier-session-import", "memory-injection"} {
+		if _, ok := projectFileSetting("", key); ok {
+			ctx.Subcommands["/marshal settings"] = append(ctx.Subcommands["/marshal settings"], key)
+		}
+	}
+}
