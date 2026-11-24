@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/processgroup"
 	"github.com/Zen1th53/marshal/internal/workerenv"
@@ -220,8 +221,34 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 		closeTerminal()
 		cancel()
 		h.runErr = err
-		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdout.String()) + stderr.String()}
+		stdoutText := stdout.String()
+		stderrText := stderr.String()
+		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdoutText) + stderrText}
 		h.reported, h.limits = stdout.result(n.Parse)
+		if stderr.dropped > 0 {
+			kept, extra := trimIncompleteTrailingUTF8(stderr.Bytes())
+			h.limits = append(h.limits, model.Limit{
+				Kind:        "driver_output",
+				Subject:     "worker stderr",
+				ActualBytes: int64(stderr.buf.Len()) + stderr.dropped,
+				CapBytes:    maxOutput,
+				Limited:     true,
+				KeptBytes:   int64(len(kept)),
+				Action:      fmt.Sprintf("Worker stderr dropped %d bytes; inspect the worker log or rerun the command in the worktree for full output.", stderr.dropped+extra),
+			})
+		}
+		if len(stdoutText) > maxOutput && stdout.head.dropped == 0 {
+			kept := trimValidUTF8Prefix(stdoutText, maxOutput)
+			h.limits = append(h.limits, model.Limit{
+				Kind:        "driver_output",
+				Subject:     "worker stdout",
+				ActualBytes: int64(len(stdoutText)),
+				CapBytes:    maxOutput,
+				Limited:     true,
+				KeptBytes:   int64(len(kept)),
+				Action:      fmt.Sprintf("Worker stdout kept %d of %d bytes (%d dropped); inspect the worker log or rerun the command in the worktree for full output.", len(kept), len(stdoutText), len(stdoutText)-len(kept)),
+			})
+		}
 	}()
 	return h, nil
 }
