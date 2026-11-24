@@ -60,7 +60,7 @@ Three pages show the rest of what the Web Board shows, in the terminal; `Esc` or
 | `e` | With the requirements waiting: edit a line (then its letter). |
 | `r`, `i`, `c` | Open the Run, Inbox or Readiness page. |
 | `Space` or `Ctrl+K` | Open the action palette. |
-| `/` | Type a command, such as `/marshal settings` or `/task-model T03` (the model a task runs on). |
+| `/` | Type a command, such as `/marshal settings` or `/task-model T03` (the model a task runs on). Every setting, its default in each edition and when it applies is in the [settings reference](configuration.md#settings-reference). |
 | `?` | Every key. |
 | `q` | Quit. |
 | `Ctrl+X` | Stop all workers (never the Marshal). |

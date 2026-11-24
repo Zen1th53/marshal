@@ -2150,7 +2150,7 @@ features:
     tests:
       - internal/marshal.TestRunTaskControl
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#settings-reference
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
@@ -2174,7 +2174,7 @@ features:
     tests:
       - internal/marshal.TestSettingsDefaultsAndEnums
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#settings-reference
     web:
       - routeOrCommand: "#settings"
         anchor: 'kv(dl, "Approval mode"'
@@ -2198,7 +2198,7 @@ features:
     tests:
       - internal/marshal.TestSettingsDefaultsAndEnums
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#settings-reference
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
@@ -2222,7 +2222,7 @@ features:
     tests:
       - internal/marshal.TestReworkPolicy
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#settings-reference
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
@@ -2246,7 +2246,7 @@ features:
     tests:
       - internal/marshal.TestTierPolicyMarshalLeaseUsesSettings
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#concurrency
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
@@ -2271,7 +2271,7 @@ features:
       - internal/tui.TestExtremeSettingsApplyAndFormat
       - internal/marshal.TestExtremeConcurrencySettingsRoundTripAndValidation
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#concurrency
     web:
       - routeOrCommand: "#team"
         anchor: 'kv(dl, "Lane caps"'
@@ -2294,7 +2294,7 @@ features:
     tests:
       - internal/tui.TestExtremeSettingsApplyAndFormat
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#concurrency
     web:
       - routeOrCommand: "#team"
         anchor: 'kv(dl, "Lane caps"'
@@ -2317,7 +2317,7 @@ features:
     tests:
       - internal/marshal.TestExtremeFailoverSettingsRoundTrip
     docs:
-      - docs/configuration.md
+      - docs/configuration.md#concurrency
     web:
       - routeOrCommand: "#team"
         anchor: 'f.ready.defaults.forEach(function (d) { kv(dl, cap(d.name), d.value); });'

@@ -137,6 +137,8 @@ func editionEffective(s marshal.Settings, key string) (string, bool) {
 
 func configureEditionDescriptor(d *Descriptor) {
 	switch d.Key {
+	case "ultra-concurrency":
+		d.Help = "Inactive legacy setting kept for older projects: it does not set how many workers run. Use the provider limits and global-cap."
 	case "worker-stall-minutes":
 		d.Help += " Zero or off disables the stall watchdog while keeping observation signals; blank restores 15 minutes."
 	case "cross-review":
@@ -147,3 +149,6 @@ func configureEditionDescriptor(d *Descriptor) {
 		d.Help = "Controls hand-in architecture conformance (enforce, warn, or off). Plans with a mandatory architecture obligation lock conformance to enforce."
 	}
 }
+
+// EditionLabel names the build this catalogue describes.
+const EditionLabel = "default"

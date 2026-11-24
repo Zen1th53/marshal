@@ -513,7 +513,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		"- A worker appearing here only means its CLI is installed. Governed work also needs a current verified harness profile and a matching canonical Process 04 route and assignment. If that evidence is missing, the runtime will reject the draft and explain what to verify. Do not claim a task can run until the runtime has accepted its canonical plan.\n"+
 		"- Give each task exactly one success criterion and executable checks that prove that criterion. Process 05 binds checks to that exact criterion.\n"+
 		runAuthority.settings+
-		fmt.Sprintf("- Current limits: rework-limit %d; ultra-concurrency %d; task-tokens %d; plan-tokens %d; task-money %d; plan-money %d; task-wall-seconds %d; plan-wall-seconds %d.\n", settings.ReworkLimit, settings.UltraConcurrency, settings.Budget.Tokens.Task, settings.Budget.Tokens.Plan, settings.Budget.Money.Task, settings.Budget.Money.Plan, settings.Budget.WallTime.Task, settings.Budget.WallTime.Plan)+
+		fmt.Sprintf("- Current limits: rework-limit %d; %stask-tokens %d; plan-tokens %d; task-money %d; plan-money %d; task-wall-seconds %d; plan-wall-seconds %d.\n", settings.ReworkLimit, runAuthority.concurrency, settings.Budget.Tokens.Task, settings.Budget.Tokens.Plan, settings.Budget.Money.Task, settings.Budget.Money.Plan, settings.Budget.WallTime.Task, settings.Budget.WallTime.Plan)+
 		runAuthority.control+
 		runAuthority.goal+
 		"- "+app.MarshalTaskDecomposition+"\n"+

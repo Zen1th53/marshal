@@ -526,13 +526,13 @@
     },
     {
       "path": "docs/board-and-keys.md",
-      "sha256": "7954f4f9f521259b93915901c46712a1fcd4f9afc389faa59979c48da22e79fb",
-      "bytes": 15724
+      "sha256": "79f1a20e76c2c102ff601a164e053a8ad6bbbe10e6eb714f97d5b9e770595038",
+      "bytes": 15856
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "1bab0f0918b86506a9b672c6de490f1397856b25532f6d7e55d6c903538ebf05",
-      "bytes": 7340
+      "sha256": "c51bd6571576f6f035e3b8389cf0cf97175674b0ef9c0713e6ac03efb61ff4fa",
+      "bytes": 20053
     },
     {
       "path": "docs/design/board-v2/screen1.ans",
@@ -576,8 +576,8 @@
     },
     {
       "path": "docs/design/web-board.md",
-      "sha256": "eae59f84074e812e246cbc4652811d13be342b7927e4d46ae15a79a46bb4a4c0",
-      "bytes": 11970
+      "sha256": "43d0ad0ad2830cbd5de6798d5396ef50a6c082f57a7e183f4eb2e9b07e5a09f7",
+      "bytes": 12399
     },
     {
       "path": "docs/faq.md",
@@ -586,8 +586,8 @@
     },
     {
       "path": "docs/features.yaml",
-      "sha256": "76707e7f33e4219d131e915a698f6bd174c89944c4498b78f16b5aba5e6a217c",
-      "bytes": 122708
+      "sha256": "c683e8778716f1a0c587949f071bb16bdd8a16898e0b99ddf863fbfe80cae99a",
+      "bytes": 122832
     },
     {
       "path": "docs/getting-started.md",
@@ -676,8 +676,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "sha256": "83abbea0dd1b05836d3aed0d5a18b2366d5f4978d172e1b8f80601186ae685d0",
-      "bytes": 11872
+      "sha256": "7f9048c82b32f5e2d02164b042baba6ee5765ad7000ba96b2a1813d56f30a974",
+      "bytes": 12166
     },
     {
       "path": "docs/upgrading.md",
@@ -2626,7 +2626,7 @@
     },
     {
       "path": "internal/app/marshal_event_artifacts_test.go",
-      "sha256": "2b94d8e208c97e3a8788eaad0e53baa21e519079a811f11805ad4ab48bbb6ffd",
+      "sha256": "7e65115dcd56b31af8f7889f33ebf386bbb760479df7da69c7bef5c0d31c6130",
       "bytes": 34917
     },
     {
@@ -2921,8 +2921,8 @@
     },
     {
       "path": "internal/app/marshal_model_transport_default_test.go",
-      "sha256": "da5445898cfefcaa7618d699878921be3214e09858573787d75e87d5c978491b",
-      "bytes": 721
+      "sha256": "7c7e65ab686e424dee7aaec6c0f536761c183072a66bde9e76f8a62d96a77c0a",
+      "bytes": 865
     },
     {
       "path": "internal/app/marshal_model_transport_extreme_test.go",
@@ -2931,8 +2931,8 @@
     },
     {
       "path": "internal/app/marshal_model_transport_test.go",
-      "sha256": "00d66664dd274de3e12991a392c5fc00ed094ae8be2a424d385ce0d8b6f8ed9b",
-      "bytes": 6924
+      "sha256": "4545025ad28e87a925594545cc425eb3effe1690605dba1ed1efe2c58eebc8f1",
+      "bytes": 6920
     },
     {
       "path": "internal/app/marshal_native_plan_bridge_extreme_test.go",
@@ -10431,18 +10431,23 @@
     },
     {
       "path": "internal/settingscatalog/catalog_default.go",
-      "sha256": "00f2cfa174bc2e8eb550cbf1ccc59063cbc55c3d03b8e54fcae1ed36ef9110fd",
-      "bytes": 3229
+      "sha256": "21db0ec9135b7d96f7e54614f95f4a3b67f61477d7f93056b076da71ad230ba4",
+      "bytes": 3514
     },
     {
       "path": "internal/settingscatalog/catalog_extreme.go",
-      "sha256": "492dcc14b5069d33588a36846b316f874197d8559390821f2fe038e50d55319a",
-      "bytes": 5561
+      "sha256": "ed1bceb7fc67a05e39d502840ef282e996492497f692287c00fbb39a1ad0e4a5",
+      "bytes": 5818
     },
     {
       "path": "internal/settingscatalog/catalog_test.go",
       "sha256": "ad4aa0914741bccab854da206561ae23ec8bce18d8f8e1b50a4d082b8cd04564",
       "bytes": 4100
+    },
+    {
+      "path": "internal/settingscatalog/docs.go",
+      "sha256": "2dd381c7ca094de06e83de62dcc444e0f1b0483e34426ec7198b51549ea2b14f",
+      "bytes": 1357
     },
     {
       "path": "internal/settingscatalog/preferences.go",
@@ -13796,8 +13801,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "1fa153d9833ac3019539b2aa8cfde17a39daa392c2bd878bad69a30083f51c9b",
-      "bytes": 103477
+      "sha256": "4a754256932b8a752a261ff5281024e298d4873f9c6f48da848268255de18315",
+      "bytes": 104069
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -14596,8 +14601,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "8cf07b3a60e17382de7215ff0a51adba55447668220cc20523df736c98eece7a",
-      "bytes": 75440
+      "sha256": "3498d217ef21648a80947f6fd78dcbbed735ec669d58536990f5bc5816aaeee4",
+      "bytes": 75482
     },
     {
       "path": "internal/tui/marshal_proposal_default_test.go",
@@ -14676,18 +14681,18 @@
     },
     {
       "path": "internal/tui/marshal_run_authority.go",
-      "sha256": "426841e6bea5dc33a8f43eedef10ba193fa2a1d0f27189c3bff29becd99fac77",
-      "bytes": 610
+      "sha256": "4628c56a1eb493da849c96e9296aad8203bdb53c51530f4b592696cb966bb58f",
+      "bytes": 699
     },
     {
       "path": "internal/tui/marshal_run_authority_default.go",
-      "sha256": "2db12867e7180a8105b69da51ab52e7a328f89f9af7dbeb17118b7bbc9a0c8ec",
-      "bytes": 1487
+      "sha256": "8906c8ad69709f1a6763793733fd59af57d8f038ffa0c8ad480b6593bdad47b0",
+      "bytes": 1644
     },
     {
       "path": "internal/tui/marshal_run_authority_extreme.go",
-      "sha256": "0967aab9e7462f965f70176b785e014bb5e0116507353a9d6d3bca7ee7d0e2bd",
-      "bytes": 2893
+      "sha256": "72d401bc0c81f0501c2e024525db2cf0087ba4d3f480a9ac0ab93998f7317fb1",
+      "bytes": 3419
     },
     {
       "path": "internal/tui/marshal_run_authority_extreme_test.go",
@@ -16041,12 +16046,12 @@
     },
     {
       "path": "internal/tui/testdata/board/help-split-120x40.golden",
-      "sha256": "9c6bc1d5f19dab7c9223e0cd21a5b269d74ff6280422e62ffc4b17b18efb05b0",
-      "bytes": 7790
+      "sha256": "f71a9c29c60dbd99bfa6add8d1d6847546078cd1928163de124ca006c7020717",
+      "bytes": 7776
     },
     {
       "path": "internal/tui/testdata/board/help-split-80x24.golden",
-      "sha256": "ef9c7339e2d023e7a58843db82a7fa4b989bb39befa705f0b465cf4e4a98388b",
+      "sha256": "3ab7781d94b8e4ba7fc1d8c0771d1485b26ff90c39f5cb73f17a03ea9d28f00c",
       "bytes": 3715
     },
     {
@@ -16201,22 +16206,22 @@
     },
     {
       "path": "internal/tui/testdata/board/palette-empty-132x40.golden",
-      "sha256": "44e5131b18d3171c166727e65ec66bb0fba0a9dadff906e503ae9e0151d7fcf2",
+      "sha256": "9549aa0bae3a4d0b398026731b7d74521525a97bc19fac2a775cdd95da6dd121",
       "bytes": 1028
     },
     {
       "path": "internal/tui/testdata/board/palette-empty-80x24.golden",
-      "sha256": "5755e98292969a0c972c5926d2dc31a0eb2e0ce2f04d82d891a6f0fecd4827af",
+      "sha256": "bf533d025910aa048219ce318c545319fc8d3bc95aceb8bec89be91289603f3b",
       "bytes": 1280
     },
     {
       "path": "internal/tui/testdata/board/palette-empty-ascii-132x40.golden",
-      "sha256": "f6ea5ad4213cb663fc1cba3382a87b52f2890435138c3d20c6b743539d8974f0",
+      "sha256": "8e233036104a909039554c8e4afc6e7e0b05dc3d321e157063c32aad39f8657a",
       "bytes": 702
     },
     {
       "path": "internal/tui/testdata/board/palette-empty-ascii-80x24.golden",
-      "sha256": "f6adf71df72a21f508e488bcfd8f5427338a6bc44176091a07fdd3902c942c93",
+      "sha256": "f7c4b774b94144c70ca225b18cc453f7f4bca285cc0f8d2df40d128409bba22c",
       "bytes": 962
     },
     {
@@ -16246,7 +16251,7 @@
     },
     {
       "path": "internal/tui/testdata/board/palette-search-retry-132x40.golden",
-      "sha256": "121dbb7fb212d12ee906e009c5cb13083a8738eaf58cd2e0cd2433ee5892fcb1",
+      "sha256": "456dc130eda176e2ce66db708447161f4716c0191062e988f21620ac8cd7ce94",
       "bytes": 695
     },
     {
@@ -18045,6 +18050,26 @@
       "bytes": 25441
     },
     {
+      "path": "tools/feature-inventory/cmd/settingsdocs/main.go",
+      "sha256": "9330d2b4b42505d9e84e8ee2bd0054823151c09e4c04f280970593ae5ac90025",
+      "bytes": 1969
+    },
+    {
+      "path": "tools/feature-inventory/docs_default_test.go",
+      "sha256": "16f49fe926d61dd3459ccbd4b3be0fb42fddb4df84ec1419cedfedf4b129e77f",
+      "bytes": 69
+    },
+    {
+      "path": "tools/feature-inventory/docs_governed_test.go",
+      "sha256": "7b7aaa8e8c7549ef70b04ef7ebfc8c5b9a2427e763eb572dac46173bac6b7234",
+      "bytes": 67
+    },
+    {
+      "path": "tools/feature-inventory/docs_test.go",
+      "sha256": "e70a96357b62ef307ae31731020d32dec5dc9a070aa6c73370a39096a42c9554",
+      "bytes": 1477
+    },
+    {
       "path": "tools/feature-inventory/frozen_features_test.go",
       "sha256": "df4362a7e59a654552a4d75ae8267a712cd546caf759dc68b92b948c4280f740",
       "bytes": 4530
@@ -18056,8 +18081,8 @@
     },
     {
       "path": "tools/feature-inventory/inventory.go",
-      "sha256": "f51dc799ab5be34292e05d68bd6fcef0c002a0481c0cd0eee6da241e89d9b463",
-      "bytes": 14508
+      "sha256": "d554733ea6454f2113d11af3d69aaa904798272cc03e0014dc70d88996cd6080",
+      "bytes": 15481
     },
     {
       "path": "tools/feature-inventory/main_test.go",
