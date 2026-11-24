@@ -805,7 +805,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-accept
-    name: Approve a handed-in result immediately when idle or queue acceptance during execution
+    name: Apply result acceptance through the run writer when idle or during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -821,7 +821,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-return
-    name: Return a handed-in task immediately when idle or queue it during execution
+    name: Return a handed-in task through the run writer when idle or during execution
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -837,7 +837,7 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-retry
-    name: Retry a returned or escalated task immediately when idle or queue it during execution
+    name: Retry a bound returned or escalated attempt through the run writer
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
@@ -845,6 +845,9 @@ features:
       - internal/app/marshal_run_commands.go
     tests:
       - internal/app.TestQueuedRetryRetainsFreshSession
+      - internal/tui.TestActiveRunQueuesRetryAndNamesExecution
+      - internal/tui.TestLegacyTaskCommandUsesBoundWriter
+      - internal/tui.TestTaskProposalReplaysWriterReceipt
     docs:
       - docs/board-and-keys.md
     web: []

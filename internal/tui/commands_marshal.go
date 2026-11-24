@@ -2307,16 +2307,15 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	}
 	m.mu.Lock()
 	service := m.service
-	busy := m.busy
 	var busyErr error
-	if busy {
+	if m.busy {
 		busyErr = m.busyErrorLocked("accept")
 	}
 	m.mu.Unlock()
-	if busy && (service == nil || service.ActiveExecution(runID) == "") {
+	if busyErr != nil && (service == nil || service.ActiveExecution(runID) == "") {
 		return "", busyErr
 	}
-	if w.runtime != nil && service != nil && service.ActiveExecution(runID) != "" {
+	if w.runtime != nil && service != nil {
 		return w.marshalRunCommand(context.Background(), service, runID, app.RunCommandInput{Operation: "accept", TaskID: args[0]})
 	}
 	if busyErr != nil {
@@ -2352,8 +2351,11 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 			return "", err
 		}
 	}
-	if w.runtime != nil && service.ActiveExecution(runID) != "" {
+	if w.runtime != nil {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "return", TaskID: task, Reason: strings.Join(args[1:], " ")})
+	}
+	if err := m.busyErrorIfBusy("return"); err != nil {
+		return "", err
 	}
 	m.grant(runID, "return:"+task)
 	verdict, err := service.ReturnByUser(ctx, runID, task, strings.Join(args[1:], " "))
@@ -2378,11 +2380,6 @@ func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, er
 	if !isAutomaticProposalContext(ctx) {
 		w.resetAutomaticRefusalSuppression(runID, task)
 	}
-	if service.ActiveExecution(runID) == "" {
-		if err := m.busyErrorIfBusy("retry"); err != nil {
-			return "", err
-		}
-	}
 	freshSession := false
 	if len(args) == 2 {
 		if strings.EqualFold(args[1], "fresh-session") || strings.EqualFold(args[1], "fresh") || strings.EqualFold(args[1], "true") {
@@ -2391,8 +2388,16 @@ func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, er
 			return "", errors.New("usage: /marshal retry <task> [fresh-session]")
 		}
 	}
-	if w.runtime != nil && service.ActiveExecution(runID) != "" {
+	if service.ActiveExecution(runID) == "" {
+		if err := m.busyErrorIfBusy("retry"); err != nil {
+			return "", err
+		}
+	}
+	if w.runtime != nil {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "retry", TaskID: task, FreshSession: freshSession})
+	}
+	if err := m.busyErrorIfBusy("retry"); err != nil {
+		return "", err
 	}
 	if err := service.RetryTask(ctx, runID, task, freshSession); err != nil {
 		return "", err
@@ -2420,8 +2425,11 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 			return "", err
 		}
 	}
-	if w.runtime != nil && service.ActiveExecution(runID) != "" {
+	if w.runtime != nil {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "reassign", TaskID: task, Worker: worker, Reason: "operator reassignment"})
+	}
+	if err := m.busyErrorIfBusy("reassign"); err != nil {
+		return "", err
 	}
 	if err := service.ReassignByOperator(ctx, runID, task, worker, "operator /marshal reassign "+task+" "+worker); err != nil {
 		return "", err
@@ -2449,8 +2457,11 @@ func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, e
 			return "", err
 		}
 	}
-	if w.runtime != nil && service.ActiveExecution(runID) != "" {
+	if w.runtime != nil {
 		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "cancel", TaskID: task})
+	}
+	if err := m.busyErrorIfBusy("cancel"); err != nil {
+		return "", err
 	}
 	if err := service.CancelTask(ctx, runID, task); err != nil {
 		return "", err
@@ -2627,9 +2638,21 @@ func (w *Workspace) marshalRunCommand(ctx context.Context, service *app.MarshalS
 	if err != nil {
 		return "", err
 	}
-	id, err := model.NewID("command-")
-	if err != nil {
-		return "", err
+	request, bound := ctx.Value(marshalRunRequestKey{}).(marshalRunRequest)
+	id := request.ID
+	if !bound {
+		for _, task := range record.Value.Tasks {
+			if task.PlanTaskID == input.TaskID {
+				input.TaskDigest = app.TaskCommandDigest(task)
+			}
+		}
+		id, err = model.NewID("command-")
+		if err != nil {
+			return "", err
+		}
+	} else {
+		record.Revision = request.Revision
+		input.TaskDigest = request.TaskDigest
 	}
 	receipt, err := service.CommandRun(a.localControl.Context(ctx), app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: runID, TargetID: input.TaskID, ExpectedVersion: record.Revision, IdempotencyKey: id}, input)
 	if err != nil {
@@ -2647,5 +2670,15 @@ func (w *Workspace) marshalRunCommand(ctx context.Context, service *app.MarshalS
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "run action "+receipt.Operation+" applied"))
 		}
 	}
+	if receipt.State == "queued" {
+		return fmt.Sprintf("Run action %s: queued (%s), execution %s.", receipt.Operation, receipt.ID, service.ActiveExecution(runID)), nil
+	}
 	return fmt.Sprintf("Run action %s: %s (%s).", receipt.Operation, receipt.State, receipt.ID), nil
+}
+
+// A validated proposal carries one immutable request identity to the writer.
+type marshalRunRequestKey struct{}
+type marshalRunRequest struct {
+	ID, TaskDigest string
+	Revision       int64
 }

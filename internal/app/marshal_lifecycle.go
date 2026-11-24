@@ -1607,6 +1607,18 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 		}
 		return fmt.Errorf("task is %s; /marshal retry applies to returned or escalated tasks; use /marshal resume to continue", t.State)
 	}
+	// Check retained work before changing counters or the retry state.
+	if t.ResultCommit != "" && t.FailedAttemptCommit == "" && !reworkInTaskLane(run, *t) {
+		if t.QuarantinedRef != "" || !marshalCommitPattern.MatchString(t.ResultCommit) {
+			return ErrStaleBase
+		}
+		if _, err := gitMarshal(ctx, s.Repository, "cat-file", "-e", t.ResultCommit+"^{commit}"); err != nil {
+			return ErrStaleBase
+		}
+		if _, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", run.BaseCommit, t.ResultCommit); err != nil {
+			return ErrStaleBase
+		}
+	}
 	wasEscalated := t.State == marshal.Escalated
 	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)

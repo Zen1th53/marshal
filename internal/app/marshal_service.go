@@ -204,7 +204,7 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 		}
 		task := taskIndex(run, command.TaskID)
 		for i := range run.Commands {
-			if task >= 0 && taskCommandDigest(run.Tasks[task]) != command.TaskDigest && run.Commands[i].ID == command.ID && run.Commands[i].Actor == command.Actor && run.Commands[i].State == "applying" {
+			if task >= 0 && TaskCommandDigest(run.Tasks[task]) != command.TaskDigest && run.Commands[i].ID == command.ID && run.Commands[i].Actor == command.Actor && run.Commands[i].State == "applying" {
 				ctx = store.WithMarshalCommand(ctx, store.CommandRecord{ProjectID: command.AuthorityProject, Actor: command.Actor, Key: "marshal:" + runID + ":" + command.ID, Operation: "marshal." + command.Operation, SessionID: runID, TargetID: command.TaskID, ExpectedVersion: command.Revision, Digest: command.Digest, CapabilityGrantID: command.GrantID})
 				if command.Operation == "accept" && run.Tasks[task].State != marshal.Accepted {
 					run.Commands[i].State = "refused"

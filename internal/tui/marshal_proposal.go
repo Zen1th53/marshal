@@ -586,6 +586,13 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 			req.Reason = "Make this change to the plan: " + pending.reason
 		}
 	}
+	if p.action == "accept" || p.action == "return" || p.action == "retry" || p.action == "reassign" {
+		for _, task := range run.Tasks {
+			if task.PlanTaskID == proposalTarget(p) {
+				req.ApprovalBinding = app.TaskCommandDigest(task)
+			}
+		}
+	}
 	bound, bindErr := w.bindProposalMCPRequest(req)
 	if bindErr != nil {
 		w.permissions.mu.Unlock()
@@ -702,8 +709,29 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			}
 			p.reviewed = &snapshot
 		}
+		var request marshalRunRequest
+		journaledTask := w.runtime != nil && (p.action == "accept" || p.action == "return" || p.action == "retry" || p.action == "reassign")
+		if journaledTask {
+			if req.ApprovalBinding == "" {
+				return proposalStaleBindingRefusal(errors.New("task request binding is missing"))
+			}
+			request.ID = fmt.Sprintf("proposal-%x", sha256.Sum256([]byte(req.RunID+"\x00"+req.ProposalID+"\x00"+req.Key())))
+			request.TaskDigest = req.ApprovalBinding
+			if _, err := fmt.Sscanf(req.TaskID, "%d:%d", new(int64), &request.Revision); err != nil {
+				return proposalStaleBindingRefusal(err)
+			}
+			ctx = context.WithValue(ctx, marshalRunRequestKey{}, request)
+		}
 		record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
-		if err != nil || (p.action != "deliver" && marshalRunProposalBinding(record.Value.PlanVersion, record.Revision, pending) != binding) || (p.action == "deliver" && record.Value.ApprovalScopeDigest != req.ApprovalBinding) {
+		replay := false
+		if journaledTask && err == nil {
+			for _, command := range record.Value.Commands {
+				if command.ID == request.ID {
+					replay = true
+				}
+			}
+		}
+		if err != nil || (p.action != "deliver" && !replay && marshalRunProposalBinding(record.Value.PlanVersion, record.Revision, pending) != binding) || (p.action == "deliver" && record.Value.ApprovalScopeDigest != req.ApprovalBinding) {
 			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, proposalStaleBindingRefusal(errors.New("Marshal proposal expired")))
 		}
 		if p.action == "approve" || p.action == "amend-approve" {
@@ -733,6 +761,16 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		if err := w.validatePrivateProcess05Resume(ctx, req, p); err != nil {
+			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
+		}
+		if journaledTask {
+			if service.ActiveExecution(runID) == "" {
+				if err := m.busyErrorIfBusy(p.action); err != nil {
+					return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
+				}
+			}
+			input := app.RunCommandInput{Operation: p.action, TaskID: target, Worker: p.targetWorker, Reason: p.reason, FreshSession: p.freshSession}
+			_, err = w.marshalRunCommand(ctx, service, runID, input)
 			return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 		}
 		// Dispatch arguments directly so spaces in free-text reasons are exact.
