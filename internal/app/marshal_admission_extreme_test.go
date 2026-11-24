@@ -4,6 +4,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -324,5 +326,69 @@ func TestReservationSurvivesAdmissionRestart(t *testing.T) {
 		if n := f.launcher.count(key); n != 1 {
 			t.Fatalf("launch %s ran %d times", key, n)
 		}
+	}
+}
+
+func TestDirectDispatchRecoveryAndTemporaryCap(t *testing.T) {
+	for _, kind := range []string{"capacity", "unknown", "pace"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newAdmissionFixture(t)
+			f.reset()
+			if kind == "capacity" {
+				f.s.LaneCap = func(int) int { return 1 }
+			}
+			if kind == "unknown" {
+				f.s.QuotaLeft = func(string) (int, bool) { return 0, false }
+			} else {
+				if _, err := f.s.Dispatch(t.Context(), "run", f.run.Tasks[0].PlanTaskID, "brief"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := f.s.Dispatch(t.Context(), "run", f.run.Tasks[1].PlanTaskID, "brief")
+			var blocked *DispatchAdmissionError
+			if !errors.As(err, &blocked) {
+				t.Fatalf("expected admission refusal, got %v", err)
+			}
+			want := map[string]DispatchAdmissionCode{"capacity": AdmissionCapacity, "unknown": AdmissionQuotaUnknown, "pace": AdmissionRecoveryRamp}[kind]
+			if blocked.Admission.Code != want {
+				t.Fatalf("admission = %+v", blocked.Admission)
+			}
+		})
+	}
+}
+
+func TestFailoverRecoveryUsesSelectedProvider(t *testing.T) {
+	for _, unknown := range []bool{false, true} {
+		t.Run(fmt.Sprint(unknown), func(t *testing.T) {
+			f := newAdmissionFixture(t)
+			providerHealth.Mark("codex", "limit", f.now.Add(time.Hour))
+			providerHealth.Mark("claude", "limit", f.now.Add(-time.Second))
+			if unknown {
+				f.s.QuotaLeft = func(string) (int, bool) { return 0, false }
+			}
+			launched, err := f.s.dispatchReady(t.Context(), "run", f.run, marshalBrief)
+			if err != nil {
+				t.Fatal(err)
+			}
+			claude := f.s.GovernedDrivers["claude"].(*clockDriver)
+			if unknown {
+				hold, ok := f.s.admissionHold("run")
+				if len(launched) != 0 || !ok || hold.Code != AdmissionQuotaUnknown || hold.Provider != "claude" {
+					t.Fatalf("launches %d hold %+v", len(launched), hold)
+				}
+				return
+			}
+			if len(launched) < 2 || len(claude.launches) != len(launched) {
+				t.Fatalf("launches %d times %v", len(launched), claude.launches)
+			}
+			for i := 1; i < len(claude.launches); i++ {
+				if claude.launches[i].Sub(claude.launches[i-1]) < recoveryInterval {
+					t.Fatalf("unpaced failover: %v", claude.launches)
+				}
+			}
+			if len(f.codex.launches) != 0 {
+				t.Fatal("cooling provider launched")
+			}
+		})
 	}
 }

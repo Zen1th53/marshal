@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,5 +330,38 @@ func TestPlatformRefusalClaimsLinuxOnlyWhenTheCauseDoes(t *testing.T) {
 		if c.want == "Marshal could not start them here" && strings.Contains(plain, "need Linux") {
 			t.Fatalf("%q: claims a Linux requirement: %q", c.reason, plain)
 		}
+	}
+}
+
+func TestInfraRetriesExtendExecutionRoundAllowance(t *testing.T) {
+	for _, limit := range []int{0, 100} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			ResetProviderCooldowns()
+			t.Cleanup(ResetProviderCooldowns)
+			s, _, _ := parallelWaitFixture(t, 1)
+			run, rev, err := s.load(t.Context(), "par")
+			if err != nil {
+				t.Fatal(err)
+			}
+			run.Settings.InfraRetryLimit = &limit
+			failures := marshalMaxRounds(run) + 2
+			if err := s.save(t.Context(), "par", run, rev); err != nil {
+				t.Fatal(err)
+			}
+			d, launches := failingLaneDriver(t, func(_ string, n int) error {
+				if n <= failures {
+					return errors.New("stream: unexpected end of JSON input (malformed tool output)")
+				}
+				return nil
+			})
+			s.Drivers["worker"] = d
+			run, err = s.Execute(t.Context(), "par", marshalBrief, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if run.Pause != nil || run.Tasks[0].State != marshal.Merged || launches(run.Tasks[0].PlanTaskID) != failures+1 {
+				t.Fatalf("state %s pause %+v launches %d", run.Tasks[0].State, run.Pause, launches(run.Tasks[0].PlanTaskID))
+			}
+		})
 	}
 }

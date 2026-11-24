@@ -168,10 +168,10 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		if err != nil {
 			return run, err
 		}
-		// Every round either changes a task's state or stops, and a task can
-		// only be returned a bounded number of times, so a healthy run ends
-		// well within this bound. Reaching it means something loops; the run
-		// is handed to the user rather than left to spend its budget.
+		// Every round either changes a task's state or stops. The bound
+		// includes recorded infrastructure failures, whose retries have
+		// their own policy. Reaching it means something else loops; the
+		// run is handed to the user instead of spending more budget.
 		if round > marshalMaxRounds(run) {
 			if err := s.escalateWithDetail(ctx, runID, "", marshal.CodeRunStalled, "the run stopped making progress", stalledRunDetail(run, round)); err != nil {
 				return run, err
@@ -595,12 +595,26 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeWorkerNotGoverned, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
 		}
-		now := s.clock()
-		if now.Before(admitAt) {
-			now = admitAt
+		// The hold may have landed since the check above: claim the
+		// launch under the hold's own lock so the two cannot cross.
+		end := func() {}
+		if s.ClaimDispatch != nil {
+			claimEnd, ok := s.ClaimDispatch(runID, t.PlanTaskID)
+			if !ok {
+				continue
+			}
+			if claimEnd != nil {
+				end = claimEnd
+			}
 		}
-		adm, families, rampCap := s.recoveryAdmission(ctx, gate, run, t, launched, now)
-		if !adm.Allowed {
+		d, err := s.dispatchWithBrief(ctx, runID, t.PlanTaskID, "", brief)
+		end()
+		if err != nil {
+			var blocked *DispatchAdmissionError
+			if !errors.As(err, &blocked) {
+				return launched, err
+			}
+			adm := blocked.Admission
 			if refilling, _ := ctx.Value(rollingRefillKey{}).(bool); refilling && adm.RetryAt != nil {
 				// The next round waits for the pace; refill does not.
 				continue
@@ -615,25 +629,6 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			}
 			held = append(held, adm)
 			continue
-		}
-		undo := s.takeRecoveryStarts(families, now, rampCap)
-		// The hold may have landed since the check above: claim the
-		// launch under the hold's own lock so the two cannot cross.
-		end := func() {}
-		if s.ClaimDispatch != nil {
-			claimEnd, ok := s.ClaimDispatch(runID, t.PlanTaskID)
-			if !ok {
-				undo()
-				continue
-			}
-			if claimEnd != nil {
-				end = claimEnd
-			}
-		}
-		d, err := s.dispatchWithBrief(ctx, runID, t.PlanTaskID, "", brief)
-		end()
-		if err != nil {
-			return launched, err
 		}
 		launched = append(launched, d)
 		s.markDispatchLive(runID, []MarshalDispatch{d})
@@ -864,13 +859,14 @@ func (s *MarshalService) otherWorkerFor(ctx context.Context, fallback marshal.Se
 
 // marshalMaxRounds bounds Execute's loop by the work a run can legitimately
 // need: every task dispatched, reviewed and merged across all its allowed
-// returns and one reassignment, plus verification.
+// returns and one reassignment, plus verification. Infrastructure attempts
+// extend the allowance only as failures are recorded, including unlimited retries.
 func marshalMaxRounds(run marshal.Run) int {
 	limit := run.Settings.ReworkLimit
 	if limit < 1 {
 		limit = 1
 	}
-	return len(run.Tasks)*(limit+2)*3 + 10
+	return len(run.Tasks)*(limit+2)*3 + 10 + infraRetryRounds(run)
 }
 
 // unknownMarshalCharge is usage the runtime could not measure.

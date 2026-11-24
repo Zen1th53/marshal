@@ -1,6 +1,8 @@
 package app
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -37,5 +39,55 @@ func TestProviderHealthOneRegistryAndResetText(t *testing.T) {
 	}
 	if workerFallbackOrder[0] != "codex" || len(providerFallbackOrder) != 4 || providerFallbackOrder[1] != "claude" {
 		t.Fatalf("one fallback order: %v", providerFallbackOrder)
+	}
+}
+
+func TestRecoveryReservationIsAtomic(t *testing.T) {
+	h := &ProviderHealth{entries: map[string]providerHealthEntry{}}
+	now := time.Now()
+	h.Mark("codex", "limit", now.Add(-time.Second))
+	h.Mark("model", "limit", now.Add(-time.Second))
+	var wg sync.WaitGroup
+	var admitted atomic.Int32
+	start := make(chan struct{})
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, _, ok := h.RampReserve([]string{"codex", "model"}, now, 4); ok {
+				admitted.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	if admitted.Load() != 1 {
+		t.Fatalf("admitted %d simultaneous starts", admitted.Load())
+	}
+	// A model refusal must not charge its otherwise available provider.
+	h.Mark("other", "limit", now.Add(-time.Second))
+	if _, _, ok := h.RampReserve([]string{"other", "model"}, now, 4); ok {
+		t.Fatal("busy model admitted")
+	}
+	undo, _, ok := h.RampReserve([]string{"other"}, now, 4)
+	if !ok {
+		t.Fatal("refusal consumed another family's start")
+	}
+	undo()
+	if _, _, ok := h.RampReserve([]string{"other"}, now, 4); !ok {
+		t.Fatal("undo did not release reservation")
+	}
+}
+
+func TestRecoveryUndoPreservesLaterStart(t *testing.T) {
+	h := &ProviderHealth{entries: map[string]providerHealthEntry{}}
+	now := time.Now()
+	h.Mark("codex", "limit", now.Add(-time.Second))
+	undo, _, _ := h.RampReserve([]string{"codex"}, now, 4)
+	h.RampReserve([]string{"codex"}, now.Add(recoveryInterval), 4)
+	undo()
+	if _, _, ok := h.RampReserve([]string{"codex"}, now.Add(recoveryInterval), 4); ok {
+		t.Fatal("undo erased a later start")
 	}
 }

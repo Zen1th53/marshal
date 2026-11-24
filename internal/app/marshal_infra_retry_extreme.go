@@ -202,3 +202,11 @@ func retireWorkerAuthLane(run marshal.Run, t *marshal.Task) {
 		t.LaneReworkBase++
 	}
 }
+
+func infraRetryRounds(run marshal.Run) int {
+	rounds := 0
+	for _, t := range run.Tasks {
+		rounds += t.InfraRetries * 3
+	}
+	return rounds
+}

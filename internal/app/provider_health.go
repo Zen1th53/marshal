@@ -160,3 +160,55 @@ func (h *ProviderHealth) RampTake(key string, now time.Time, cap int) (undo func
 		}
 	}
 }
+
+// RampReserve checks and reserves every family together under the registry lock.
+// A refusal leaves all families untouched. Undo retains any later reservation.
+func (h *ProviderHealth) RampReserve(keys []string, now time.Time, cap int) (func(), time.Time, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var retry time.Time
+	for _, key := range keys {
+		if r, active := h.rampLocked(key, now, cap); active && r.starts > 0 && now.Before(r.last.Add(recoveryInterval)) {
+			if next := r.last.Add(recoveryInterval); next.After(retry) {
+				retry = next
+			}
+		}
+	}
+	if !retry.IsZero() {
+		return nil, retry, false
+	}
+	type reservation struct {
+		key           string
+		before, after recoveryRamp
+		had           bool
+	}
+	var taken []reservation
+	for _, key := range keys {
+		r, active := h.rampLocked(key, now, cap)
+		if !active {
+			continue
+		}
+		prev, had := h.ramps[key]
+		if h.ramps == nil {
+			h.ramps = map[string]recoveryRamp{}
+		}
+		r.starts++
+		r.last = now
+		h.ramps[key] = r
+		taken = append(taken, reservation{key, prev, r, had})
+	}
+	return func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for _, t := range taken {
+			if h.ramps[t.key] != t.after {
+				continue
+			}
+			if t.had {
+				h.ramps[t.key] = t.before
+			} else {
+				delete(h.ramps, t.key)
+			}
+		}
+	}, time.Time{}, true
+}
