@@ -13816,13 +13816,13 @@
     },
     {
       "path": "internal/tui/host_thermal_repair.go",
-      "sha256": "e8eea323edd90cf1d3b641d987f89887b50fecf629f717be8e613fe5aab6606d",
-      "bytes": 5725
+      "sha256": "96fe43a2935a4fcf49640dec23870c83470665c808525ac928162468f6746fdc",
+      "bytes": 5278
     },
     {
       "path": "internal/tui/host_thermal_test.go",
-      "sha256": "32c8f54a071b0149bfa0fceec020c1c410d3174220469aa76c99e5929d10592a",
-      "bytes": 17646
+      "sha256": "56026a0fb0c464b78e0267b316612a729efc3f80f6b579576f400c5376a071e3",
+      "bytes": 17203
     },
     {
       "path": "internal/tui/host_view.go",

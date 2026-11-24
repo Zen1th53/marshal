@@ -312,15 +312,11 @@ func TestLegacyThermalCapMigrationPreservesOwnerEdits(t *testing.T) {
 		return store.MarshalRecord[marshal.Settings]{Value: s, Revision: rev}
 	}
 
-	t.Run("proven reduction is restored by revision", func(t *testing.T) {
+	t.Run("unapplied decision followed by an explicit matching cap is retained", func(t *testing.T) {
 		f := &fakeThermalStore{rec: rec(six, 3), changes: []store.SettingChange{capChange(3, 2, "0", "6")}, events: []model.Event{decision(1, "6", lowering)}}
 		restored, notice, err := repairLegacyThermalCap(t.Context(), f, project)
-		if !restored || notice != "" || err != nil || len(f.commits) != 1 {
-			t.Fatalf("repair %v %q %v %+v", restored, notice, err, f.commits)
-		}
-		c := f.commits[0]
-		if projectGlobalCap(c.settings) != 0 || c.expected != 3 || c.actor != hostWatchActor {
-			t.Fatalf("commit %+v", c)
+		if restored || !strings.Contains(notice, "global-cap 6") || err != nil || len(f.commits) != 0 || projectGlobalCap(f.rec.Value) != 6 || f.rec.Revision != 3 {
+			t.Fatalf("repair %v %q %v %+v", restored, notice, err, f.rec)
 		}
 	})
 	t.Run("later owner edit to another cap is kept silently", func(t *testing.T) {
@@ -372,36 +368,29 @@ func TestLegacyThermalCapMigrationPreservesOwnerEdits(t *testing.T) {
 			t.Fatalf("repair %v %q %v", restored, notice, err)
 		}
 	})
-	t.Run("the real store restores a proven reduction", func(t *testing.T) {
+	t.Run("the real store retains a matching explicit setting after an unapplied decision", func(t *testing.T) {
 		st, w := settingsWorkspace(t)
 		legacy := permission.Request{Kind: "marshal-command", Object: "/marshal settings global-cap 6", Scope: "this project, next Marshal run; run R-1 keeps its approved cap", Who: hostWatchActor, Reason: lowering}
-		// An earlier release applied this decision as a saved setting; the
-		// current release refuses to, but the decision is audited.
+		// Simulate a crash after the decision was recorded, before its
+		// setting was applied. The later command is an independent edit.
 		_ = w.decidePermission(t.Context(), legacy, true, "operator popup")
 		if _, err := w.marshalSettings(t.Context(), []string{"global-cap", "6"}); err != nil {
 			t.Fatal(err)
 		}
-		if msg := w.repairThermalCap(t.Context()); !strings.Contains(msg, "restored global-cap") {
+		if msg := w.repairThermalCap(t.Context()); !strings.Contains(msg, "global-cap 6 may be") {
 			t.Fatalf("repair said %q", msg)
 		}
 		after, err := st.GetMarshalSettings(t.Context(), w.projectID)
-		if err != nil || projectGlobalCap(after.Value) != 0 {
+		if err != nil || projectGlobalCap(after.Value) != 6 {
 			t.Fatalf("settings %+v %v", after, err)
 		}
 		changes, _ := st.MarshalSettingsChanges(t.Context(), w.projectID)
-		if len(changes) == 0 || changes[0].Actor != hostWatchActor || changes[0].New != "0" {
+		if len(changes) == 0 || changes[0].Actor != "owner" || changes[0].New != "6" {
 			t.Fatalf("changes %+v", changes)
 		}
-		// A second launch has nothing to do.
+		// A second launch at this revision does not repeat the notice.
 		if msg := w.repairThermalCap(t.Context()); msg != "" {
 			t.Fatalf("second repair said %q", msg)
-		}
-	})
-	t.Run("a failed compare-and-swap changes nothing", func(t *testing.T) {
-		f := &fakeThermalStore{rec: rec(six, 3), changes: []store.SettingChange{capChange(3, 2, "0", "6")}, events: []model.Event{decision(1, "6", lowering)}, commitErr: errors.New("revision conflict")}
-		restored, _, err := repairLegacyThermalCap(t.Context(), f, project)
-		if restored || err == nil || projectGlobalCap(f.rec.Value) != 6 {
-			t.Fatalf("repair %v %v %+v", restored, err, f.rec)
 		}
 	})
 }
