@@ -8,6 +8,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // governedBriefBytes bounds the approved plan note and return reasons added
@@ -36,13 +37,23 @@ func governedPlanNoteBlock(taskID, note string) (string, error) {
 	}
 	block := governedNoteHeader(taskID) + note + "\n"
 	if len(block) > governedBriefBytes {
-		return "", fmt.Errorf("%w: approved plan note tasks/%s.md needs %d bytes, a governed worker brief carries at most %d; shorten the note and amend the plan", errGovernedBriefTooLarge, taskID, len(block), governedBriefBytes)
+		return "", model.NewLimitError(
+			fmt.Errorf("%w: approved plan note tasks/%s.md needs %d bytes, a governed worker brief carries at most %d; shorten the note and amend the plan", errGovernedBriefTooLarge, taskID, len(block), governedBriefBytes),
+			model.Limit{
+				Kind:        "worker_brief",
+				Subject:     "approved plan note tasks/" + taskID + ".md",
+				ActualBytes: int64(len(block)),
+				CapBytes:    governedBriefBytes,
+				Action:      "Shorten tasks/" + taskID + ".md and amend the plan, approve it, then /marshal use-plan.",
+			},
+		)
 	}
 	return block, nil
 }
 
 // renderGovernedBrief adds the newest return reasons that fit after the note.
-// Older reasons that do not fit are counted, never silently lost.
+// Older reasons that do not fit are counted with a pointer to the task's
+// durable review history, never silently lost.
 func renderGovernedBrief(taskID, note string, returned []string) (string, error) {
 	block, err := governedPlanNoteBlock(taskID, note)
 	if err != nil {
@@ -57,7 +68,9 @@ func renderGovernedBrief(taskID, note string, returned []string) (string, error)
 	if len(reasons) == 0 {
 		return block, nil
 	}
-	omittedLine := func(n int) string { return fmt.Sprintf("- (%d older reasons omitted)\n", n) }
+	omittedLine := func(n int) string {
+		return fmt.Sprintf("- (%d older reasons omitted; inspect task %s durable review history for earlier attempts)\n", n, taskID)
+	}
 	room := governedBriefBytes - len(block) - len(governedReturnedHeader) - len(omittedLine(len(reasons)))
 	var kept []string
 	used := 0
@@ -70,6 +83,23 @@ func renderGovernedBrief(taskID, note string, returned []string) (string, error)
 		used += len(line)
 	}
 	if len(kept) == 0 {
+		// Even if the newest return reason alone exceeds the remaining space,
+		// keep a valid-UTF-8 summary or pointer to the durable review history
+		// when room permits rather than dropping return feedback silently.
+		pointer := fmt.Sprintf("\n(%d return reasons omitted to keep the approved plan note whole; inspect task %s durable review history)\n", len(reasons), taskID)
+		if len(block)+len(pointer) <= governedBriefBytes {
+			newest := reasons[len(reasons)-1]
+			suffix := fmt.Sprintf("... [trimmed; inspect task %s durable review history]\n", taskID)
+			older := ""
+			if len(reasons) > 1 {
+				older = omittedLine(len(reasons) - 1)
+			}
+			prefix := governedReturnedHeader + older + "- "
+			if avail := governedBriefBytes - len(block) - len(prefix) - len(suffix); avail > 0 {
+				return block + prefix + trimUTF8Prefix(newest, avail) + suffix, nil
+			}
+			return block + pointer, nil
+		}
 		return block, nil
 	}
 	block += governedReturnedHeader

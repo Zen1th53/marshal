@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -23,6 +25,16 @@ func (s *Server) recordDesign(ctx context.Context, caller auth.Principal, args m
 		default:
 			return "", fmt.Errorf("%w: unknown design_record argument %s", model.ErrInvalid, key)
 		}
+	}
+	if content, _ := args["content"].(string); len(content) > app.MaxDesignArtifactBytes {
+		// Refused whole before anything is stored: a design is never kept in part.
+		name := strings.ToValidUTF8(stringArg(args, "path"), "")
+		if len(name) > 256 {
+			name = strings.ToValidUTF8(name[:256], "") + "…"
+		}
+		return "", model.NewLimitError(fmt.Errorf("%w: design artifact %s is %d bytes, over the %d-byte design record cap", model.ErrInvalid, name, len(content), app.MaxDesignArtifactBytes),
+			model.Limit{Kind: "design_record", Subject: "design artifact " + name, ActualBytes: int64(len(content)), CapBytes: app.MaxDesignArtifactBytes,
+				Action: "Record a smaller artifact: split the design into separate stage artifacts or move long appendices into project files and reference them."})
 	}
 	rec, err := s.runtime.Memory().RecordDesign(ctx, memoryPrincipal(caller), s.runtime.ProjectID(), app.DesignRecordRequest{Stage: stringArg(args, "stage"), Provider: stringArg(args, "provider"), Version: stringArg(args, "egm_version"), Path: stringArg(args, "path"), Content: func() string { content, _ := args["content"].(string); return content }(), Digest: stringArg(args, "digest")})
 	return marshalToolResult(rec, err)

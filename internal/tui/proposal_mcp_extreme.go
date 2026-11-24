@@ -353,6 +353,9 @@ func (w *Workspace) handleProposalMCP(ctx context.Context, l *proposalMCPLease, 
 	out, live, err := w.serveProposalMCP(ctx, l, method, raw)
 	if live {
 		w.noteBrokerStep(l.id, l.provider, method, raw, out, err)
+		if err != nil {
+			w.recordAdapterLimitError(ctx, "", method, err)
+		}
 	}
 	return out, err
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/verification"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // Tier selects the run's worker and review policy.
@@ -418,6 +419,9 @@ type Pause struct {
 	// pause. It is saved with the pause, so a notice that failed to record
 	// is recorded again on restart and a re-saved pause never repeats it.
 	NoticeID string `json:",omitempty"`
+	// Limit is the byte cap behind a "limit_exceeded" pause: what reached
+	// it, the sizes and the supported split or inspection.
+	Limit *model.Limit `json:",omitempty"`
 }
 
 // PauseAction is what moves a paused run on. The Board's Enter key and the
@@ -482,6 +486,11 @@ const (
 	CodeDispatchFailed  = "dispatch_failed"
 	CodeMergeFailed     = "merge_failed"
 	CodeCommandsBlocked = "commands_blocked"
+
+	// CodeLimitExceeded stops a step whose input cannot fit one of the
+	// runtime's byte caps even after optional material is dropped. The
+	// same input would not fit again, so the pause names a split instead.
+	CodeLimitExceeded = "limit_exceeded"
 )
 
 // LaunchBasePin records the observed delivery ref, private integration head,
@@ -727,6 +736,9 @@ type HandIn struct {
 	WorkerReported  []CommandRecord
 	CheckResults    []CheckResult
 	Claims          []string
+	// Limits lists the parts of the hand-in kept out of it because they
+	// reached a byte cap, each with a pointer to the complete evidence.
+	Limits []model.Limit `json:",omitempty"`
 }
 
 // ValidateHandIn checks scope and completeness of re-run evidence, regardless of pass status.

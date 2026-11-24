@@ -4,12 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectknowledge"
 )
+
+// knowledgeMaximumBytes is the largest knowledge answer a caller may ask
+// for, measured as the complete encoded response.
+const knowledgeMaximumBytes = 64 << 10
 
 func isKnowledgeTool(name string) bool {
 	switch name {
@@ -29,7 +34,7 @@ func (s *Server) knowledgeTools() []Tool {
 		{"related_files", "Related package and test files"},
 		{"project_search", "Search indexed metadata"},
 	} {
-		props := map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "lease_id": stringSchema(), "current_head": stringSchema(), "indexed_head": stringSchema(), "tree_digest": stringSchema(), "offset": map[string]any{"type": "integer", "minimum": 0}, "max_records": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}, "max_bytes": map[string]any{"type": "integer", "minimum": 1024, "maximum": 65536}}
+		props := map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "lease_id": stringSchema(), "current_head": stringSchema(), "indexed_head": stringSchema(), "tree_digest": stringSchema(), "offset": map[string]any{"type": "integer", "minimum": 0}, "max_records": map[string]any{"type": "integer", "minimum": 1, "maximum": 100}, "max_bytes": map[string]any{"type": "integer", "minimum": 1024, "maximum": knowledgeMaximumBytes}}
 		required := []string{}
 		switch item.name {
 		case "project_overview", "project_context":
@@ -135,7 +140,7 @@ func (s *Server) callKnowledgeTool(ctx context.Context, principal authz.Principa
 	if err != nil {
 		return "", true, err
 	}
-	maxBytes, err := knowledgeIntArg(args, "max_bytes", 4096, 1024, 65536)
+	maxBytes, err := knowledgeIntArg(args, "max_bytes", 4096, 1024, knowledgeMaximumBytes)
 	if err != nil {
 		return "", true, err
 	}
@@ -178,7 +183,8 @@ func (s *Server) callKnowledgeTool(ctx context.Context, principal authz.Principa
 			return "", true, err
 		}
 		if bytes > maxBytes {
-			return "", true, projectknowledge.ErrContextBudget
+			return "", true, model.NewLimitError(fmt.Errorf("%w: project context needs %d bytes, max_bytes is %d", projectknowledge.ErrContextBudget, bytes, maxBytes),
+				model.Limit{Kind: "knowledge_page", Subject: "project_context", ActualBytes: int64(bytes), CapBytes: int64(maxBytes), EvidenceRef: packet.Architecture.Snapshot.Head, Action: knowledgeBudgetAction(bytes, "read project_overview or project_search for smaller parts")})
 		}
 		if s.role == "worker" && s.workerCaller == nil {
 			if err := s.runtime.ValidateKnowledgeBinding(ctx, s.workerBinding); err != nil {
@@ -227,10 +233,11 @@ func (s *Server) callKnowledgeTool(ctx context.Context, principal authz.Principa
 		if len(report.Result.Items) == 0 {
 			return "", true, fmt.Errorf("%w: max_bytes cannot fit knowledge envelope or request ID", model.ErrInvalid)
 		}
-		report.Result.Items = report.Result.Items[:len(report.Result.Items)-1]
-		if len(report.Result.Items) == 0 && result.Total > offset {
-			return "", true, fmt.Errorf("%w: max_bytes cannot fit one knowledge result; increase budget", model.ErrInvalid)
+		if len(report.Result.Items) == 1 && result.Total > offset {
+			return "", true, model.NewLimitError(fmt.Errorf("%w: max_bytes cannot fit one knowledge result; increase budget (the result at offset %d needs %d bytes, max_bytes is %d)", model.ErrInvalid, offset, bytes, maxBytes),
+				model.Limit{Kind: "knowledge_page", Subject: fmt.Sprintf("%s result at offset %d", name, offset), ActualBytes: int64(bytes), CapBytes: int64(maxBytes), Cursor: strconv.Itoa(offset), EvidenceRef: result.Snapshot.Head, Action: knowledgeBudgetAction(bytes, "narrow the query or path")})
 		}
+		report.Result.Items = report.Result.Items[:len(report.Result.Items)-1]
 	}
 }
 
@@ -251,4 +258,13 @@ func encodeKnowledge(ctx context.Context, report *knowledgeResponse) (string, in
 		report.Bytes = bytes
 	}
 	return "", 0, model.ErrInvalid
+}
+
+// knowledgeBudgetAction names the next call after a knowledge answer did not
+// fit: a larger max_bytes when one can fit it, otherwise a narrower read.
+func knowledgeBudgetAction(needed int, narrower string) string {
+	if needed <= knowledgeMaximumBytes {
+		return fmt.Sprintf("Call again with max_bytes %d or more (at most %d).", needed, knowledgeMaximumBytes)
+	}
+	return fmt.Sprintf("It does not fit the largest page of %d bytes; %s.", knowledgeMaximumBytes, narrower)
 }

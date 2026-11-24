@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -11,12 +12,18 @@ import (
 
 const defaultEventsPageLimit = 50
 
+// eventsPageMaxBytes bounds one encoded events_list page. A page that would
+// pass it ends early with a cursor and a limit naming the next call.
+const eventsPageMaxBytes = 64 << 10
+
 // eventsPage is the paged events_list answer: only events after the cursor
 // that match the filter, so a Marshal reads deltas instead of the history.
 type eventsPage struct {
 	Events     []model.Event `json:"events"`
 	NextCursor string        `json:"next_cursor"`
 	HasMore    bool          `json:"has_more"`
+	// Limit is set when the byte bound, not the count, ended the page.
+	Limit *model.Limit `json:"limit,omitempty"`
 }
 
 // eventCursor orders events as the store lists them: timestamp, then ID.
@@ -62,6 +69,7 @@ func pageEvents(events []model.Event, args map[string]any) (eventsPage, bool, er
 		}
 	}
 	page := eventsPage{Events: []model.Event{}, NextCursor: cursor}
+	var before []string // the cursor before each kept event
 	for _, e := range events {
 		if cursor != "" && !afterCursor(e, nanos, lastID) {
 			continue
@@ -72,11 +80,44 @@ func pageEvents(events []model.Event, args map[string]any) (eventsPage, bool, er
 		}
 		// The cursor advances past filtered-out events too, so the next
 		// call never rescans them.
+		prior := page.NextCursor
 		page.NextCursor = eventCursor(e)
 		if (len(allowed) > 0 && !allowed[e.Type]) || (taskID != "" && e.TaskID != taskID) {
 			continue
 		}
 		page.Events = append(page.Events, e)
+		before = append(before, prior)
+		size := encodedEventsPage(page)
+		if size <= eventsPageMaxBytes {
+			continue
+		}
+		if len(page.Events) == 1 {
+			return eventsPage{}, true, model.NewLimitError(
+				fmt.Errorf("%w: event %s alone is larger than the %d-byte events page", model.ErrInvalid, e.ID, eventsPageMaxBytes),
+				model.Limit{Kind: "event", Subject: "event " + e.ID, ActualBytes: int64(len(mustJSON(e))), CapBytes: eventsPageMaxBytes, Cursor: eventCursor(e),
+					Action: fmt.Sprintf("Continue past it with since_cursor %q, or leave it out with types or task_id.", eventCursor(e))})
+		}
+		// The page fitted before this event: it ends there, and the cursor
+		// goes back to just before it. The limit is left out when it alone
+		// would not fit; has_more and next_cursor still lead on.
+		last := len(page.Events) - 1
+		page.Events, page.NextCursor, page.HasMore = page.Events[:last], before[last], true
+		page.Limit = &model.Limit{Kind: "events_page", Subject: "events_list page", ActualBytes: int64(size), CapBytes: eventsPageMaxBytes, Limited: true, Cursor: page.NextCursor, Action: "Call events_list again with since_cursor set to next_cursor for the rest."}
+		if kept := encodedEventsPage(page); kept <= eventsPageMaxBytes {
+			page.Limit.KeptBytes = int64(kept)
+		} else {
+			page.Limit = nil
+		}
+		break
 	}
 	return page, true, nil
+}
+
+// encodedEventsPage measures a page as it travels: escaped as the text of
+// the tool result.
+func encodedEventsPage(page eventsPage) int { return len(mustJSON(string(mustJSON(page)))) }
+
+func mustJSON(v any) []byte {
+	data, _ := json.Marshal(v)
+	return data
 }
