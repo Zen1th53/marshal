@@ -124,6 +124,20 @@ func (s *Store) recordNoticeWithEventOnce(ctx context.Context, entry NoticeOutbo
 	}
 	defer tx.Rollback()
 
+	created, err := s.recordNoticeWithEventTx(ctx, tx, entry, auditEvent)
+	if err != nil {
+		return false, err
+	}
+	return created, tx.Commit()
+}
+
+// NoticeWrite pairs a durable notice with its audit event.
+type NoticeWrite struct {
+	Entry NoticeOutboxEntry
+	Event model.Event
+}
+
+func (s *Store) recordNoticeWithEventTx(ctx context.Context, tx *sql.Tx, entry NoticeOutboxEntry, auditEvent model.Event) (bool, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO marshal_notice_outbox (
 			event_id, project_id, run_id, task_id, approval_id, category, transition,
@@ -147,9 +161,6 @@ func (s *Store) recordNoticeWithEventOnce(ctx context.Context, entry NoticeOutbo
 		if err := s.appendEventTx(ctx, tx, auditEvent); err != nil {
 			return false, fmt.Errorf("append notice audit event: %w", err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return false, err
 	}
 	return affected > 0, nil
 }
