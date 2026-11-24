@@ -82,6 +82,11 @@ var (
 	// was never seen busy counts as having answered it: a fast turn can
 	// start and end between two looks.
 	sayTurnSettle = 1500 * time.Millisecond
+	// sayTrustSettle is how long the chat must stay idle, after it showed a
+	// trust prompt, before a queued message is typed. Once the folder is
+	// trusted the CLI draws its input box and only then submits its own
+	// opening turn; a message pasted in that gap is swallowed by it.
+	sayTrustSettle = 4 * time.Second
 )
 
 // sayWatch is a message Marshal typed into the tmux chat whose turn has not
@@ -268,6 +273,10 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 	// of a queued message starts again from it: a queued message is kept
 	// for as long as the owner or the network holds the chat up.
 	var held time.Time
+	// trustPending is set when the chat showed a trust prompt; lastBusy is
+	// the last look at which the chat was not idle at its prompt.
+	var trustPending bool
+	var lastBusy time.Time
 	for {
 		w.say.mu.Lock()
 		queued := len(w.say.pending) > 0
@@ -301,6 +310,9 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		if watch != nil && !idle {
 			watch.started = true
 		}
+		if !idle {
+			lastBusy = time.Now()
+		}
 		if pausedFrame != "" {
 			if frame != "" && frame != pausedFrame && (!idle || chatNetworkError(frame, "", "") == "") {
 				pausedFrame = ""
@@ -323,6 +335,9 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		}
 		if wait != chatWaitNone {
 			held = time.Now()
+		}
+		if wait == chatWaitTrust {
+			trustPending = true
 		}
 		if wait != shown || review.argv != shownReview {
 			shown, shownReview = wait, review.argv
@@ -418,7 +433,13 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 		}
 		err := errChatBusy
 		var before string
-		if idle && watch == nil && pausedFrame == "" {
+		// An input box seen right after a trust prompt is not ready yet: the
+		// CLI still submits its own opening turn. Wait until it has held
+		// still for sayTrustSettle.
+		if trustPending && idle && time.Since(lastBusy) >= sayTrustSettle {
+			trustPending = false
+		}
+		if idle && watch == nil && pausedFrame == "" && !trustPending {
 			before, err = w.typeIntoChat(ctx, pane, item.text)
 		}
 		giveUpFrom := item.at

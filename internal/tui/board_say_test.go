@@ -342,9 +342,9 @@ func TestBoardSayShowsProviderTrustAndPermissionPrompts(t *testing.T) {
 	t.Cleanup(w.Close)
 	w.screen = NewScreen(NewTerminal(strings.NewReader(""), &strings.Builder{}))
 	w.homeBoard = true
-	oldPoll, oldSettle, oldTurn := sayPoll, saySettle, sayTurnSettle
-	sayPoll, saySettle, sayTurnSettle = 50*time.Millisecond, 80*time.Millisecond, 200*time.Millisecond
-	defer func() { sayPoll, saySettle, sayTurnSettle = oldPoll, oldSettle, oldTurn }()
+	oldPoll, oldSettle, oldTurn, oldTrust := sayPoll, saySettle, sayTurnSettle, sayTrustSettle
+	sayPoll, saySettle, sayTurnSettle, sayTrustSettle = 50*time.Millisecond, 80*time.Millisecond, 200*time.Millisecond, 100*time.Millisecond
+	defer func() { sayPoll, saySettle, sayTurnSettle, sayTrustSettle = oldPoll, oldSettle, oldTurn, oldTrust }()
 
 	script := `printf 'Do you trust the contents of this project?\n\n❯ Yes, I trust the contents of this project\n  No, exit\n'
 IFS= read -r _
@@ -526,4 +526,63 @@ done`, logFile)
 	waitForTmuxOutput(t, pane, "ok:recover")
 	waitForTmuxOutput(t, pane, "ok:still-queued")
 	waitFor(t, func() bool { return echoState(w, "still-queued") == saySent }, func() string { return echoState(w, "still-queued") })
+}
+
+// The CLI submits its own opening turn once the folder is trusted. A message
+// queued behind the trust prompt must not be pasted into the input box in the
+// gap before that turn starts; it goes in after the chat has held still.
+func TestBoardSayWaitsOutTheOpeningTurnAfterTrust(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not installed")
+	}
+	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	w := realTmuxWorkspace(t)
+	t.Cleanup(w.Close)
+	w.screen = NewScreen(NewTerminal(strings.NewReader(""), &strings.Builder{}))
+	w.homeBoard = true
+	oldPoll, oldSettle, oldTurn, oldTrust := sayPoll, saySettle, sayTurnSettle, sayTrustSettle
+	sayPoll, saySettle, sayTurnSettle, sayTrustSettle = 50*time.Millisecond, 80*time.Millisecond, 200*time.Millisecond, 1500*time.Millisecond
+	defer func() { sayPoll, saySettle, sayTurnSettle, sayTrustSettle = oldPoll, oldSettle, oldTurn, oldTrust }()
+
+	script := `printf 'Do you trust the contents of this project?\n\n❯ Yes, I trust the contents of this project\n  No, exit\n'
+IFS= read -r _
+printf '\033[2J\Hready\n> '
+sleep 1
+printf '\033[2J\033[HHello. Working (esc to interrupt)'
+sleep 1
+printf '\033[2J\033[Hready\n> '
+while IFS= read -r l; do
+  printf 'got:%s\n' "$l"
+  printf '> '
+done`
+	script = strings.Replace(script, `\033[2J\Hready`, `\033[2J\033[Hready`, 1)
+	var pane string
+	if err := tmux.NewWindow(context.Background(), w.tmuxSession, "marshal-chat-agy", w.workDir, nil, []string{"sh", "-c", script}, &pane); err != nil {
+		t.Fatal(err)
+	}
+	w.tmuxMu.Lock()
+	w.tmuxActiveWins["marshal-chat"] = &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", paneID: pane, window: "marshal-chat-agy", provider: "antigravity"}
+	w.tmuxMu.Unlock()
+	waitForTmuxOutput(t, pane, "Do you trust the contents of this project?")
+
+	ctx := context.Background()
+	w.sayToMarshal(ctx, "first-goal")
+	waitFor(t, func() bool {
+		return strings.Contains(lastBoardOutput(w), "Waiting for you: agy asks to trust this folder")
+	}, func() string { return lastBoardOutput(w) })
+
+	if _, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "Enter"); err != nil {
+		t.Fatal(err)
+	}
+	// While the input box stands idle before the opening turn starts, the
+	// goal must not be typed into it.
+	deadline := time.Now().Add(900 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if out, _ := tmux.CapturePane(ctx, pane); strings.Contains(out, "first-goal") {
+			t.Fatalf("goal typed before the opening turn:\n%s", out)
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	waitForTmuxOutput(t, pane, "got:first-goal")
+	waitFor(t, func() bool { return echoState(w, "first-goal") == saySent }, func() string { return fmt.Sprintf("%+v", w.sayEchoList()) })
 }

@@ -229,3 +229,55 @@ func TestOwnChatComposerWrapped(t *testing.T) {
 		}
 	}
 }
+
+// The first Enter goes out a beat after the paste is seen drawn, as its own
+// tmux command, never in the same write as the paste.
+func TestSubmitChatTurnPausesBetweenPasteAndEnter(t *testing.T) {
+	t.Cleanup(func() { forgetOwnPaste("%1") })
+	frames := []string{"> ", "> ", "> Land on main", "> "}
+	var drawnAt, enterAt time.Time
+	n := 0
+	run := func(ctx context.Context, args ...string) ([]byte, error) {
+		switch args[0] {
+		case "display-message":
+			return []byte("%1 0 0"), nil
+		case "capture-pane":
+			f := frames[min(n, len(frames)-1)]
+			n++
+			if f == "> Land on main" && drawnAt.IsZero() {
+				drawnAt = time.Now()
+			}
+			return []byte(f), nil
+		case "send-keys":
+			if enterAt.IsZero() {
+				enterAt = time.Now()
+			}
+		}
+		return nil, nil
+	}
+	wait := 120 * time.Millisecond
+	if err := deliverChatTurn(t.Context(), run, "%1", "Land on main", deliverEnterTries, wait); err != nil {
+		t.Fatal(err)
+	}
+	if enterAt.IsZero() || drawnAt.IsZero() {
+		t.Fatal("no Enter sent")
+	}
+	if gap := enterAt.Sub(drawnAt); gap < min(deliverPasteSettle, wait)-10*time.Millisecond {
+		t.Fatalf("Enter followed the paste after %v, want a pause of %v", gap, min(deliverPasteSettle, wait))
+	}
+}
+
+// A frame caught while the CLI redraws shows no input box; that is not a
+// reason to leave our own text unsent in it.
+func TestSubmitChatTurnSurvivesRedrawFrame(t *testing.T) {
+	t.Cleanup(func() { forgetOwnPaste("%1") })
+	rememberOwnPaste("%1", "Land on main", "Land on main")
+	f := &fakeTmux{frames: []string{"", "> Land on main", "> "}}
+	d := composerDialectFor("")
+	if err := submitChatTurnAs(t.Context(), f.run, d, "%1", "Land on main", deliverEnterTries, time.Millisecond, false); err != nil {
+		t.Fatal(err)
+	}
+	if f.enters() != 1 {
+		t.Fatalf("Enter presses = %d, want 1", f.enters())
+	}
+}

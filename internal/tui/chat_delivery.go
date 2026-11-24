@@ -23,6 +23,11 @@ const (
 	// deliverEnterWait spaces Enter retries; deliverEnterTries *
 	// deliverEnterWait stays ~2s. A cleared composer returns sooner.
 	deliverEnterWait = 700 * time.Millisecond
+	// deliverPasteSettle is the pause between seeing a paste drawn in the
+	// input and the first Enter. An Enter that follows a bracketed paste
+	// too closely is taken by some CLIs (Claude Code on a loaded machine)
+	// as part of the paste, a newline, not as a submit.
+	deliverPasteSettle = 250 * time.Millisecond
 )
 
 // composerPending checks the input, not the transcript: a submitted message
@@ -386,6 +391,13 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 			return errChatUnsubmitted
 		}
 	}
+	if fresh {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(min(deliverPasteSettle, wait)):
+		}
+	}
 	for try := 0; try < tries; try++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -395,6 +407,21 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 			var err error
 			if frame, err = run(ctx, "capture-pane", "-p", "-t", pane); err != nil {
 				return err
+			}
+		}
+		if !own(string(frame)) && try == 0 {
+			// A frame caught mid-redraw does not show the input; look
+			// again briefly before deciding the input is not ours.
+			for look := 0; look < 3 && !own(string(frame)); look++ {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(min(wait, 100*time.Millisecond)):
+				}
+				var err error
+				if frame, err = run(ctx, "capture-pane", "-p", "-t", pane); err != nil {
+					return err
+				}
 			}
 		}
 		if !own(string(frame)) {
