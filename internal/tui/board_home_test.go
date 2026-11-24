@@ -109,7 +109,7 @@ func TestHomeFromYou(t *testing.T) {
 	if p := homePrimaryOf(inbox, homeIn{}); p.kind != "" {
 		t.Fatalf("an inbox decision got y: %+v", p)
 	}
-	if got, _ := homeFromYou(inbox, homePrimaryOf(inbox, homeIn{})); !strings.HasSuffix(got, "— open the web to decide (w)") {
+	if got, _ := homeFromYou(inbox, homePrimaryOf(inbox, homeIn{})); !strings.HasSuffix(got, "— open the web to decide (w) · o decides here") {
 		t.Fatalf("inbox: %q", got)
 	}
 	for _, kind := range []string{decisionArchitecture, decisionPlan, decisionGuard, decisionAsk, decisionChange, decisionNext} {

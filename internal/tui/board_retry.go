@@ -32,7 +32,7 @@ func retryTarget(w *Workspace) (string, string) {
 		}
 		id, cid := row.ID, cleanBoard(row.ID)
 		if slices.ContainsFunc(inbox, func(it boardmodel.InboxItem) bool { return it.Request.TaskID == id }) {
-			why = cid + " has a decision waiting: answer it on the Web Board (w)."
+			why = cid + " has a decision waiting: answer it here (o) or on the Web Board (w)."
 			continue
 		}
 		if canonicalTaskState(p, id) == marshal.Reassigned {

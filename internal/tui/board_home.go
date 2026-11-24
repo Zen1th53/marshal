@@ -157,7 +157,7 @@ func homeFromYou(b vm.Board, p homePrimary) (string, bool) {
 	case p.label != "":
 		return what + " — y " + p.label, true
 	case !n.FromYouOK:
-		return what + " — open the web to decide (w)", true
+		return what + " — open the web to decide (w) · o decides here", true
 	}
 	return what, false
 }
@@ -269,7 +269,9 @@ func (w *Workspace) paintHome(v boardVisual, cols, rows int) []string {
 	if b.Top.Clock.IsZero() {
 		b.Top.Clock = v.now
 	}
-	if ui := &w.boardUI; ui.homePage != "" {
+	if ui := &w.boardUI; ui.decisionFocus != "" {
+		return w.paintDecisionPane(v, b, cols, rows)
+	} else if ui.homePage != "" {
 		return renderHomePage(v, b, ui.homePage, &ui.homePageState, cols, rows)
 	}
 	return renderHome(v, b, homePrimaryOf(b, w.homeIn()), cols, rows)
@@ -406,6 +408,12 @@ func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 	case 'w':
 		w.openWebBoardKey()
 		return true
+	case 'o':
+		// Explicit decision focus: the waiting card's own keys.
+		if !w.decisionFocusReady() {
+			return false
+		}
+		return w.openDecisionFocus("")
 	case 's':
 		w.openSay()
 		return true
@@ -475,7 +483,7 @@ func (w *Workspace) homeYes(ctx context.Context) {
 		case b.NowLine.ChatAsked:
 			w.setOutput("The Marshal asked you something in its chat: Enter opens it.", false)
 		case !b.NowLine.FromYouOK:
-			w.setOutput("Decide this on the Web Board: w opens it.", false)
+			w.setOutput("Decide this here (o) or on the Web Board (w).", false)
 		default:
 			w.setOutput("Nothing waits for you.", false)
 		}

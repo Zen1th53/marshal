@@ -486,11 +486,16 @@ type boardUI struct {
 	// board_run_view.go) and homePageState its selection and scroll.
 	homePage      string
 	homePageState pageState
-	task          string // selected task
-	lane          string // selected lane's worker
-	ack           string // command answer already seen; the footer stops showing it
-	ackSeq        uint64 // output sequence when ack was taken: a repeated answer is new
-	note          string // run note last painted
+	// decisionFocus is the card decision focus rests on ("" none) and
+	// decisionRev the revision its keys are bound to; decisionStop is an
+	// armed stop of the paused run (board_decisions_view.go).
+	decisionFocus, decisionRev string
+	decisionStop               bool
+	task                       string // selected task
+	lane                       string // selected lane's worker
+	ack                        string // command answer already seen; the footer stops showing it
+	ackSeq                     uint64 // output sequence when ack was taken: a repeated answer is new
+	note                       string // run note last painted
 	// hostScroll is how far the Host view is scrolled down; hostMax is
 	// the furthest it could go at the last paint.
 	hostScroll, hostMax int
@@ -870,6 +875,15 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 	w.mu.RLock()
 	w.boardUI.ack, w.boardUI.ackSeq = w.state.LastOutput, w.outputSeq.Load()
 	w.mu.RUnlock()
+	// Explicit decision focus takes the keys its card documents before the
+	// home and the views; the editor still wins (composing).
+	if w.boardUI.decisionFocus != "" && !w.composing() && !w.anyBodyView() {
+		if w.handleDecisionFocusKey(event) || event.Type == KeyEnter {
+			// Enter acts here or does nothing: it never opens the chat
+			// from a focused card.
+			return true
+		}
+	}
 	if w.inboxView.Confirming() || w.composing() {
 		return false
 	}

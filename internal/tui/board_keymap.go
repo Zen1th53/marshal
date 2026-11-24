@@ -101,8 +101,9 @@ var boardKeymap = []boardKey{
 	{Group: "VIEWS", Keys: "8  b", What: "architecture and business process", View: "Architecture", Press: pressRune('8'), Class: KeyOpen, ID: "view.architecture", Hint: "architecture", When: func(w *Workspace) bool { return w.archSrc() != nil }, Why: reason("There is no architecture to show in this session.")},
 
 	{Group: "HOME", Keys: "Enter", What: "open the Marshal chat", Press: &KeyEvent{Type: KeyEnter}, Class: KeyOpen, ID: "home.chat", Hint: "chat", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
-	{Group: "HOME", Keys: "y", What: "do the safe step From you names", Press: pressRune('y'), Class: KeyConfirm, ID: "task.retry", Hint: "yes", Core: true, CoreOrder: 3, CoreKey: "y", CoreLabel: "retry or continue", When: (*Workspace).homeYesReady, Why: reason("Nothing safe to continue now: decisions are made on the Web Board (w).")},
+	{Group: "HOME", Keys: "y", What: "do the safe step From you names", Press: pressRune('y'), Class: KeyConfirm, ID: "task.retry", Hint: "yes", Core: true, CoreOrder: 3, CoreKey: "y", CoreLabel: "retry or continue", When: (*Workspace).homeYesReady, Why: reason("Nothing safe to continue now: decide a waiting card here (o) or on the Web Board (w).")},
 	{Group: "HOME", Keys: "w", What: "open the Web Board: every card", Press: pressRune('w'), Class: KeyOpen, ID: "home.web", Hint: "web", When: func(w *Workspace) bool { return w.boardVisible() && !w.anyBodyView() }, Why: reason("Leave the view first: Esc.")},
+	{Group: "HOME", Keys: "o", What: "decide the waiting card here: its keys, bound to it", Press: pressRune('o'), Class: KeyOpen, ID: "home.decide", When: (*Workspace).decisionFocusReady, Why: reason("No card waits for you.")},
 	{Group: "HOME", Keys: "r", What: "run: stages, lanes, tasks, Activity", Press: pressRune('r'), Class: KeyOpen, ID: "home.run", Hint: "run", When: homeShown, Why: reason("Leave the view first: Esc.")},
 	{Group: "HOME", Keys: "i", What: "inbox: everything waiting for you", Press: pressRune('i'), Class: KeyOpen, ID: "home.inbox", Hint: "inbox", When: homeShown, Why: reason("Leave the view first: Esc.")},
 	{Group: "HOME", Keys: "c", What: "readiness: checks, providers, limits", Press: pressRune('c'), Class: KeyOpen, ID: "home.ready", Hint: "checks", When: homeShown, Why: reason("Leave the view first: Esc.")},
@@ -439,6 +440,7 @@ func (w *Workspace) pressBoardKey(ctx context.Context, event KeyEvent) {
 		w.runCommand(ctx, w.updateKeyCommand())
 		return
 	}
+	w.dropDecisionFocus()
 	if w.handleBoardKey(event) || w.handleBoardInboxKey(ctx, event) {
 		return
 	}

@@ -223,6 +223,7 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 	case hitChip:
 		w.openChip(h.id)
 	case hitStop:
+		w.dropDecisionFocus()
 		w.boardUI.focus = layout.Inbox
 		w.handleBoardKey(KeyEvent{Type: KeyEnter})
 	case hitVerify:
