@@ -1306,8 +1306,8 @@
     },
     {
       "path": "internal/app/architecture_conformance_extreme_test.go",
-      "sha256": "a4c9023ea0b61a7bd210d9f49c1764eccd4f8e3fac0201e490a59b6061a8f191",
-      "bytes": 6090
+      "sha256": "22da12d2d571dc53573ec335bf395590cc4c40edafd7e80984f1bd5e5a27cf2f",
+      "bytes": 8463
     },
     {
       "path": "internal/app/architecture_context.go",
@@ -2746,13 +2746,13 @@
     },
     {
       "path": "internal/app/marshal_integration_order.go",
-      "sha256": "5475e9e1720c4def092a8be04618de63b788318fbd9ed7fca3695c710ae48768",
-      "bytes": 15618
+      "sha256": "a5e7670c18d93596a72cfcf0e6cbadda733f6cb84d02204330d5bd70a91cb9ed",
+      "bytes": 15857
     },
     {
       "path": "internal/app/marshal_integration_order_test.go",
-      "sha256": "b839eff7b1021dcbe0e2d6e06be8494f1dabf3854e775cb8844bc1fbc90f5d1d",
-      "bytes": 18877
+      "sha256": "8f3d4f21174d790eb76b6975da1d526736384271e6448ab32efdd7a2f33471ed",
+      "bytes": 19079
     },
     {
       "path": "internal/app/marshal_integrity_test.go",
