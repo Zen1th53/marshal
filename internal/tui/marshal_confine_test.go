@@ -61,9 +61,9 @@ func TestConfineMarshalChatArgsPerProvider(t *testing.T) {
 					}
 				}
 			case provider == "claude":
-				want := []string{"--permission-mode", "manual", "--restricted", "--tools", "Read,Glob,Grep", "--", "Hello."}
+				want := []string{"--permission-mode", "manual", "--restricted", "--tools", "Read,Glob,Grep,Edit,Write", "--", "Hello."}
 				if codexMarshalConfineEnforced { // the shipped edition
-					want = []string{"--permission-mode", "dontAsk", "--settings", wantClaudeSettings, "--restricted", "--tools", "Read,Glob,Grep", "--", "Hello."}
+					want = []string{"--permission-mode", "dontAsk", "--settings", wantClaudeSettings, "--restricted", "--tools", "Read,Glob,Grep,Edit,Write", "--", "Hello."}
 				}
 				if !slices.Equal(args, want) {
 					t.Fatalf("claude %q args %q, want %q", rights, args, want)
@@ -238,7 +238,13 @@ func TestConfinedClaudeChatKeepsMCPFlagsBeforeSeparator(t *testing.T) {
 	if sep < 0 {
 		t.Fatalf("no option separator before the cue: %q", got)
 	}
-	for _, flag := range []string{"--mcp-config", "--allowedTools", "--tools", "--permission-mode"} {
+	want := []string{"--tools", "--permission-mode"}
+	for _, f := range mcpFlags {
+		if strings.HasPrefix(f, "--") {
+			want = append(want, f)
+		}
+	}
+	for _, flag := range want {
 		if i := slices.Index(got, flag); i < 0 || i > sep {
 			t.Fatalf("%s is not an option (index %d, separator at %d): %q", flag, i, sep, got)
 		}
@@ -248,5 +254,31 @@ func TestConfinedClaudeChatKeepsMCPFlagsBeforeSeparator(t *testing.T) {
 	}
 	if !slices.Equal(got[sep+1:], marshalKickoffArgs("claude")[len(marshalKickoffArgs("claude"))-1:]) {
 		t.Fatalf("cue is not the only positional argument: %q", got[sep+1:])
+	}
+}
+
+// The Marshal saves its plan pack under .marshal/marshal, so a confined Claude
+// chat keeps Edit and Write but never the shell.
+func TestConfinedClaudeChatCanWritePlanFilesButHasNoShell(t *testing.T) {
+	args, err := confineMarshalChat("claude", t.TempDir(), marshalKickoffArgs("claude"), marshal.RightsReadOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.Index(args, "--tools")
+	if i < 0 || i+1 >= len(args) {
+		t.Fatalf("no --tools: %q", args)
+	}
+	tools := strings.Split(args[i+1], ",")
+	for _, want := range []string{"Edit", "Write"} {
+		if !slices.Contains(tools, want) {
+			t.Fatalf("confined chat cannot %s its plan files: %q", want, args[i+1])
+		}
+	}
+	if slices.Contains(tools, "Bash") {
+		t.Fatalf("confined chat got a shell: %q", args[i+1])
+	}
+	// A chat saved with the earlier read-only list is still accepted.
+	if _, err := confineMarshalChat("claude", t.TempDir(), []string{"--restricted", "--tools", "Read,Glob,Grep"}, marshal.RightsReadOnly); err != nil {
+		t.Fatalf("earlier read-only list refused: %v", err)
 	}
 }

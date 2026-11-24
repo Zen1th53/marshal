@@ -114,16 +114,16 @@ func confineMarshalChat(provider, root string, args []string, rights marshal.Exe
 				break
 			}
 			if arg == "--tools" {
-				if i+1 >= len(args) || args[i+1] != "Read,Glob,Grep" || (i+2 < len(args) && !strings.HasPrefix(args[i+2], "-")) {
-					return nil, errors.New("read-only chat refuses executable or editing built-in tools")
+				if i+1 >= len(args) || !claudeMarshalChatToolList(args[i+1]) || (i+2 < len(args) && !strings.HasPrefix(args[i+2], "-")) {
+					return nil, errors.New("read-only chat refuses executable built-in tools")
 				}
 			}
-			if strings.HasPrefix(arg, "--tools=") && arg != "--tools=Read,Glob,Grep" {
-				return nil, errors.New("read-only chat refuses executable or editing built-in tools")
+			if v, ok := strings.CutPrefix(arg, "--tools="); ok && !claudeMarshalChatToolList(v) {
+				return nil, errors.New("read-only chat refuses executable built-in tools")
 			}
 		}
 		flags, _ := claudeMarshalConfineFlags()
-		if slices.Contains(args, flags[1]) && codexArgsHave(args, "--permission-mode") && slices.Contains(args, "Read,Glob,Grep") && slices.Contains(args, "--tools") && slices.Contains(args, "--restricted") {
+		if slices.Contains(args, flags[1]) && codexArgsHave(args, "--permission-mode") && slices.ContainsFunc(args, claudeMarshalChatToolList) && slices.Contains(args, "--tools") && slices.Contains(args, "--restricted") {
 			return args, nil
 		}
 		// Every flag takes exactly one value, so the cue stays positional.
@@ -132,10 +132,12 @@ func confineMarshalChat(provider, root string, args []string, rights marshal.Exe
 		if at > 0 && args[at-1] == "--" {
 			at--
 		}
-		// Built-in shell and edit tools cannot be restored by inherited allow
-		// rules or a provider approval prompt. Runtime MCP tools retain their
+		// The built-in shell cannot be restored by inherited allow rules or a
+		// provider approval prompt. Edit and Write stay available so the
+		// Marshal can save its plan files; the permission flags above confine
+		// them to the Marshal's own directories. Runtime MCP tools retain their
 		// own policy checks and operator grants.
-		flags = append(flags, "--restricted", "--tools", "Read,Glob,Grep")
+		flags = append(flags, "--restricted", "--tools", claudeMarshalChatTools)
 		if at < len(args) && args[at] != "--" {
 			flags = append(flags, "--")
 		}
@@ -939,4 +941,16 @@ func marshalConfigMatches(args []string, key, expected string) bool {
 		}
 	}
 	return found
+}
+
+// claudeMarshalChatTools are the built-in tools of a confined Claude Marshal
+// chat: reading, and editing that the chat's permission flags confine to the
+// Marshal's own directories. No shell.
+const claudeMarshalChatTools = "Read,Glob,Grep,Edit,Write"
+
+// claudeMarshalChatToolList reports whether v is the confined chat's tool list.
+// The earlier read-only list is still accepted, so a chat saved by an earlier
+// release can be adopted; it only lacks the plan-writing tools.
+func claudeMarshalChatToolList(v string) bool {
+	return v == claudeMarshalChatTools || v == "Read,Glob,Grep"
 }
