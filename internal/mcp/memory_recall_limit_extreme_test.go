@@ -5,6 +5,8 @@ package mcp
 import (
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 // A detail recall whose complete response is exactly max_bytes is served
@@ -53,5 +55,9 @@ func TestRecallPageLimitAtCap(t *testing.T) {
 	_, _, rpcError = recallWire(t, server, strings.Repeat("<&>東京", 1024), map[string]any{"query": "east", "max_bytes": 1024}, false)
 	if rpcError == nil || rpcError.Data == nil || rpcError.Data.Code != "invalid_input" || rpcError.Data.Limit == nil || rpcError.Data.Limit.CapBytes != 1024 || rpcError.Data.Limit.ActualBytes <= 1024 || rpcError.Data.Limit.Action == "" {
 		t.Fatalf("envelope refusal %+v", rpcError)
+	}
+	notices, err := runtime.Store().PendingNotices(t.Context(), runtime.ProjectIdentity(), "", 10)
+	if err != nil || len(notices) == 0 || notices[0].Category != app.LimitNoticeCategory || notices[0].Status != "recall_page" {
+		t.Fatalf("recall limit notice: %+v %v", notices, err)
 	}
 }

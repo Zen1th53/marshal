@@ -279,7 +279,16 @@ func boundedProjectContractJSON(v any) (json.RawMessage, error) {
 	// Bound the local inspection projection. The MCP child MUST separately
 	// measure the entire escaped JSON-RPC response, including its actual ID.
 	if len(raw) > projectContractPageBytes {
-		return nil, fmt.Errorf("%w: inspection page is too large; reduce limit (%d bytes, page bound %d)", projectcontext.ErrBudget, len(raw), projectContractPageBytes)
+		return nil, model.NewLimitError(
+			fmt.Errorf("%w: inspection page is too large; reduce limit (%d bytes, page bound %d)", projectcontext.ErrBudget, len(raw), projectContractPageBytes),
+			model.Limit{
+				Kind:        "contract_page",
+				Subject:     "project contract inspection page",
+				ActualBytes: int64(len(raw)),
+				CapBytes:    projectContractPageBytes,
+				Action:      "Read a smaller page of the same revision: pass a lower limit, or a component, and continue with the returned cursor.",
+			},
+		)
 	}
 	return raw, nil
 }

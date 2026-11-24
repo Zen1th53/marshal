@@ -15,7 +15,7 @@ live contract proposal,65536,pending,live proposal submission,internal/mcp:Contr
 live proposal frame,16384,pending,live proposal submission,internal/mcp:ProposalFrameSocket;internal/mcp:ProposalFrameSpool,typed refusal and persisted notice with a compact or split action
 native planning context,98304,covered,,internal/tui:TestNativePlanningLimitAtCap,page optional material; mandatory context kept; otherwise a field-specific split
 decision questions,16384,covered,,internal/tui:TestProcess05QuestionsLimitAtCap,fewer questions in order with the same IDs; only a single question over the bound is refused
-native live inbox,65536,covered,,internal/tui:TestInboxViewLimitAtCap,durable entries with a bounded tail; the note counts toward the bound and names where the rest is kept
+native live inbox,65536,covered,,internal/tui:TestInboxViewLimitAtCap,durable entries with a bounded tail and cursor; unanswered items listed first and note counts toward the bound
 Board diff,4194304,covered,,internal/tui:TestBoardDiffLimitAtCap,scoped file pages or an authorized commit view
 Marshal events knowledge and recall reads,65536,covered,,internal/mcp:TestEventsPageLimitAtCap;internal/mcp:TestKnowledgePageLimitAtCap;internal/mcp:TestRecallPageLimitAtCap,revision-bound cursor and remaining count or a named error with a detail path
 code evidence reads,8192,covered,,internal/mcp:TestCodeContextBudgetAtCap;internal/mcp:TestCodeExpandBudgetAtCap;internal/mcp:TestCodeValidateTextAtCap,receipt-bound paging keeping evidence identity

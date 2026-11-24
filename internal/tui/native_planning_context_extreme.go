@@ -77,7 +77,11 @@ func (w *Workspace) prepareNativePlanningLaunch(ctx context.Context, l *proposal
 	if err != nil {
 		return nil, err
 	}
-	return appendNativePlanningHiddenExact(l.provider, root, args, dir, w.nativePlanningPointer(ownerCtx, view, true))
+	out, err := appendNativePlanningHiddenExact(l.provider, root, args, dir, w.nativePlanningPointer(ownerCtx, view, true))
+	if err != nil {
+		w.recordAdapterLimitError(ctx, "", "native_planning_launch", err)
+	}
+	return out, err
 }
 
 // nativePlanningPointer is all a launch carries about the project
@@ -467,7 +471,11 @@ func (w *Workspace) prepareUnleasedNativePlanningLaunch(ctx context.Context, pro
 		}
 		text += "\n" + w.nativePlanningPointer(ownerCtx, view, false)
 	}
-	return appendNativePlanningHiddenExact(provider, root, args, dir, text)
+	out, err := appendNativePlanningHiddenExact(provider, root, args, dir, text)
+	if err != nil {
+		w.recordAdapterLimitError(ctx, "", "native_planning_launch", err)
+	}
+	return out, err
 }
 
 // marshalArchitectureNextStep tells the Marshal what to do while the

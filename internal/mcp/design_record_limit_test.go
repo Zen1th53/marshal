@@ -66,6 +66,10 @@ func TestDesignRecordLimitAtCap(t *testing.T) {
 	if n := count(); n != 0 {
 		t.Fatalf("oversized design stored %d records", n)
 	}
+	notices, err := runtime.Store().PendingNotices(context.Background(), runtime.ProjectIdentity(), "", 10)
+	if err != nil || len(notices) != 1 || notices[0].Category != app.LimitNoticeCategory || notices[0].Status != "design_record" {
+		t.Fatalf("design limit notice: %+v %v", notices, err)
+	}
 	if err := record(strings.Repeat("d", app.MaxDesignArtifactBytes)); err != nil {
 		t.Fatalf("at bound: %+v", err)
 	}

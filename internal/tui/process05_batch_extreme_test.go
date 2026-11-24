@@ -435,6 +435,110 @@ func TestProcess05QuestionsLimitAtCap(t *testing.T) {
 	if denied != 1 || remaining != 3 {
 		t.Fatalf("oversize outcomes=%d remaining=%d", denied, remaining)
 	}
+	// Refusing an oversized decision question notifies both Boards (Activity)
+	// and the Marshal chat inbox.
+	inbox := readMarshalInboxText(t, w2)
+	if !strings.Contains(inbox, "## MARSHAL limit reached · decision_question") || !strings.Contains(inbox, bigID) {
+		t.Fatalf("oversize refusal missing marshal inbox notice:\n%s", inbox)
+	}
+	foundLimitActivity := false
+	for _, ev := range w2.boardV2().Activity {
+		if strings.Contains(ev.Text, "Limit reached:") && strings.Contains(ev.Text, bigID) {
+			foundLimitActivity = true
+		}
+	}
+	if !foundLimitActivity {
+		t.Fatalf("oversize refusal missing Board Activity notice: %+v", w2.boardV2().Activity)
+	}
+}
+
+// A question deferred because a batch exceeded the packet byte cap keeps its
+// original ID and deadline, stays queued while the first batch is open, and
+// is delivered in a later batch once the first batch is answered.
+func TestProcess05DeferredQuestionDeliveredInLaterBatch(t *testing.T) {
+	w, requests := process05QuestionFixture(t)
+	cfg := bindWorkspaceMCP(t, w)
+	log, mode := fakeCodexDecisionPane(t, "pasted")
+	w.registerPrivateProcess05Questions(t.Context(), requests)
+
+	w.permissions.mu.Lock()
+	var firstID string
+	var first *buildPendingDecision
+	for key, value := range w.permissions.build.pending {
+		if firstID == "" || key < firstID {
+			firstID, first = key, value
+		}
+	}
+	w.permissions.mu.Unlock()
+
+	items, payload, bounded := w.privateDecisionPacket(firstID, first)
+	if !bounded || len(items) != 4 {
+		t.Fatalf("fixture packet: %d items bounded=%v", len(items), bounded)
+	}
+	// Push the 4-item batch 1 byte past the cap so items[3] is deferred.
+	deferredItem := items[3]
+	w.permissions.mu.Lock()
+	deferredItem.p.text += strings.Repeat("x", privateDecisionPacketBytes-len(payload)+1)
+	w.permissions.mu.Unlock()
+
+	// Deliver the first batch (items[0..2]); items[3] stays deferred.
+	w.deliverCodexDecision(t.Context(), firstID, first)
+	w.permissions.mu.Lock()
+	waiting := w.permissions.build.pending[deferredItem.id]
+	w.permissions.mu.Unlock()
+	if waiting == nil || waiting.delivered || waiting.answer != nil || !waiting.deadline.Equal(deferredItem.deadline) {
+		t.Fatalf("deferred question not preserved before later batch: %+v", waiting)
+	}
+	// Attempting delivery while the first batch is unanswered must not inject
+	// into the active native turn.
+	w.deliverCodexDecision(t.Context(), deferredItem.id, waiting)
+	if waiting.delivered {
+		t.Fatal("deferred question was delivered before first batch settled")
+	}
+
+	// Answer the first batch so the native turn clears.
+	for i, item := range items[:3] {
+		submitMCP(t, cfg, fmt.Sprintf(`{"submission_id":"batch1-decline-%d","proposal":{"action":"decide","id":%q,"allow":false,"reason":"model-free fixture decline for batch 1"}}`, i, item.id))
+		w.routeBuildPermission(context.WithValue(t.Context(), privateDecisionRegistrationKey{}, true), item.request)
+	}
+	if err := os.WriteFile(mode, []byte("ready"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now deliver the deferred question in the next batch.
+	w.deliverCodexDecision(t.Context(), deferredItem.id, waiting)
+	if !waiting.delivered || !waiting.deadline.Equal(deferredItem.deadline) {
+		t.Fatalf("deferred question not delivered in later batch or deadline changed: delivered=%v", waiting.delivered)
+	}
+
+	var buffers []string
+	pastes, submits := 0, 0
+	for _, call := range decisionCalls(t, log) {
+		switch call.Args[0] {
+		case "set-buffer":
+			buffers = append(buffers, call.Args[len(call.Args)-1])
+		case "paste-buffer":
+			pastes++
+		case "send-keys":
+			if call.Args[len(call.Args)-1] == "Enter" {
+				submits++
+			}
+		}
+	}
+	if pastes != 2 || submits != 2 || len(buffers) != 2 {
+		t.Fatalf("expected 2 native batches, got buffers=%d pastes=%d submits=%d", len(buffers), pastes, submits)
+	}
+	if strings.Contains(buffers[0], deferredItem.id) {
+		t.Fatal("first batch unexpectedly carried deferred question")
+	}
+	if !strings.Contains(buffers[1], deferredItem.id) {
+		t.Fatal("later batch omitted deferred question ID")
+	}
+	for _, item := range items[:3] {
+		if strings.Contains(buffers[1], item.id) {
+			t.Fatalf("later batch repeated already-answered question %s", item.id)
+		}
+	}
 }
 
 func TestProcess05LateQuestionsWaitThenRetainOriginalIndependentDeadlines(t *testing.T) {

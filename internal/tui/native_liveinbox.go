@@ -1,16 +1,21 @@
 package tui
 
 import (
+	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/nativehistory"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // What one agent sees of the channel.
@@ -37,12 +42,47 @@ type inboxView struct {
 	path                                   string
 	written                                int
 	rendered                               int
+	dropped                                int
+	cursor                                 string
 	cachedStream, cachedPolicy, cachedView os.FileInfo
 	refreshCached                          bool
 }
 
+type inboxArchiveEntry struct {
+	Seq  int64  `json:"seq"`
+	Text string `json:"text"`
+}
+
+// inboxPageEntry is one durable inbox item returned by a paged read.
+type inboxPageEntry struct {
+	Seq        int64  `json:"seq"`
+	Cursor     string `json:"cursor"`
+	ID         string `json:"id,omitempty"`
+	Unanswered bool   `json:"unanswered,omitempty"`
+	Text       string `json:"text"`
+}
+
+// inboxPage is one bounded page of durable inbox entries with a cursor.
+type inboxPage struct {
+	Entries    []inboxPageEntry `json:"entries"`
+	NextCursor string           `json:"next_cursor,omitempty"`
+	HasMore    bool             `json:"has_more"`
+	Limit      *model.Limit     `json:"limit,omitempty"`
+}
+
 func inboxPath(root, provider string) string {
 	return filepath.Join(root, statepath.DirName, "inbox", provider+".md")
+}
+
+func inboxArchivePathFor(viewPath string) string {
+	return strings.TrimSuffix(viewPath, ".md") + ".archive.jsonl"
+}
+
+func inboxCursor(reader string, seq int64) string {
+	if seq <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("inbox:%s:%d", reader, seq)
 }
 
 // marshalInboxReader names the Marshal's runtime inbox: what MARSHAL itself
@@ -67,14 +107,22 @@ func openMarshalInbox(root string) (*inboxView, error) {
 // closed are the point of the channel, and a boundary marks where the current
 // session begins so nothing older reads as though it just arrived.
 func openInboxView(root, reader string, opening bool) (*inboxView, error) {
-	if err := statepath.CheckPath(root, inboxPath(root, reader)); err != nil {
+	path := inboxPath(root, reader)
+	if err := statepath.CheckPath(root, path); err != nil {
 		return nil, err
 	}
-	path := inboxPath(root, reader)
+	if err := statepath.CheckPath(root, inboxArchivePathFor(path)); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
 	v := &inboxView{reader: reader, path: path}
+	if archived, err := v.readArchive(); err == nil && len(archived) > 0 {
+		last := archived[len(archived)-1].Seq
+		v.dropped = int(last)
+		v.cursor = inboxCursor(reader, last)
+	}
 	if info, err := os.Stat(path); err == nil {
 		v.written = int(info.Size())
 	} else if !os.IsNotExist(err) {
@@ -175,54 +223,223 @@ func (v *inboxView) writeNotice(eventID, text string) error {
 	return v.trim()
 }
 
+// writeUnanswered appends an unanswered item and moves unanswered items to the
+// front of the live inbox view.
+func (v *inboxView) writeUnanswered(id, text string) error {
+	if err := inboxRenderGate.acquire(); err != nil {
+		return err
+	}
+	defer inboxRenderGate.release()
+	marker := "<!-- unanswered:" + id + " -->"
+	data, err := os.ReadFile(v.path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if strings.Contains(string(data), marker) {
+		return nil
+	}
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	if err := v.write(marker + "\n" + text); err != nil {
+		return err
+	}
+	return v.trim()
+}
+
+// markAnswered records that an earlier unanswered item has been settled so it
+// no longer stays pinned ahead of regular entries.
+func (v *inboxView) markAnswered(id string) error {
+	if err := inboxRenderGate.acquire(); err != nil {
+		return err
+	}
+	defer inboxRenderGate.release()
+	marker := "<!-- answered:" + id + " -->\n"
+	data, err := os.ReadFile(v.path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if strings.Contains(string(data), marker) {
+		return nil
+	}
+	if err := v.write(marker); err != nil {
+		return err
+	}
+	return v.trim()
+}
+
+// Cursor returns the durable cursor of the oldest dropped boundary for this
+// inbox view, or "" when no entry has been dropped.
+func (v *inboxView) Cursor() string {
+	if v == nil {
+		return ""
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cursor
+}
+
+func (v *inboxView) readArchive() ([]inboxArchiveEntry, error) {
+	f, err := os.Open(inboxArchivePathFor(v.path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var out []inboxArchiveEntry
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1<<16), 4<<20)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var e inboxArchiveEntry
+		if json.Unmarshal(line, &e) != nil {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, scanner.Err()
+}
+
+func (v *inboxView) appendArchive(entries []string) (int64, error) {
+	if len(entries) == 0 {
+		v.mu.Lock()
+		seq := int64(v.dropped)
+		v.mu.Unlock()
+		return seq, nil
+	}
+	existing, err := v.readArchive()
+	if err != nil {
+		return 0, err
+	}
+	var seq int64
+	if len(existing) > 0 {
+		seq = existing[len(existing)-1].Seq
+	}
+	f, err := os.OpenFile(inboxArchivePathFor(v.path), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	for _, text := range entries {
+		seq++
+		line, err := json.Marshal(inboxArchiveEntry{Seq: seq, Text: text})
+		if err != nil {
+			return 0, err
+		}
+		if _, err := f.Write(append(line, '\n')); err != nil {
+			return 0, err
+		}
+	}
+	return seq, nil
+}
+
 func (v *inboxView) trim() error {
 	data, err := os.ReadFile(v.path)
 	if err != nil {
 		return err
 	}
-	private := containsMarshalProtocol(string(data))
-	v.mu.Lock()
-	written := v.written
-	v.mu.Unlock()
-	if !private && written <= viewMaxBytes {
+	raw := string(data)
+	private := containsMarshalProtocol(raw)
+	header, body := splitInboxHeaderAndBody(raw, v.reader)
+	body = stripInboxDropNote(body)
+	blocks := splitInboxEntries(body)
+
+	archived, _ := v.readArchive()
+	answered := collectInboxAnsweredIDs(archived, blocks)
+	var unanswered, regular []string
+	seenRegular := false
+	needsReorder := false
+	for _, block := range blocks {
+		if _, pending := inboxEntryUnanswered(block, answered); pending {
+			if seenRegular {
+				needsReorder = true
+			}
+			unanswered = append(unanswered, block)
+		} else {
+			seenRegular = true
+			regular = append(regular, block)
+		}
+	}
+	if !private && !needsReorder && len(data) <= viewMaxBytes {
+		v.mu.Lock()
+		v.written = len(data)
+		v.mu.Unlock()
 		return nil
 	}
-	header, rest, found := strings.Cut(string(data), "\n---\n")
-	if !found {
-		header, rest = "", string(data)
-	} else {
-		header += "\n---\n"
-	}
-	entries := strings.SplitAfter(rest, "\n\n## ")
-	dropped := 0
-	// The note counts toward the bound, so the rebuilt view never passes it.
-	size := func() int { return len(header) + len(inboxDropNote(dropped)) + len(strings.Join(entries, "")) }
-	for len(entries) > 1 && size() > viewMaxBytes {
-		entries = entries[1:]
-		dropped++
-	}
-	note := inboxDropNote(dropped)
-	if !private && size() > viewMaxBytes {
-		// One entry alone is larger than the view: keep its newest bytes.
-		entry := entries[len(entries)-1]
-		note = fmt.Sprintf("\n_%d older entr%s dropped and the start of the newest entry cut to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n",
-			dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
-		keep := max(viewMaxBytes-len(header)-len(note), 0)
-		cut := max(len(entry)-keep, 0)
-		for cut < len(entry) && !utf8.RuneStart(entry[cut]) {
-			cut++
+	if needsReorder {
+		for i := range unanswered {
+			unanswered[i] = ensureInboxEntrySeparator(unanswered[i])
 		}
-		entries, dropped = []string{entry[cut:]}, dropped+1
 	}
+
+	v.mu.Lock()
+	baseDropped := v.dropped
+	v.mu.Unlock()
+
+	var droppedNow []string
+	note := ""
 	if private {
 		// A retained view may contain an old visible kickoff. Withhold the whole
 		// view rather than leave a wrapped remainder; durable memory is retained.
-		header, entries, dropped, note = viewHeader(v.reader), []string{"[REDACTED]\n"}, 0, ""
+		header, unanswered, regular, note = viewHeader(v.reader), nil, []string{"[REDACTED]\n"}, ""
+	} else {
+		dropCount := func() int { return baseDropped + len(droppedNow) }
+		dropCursor := func() string { return inboxCursor(v.reader, int64(dropCount())) }
+		currentNote := func() string { return inboxDropNote(dropCount(), dropCursor()) }
+		size := func() int {
+			return len(header) + len(strings.Join(unanswered, "")) + len(currentNote()) + len(strings.Join(regular, ""))
+		}
+		// Drop oldest regular/answered entries first so unanswered items stay
+		// visible at the front of the live inbox.
+		for len(regular) > 0 && (len(regular) > 1 || len(unanswered) > 0) && size() > viewMaxBytes {
+			droppedNow = append(droppedNow, regular[0])
+			regular = regular[1:]
+		}
+		for len(unanswered) > 1 && size() > viewMaxBytes {
+			droppedNow = append(droppedNow, unanswered[0])
+			unanswered = unanswered[1:]
+		}
+		note = currentNote()
+		if size() > viewMaxBytes {
+			// One entry alone is larger than the view: archive the full text
+			// and keep its newest valid UTF-8 bytes inline.
+			target := &regular
+			if len(regular) == 0 && len(unanswered) > 0 {
+				target = &unanswered
+			}
+			entry := (*target)[len(*target)-1]
+			droppedNow = append(droppedNow, entry)
+			d := dropCount()
+			cur := dropCursor()
+			note = inboxCutDropNote(d, cur)
+			keep := max(viewMaxBytes-len(header)-len(note), 0)
+			cut := max(len(entry)-keep, 0)
+			for cut < len(entry) && !utf8.RuneStart(entry[cut]) {
+				cut++
+			}
+			*target = []string{entry[cut:]}
+		}
 	}
-	if dropped == 0 && !private {
+
+	if len(droppedNow) == 0 && !private && !needsReorder {
 		return nil
 	}
-	rebuilt := header + note + strings.Join(entries, "")
+	if len(droppedNow) > 0 {
+		lastSeq, err := v.appendArchive(droppedNow)
+		if err != nil {
+			return err
+		}
+		v.mu.Lock()
+		v.dropped = int(lastSeq)
+		v.cursor = inboxCursor(v.reader, lastSeq)
+		v.mu.Unlock()
+	}
+	rebuilt := header + strings.Join(unanswered, "") + note + strings.Join(regular, "")
 	if err := os.WriteFile(v.path, []byte(rebuilt), 0600); err != nil {
 		return err
 	}
@@ -232,13 +449,300 @@ func (v *inboxView) trim() error {
 	return nil
 }
 
-// inboxDropNote tells the reader how many older entries left the view and
-// where the complete record stays.
-func inboxDropNote(dropped int) string {
+// Page returns a bounded page of durable inbox entries (archived and live),
+// listing unanswered items first and advancing through a reader-scoped cursor.
+func (v *inboxView) Page(cursor string, maxBytes int) (inboxPage, error) {
+	if maxBytes <= 0 || maxBytes > viewMaxBytes {
+		maxBytes = viewMaxBytes
+	}
+	prefix := "inbox:" + v.reader + ":"
+	if cursor != "" {
+		if !strings.HasPrefix(cursor, "inbox:") {
+			return inboxPage{}, fmt.Errorf("%w: invalid inbox cursor", model.ErrInvalid)
+		}
+		if !strings.HasPrefix(cursor, prefix) {
+			return inboxPage{}, fmt.Errorf("%w: inbox cursor belongs to another reader", model.ErrPolicyDenied)
+		}
+	}
+	archived, err := v.readArchive()
+	if err != nil {
+		return inboxPage{}, err
+	}
+	var liveBlocks []string
+	if data, err := os.ReadFile(v.path); err == nil {
+		_, body := splitInboxHeaderAndBody(string(data), v.reader)
+		body = stripInboxDropNote(body)
+		liveBlocks = splitInboxEntries(body)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return inboxPage{}, err
+	}
+	answered := collectInboxAnsweredIDs(archived, liveBlocks)
+	var unanswered, regular []inboxPageEntry
+	var seq int64
+	add := func(s int64, text string) {
+		if strings.TrimSpace(text) == "" {
+			return
+		}
+		id, pending := inboxEntryUnanswered(text, answered)
+		item := inboxPageEntry{
+			Seq:        s,
+			Cursor:     inboxCursor(v.reader, s),
+			ID:         id,
+			Unanswered: pending,
+			Text:       text,
+		}
+		if pending {
+			unanswered = append(unanswered, item)
+		} else {
+			regular = append(regular, item)
+		}
+	}
+	for _, a := range archived {
+		if a.Seq > seq {
+			seq = a.Seq
+		}
+		add(a.Seq, a.Text)
+	}
+	for _, block := range liveBlocks {
+		seq++
+		add(seq, block)
+	}
+	ordered := append(unanswered, regular...)
+
+	start := 0
+	if cursor != "" {
+		if cursor == prefix+"0" {
+			start = 0
+		} else {
+			found := false
+			for i, item := range ordered {
+				if item.Cursor == cursor {
+					start = i + 1
+					found = true
+					break
+				}
+			}
+			if !found {
+				if n, err := strconv.ParseInt(strings.TrimPrefix(cursor, prefix), 10, 64); err != nil || n < 0 {
+					return inboxPage{}, fmt.Errorf("%w: invalid inbox cursor %q", model.ErrInvalid, cursor)
+				}
+				return inboxPage{}, fmt.Errorf("%w: inbox cursor %q not found", model.ErrInvalid, cursor)
+			}
+		}
+	}
+
+	page := inboxPage{Entries: []inboxPageEntry{}}
+	for i := start; i < len(ordered); i++ {
+		item := ordered[i]
+		page.Entries = append(page.Entries, item)
+		page.NextCursor = item.Cursor
+		size := encodedInboxPage(page)
+		if size <= maxBytes {
+			continue
+		}
+		if len(page.Entries) == 1 {
+			return inboxPage{}, model.NewLimitError(
+				fmt.Errorf("%w: inbox entry %s alone is %d bytes, over the %d-byte inbox page", model.ErrInvalid, item.Cursor, size, maxBytes),
+				model.Limit{
+					Kind:        "live_inbox",
+					Subject:     v.reader + " inbox entry " + item.Cursor,
+					ActualBytes: int64(size),
+					CapBytes:    int64(maxBytes),
+					Cursor:      item.Cursor,
+					Action:      fmt.Sprintf("Continue past it with cursor %q or request up to %d bytes.", item.Cursor, viewMaxBytes),
+				},
+			)
+		}
+		page.Entries = page.Entries[:len(page.Entries)-1]
+		page.NextCursor = page.Entries[len(page.Entries)-1].Cursor
+		page.HasMore = true
+		page.Limit = &model.Limit{
+			Kind:        "live_inbox",
+			Subject:     v.reader + " inbox",
+			ActualBytes: int64(size),
+			CapBytes:    int64(maxBytes),
+			Limited:     true,
+			Cursor:      page.NextCursor,
+			Action:      "Read the next page with cursor set to next_cursor.",
+		}
+		if kept := encodedInboxPage(page); kept <= maxBytes {
+			page.Limit.KeptBytes = int64(kept)
+		} else {
+			page.Limit = nil
+		}
+		return page, nil
+	}
+	return page, nil
+}
+
+func encodedInboxPage(page inboxPage) int {
+	data, _ := json.Marshal(page)
+	return len(data)
+}
+
+func splitInboxHeaderAndBody(raw, reader string) (string, string) {
+	if header, rest, found := strings.Cut(raw, "\n---\n"); found {
+		return header + "\n---\n", rest
+	}
+	if hdr := viewHeader(reader); strings.HasPrefix(raw, hdr) {
+		return hdr, raw[len(hdr):]
+	}
+	return "", raw
+}
+
+func stripInboxDropNote(body string) string {
+	if !strings.HasPrefix(body, "\n_") {
+		return body
+	}
+	end := strings.Index(body, "_\n\n")
+	if end < 0 {
+		return body
+	}
+	note := body[:end+len("_\n\n")]
+	if !strings.Contains(note, "older entr") || !strings.Contains(note, "dropped") {
+		return body
+	}
+	return body[end+len("_\n\n"):]
+}
+
+func splitInboxEntries(body string) []string {
+	if body == "" {
+		return nil
+	}
+	var entries []string
+	var cur strings.Builder
+	prevMarker := false
+	rest := body
+	for rest != "" {
+		var line string
+		if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
+			line, rest = rest[:nl+1], rest[nl+1:]
+		} else {
+			line, rest = rest, ""
+		}
+		marker := isInboxMarkerLine(line)
+		heading := strings.HasPrefix(line, "## ")
+		if strings.TrimSpace(cur.String()) != "" && (marker || (heading && !prevMarker)) {
+			entries = append(entries, cur.String())
+			cur.Reset()
+		}
+		cur.WriteString(line)
+		prevMarker = marker
+	}
+	if cur.Len() > 0 {
+		entries = append(entries, cur.String())
+	}
+	return entries
+}
+
+func isInboxMarkerLine(line string) bool {
+	t := strings.TrimSpace(line)
+	return strings.HasPrefix(t, "<!-- notice:") || strings.HasPrefix(t, "<!-- unanswered:") || strings.HasPrefix(t, "<!-- answered:")
+}
+
+func ensureInboxEntrySeparator(entry string) string {
+	if strings.HasSuffix(entry, "\n\n") {
+		return entry
+	}
+	if strings.HasSuffix(entry, "\n") {
+		return entry + "\n"
+	}
+	return entry + "\n\n"
+}
+
+func collectInboxAnsweredIDs(archived []inboxArchiveEntry, live []string) map[string]bool {
+	answered := map[string]bool{}
+	scan := func(text string) {
+		for _, line := range strings.Split(text, "\n") {
+			t := strings.TrimSpace(line)
+			if id, ok := extractInboxCommentTag(t, "answered:"); ok {
+				answered[id] = true
+				answered["arch:"+id] = true
+				answered["approval:"+id] = true
+			}
+			if ev, ok := extractInboxCommentTag(t, "notice:"); ok {
+				if rest, ok := strings.CutPrefix(ev, "approval:"); ok {
+					if id, ok := strings.CutSuffix(rest, ":terminal"); ok {
+						answered["approval:"+id] = true
+					}
+					if id, ok := strings.CutSuffix(rest, ":revoked"); ok {
+						answered["approval:"+id] = true
+					}
+				}
+			}
+		}
+	}
+	for _, a := range archived {
+		scan(a.Text)
+	}
+	for _, b := range live {
+		scan(b)
+	}
+	return answered
+}
+
+func inboxEntryUnanswered(entry string, answered map[string]bool) (string, bool) {
+	for _, line := range strings.Split(entry, "\n") {
+		t := strings.TrimSpace(line)
+		if id, ok := extractInboxCommentTag(t, "unanswered:"); ok {
+			return id, !answered[id]
+		}
+		if ev, ok := extractInboxCommentTag(t, "notice:"); ok {
+			if rest, ok := strings.CutPrefix(ev, "approval:"); ok {
+				if id, ok := strings.CutSuffix(rest, ":opened"); ok {
+					key := "approval:" + id
+					return key, !answered[key]
+				}
+			}
+		}
+		if rest, ok := strings.CutPrefix(t, "## architecture request "); ok {
+			id := strings.TrimSpace(rest)
+			if id != "" {
+				key := "arch:" + id
+				return key, !answered[key] && !answered[id]
+			}
+		}
+		if rest, ok := strings.CutPrefix(t, "Operator action: /egress allow "); ok && !strings.Contains(entry, "Permission request expired") {
+			id := "egress:" + strings.TrimSpace(rest)
+			return id, !answered[id]
+		}
+	}
+	return "", false
+}
+
+func extractInboxCommentTag(line, prefix string) (string, bool) {
+	rest, ok := strings.CutPrefix(line, "<!-- "+prefix)
+	if !ok {
+		return "", false
+	}
+	id, ok := strings.CutSuffix(rest, " -->")
+	if !ok {
+		return "", false
+	}
+	id = strings.TrimSpace(id)
+	return id, id != ""
+}
+
+// inboxDropNote tells the reader how many older entries left the view, the
+// durable cursor, and where the complete record stays.
+func inboxDropNote(dropped int, cursor string) string {
 	if dropped == 0 {
 		return ""
 	}
-	return fmt.Sprintf("\n_%d older entr%s dropped to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n## ",
+	if cursor != "" {
+		return fmt.Sprintf("\n_%d older entr%s dropped (cursor: %s) to stay inside %d KiB. Nothing is lost: use cursor %s or MARSHAL's `/memory search` for the rest._\n\n",
+			dropped, plural(dropped, "y", "ies"), cursor, viewMaxBytes>>10, cursor)
+	}
+	return fmt.Sprintf("\n_%d older entr%s dropped to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n",
+		dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
+}
+
+func inboxCutDropNote(dropped int, cursor string) string {
+	if cursor != "" {
+		return fmt.Sprintf("\n_%d older entr%s dropped (cursor: %s) and the start of the newest entry cut to stay inside %d KiB. Nothing is lost: use cursor %s or MARSHAL's `/memory search` for the rest._\n\n",
+			dropped, plural(dropped, "y", "ies"), cursor, viewMaxBytes>>10, cursor)
+	}
+	return fmt.Sprintf("\n_%d older entr%s dropped and the start of the newest entry cut to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n",
 		dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
 }
 
@@ -347,9 +851,12 @@ func (v *inboxView) replace(entries []streamEntry, cfg channelConfig) error {
 	if err := os.Rename(tmp, v.path); err != nil {
 		return err
 	}
+	_ = os.Remove(inboxArchivePathFor(v.path))
 	v.mu.Lock()
 	v.written = len(text)
 	v.rendered = count
+	v.dropped = 0
+	v.cursor = ""
 	v.mu.Unlock()
 	return v.trim()
 }

@@ -3,6 +3,8 @@ package mcp
 import (
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 // A knowledge answer whose complete response is exactly max_bytes is
@@ -36,5 +38,9 @@ func TestKnowledgePageLimitAtCap(t *testing.T) {
 	}
 	if _, _, rpcError = knowledgeWire(t, server, 1, "find_symbol", map[string]any{"query": "東京", "max_bytes": knowledgeMaximumBytes + 1}, false); rpcError == nil {
 		t.Fatal("max_bytes over the largest page accepted")
+	}
+	notices, err := runtime.Store().PendingNotices(t.Context(), runtime.ProjectIdentity(), "", 10)
+	if err != nil || len(notices) == 0 || notices[0].Category != app.LimitNoticeCategory || notices[0].Status != "knowledge_page" {
+		t.Fatalf("knowledge limit notice: %+v %v", notices, err)
 	}
 }

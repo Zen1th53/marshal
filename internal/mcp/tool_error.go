@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -12,6 +13,19 @@ import (
 
 // toolErrorCode is the JSON-RPC code every failed Marshal tool call carries.
 const toolErrorCode = -32000
+
+func (s *Server) recordLimitNotice(ctx context.Context, source string, limit model.Limit) {
+	if s == nil || s.runtime == nil {
+		return
+	}
+	_ = s.runtime.RecordLimitNotice(ctx, "", source, limit)
+}
+
+func (s *Server) recordLimitError(ctx context.Context, source string, err error) {
+	if limit, ok := model.LimitOf(err); ok {
+		s.recordLimitNotice(ctx, source, limit)
+	}
+}
 
 // rpcErrData keeps the stable machine code and optional typed refusal fields
 // of a translated tool error, so a caller that parses codes and refusal
