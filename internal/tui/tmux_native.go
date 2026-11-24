@@ -2201,26 +2201,11 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 			}
 		}
 		t.w.updateTmuxStatusLine(context.Background())
-		state := "done"
-		message := "Task " + taskID + " completed."
-		if waiting {
-			state = "waiting"
-			message = taskApprovalNotice(taskID, approvalID)
-		} else if err != nil {
-			state = "failed"
-			message = "Task " + taskID + " failed: " + err.Error()
-		} else {
-			for _, record := range handin.RuntimeObserved {
-				if record.ExitCode != 0 {
-					state = "failed"
-					message = "Task " + taskID + " failed."
-					break
-				}
-			}
+		authMessage := ""
+		if authFailed {
+			authMessage = providerNotSignedInMessage(worker)
 		}
-		if authFailed && state == "failed" {
-			message = "Task " + taskID + " failed: " + providerNotSignedInMessage(worker)
-		}
+		state, message := taskExitAnnouncement(taskID, app.TaskAttempt(h.Request().Task), approvalID, waiting, err, hasFailure, authMessage)
 		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, ParentRunID: h.Request().RunID, TaskID: taskID, Worker: worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
 			err = errors.Join(err, alertErr)
 		}

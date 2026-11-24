@@ -439,6 +439,11 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if i := taskIndex(initial, dispatch.TaskID); i >= 0 {
 		launchKey = initial.Tasks[i].LaunchKey
 	}
+	// A late, duplicate or foreign result is refused before anything is
+	// recorded, so it neither ends the current attempt nor counts as rework.
+	if err := s.matchAssignedDispatch(runID, initial, dispatch); err != nil {
+		return marshal.HandIn{}, err
+	}
 	if s.LaunchSupervisor != nil && launchKey != "" && s.LaunchSupervisor.Quarantined(launchKey) {
 		return marshal.HandIn{}, &driver.LaunchHeldError{Key: launchKey, Disposition: driver.LaunchAmbiguous, Reason: "output from an ambiguous launch is quarantined", Recovery: "inspect the worker process and its worktree, then resolve the held launch", ProcessMayExist: true}
 	}
@@ -496,6 +501,12 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	}
 	if handled, parkErr := s.parkPausedTask(ctx, runID, dispatch, err); handled {
 		return handin, parkErr
+	}
+	exitAttempt := slotAttempt(dispatch.Handle.Request().Task)
+	if err == nil {
+		s.announceTask(ctx, runID, dispatch.TaskID, exitAttempt, TaskNoticeWorkerExited, op.ID, "The worker for task "+dispatch.TaskID+" exited; its hand-in is being checked.", "")
+	} else if !errors.Is(err, context.Canceled) {
+		s.announceTask(ctx, runID, dispatch.TaskID, exitAttempt, TaskNoticeWorkerExited, op.ID, "The worker for task "+dispatch.TaskID+" exited without a hand-in.", "")
 	}
 	if errors.Is(err, ErrStaleBase) {
 		return handin, err
@@ -676,6 +687,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		return handin, err
 	}
+	if validationErr == nil {
+		s.announceTask(ctx, runID, dispatch.TaskID, attempt, TaskNoticeHandedIn, op.ID, "Task "+dispatch.TaskID+" was handed in and waits for review; it is not complete yet.", "")
+	}
 	if s.LaunchSupervisor != nil && launchKey != "" {
 		if stagedSlots != nil {
 			// The release is committed; recovery repeats a failed notice.
@@ -735,6 +749,35 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		return handin, s.record(ctx, runID, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": "plan budget exceeded"})
 	}
 	return handin, nil
+}
+
+// ErrUnassignedHandIn refuses a result that is not from the task's current
+// dispatch: another run, task, worker or attempt, or a launch the runtime
+// did not record for it.
+var ErrUnassignedHandIn = errors.New("hand-in does not match the assigned dispatch")
+
+// matchAssignedDispatch binds a collection to the task's current dispatch
+// by what the runtime observed at launch: the handle's own request and, for
+// a supervised launch, its receipt. Nothing the worker reports is trusted.
+func (s *MarshalService) matchAssignedDispatch(runID string, run marshal.Run, dispatch MarshalDispatch) error {
+	i := taskIndex(run, dispatch.TaskID)
+	if i < 0 {
+		return fmt.Errorf("%w: task %s is not in run %s", ErrUnassignedHandIn, dispatch.TaskID, runID)
+	}
+	t := run.Tasks[i]
+	if t.State != marshal.Dispatched {
+		return fmt.Errorf("%w: task %s is %s, not dispatched", ErrUnassignedHandIn, t.PlanTaskID, t.State)
+	}
+	req := dispatch.Handle.Request()
+	if req.RunID != runID || req.Task.PlanTaskID != t.PlanTaskID || req.Task.Worker != t.Worker || req.Task.BaseCommit != t.BaseCommit || slotAttempt(req.Task) != slotAttempt(t) {
+		return fmt.Errorf("%w: task %s attempt %d", ErrUnassignedHandIn, t.PlanTaskID, slotAttempt(t))
+	}
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
+		if receipt, ok := dispatch.Handle.LaunchReceipt(); !ok || receipt.Key != t.LaunchKey {
+			return fmt.Errorf("%w: task %s launch %s", ErrUnassignedHandIn, t.PlanTaskID, t.LaunchKey)
+		}
+	}
+	return nil
 }
 
 func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charge marshal.Charge) (marshal.Verdict, error) {
@@ -920,7 +963,11 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return "", err
 	}
-	return result, s.record(ctx, runID, taskID, events.EventTypeMarshalTaskAccepted, eventData)
+	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskAccepted, eventData); err != nil {
+		return result, err
+	}
+	s.announceTask(ctx, runID, taskID, attempt, TaskNoticeReviewAccepted, fmt.Sprint(rev), "Task "+taskID+" passed review and waits for merge; it is not complete yet.", "")
+	return result, nil
 }
 
 // acceptanceRefusal names why the gate refused a hand-in the Marshal
@@ -983,6 +1030,7 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	if err := s.save(ctx, runID, run, revision); err != nil {
 		return "", err
 	}
+	s.announceTask(ctx, runID, t.PlanTaskID, attempt, TaskNoticeReviewReturned, fmt.Sprint(revision), "Task "+t.PlanTaskID+" was returned: "+strings.Join(review.Reasons, "; "), "")
 	_, err := s.Charge(ctx, runID, t.PlanTaskID, "return", zeroMarshalCharge())
 	return result, err
 }
@@ -1587,7 +1635,11 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
-	return s.completeOperation(ctx, runID, rev, op)
+	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
+		return err
+	}
+	s.announceTask(ctx, runID, taskID, slotAttempt(run.Tasks[i]), TaskNoticeMerged, op.ID, "Task "+taskID+" completed: it passed review and was merged.", "")
+	return nil
 }
 
 func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge marshal.Charge) (decision verification.Decision, retErr error) {

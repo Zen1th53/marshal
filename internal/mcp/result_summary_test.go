@@ -13,7 +13,7 @@ func TestMarshalResultStartsWithPlainSummary(t *testing.T) {
 	for _, tc := range []struct{ name, text, want string }{
 		{"run_digest", digest, "The run is drafting: 1 of 2 tasks done."},
 		{"run_digest", `{"close_authorized":false,"tasks":[],"no_run":true}`, "No run yet."},
-		{"run_digest", `{"run_id":"RUN-1","state":"awaiting_user","paused":"budget","tasks":[{"id":"a","state":"accepted"}]}`, "The run is paused: 1 of 1 task done."},
+		{"run_digest", `{"run_id":"RUN-1","state":"awaiting_user","paused":"budget","tasks":[{"id":"a","state":"accepted"}]}`, "The run is paused: 0 of 1 task done."},
 		{"marshal_proposal_submit", `{"occurrence_id":"mcp:07638b9e","state":"admitted"}`, "Proposal received; it waits for the person's decision."},
 		{"marshal_proposal_receipt", `{"occurrence_id":"mcp:07638b9e","state":"applied"}`, "Proposal applied."},
 		{"marshal_memory_receipt", `{"occurrence_id":"mcp:1","memory_id":"MEM-1","state":"committed"}`, "Memory candidate saved."},

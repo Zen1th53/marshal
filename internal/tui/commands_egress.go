@@ -177,7 +177,7 @@ func alertMatchesAgent(alert app.EgressAlert, a *activeTmuxAgent) bool {
 // decision, as opposed to ordinary progress such as a finished task.
 func alertIsProblem(state string) bool {
 	switch state {
-	case "done", "completed", "merged", "accepted":
+	case "done", "completed", "merged", "accepted", "exited", "handed_in":
 		return false
 	}
 	return true
