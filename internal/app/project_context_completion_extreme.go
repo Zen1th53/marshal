@@ -41,7 +41,7 @@ func (s *VerificationService) completeRequiredContextAttestation(ctx context.Con
 		provider = installed[0]
 	}
 	if provider == "" {
-		return verification.CompletionAttestation{}, projectcontext.ErrReviewPending
+		return verification.CompletionAttestation{}, fmt.Errorf("%w: completion review found no installed provider CLI on PATH", projectcontext.ErrReviewPending)
 	}
 	cli := freshRoleCLI(provider, "")
 	cli.runtime, cli.ProjectID = s.runtime, s.runtime.ProjectIdentity()
@@ -64,7 +64,7 @@ func (s *VerificationService) completeRequiredContextAttestationWithCLI(ctx cont
 		return zero, err
 	}
 	if receipt.Outcome != "COMPATIBLE" || proof == nil {
-		return zero, projectcontext.ErrReviewPending
+		return zero, fmt.Errorf("%w: architecture compatibility review outcome %q (reason %q, live proof present: %t); every contract obligation must be assessed PASS or N/A", projectcontext.ErrReviewPending, receipt.Outcome, receipt.ReasonCode, proof != nil)
 	}
 	if err = verifier.bindArchitecture(r, proof); err != nil {
 		return zero, err

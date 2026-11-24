@@ -3756,8 +3756,8 @@
     },
     {
       "path": "internal/app/project_context_close_extreme.go",
-      "sha256": "10caf80f7ef9d1243e6304bdac4458b82aade6db16fa8b9af8c0c35dcf504262",
-      "bytes": 18664
+      "sha256": "27e3d42e30e74a4f471089a7dfd5029983dd3338a972419b9f684d546e411653",
+      "bytes": 18987
     },
     {
       "path": "internal/app/project_context_close_extreme_test.go",
@@ -3776,8 +3776,8 @@
     },
     {
       "path": "internal/app/project_context_completion_extreme.go",
-      "sha256": "d0294bcaa761b0fabf24961465182f93a58fbe216ecabfd97dbdd459b82ef9bb",
-      "bytes": 10576
+      "sha256": "87c3bcc14ae52be2ba602bb07a11bf1dcf869f5fa2736ff5ff1a62cb2080bcb3",
+      "bytes": 10860
     },
     {
       "path": "internal/app/project_context_completion_extreme_test.go",
@@ -9791,8 +9791,8 @@
     },
     {
       "path": "internal/projectcontext/context.go",
-      "sha256": "49852df847d95dea97ca8da00b4d599dee1e95b46ce3bb93694f1649fd19f84e",
-      "bytes": 29168
+      "sha256": "350260ef7946f74a2a95f138f1590b3f2a34e4a7a83b7170658e46b9b59967fc",
+      "bytes": 29517
     },
     {
       "path": "internal/projectcontext/context_test.go",
