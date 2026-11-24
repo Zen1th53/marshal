@@ -2285,6 +2285,11 @@
       "bytes": 439
     },
     {
+      "path": "internal/app/limit_notice.go",
+      "sha256": "0c95f0ea2d3f3bef7cb7c3b8ecd53d928950db3c72559fb1b7b72b7e9878e029",
+      "bytes": 1650
+    },
+    {
       "path": "internal/app/local_control.go",
       "sha256": "4c6d4d96b83329b1e05208dff8fc6ac2520eb1727c99ad36fd954c5f22682c6d",
       "bytes": 8200
@@ -8175,6 +8180,11 @@
       "bytes": 6912
     },
     {
+      "path": "internal/mcp/proposal_limit_extreme_test.go",
+      "sha256": "438045c378d14249505ec36d0138a44da79b5399db156d8e81cd6a38e30ca561",
+      "bytes": 5134
+    },
+    {
       "path": "internal/mcp/provider_status.go",
       "sha256": "99f3374be565f05eea9cbb13b27038ef60dd9ac9bc09dd21b1f7a9aaca51297a",
       "bytes": 2075
@@ -9605,14 +9615,24 @@
       "bytes": 2014
     },
     {
+      "path": "internal/proposalmcp/limit.go",
+      "sha256": "1be86945e5d3d0175a3158cd46f606af97fb5ba00d0b32902066235f7d6e0e6d",
+      "bytes": 7651
+    },
+    {
+      "path": "internal/proposalmcp/limit_extreme_test.go",
+      "sha256": "c5159e708b43b9cc072630b174062aabb7048e4fe75ec0a1f5f09c8ea55ec8ae",
+      "bytes": 9219
+    },
+    {
       "path": "internal/proposalmcp/namespace_extreme_test.go",
       "sha256": "18239390259906e5c915d069bac9ebfdab5aac890f084d8fc6e5b3666c0d9638",
       "bytes": 3543
     },
     {
       "path": "internal/proposalmcp/spool.go",
-      "sha256": "92c2346b5121212a3383b35e60bb5b88ee8fa9b71fac2207c9fa509544482c9d",
-      "bytes": 6173
+      "sha256": "a3d3916fbd517a9496d6725bb8fd44fdda76f78685bd3c85dec2191b1865c916",
+      "bytes": 6066
     },
     {
       "path": "internal/proposalmcp/spool_extreme_test.go",
@@ -9621,8 +9641,8 @@
     },
     {
       "path": "internal/proposalmcp/transport.go",
-      "sha256": "392578ef485f2903d121e902e5da11801ef8639dad223878edfb6c632da0b628",
-      "bytes": 14397
+      "sha256": "ea41b2b90cd109c0c2f8e39f8bb52bdb7b8858cadc17cb732f8bffcee0803020",
+      "bytes": 17082
     },
     {
       "path": "internal/proposalmcp/transport_extreme_test.go",
@@ -14916,8 +14936,8 @@
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme.go",
-      "sha256": "3f27ad7d7925c2acbfae121a29d4cfbbe086cf0e6296869b4211971341c1779a",
-      "bytes": 15458
+      "sha256": "8c9cdfca98df5aa42932842d82bf00f109e92c074492f8fc4eeafdb41f421a56",
+      "bytes": 15569
     },
     {
       "path": "internal/tui/project_contract_mcp_extreme_test.go",
@@ -14965,14 +14985,24 @@
       "bytes": 221
     },
     {
+      "path": "internal/tui/proposal_limit_extreme.go",
+      "sha256": "7a9a905cc776bee4f94f25f4020ca3bba503cd051fc4022969aafdb4432ce154",
+      "bytes": 5660
+    },
+    {
+      "path": "internal/tui/proposal_limit_extreme_test.go",
+      "sha256": "626b449de3c67b9802afd3b97b5baddb807c9db052bce1288a627c8216364684",
+      "bytes": 8401
+    },
+    {
       "path": "internal/tui/proposal_mcp_default.go",
       "sha256": "e724d4fa040dc93ff783fea3ca3e368fed95a7b9580f7632b65556884c113661",
       "bytes": 1622
     },
     {
       "path": "internal/tui/proposal_mcp_extreme.go",
-      "sha256": "e330e5f0d608d46e25ce1f498ab6ea505ead55bb68b90198e173c4f9486bb905",
-      "bytes": 25045
+      "sha256": "cabcd3f534819f723bb8a1ba5f138d4b26155202e794d38985ccfb90884b5efe",
+      "bytes": 25512
     },
     {
       "path": "internal/tui/proposal_mcp_extreme_test.go",
@@ -17381,8 +17411,8 @@
     },
     {
       "path": "tools/cap-matrix/caps.csv",
-      "sha256": "486955f114841340c426dc36d47816602286b73ffb51d0c387421b44e3fb44bf",
-      "bytes": 3813
+      "sha256": "e56952cee9338caec62b6359e60340e3dc55ce0a56abc5da2b3a09a641fa6bc9",
+      "bytes": 4001
     },
     {
       "path": "tools/ci/test-shard.sh",
@@ -17456,7 +17486,7 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "0f57d543970dea65be25ad217113d41193bf4075921bfb04d1f3f8549a3532df",
+      "sha256": "03a5f06fca952ac65ee0680d0d066fd58daa3bde7104d28eed937941b6e131fa",
       "bytes": 452391
     },
     {
