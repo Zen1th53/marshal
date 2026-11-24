@@ -237,8 +237,14 @@ func (s *MarshalService) revalidateMergeCandidate(ctx context.Context, runID str
 	h := stored.Value
 	h.BaseCommit = in.ExpectedHead
 	h.ResultCommit = in.Candidate
-	review, _, err := s.CrossReview(ctx, t, h, run.TaskControl(t))
+	reviewTask := t
+	architecture, architectureRequired := s.taskArchitecture(ctx, t)
+	reviewTask.ArchitectureContext = architecture
+	review, _, err := s.CrossReview(ctx, reviewTask, h, run.TaskControl(t))
 	if err != nil {
+		return "", err
+	}
+	if err := checkArchitectureReview(&review, architectureRequired); err != nil {
 		return "", err
 	}
 	if review.Verdict != marshal.VerdictAccept || review.Reviewer == "" || review.Reviewer == h.Worker || review.Reviewer == s.Reviewer || len(review.EvidenceRefs) == 0 {
