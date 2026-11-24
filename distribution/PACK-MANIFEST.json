@@ -2445,6 +2445,11 @@
       "bytes": 17775
     },
     {
+      "path": "internal/app/marshal_batch_scheduler_default_test.go",
+      "sha256": "50ec8ea97fcd7c765bfdbf8afe6da1ab1d9f7130d864dc80b7599c056d29a7c8",
+      "bytes": 2304
+    },
+    {
       "path": "internal/app/marshal_bind_plan.go",
       "sha256": "7ce4013c03f7c07a490cf10b99407133aebbfa99b39b43e4b1e6b14cb6ff1b79",
       "bytes": 7726
@@ -3065,6 +3070,16 @@
       "bytes": 1853
     },
     {
+      "path": "internal/app/marshal_scheduler_extreme.go",
+      "sha256": "0271eb9700c1b163da5b10c80a796b0dfd0c43c569bfd8194f8f9e2f8d183393",
+      "bytes": 17180
+    },
+    {
+      "path": "internal/app/marshal_scheduler_extreme_test.go",
+      "sha256": "4a78687b8e529e1b0685210dbbf392455e278d4ac7084dae72b9522b8ad94772",
+      "bytes": 18418
+    },
+    {
       "path": "internal/app/marshal_service.go",
       "sha256": "36a57907514c6afee94fe21ced18ea1aa6e1031d6eac39fee8e7394814679373",
       "bytes": 27725
@@ -3108,6 +3123,11 @@
       "path": "internal/app/marshal_task_lane_extreme.go",
       "sha256": "417de85853ca1d573f03cb60a1614cdf441c4ab49345a352e8e5c610b0dd3154",
       "bytes": 7334
+    },
+    {
+      "path": "internal/app/marshal_transition_inventory_test.go",
+      "sha256": "dd5bec8fb49c8f578e68a9b03f90fd1657351b731b47f80bebbbf0330331c876",
+      "bytes": 7874
     },
     {
       "path": "internal/app/marshal_turn_error_test.go",
@@ -7631,8 +7651,8 @@
     },
     {
       "path": "internal/marshal/domain.go",
-      "sha256": "eb40eec61607e67fac64e4d73e59637c17cdfae4f0820b35374940e680ac811b",
-      "bytes": 25890
+      "sha256": "858b9044ec74a7532707dc508736cc5eb7324b619af48e876d71c2db2305ba88",
+      "bytes": 28310
     },
     {
       "path": "internal/marshal/domain_test.go",
@@ -17406,8 +17426,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "dc88a74796c4bb2e821e78fe4a0b73ba6a023236d519d22f86d02c4dfbc62e29",
-      "bytes": 459055
+      "sha256": "2651e8a1f89683bd4716956cbdabac1eb48e388b94c628c1cb3bfe82bf872cef",
+      "bytes": 459805
     },
     {
       "path": "tools/extreme/prq/main_default.go",
