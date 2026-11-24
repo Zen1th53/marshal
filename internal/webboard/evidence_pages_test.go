@@ -254,7 +254,7 @@ func TestPausedDetailAlwaysReachable(t *testing.T) {
 func TestLargeDiffPageIsNotCut(t *testing.T) {
 	e := &evidence{run: "run-a", commit: "c1", base: "m1"}
 	src := e.source()
-	big := strings.Repeat("+x\n", 1_200_000)
+	big := strings.Repeat("+x\n", 400_000) // 1.2 MB: above the former 1 MiB page cap
 	src.Diff = func(context.Context, string, string) (DiffPart, error) { return DiffPart{Text: big}, nil }
 	s := newEvidence(t, false, e)
 	s.ConfigureDetails(src)
