@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -13,6 +14,19 @@ import (
 // toolErrorCode is the JSON-RPC code every failed Marshal tool call carries.
 const toolErrorCode = -32000
 
+func (s *Server) recordLimitNotice(ctx context.Context, source string, limit model.Limit) {
+	if s == nil || s.runtime == nil {
+		return
+	}
+	_ = s.runtime.RecordLimitNotice(ctx, "", source, limit)
+}
+
+func (s *Server) recordLimitError(ctx context.Context, source string, err error) {
+	if limit, ok := model.LimitOf(err); ok {
+		s.recordLimitNotice(ctx, source, limit)
+	}
+}
+
 // rpcErrData keeps the stable machine code and optional typed refusal fields
 // of a translated tool error, so a caller that parses codes and refusal
 // metadata still can while the message stays a plain sentence.
@@ -23,6 +37,12 @@ type rpcErrData struct {
 	NextCommands []string                 `json:"nextCommands,omitempty"`
 	EscalationID string                   `json:"escalationId,omitempty"`
 	Attempt      int                      `json:"attempt,omitempty"`
+	// Detail is the runtime's own explanation behind the code, such as
+	// what changed while a read was in progress.
+	Detail string `json:"detail,omitempty"`
+	// Limit is the byte cap behind a refusal: what reached it, both sizes
+	// and the supported page, split or inspection.
+	Limit *model.Limit `json:"limit,omitempty"`
 }
 
 func refusalRPCError(receipt marshal.RefusalReceipt, message string) *rpcErr {
@@ -49,6 +69,23 @@ func refusalRPCError(receipt marshal.RefusalReceipt, message string) *rpcErr {
 // Live proposal errors cross the parent transport as text, so each code is
 // matched by its sentinel's text as well as by errors.Is.
 func toolError(tool string, err error) *rpcErr {
+	out := toolErrorText(tool, err)
+	if limit, ok := model.LimitOf(err); ok {
+		if out.Data == nil {
+			out.Data = &rpcErrData{Code: "limit_exceeded"}
+		}
+		out.Data.Limit = &limit
+		if limit.Action != "" && !strings.Contains(out.Message, limit.Action) {
+			out.Message = strings.TrimSpace(out.Message + " " + limit.Action)
+		}
+	}
+	return out
+}
+
+// toolErrorDetailLimit bounds the detail a tool error carries.
+const toolErrorDetailLimit = 1000
+
+func toolErrorText(tool string, err error) *rpcErr {
 	if receipt, ok := marshal.RefusalOf(err); ok {
 		return refusalRPCError(receipt, receipt.Summary())
 	}
@@ -77,7 +114,21 @@ func toolError(tool string, err error) *rpcErr {
 					text = "The project context did not pass its checks: " + detail + ". Fix that and submit again with a new submission_id."
 				}
 			}
-			return &rpcErr{Code: toolErrorCode, Message: text, Data: &rpcErrData{Code: code}}
+			data := &rpcErrData{Code: code}
+			detail := contextDetail(msg, code)
+			if detail == "" {
+				// Changed reads name where the change was seen: "CODE (where)".
+				if _, rest, ok := strings.Cut(msg, code+" ("); ok {
+					detail, _, _ = strings.Cut(rest, ")")
+				}
+			}
+			if detail != "" {
+				if len(detail) > toolErrorDetailLimit {
+					detail = strings.ToValidUTF8(detail[:toolErrorDetailLimit], "") + "…"
+				}
+				data.Detail = detail
+			}
+			return &rpcErr{Code: toolErrorCode, Message: text, Data: data}
 		}
 	}
 	if errors.Is(err, sql.ErrNoRows) || strings.Contains(msg, sql.ErrNoRows.Error()) {

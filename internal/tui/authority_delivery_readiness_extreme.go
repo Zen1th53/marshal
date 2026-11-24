@@ -18,6 +18,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -278,6 +279,14 @@ func (w *Workspace) deliverCodexDecision(ctx context.Context, id string, p *buil
 			} else if current && reason == "decision packet too large" {
 				// Structural: the exact description cannot be delivered
 				// without truncation, so re-delivery cannot succeed.
+				w.recordAdapterLimitNotice(context.WithoutCancel(ctx), item.request.RunID, "decision_questions", model.Limit{
+					Kind:        "decision_question",
+					Subject:     "decision question " + item.id,
+					ActualBytes: int64(len(item.p.text)),
+					CapBytes:    privateDecisionPacketBytes,
+					Limited:     true,
+					Action:      "Shorten the approval description or decide it directly with /marshal approve-task.",
+				})
 				w.finishBuildDecision(context.WithoutCancel(ctx), item.request, item.id, false, reason, item.p.provider)
 			} else if current {
 				w.settleUnansweredDecision(context.WithoutCancel(ctx), item.request, item.id, item.p, reason)

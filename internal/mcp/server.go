@@ -457,6 +457,14 @@ func (s *Server) defaultCaller() auth.Principal {
 }
 
 func (s *Server) callTool(ctx context.Context, caller auth.Principal, name string, args map[string]any) (string, error) {
+	res, err := s.dispatchTool(ctx, caller, name, args)
+	if err != nil {
+		s.recordLimitError(ctx, name, err)
+	}
+	return res, err
+}
+
+func (s *Server) dispatchTool(ctx context.Context, caller auth.Principal, name string, args map[string]any) (string, error) {
 	if s.role == "marshal" {
 		// The launch-bound Marshal transport owns its authority; a caller
 		// identity supplied by the transport is never widened or substituted.
@@ -512,7 +520,7 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		scoped := *s
 		scoped.role, scoped.workerTaskID, scoped.workerBinding, scoped.workerBindingErr = "worker", taskID, binding, nil
 		caller.ID = binding.AgentID
-		return scoped.callTool(ctx, caller, name, args)
+		return scoped.dispatchTool(ctx, caller, name, args)
 	}
 	if s.scopedKnowledge && !isKnowledgeTool(name) {
 		return "", fmt.Errorf("%w: tool %q is not authorized for scoped knowledge transport", model.ErrPolicyDenied, name)

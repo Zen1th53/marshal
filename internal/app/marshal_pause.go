@@ -33,7 +33,12 @@ func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID str
 	pause := marshal.Pause{Reason: machine,
 		Resolutions: []string{"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan"}, ResumeState: marshal.Verifying, Code: marshal.CodeVerificationStopped, Action: marshal.PauseResume}
 	data := map[string]any{"reason": machine, "role": "verification"}
-	if internalVerificationStop(cause) {
+	if limit, ok := model.LimitOf(cause); ok {
+		// The same input would not fit again: the pause names the cap and
+		// the split that lets the check run, never a plain retry.
+		pause = limitPause(limit, machine)
+		data["summary"], data["code"], data["limit"] = pause.Reason, pause.Code, limit
+	} else if internalVerificationStop(cause) {
 		// The runtime's own run bookkeeping stopped the check; nothing in
 		// it is the person's to fix. They read a plain sentence; the raw
 		// error stays in the pause detail and the recorded event.
@@ -192,14 +197,17 @@ const (
 // person or the Marshal must act on. It is delivered at least once to each
 // consumer and deduplicated by EventID.
 type RunNotice struct {
-	EventID string    `json:"eventId"`
-	RunID   string    `json:"runId"`
-	TaskID  string    `json:"taskId,omitempty"`
-	State   string    `json:"state"`
-	Code    string    `json:"code"`
-	Summary string    `json:"summary"`
-	Next    string    `json:"next,omitempty"`
-	At      time.Time `json:"at"`
+	EventID string `json:"eventId"`
+	RunID   string `json:"runId"`
+	TaskID  string `json:"taskId,omitempty"`
+	State   string `json:"state"`
+	Code    string `json:"code"`
+	Summary string `json:"summary"`
+	Next    string `json:"next,omitempty"`
+	// Limit is the byte cap behind a limit pause, the same one the pause
+	// and the Marshal's tool errors carry.
+	Limit *model.Limit `json:"limit,omitempty"`
+	At    time.Time    `json:"at"`
 }
 
 // TaskNoticeCategory is the outbox category of task progress notices.
@@ -266,14 +274,22 @@ func (s *MarshalService) pauseStageFailure(ctx context.Context, runID, stage str
 		return cause
 	}
 	pause := marshal.Pause{ResumeState: run.State, Action: marshal.PauseResume, Detail: boundedRedacted(stage+": "+cause.Error(), runNoticeDetailLimit), Resolutions: []string{"Press Enter to try again (/marshal resume). The task's attempt is kept."}}
-	switch stage {
-	case "review":
+	limit, limited := model.LimitOf(cause)
+	switch {
+	case limited:
+		pause = limitPause(limit, pause.Detail)
+		if stage == "review" {
+			pause.TaskID = firstMarshalTask(run, marshal.HandedIn)
+		} else {
+			pause.TaskID = firstMarshalTask(run, marshal.Dispatched)
+		}
+	case stage == "review":
 		pause.Code, pause.TaskID = marshal.CodeReviewFailed, firstMarshalTask(run, marshal.HandedIn)
 		pause.Reason = "Marshal could not review the handed-in work."
-	case "merge":
+	case stage == "merge":
 		pause.Code, pause.TaskID = marshal.CodeMergeFailed, firstMarshalTask(run, marshal.Accepted)
 		pause.Reason = "Marshal could not merge the accepted work."
-	case "commands":
+	case stage == "commands":
 		pause.Code = marshal.CodeCommandsBlocked
 		pause.Reason = "Marshal could not apply the queued run commands; new starts are held."
 	default:
@@ -287,7 +303,27 @@ func (s *MarshalService) pauseStageFailure(ctx context.Context, runID, stage str
 	if err := s.save(wctx, runID, run, rev); err != nil {
 		return errors.Join(cause, err)
 	}
-	return errors.Join(cause, s.record(wctx, runID, pause.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": pause.Reason, "summary": pause.Reason, "detail": pause.Detail, "code": pause.Code, "stage": stage}))
+	data := map[string]any{"reason": pause.Reason, "summary": pause.Reason, "detail": pause.Detail, "code": pause.Code, "stage": stage}
+	if limited {
+		data["limit"] = limit
+	}
+	return errors.Join(cause, s.record(wctx, runID, pause.TaskID, events.EventTypeMarshalEscalated, data))
+}
+
+// limitPause is the pause for an input that cannot fit a byte cap. It names
+// what reached the cap and both sizes, and its next step is the limit's own
+// split or inspection: the same input would not fit on a retry.
+func limitPause(limit model.Limit, detail string) marshal.Pause {
+	subject := limit.Subject
+	if subject == "" {
+		subject = limit.Kind
+	}
+	reason := fmt.Sprintf("Marshal stopped: the %s needs %d bytes, more than the %d-byte limit.", subject, limit.ActualBytes, limit.CapBytes)
+	next := limit.Action
+	if next == "" {
+		next = "Split the work so this part is smaller, approve the amended plan, then /marshal use-plan."
+	}
+	return marshal.Pause{Code: marshal.CodeLimitExceeded, Action: marshal.PauseUsePlan, Reason: reason, Resolutions: []string{next}, Detail: boundedRedacted(detail, runNoticeDetailLimit), Limit: &limit}
 }
 
 // awaitingApproval marks a step that stopped because the person has not
@@ -303,6 +339,9 @@ func (e awaitingApproval) Unwrap() error { return e.err }
 // context, which a retry cannot clear until the context is put right. Those
 // stop execution as they are.
 func presentedStop(err error) bool {
+	if _, limited := model.LimitOf(err); limited {
+		return false
+	}
 	var known interface{ StopReason() (string, string) }
 	var refusal *marshal.RefusalError
 	var waiting awaitingApproval
@@ -349,7 +388,7 @@ func pauseNotice(runID string, p marshal.Pause, at time.Time) RunNotice {
 		state = RunNoticeStopped
 	}
 	return RunNotice{EventID: p.NoticeID, RunID: runID, TaskID: p.TaskID, State: state, Code: p.Code,
-		Summary: boundedRedacted(p.Reason, 500), Next: boundedRedacted(strings.Join(p.Resolutions, "; "), 500), At: at}
+		Summary: boundedRedacted(p.Reason, 500), Next: boundedRedacted(strings.Join(p.Resolutions, "; "), 500), Limit: p.Limit, At: at}
 }
 
 // noticeProjectID is the project the notice outbox is read under.
