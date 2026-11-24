@@ -277,12 +277,12 @@ func (s *Server) serveSession(w http.ResponseWriter, q *http.Request) {
 		s.tokenMu.Unlock()
 		s.spend()
 		w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-		refuse(w, http.StatusUnauthorized, "This link was already used, so to be safe the Web Board closed every open page. Run /marshal web for a new link.")
+		refuse(w, http.StatusUnauthorized, "This link was already used, so to be safe the Web Board closed every open page. Press w on the Board or run /marshal web for a new one-time link.")
 		return
 	}
 	s.tokenMu.Unlock()
 	w.Header().Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-	refuse(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+	refuse(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
 }
 
 // hostAllowed is the DNS-rebinding guard: the Host header must name this
@@ -337,7 +337,7 @@ func (s *Server) Handler() http.Handler {
 			}
 			if !s.authorized(q) {
 				h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-				refuse(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+				refuse(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
 				return
 			}
 			s.serveAct(w, q)
@@ -362,7 +362,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		if !s.authorized(q) {
 			h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
-			deny(w, http.StatusUnauthorized, "Open the link the Board printed (/marshal web).")
+			deny(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
 			return
 		}
 		if q.URL.Path == "/api/events" {

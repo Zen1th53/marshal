@@ -2,6 +2,8 @@ package architecturereview
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,5 +104,40 @@ func TestLegacyChatAcceptanceLoadsAsDraft(t *testing.T) {
 	}
 	if err := applyFixture(t, reloaded, requestFixture(t, reloaded, "approve")); err != nil {
 		t.Fatalf("owner cannot Accept again: %v", err)
+	}
+}
+
+// An accepted architecture opened read-only refuses every write on every
+// route and leaves the saved state and the acceptance callback untouched.
+func TestAcceptedReviewRejectsAllWrites(t *testing.T) {
+	r := newFixture(t, nil)
+	r.config.ReadOnly = true
+	accepted := 0
+	r.config.OnAccepted = func(json.RawMessage) { accepted++ }
+	before, err := os.ReadFile(filepath.Join(r.config.StateDir, "state.json"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	const token = "accepted-fixture-with-a-long-token"
+	raw, _ := json.Marshal(requestFixture(t, r, "approve"))
+	body := string(raw)
+	for _, path := range []string{"/api/review", "/api/builders", "/api/design", "/api/history", "/api/conformance", "/api/codeview"} {
+		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+			q := httptest.NewRequest(method, "http://127.0.0.1"+path, strings.NewReader(body))
+			q.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			r.Handler(token).ServeHTTP(w, q)
+			if w.Code < 400 {
+				t.Fatalf("%s %s accepted: %d %s", method, path, w.Code, w.Body)
+			}
+		}
+	}
+	if err := applyFixture(t, r, requestFixture(t, r, "approve")); err == nil {
+		t.Fatal("Apply accepted a read-only review")
+	}
+	r.Wait()
+	after, _ := os.ReadFile(filepath.Join(r.config.StateDir, "state.json"))
+	if string(before) != string(after) || accepted != 0 || stateFixture(t, r)["approved"] != false {
+		t.Fatalf("a rejected write changed the accepted review (callbacks %d)", accepted)
 	}
 }

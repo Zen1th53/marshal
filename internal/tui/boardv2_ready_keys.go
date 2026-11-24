@@ -36,6 +36,9 @@ type v2ReadyShown struct {
 	mu     sync.Mutex
 	usage  bool // the Usage counts card
 	signIn bool // the g sign in to agy button
+	// offered is whether the last readiness read offered agy's sign-in
+	// window, drawn or not (the Web Board's team action follows it).
+	offered bool
 	// signingIn is the pane of an open agy sign-in window, "" for none.
 	signingIn string
 }
@@ -138,7 +141,12 @@ func (w *Workspace) addV2ReadyActions(r *vm.Readiness) {
 	if v2SignInParts.here != nil {
 		here = v2SignInParts.here
 	}
-	if at < 0 || !here(w) {
+	shown := w.v2ReadyState()
+	offered := at >= 0 && here(w)
+	shown.mu.Lock()
+	shown.offered = offered
+	shown.mu.Unlock()
+	if !offered {
 		return
 	}
 	r.Checks[at].Hint = signInHint("agy") + " · g opens it here"

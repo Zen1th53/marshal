@@ -356,6 +356,7 @@ type Workspace struct {
 	provView   atomic.Bool
 	prov       providerViewState
 	provWake   chan struct{}
+	webTeam    webTeamState
 	provSource providerViewSource
 	// verView is set while the Verify view is painted in the Board's body;
 	// ver is its data and selection, verWake wakes its follower, and

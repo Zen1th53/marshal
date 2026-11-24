@@ -38,6 +38,7 @@ func (w *Workspace) webSettingsState() webboard.SettingsState {
 	}
 	w.mu.RUnlock()
 	state.Capabilities = append(state.Capabilities, w.webWorkCapabilities(context.Background())...)
+	state.Capabilities = append(state.Capabilities, w.webTeamCapabilities(context.Background())...)
 	return state
 }
 

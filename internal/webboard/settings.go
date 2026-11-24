@@ -279,6 +279,14 @@ func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actReq
 		key = c.Target.ID
 		raw, _ := json.Marshal(c.Payload)
 		value = string(raw)
+	case "team/provider.verify", "team/provider.route-around", "team/provider.signin.start", "team/session.import.request", "team/architecture.open", "team/telemetry.choose":
+		if !validTeamPayload(c) {
+			refuse(w, 400, "Invalid team payload.")
+			return
+		}
+		key = c.Target.ID
+		raw, _ := json.Marshal(c.Payload)
+		value = string(raw)
 	case "settings/set":
 		if c.Target.Kind != "setting" {
 			refuse(w, 400, "Invalid setting target.")

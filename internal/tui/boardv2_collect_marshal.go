@@ -444,8 +444,12 @@ func buildV2Ready(in v2MarshalIn) vm.Readiness {
 	} else {
 		p := in.provider(prov)
 		name := prov
-		if model := buildV2Marshal(in).Model; model != "" {
-			name += " · " + model
+		marshalNow := buildV2Marshal(in)
+		if marshalNow.Model != "" {
+			name += " · " + marshalNow.Model
+		}
+		if marshalNow.Effort != "" {
+			name += " · " + marshalNow.Effort + " effort"
 		}
 		switch p.State {
 		case "in use":

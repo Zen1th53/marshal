@@ -139,3 +139,48 @@ func TestRunControlTokenIsBoundAndSingleUse(t *testing.T) {
 		t.Fatalf("run control ran %d times", calls)
 	}
 }
+
+// A team action names a provider, an opaque id or a fixed choice; a path,
+// a command, a model or a credential-shaped value is refused before it is
+// admitted.
+func TestTeamCommandPayloadsCarryNoPath(t *testing.T) {
+	cmd := func(op, id string, p SettingPayload) Command {
+		return Command{Op: op, Target: Target{Kind: "team", ID: id}, AttemptID: "bound", Payload: p}
+	}
+	for _, c := range []Command{
+		cmd("team/provider.verify", "claude", SettingPayload{Provider: "claude"}),
+		cmd("team/provider.route-around", "codex", SettingPayload{Provider: "codex"}),
+		cmd("team/provider.signin.start", "agy", SettingPayload{Provider: "agy"}),
+		cmd("team/session.import.request", "0123456789abcdef", SettingPayload{}),
+		cmd("team/architecture.open", "architecture", SettingPayload{}),
+		cmd("team/telemetry.choose", "telemetry", SettingPayload{Value: "off"}),
+	} {
+		if !validCommandTarget(c) || !validTeamPayload(c) {
+			t.Errorf("%s was refused", c.Op)
+		}
+	}
+	for _, c := range []Command{
+		cmd("team/session.import.request", "x", SettingPayload{Value: "/home/someone/.claude"}),
+		cmd("team/session.import.request", "x", SettingPayload{Key: "path"}),
+		cmd("team/provider.verify", "claude", SettingPayload{Provider: "codex"}),
+		cmd("team/provider.verify", "claude", SettingPayload{Provider: "claude", Model: "x"}),
+		cmd("team/provider.signin.start", "agy", SettingPayload{Provider: "agy", Value: "token"}),
+		cmd("team/architecture.open", "architecture", SettingPayload{Value: "http://127.0.0.1/?token=x"}),
+		cmd("team/telemetry.choose", "telemetry", SettingPayload{Value: "maybe"}),
+		cmd("team/unknown", "x", SettingPayload{}),
+	} {
+		if validTeamPayload(c) {
+			t.Errorf("%s %+v was admitted", c.Op, c.Payload)
+		}
+	}
+	if c := cmd("team/provider.verify", "claude", SettingPayload{Provider: "claude"}); true {
+		c.RunID = "run"
+		if validCommandTarget(c) {
+			t.Error("a team action was bound to a run")
+		}
+		c.RunID, c.AttemptID = "", ""
+		if validCommandTarget(c) {
+			t.Error("a team action without the state it was offered for")
+		}
+	}
+}

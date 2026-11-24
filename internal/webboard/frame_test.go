@@ -2,6 +2,7 @@ package webboard
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -417,5 +418,109 @@ func TestUnverifiableWorkerNeverRendersDead(t *testing.T) {
 	}
 	if out, err := exec.Command(node, "testdata/liveness.cjs").CombinedOutput(); err != nil {
 		t.Fatalf("liveness rendering: %v\n%s", err, out)
+	}
+}
+
+// retained are the wire fields the page does not draw. Each one stays on
+// the wire for readers of earlier pages and for the terminal-equivalent
+// state it names, so none is removed until its replacement is on the page
+// and no consumer reads it.
+var retained = map[string]string{
+	"SettingsState.-":    "server side only",
+	"TopBar.clock":       "the page keeps its own clock",
+	"Lane.stale":         "the page derives staleness from lastSignal",
+	"Lane.modelWaitSec":  "waiting is told by Lane.waiting",
+	"Waiting.blockerId":  "an opaque id; the text names the blocker",
+	"Worker.leftPct":     "quota windows are drawn from Limits, but earlier pages read this",
+	"Approval.createdAt": "the page orders by expiry",
+	"Approval.command":   "the page shows the approval's reason, not its command line",
+	"Decision.binding":   "sent back through the action tokens, never drawn",
+	"Decision.hasLink":   "the review opens from the Architecture page",
+	"Decision.noDisplay": "the review opens from the Architecture page",
+	"Link.both":          "drawn as a two-way arrow only where links are listed",
+}
+
+// A field sent to the browser is drawn by the page or listed in retained
+// with its reason; a retained field is still on the wire. An empty startup
+// frame and a frame from before the field existed both decode and encode.
+func TestWireFieldDispositionsAndConsumerCompatibility(t *testing.T) {
+	js, err := os.ReadFile("page/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	drawn := func(name string) bool { return strings.Contains(string(js), "."+name) }
+	seen := map[reflect.Type]bool{}
+	onWire := map[string]bool{}
+	var walk func(reflect.Type)
+	walk = func(v reflect.Type) {
+		for v.Kind() == reflect.Pointer || v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
+			v = v.Elem()
+		}
+		if v.Kind() != reflect.Struct || seen[v] || v.PkgPath() != reflect.TypeOf(Frame{}).PkgPath() {
+			return
+		}
+		seen[v] = true
+		for i := 0; i < v.NumField(); i++ {
+			f := v.Field(i)
+			name := strings.Split(f.Tag.Get("json"), ",")[0]
+			if name == "" {
+				continue
+			}
+			key := v.Name() + "." + name
+			onWire[key] = true
+			if why, ok := retained[key]; ok {
+				if why == "" {
+					t.Errorf("%s is retained without a reason", key)
+				}
+			} else if !drawn(name) {
+				t.Errorf("%s is sent but neither drawn by the page nor listed as retained", key)
+			}
+			walk(f.Type)
+		}
+	}
+	walk(reflect.TypeOf(Frame{}))
+	for key := range retained {
+		if !onWire[key] {
+			t.Errorf("%s is listed as retained but is no longer on the wire", key)
+		}
+	}
+
+	// The fields the page now draws are on an empty startup frame.
+	body, err := Encode(vm.Board{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var startup map[string]any
+	if err := json.Unmarshal(body, &startup); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range [][]string{{"marshal", "contextUsed"}, {"marshal", "inputKnown"}, {"chat", "stage"}, {"workers"}, {"approvals"}, {"inbox"}, {"ready", "actions"}} {
+		var at any = startup
+		for _, k := range path {
+			m, ok := at.(map[string]any)
+			if !ok {
+				t.Fatalf("startup frame has no %v", path)
+			}
+			if at, ok = m[k]; !ok {
+				t.Fatalf("startup frame has no %v", path)
+			}
+		}
+		if at == nil {
+			t.Fatalf("startup frame carries null at %v", path)
+		}
+	}
+	if startup["decision"] != nil || startup["paused"] != nil {
+		t.Fatal("an empty Board carries a card")
+	}
+
+	// A frame from before these fields existed still decodes, and what is
+	// missing reads as unknown rather than as a value.
+	var old Frame
+	older := `{"v":1,"screen":"home","marshal":{"provider":"codex","contextPct":40},"chat":{"bound":true},"paused":{"title":"Paused"},"decision":{"kind":"plan","title":"Plan"},"workers":[{"provider":"codex"}]}`
+	if err := json.Unmarshal([]byte(older), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.Marshal.ContextUsed != 0 || old.Marshal.InputKnown || old.Chat.Stage != "" || old.Paused.Kind != "" || len(old.Decision.Links) != 0 || old.Workers[0].LeftPct != 0 {
+		t.Fatalf("an old frame decodes to values: %+v", old)
 	}
 }
