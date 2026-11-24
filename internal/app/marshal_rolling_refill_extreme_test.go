@@ -308,7 +308,11 @@ func TestRollingRefillNeedsLaunchSupervisor(t *testing.T) {
 	if s.rollingRefill("run", marshalBrief, []MarshalDispatch{{Tier: marshal.Standard}}) != nil {
 		t.Fatal("standard batch refilled")
 	}
-	if s.rollingRefill("run", marshalBrief, []MarshalDispatch{{Tier: marshal.Ultra}}) == nil {
+	if s.rollingRefill("run", marshalBrief, []MarshalDispatch{{Tier: marshal.Ultra, Driver: &heldWorker{}}}) == nil {
 		t.Fatal("supervised ULTRA batch did not refill")
+	}
+	governed := driver.Governed{Provider: "test"}
+	if s.rollingRefill("run", marshalBrief, []MarshalDispatch{{Tier: marshal.Ultra, Driver: &heldWorker{}}, {Tier: marshal.Ultra, Driver: governed}}) != nil {
+		t.Fatal("batch with a directly launched worker refilled")
 	}
 }
