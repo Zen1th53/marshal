@@ -1726,13 +1726,18 @@
     },
     {
       "path": "internal/app/design_review.go",
-      "sha256": "88047ddf09137797f89068717e49ed04525e3bae1c77b39d54ecaef6354fb84e",
-      "bytes": 10082
+      "sha256": "654a5fdf1dd5025323cd3d0f3e70c7173e56ef6335ec8931013ef37dc3edce3f",
+      "bytes": 9840
     },
     {
       "path": "internal/app/design_review_extreme_test.go",
       "sha256": "0103c47102a2110be07c5a631b74671ea6ee5c9104b1fcfc0d879e3110d129b4",
       "bytes": 2106
+    },
+    {
+      "path": "internal/app/design_review_snapshot_test.go",
+      "sha256": "4b110ae80bd525854d2d7ab72d1415a1731cf4db1ed4982eeadf603a2d9f66ae",
+      "bytes": 2568
     },
     {
       "path": "internal/app/diff.go",
@@ -2466,8 +2471,8 @@
     },
     {
       "path": "internal/app/marshal_bind_plan.go",
-      "sha256": "525fd3520938e1a2f2eb50a0d7644933c0f095389959f8073075dc938bd7dea7",
-      "bytes": 8035
+      "sha256": "709926eb24572482f631810e0394c8a418a0623f50a95029534fa1a0d4ae1a1c",
+      "bytes": 8120
     },
     {
       "path": "internal/app/marshal_board_state_test.go",
@@ -17556,8 +17561,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "788fe655d7828d1ee98d3b90087fc5f49c43c259ae909c6918aec9acfa8d889b",
-      "bytes": 453148
+      "sha256": "84d2cfba2a8cd2d1c8ab16871e46969181a41dcb097bbd2164fbf1030558781a",
+      "bytes": 457929
     },
     {
       "path": "tools/extreme/prq/main_default.go",
