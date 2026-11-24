@@ -152,7 +152,7 @@ func (s *Server) rememberViaProposalMCP(ctx context.Context, args map[string]any
 }
 
 func memoryRememberTool() Tool {
-	return Tool{Name: "memory_remember", Description: "Retain memory (title<=256B, body<=4096B)", InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "submission_id": stringSchema(), "title": stringSchema(), "body": stringSchema(), "sources": memorySourceSchema()}, "title", "body")}
+	return Tool{Name: "memory_remember", Description: "Retain memory (title<=256B, body<=4096B)", InputSchema: objectSchema(map[string]any{"project_id": map[string]any{"type": "string", "description": "Leave out: memories are always saved to the current project"}, "submission_id": stringSchema(), "title": stringSchema(), "body": stringSchema(), "sources": memorySourceSchema()}, "title", "body")}
 }
 func memorySourceSchema() map[string]any {
 	return map[string]any{"type": "array", "maxItems": 8, "items": objectSchema(map[string]any{"path": stringSchema(), "commit": stringSchema(), "session": stringSchema(), "observed_at": stringSchema(), "sha256": stringSchema()})}

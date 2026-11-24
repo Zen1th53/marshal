@@ -132,6 +132,21 @@ func (w *Workspace) recoverBoundMCPMemory(record store.MarshalProposal) bool {
 func validMemoryMCPText(s string, limit int, multiline bool) bool {
 	return len(s) > 0 && len(s) <= limit && !strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) && !(multiline && (r == '\n' || r == '\t')) })
 }
+// validateMemoryMCPArgs names the exact field that failed, so a caller that
+// guessed a project id (or sent a malformed title) can correct it.
+func validateMemoryMCPArgs(args memoryMCPSubmission, projectID string) error {
+	switch {
+	case args.ProjectID != "" && args.ProjectID != projectID:
+		return fmt.Errorf("invalid memory project_id %q: memories are saved to the current project %q only; omit project_id", args.ProjectID, projectID)
+	case !validMemoryMCPText(args.Title, 256, false):
+		return errors.New("invalid memory title: required, at most 256 bytes, single line without control characters")
+	case !validMemoryMCPText(args.Body, 4096, true):
+		return errors.New("invalid memory body: required, at most 4096 bytes, no control characters other than newline and tab")
+	case len(args.Sources) > 8:
+		return errors.New("invalid memory sources: at most 8 entries")
+	}
+	return nil
+}
 func (w *Workspace) submitMemoryMCP(ctx context.Context, l *proposalMCPLease, raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) > 10<<10 {
 		return nil, errors.New("memory submission too large")
@@ -140,8 +155,9 @@ func (w *Workspace) submitMemoryMCP(ctx context.Context, l *proposalMCPLease, ra
 	if err := proposalmcp.DecodeStrict(raw, &args); err != nil {
 		return nil, errors.New("invalid memory JSON arguments")
 	}
-	if (args.ProjectID != "" && args.ProjectID != w.projectID) || !validMemoryMCPText(args.Title, 256, false) || !validMemoryMCPText(args.Body, 4096, true) || len(args.Sources) > 8 {
-		return nil, errors.New("invalid memory scope or content bounds")
+	args.Title, args.Body = strings.TrimSpace(args.Title), strings.TrimSpace(args.Body)
+	if err := validateMemoryMCPArgs(args, w.projectID); err != nil {
+		return nil, err
 	}
 	for _, src := range args.Sources {
 		for _, v := range []string{src.Path, src.Commit, src.Session, src.ObservedAt, src.SHA256} {
