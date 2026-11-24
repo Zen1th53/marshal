@@ -561,10 +561,15 @@ func RenderWithPrefix(m Manifest, prefix string, capBytes int) (Packet, error) {
 		Connections []Connection `json:"connections,omitempty"`
 		Invariants  []string     `json:"invariants"`
 		Prohibited  []string     `json:"prohibited,omitempty"`
-		Goal        Goal         `json:"goal"`
-		Memories    []item       `json:"memories"`
-		Bytes       int          `json:"bytes"`
-	}{"accepted_required_project_context", binding, c.Purpose, c.Components, c.Connections, c.Invariants, c.ProhibitedChanges, m.Goal, items, 0}
+		// The source anchors and decision references are review obligations
+		// of the contract, so the packet must carry their text: a reviewer
+		// cannot judge an obligation whose claim it was never shown.
+		SourceAnchors []string `json:"source_anchors,omitempty"`
+		DecisionRefs  []string `json:"decision_refs,omitempty"`
+		Goal          Goal     `json:"goal"`
+		Memories      []item   `json:"memories"`
+		Bytes         int      `json:"bytes"`
+	}{"accepted_required_project_context", binding, c.Purpose, c.Components, c.Connections, c.Invariants, c.ProhibitedChanges, c.SourceAnchors, c.DecisionRefs, m.Goal, items, 0}
 	marshal := func() ([]byte, error) { return json.Marshal(envelope) }
 	if security.RedactsSecrets {
 		// Extreme never refuses a packet because it carries a secret: the
