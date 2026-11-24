@@ -234,7 +234,7 @@
     switch (t.state) {
       case "building": word = n ? "sent back " + n + "×, building" : "building"; break;
       case "review": word = t.note === "merging" ? "accepted, merging" : "in review"; break;
-      case "waiting": word = t.note ? t.note.replace(/^waits /, "waits ") : "waiting"; break;
+      case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;
       default: word = t.state || "–";
     }
     var c = el("span", "chip " + toneClass(n ? "warn" : /stuck/.test(t.note || "") ? "bad" : taskTone[t.state]), word);
@@ -718,7 +718,7 @@
     if (!id) { dr.hidden = true; sigs.drawer = ""; return; }
     var l = t ? laneFor(f, t.id) : null, rl = t ? reviewLaneFor(f, t.id) : null;
     var rt = retryTask(f);
-    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step, l.lane.process, l.lane.note], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused, workCapabilities(f, id)])) return;
+    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step, l.lane.process, l.lane.note, l.lane.signal.state], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused, workCapabilities(f, id)])) return;
     dr.hidden = false;
     var facts = clear($("dr-facts")), acts = clear($("dr-acts"));
     setText("dr-note", "");
@@ -755,6 +755,7 @@
     kv(facts, "Attempt", n ? "attempt " + (n + 1) + ": the reviewer sent it back " + plural(n, "time") : t.state === "building" || t.state === "review" ? "first attempt" : "");
     if (n) kv(facts, "Why sent back", "The reviewer's reason is not sent to this page yet; the terminal Board's task inspector shows it.", "muted");
     if (t.note && !n) kv(facts, "Note", t.note);
+    if (t.waiting) kv(facts, "Waits", waitText(t.waiting) + " (" + (t.waiting.code === "unknown" ? "cause unknown, from " : "from ") + t.waiting.source + ")");
     renderWorkControls(f, t.id, acts);
     tickLanes();
   }
@@ -789,7 +790,7 @@
   function renderLanes(f) {
     var l = f.lanes;
     show("w-lanes", l.items.length > 0 || !!f.top.run);
-    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected, x.process, x.turn, x.note]; }))) { tickLanes(); return; }
+    if (!changed("lanes", l.items.map(function (x) { return [x.name, x.model, x.provider, x.task, x.step, x.reviewing, x.selected, x.process, x.turn, x.note, x.signal, x.waiting]; }))) { tickLanes(); return; }
     var tb = clear($("la-rows"));
     l.items.forEach(function (x, i) {
       var tr = el("tr");
@@ -797,7 +798,7 @@
       tr.appendChild(el("td", "", x.name));
       tr.appendChild(el("td", "muted", x.model || x.provider));
       tr.appendChild(el("td", x.reviewing ? "tone-vio" : "", x.task));
-      tr.appendChild(el("td", "", x.note ? x.step + " · " + x.note : x.step));
+      tr.appendChild(el("td", "", x.waiting ? x.step + " · " + waitText(x.waiting) : x.note ? x.step + " · " + x.note : x.step));
       var e = el("td", "num el"); e.dataset.lane = i; tr.appendChild(e);
       var s = el("td", "num sig"); s.dataset.lane = i; tr.appendChild(s);
       tb.appendChild(tr);
@@ -806,6 +807,46 @@
     $("la-rows").closest(".tablewrap").hidden = l.items.length === 0;
     tickLanes();
   }
+  // ---- liveness: pure helpers, read by testdata/liveness.cjs
+  // signalView is a lane's last signal as the page says it, add seconds
+  // after the frame came. Stale, unverifiable and exited are the server's
+  // judgement only; unverifiable reads "cannot verify", never exited. The
+  // local clock only turns a known signal amber after 60 s of quiet.
+  function signalView(x, add) {
+    var s = x.signal || {};
+    switch (s.state) {
+      case "stale": return { text: s.label || "no heartbeat: cannot verify the worker", tone: "bad" };
+      case "unverifiable": return { text: /^cannot verify/.test(s.label || "") ? s.label : "cannot verify" + (s.label ? ": " + s.label : ""), tone: "warn" };
+      case "exited": return { text: s.label || "the worker exited", tone: "muted" };
+      case "live": case "quiet": break;
+      default: return { text: s.label || "–", tone: "" };
+    }
+    if (!s.at) return { text: "–", tone: "" };
+    var sec = x.lastSignalSec + add, quiet = s.state === "quiet" || sec > 60;
+    return { text: dur(sec) + " ago" + (quiet ? " · quiet" : ""), tone: quiet ? "warn" : "" };
+  }
+  // waitText is a wait in one line: its label and where to look.
+  function waitText(w) {
+    if (!w) return "";
+    var t = w.label || (w.code === "unknown" ? "waits, cause unknown" : w.code);
+    if (w.retryAt) t += " · retry " + hm(w.retryAt);
+    if (w.inspect) t += " · see " + w.inspect;
+    return t;
+  }
+  // approvalAge is an approval's age and time left, add seconds after a
+  // frame made at nowIso.
+  function approvalAge(a, nowIso, add) {
+    var age = (a.ageSec || 0) + add, out = "waiting " + dur(age);
+    if (a.status !== "requested") return out + " · " + a.status + ", cannot be answered";
+    var exp = parse(a.expiresAt), now = parse(nowIso);
+    if (exp && now) {
+      var left = (exp - now) / 1000 - add;
+      out += left > 0 ? " · expires in " + dur(left) : " · expired, cannot be answered";
+    }
+    return out;
+  }
+  // ---- end liveness
+
   // tickLanes moves every running clock on the page by the time since the
   // frame came.
   function tickLanes() {
@@ -814,10 +855,70 @@
     Array.prototype.forEach.call(document.querySelectorAll("[data-lane]"), function (n) {
       var x = frame.lanes.items[+n.dataset.lane];
       if (!x) return;
-      var sig = x.lastSignalSec + add, stale = x.stale || sig > 60;
-      if (n.tagName === "TR") { n.classList.toggle("stale", stale); return; }
+      var sv = signalView(x, add);
+      if (n.tagName === "TR") { n.classList.toggle("stale", sv.tone === "bad"); n.classList.toggle("quiet", sv.tone === "warn"); return; }
       if (n.classList.contains("el")) n.textContent = dur(x.elapsedSec + add);
-      else if (n.classList.contains("sig")) n.textContent = dur(sig) + " ago" + (stale ? " · no signal for a while" : "");
+      else if (n.classList.contains("sig")) { n.textContent = sv.text; n.className = n.className.replace(/ ?tone-\w+/g, "") + (sv.tone ? " " + toneClass(sv.tone) : ""); }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-approval-age]"), function (n) {
+      var a = null;
+      (frame.approvals || []).forEach(function (x) { if (x.id === n.dataset.approvalAge) a = x; });
+      if (a) n.textContent = approvalAge(a, frame.now, add);
+    });
+  }
+
+  // renderInbox draws what waits for the owner: the run's wait, the inbox
+  // lines and the approvals. Approvals are keyed by id and updated in
+  // place, so a focused button or its age survives a new frame.
+  function renderInbox(f) {
+    var ib = f.inbox || { lines: [] }, aps = f.approvals || [];
+    setText("ib-count", (ib.count || 0) + aps.filter(function (a) { return a.status === "requested"; }).length || "");
+    var rw = $("run-wait");
+    rw.hidden = !f.waiting;
+    rw.textContent = f.waiting ? "The run waits: " + waitText(f.waiting) : "";
+    if (changed("inbox", [ib.lines, ib.next])) {
+      var ul = clear($("ib-lines"));
+      ib.lines.forEach(function (l) { ul.appendChild(el("li", "", l)); });
+      setText("ib-next", ib.next ? "Next ask: " + ib.next : "");
+    }
+    show("ib-empty", ib.lines.length === 0 && aps.length === 0 && !f.waiting && f.nowLine.fromYouOK);
+    // Rows that left go first, so the rows that stay are not moved and
+    // keep their focus.
+    var box = $("ib-approvals"), have = {}, ids = {};
+    aps.forEach(function (a) { ids[a.id] = true; });
+    Array.prototype.slice.call(box.children).forEach(function (n) {
+      if (ids[n.dataset.id]) have[n.dataset.id] = n; else box.removeChild(n);
+    });
+    aps.forEach(function (a, i) {
+      var li = have[a.id];
+      if (!li) {
+        li = el("li", "approval");
+        li.dataset.id = a.id;
+        li.appendChild(el("b", "ap-title"));
+        li.appendChild(el("span", "muted ap-age")).dataset.approvalAge = a.id;
+        li.appendChild(el("p", "ap-wait"));
+        li.appendChild(el("p", "muted ap-reason"));
+        li.appendChild(el("span", "acts ap-acts"));
+      }
+      if (box.children[i] !== li) box.insertBefore(li, box.children[i] || null);
+      li.querySelector(".ap-title").textContent = (a.taskId ? a.taskId + ": " : "") + "approval " + a.id + " · " + (a.awaiting === "owner" ? "you answer" : "the Marshal answers") + " ";
+      li.querySelector(".ap-wait").textContent = a.waiting ? waitText(a.waiting) : "";
+      li.querySelector(".ap-reason").textContent = a.reason || "";
+      var acts = li.querySelector(".ap-acts"), sig = JSON.stringify([a.status, a.actions, a.destination]);
+      if (acts.dataset.sig !== sig) {
+        acts.dataset.sig = sig;
+        clear(acts);
+        if (a.actions.length) {
+          a.actions.forEach(function (k) {
+            acts.appendChild(button("ghost", "Copy " + k.label + " command", function () {
+              if (navigator.clipboard) navigator.clipboard.writeText(k.key);
+              feedback("ok", "Copied: " + k.key + " (run it in the terminal).");
+            }));
+          });
+        } else if (a.status === "requested") {
+          acts.appendChild(el("span", "muted", "Answered at " + (a.destination || "the Marshal") + "."));
+        }
+      }
     });
   }
 
@@ -1043,7 +1144,7 @@
     var host = [pct(s.cpuPct, "CPU"), pct(s.memPct, "memory used"), pct(s.diskPct, "disk used") + (s.lowDisk ? " (low on space)" : ""),
       s.tempC >= 0 ? s.tempC + " °C" : ""].filter(Boolean).join(" · ");
     kv(dl, "Host load", host);
-    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; lane cap " + s.thermalCap + " asked for" : "") : "off", s.thermalGuard ? "tone-warn" : "");
+    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; temporary lane cap " + s.thermalCap + " for new lanes" : "") : "off", s.thermalGuard ? "tone-warn" : "");
     if (s.notice) kv(dl, "Host note", s.notice);
     kv(dl, "MCP", s.mcpFailed ? "failed in this session · F6 in the terminal shows why" : "working", s.mcpFailed ? "tone-bad" : "");
     var approval = "";
@@ -1232,7 +1333,7 @@
   function render(f) {
     if (!f) return;
     if (!settingsRecovered) { settingsRecovered = true; recoverSetting(); }
-    renderTop(f); renderCard(f); renderHome(f); renderWork(f); renderArchitecture(f);
+    renderTop(f); renderCard(f); renderInbox(f); renderHome(f); renderWork(f); renderArchitecture(f);
     renderTeam(f); renderActivity(f); renderSettings(f); renderRunControls(f);
   }
 

@@ -393,8 +393,11 @@ func TestFlowTasks(t *testing.T) {
 		{ID: "T02", Title: "task T02", Files: "review.go +1", Writer: "claude", State: "building"},
 		{ID: "T03", Title: "task T03", Files: "review.go +1", Writer: "claude", State: "waiting", Note: "waits T02"},
 	}
+	if w := got[2].Waiting; w == nil || w.Code != vm.WaitDependency || w.BlockerID != "T02" {
+		t.Fatalf("T03 waits %+v, want its dependency T02", w)
+	}
 	for i := range want {
-		if got[i] != want[i] {
+		if got[i].Waiting = nil; got[i] != want[i] {
 			t.Fatalf("task %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}

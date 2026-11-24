@@ -419,11 +419,12 @@ features:
       - internal/app/worker_liveness.go
     tests:
       - internal/webboard.TestEncodeRunningFrame
+      - internal/webboard.TestUnverifiableWorkerNeverRendersDead
     docs:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
-        anchor: 'no signal for a while'
+        anchor: 'function signalView(x, add)'
         kind: view
     tui:
       - routeOrCommand: "1"
@@ -439,10 +440,12 @@ features:
       - internal/tui/boardv2_flow.go
     tests:
       - internal/webboard.TestEncodeRunningFrame
+      - internal/tui.TestBoardExplainsEveryWaitingState
+      - internal/tui.TestAllBlockedEntitiesHaveWaitReasonAndDestination
     docs: []
     web:
       - routeOrCommand: "#work"
-        anchor: 'case "waiting": word = t.note ? t.note.replace(/^waits /, "waits ") : "waiting"; break;'
+        anchor: 'case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;'
         kind: view
     tui:
       - routeOrCommand: /why
@@ -458,12 +461,16 @@ features:
       - internal/tui/boardv2_cards_decision.go
     tests:
       - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestApprovalFrameIncludesAgeAndRedactsReason
     docs:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#home"
         anchor: 'inbox: "a request waiting in the inbox"'
         kind: control
+      - routeOrCommand: "#home"
+        anchor: 'function renderInbox(f)'
+        kind: view
     tui:
       - routeOrCommand: /approvals
         anchor: 'case "/approvals":'
@@ -2327,6 +2334,34 @@ features:
         anchor: 'func handleFailoverSetting('
         kind: control
 
+  - id: setting-provider-enablement
+    name: Project settings codex-enabled, claude-enabled, agy-enabled and opencode-enabled
+    editions: [default, governed]
+    sources:
+      - internal/settingscatalog/catalog.go
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/settingscatalog/catalog_default.go
+      - internal/marshal/domain.go
+      - internal/app/marshal_execute.go
+      - internal/app/failover_extreme.go
+      - internal/app/failover_default.go
+      - internal/tui/commands_marshal.go
+      - internal/tui/settings_view.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/settingscatalog.TestProviderAndRuntimeLimitRowsExposeEffectiveValues
+      - internal/app.TestProviderDisableAppliesToNextAdmission
+      - internal/app.TestGovernedProviderDisableRefusesWithoutFailover
+    docs: []
+    web:
+      - routeOrCommand: "#settings"
+        anchor: 'var settings = f.settings'
+        kind: control
+    tui:
+      - routeOrCommand: /marshal settings codex-enabled
+        anchor: 'settingscatalog.Apply('
+        kind: control
+
   - id: setting-worker-stall-minutes
     name: Project setting worker stall window (WorkerStallMinutes)
     editions: [default]
@@ -2340,11 +2375,12 @@ features:
       - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeWorkerStallClassifiesAsProviderFailure
+      - internal/app.TestStallOffRetainsSignals
     docs: []
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
-        kind: view
+        kind: control
     tui:
       - routeOrCommand: /marshal settings worker-stall-minutes
         anchor: 'func (w *Workspace) marshalSettings('
@@ -2454,6 +2490,8 @@ features:
       - internal/hostwatch/policy.go
     tests:
       - internal/tui.TestHostLaneGuardLowersAndRestores
+      - internal/tui.TestThermalOverlayClearsWithoutPersistingCap
+      - internal/tui.TestLegacyThermalCapMigrationPreservesOwnerEdits
       - internal/hostwatch.TestPolicyHysteresis
     docs: []
     web:
@@ -2755,41 +2793,50 @@ features:
     editions: [default, governed]
     sources:
       - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/settingscatalog/catalog_default.go
       - internal/app/verification_timeout_extreme.go
       - internal/app/verification_timeout_default.go
+      - internal/tui/commands_marshal.go
       - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeVerificationHasNoWallClockLimit
+      - internal/app.TestRuntimeLimitsDistinguishAbsentAndZero
+      - internal/app.TestGovernedVerificationTimeoutRemainsFixedAt15Minutes
     docs: []
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
-        kind: view
+        kind: control
     tui:
-      - routeOrCommand: /marshal settings
-        anchor: 'func formatSettingsView('
-        kind: view
+      - routeOrCommand: /marshal settings verification-timeout-seconds
+        anchor: 'settingscatalog.Apply('
+        kind: control
 
   - id: infra-retry-bounds
     name: Infrastructure retry limit and provider cooldown policy before hand-in
     editions: [default, governed]
     sources:
       - internal/webboard/page/app.js
+      - internal/settingscatalog/catalog_extreme.go
+      - internal/settingscatalog/catalog_default.go
       - internal/app/marshal_infra_retry_extreme.go
       - internal/app/marshal_infra_retry_default.go
+      - internal/tui/commands_marshal.go
       - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeInfraFailuresDoNotSpendRework
       - internal/app.TestCommunityHasNoInfraRetry
+      - internal/app.TestRuntimeLimitsDistinguishAbsentAndZero
     docs: []
     web:
       - routeOrCommand: "#settings"
         anchor: 'var settings = f.settings'
-        kind: view
+        kind: control
     tui:
-      - routeOrCommand: /marshal settings
-        anchor: 'func formatSettingsView('
-        kind: view
+      - routeOrCommand: /marshal settings infra-retry-limit
+        anchor: 'settingscatalog.Apply('
+        kind: control
 
   - id: worker-candidate-writes
     name: Edition policy for worker candidate memory and design writes

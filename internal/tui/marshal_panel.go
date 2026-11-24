@@ -30,6 +30,11 @@ type MarshalPanel struct {
 	// run is the snapshot the Board is projected from, kept so the Board can
 	// be projected again when its workers change without reading the store.
 	run marshal.Run
+	// approvals are the run's approvals awaiting an answer (or just
+	// expired), read at publish so a frame never reads the store; hold is
+	// the launch the dispatcher holds, nil for none.
+	approvals []app.ApprovalNoticeView
+	hold      *app.DispatchAdmission
 }
 
 // MarshalTaskRow is one task as the panel shows it.

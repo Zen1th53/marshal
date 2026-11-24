@@ -559,12 +559,15 @@ func TestRollingUltraOffDrainsThenAdmitsSerially(t *testing.T) {
 	}
 }
 
-func TestRollingDispatchGateStaysClosed(t *testing.T) {
-	if rollingDispatchEnabled {
-		t.Fatal("rolling dispatch gate is open")
+func TestRollingDispatchGateRequiresProof(t *testing.T) {
+	if err := enableRollingDispatch(nil); !errors.Is(err, ErrRollingDisabled) {
+		t.Fatalf("enable without proof err = %v", err)
 	}
-	if err := enableRollingDispatch(rollingFixtureProof{}); !errors.Is(err, ErrRollingDisabled) {
+	if err := enableRollingDispatch(rollingFixtureProof{}); err != nil {
 		t.Fatalf("enable err = %v", err)
+	}
+	if (&MarshalService{}).rollingRefillAvailable() {
+		t.Fatal("rolling refill offered without a launch supervisor")
 	}
 	if _, err := acquireRollingScheduler(context.Background(), rollingPlan{}, rollingDeps{Store: &rollingMemStore{}}); err == nil {
 		t.Fatal("scheduler acquired without its launch, result, admission and proof interfaces")

@@ -301,6 +301,9 @@ func (v boardVisual) hostTop(s hostSnapshot, w int) []string {
 		if s.Guard.Pending && s.Guard.Lowered > 0 {
 			state += v.fg("dim", fmt.Sprintf(" · lane cap %d waits in inbox", s.Guard.Lowered))
 		}
+		if s.Guard.Temporary > 0 {
+			state += v.fg("dim", fmt.Sprintf(" · temporary lane cap %d for new lanes", s.Guard.Temporary))
+		}
 	}
 	parts := []string{state}
 	if s.Guard.Cap > 0 {

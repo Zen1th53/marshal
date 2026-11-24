@@ -15,18 +15,19 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-// rollingDispatchEnabled keeps the rolling dispatcher out of Execute. Batch
-// dispatch stays in force until real hand-in proof and budget admission are
-// wired into the dispatcher.
-const rollingDispatchEnabled = false
+// rollingDispatchEnabled lets an admitted ULTRA batch refill freed worker
+// slots during collection. Refill uses the production launch path: durable
+// slot reservations, supervised launch receipts, staged exits with proof,
+// and quota, cooldown and recovery admission. Standard stays batch.
+const rollingDispatchEnabled = true
 
 // rollingReviewPool is how many results review at once. Review seats are
 // counted apart from worker slots.
 const rollingReviewPool = 2
 
 var (
-	// ErrRollingDisabled refuses enabling rolling dispatch in production.
-	ErrRollingDisabled = errors.New("rolling dispatch is not enabled: hand-in proof and budget admission are not wired")
+	// ErrRollingDisabled refuses enabling rolling dispatch without hand-in proof.
+	ErrRollingDisabled = errors.New("rolling dispatch is not enabled: hand-in proof is missing")
 	// ErrRollingFenced reports a dispatcher whose lease was lost or shut
 	// down: it starts no effect and keeps every record.
 	ErrRollingFenced = errors.New("rolling dispatcher is fenced")
@@ -41,6 +42,13 @@ func enableRollingDispatch(proof rollingProof) error {
 		return ErrRollingDisabled
 	}
 	return nil
+}
+
+// rollingRefillAvailable reports whether rolling refill may run. It needs a
+// launch supervisor, which proves each worker's launch ownership and exit;
+// a service without one keeps batch dispatch.
+func (s *MarshalService) rollingRefillAvailable() bool {
+	return rollingDispatchEnabled && s.LaunchSupervisor != nil
 }
 
 // rollingState is the dispatcher's durable record. One writer owns it: every

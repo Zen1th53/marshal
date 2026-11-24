@@ -224,7 +224,7 @@ func (w *Workspace) addSessionSettings(view *settingscatalog.Snapshot) {
 		}
 		for i := range view.Rows {
 			r := &view.Rows[i]
-			if r.Scope != "project" {
+			if r.Scope != "project" || r.Applies != "next run" {
 				continue
 			}
 			if _, err := settingscatalog.Get(runSettings, r.Key); err == nil {

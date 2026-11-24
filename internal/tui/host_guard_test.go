@@ -77,10 +77,10 @@ func TestWorkspaceLaneCapSink(t *testing.T) {
 		t.Fatalf("queued %+v", taken)
 	}
 	req := taken[0]
-	if req.Who != hostWatchActor || req.Kind != "marshal-command" || req.Object != "/marshal settings global-cap 6" || req.RunID != "" || req.Key() != key {
+	if req.Who != hostWatchActor || req.Kind != "marshal-command" || req.Object != "/host thermal-cap 6" || req.RunID != "" || req.Key() != key {
 		t.Fatalf("request %+v", req)
 	}
-	if !strings.Contains(req.Scope, "next Marshal run") || !strings.Contains(req.Scope, "R-1 keeps its approved cap") {
+	if !strings.Contains(req.Scope, "until the CPU cools") || !strings.Contains(req.Scope, "no setting changes") {
 		t.Fatalf("scope %q", req.Scope)
 	}
 	// The request sits in the Board inbox; withdrawing it removes it.
@@ -97,16 +97,20 @@ func TestWorkspaceLaneCapSink(t *testing.T) {
 		t.Fatal("withdrawn request admitted")
 	}
 	// A live request is admitted once.
-	_, err = sink.Request(laneCapRequest{To: 6})
+	key, err = sink.Request(laneCapRequest{To: 6})
 	if err != nil {
 		t.Fatal(err)
 	}
+	liveGuard(w, key, 6)
 	req = w.permissions.queue.Take(false)[0]
 	if err := w.takeHostCapRequest(req); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.takeHostCapRequest(req); err == nil {
 		t.Fatal("request admitted twice")
+	}
+	if got := w.thermalLaneCap(12); got != 6 {
+		t.Fatalf("thermal lane cap = %d", got)
 	}
 	bad := req
 	bad.Object = "/marshal settings execution-rights small-tasks"
@@ -121,9 +125,11 @@ func TestHostCapRequestAdmitsMarshalBoundDecision(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	defer w.Close()
 	sink := workspaceLaneCapSink{w}
-	if _, err := sink.Request(laneCapRequest{RunID: "R-1", To: 6, Reason: "hot"}); err != nil {
+	key, err := sink.Request(laneCapRequest{RunID: "R-1", To: 6, Reason: "hot"})
+	if err != nil {
 		t.Fatal(err)
 	}
+	liveGuard(w, key, 6)
 	req := w.permissions.queue.Take(false)[0]
 	bound := req
 	bound.SourceLaunch, bound.SourceOccurrence = "launch-1", "mcp:occurrence-1"
@@ -136,4 +142,11 @@ func TestHostCapRequestAdmitsMarshalBoundDecision(t *testing.T) {
 	if err := w.takeHostCapRequest(req); err == nil {
 		t.Fatal("request admitted again after the Marshal-bound decision")
 	}
+}
+
+// liveGuard installs a host watcher whose guard stands behind key.
+func liveGuard(w *Workspace, key string, to int) {
+	h := newHostWatcher(nil)
+	h.guard = &hostLaneGuard{sink: workspaceLaneCapSink{w}, active: true, key: key, to: to}
+	w.hostWatch.Store(h)
 }

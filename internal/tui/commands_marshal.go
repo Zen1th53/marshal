@@ -992,6 +992,8 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	service.RecordActivity = w.RecordActivity
 	service.QuotaLeft = w.providerLeft
 	service.ModelQuotaLeft = w.providerModelLeft
+	// A temporary host lane cap lowers the cap new admissions use.
+	service.LaneCap = w.thermalLaneCap
 	// The hooks take the run being dispatched, not runID: a draft that
 	// supersedes the run keeps this service for the new run ID, and a hold
 	// applies to that new run (board_change.go).
@@ -1230,6 +1232,7 @@ func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPa
 		return
 	}
 	if service != nil {
+		w.noteRunWaits(service, runID, p)
 		// The feed reads only decisions it has not seen; the rest come
 		// from its cache, so a publish per run step stays one indexed query.
 		if events, _, _, err := w.boardFeed.read(context.Background(), service.Store, runID); err == nil {
