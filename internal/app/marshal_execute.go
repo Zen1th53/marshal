@@ -159,7 +159,9 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 	}
 	for round := 0; ; round++ {
 		if err := s.runCommandSafePoint(ctx, runID); err != nil {
-			return marshal.Run{}, err
+			err = s.pauseStageFailure(ctx, runID, "commands", err)
+			run, _, _ := s.readRun(context.WithoutCancel(ctx), runID)
+			return run, err
 		}
 		run, err := current()
 		if err != nil {
@@ -195,6 +197,10 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		progressed, err := s.mergeAccepted(ctx, runID, run)
 		if err != nil || progressed {
 			if err != nil {
+				err = s.pauseStageFailure(ctx, runID, "merge", err)
+				if after, readErr := current(); readErr == nil {
+					run = after
+				}
 				return run, err
 			}
 			continue
@@ -202,6 +208,10 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 		progressed, err = s.reviewHandedIn(ctx, runID, run)
 		if err != nil || progressed {
 			if err != nil {
+				err = s.pauseStageFailure(ctx, runID, "review", err)
+				if after, readErr := current(); readErr == nil {
+					run = after
+				}
 				return run, err
 			}
 			continue
@@ -221,6 +231,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			// Workers already launched in this round are still running;
 			// collect them so none is left without a hand-in.
 			err = errors.Join(err, s.collectAdmitted(ctx, runID, launched, observe, current))
+			err = s.pauseStageFailure(ctx, runID, "dispatch", err)
 			after, _ := current()
 			return after, err
 		}
@@ -256,6 +267,7 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			_, _ = current()
 		}
 		if err := s.collectAdmitted(ctx, runID, launched, observe, current); err != nil {
+			err = s.pauseStageFailure(ctx, runID, "dispatch", err)
 			after, _ := current()
 			return after, err
 		}

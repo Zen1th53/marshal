@@ -54,6 +54,7 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
+	noticeDeliveryMu sync.Mutex
 	// projectIdentity* cache ProjectIdentity for projectIdentityTTL.
 	projectIdentityMu    sync.Mutex
 	projectIdentityAt    time.Time

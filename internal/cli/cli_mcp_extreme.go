@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/mcp"
@@ -17,6 +18,15 @@ import (
 
 func newStdioMCPServer(runtime *app.Runtime, role, task string) (*mcp.Server, error) {
 	srv := mcp.NewExtremeServer(runtime, role, task)
+	if role == "marshal" {
+		if service := runtime.Marshal(); service != nil {
+			id, _, err := runtime.Store().LatestMarshalRun(context.Background(), service.ProjectID)
+			if err != nil && !errors.Is(err, model.ErrNotFound) {
+				return nil, err
+			}
+			srv.SetBoundRunID(id)
+		}
+	}
 	if path := os.Getenv("MARSHAL_PROPOSAL_MCP_CONFIG"); path != "" && role == "marshal" {
 		cfg, err := proposalmcp.LoadConfig(path)
 		if err != nil {

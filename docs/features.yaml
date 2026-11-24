@@ -1916,13 +1916,19 @@ features:
         kind: view
 
   - id: TUI-NOTICE-pause-and-offline-replay
-    name: Durable chat and Board notices for non-error pauses, resume failures and offline chat replay
+    name: Durable chat and Board notices for pauses, approval outcomes, resume failures and offline replay
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
       - internal/tui/board_next.go
       - internal/tui/marshal_plan_stall.go
-    tests: []
+      - internal/app/approval_notices.go
+      - internal/store/approval_outbox.go
+      - internal/tui/native_liveinbox.go
+    tests:
+      - internal/app.TestApprovalTerminalNoticeRecovery
+      - internal/app.TestApprovalNoticeConcurrentDelivery
+      - internal/tui.TestApprovalNoticeInboxDeduplication
     docs: []
     web: []
     tui: []
@@ -3124,13 +3130,16 @@ features:
 
   # ---- MCP tools (internal/mcp) ----------------------------------------------
   - id: MCP-marshal-status-and-digest
-    name: Marshal run status, digest and event stream MCP tools (marshal_status, run_digest, events_list)
+    name: Marshal run status, digest, approvals and event stream MCP tools (marshal_status, run_digest, marshal_approvals, events_list)
     editions: [default, governed]
     sources:
       - internal/tui/boardv2_steps.go
       - internal/webboard/page/index.html
       - internal/mcp/server.go
       - internal/mcp/run_digest.go
+      - internal/mcp/marshal_approvals.go
+      - internal/cli/cli_mcp_default.go
+      - internal/cli/cli_mcp_extreme.go
       - internal/mcp/events_page.go
     tests: []
     docs:

@@ -198,6 +198,11 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			}
 		}
 		if completed.State == execution.RunNeedsApproval && result.ApprovalID != "" {
+			if approval, getErr := service.Engine().ApprovalManager().GetApproval(result.ApprovalID); getErr == nil && approval != nil {
+				if err := r.RecordApprovalOpened(ctx, req.RunID, *approval); err != nil {
+					return nil, err
+				}
+			}
 			return nil, process05ApprovalRequired(completed.RunID, req.Task.PlanTaskID, result.ApprovalID)
 		}
 		if (completed.State != execution.RunDonePendingVerification && completed.State != execution.RunPaused) || result.State != execution.TaskCompletedPendingVerify || result.ResultCommit == "" || result.WorktreePath == "" {

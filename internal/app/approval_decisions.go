@@ -25,14 +25,14 @@ import (
 // DecisionRecord names the canonical kind and exact revision displayed to the
 // owner. Digest binds the entire record, including action, state and expiry.
 type DecisionRecord struct {
-	ID, Kind, ResourceID, Status, Digest, RequestedBy string
-	Version                                           int64
-	Pending                                           bool
-	ExpiresAt                                         *time.Time
-	goal                                              *model.GoalContract
-	plan                                              *plan.ExecutionPlan
-	approval                                          *model.Approval
-	execution                                         *execution.RuntimeApproval
+	ID, Kind, ResourceID, Status, Digest, RequestedBy, ReplacementID string
+	Version                                                          int64
+	Pending                                                          bool
+	ExpiresAt                                                        *time.Time
+	goal                                                             *model.GoalContract
+	plan                                                             *plan.ExecutionPlan
+	approval                                                         *model.Approval
+	execution                                                        *execution.RuntimeApproval
 }
 type ApprovalDecision struct {
 	Envelope CommandEnvelope
@@ -53,10 +53,22 @@ func planDecision(p plan.ExecutionPlan) DecisionRecord {
 	return DecisionRecord{ID: fmt.Sprintf("plan:%s@%d", p.ID, p.Version), Kind: "plan", ResourceID: p.ID, Version: p.Version, Status: string(p.State), Pending: p.State == plan.StateReady, Digest: decisionDigest(p), plan: &p}
 }
 func sqliteDecision(a model.Approval) DecisionRecord {
-	return DecisionRecord{ID: "approval:" + a.ID, Kind: "approval", ResourceID: a.ID, Version: a.Revision, Status: string(a.Status), Pending: a.Status == model.ApprovalRequested, Digest: decisionDigest(a), RequestedBy: a.RequestedBy, ExpiresAt: a.ExpiresAt, approval: &a}
+	status := string(a.Status)
+	pending := a.Status == model.ApprovalRequested
+	if pending && a.ExpiresAt != nil && !time.Now().UTC().Before(*a.ExpiresAt) {
+		status = string(model.ApprovalExpired)
+		pending = false
+	}
+	return DecisionRecord{ID: "approval:" + a.ID, Kind: "approval", ResourceID: a.ID, Version: a.Revision, Status: status, Pending: pending, Digest: decisionDigest(a), RequestedBy: a.RequestedBy, ExpiresAt: a.ExpiresAt, approval: &a}
 }
 func executionDecision(a execution.RuntimeApproval) DecisionRecord {
-	return DecisionRecord{ID: "execution:" + a.ApprovalID, Kind: "execution", ResourceID: a.ApprovalID, Version: a.Revision, Status: string(a.Status), Pending: a.Status == execution.ApprovalRequested, Digest: decisionDigest(a), RequestedBy: a.RequestedBy, ExpiresAt: a.ExpiresAt, execution: &a}
+	status := string(a.Status)
+	pending := a.Status == execution.ApprovalRequested
+	if pending && a.ExpiresAt != nil && !time.Now().UTC().Before(*a.ExpiresAt) {
+		status = string(execution.ApprovalExpired)
+		pending = false
+	}
+	return DecisionRecord{ID: "execution:" + a.ApprovalID, Kind: "execution", ResourceID: a.ApprovalID, Version: a.Revision, Status: status, Pending: pending, Digest: decisionDigest(a), RequestedBy: a.RequestedBy, ReplacementID: a.ReplacementID, ExpiresAt: a.ExpiresAt, execution: &a}
 }
 
 // DecisionRecords aggregates canonical records within the project/session.
@@ -264,11 +276,11 @@ func (r *Runtime) CommandDecideApproval(ctx context.Context, request ApprovalDec
 			}
 		}
 	}
-	if !current.Pending {
-		return DecisionRecord{}, fmt.Errorf("%w: decision already %s", model.ErrConflict, current.Status)
-	}
 	if current.ExpiresAt != nil && !time.Now().UTC().Before(*current.ExpiresAt) {
-		return DecisionRecord{}, fmt.Errorf("%w: approval expired", model.ErrApprovalRequired)
+		return current, fmt.Errorf("%w: approval expired", model.ErrApprovalRequired)
+	}
+	if !current.Pending {
+		return current, fmt.Errorf("%w: decision already %s", model.ErrConflict, current.Status)
 	}
 	if (current.Kind == "approval" || current.Kind == "execution") && current.RequestedBy == p.ID() {
 		return DecisionRecord{}, fmt.Errorf("%w: requester cannot decide its own action (CI-003)", authz.ErrDenied)
@@ -375,11 +387,27 @@ func (r *Runtime) commandExecutionDecision(ctx context.Context, request Approval
 		}
 		return r.ResolveDecision(ctx, record.SessionID, record.TargetID)
 	}
+	if a.Status == execution.ApprovalRequested && (a.ExpiresAt == nil || !time.Now().UTC().Before(*a.ExpiresAt)) {
+		if a.ExpiresAt != nil {
+			marshalRunID := r.resolveMarshalRunIDForExecution(ctx, a.RunID, a.PlanID, a.PlanVersion)
+			expired, _, expErr := r.ExpireApproval(ctx, marshalRunID, a.ApprovalID, time.Now().UTC())
+			if expErr != nil {
+				return current, expErr
+			}
+			if expired != nil {
+				return executionDecision(*expired), execution.ErrApprovalTOCTOUViolation
+			}
+		}
+		return current, execution.ErrApprovalTOCTOUViolation
+	}
 	if !current.Pending || current.Version != request.Envelope.ExpectedVersion {
-		return DecisionRecord{}, model.ErrConflict
+		if a.Status == execution.ApprovalExpired {
+			return current, execution.ErrApprovalTOCTOUViolation
+		}
+		return current, model.ErrConflict
 	}
 	if current.Digest != request.Digest {
-		return DecisionRecord{}, execution.ErrApprovalTOCTOUViolation
+		return current, execution.ErrApprovalTOCTOUViolation
 	}
 	requester := a.RequestedBy
 	if requester == "" {
@@ -392,7 +420,7 @@ func (r *Runtime) commandExecutionDecision(ctx context.Context, request Approval
 		return DecisionRecord{}, execution.ErrConstraintViolation
 	}
 	if a.ExpiresAt == nil || !time.Now().UTC().Before(*a.ExpiresAt) {
-		return DecisionRecord{}, execution.ErrApprovalTOCTOUViolation
+		return current, execution.ErrApprovalTOCTOUViolation
 	}
 	run, err := r.Execution().GetRun(ctx, a.RunID)
 	if err != nil {

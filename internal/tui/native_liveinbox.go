@@ -154,6 +154,26 @@ func (v *inboxView) write(text string) error {
 	return nil
 }
 
+// writeNotice deduplicates retries using the stable event ID in the inbox.
+func (v *inboxView) writeNotice(eventID, text string) error {
+	if err := inboxRenderGate.acquire(); err != nil {
+		return err
+	}
+	defer inboxRenderGate.release()
+	marker := "<!-- notice:" + eventID + " -->"
+	data, err := os.ReadFile(v.path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if strings.Contains(string(data), marker) {
+		return nil
+	}
+	if err := v.write(marker + "\n" + text); err != nil {
+		return err
+	}
+	return v.trim()
+}
+
 func (v *inboxView) trim() error {
 	data, err := os.ReadFile(v.path)
 	if err != nil {

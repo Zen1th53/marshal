@@ -7,10 +7,13 @@ import (
 	"time"
 )
 
+func defaultTaskApprovalAuthority() string { return "marshal" }
+
 // renewExpiredTaskApproval clears a task's TASK_EXECUTE approval that expired
 // unanswered, so the same round requests a fresh one (owner rule: in Extreme
 // an unanswered approval never stops the work). A decided approval, a denial
-// and any other state keep their meaning; nothing is granted here.
+// and any other state keep their meaning; nothing is granted here and an old
+// grant is never renewed.
 func (e *Engine) renewExpiredTaskApproval(run ExecutionRun, t *TaskExecution, now time.Time) bool {
 	if t.State != TaskNeedsApproval || t.ApprovalID == "" || !t.ApprovalRequired {
 		return false
@@ -19,9 +22,19 @@ func (e *Engine) renewExpiredTaskApproval(run ExecutionRun, t *TaskExecution, no
 	if err != nil || app.OperationType != "TASK_EXECUTE" || app.RunID != run.RunID || app.TaskID != t.TaskID || app.PlanID != run.PlanID || app.PlanVersion != run.PlanVersion || app.ApprovedBy != "" || app.HardViolation {
 		return false
 	}
-	expired := app.Status == ApprovalExpired || (app.Status == ApprovalRequested && app.ExpiresAt != nil && !now.Before(*app.ExpiresAt))
-	if !expired {
+	if app.Status != ApprovalExpired && app.Status != ApprovalRequested {
 		return false
+	}
+	if app.Status == ApprovalRequested {
+		if app.ExpiresAt == nil || now.Before(*app.ExpiresAt) {
+			return false
+		}
+		// Atomically race-close the unanswered ticket as EXPIRED before clearing
+		// the binding; if a decision won the race, never renew or clear it.
+		after, _, expErr := e.approvals.Expire(app.ApprovalID, now)
+		if expErr != nil || after == nil || after.Status != ApprovalExpired {
+			return false
+		}
 	}
 	_, _ = e.journal.Append(JournalEvent{
 		RunID:       run.RunID,

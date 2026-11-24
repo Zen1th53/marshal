@@ -607,10 +607,12 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					TaskID:         t.TaskID,
 					PlanID:         run.PlanID,
 					PlanVersion:    run.PlanVersion,
+					Attempt:        t.Attempts + 1,
 					OperationType:  "TASK_EXECUTE",
 					TargetResource: filepath.Join(t.TargetFiles...),
 					RiskLevel:      model.R2,
 					Scope:          "task_mutation",
+					Authority:      defaultTaskApprovalAuthority(),
 					Parameters:     t.Description,
 				}
 				app, err := e.approvals.RequestApproval(appReq)
@@ -1176,6 +1178,78 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 	})
 
 	return nil
+}
+
+// ClearExpiredTaskApproval clears an expired unanswered TASK_EXECUTE approval
+// binding on explicit owner retry so the next dispatch requests a fresh ticket
+// through normal authority. An old grant, denial, live approval, or non-task
+// approval is never cleared or renewed here.
+func (e *Engine) ClearExpiredTaskApproval(ctx context.Context, runID, taskID string, now time.Time) (*RuntimeApproval, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	run, err := e.store.GetRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	t, exists := run.Tasks[taskID]
+	if !exists {
+		return nil, fmt.Errorf("%w: task %s not found in run %s", ErrRunInvalid, taskID, runID)
+	}
+	if t.State != TaskNeedsApproval || t.ApprovalID == "" || !t.ApprovalRequired {
+		return nil, fmt.Errorf("%w: task %s has no pending approval wait to clear", ErrInvalidStateTransition, taskID)
+	}
+	app, err := e.approvals.GetApproval(t.ApprovalID)
+	if err != nil {
+		return nil, err
+	}
+	if app.OperationType != "TASK_EXECUTE" || app.RunID != run.RunID || app.TaskID != taskID || app.PlanID != run.PlanID || app.PlanVersion != run.PlanVersion {
+		return nil, fmt.Errorf("%w: approval binding does not match task %s", ErrRunConflict, taskID)
+	}
+	if app.ApprovedBy != "" || app.HardViolation {
+		return nil, fmt.Errorf("%w: decided or hard-violation approval cannot be cleared as expired", ErrInvalidStateTransition)
+	}
+	if app.Status == ApprovalRequested {
+		if app.ExpiresAt == nil || now.Before(*app.ExpiresAt) {
+			return nil, fmt.Errorf("%w: approval %s is not expired", ErrInvalidStateTransition, app.ApprovalID)
+		}
+		expired, _, expErr := e.approvals.Expire(app.ApprovalID, now)
+		if expErr != nil {
+			return nil, expErr
+		}
+		if expired == nil {
+			return nil, fmt.Errorf("%w: approval %s disappeared before expiry", ErrInvalidStateTransition, app.ApprovalID)
+		}
+		if expired.Status != ApprovalExpired {
+			return expired, fmt.Errorf("%w: approval %s transitioned to %s before expiry", ErrInvalidStateTransition, app.ApprovalID, expired.Status)
+		}
+		app = expired
+	} else if app.Status != ApprovalExpired {
+		return app, fmt.Errorf("%w: approval %s is %s, not EXPIRED", ErrInvalidStateTransition, app.ApprovalID, app.Status)
+	}
+	t.ApprovalID = ""
+	t.State = TaskPending
+	t.UpdatedAt = now
+	run.Tasks[taskID] = t
+	if run.State == RunNeedsApproval {
+		run.State = RunPaused
+		run.CurrentPhase = PhasePaused
+	}
+	run.UpdatedAt = now
+	if err := e.persistRun(ctx, &run); err != nil {
+		return nil, err
+	}
+	_, _ = e.journal.Append(JournalEvent{
+		RunID:       run.RunID,
+		TaskID:      taskID,
+		Timestamp:   now,
+		Actor:       "MARSHAL_ENGINE",
+		EventType:   "APPROVAL_EXPIRED_CLEARED",
+		StateBefore: string(TaskNeedsApproval),
+		StateAfter:  string(TaskPending),
+		Summary:     fmt.Sprintf("Expired TASK_EXECUTE approval %s cleared on owner retry for fresh approval", app.ApprovalID),
+	})
+	return app, nil
 }
 
 // SetRunContext explicitly sets the cached goal and plan for a run (e.g. after crash recovery).

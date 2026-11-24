@@ -368,6 +368,9 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 		return marshalNotStarted(provider, fmt.Errorf("tmux window not opened: %w", redactedCause{err}))
 	}
 	launched = true
+	// Notices that could not be delivered while the chat was closed are
+	// replayed now; each is admitted once by its event ID.
+	w.replayMarshalNotices(ctx)
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, false) // F3: normal operator input
 

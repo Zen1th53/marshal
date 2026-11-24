@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
@@ -130,6 +131,7 @@ type MarshalService struct {
 	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
 	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
 	process05WaitPause            func(context.Context, string) error
+	process05ClearExpiredWait     func(context.Context, string, string, time.Time) (*execution.RuntimeApproval, error)
 	// process05Paused reports whether part of the run's canonical execution
 	// is paused (the person paused it); process05Settle ends any part whose
 	// work all finished while it was paused (Runtime.settleProcess05).
@@ -206,8 +208,20 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 			}
 		}
 	}
-	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
+	return s.saveMarshalState(ctx, runID, run, revision, nil, nil, 0)
+}
 
+// saveMarshalState saves the run and, when it newly pauses, records the
+// pause's run notice after the pause is durable.
+func (s *MarshalService) saveMarshalState(ctx context.Context, runID string, run marshal.Run, revision int64, event *events.Event, handIn *marshal.HandIn, attempt int) error {
+	announce := s.assignPauseNotice(ctx, runID, &run)
+	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, event, handIn, attempt); err != nil {
+		return err
+	}
+	if announce {
+		s.announcePause(ctx, runID, *run.Pause)
+	}
+	return nil
 }
 
 // load is the lifecycle read boundary. Snapshot uses readRun instead so a

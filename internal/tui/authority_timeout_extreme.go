@@ -64,6 +64,24 @@ func (w *Workspace) settleUnansweredDecision(ctx context.Context, req permission
 		w.finishBuildDecisionAs(ctx, req, id, true, extremeUnansweredApplyNote+" ("+cause+")", provider, marshalRuntimeDecider)
 		return
 	}
+	// An expired or settled approval ticket stops interactive retries immediately.
+	if req.Kind == "marshal-command" && strings.HasPrefix(req.Object, "/marshal approve-task ") && w.settledProcess05Approval(req) {
+		now := time.Now().UTC()
+		w.permissions.mu.Lock()
+		delete(w.permissions.outstanding, req.Key())
+		delete(w.permissions.build.redeliver, req.Key())
+		w.permissions.mu.Unlock()
+		w.RecordActivity("Stopped retrying expired or settled approval request: " + req.Object)
+		if w.store != nil {
+			if eventID, err := model.NewID("EVENT-PERMISSION-EXPIRED-STOP-"); err == nil {
+				_ = w.store.AppendEvent(context.WithoutCancel(ctx), nil, model.Event{ID: eventID, Type: "PERMISSION_RETRY_STOPPED_EXPIRED", ProjectID: w.projectID, Timestamp: now, Data: map[string]any{
+					"request_id": id, "kind": req.Kind, "object": req.Object, "cause": cause,
+					"provider": provider, "decided_by": marshalRuntimeDecider, "source": "marshal",
+				}})
+			}
+		}
+		return
+	}
 	now := time.Now()
 	w.permissions.mu.Lock()
 	if w.permissions.build.redeliver == nil {

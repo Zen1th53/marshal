@@ -281,6 +281,10 @@ type Pause struct {
 	// Until is the earliest a provider limit is expected to free up, for a
 	// "quota" pause; zero when unknown.
 	Until time.Time `json:",omitempty"`
+	// NoticeID is the stable event ID of the run notice announcing this
+	// pause. It is saved with the pause, so a notice that failed to record
+	// is recorded again on restart and a re-saved pause never repeats it.
+	NoticeID string `json:",omitempty"`
 }
 
 // PauseAction is what moves a paused run on. The Board's Enter key and the
@@ -335,6 +339,13 @@ const (
 	// CodeStaleBase stops launch or recovery when the approved delivery base,
 	// private integration head, or merged dependency heads are stale or unproven.
 	CodeStaleBase = "stale_base"
+
+	// A stage of the run failed for a reason a retry may clear: the
+	// attempt is kept and the run waits for the person to resume it.
+	CodeReviewFailed    = "review_failed"
+	CodeDispatchFailed  = "dispatch_failed"
+	CodeMergeFailed     = "merge_failed"
+	CodeCommandsBlocked = "commands_blocked"
 )
 
 // LaunchBasePin records the observed delivery ref, private integration head,

@@ -829,7 +829,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 		userApproval, err = s.ApprovalActor(ctx, runID, taskAcceptancePurpose(run, *t, attempt, h))
 		if err != nil {
-			return "", err
+			return "", awaitingApproval{err}
 		}
 	}
 	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
@@ -1326,6 +1326,9 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 		return errors.New("task not found")
 	}
 	t := &run.Tasks[i]
+	if handled, retryErr := s.retryExpiredApprovalWait(ctx, runID, run, rev, i); handled {
+		return retryErr
+	}
 	if t.State != marshal.Escalated && t.State != marshal.Returned {
 		if t.State == marshal.HandedIn {
 			return fmt.Errorf("task is %s; use /marshal return %s <reason> to request rework", t.State, taskID)
@@ -1863,6 +1866,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	// The run's own merged worktrees and branches are done with; a failure
 	// keeps them and never undoes the close.
 	_ = s.cleanupDeliveredRun(ctx, runID, next, target)
+	if s.runtime != nil {
+		_, _ = s.runtime.CloseRunApprovals(ctx, runID, next, "marshal run closed", s.clock())
+	}
 	return nil
 }
 
@@ -2219,7 +2225,18 @@ func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, 
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, data)
 }
 
+// Resume takes a paused or interrupted run on again. A resume that does not
+// go through keeps the run's pause and records a run notice naming why, so
+// the Marshal hears of it even when its chat is closed.
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
+	run, err := s.resume(ctx, runID)
+	if err != nil {
+		s.noteResumeFailure(ctx, runID, err)
+	}
+	return run, err
+}
+
+func (s *MarshalService) resume(ctx context.Context, runID string) (marshal.Run, error) {
 	if id := s.ActiveExecution(runID); id != "" {
 		run, err := s.Snapshot(ctx, runID)
 		if err == nil {
@@ -2368,6 +2385,17 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			}
 		}
 		if t.State == marshal.Dispatched && !s.dispatchLive(runID, t.PlanTaskID) {
+			if s.requeueGovernedApprovalTask(ctx, run, *t) {
+				run.Tasks[i].State = marshal.Queued
+				if err = s.save(ctx, runID, run, rev); err != nil {
+					return run, err
+				}
+				run, rev, err = s.load(ctx, runID)
+				if err != nil {
+					return run, err
+				}
+				continue
+			}
 			if infraRetryApplies(run, *t) {
 				// Observe the failed attempt before preparing a base checkout.
 				// Its branch may legitimately have advanced before hand-in.
