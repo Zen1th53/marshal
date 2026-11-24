@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -89,6 +90,12 @@ func integrationRef() string { return "refs/heads/" + statepath.RefName + "/run/
 
 func integrationDir(s *MarshalService, run marshal.Run) string {
 	return filepath.Join(s.Worktrees, integrationTaskID("run", run))
+}
+
+// isMarshalMergeCommit reports whether commit is a staged merge candidate.
+func isMarshalMergeCommit(repo, commit string) bool {
+	out, err := exec.Command("git", "-C", repo, "log", "-1", "--format=%s", commit).Output()
+	return err == nil && strings.HasPrefix(strings.TrimSpace(string(out)), "marshal: merge ")
 }
 
 func requireRollingMerge(t *testing.T) {
@@ -415,6 +422,9 @@ func mergedEvents(t *testing.T, s *MarshalService) int {
 	for _, e := range history {
 		if e.Type == events.EventTypeMarshalTaskMerged {
 			n++
+			if c, _ := e.Data["candidate"].(string); c == "" {
+				t.Fatalf("merge receipt names no candidate: %v", e.Data)
+			}
 		}
 	}
 	return n

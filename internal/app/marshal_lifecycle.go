@@ -1547,7 +1547,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if all {
 		next.State = marshal.Verifying
 	}
-	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged}, Merge: intent}
+	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged, Data: map[string]any{"candidate": intent.Candidate, "candidate_tree": intent.CandidateTree, "expected_head": intent.ExpectedHead, "revalidated": intent.Revalidated}}, Merge: intent}
 	rev, err = s.beginOperation(ctx, runID, run, rev, op)
 	if err != nil {
 		return err

@@ -108,8 +108,9 @@ func TestExpiredApprovalReworksRequeuesTaskWithoutPausingRun(t *testing.T) {
 	if taskA.State != marshal.Queued || taskA.Process05WaitApprovalID != "approval-a-0" || taskA.Process05WaitRunID != "lane-a-0" {
 		t.Fatalf("task a not waiting on approval-a-0: %+v", taskA)
 	}
-	if taskB.State != marshal.Accepted {
-		t.Fatalf("sibling task b was not accepted: state=%s", taskB.State)
+	// Independent b merges without waiting for a.
+	if taskB.State != marshal.Merged {
+		t.Fatalf("sibling task b was not merged: state=%s", taskB.State)
 	}
 
 	// 2. Mark approval-a-0 as expired unanswered and switch next wait to fresh_pending
