@@ -153,7 +153,7 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			return run, rev, err
 		}
 		if op.DeliveryKind != "" {
-			completed, unapplied, err = s.recoverChecksOnlyClose(ctx, op, head)
+			completed, unapplied, err = s.recoverChecksOnlyClose(ctx, runID, op, head)
 			if err != nil {
 				return run, rev, err
 			}
@@ -346,11 +346,12 @@ func (s *MarshalService) repairRetainedHandInAttempt(ctx context.Context, runID 
 
 // recoverChecksOnlyClose observes an interrupted checks-only close. Git at
 // the recorded after commit finishes the stored close only with the matching
-// authorized operation and sealed receipt; Git still at the recorded before
-// commit, with no partial checkout update, clears the intent as unapplied.
-// When before equals after, ref equality proves nothing, so the close is
-// unapplied. Anything else is held for inspection.
-func (s *MarshalService) recoverChecksOnlyClose(ctx context.Context, op *marshal.LifecycleOperation, head string) (completed, unapplied bool, err error) {
+// authorized operation, checkpoint, durable fence record and sealed receipt;
+// Git still at the recorded before commit, with no partial checkout update,
+// clears the intent as unapplied. When before equals after, ref equality
+// proves nothing, so the close is unapplied. Anything else is held for
+// inspection.
+func (s *MarshalService) recoverChecksOnlyClose(ctx context.Context, runID string, op *marshal.LifecycleOperation, head string) (completed, unapplied bool, err error) {
 	if op.DeliveryKind != verification.DeliveredChecksOnly {
 		return false, false, fmt.Errorf("unfinished close %s: unknown delivery kind %q; inspect retained operation", op.ID, op.DeliveryKind)
 	}
@@ -358,6 +359,21 @@ func (s *MarshalService) recoverChecksOnlyClose(ctx context.Context, op *marshal
 		next := op.Next
 		if !op.Authorized || next == nil || next.State != marshal.Closed || next.DeliveryKind != op.DeliveryKind || next.ChecksOnly == nil || next.ChecksOnly.ID != op.ReceiptID || next.ChecksOnly.Digest != op.ReceiptDigest || !next.ChecksOnly.Passed() || next.ChecksOnly.Head != op.After || next.ChecksOnly.TargetBefore != op.Before {
 			return false, false, fmt.Errorf("unfinished close %s: target advanced without a matching authorized proof; inspect %s", op.ID, op.Target)
+		}
+		checkpoint, _ := op.Event.Data["checkpoint"].(string)
+		if checkpoint == "" {
+			return false, false, fmt.Errorf("unfinished close %s: missing close checkpoint; inspect %s", op.ID, op.Target)
+		}
+		cpCommit, cpErr := gitMarshal(ctx, s.Repository, "rev-parse", "--verify", checkpoint)
+		if cpErr != nil || cpCommit != op.Before {
+			return false, false, fmt.Errorf("unfinished close %s: close checkpoint %s does not match before commit; inspect %s", op.ID, checkpoint, op.Target)
+		}
+		passed, fenceErr := s.hasChecksOnlyCloseFence(ctx, runID, op)
+		if fenceErr != nil {
+			return false, false, fenceErr
+		}
+		if !passed {
+			return false, false, fmt.Errorf("unfinished close %s: missing durable close fence proof; inspect %s", op.ID, op.Target)
 		}
 		return true, false, nil
 	}

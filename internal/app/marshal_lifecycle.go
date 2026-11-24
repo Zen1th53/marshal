@@ -1722,6 +1722,11 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 		if err != nil {
 			return err
 		}
+		if receipt != nil {
+			if err = s.ensureChecksOnlyCloseFence(ctx, runID, op); err != nil {
+				return err
+			}
+		}
 		if checkedOut != "" {
 			// Git's fast-forward merge updates the branch, index and files
 			// together and refuses divergence and worktree conflicts; hooks
