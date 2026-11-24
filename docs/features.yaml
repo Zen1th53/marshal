@@ -1,5 +1,32 @@
 version: 1
 features:
+  - id: bound-browser-work-actions
+    name: Browser task and worker actions with attempt bindings and durable receipts
+    editions: [default, governed]
+    sources:
+      - internal/tui/commands_marshal.go
+      - internal/tui/webboard_commands.go
+      - internal/tui/webboard_lanes.go
+      - internal/webboard/commands.go
+      - internal/webboard/settings.go
+      - internal/webboard/page/app.js
+    tests:
+      - internal/webboard.TestCmdTokenCannotCrossTargetOrOp
+      - internal/webboard.TestWorkControlsPreserveTypedBindings
+      - internal/tui.TestTaskCommandStaleAttemptRefused
+      - internal/tui.TestSkipRequiresReplan
+      - internal/tui.TestWebOpMatrixUsesExistingAuthorityAndPayload
+      - internal/tui.TestWebLaneMutationRechecksAttemptAtDequeue
+    docs: []
+    web:
+      - routeOrCommand: "#work"
+        anchor: 'function renderWorkControls('
+        kind: control
+    tui:
+      - routeOrCommand: /marshal retry
+        anchor: 'func (w *Workspace) marshalRunCommand('
+        kind: control
+
   - id: authenticated-settings-actions
     name: Authenticated browser project settings and ULTRA execution changes with durable receipts
     editions: [default, governed]

@@ -57,6 +57,10 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 		if !claimed.CompareAndSwap(false, true) {
 			return
 		}
+		if a.Kind == "cmd" && a.Command != nil && (strings.HasPrefix(a.Command.Op, "task/") || strings.HasPrefix(a.Command.Op, "lane/")) {
+			go func() { done <- webActed{res: w.webWorkCommand(a)} }()
+			return
+		}
 		done <- w.webAct(a)
 	}
 	wait, cancel := context.WithTimeout(ctx, webActWait)
@@ -128,6 +132,9 @@ func (w *Workspace) webCommandResult(ctx context.Context, r webActed) webboard.R
 // card the Board shows now.
 func (w *Workspace) webAct(a webboard.Action) webActed {
 	if a.Kind == "cmd" {
+		if a.Command != nil && (strings.HasPrefix(a.Command.Op, "task/") || strings.HasPrefix(a.Command.Op, "lane/")) {
+			return webActed{res: w.webWorkCommand(a)}
+		}
 		return webActed{res: w.webSetting(a)}
 	}
 	if a.Kind == "key" && (a.Key == webKeyRetry || a.Key == webKeyStopAll) {
@@ -426,6 +433,9 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 	r := webActed{res: webboard.Result{Status: "done"}}
 	switch a.Key {
 	case webKeyRetry:
+		if w.runtime != nil {
+			return out(refused("Refresh the page and use the bound task retry control."))
+		}
 		if busyErr := w.marshalSession().busyErrorIfBusy("retry"); busyErr != nil {
 			return out(refusedErr(busyErr))
 		}

@@ -1469,6 +1469,10 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
 		return "", errors.New("usage: /marshal approve-task <approval-id>")
 	}
+	return w.approveProcess05Task(ctx, args[0], uuid.NewString())
+}
+
+func (w *Workspace) approveProcess05Task(ctx context.Context, approvalID, requestID string) (string, error) {
 	_, service, runID, _, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
@@ -1487,15 +1491,15 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	}
 	bound := false
 	for _, p05 := range runs {
-		bound = bound || marshalProcess05ApprovalBound(run, p05, string(service.CanonicalPlanProjectID()), args[0]) || privateProcess05ApprovalBound(ctx, execService, run, p05, string(service.CanonicalPlanProjectID()), args[0])
+		bound = bound || marshalProcess05ApprovalBound(run, p05, string(service.CanonicalPlanProjectID()), approvalID) || privateProcess05ApprovalBound(ctx, execService, run, p05, string(service.CanonicalPlanProjectID()), approvalID)
 	}
 	if !bound {
 		return "", errors.New("approval does not belong to the active Marshal plan")
 	}
-	if !editionExtreme {
+	{
 		if control := w.controlSource(); control != nil {
 			if authority, ok := control.Authority.(*runtimeControlAuthority); ok && authority != nil && authority.runtime != nil && authority.localControl != nil && authority.localControlErr == nil {
-				record, resolveErr := authority.runtime.ResolveDecision(ctx, authority.sessionID, "execution:"+args[0])
+				record, resolveErr := authority.runtime.ResolveDecision(ctx, authority.sessionID, "execution:"+approvalID)
 				if resolveErr != nil {
 					return "", resolveErr
 				}
@@ -1505,7 +1509,7 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 						SessionID:       authority.sessionID,
 						TargetID:        record.ID,
 						ExpectedVersion: record.Version,
-						IdempotencyKey:  uuid.NewString(),
+						IdempotencyKey:  requestID,
 					},
 					Digest:  record.Digest,
 					Approve: true,
@@ -1518,7 +1522,7 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 			}
 		}
 	}
-	if err := execService.Approve(ctx, args[0], marshalOperator(), "approved in Marshal TUI"); err != nil {
+	if err := execService.Approve(ctx, approvalID, marshalOperator(), "approved in Marshal TUI"); err != nil {
 		return "", err
 	}
 	w.deliverApprovalNotices(context.WithoutCancel(ctx), runID)
@@ -2426,7 +2430,7 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 		}
 	}
 	if w.runtime != nil {
-		return w.marshalRunCommand(ctx, service, runID, app.RunCommandInput{Operation: "reassign", TaskID: task, Worker: worker, Reason: "operator reassignment"})
+		return w.marshalRunCommand(ctx, service, runID, taskModelCommand(task, worker, "operator reassignment", ""))
 	}
 	if err := m.busyErrorIfBusy("reassign"); err != nil {
 		return "", err

@@ -310,6 +310,10 @@
     setTimeout(function () { if (armed === id) { armed = null; render(frame); } }, 6000);
   }
   function twoStep(cls, key, label, warn) {
+    if (key === "r" && frame) {
+      var retry = workCapabilities(frame, retryTask(frame)).find(function (c) { return c.op === "task/retry"; });
+      if (retry) { var typed = el("button", cls, label); typed.type = "button"; typed.onclick = function () { previewSetting(newWorkRequest(retry, {})); }; return typed; }
+    }
     var id = (frame.act ? frame.act.card : "") + "|" + key;
     var on = armed === id;
     return button(cls + (on ? " danger" : ""), on ? "Click again to " + label : cap(label), function () {
@@ -709,13 +713,14 @@
     if (!id) { dr.hidden = true; sigs.drawer = ""; return; }
     var l = t ? laneFor(f, t.id) : null, rl = t ? reviewLaneFor(f, t.id) : null;
     var rt = retryTask(f);
-    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step, l.lane.process, l.lane.note], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused])) return;
+    if (!changed("drawer", [id, t, pt, l && [l.lane.name, l.lane.model, l.lane.step, l.lane.process, l.lane.note], rl && rl.lane.name, rt, armed, pending, f.act && f.act.card, !!f.paused, workCapabilities(f, id)])) return;
     dr.hidden = false;
     var facts = clear($("dr-facts")), acts = clear($("dr-acts"));
     setText("dr-note", "");
     if (!t && !pt) {
       setText("dr-title", id);
       clear($("dr-state")).textContent = "This task is not on the Board now.";
+      renderWorkControls(f, id, acts);
       return;
     }
     if (pt) {
@@ -725,6 +730,7 @@
       kv(facts, "Kept", pt.kept);
       setText("dr-note", "The choice for this task is on Home, in the paused card.");
       acts.appendChild(link("#home", "Go to the paused card"));
+      renderWorkControls(f, id, acts);
       return;
     }
     setText("dr-title", t.id + " · " + t.title);
@@ -744,8 +750,7 @@
     kv(facts, "Attempt", n ? "attempt " + (n + 1) + ": the reviewer sent it back " + plural(n, "time") : t.state === "building" || t.state === "review" ? "first attempt" : "");
     if (n) kv(facts, "Why sent back", "The reviewer's reason is not sent to this page yet; the terminal Board's task inspector shows it.", "muted");
     if (t.note && !n) kv(facts, "Note", t.note);
-    if (rt === t.id) acts.appendChild(twoStep("ghost", "r", "retry " + t.id + " from scratch", retryWarn));
-    else setText("dr-note", "No action for this task from here: the Board offers Retry only for a stuck task, and moving work to another provider only on a paused card.");
+    renderWorkControls(f, t.id, acts);
     tickLanes();
   }
   function renderPlan(f) {
@@ -1087,8 +1092,40 @@
 
   var settingStorage = "marshal-board-setting-request";
   var settingReceiptTimer = null;
+  function workCapabilities(f, id) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) {
+      return c.target.kind === "task" && c.target.id === id || c.target.kind === "lane" && c.taskId === id;
+    });
+  }
+  function newWorkRequest(capability, payload) {
+    var body = newSettingRequest(capability, "");
+    body.runId = capability.runId; body.attemptId = capability.attemptId; body.payload = payload;
+    return body;
+  }
+  function renderWorkControls(f, id, box) {
+    var labels = {"task/retry": "Retry", "task/retry.debug": "Retry in a fresh session with diagnostics", "task/reassign": "Reassign", "task/model.set": "Change task model", "task/skip": "Skip and require a revised plan", "task/accept": "Accept task", "task/return": "Return for rework", "task/approve-task": "Approve task", "lane/nudge": "Request worker status", "lane/restart": "Restart this worker"};
+    workCapabilities(f, id).forEach(function (c) {
+      var row = el("div", "acts"), provider, reason;
+      if (c.op === "task/reassign" || c.op === "task/model.set") {
+        provider = el("input"); provider.placeholder = "Provider"; provider.setAttribute("aria-label", "Task provider"); row.appendChild(provider);
+      }
+      if (c.op === "task/return" || c.op === "task/reassign") {
+        reason = el("input"); reason.placeholder = "Reason"; reason.maxLength = 2000; reason.setAttribute("aria-label", "Action reason"); row.appendChild(reason);
+      }
+      var button = el("button", "ghost", labels[c.op]); button.type = "button";
+      button.onclick = function () {
+        var payload = {};
+        if (provider) payload.provider = provider.value.trim();
+        if (reason) payload.reason = reason.value.trim();
+        if (c.approvalId) payload.approvalId = c.approvalId;
+        previewSetting(newWorkRequest(c, payload));
+      };
+      row.appendChild(button); box.appendChild(row);
+    });
+  }
+  function commandPanel(body) { return $(body && (body.target.kind === "task" || body.target.kind === "lane") ? "work-confirm" : "settings-confirm"); }
   function settingCapability(f, key) {
-    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key; });
+    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key && c.target.kind !== "task" && c.target.kind !== "lane"; });
   }
   function newSettingRequest(cap, value) {
     var bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
@@ -1101,8 +1138,8 @@
     sessionStorage.setItem(settingStorage, JSON.stringify(saved));
   }
   function settingPost(body) {
-    var cap = settingCapability(frame, body.target.id);
-    if (!cap || cap.op !== body.op || cap.revision !== body.revision || frame.settingsActions.projectId !== body.projectId) return Promise.reject(new Error("The project or settings changed. Refresh and preview again."));
+    var cap = ((frame.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === body.target.id && c.target.kind === body.target.kind && c.op === body.op; });
+    if (!cap || cap.op !== body.op || cap.revision !== body.revision || (cap.runId || "") !== (body.runId || "") || (cap.attemptId || "") !== (body.attemptId || "") || frame.settingsActions.projectId !== body.projectId) return Promise.reject(new Error("The project or settings changed. Refresh and preview again."));
     var headers = auth(); headers["Content-Type"] = "application/json";
     return fetch("/api/act", {method: "POST", headers: headers, credentials: "omit", cache: "no-store",
       body: JSON.stringify(Object.assign({}, body, {token: cap.token}))}).then(function (r) {
@@ -1117,13 +1154,14 @@
     });
   }
   function showSettingReceipt(r) {
+    var body; try { body = JSON.parse(sessionStorage.getItem(settingStorage)); } catch (e) {}
     feedback(r.status === "applied" ? "ok" : r.status === "queued" || r.status === "applying" ? "wait" : "bad",
       r.status + ": " + (r.result || r.code) + " · revision " + r.revision);
     clearTimeout(settingReceiptTimer);
     if (r.status === "queued" || r.status === "applying") settingReceiptTimer = setTimeout(recoverSetting, 1000);
-    if (r.status === "applied" || r.status === "refused") { sessionStorage.removeItem(settingStorage + "-submitted"); sessionStorage.removeItem(settingStorage); clear($("settings-confirm")); }
+    if (r.status === "applied" || r.status === "refused") { sessionStorage.removeItem(settingStorage + "-submitted"); sessionStorage.removeItem(settingStorage); clear(commandPanel(body)); }
     if (r.status === "interrupted") {
-      var panel = clear($("settings-confirm"));
+      var panel = clear(commandPanel(body));
       var check = el("button", "", "Check previous outcome"); check.type = "button"; check.onclick = recoverSetting; panel.appendChild(check);
     }
     return refresh();
@@ -1137,8 +1175,10 @@
       if (r) return showSettingReceipt(r);
       return refresh().then(function () { return settingPost(Object.assign({}, body, {preview: true, confirmation: undefined})); }).then(function (r) {
         body.confirmation = r.confirmation; rememberSetting(body);
-        var panel = clear($("settings-confirm"));
-        panel.appendChild(el("p", "", "Confirm " + (body.op === "settings/ultra.request" ? "entitlement request" : body.target.id) + " → " + (body.payload.value === undefined ? (body.payload.enabled ? "on" : "off") : body.payload.value) + " at revision " + body.revision + ". This preview expires in one minute."));
+        var panel = clear(commandPanel(body));
+        var work = body.target.kind === "task" || body.target.kind === "lane";
+        var detail = work ? JSON.stringify(body.payload) : (body.payload.value === undefined ? (body.payload.enabled ? "on" : "off") : body.payload.value);
+        panel.appendChild(el("p", "", "Confirm " + body.op + " for " + body.target.id + ": " + detail + ". This preview expires in one minute."));
         var button = el("button", "", "Confirm change"); button.type = "button"; panel.appendChild(button);
         button.onclick = function () {
           button.disabled = true;
@@ -1157,7 +1197,7 @@
     if (!body) return;
     settingReceipt(body).then(function (r) {
       if (r) { showSettingReceipt(r); return; }
-      var panel = clear($("settings-confirm"));
+      var panel = clear(commandPanel(body));
       panel.appendChild(el("p", "", "A previous settings change has no receipt. Preview it again to retry with the same request identity."));
       var button = el("button", "", "Preview previous change"); button.type = "button"; button.onclick = function () { previewSetting(body); }; panel.appendChild(button);
     }).catch(function () { feedback("bad", "A previous settings outcome is unknown; reconnect to check its receipt."); });

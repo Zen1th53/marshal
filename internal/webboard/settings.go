@@ -23,9 +23,13 @@ type Target struct {
 	ID   string `json:"id"`
 }
 type SettingPayload struct {
-	Key     string `json:"key,omitempty"`
-	Value   string `json:"value,omitempty"`
-	Enabled *bool  `json:"enabled,omitempty"`
+	Key        string `json:"key,omitempty"`
+	Value      string `json:"value,omitempty"`
+	Enabled    *bool  `json:"enabled,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	ApprovalID string `json:"approvalId,omitempty"`
 }
 type Confirmation struct {
 	Digest   string `json:"digest"`
@@ -46,11 +50,15 @@ type Command struct {
 	Preview      bool           `json:"preview,omitempty"`
 }
 type SettingCapability struct {
-	Op       string   `json:"op"`
-	Target   Target   `json:"target"`
-	Revision int64    `json:"revision"`
-	Token    string   `json:"token"`
-	Values   []string `json:"values,omitempty"`
+	TaskID     string   `json:"taskId,omitempty"`
+	Op         string   `json:"op"`
+	Target     Target   `json:"target"`
+	Revision   int64    `json:"revision"`
+	Token      string   `json:"token"`
+	Values     []string `json:"values,omitempty"`
+	RunID      string   `json:"runId,omitempty"`
+	AttemptID  string   `json:"attemptId,omitempty"`
+	ApprovalID string   `json:"approvalId,omitempty"`
 }
 type SettingsState struct {
 	ProjectID    string              `json:"projectId"`
@@ -128,11 +136,12 @@ func (s *Server) LockSettingsTarget() func() {
 }
 
 type commandClaims struct {
-	Project, Fence, Auth, Op string
-	Target                   Target
-	Revision                 int64
-	Nonce                    string
-	Expires                  int64
+	Project, Fence, Auth, Op     string
+	Target                       Target
+	Revision                     int64
+	Nonce                        string
+	Expires                      int64
+	RunID, AttemptID, ApprovalID string
 }
 
 func (s *Server) authIdentity() string {
@@ -190,7 +199,7 @@ func (s *Server) settingsFrame() *SettingsState {
 		cap := &state.Capabilities[n]
 		// Reuse an unspent token for the same binding while it has at least a
 		// minute left, so an idle Board's frame (and its stream) stays stable.
-		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%v\x00%v", state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, cap.Revision)
+		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%v\x00%v", state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, fmt.Sprint(cap.Revision, "|", cap.RunID, "|", cap.AttemptID, "|", cap.ApprovalID))
 		if t, ok := s.settingsTokens[key]; ok && t.expires-now.Unix() >= 60 {
 			cap.Token = t.token
 			continue
@@ -200,7 +209,7 @@ func (s *Server) settingsFrame() *SettingsState {
 			return nil
 		}
 		expires := now.Add(2 * time.Minute).Unix()
-		cap.Token = s.signClaims(commandClaims{state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, cap.Revision, nonce, expires})
+		cap.Token = s.signClaims(commandClaims{state.ProjectID, SettingsEpoch(state.Fence), auth, cap.Op, cap.Target, cap.Revision, nonce, expires, cap.RunID, cap.AttemptID, cap.ApprovalID})
 		s.settingsTokens[key] = cachedSettingsToken{token: cap.Token, nonce: nonce, expires: expires}
 	}
 	return &state
@@ -242,7 +251,7 @@ func (s *Server) commandEligible(c Command, claims commandClaims) bool {
 		return false
 	}
 	for _, cap := range state.Capabilities {
-		if cap.Op == c.Op && cap.Target == c.Target && cap.Revision == c.Revision && claims.Op == c.Op && claims.Target == c.Target && claims.Revision == c.Revision {
+		if cap.Op == c.Op && cap.Target == c.Target && cap.Revision == c.Revision && claims.Op == c.Op && claims.Target == c.Target && claims.Revision == c.Revision && cap.RunID == c.RunID && claims.RunID == c.RunID && cap.AttemptID == c.AttemptID && claims.AttemptID == c.AttemptID && claims.ApprovalID == cap.ApprovalID && (cap.ApprovalID == "" || cap.ApprovalID == c.Payload.ApprovalID) {
 			return true
 		}
 	}
@@ -256,12 +265,20 @@ func validRequestID(id string) bool {
 // serveCommand runs only after the shared bounded JSON and browser-origin checks.
 func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actRequest) {
 	c := req.Command
-	if !validRequestID(c.RequestID) || (c.Target.Kind != "setting" && c.Target.Kind != "entitlement-request") || c.RunID != "" || c.AttemptID != "" || c.Revision < 0 {
+	if !validRequestID(c.RequestID) || !validCommandTarget(c) || c.Revision < 0 {
 		refuse(w, 400, "Invalid settings request.")
 		return
 	}
 	key, value := c.Payload.Key, c.Payload.Value
 	switch c.Op {
+	case "task/retry", "task/retry.debug", "task/reassign", "task/skip", "task/accept", "task/return", "task/approve-task", "task/model.set", "lane/nudge", "lane/restart":
+		if !validWorkPayload(c) {
+			refuse(w, 400, "Invalid work payload.")
+			return
+		}
+		key = c.Target.ID
+		raw, _ := json.Marshal(c.Payload)
+		value = string(raw)
 	case "settings/set":
 		if c.Target.Kind != "setting" {
 			refuse(w, 400, "Invalid setting target.")
@@ -385,7 +402,7 @@ func (s *Server) serveCommand(w http.ResponseWriter, q *http.Request, req actReq
 		refuse(w, 409, "The confirmation expired or the change differs from its preview.")
 		return
 	}
-	i := store.WebIntent{AuthGeneration: claims.Auth, ProjectEpoch: claims.Fence, TargetKind: c.Target.Kind, RequestID: c.RequestID, ProjectID: c.ProjectID, Owner: "owner", Session: config.Session, Digest: digest, Op: c.Op, Key: key, Value: value, Revision: c.Revision}
+	i := store.WebIntent{AuthGeneration: claims.Auth, ProjectEpoch: claims.Fence, TargetKind: c.Target.Kind, RequestID: c.RequestID, ProjectID: c.ProjectID, Owner: "owner", Session: config.Session, Digest: digest, Op: c.Op, Key: key, Value: value, Revision: c.Revision, RunID: c.RunID, AttemptID: c.AttemptID}
 	receipt, err := journal.AdmitWebSetting(q.Context(), i)
 	if err != nil {
 		refuse(w, 409, "The settings queue could not accept this change; refresh and try the same request again.")
