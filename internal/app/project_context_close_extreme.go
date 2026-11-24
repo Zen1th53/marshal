@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
@@ -44,12 +45,16 @@ func (r *Runtime) retainRequiredContextCloseProof(source *requiredIntegrationSou
 // requiredChecksOnlyCloseProof is the live one-shot capability a checks-only
 // close presents at the close fence in place of the canonical session and
 // attestation. It exists only after this runtime reobserved the same
-// integration source and the approved checks all passed on its head.
+// integration source, validated current mandatory context/freshness/authority
+// admissions, and observed the approved checks all pass on its head.
 type requiredChecksOnlyCloseProof struct {
 	mu                           sync.Mutex
 	runtime                      *Runtime
 	sourceObservation, principal string
 	receiptID, receiptDigest     string
+	goalID                       string
+	goalRevision                 int64
+	admissions                   []store.ProjectContextAdmission
 	consumed                     bool
 }
 
@@ -58,24 +63,142 @@ func (r *Runtime) retainRequiredChecksOnlyCloseProof(ctx context.Context, id str
 	if err != nil {
 		return err
 	}
-	if !checksOnlyDelivery(run) || !receipt.Passed() || receipt.Head != head || receipt.RunID != id {
+	if r.memoryService == nil || !checksOnlyDelivery(run) || !receipt.Passed() || receipt.Head != head || receipt.RunID != id {
 		return fmt.Errorf("required close checks-only receipt: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-receipt"))
 	}
 	r.requiredIntegrationSources.mu.Lock()
-	defer r.requiredIntegrationSources.mu.Unlock()
 	var source *requiredIntegrationSource
 	for _, candidate := range r.requiredIntegrationSources.byRun {
 		if candidate.marshalRunID == id {
 			if source != nil {
+				r.requiredIntegrationSources.mu.Unlock()
 				return fmt.Errorf("required close unique observed source: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-source"))
 			}
 			source = candidate
 		}
 	}
+	r.requiredIntegrationSources.mu.Unlock()
 	if source == nil || source.runtime != r || source.head != head || !reflect.DeepEqual(source.marshalRun, run) {
 		return fmt.Errorf("required close checks-only source: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-source"))
 	}
-	source.checksOnly = &requiredChecksOnlyCloseProof{runtime: r, sourceObservation: source.observationID, principal: principal.ID, receiptID: receipt.ID, receiptDigest: receipt.Digest}
+	p, err := r.store.GetActivePlan(ctx, source.rootRun.ProjectID)
+	if err != nil || p.ID != source.rootRun.PlanID || p.Version != source.rootRun.PlanVersion || p.State != plan.StateApproved {
+		return fmt.Errorf("required close checks-only plan: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-plan"))
+	}
+	accepted, err := r.store.ReadAcceptedProjectContract(ctx, r.ProjectContractBinding())
+	if err != nil {
+		return err
+	}
+	ref := projectcontext.ContractRef{ID: accepted.Contract.ID, Revision: accepted.Contract.Revision, Digest: accepted.Digest}
+	if ref != source.contract {
+		return fmt.Errorf("required close checks-only contract: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-contract"))
+	}
+	if pinned, err := requiredApprovedPlanProjectContract(p); err != nil || pinned != ref {
+		return fmt.Errorf("required close checks-only contract pin: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-contract"))
+	}
+	audience, err := r.projectContractOwnerAudience(ctx, principal.ID)
+	if err != nil {
+		return err
+	}
+	goal, err := r.store.GetGoalContract(ctx, source.rootRun.GoalID, source.rootRun.GoalRevision)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	grounding := &requiredProjectGroundingBudget{Hashes: map[string]string{}}
+	baseBinding := projectcontext.Binding{
+		FormatVersion:       projectcontext.FormatVersion,
+		Project:             r.ProjectContractBinding(),
+		Contract:            ref,
+		GoalID:              source.rootRun.GoalID,
+		GoalRevision:        source.rootRun.GoalRevision,
+		PlanID:              source.rootRun.PlanID,
+		PlanVersion:         source.rootRun.PlanVersion,
+		ApprovalScopeDigest: p.ApprovalScopeDigest,
+		RunID:               source.rootRun.RunID,
+		RunVersion:          source.rootRun.Version,
+		Principal:           principal.ID,
+		Session:             source.rootRun.SessionID,
+		Base:                source.head,
+		Tree:                source.tree,
+	}
+	buildAdmission := func(b projectcontext.Binding, selection projectcontext.Selection) (store.ProjectContextAdmission, error) {
+		snapshot, err := r.store.ReadProjectContextSnapshotBound(ctx, b.Project, audience, selection, now, b.Contract)
+		if err != nil {
+			return store.ProjectContextAdmission{}, err
+		}
+		for _, record := range snapshot.Records {
+			inputs, err := requiredProjectFreshnessInputsBounded(source.workspace, source.head, record, grounding)
+			if err != nil {
+				return store.ProjectContextAdmission{}, err
+			}
+			if r.memoryService.EvaluateFreshness(record, inputs).Classification != FreshnessFresh {
+				return store.ProjectContextAdmission{}, fmt.Errorf("required close checks-only fresh memory: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-fresh"))
+			}
+		}
+		b.RequiredStateDigest = snapshot.StateDigest
+		packet, err := projectcontext.Render(projectcontext.Manifest{Contract: snapshot.Contract, Goal: projectcontext.GoalFromCanonical(goal), Binding: b, Selection: selection, Records: snapshot.Records}, projectcontext.MaximumPacketBytes)
+		if err != nil {
+			return store.ProjectContextAdmission{}, err
+		}
+		request := store.ProjectContextAuthorityRequest{Binding: b, Purpose: store.ProjectContextAuthorityCompletion}
+		if r.policyConfigured {
+			request.RuntimePolicyID, request.RuntimePolicyVersion = string(r.runtimePolicy.PolicyID), int64(r.runtimePolicy.PolicyVersion)
+		}
+		authority, err := r.store.ReadProjectContextAuthority(ctx, request, now)
+		if err != nil {
+			return store.ProjectContextAdmission{}, err
+		}
+		return store.ProjectContextAdmission{
+			Stage:                "checks_only_close",
+			Binding:              b,
+			Audience:             audience,
+			Selection:            selection,
+			ExpectedStateDigest:  snapshot.StateDigest,
+			ExpectedPacketDigest: packet.Digest,
+			ByteCap:              projectcontext.MaximumPacketBytes,
+			Now:                  now,
+			ExpectedAuthority:    &authority,
+		}, nil
+	}
+	admissions := make([]store.ProjectContextAdmission, 0, len(p.Tasks)+1)
+	fullSelection, err := projectcontext.PlanningSelection(accepted.Contract)
+	if err != nil {
+		return err
+	}
+	fullAdmission, err := buildAdmission(baseBinding, fullSelection)
+	if err != nil {
+		return err
+	}
+	admissions = append(admissions, fullAdmission)
+	for _, task := range p.Tasks {
+		b := baseBinding
+		b.TaskID, b.CanonicalTaskID = task.ID, canonicalPlanTaskID(p.ID, p.Version, task.ID)
+		selection, err := requiredProjectPlanSelection(p, b, accepted.Contract)
+		if err != nil {
+			return err
+		}
+		taskAdmission, err := buildAdmission(b, selection)
+		if err != nil {
+			return err
+		}
+		admissions = append(admissions, taskAdmission)
+	}
+	r.requiredIntegrationSources.mu.Lock()
+	defer r.requiredIntegrationSources.mu.Unlock()
+	if r.requiredIntegrationSources.byRun[source.rootRun.RunID] != source {
+		return fmt.Errorf("required close checks-only source changed: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-source"))
+	}
+	source.checksOnly = &requiredChecksOnlyCloseProof{
+		runtime:           r,
+		sourceObservation: source.observationID,
+		principal:         principal.ID,
+		receiptID:         receipt.ID,
+		receiptDigest:     receipt.Digest,
+		goalID:            source.rootRun.GoalID,
+		goalRevision:      source.rootRun.GoalRevision,
+		admissions:        admissions,
+	}
 	return nil
 }
 
@@ -180,30 +303,31 @@ func (r *Runtime) withRequiredContextCloseEffect(ctx context.Context, service *M
 		if current.tree != source.tree || current.commonDir != source.commonDir {
 			return fmt.Errorf("required close current source tree: %w", projectcontext.Changed("project_context_close_extreme.go:117"))
 		}
+		var goalID string
+		var goalRevision int64
+		var admissions []store.ProjectContextAdmission
 		if checksOnly {
-			if err = r.validateRequiredIntegrationSource(ctx, &current, root, tasks); err != nil {
-				return err
+			if checksProof.goalID == "" || checksProof.goalRevision < 1 || len(checksProof.admissions) == 0 {
+				return fmt.Errorf("required close checks-only context admissions: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-admissions"))
 			}
-			before, err := gitMarshal(ctx, service.Repository, "rev-parse", op.Target)
-			if err != nil || strings.TrimSpace(before) != op.Before {
-				return fmt.Errorf("required close target base: %w", projectcontext.Changed("project_context_close_extreme.go:checks-only-base"))
+			goalID, goalRevision, admissions = checksProof.goalID, checksProof.goalRevision, checksProof.admissions
+		} else {
+			session, err := r.store.GetVerificationSession(ctx, proof.session.ID)
+			if err != nil || !reflect.DeepEqual(session, proof.session) || verification.Evaluate(session, session.Binding, time.Now().UTC()) != verification.VerifiedComplete {
+				return fmt.Errorf("required close current verification session: %w", projectcontext.Changed("project_context_close_extreme.go:121"))
 			}
-			return effect()
+			attestation, err := r.store.LatestCompletionAttestation(ctx, session.ID)
+			if err != nil || attestation.Digest != proof.attestation.Digest || attestation.Verify(session.Binding) != nil {
+				return fmt.Errorf("required close canonical attestation digest: %w", projectcontext.Changed("project_context_close_extreme.go:125"))
+			}
+			goalID, goalRevision, admissions = session.Binding.GoalID, session.Binding.GoalRevision, proof.admissions
 		}
-		session, err := r.store.GetVerificationSession(ctx, proof.session.ID)
-		if err != nil || !reflect.DeepEqual(session, proof.session) || verification.Evaluate(session, session.Binding, time.Now().UTC()) != verification.VerifiedComplete {
-			return fmt.Errorf("required close current verification session: %w", projectcontext.Changed("project_context_close_extreme.go:121"))
-		}
-		attestation, err := r.store.LatestCompletionAttestation(ctx, session.ID)
-		if err != nil || attestation.Digest != proof.attestation.Digest || attestation.Verify(session.Binding) != nil {
-			return fmt.Errorf("required close canonical attestation digest: %w", projectcontext.Changed("project_context_close_extreme.go:125"))
-		}
-		goal, err := r.store.GetGoalContract(ctx, session.Binding.GoalID, session.Binding.GoalRevision)
+		goal, err := r.store.GetGoalContract(ctx, goalID, goalRevision)
 		if err != nil {
 			return err
 		}
 		grounding := &requiredProjectGroundingBudget{Hashes: map[string]string{}}
-		for _, admission := range proof.admissions {
+		for _, admission := range admissions {
 			now := time.Now().UTC()
 			snapshot, err := r.store.ReadProjectContextSnapshotBound(ctx, admission.Binding.Project, admission.Audience, admission.Selection, now, admission.Binding.Contract)
 			if err != nil || snapshot.StateDigest != admission.ExpectedStateDigest {
@@ -230,6 +354,11 @@ func (r *Runtime) withRequiredContextCloseEffect(ctx context.Context, service *M
 		before, err := gitMarshal(ctx, service.Repository, "rev-parse", op.Target)
 		if err != nil || strings.TrimSpace(before) != op.Before {
 			return fmt.Errorf("required close target base: %w", projectcontext.Changed("project_context_close_extreme.go:158"))
+		}
+		if checksOnly {
+			if err = service.ensureChecksOnlyCloseFence(ctx, id, op); err != nil {
+				return err
+			}
 		}
 		return effect()
 	})
