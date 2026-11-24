@@ -12866,13 +12866,13 @@
     },
     {
       "path": "internal/tui/board_decisions_view.go",
-      "sha256": "2160095e47b63c95af75d578b8650890159c34d1f0e8834c42c75eb4517a8607",
-      "bytes": 10506
+      "sha256": "993759e35bb4ade77e7e82e35e9dd7346c55f72b54166bacee659a94991a1605",
+      "bytes": 10938
     },
     {
       "path": "internal/tui/board_decisions_view_test.go",
-      "sha256": "ab7c49b89981eb37896571a4239a1c64133279295a36b659ea333c19eed7a4d2",
-      "bytes": 10394
+      "sha256": "d5ee17144c9ce7e665ecadb84912b8895223a3ab3ba3716a1407f6ecafa61451",
+      "bytes": 11595
     },
     {
       "path": "internal/tui/board_demo_test.go",
@@ -13196,8 +13196,8 @@
     },
     {
       "path": "internal/tui/board_say.go",
-      "sha256": "ebad617df515f4f701fe8dfb3fae478a75097ac16d07b71913108dced99e6538",
-      "bytes": 39992
+      "sha256": "80e82fc68c8a77b6e5f1c4dc48ea8b7c2d49be4c7cb9f054f17a5aa5ce43558e",
+      "bytes": 40099
     },
     {
       "path": "internal/tui/board_say_review_test.go",
@@ -16591,18 +16591,18 @@
     },
     {
       "path": "internal/tui/webboard_composer.go",
-      "sha256": "593be4e1c45b0d3afc58eb8c20176d34ec91e3a26abbe231a0d0d9a585315023",
-      "bytes": 10896
+      "sha256": "6295aaf5a9506572c2cdd5a789b95f01e75e052078c9a05b7376db3e31fc8569",
+      "bytes": 11717
     },
     {
       "path": "internal/tui/webboard_composer_test.go",
-      "sha256": "18ea3f775891f5e1ca8e9cb5503dbbc62422fa7908d8788eeeec85cbecd92f2f",
-      "bytes": 8149
+      "sha256": "c00e9e75524e7b0d1574ee3f2b33e1832c1e87799efb8f6913a322b20869e008",
+      "bytes": 11043
     },
     {
       "path": "internal/tui/webboard_decisions.go",
-      "sha256": "f77b67978dcc7d188237fd5beab6a33b8576a01e41c6f5a259c73b9b9a2d37eb",
-      "bytes": 15643
+      "sha256": "d26920026c0cfc18f0dd6eca3abc196cbd1ae85404efb398b082c4a9a1688cac",
+      "bytes": 15739
     },
     {
       "path": "internal/tui/webboard_decisions_test.go",
@@ -16611,8 +16611,8 @@
     },
     {
       "path": "internal/tui/webboard_details.go",
-      "sha256": "0d0e87427093f58e4615ce2d08fa489dbd18119bd2649effe048254aeac09627",
-      "bytes": 6747
+      "sha256": "eee981ba6f6e64bb24f7331a5f4180b383a07b3d0e92bebdbb87e4d346a1dd3c",
+      "bytes": 6800
     },
     {
       "path": "internal/tui/webboard_lanes.go",

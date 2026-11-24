@@ -9,6 +9,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 
@@ -272,4 +273,41 @@ func dvOutput(w *Workspace) string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.state.LastOutput
+}
+
+func TestPausedRevisionBindsWhatEnterDoes(t *testing.T) {
+	base := v2Pause{cause: "quota", wait: true, until: time.Unix(1000, 0), tasks: []marshal.Task{{PlanTaskID: "T01"}}}
+	moved := base
+	moved.wait, moved.target = false, "codex"
+	moved.enter.commands = []string{"/marshal reassign T01 codex", "/marshal resume"}
+	if pausedRevision(base) == pausedRevision(moved) {
+		t.Fatal("a paused card whose Enter changed kept its binding")
+	}
+}
+
+func TestPlanDecisionRevisionBindsDigest(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	a := v2Decision{kind: decisionPlan, key: "plan:R:P", card: vm.Decision{Plan: &vm.PlanPreview{Digest: "d1"}}}
+	b := a
+	b.card.Plan = &vm.PlanPreview{Digest: "d2"}
+	if w.decisionRevision(a) == w.decisionRevision(b) {
+		t.Fatal("a revised plan kept its revision")
+	}
+}
+
+func TestClosingDecisionFocusDisarmsCards(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	defer v2Cards.Delete(w)
+	w.guard.mu.Lock()
+	w.guard.armed = true
+	w.guard.mu.Unlock()
+	w.closeDecisionFocus()
+	w.guard.mu.Lock()
+	armed := w.guard.armed
+	w.guard.mu.Unlock()
+	if armed {
+		t.Fatal("Esc left the guard undo armed")
+	}
 }

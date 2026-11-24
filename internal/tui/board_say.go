@@ -130,21 +130,22 @@ func (w *Workspace) sayNote(e sayEcho) {
 }
 
 // sayToMarshal sends text to the Marshal chat as the operator's message.
-func (w *Workspace) sayToMarshal(ctx context.Context, text string) {
-	w.sayAs(ctx, text, false)
+func (w *Workspace) sayToMarshal(ctx context.Context, text string) int {
+	return w.sayAs(ctx, text, false)
 }
 
 // noticeToMarshal sends a message the runtime wrote itself (not the
 // owner's words) through the same path; Activity and the docked chat label
 // it as from the runtime, never as "you".
 func (w *Workspace) noticeToMarshal(ctx context.Context, text string) {
-	w.sayAs(ctx, text, true)
+	_ = w.sayAs(ctx, text, true)
 }
 
-func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
+// sayAs returns the message's echo id, 0 when nothing was taken.
+func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) int {
 	text = strings.TrimSpace(cleanBoard(text))
 	if text == "" {
-		return
+		return 0
 	}
 	w.say.mu.Lock()
 	w.say.next++
@@ -182,20 +183,20 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 				w.memoryAnswer(sayWhose(runtime, "The Marshal chat did not take your message: ", "The Marshal chat did not take Marshal's notice: ")+err.Error(), true)
 			}
 		})
-		return
+		return id
 	}
 	if w.sayPane() == "" {
 		echo.State, echo.Why = sayFailed, "no Marshal chat is open"
 		w.sayNote(echo)
 		if runtime {
 			// Nothing the owner typed is lost: the notice is not theirs.
-			return
+			return id
 		}
 		// The text goes back in the composer: nothing typed is lost.
 		w.composer.SetText(text)
 		w.say.open.Store(true)
 		w.setOutput("No Marshal chat is open, so nothing was sent; /marshal chat starts one. Your text is back in the line below.", true)
-		return
+		return id
 	}
 	w.sayNote(echo)
 	w.say.mu.Lock()
@@ -208,6 +209,7 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) {
 		w.say.running = false
 		w.say.mu.Unlock()
 	}
+	return id
 }
 
 // sayPane is the tmux chat's pane, or "" with no tmux chat.

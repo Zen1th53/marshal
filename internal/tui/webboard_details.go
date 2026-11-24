@@ -116,9 +116,9 @@ func (w *Workspace) webRunDetails(ctx context.Context) webboard.RunDetails {
 		}
 	}
 	for _, t := range run.Tasks {
-		e := webboard.TaskEvidence{Task: t.PlanTaskID, Title: t.Title, State: string(t.State), Scope: t.Files}
+		e := webboard.TaskEvidence{Task: t.PlanTaskID, Title: w.webSecret(t.Title), State: string(t.State), Scope: w.webSecrets(t.Files)}
 		for _, c := range t.Checks {
-			e.Checks = append(e.Checks, c.Command)
+			e.Checks = append(e.Checks, w.webSecret(c.Command))
 		}
 		if h, attempt, ok := latestAttempt(ctx, service, runID, t); ok {
 			e.Changed, e.Base, e.Result = w.webSecrets(h.FilesTouched), h.BaseCommit, h.ResultCommit
@@ -129,7 +129,7 @@ func (w *Workspace) webRunDetails(ctx context.Context) webboard.RunDetails {
 				if c.Passed {
 					verdict = "passed"
 				}
-				e.Checks = append(e.Checks, c.Command+" — "+verdict)
+				e.Checks = append(e.Checks, w.webSecret(c.Command)+" — "+verdict)
 			}
 			if h.ResultCommit != "" {
 				e.DiffSubject = t.PlanTaskID + "@" + h.ResultCommit

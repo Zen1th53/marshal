@@ -46,6 +46,9 @@ func (w *Workspace) decisionRevision(d v2Decision) string {
 			return d.key + ":" + strconv.Itoa(c.edits)
 		}
 	}
+	if d.kind == decisionPlan && d.card.Plan != nil {
+		return d.key + ":" + d.card.Plan.Digest
+	}
 	return d.key
 }
 
