@@ -75,3 +75,7 @@ func (s *MarshalService) recoveryAdmission(_ context.Context, _ marshal.Capabili
 }
 
 func (s *MarshalService) takeRecoveryStarts([]string, time.Time, int) func() { return func() {} }
+
+func (s *MarshalService) reserveRecoveryStart(context.Context, marshal.Run, marshal.Task) (func(), error) {
+	return func() {}, nil
+}

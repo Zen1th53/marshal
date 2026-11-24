@@ -124,3 +124,22 @@ func (s *MarshalService) takeRecoveryStarts(keys []string, now time.Time, rampCa
 		}
 	}
 }
+
+// reserveRecoveryStart checks the final provider and atomically takes all
+// recovering families, so other projects cannot admit the same interval.
+func (s *MarshalService) reserveRecoveryStart(ctx context.Context, run marshal.Run, t marshal.Task) (func(), error) {
+	now := s.clock()
+	adm, keys, cap := s.recoveryAdmission(ctx, s.admissionGate(ctx), run, t, nil, now)
+	if !adm.Allowed {
+		return nil, &DispatchAdmissionError{Admission: adm}
+	}
+	undo, retry, ok := providerHealth.RampReserve(keys, now, cap)
+	if !ok {
+		adm.Allowed = false
+		adm.Code = AdmissionRecoveryRamp
+		adm.Reason = fmt.Sprintf("%s is back from its usage limit: new tasks start one every %s", adm.Provider, recoveryInterval)
+		adm.RetryAt = &retry
+		return nil, &DispatchAdmissionError{Admission: adm}
+	}
+	return undo, nil
+}

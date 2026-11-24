@@ -20,3 +20,5 @@ func (s *MarshalService) returnInfraFailure(context.Context, string, marshal.Run
 func resetInfraRetries(*marshal.Task) {}
 
 func retireWorkerAuthLane(marshal.Run, *marshal.Task) {}
+
+func infraRetryRounds(marshal.Run) int { return 0 }

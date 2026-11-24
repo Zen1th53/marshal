@@ -123,6 +123,16 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	if err := checkDispatchAdmission(s.admissionGate(ctx), run, *t, i); err != nil {
 		return MarshalDispatch{}, err
 	}
+	undoRecovery, err := s.reserveRecoveryStart(ctx, run, *t)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+	keepRecovery := false
+	defer func() {
+		if !keepRecovery {
+			undoRecovery()
+		}
+	}()
 	d := s.Drivers[t.Worker]
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		d = s.GovernedDrivers[t.Worker]
@@ -354,8 +364,10 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		// so does a held launch whose worker may exist.
 		var held *driver.LaunchHeldError
 		retainOperation = errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &held) && held.ProcessMayExist)
+		keepRecovery = retainOperation
 		return MarshalDispatch{}, err
 	}
+	keepRecovery = true
 	retainOperation = true
 	if s.LaunchSupervisor != nil {
 		markSlotRunning(op.Next, t.LaunchKey)

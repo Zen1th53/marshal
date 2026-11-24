@@ -2745,6 +2745,7 @@ features:
       - internal/tui/settings_view.go
     tests:
       - internal/app.TestExtremeInfraFailuresDoNotSpendRework
+      - internal/app.TestInfraRetriesExtendExecutionRoundAllowance
       - internal/app.TestCommunityHasNoInfraRetry
       - internal/app.TestRuntimeLimitsDistinguishAbsentAndZero
     docs: []
