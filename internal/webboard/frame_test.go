@@ -2,6 +2,7 @@ package webboard
 
 import (
 	"encoding/json"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -65,10 +66,10 @@ func TestEncodeEmptyBoard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(rest), "null") != 2 {
+	if strings.Count(string(rest), "null") != 3 { // decision, paused, waiting
 		t.Fatalf("a list encodes as null: %s", s)
 	}
-	for _, want := range []string{`"tasks":[]`, `"workers":[]`, `"limits":[]`, `"activity":[]`, `"requests":[]`, `"keys":[]`, `"items":[]`, `"lines":[]`, `"stages":[]`, `"checks":[]`, `"defaults":[]`, `"now":""`, `"decision":null`, `"paused":null`} {
+	for _, want := range []string{`"tasks":[]`, `"workers":[]`, `"limits":[]`, `"activity":[]`, `"requests":[]`, `"keys":[]`, `"items":[]`, `"lines":[]`, `"stages":[]`, `"checks":[]`, `"defaults":[]`, `"now":""`, `"decision":null`, `"paused":null`, `"waiting":null`, `"approvals":[]`} {
 		if !strings.Contains(s, want) {
 			t.Errorf("empty frame lacks %s: %s", want, s)
 		}
@@ -126,6 +127,8 @@ func TestFrameMapsEveryField(t *testing.T) {
 		reflect.TypeOf(vm.Key{}):            reflect.TypeOf(Key{}),
 		reflect.TypeOf(vm.ProviderLimits{}): reflect.TypeOf(ProviderLimits{}), reflect.TypeOf(vm.LimitRow{}): reflect.TypeOf(LimitRow{}),
 		reflect.TypeOf(vm.System{}): reflect.TypeOf(System{}), reflect.TypeOf(vm.MarshalSays{}): reflect.TypeOf(MarshalSays{}),
+		reflect.TypeOf(vm.Signal{}): reflect.TypeOf(Signal{}), reflect.TypeOf(vm.Waiting{}): reflect.TypeOf(Waiting{}),
+		reflect.TypeOf(vm.Approval{}): reflect.TypeOf(Approval{}),
 	}
 	seen := map[reflect.Type]bool{}
 	var walk func(reflect.Type)
@@ -319,5 +322,98 @@ func TestModeFrameDoesNotExposeLease(t *testing.T) {
 	unknown := FromBoard(vm.Board{}).Mode
 	if unknown.Active != nil || unknown.PlanParallel != nil || unknown.EffectiveCap != nil || unknown.Reasons == nil {
 		t.Fatalf("unknown observations: %+v", unknown)
+	}
+}
+
+// An approval reaches the page with its times and age, and a secret in its
+// reason never does; the reason is capped.
+func TestApprovalFrameIncludesAgeAndRedactsReason(t *testing.T) {
+	now := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
+	secret := "sk-" + "proj-" + strings.Repeat("abcdef1234567890", 3)
+	b := vm.Board{Now: now, Approvals: []vm.Approval{
+		{ID: "ap-1", TaskID: "T02", Awaiting: "owner", CreatedAt: now.Add(-3 * time.Minute), ExpiresAt: now.Add(7 * time.Minute),
+			Status: "requested", Reason: "push to origin with key " + secret + " " + strings.Repeat("x", 400),
+			Command: "/approve execution:ap-1", Actions: []vm.Key{{Key: "/approve execution:ap-1", Label: "approve"}},
+			Waiting: &vm.Waiting{Code: vm.WaitAuthority, Label: "approval ap-1 awaits the owner", BlockerID: "ap-1", Source: "approval", Inspect: "/approve execution:ap-1", RetryAt: now.Add(7 * time.Minute)}},
+		{ID: "ap-0", TaskID: "T01", Awaiting: "owner", CreatedAt: now.Add(-20 * time.Minute), Status: "expired",
+			Waiting: &vm.Waiting{Code: vm.WaitExpiry, Label: "expired: cannot be answered", Source: "approval", Inspect: "Inbox"}},
+	}}
+	body, err := Encode(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), secret) || strings.Contains(string(body), "abcdef1234567890abcdef") {
+		t.Fatalf("frame carries the secret: %s", body)
+	}
+	var f Frame
+	if err := json.Unmarshal(body, &f); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Approvals) != 2 {
+		t.Fatalf("approvals = %+v", f.Approvals)
+	}
+	a := f.Approvals[0]
+	if a.ID != "ap-1" || a.TaskID != "T02" || a.Awaiting != "owner" || a.Status != "requested" || a.AgeSec != 180 ||
+		a.CreatedAt != "2026-03-02T11:57:00Z" || a.ExpiresAt != "2026-03-02T12:07:00Z" || len(a.Actions) != 1 {
+		t.Fatalf("approval = %+v", a)
+	}
+	if a.Waiting == nil || a.Waiting.Code != vm.WaitAuthority || a.Waiting.BlockerID != "ap-1" || a.Waiting.RetryAt != "2026-03-02T12:07:00Z" {
+		t.Fatalf("approval wait = %+v", a.Waiting)
+	}
+	if n := len([]rune(a.Reason)); n > ReasonMax+1 || !strings.HasPrefix(a.Reason, "push to origin") {
+		t.Fatalf("reason = %q (%d runes)", a.Reason, n)
+	}
+	if x := f.Approvals[1]; x.Status != "expired" || len(x.Actions) != 0 || x.AgeSec != 1200 || x.ExpiresAt != "" {
+		t.Fatalf("expired approval = %+v", x)
+	}
+	// The change key has no clock: an approval's age alone pushes no frame.
+	later := b
+	later.Now = now.Add(time.Minute)
+	ka, _ := changeKey(b)
+	kb, _ := changeKey(later)
+	if string(ka) != string(kb) {
+		t.Fatal("an approval's age changed the frame key")
+	}
+}
+
+// A worker Marshal cannot verify is said to be unverifiable, never exited
+// or dead: on the wire and as the page renders it.
+func TestUnverifiableWorkerNeverRendersDead(t *testing.T) {
+	now := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
+	b := vm.Board{Now: now, Lanes: vm.Lanes{Items: []vm.Lane{
+		{Name: "claude-1", Task: "T01", Step: "unverified", Process: "unverifiable", LastSignal: 20 * time.Second,
+			Signal:  vm.Signal{At: now.Add(-20 * time.Second), State: vm.SignalUnverifiable, Label: "cannot verify: the process is in another namespace"},
+			Waiting: &vm.Waiting{Code: vm.WaitSignal, Label: "cannot verify: the process is in another namespace", BlockerID: "claude-1", Source: "heartbeat", Inspect: "/marshal status"}},
+		{Name: "claude-2", Task: "T02", Step: "no worker", LastSignal: 5 * time.Minute, Stale: true,
+			Signal: vm.Signal{At: now.Add(-5 * time.Minute), State: vm.SignalStale, Label: "no heartbeat for 5m: cannot verify the worker, it may still run"}},
+	}}}
+	body, err := Encode(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f Frame
+	if err := json.Unmarshal(body, &f); err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range f.Lanes.Items {
+		if l.Signal.State == vm.SignalExited || !strings.Contains(l.Signal.Label, "cannot verify") || l.Signal.At == "" {
+			t.Errorf("lane %s signal = %+v", l.Name, l.Signal)
+		}
+	}
+	if w := f.Lanes.Items[0].Waiting; w == nil || w.Code != vm.WaitSignal || w.Source != "heartbeat" || w.Inspect == "" {
+		t.Errorf("unverifiable lane wait = %+v", w)
+	}
+	for _, bad := range []string{"dead", "exited"} {
+		if strings.Contains(strings.ToLower(string(body)), bad) {
+			t.Errorf("frame says %q: %s", bad, body)
+		}
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Log("node not found: the page rendering check is skipped")
+		return
+	}
+	if out, err := exec.Command(node, "testdata/liveness.cjs").CombinedOutput(); err != nil {
+		t.Fatalf("liveness rendering: %v\n%s", err, out)
 	}
 }

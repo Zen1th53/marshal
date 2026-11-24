@@ -79,6 +79,17 @@
       </details>
     </section>
 
+    <!-- The inbox: what waits for the owner, and every approval with its
+         age. Drawn apart from the card above, keyed by approval id. -->
+    <section id="inbox" class="panel" aria-labelledby="h-inbox">
+      <h2 id="h-inbox" class="lbl">Inbox <span id="ib-count" class="ncount"></span></h2>
+      <p id="run-wait" class="muted" hidden></p>
+      <ul id="ib-lines" class="plain"></ul>
+      <p id="ib-empty" class="muted">Nothing waits for you.</p>
+      <p id="ib-next" class="muted"></p>
+      <ul id="ib-approvals" class="plain approvals" aria-label="Approvals"></ul>
+    </section>
+
     <p id="now" class="now">Connecting to the Board…</p>
     <p id="execution-mode" class="muted"></p>
     <p id="execution-reasons" class="muted"></p>

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -403,7 +404,44 @@ func (w *Workspace) refreshBoard(ctx context.Context) bool {
 	if service == nil || service.Store == nil || p == nil || p.RunID != runID {
 		return false
 	}
-	return w.refreshBoardFrom(ctx, service.Store, p)
+	next, waits := w.refreshBoardWaits(service, p)
+	return w.refreshBoardFrom(ctx, service.Store, next) || waits
+}
+
+// noteRunWaits reads onto p what the Board says the run waits on beyond
+// its own record: the approvals awaiting an answer and the launch the
+// dispatcher holds.
+func (w *Workspace) noteRunWaits(service *app.MarshalService, runID string, p *MarshalPanel) {
+	p.approvals, p.hold = nil, nil
+	if rt := w.runtime; rt != nil && runID != "" {
+		if views, _, err := rt.ApprovalProjection(context.Background(), runID, p.run, false); err == nil && len(views) > 0 {
+			p.approvals = views
+		}
+	}
+	if hold, ok := service.AdmissionHold(runID); ok {
+		p.hold = &hold
+	}
+}
+
+// refreshBoardWaits publishes p again when its approvals or admission hold
+// changed since it was published, and returns the panel now published.
+func (w *Workspace) refreshBoardWaits(service *app.MarshalService, p *MarshalPanel) (*MarshalPanel, bool) {
+	next := *p
+	w.noteRunWaits(service, p.RunID, &next)
+	if reflect.DeepEqual(next.approvals, p.approvals) && reflect.DeepEqual(next.hold, p.hold) {
+		return p, false
+	}
+	w.mu.Lock()
+	current := w.state.Marshal == p
+	if current {
+		w.state.Marshal = &next
+	}
+	w.mu.Unlock()
+	if !current {
+		return p, false
+	}
+	w.requestRepaint()
+	return &next, true
 }
 
 func (w *Workspace) refreshBoardFrom(ctx context.Context, src decisionReader, p *MarshalPanel) bool {
@@ -444,11 +482,15 @@ type boardUI struct {
 	stopArmed bool
 	// homeYesAt is when y last ran the home screen's safe action (homeYes).
 	homeYesAt time.Time
-	task      string // selected task
-	lane      string // selected lane's worker
-	ack       string // command answer already seen; the footer stops showing it
-	ackSeq    uint64 // output sequence when ack was taken: a repeated answer is new
-	note      string // run note last painted
+	// homePage is the page drawn in the home's place ("" the home itself:
+	// board_run_view.go) and homePageState its selection and scroll.
+	homePage      string
+	homePageState pageState
+	task          string // selected task
+	lane          string // selected lane's worker
+	ack           string // command answer already seen; the footer stops showing it
+	ackSeq        uint64 // output sequence when ack was taken: a repeated answer is new
+	note          string // run note last painted
 	// hostScroll is how far the Host view is scrolled down; hostMax is
 	// the furthest it could go at the last paint.
 	hostScroll, hostMax int

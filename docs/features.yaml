@@ -393,11 +393,12 @@ features:
       - internal/app/worker_liveness.go
     tests:
       - internal/webboard.TestEncodeRunningFrame
+      - internal/webboard.TestUnverifiableWorkerNeverRendersDead
     docs:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
-        anchor: 'no signal for a while'
+        anchor: 'function signalView(x, add)'
         kind: view
     tui:
       - routeOrCommand: "1"
@@ -413,10 +414,12 @@ features:
       - internal/tui/boardv2_flow.go
     tests:
       - internal/webboard.TestEncodeRunningFrame
+      - internal/tui.TestBoardExplainsEveryWaitingState
+      - internal/tui.TestAllBlockedEntitiesHaveWaitReasonAndDestination
     docs: []
     web:
       - routeOrCommand: "#work"
-        anchor: 'case "waiting": word = t.note ? t.note.replace(/^waits /, "waits ") : "waiting"; break;'
+        anchor: 'case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;'
         kind: view
     tui:
       - routeOrCommand: /why
@@ -432,12 +435,16 @@ features:
       - internal/tui/boardv2_cards_decision.go
     tests:
       - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestApprovalFrameIncludesAgeAndRedactsReason
     docs:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#home"
         anchor: 'inbox: "a request waiting in the inbox"'
         kind: control
+      - routeOrCommand: "#home"
+        anchor: 'function renderInbox(f)'
+        kind: view
     tui:
       - routeOrCommand: /approvals
         anchor: 'case "/approvals":'
@@ -1750,12 +1757,19 @@ features:
     name: Terminal Home and Run view projection of tasks, lanes, quota, Activity, steps, chat health and readiness
     editions: [default, governed]
     sources:
+      - internal/tui/board_run_view.go
       - internal/tui/board_home.go
       - internal/webboard/page/app.js
       - internal/tui/boardv2_flow.go
     tests:
       - internal/webboard.TestFrameMapsEveryField
-    docs: []
+      - internal/tui.TestHomeShowsWorkAndOwnerActionAt80x24
+      - internal/tui.TestRunViewReachableAndSelectionStable
+      - internal/tui.TestReadinessAndActivityVisibleWithoutWeb
+      - internal/tui.TestHomeRunProjectionFieldsAndHiddenKeys
+      - internal/tui.TestHostNoticeSurvivesOtherStatus
+    docs:
+      - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
         anchor: 'function renderLanes(f)'
@@ -1763,7 +1777,19 @@ features:
       - routeOrCommand: "#activity"
         anchor: 'function renderActivity(f)'
         kind: view
-    tui: []
+    tui:
+      - routeOrCommand: "1"
+        anchor: 'func hostAbnormal('
+        kind: view
+      - routeOrCommand: r
+        anchor: 'func runWorkLines('
+        kind: view
+      - routeOrCommand: i
+        anchor: 'func inboxPageLines('
+        kind: view
+      - routeOrCommand: c
+        anchor: 'func readyPageLines('
+        kind: view
 
   # ---- TUI cards and overlays ------------------------------------------------
   - id: TUI-CARD-paused
@@ -3710,9 +3736,6 @@ pending:
   - id: TUI-KEY-task-diff-D
     missing: both
     source: internal/tui/board_task_diff.go
-  - id: TUI-HOME-operational-projection
-    missing: tui
-    source: internal/tui/board_home.go
   - id: TUI-CARD-decision-web-only
     missing: tui
     source: internal/tui/boardv2_cards_owner.go

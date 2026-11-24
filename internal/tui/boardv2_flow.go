@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
@@ -669,6 +670,7 @@ func flowLanes(in flowIn) vm.Lanes {
 		return out
 	}
 	b := in.v.board
+	approvals := pendingApprovals(in)
 	for _, l := range b.Lanes {
 		row := vm.Lane{Name: l.Worker, Provider: l.Provider, Selected: in.selectedLane != "" && l.Worker == in.selectedLane}
 		if t, ok := taskRow(b, l.TaskID); ok {
@@ -699,6 +701,12 @@ func flowLanes(in flowIn) vm.Lanes {
 			row.Step = "working"
 		}
 		laneLiveness(&row, l, in.now)
+		laneSignal(&row, l, in.now)
+		if row.Waiting = laneWaiting(row, l, in.now); row.Waiting == nil {
+			if a, ok := approvals[l.TaskID]; ok && !row.Reviewing {
+				row.Waiting = approvalWait(a)
+			}
+		}
 		if !l.Started.IsZero() && in.now.After(l.Started) {
 			row.Elapsed = in.now.Sub(l.Started)
 		}
@@ -764,6 +772,7 @@ func flowTasks(in flowIn) []vm.Task {
 		state[t.ID] = t.State
 	}
 	reviewers := taskReviewers(b.Events)
+	approvals := pendingApprovals(in)
 	rows := slices.Clone(b.Tasks)
 	slices.SortStableFunc(rows, func(x, y boardmodel.TaskRow) int { return cmp.Compare(x.ID, y.ID) })
 	out := make([]vm.Task, 0, len(rows))
@@ -791,6 +800,7 @@ func flowTasks(in flowIn) []vm.Task {
 		default:
 			row.State, row.Note = "waiting", waitsOn(deps[t.ID], state)
 		}
+		row.Waiting = taskWaiting(in, t, deps[t.ID], state, approvals)
 		if (row.State == "review" || row.State == "merged") && row.Reviewer == "" {
 			row.Reviewer = "marshal"
 		}
@@ -967,4 +977,264 @@ func joinDot(parts ...string) string {
 		}
 	}
 	return strings.Join(kept, " · ")
+}
+
+// hold is the launch the dispatcher holds for the run, nil for none.
+func (in flowIn) hold() *app.DispatchAdmission {
+	if in.panel == nil {
+		return nil
+	}
+	return in.panel.hold
+}
+
+// inspectStatus is where a wait with no closer place to look is inspected.
+const inspectStatus = "/marshal status"
+
+// pendingApprovals is each task's oldest approval that awaits an answer.
+func pendingApprovals(in flowIn) map[string]app.ApprovalNoticeView {
+	out := map[string]app.ApprovalNoticeView{}
+	if in.panel == nil {
+		return out
+	}
+	for _, a := range in.panel.approvals {
+		if _, seen := out[a.TaskID]; !seen && approvalStatus(a, in.now) == "requested" {
+			out[a.TaskID] = a
+		}
+	}
+	return out
+}
+
+// approvalWait is the wait of a task held by approval a.
+func approvalWait(a app.ApprovalNoticeView) *vm.Waiting {
+	who := "the owner"
+	if a.Authority != "owner" {
+		who = "the Marshal"
+	}
+	return &vm.Waiting{Code: vm.WaitAuthority, Label: "approval " + a.ApprovalID + " awaits " + who, BlockerID: a.ApprovalID,
+		Source: "approval", Inspect: firstSet(a.Command, a.Destination, "Inbox")}
+}
+
+// holdWait is the wait of a launch the dispatcher holds.
+func holdWait(h app.DispatchAdmission) *vm.Waiting {
+	w := &vm.Waiting{Code: vm.WaitAdmission, Label: firstSet(h.Reason, "held by admission"), Source: "admission", Inspect: inspectStatus}
+	switch h.Code {
+	case app.AdmissionScopeOverlap, app.AdmissionScopeBroad:
+		w.Code = vm.WaitOverlap
+	case app.AdmissionDependencyUnmerged:
+		w.Code = vm.WaitDependency
+	case app.AdmissionCapacity:
+		w.Code = vm.WaitCapacity
+	case app.AdmissionQuotaUnknown, app.AdmissionRecoveryRamp:
+		w.Code = vm.WaitProvider
+	}
+	if len(h.BlockingTaskIDs) > 0 {
+		w.BlockerID = h.BlockingTaskIDs[0]
+	}
+	if h.RetryAt != nil {
+		w.RetryAt = *h.RetryAt
+	}
+	return w
+}
+
+// runWaiting is why the run as a whole does not move, nil while it moves.
+func runWaiting(in flowIn) *vm.Waiting {
+	if w := runStopWaiting(in); w != nil {
+		return w
+	}
+	if h := in.hold(); h != nil && in.hasRun && !in.lastRun {
+		return holdWait(*h)
+	}
+	return nil
+}
+
+// runStopWaiting is the run's stop or the owner's pause, nil for none.
+func runStopWaiting(in flowIn) *vm.Waiting {
+	if !in.hasRun || in.lastRun {
+		return nil
+	}
+	if s, ok := in.v.stopNotice(); ok {
+		w := &vm.Waiting{Code: vm.WaitPause, Label: s.reason, Source: "run", Inspect: firstSet(strings.Join(s.commands, ", then "), "/marshal resume")}
+		switch {
+		case s.code == marshal.CodeLaneAdmission:
+			w.Code = vm.WaitAdmission
+		case s.code == marshal.CodeApprovalWait:
+			w.Code = vm.WaitAuthority
+		default:
+			switch pauseCause(in.run.Pause) {
+			case pauseQuota, pauseAuth:
+				w.Code = vm.WaitProvider
+			case pauseLease:
+				w.Code = vm.WaitLease
+			}
+		}
+		if p := in.run.Pause; p != nil {
+			w.BlockerID, w.RetryAt = p.TaskID, p.Until
+		}
+		return w
+	}
+	if in.v.board.Run.UserPaused {
+		return &vm.Waiting{Code: vm.WaitPause, Label: "you paused the run", Source: "run", Inspect: "/marshal resume"}
+	}
+	if s := in.stall; s.overdue(in.now) {
+		return &vm.Waiting{Code: vm.WaitUnknown, Label: stallAsk(s, in.now), Source: "run", Inspect: inspectStatus}
+	}
+	return nil
+}
+
+// taskWaiting is why task t does not move, nil while it builds unblocked
+// or is done. Every waiting state names a code; one Marshal has not said a
+// cause for is WaitUnknown with where to look.
+func taskWaiting(in flowIn, t boardmodel.TaskRow, deps []string, state map[string]boardmodel.TaskState, approvals map[string]app.ApprovalNoticeView) *vm.Waiting {
+	if a, ok := approvals[t.ID]; ok && t.State != boardmodel.TaskMerged && t.State != boardmodel.TaskCancelled {
+		return approvalWait(a)
+	}
+	switch t.State {
+	case boardmodel.TaskMerged, boardmodel.TaskCancelled:
+		return nil
+	case boardmodel.TaskParked:
+		return &vm.Waiting{Code: vm.WaitOwner, Label: "stuck: needs you", Source: "run", Inspect: "/marshal retry " + t.ID}
+	case boardmodel.TaskAccepted:
+		return &vm.Waiting{Code: vm.WaitVerification, Label: "accepted: merge checks run", Source: "run", Inspect: inspectStatus}
+	case boardmodel.TaskReview:
+		for _, l := range in.v.board.Lanes {
+			if l.TaskID == t.ID && l.State == boardmodel.LaneReview {
+				return nil
+			}
+		}
+		if in.run.Settings.AcceptanceMode == marshal.AcceptUser {
+			return &vm.Waiting{Code: vm.WaitReviewRole, Label: "waits for your acceptance", Source: "run settings", Inspect: "Inbox"}
+		}
+		return &vm.Waiting{Code: vm.WaitReviewQueue, Label: "waits for a reviewer", Source: "board", Inspect: inspectStatus}
+	case boardmodel.TaskWorking, boardmodel.TaskRework:
+		for _, l := range in.v.board.Lanes {
+			if l.TaskID != t.ID || l.State == boardmodel.LaneReview {
+				continue
+			}
+			var row vm.Lane
+			laneSignal(&row, l, in.now)
+			if lw := laneWaiting(row, l, in.now); lw != nil {
+				return lw
+			}
+		}
+		return nil
+	}
+	if open := openDeps(deps, state); len(open) > 0 {
+		return &vm.Waiting{Code: vm.WaitDependency, Label: waitsOn(deps, state), BlockerID: open[0], Source: "plan", Inspect: "task " + open[0]}
+	}
+	// A held launch explains its own task, and every queued task when it
+	// is the lane cap that holds it.
+	if h := in.hold(); h != nil && (h.TaskID == t.ID || h.Code == app.AdmissionCapacity) {
+		return holdWait(*h)
+	}
+	if w := runStopWaiting(in); w != nil {
+		return w
+	}
+	return &vm.Waiting{Code: vm.WaitUnknown, Label: "queued: Marshal has not said why it waits", Source: "board", Inspect: inspectStatus}
+}
+
+// openDeps is the dependencies of a task not yet merged or cancelled.
+func openDeps(deps []string, state map[string]boardmodel.TaskState) []string {
+	var open []string
+	for _, d := range deps {
+		if s, ok := state[d]; ok && s != boardmodel.TaskMerged && s != boardmodel.TaskCancelled {
+			open = append(open, d)
+		}
+	}
+	return open
+}
+
+// laneSignal gives a Lanes row its last worker signal: live, quiet past a
+// minute, stale once the heartbeat stopped, unverifiable when Marshal
+// cannot see the worker, exited only when its exit is confirmed. A
+// worker window has no heartbeat to read.
+func laneSignal(row *vm.Lane, l boardmodel.Lane, now time.Time) {
+	if !l.Heartbeat {
+		row.Signal = vm.Signal{State: vm.SignalNone, Label: "worker window: no heartbeat to read"}
+		return
+	}
+	row.Signal.At = l.Beat
+	quiet := time.Duration(0)
+	if !l.Beat.IsZero() && now.After(l.Beat) {
+		quiet = now.Sub(l.Beat)
+	}
+	switch {
+	case l.Liveness.Process == app.ProcessExited:
+		row.Signal.State, row.Signal.Label = vm.SignalExited, "the worker exited"
+	case l.State == boardmodel.LaneLost:
+		row.Signal.State, row.Signal.Label = vm.SignalStale, "no heartbeat for "+quietFor(quiet)+": cannot verify the worker, it may still run"
+	case l.Liveness.Process == app.ProcessUnverifiable:
+		row.Signal.State, row.Signal.Label = vm.SignalUnverifiable, "cannot verify: "+firstSet(l.Liveness.Note, "Marshal cannot see the worker process")
+	case quiet > staleSignal:
+		row.Signal.State, row.Signal.Label = vm.SignalQuiet, "quiet for "+quietFor(quiet)
+	default:
+		row.Signal.State, row.Signal.Label = vm.SignalLive, "the worker signals"
+	}
+}
+
+// laneWaiting is why lane l does not move, from row's signal and model
+// wait; nil while it works.
+func laneWaiting(row vm.Lane, l boardmodel.Lane, now time.Time) *vm.Waiting {
+	switch row.Signal.State {
+	case vm.SignalStale, vm.SignalUnverifiable:
+		return &vm.Waiting{Code: vm.WaitSignal, Label: row.Signal.Label, BlockerID: l.Worker, Source: "heartbeat", Inspect: inspectStatus}
+	}
+	if since := l.Liveness.ModelWaitSince; !since.IsZero() && now.Sub(since) >= app.ModelWaitNoticeAfter {
+		return &vm.Waiting{Code: vm.WaitProvider, Label: "waiting on its model for " + quietFor(now.Sub(since)), BlockerID: l.Provider, Source: "heartbeat", Inspect: inspectStatus}
+	}
+	if l.State == boardmodel.LaneParked {
+		return &vm.Waiting{Code: vm.WaitOwner, Label: "stuck: needs you", Source: "run", Inspect: "/marshal retry " + l.TaskID}
+	}
+	return nil
+}
+
+// approvalStatus is a's status at now: requested, expired, or superseded
+// by its replacement.
+func approvalStatus(a app.ApprovalNoticeView, now time.Time) string {
+	switch {
+	case a.ReplacementID != "":
+		return "superseded"
+	case a.Expired, a.ExpiresAt != nil && !now.Before(*a.ExpiresAt):
+		return "expired"
+	case a.Status != "" && a.Status != execution.ApprovalRequested:
+		return strings.ToLower(string(a.Status))
+	}
+	return "requested"
+}
+
+// approvalReasonMax bounds an approval's reason on the Board.
+const approvalReasonMax = 160
+
+// flowApprovals is every approval of the run that awaits an answer or has
+// just expired, oldest first. Only a requested approval the owner answers
+// carries actions, its bound commands; one the Marshal answers shows where
+// it is answered and its status.
+func flowApprovals(in flowIn) []vm.Approval {
+	if in.panel == nil || !in.hasRun {
+		return nil
+	}
+	var out []vm.Approval
+	for _, a := range in.panel.approvals {
+		row := vm.Approval{ID: a.ApprovalID, TaskID: a.TaskID, Awaiting: firstSet(a.Authority, "owner"), CreatedAt: a.CreatedAt,
+			Status: approvalStatus(a, in.now), Destination: app.RedactApprovalText(a.Destination), Command: app.RedactApprovalText(a.Command)}
+		if a.ExpiresAt != nil {
+			row.ExpiresAt = *a.ExpiresAt
+		}
+		row.Reason = Truncate(app.RedactApprovalText(firstSet(a.DecisionReason, a.RevokedReason, joinDot(a.OperationType, a.TargetResource))), approvalReasonMax)
+		switch row.Status {
+		case "requested":
+			row.Waiting = approvalWait(a)
+			if row.Awaiting == "owner" {
+				row.Actions = []vm.Key{{Key: row.Command, Label: "approve"}, {Key: "/reject execution:" + a.ApprovalID, Label: "reject"}}
+			}
+		case "superseded":
+			row.Waiting = &vm.Waiting{Code: vm.WaitExpiry, Label: "superseded by " + a.ReplacementID + ": cannot be answered", BlockerID: a.ReplacementID, Source: "approval", Inspect: "Inbox"}
+		default:
+			row.Waiting = &vm.Waiting{Code: vm.WaitExpiry, Label: row.Status + ": cannot be answered", Source: "approval", Inspect: "Inbox"}
+		}
+		if !row.ExpiresAt.IsZero() && row.Status == "requested" {
+			row.Waiting.RetryAt = row.ExpiresAt
+		}
+		out = append(out, row)
+	}
+	return out
 }

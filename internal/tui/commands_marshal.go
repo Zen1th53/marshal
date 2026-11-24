@@ -1238,6 +1238,7 @@ func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPa
 		return
 	}
 	if service != nil {
+		w.noteRunWaits(service, runID, p)
 		// The feed reads only decisions it has not seen; the rest come
 		// from its cache, so a publish per run step stays one indexed query.
 		if events, _, _, err := w.boardFeed.read(context.Background(), service.Store, runID); err == nil {

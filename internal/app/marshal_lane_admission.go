@@ -195,6 +195,15 @@ func (s *MarshalService) admissionHold(runID string) (DispatchAdmission, bool) {
 	return v.(DispatchAdmission), true
 }
 
+// AdmissionHold is the launch the dispatcher last held for runID without a
+// time to retry, for the Board to say why the run waits.
+func (s *MarshalService) AdmissionHold(runID string) (DispatchAdmission, bool) {
+	if s == nil {
+		return DispatchAdmission{}, false
+	}
+	return s.admissionHold(runID)
+}
+
 // waitAdmission blocks until until, when a held launch may be admitted.
 func (s *MarshalService) waitAdmission(ctx context.Context, until time.Time) error {
 	if s.admissionWait != nil {

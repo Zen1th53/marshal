@@ -11,16 +11,19 @@ import (
 )
 
 // The terminal home is one simple screen: what is happening, the one thing
-// needed from the owner and where the Web Board is. Everything else (plan,
-// lanes, tasks, workers, activity, cards and their details) is the Web
-// Board's (internal/webboard), which shows all of it with its actions.
+// needed from the owner and where the Web Board is, then one compact line
+// each for the host when it needs attention, the work against its cap, the
+// lanes, the tasks, the Marshal and the latest Activity. Its pages (r Run,
+// i Inbox, c Readiness: board_run_view.go) show the rest of the same view
+// model; the cards and their decisions are the Web Board's
+// (internal/webboard).
 //
 //	 MARSHAL · demo · RUNNING · 3 workers · 14:05
 //
 //	 Now:       3 running · 9 queued (4/12 done)
 //	 From you:  nothing
 //	 Web:       opened in your browser (w opens it again)
-//	 ⏎ chat   w web   s say to the Marshal   q quit
+//	 ⏎ chat   w web   s say   r run   i inbox   c checks   ? keys   q quit
 //	 <status or composer>
 //
 // Enter always opens the Marshal chat. Only a safe continue-type action
@@ -33,11 +36,14 @@ import (
 // action per press, no queue of repeats.
 const homeYesQuiet = 2 * time.Second
 
-// homeKeys is the key bar, long and short.
-const (
-	homeKeysLong  = "⏎ chat   w web   s say to the Marshal   q quit"
-	homeKeysShort = "⏎ chat  w web  s say  q quit"
-)
+// homeKeys is the key bar, longest first; the first that fits is drawn.
+// ? opens the help, which lists every other key (Space, /, m, a, e, d,
+// the views 2 to 8, Ctrl+X).
+var homeKeyBars = []string{
+	"⏎ chat   w web   s say   r run   i inbox   c checks   ? keys   q quit",
+	"⏎ chat  w web  s say  r run  i inbox  c checks  ? keys",
+	"⏎ chat  w web  s say  r i c  ? keys",
+}
 
 // homePrimary is the safe action y runs now, "" for none: its words for
 // the From-you line and what it does.
@@ -263,6 +269,9 @@ func (w *Workspace) paintHome(v boardVisual, cols, rows int) []string {
 	if b.Top.Clock.IsZero() {
 		b.Top.Clock = v.now
 	}
+	if ui := &w.boardUI; ui.homePage != "" {
+		return renderHomePage(v, b, ui.homePage, &ui.homePageState, cols, rows)
+	}
 	return renderHome(v, b, homePrimaryOf(b, w.homeIn()), cols, rows)
 }
 
@@ -280,20 +289,38 @@ func renderHome(v boardVisual, b vm.Board, p homePrimary, cols, rows int) []stri
 	content := []string{v.homeHeader(b.Top, cols), "", v.homeLine("Now:", homeNow(b), cols, "")}
 	content = append(content, v.homeLines("From you:", from, cols, fromTone, 3)...)
 	content = append(content, v.homeLine("Web:", homeWeb(b.Web), cols, ""))
+	room := max(0, cols-12)
+	if h := hostAbnormal(b.System); h != "" {
+		content = append(content, v.homeLine("Host:", "▲ "+h, cols, "waiting"))
+	}
+	if len(b.Lanes.Items) > 0 || b.Mode.Active != nil {
+		content = append(content, v.homeLine("Work:", homeWork(b), cols, ""))
+	}
+	if l := homeLanes(b); len(l) > 0 {
+		content = append(content, v.homeLine("Lanes:", homeCompact(l, room), cols, ""))
+	}
+	if t := homeTasks(b); len(t) > 0 {
+		content = append(content, v.homeLine("Tasks:", homeCompact(t, room), cols, ""))
+	}
+	if b.Marshal.Provider != "" {
+		content = append(content, v.homeLine("Marshal:", homeMarshal(b.Marshal), cols, ""))
+	}
+	if n := len(b.Activity); n > 0 {
+		content = append(content, v.homeLine("Activity:", eventText(b.Activity[n-1]), cols, ""))
+	}
 	if b.Mode.Edition != "" {
 		content = append(content, v.homeLines("Execution:", homeMode(b.Mode), cols, "", 4)...)
 		if len(b.Mode.Reasons) > 0 {
 			content = append(content, v.homeLines("Why:", strings.Join(b.Mode.Reasons, "; "), cols, "", 3)...)
 		}
 	}
-	keys := homeKeysLong
-	if !v.unicode() {
-		keys = strings.ReplaceAll(keys, "⏎", "Enter")
-	}
-	if VisibleLen(" "+keys) > cols {
-		keys = homeKeysShort
+	var keys string
+	for _, keys = range homeKeyBars {
 		if !v.unicode() {
 			keys = strings.ReplaceAll(keys, "⏎", "Enter")
+		}
+		if VisibleLen(" "+keys) <= cols {
+			break
 		}
 	}
 	bottom := 1 // the status row
@@ -331,11 +358,15 @@ func renderHome(v boardVisual, b vm.Board, p homePrimary, cols, rows int) []stri
 // handleHomeKey is a key on the home screen; it reports whether it took it.
 // Enter opens the Marshal chat, always; y runs the one safe action named on
 // the From-you line; w opens the Web Board; s writes to the Marshal; q
-// quits; the digits and b and h open the views. Any other key goes on to
+// quits; r, i and c open the Run, Inbox and Readiness pages; the digits and
+// b and h open the views. Any other key goes on to
 // the palette, the shortcuts and the composer: no key acts on a card the
 // screen does not draw.
 func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 	ctx := context.Background()
+	if w.handleHomePageKey(event) {
+		return true
+	}
 	if event.Type == KeyEnter {
 		w.focusChatFromBoard(ctx)
 		return true
@@ -367,6 +398,10 @@ func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 		case 'e':
 			return w.handleRequirementsKey(event)
 		}
+		return true
+	case 'r', 'i', 'c':
+		// The Run, Inbox and Readiness pages (board_run_view.go).
+		w.openHomePage(homePageKey(event.Rune))
 		return true
 	case 'w':
 		w.openWebBoardKey()
