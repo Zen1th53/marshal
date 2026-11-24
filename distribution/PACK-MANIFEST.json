@@ -2756,8 +2756,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "ffe3aeaa03998ead0dc5979e1216773d478bcfecbd6b137acb33a696ec98df5b",
-      "bytes": 87366
+      "sha256": "50184331cc4db6fa46720d705377c811f7a461532c26d19505008c1068ce5b79",
+      "bytes": 87384
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -2881,8 +2881,8 @@
     },
     {
       "path": "internal/app/marshal_pause.go",
-      "sha256": "d97c311bc518920ec2dfa896aa07ae540cd694ef0abdb1bf1ef4669c9c27e3e8",
-      "bytes": 17084
+      "sha256": "ae9874aa16570f44c420a04e56df8b7256a1592c2b5ef95ee3ebc5cd6dbe4aa4",
+      "bytes": 17666
     },
     {
       "path": "internal/app/marshal_pause_test.go",
