@@ -720,9 +720,15 @@ func testAdmittedUltraCollector(t *testing.T, turnOff bool, beforeLaunch ...bool
 		}
 	}
 	s.ModelProvider = "test"
+	// A merge onto an advanced head reviews the restaged candidate afresh;
+	// each reviewed commit is still reviewed once.
 	reviews := map[string]int{}
+	reviewed := map[string]int{}
 	s.CrossReview = func(_ context.Context, t marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
-		reviews[t.PlanTaskID]++
+		reviewed[t.PlanTaskID+"@"+h.ResultCommit]++
+		if reviewed[t.PlanTaskID+"@"+h.ResultCommit] > reviews[t.PlanTaskID] {
+			reviews[t.PlanTaskID] = reviewed[t.PlanTaskID+"@"+h.ResultCommit]
+		}
 		ref := "check:test -f " + t.PlanTaskID + ".txt"
 		return marshal.Review{SessionID: "fresh-review-session", FreshSession: true, Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{ref}}, "test", nil
 	}
@@ -850,11 +856,12 @@ func testAdmittedUltraCollector(t *testing.T, turnOff bool, beforeLaunch ...bool
 		if err != nil {
 			t.Fatalf("execute failed: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	// A merge onto an advanced head reruns its checks and review.
+	case <-time.After(15 * time.Second):
 		t.Fatal("execute timed out after releasing task a")
 	}
 
-	// Both tasks should now be merged in plan order
+	// Both tasks should now be merged
 	finalRun, _, err := s.load(ctx, "run-ultra")
 	if err != nil {
 		t.Fatal(err)

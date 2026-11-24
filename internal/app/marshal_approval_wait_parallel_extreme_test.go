@@ -98,7 +98,7 @@ func TestExtremeParallelDispatchPassesTaskApprovalWait(t *testing.T) {
 	if a.State != marshal.Queued || a.Process05WaitApprovalID != "approval-a" || a.Process05WaitRunID != "lane-a" || len(a.ReturnsByAgent) != 0 {
 		t.Fatalf("waiting task lost its binding or became rework: %+v", a)
 	}
-	if b.State != marshal.Accepted || c.State != marshal.Accepted {
+	if b.State != marshal.Merged || c.State != marshal.Merged {
 		t.Fatalf("an approval wait held other lanes: b=%s c=%s", b.State, c.State)
 	}
 	if waiting, err := s.checkPrivateProcess05Approval(t.Context(), run); err != nil || !waiting {
@@ -142,8 +142,8 @@ func TestExtremeParallelResumeContinuesDecidedWaitPastPendingOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("continue: %v", err)
 	}
-	// Plan order merges b only after a, so b is accepted and a still waits.
-	if run.State != marshal.AwaitingUser || run.Tasks[1].State != marshal.Accepted || run.Tasks[0].State != marshal.Queued || run.Tasks[0].Process05WaitApprovalID != "approval-a" {
+	// Independent b merges without waiting for a, which still waits.
+	if run.State != marshal.AwaitingUser || run.Tasks[1].State != marshal.Merged || run.Tasks[0].State != marshal.Queued || run.Tasks[0].Process05WaitApprovalID != "approval-a" {
 		t.Fatalf("decided lane did not continue past the pending one: %+v", run)
 	}
 	if strings.Contains(run.Pause.Detail, "approval-b") || !strings.Contains(run.Pause.Detail, "approval-a") {
