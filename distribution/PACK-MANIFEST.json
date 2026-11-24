@@ -3321,8 +3321,8 @@
     },
     {
       "path": "internal/app/marshal_wiring.go",
-      "sha256": "6009afb90b38a8fc28417cdd345eb3e36cdebdcabd9f8df3dad872999dea35e6",
-      "bytes": 19369
+      "sha256": "39aca27067554b59903c65bb6d888f6f78e333f0a4a5626b95d6fbc346ecb9f8",
+      "bytes": 18986
     },
     {
       "path": "internal/app/marshal_wiring_test.go",
@@ -4941,8 +4941,8 @@
     },
     {
       "path": "internal/app/worker_reassign.go",
-      "sha256": "330e87c1732766251de7c7a9a11efd9489d9f5d894dce7be60569da11c30208c",
-      "bytes": 7978
+      "sha256": "d2eedfa4a657c8c3a982116c0062e568f7fd611ee53bee389db0f1265955fb2c",
+      "bytes": 11940
     },
     {
       "path": "internal/app/worker_reassign_test.go",
