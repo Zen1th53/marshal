@@ -334,13 +334,21 @@ func TestLaunchCrashWindowsNeverDuplicateWorker(t *testing.T) {
 	})
 	t.Run("unsupported driver", func(t *testing.T) {
 		f := newLaunchFixture(t)
+		// A driver without a startup barrier launches directly, unslotted.
 		f.s.Drivers["worker"] = unsupervisedWorker{inner: f.worker.inner}
-		if _, err := f.s.Dispatch(t.Context(), "run", "a", "write"); !errors.Is(err, driver.ErrLaunchUnsupported) {
-			t.Fatalf("unsupported driver launched: %v", err)
+		d, err := f.s.Dispatch(t.Context(), "run", "a", "write")
+		if err != nil {
+			t.Fatalf("unsupported driver refused: %v", err)
+		}
+		if _, ok := d.Handle.LaunchReceipt(); ok {
+			t.Fatal("direct launch carries a receipt")
 		}
 		run, _, _ := f.s.load(t.Context(), "run")
-		if run.Operation != nil || run.Tasks[0].State != marshal.Queued {
-			t.Fatalf("refused launch left state: op=%+v task=%+v", run.Operation, run.Tasks[0])
+		if run.Tasks[0].LaunchKey != "" || len(run.Slots) != 0 {
+			t.Fatalf("direct launch took a key or slot: key=%q slots=%+v", run.Tasks[0].LaunchKey, run.Slots)
+		}
+		if _, err := f.s.CollectHandIn(t.Context(), "run", d); err != nil {
+			t.Fatal(err)
 		}
 		f.expectWorks(t, 0)
 	})

@@ -181,7 +181,11 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
 	next.Tasks[i].ExecutionTier = policy.Tier
-	if s.LaunchSupervisor != nil {
+	if s.LaunchSupervisor != nil && !s.supervisesLaunch(d) {
+		// A driver that cannot hold its worker launches directly, unslotted.
+		t.LaunchKey = ""
+		next.Tasks[i].LaunchKey = ""
+	} else if s.LaunchSupervisor != nil {
 		// Reuse the key of a launch recovery proved never started.
 		if t.LaunchKey == "" {
 			key, err := model.NewID("marshal-launch-")
@@ -356,7 +360,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	}
 	req := driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName}
 	var handle *driver.Handle
-	if s.LaunchSupervisor == nil {
+	if s.LaunchSupervisor == nil || t.LaunchKey == "" {
 		handle, err = d.Launch(dispatchCtx, req)
 	} else {
 		handle, err = s.LaunchSupervisor.Launch(dispatchCtx, t.LaunchKey, d, req, func(ctx context.Context) error {
@@ -373,7 +377,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		return MarshalDispatch{}, err
 	}
 	retainOperation = true
-	if s.LaunchSupervisor != nil {
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
 		markSlotRunning(op.Next, t.LaunchKey)
 	}
 	if err = s.afterOperationEffect(op); err != nil {
@@ -384,7 +388,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	if s.LaunchSupervisor != nil {
+	if s.LaunchSupervisor != nil && t.LaunchKey != "" {
 		// Adopt only the worker the receipt names, with its recorded session.
 		receipt, ok := handle.LaunchReceipt()
 		if !ok || receipt.Key != t.LaunchKey {
