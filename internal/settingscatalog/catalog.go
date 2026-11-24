@@ -46,6 +46,82 @@ func field[T ~string | ~int | ~int64](key, kind, units string, values []string, 
 	return d
 }
 
+func providerEnabledField(provider string) Descriptor {
+	key := provider + "-enabled"
+	d := Descriptor{
+		Key:      key,
+		Label:    key,
+		Kind:     "enum",
+		Values:   []string{"on", "off"},
+		Default:  "on",
+		Editions: []string{"default", "governed"},
+		Scope:    "project",
+		Applies:  "next admission",
+		Help:     "Controls worker eligibility for this provider. Running workers finish; changes apply at the next admission.",
+	}
+	d.get = func(s marshal.Settings) string {
+		if s.ProviderEnabled(provider) {
+			return "on"
+		}
+		return "off"
+	}
+	d.set = func(s *marshal.Settings, raw string) error {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case "on":
+			return s.SetProviderEnabled(provider, true)
+		case "off":
+			return s.SetProviderEnabled(provider, false)
+		default:
+			return fmt.Errorf("%s needs on|off", key)
+		}
+	}
+	return d
+}
+
+func workerStallField() Descriptor {
+	d := Descriptor{
+		Key:      "worker-stall-minutes",
+		Label:    "worker-stall-minutes",
+		Kind:     "integer",
+		Units:    "minutes",
+		Editions: []string{"default", "governed"},
+		Scope:    "project",
+		Applies:  "next run",
+		Help:     "Approved and running settings keep their snapshot.",
+	}
+	d.get = func(s marshal.Settings) string {
+		if s.WorkerStallOff {
+			return "0"
+		}
+		if s.WorkerStallMinutes == 0 {
+			return ""
+		}
+		return strconv.Itoa(s.WorkerStallMinutes)
+	}
+	d.set = func(s *marshal.Settings, raw string) error {
+		trimmed := strings.ToLower(strings.TrimSpace(raw))
+		if trimmed == "" || trimmed == "default" {
+			s.WorkerStallMinutes = 0
+			s.WorkerStallOff = false
+			return nil
+		}
+		if trimmed == "off" {
+			s.WorkerStallMinutes = 0
+			s.WorkerStallOff = true
+			return nil
+		}
+		n, err := strconv.Atoi(trimmed)
+		if err != nil || n < 0 {
+			return fmt.Errorf("worker-stall-minutes needs a non-negative number (minutes) or off")
+		}
+		s.WorkerStallMinutes = n
+		s.WorkerStallOff = n == 0
+		return nil
+	}
+	d.Default = d.get(marshal.DefaultSettings())
+	return d
+}
+
 func Catalogue() []Descriptor {
 	rows := []Descriptor{
 		field("execution-rights", "enum", "", []string{"read-only", "small-tasks"}, func(s *marshal.Settings) *marshal.ExecutionRights { return &s.ExecutionRights }),
@@ -53,7 +129,11 @@ func Catalogue() []Descriptor {
 		field("control", "enum", "", []string{"free", "strict"}, func(s *marshal.Settings) *marshal.Control { return &s.Control }),
 		field("rework-limit", "integer", "attempts", nil, func(s *marshal.Settings) *int { return &s.ReworkLimit }),
 		field("ultra-concurrency", "integer", "workers", nil, func(s *marshal.Settings) *int { return &s.UltraConcurrency }),
-		field("worker-stall-minutes", "integer", "minutes", nil, func(s *marshal.Settings) *int { return &s.WorkerStallMinutes }),
+		workerStallField(),
+		providerEnabledField("codex"),
+		providerEnabledField("claude"),
+		providerEnabledField("agy"),
+		providerEnabledField("opencode"),
 		field("task-tokens", "integer", "tokens", nil, func(s *marshal.Settings) *int64 { return &s.Budget.Tokens.Task }),
 		field("plan-tokens", "integer", "tokens", nil, func(s *marshal.Settings) *int64 { return &s.Budget.Tokens.Plan }),
 		field("task-money", "integer", "minor currency units", nil, func(s *marshal.Settings) *int64 { return &s.Budget.Money.Task }),
@@ -86,9 +166,24 @@ func Canonical(key string) string {
 			}
 			return p + "-limit"
 		}
+		if key == p+"-enabled" {
+			if p == "antigravity" {
+				p = "agy"
+			}
+			return p + "-enabled"
+		}
 	}
 	if key == "global-limit" || key == "global-concurrency" {
 		return "global-cap"
+	}
+	if key == "worker-stall" {
+		return "worker-stall-minutes"
+	}
+	if key == "verification-timeout" {
+		return "verification-timeout-seconds"
+	}
+	if key == "infra-cooldown" {
+		return "infra-cooldown-seconds"
 	}
 	return key
 }

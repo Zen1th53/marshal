@@ -482,7 +482,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		// Only a worker that used up its returns is moved on here; a task
 		// the operator already moved (its new worker has none) keeps it.
 		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 && t.ReturnsByAgent[t.Worker] > 0 && !isProviderFailover(t) {
-			next := s.otherWorker(t.Worker, t.Mode)
+			next := s.otherWorkerFor(ctx, run.Settings, t.Worker, t.Mode)
 			if next == "" {
 				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
 				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeNoReassignWorker, reason))
@@ -502,7 +502,8 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				continue
 			}
 		}
-		if s.InstalledVersion != nil {
+		admissionPolicy := s.projectSettingsSnapshot(ctx, run.Settings)
+		if s.InstalledVersion != nil && admissionPolicy.ProviderEnabled(t.Worker) {
 			if (t.Mode == marshal.Governed || t.Worker == "agy") && s.ProbeWorker != nil && !s.workerTaskGovernance(ctx, t).Governed() {
 				if err := s.ProbeWorker(ctx, t.Worker); err != nil {
 					return launched, fmt.Errorf("governed worker verification failed: %w", err)
@@ -705,19 +706,41 @@ func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {
 	return true
 }
 
+// projectSettingsSnapshot reads the saved project settings snapshot for
+// admission-time provider eligibility and failover policy, falling back to
+// the run's snapshot when no project settings record has been written yet.
+func (s *MarshalService) projectSettingsSnapshot(ctx context.Context, fallback marshal.Settings) marshal.Settings {
+	if s == nil || s.Store == nil || s.ProjectID == "" {
+		return fallback
+	}
+	rec, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
+	if err != nil || rec.Revision == 0 {
+		return fallback
+	}
+	return rec.Value
+}
+
 // otherWorker picks a configured worker other than current, in a stable order.
 func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) string {
+	return s.otherWorkerFor(context.Background(), marshal.DefaultSettings(), current, mode)
+}
+
+// otherWorkerFor picks an eligible configured worker other than current using
+// the project settings snapshot for provider enablement and failover order.
+func (s *MarshalService) otherWorkerFor(ctx context.Context, fallback marshal.Settings, current string, mode marshal.WorkerMode) string {
 	drivers := s.Drivers
 	if mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
+	policy := s.projectSettingsSnapshot(ctx, fallback)
 	names := make([]string, 0, len(drivers))
 	for name, d := range drivers {
-		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode {
+		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode && policy.ProviderEnabled(name) {
 			names = append(names, name)
 		}
 	}
 	sort.Strings(names)
+	names = orderReassignCandidates(policy, names)
 	if len(names) == 0 {
 		return ""
 	}
@@ -726,7 +749,7 @@ func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) st
 	// leaves the reassigned task stalled.
 	if s.Store != nil {
 		for _, name := range names {
-			if s.workerGovernance(context.Background(), name).Governed() {
+			if s.workerGovernance(ctx, name).Governed() {
 				return name
 			}
 		}

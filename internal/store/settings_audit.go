@@ -93,9 +93,9 @@ func (s *Store) commitMarshalSettingsTx(ctx context.Context, tx *sql.Tx, project
 			continue
 		}
 		id := fmt.Sprintf("settings:%x:%d:%s", sha256.Sum256([]byte(projectID)), next, d.Key)
-		change := SettingChange{ID: id, Revision: next, Key: d.Key, Old: before, New: after, Actor: actor, At: time.Now().UTC()}
+		change := SettingChange{ID: id, Revision: next, Key: d.Key, Old: before, New: after, Actor: actor, At: time.Now().UTC(), Scope: d.Scope, Applies: d.Applies}
 		changes = append(changes, change)
-		data := map[string]any{"id": change.ID, "revision": next, "key": d.Key, "old": before, "new": after, "actor": actor, "at": change.At}
+		data := map[string]any{"id": change.ID, "revision": next, "key": d.Key, "old": before, "new": after, "actor": actor, "at": change.At, "scope": d.Scope, "applies": d.Applies}
 		err = s.appendEventTx(ctx, tx, model.Event{ID: id, Type: "marshal.settings.changed", ProjectID: projectID, AggregateRevision: next, Timestamp: change.At, Data: data})
 		if err != nil {
 			return 0, nil, err
