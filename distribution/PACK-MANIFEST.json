@@ -2746,8 +2746,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "00e3918087d6c1be8f9e4dc6a2d669264addd9a24b85568d0d9f83f1aa053b1b",
-      "bytes": 92043
+      "sha256": "c9f81c5c83f4feb07b544462e11b69abc404ee59aeb9569c9df49b260b635765",
+      "bytes": 92339
     },
     {
       "path": "internal/app/marshal_live_dispatch.go",
@@ -2906,8 +2906,8 @@
     },
     {
       "path": "internal/app/marshal_process05.go",
-      "sha256": "18c157b67b0407ed31a6f8f3431424e85b8b5bc5249bd068148fc8bf0eabf91a",
-      "bytes": 15060
+      "sha256": "b5c72216a76eaad114306f193ebf0f1f5d0a24a140500589070c79140ef08b07",
+      "bytes": 16056
     },
     {
       "path": "internal/app/marshal_process05_failover_default.go",
@@ -3051,8 +3051,8 @@
     },
     {
       "path": "internal/app/marshal_service.go",
-      "sha256": "1c57ccd637bb0b16b65686154fe222c60aecc1775fe9d74083035a35aaaef5d2",
-      "bytes": 25633
+      "sha256": "9050d64e02b1ce686ce6cae77fcb97f88259801a23fcd38a86596c8ddba4e0dd",
+      "bytes": 25843
     },
     {
       "path": "internal/app/marshal_service_test.go",
@@ -3086,8 +3086,8 @@
     },
     {
       "path": "internal/app/marshal_task_lane_extreme.go",
-      "sha256": "417de85853ca1d573f03cb60a1614cdf441c4ab49345a352e8e5c610b0dd3154",
-      "bytes": 7334
+      "sha256": "f8e9cd8d0aaf85ef53e1bde41d8693906281538b146346e79c12cbf75b43a57d",
+      "bytes": 8096
     },
     {
       "path": "internal/app/marshal_turn_error_test.go",
@@ -4111,8 +4111,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "be1d0a6b0bd76917e982cc1c40e45f482f53eb412bfb35c8af0b92535b3ecb14",
-      "bytes": 93380
+      "sha256": "0c2843760c6d68befe7ee50f94ba1e5e10bcbdf4b3ac07334488a20072dde930",
+      "bytes": 93435
     },
     {
       "path": "internal/app/runtime_base_test.go",
@@ -6491,8 +6491,8 @@
     },
     {
       "path": "internal/execution/engine.go",
-      "sha256": "bd9364d2261174f630d5deacc9e0587bd58d8e985a271cc5b27d023d98d595e4",
-      "bytes": 52161
+      "sha256": "14c462c6b372237b109d3284eb66ae97bda72ef7a61f49e94f566be18b0cc25c",
+      "bytes": 52684
     },
     {
       "path": "internal/execution/engine_test.go",
@@ -17221,7 +17221,7 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "f09216e22a570058a97e4bcb4480c42854be2eae7ffebc64b14d4031e3a37502",
+      "sha256": "30b0b1292cc6170cdc377dc7300cc0ee9a33ebff52ef0496edf85ab884b6a4de",
       "bytes": 459067
     },
     {
