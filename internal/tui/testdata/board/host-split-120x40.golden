@@ -31,8 +31,8 @@
 [38;5;114m●[0m  NVMe > 75 °C [38;5;114mOK[0m                                           [38;5;243mlog for the owner[0m                                     51 °C
                                                                                                                         
 [1m[38;5;15mHOST LOG[0m[0m [38;5;243mwhat Marshal noticed and did[0m                                                                                   
-[38;5;243m  19s ago[0m [38;5;179mthermal[0m [38;5;243m· RELEASE · package 30 s avg 84.7 °C < 85 → asked owner: restore lane cap 6 → default (inbox)[0m         
-[38;5;243m  44s ago[0m [38;5;179mthermal[0m [38;5;243m· GUARD · package 30 s avg 90.3 °C > 90 → asked owner: lane cap 12 → 6 (inbox)[0m                        
+[38;5;243m  19s ago[0m [38;5;179mthermal[0m [38;5;243m· RELEASE · package 30 s avg 84.7 °C < 85 → temporary lane cap 6 cleared[0m                              
+[38;5;243m  44s ago[0m [38;5;179mthermal[0m [38;5;243m· GUARD · package 30 s avg 90.3 °C > 90 → asked owner: temporary lane cap 12 → 6 (inbox)[0m              
 [38;5;243m   3m ago[0m [38;5;111minfo[0m [38;5;243m· watching every 1 s · GPU every 5 s · policy below[0m                                                      
                                                                                                                         
                                                                                                                         

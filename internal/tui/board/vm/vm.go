@@ -84,7 +84,7 @@ type System struct {
 	TempC                   int
 	LowDisk                 bool
 	ThermalGuard            bool   // the thermal rule is active
-	ThermalCap              int    // lane cap the guard asked for while active; 0 none
+	ThermalCap              int    // temporary lane cap the owner approved for the guard; 0 none
 	Notice                  string // the host watcher's notice: "host: thermal guard · …"
 	UpdateAvailable         string // tag of a newer release; "" none or not checked
 	MCPFailed               bool   // MCP failed in this session (the reason stays in the terminal, F6)

@@ -21,10 +21,12 @@ func configureWorkerStall(ctx context.Context, command *adapter.Command) {
 	if !ok {
 		return
 	}
-	minutes := settings.WorkerStallMinutes
-	if minutes == 0 {
-		minutes = 15
-	}
-	command.StallWindow = time.Duration(minutes) * time.Minute
 	command.StallWorktree = command.Dir
+	if settings.WorkerStallDisabled() {
+		// Remove only the stall termination trigger; output, heartbeat and
+		// liveness observation hooks on command stay intact.
+		command.StallWindow = 0
+		return
+	}
+	command.StallWindow = time.Duration(settings.EffectiveWorkerStallMinutes()) * time.Minute
 }

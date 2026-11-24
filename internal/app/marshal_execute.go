@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -259,6 +260,9 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 				round--
 				continue
 			}
+			if adm, ok := s.admissionHold(runID); ok {
+				return run, &AdmissionHoldError{RunID: runID, Admission: adm}
+			}
 			return run, fmt.Errorf("marshal run %s cannot progress: no task is ready, handed in or accepted", runID)
 		}
 		// The launched tasks are dispatched now: show them working while
@@ -454,7 +458,21 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 	}
 	release()
 	ctx = context.WithValue(ctx, admissionGateKey{}, gate)
-	for _, t := range candidates {
+	// A launch held by a provider's recovery pace goes to the end of the
+	// round with its retry time; on its next turn the round waits for that
+	// time, then rechecks everything below before it launches. The round
+	// keeps one wait at a time: the earliest held launch comes first.
+	waitUntil := map[string]time.Time{}
+	var held []DispatchAdmission
+	defer func() { s.noteAdmissionHold(runID, held) }()
+	for idx := 0; idx < len(candidates); idx++ {
+		t := candidates[idx]
+		admitAt := waitUntil[t.PlanTaskID]
+		if !admitAt.IsZero() {
+			if err := s.waitAdmission(ctx, admitAt); err != nil {
+				return launched, err
+			}
+		}
 		if err := s.runCommandSafePoint(ctx, runID); err != nil {
 			return launched, err
 		}
@@ -498,7 +516,7 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		// Only a worker that used up its returns is moved on here; a task
 		// the operator already moved (its new worker has none) keeps it.
 		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 && t.ReturnsByAgent[t.Worker] > 0 && !isProviderFailover(t) {
-			next := s.otherWorker(t.Worker, t.Mode)
+			next := s.otherWorkerFor(ctx, run.Settings, t.Worker, t.Mode)
 			if next == "" {
 				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
 				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeNoReassignWorker, reason))
@@ -518,7 +536,8 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				continue
 			}
 		}
-		if s.InstalledVersion != nil {
+		admissionPolicy := s.projectSettingsSnapshot(ctx, run.Settings)
+		if s.InstalledVersion != nil && admissionPolicy.ProviderEnabled(t.Worker) {
 			if (t.Mode == marshal.Governed || t.Worker == "agy") && s.ProbeWorker != nil && !s.workerTaskGovernance(ctx, t).Governed() {
 				if err := s.ProbeWorker(ctx, t.Worker); err != nil {
 					return launched, fmt.Errorf("governed worker verification failed: %w", err)
@@ -528,12 +547,31 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, marshal.CodeWorkerNotGoverned, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
 		}
+		now := s.clock()
+		if now.Before(admitAt) {
+			now = admitAt
+		}
+		adm, families, rampCap := s.recoveryAdmission(ctx, gate, run, t, launched, now)
+		if !adm.Allowed {
+			if adm.RetryAt != nil && adm.RetryAt.After(admitAt) {
+				if admitAt.IsZero() && s.RecordActivity != nil {
+					s.RecordActivity(firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID) + " is waiting: " + adm.Reason + ".")
+				}
+				waitUntil[t.PlanTaskID] = *adm.RetryAt
+				candidates = append(candidates, t)
+				continue
+			}
+			held = append(held, adm)
+			continue
+		}
+		undo := s.takeRecoveryStarts(families, now, rampCap)
 		// The hold may have landed since the check above: claim the
 		// launch under the hold's own lock so the two cannot cross.
 		end := func() {}
 		if s.ClaimDispatch != nil {
 			claimEnd, ok := s.ClaimDispatch(runID, t.PlanTaskID)
 			if !ok {
+				undo()
 				continue
 			}
 			if claimEnd != nil {
@@ -721,19 +759,41 @@ func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {
 	return true
 }
 
+// projectSettingsSnapshot reads the saved project settings snapshot for
+// admission-time provider eligibility and failover policy, falling back to
+// the run's snapshot when no project settings record has been written yet.
+func (s *MarshalService) projectSettingsSnapshot(ctx context.Context, fallback marshal.Settings) marshal.Settings {
+	if s == nil || s.Store == nil || s.ProjectID == "" {
+		return fallback
+	}
+	rec, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
+	if err != nil || rec.Revision == 0 {
+		return fallback
+	}
+	return rec.Value
+}
+
 // otherWorker picks a configured worker other than current, in a stable order.
 func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) string {
+	return s.otherWorkerFor(context.Background(), marshal.DefaultSettings(), current, mode)
+}
+
+// otherWorkerFor picks an eligible configured worker other than current using
+// the project settings snapshot for provider enablement and failover order.
+func (s *MarshalService) otherWorkerFor(ctx context.Context, fallback marshal.Settings, current string, mode marshal.WorkerMode) string {
 	drivers := s.Drivers
 	if mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
+	policy := s.projectSettingsSnapshot(ctx, fallback)
 	names := make([]string, 0, len(drivers))
 	for name, d := range drivers {
-		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode {
+		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode && policy.ProviderEnabled(name) {
 			names = append(names, name)
 		}
 	}
 	sort.Strings(names)
+	names = orderReassignCandidates(policy, names)
 	if len(names) == 0 {
 		return ""
 	}
@@ -742,7 +802,7 @@ func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) st
 	// leaves the reassigned task stalled.
 	if s.Store != nil {
 		for _, name := range names {
-			if s.workerGovernance(context.Background(), name).Governed() {
+			if s.workerGovernance(ctx, name).Governed() {
 				return name
 			}
 		}

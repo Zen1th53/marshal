@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/plan"
@@ -69,6 +70,16 @@ const (
 	AdmissionScopeOverlap       DispatchAdmissionCode = "scope_overlap"
 	AdmissionDependencyUnmerged DispatchAdmissionCode = "dependency_unmerged"
 	AdmissionStaleBase          DispatchAdmissionCode = "stale_base"
+	// AdmissionRecoveryRamp holds a launch while a provider that just came
+	// back from its limit admits new work one start at a time.
+	AdmissionRecoveryRamp DispatchAdmissionCode = "recovery_ramp"
+	// AdmissionQuotaUnknown holds a launch because the provider's limit
+	// cannot be read after its reset: an unknown limit never opens it.
+	AdmissionQuotaUnknown DispatchAdmissionCode = "quota_unknown"
+	// AdmissionCapacity holds a launch because the lanes in use (reserved,
+	// running, or kept by an approval with a live worker) fill the cap new
+	// admissions use, including a temporary host lane cap.
+	AdmissionCapacity DispatchAdmissionCode = "capacity"
 )
 
 // DispatchAdmission describes whether a candidate task may launch now or which
@@ -80,6 +91,12 @@ type DispatchAdmission struct {
 	Reason          string                `json:"reason,omitempty"`
 	TaskID          string                `json:"task_id,omitempty"`
 	BlockingTaskIDs []string              `json:"blocking_task_ids,omitempty"`
+	// Provider is the provider whose limit or recovery holds the task.
+	Provider string `json:"provider,omitempty"`
+	// RetryAt is the earliest time the held task may be admitted.
+	RetryAt *time.Time `json:"retry_at,omitempty"`
+	// EffectiveCap is the lane cap the decision used.
+	EffectiveCap int `json:"effective_cap,omitempty"`
 }
 
 // DispatchAdmissionError wraps a refused dispatch admission so callers can

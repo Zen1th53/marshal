@@ -1179,7 +1179,7 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 		}
 		request.Command = resolved
 	}
-	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, verificationTimeout, 8<<20)
+	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, r.effectiveVerificationTimeout(ctx), 8<<20)
 	if err != nil {
 		return VerifyResult{}, err
 	}

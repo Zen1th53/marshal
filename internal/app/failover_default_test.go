@@ -126,3 +126,57 @@ func TestDefaultProviderLimitDoesNotPreemptDeadline(t *testing.T) {
 		t.Fatal("deadline return accounting lost")
 	}
 }
+
+// launchCounter counts launches of a worker that must never start.
+type launchCounter struct {
+	rateLimitedDriver
+	launches int
+}
+
+func (d *launchCounter) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
+	d.launches++
+	return d.rateLimitedDriver.Launch(ctx, req)
+}
+
+// This edition keeps the quota pause: a provider limit stops the run for the
+// person and never moves the task to another worker, even when one is free.
+func TestGovernedQuotaPauseDoesNotFailOver(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	startIntegrityRun(t, s, marshal.Budget{})
+	s.Drivers["worker"] = &rateLimitedDriver{errMsg: "usage limit reached: resets at 10:00", exitCode: 1}
+	spare := &launchCounter{}
+	s.Drivers["spare"] = spare
+	d, err := s.Dispatch(t.Context(), "run", "a", "do work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CollectHandIn(t.Context(), "run", d); err == nil {
+		t.Fatal("provider limit did not stop the task")
+	}
+	run, _, err := s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := run.Tasks[0]
+	if task.Worker != "worker" || task.State != marshal.Escalated || providerFailoverPending(task) {
+		t.Fatalf("task = %s on %s, want escalated on its own worker", task.State, task.Worker)
+	}
+	if run.Pause == nil || run.Pause.Code != marshal.CodeProviderLimit {
+		t.Fatalf("pause = %+v, want the provider limit pause", run.Pause)
+	}
+	if spare.launches != 0 {
+		t.Fatalf("spare worker launched %d times", spare.launches)
+	}
+	decisions, err := s.Store.MarshalDecisions(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range decisions {
+		if e.Type == events.EventTypeMarshalTaskReassigned {
+			t.Fatal("quota pause reassigned the task")
+		}
+	}
+	if adm, _, _ := s.recoveryAdmission(t.Context(), s.Gate, run, task, nil, time.Now()); !adm.Allowed {
+		t.Fatalf("admission = %+v, want no recovery pace in this edition", adm)
+	}
+}

@@ -1355,6 +1355,10 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	if marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
 		return errors.New("cannot reassign to the same harness")
 	}
+	policy := s.projectSettingsSnapshot(ctx, run.Settings)
+	if !policy.ProviderEnabled(worker) {
+		return fmt.Errorf("provider %s is disabled by project settings", worker)
+	}
 	previous := t.Worker
 	providerSwitch, err := s.governedProviderSwitch(ctx, run, *t, worker, operatorReason != "")
 	if err != nil {
@@ -1430,7 +1434,7 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	if isPermanentEscalation(*t) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
 	}
-	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
+	hasOtherWorker := s.otherWorkerFor(ctx, run.Settings, t.Worker, t.Mode) != ""
 	// Zero means no bound (Extreme); Community bounds fresh-session retries.
 	maxFresh := buildMaxFreshSessionRetries()
 	if !hasOtherWorker {
