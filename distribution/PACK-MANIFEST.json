@@ -3266,8 +3266,8 @@
     },
     {
       "path": "internal/app/marshal_transition_inventory_test.go",
-      "sha256": "c09cc2bef92125da676b8618b38abdfce76c523c2250fb9ea891aee1143e4908",
-      "bytes": 7955
+      "sha256": "75f5687c0b4c9ae2ff993e0940c837ba7fc40a64c928b7c14933e32be49a3fdf",
+      "bytes": 8633
     },
     {
       "path": "internal/app/marshal_turn_error_test.go",

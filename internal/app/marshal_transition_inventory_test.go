@@ -35,8 +35,10 @@ var frozenTaskStateWriters = map[string]int{
 	"failover_extreme.go handleWorkerLimit -> Escalated":                        2,
 	"failover_extreme.go handleWorkerLimit -> Reassigned":                       1,
 	"handin_identity.go pauseHandInNotRecorded -> Escalated":                    1,
+	"marshal_approval_wait_default.go retryExpiredApprovalWait -> Queued":       1,
 	"marshal_approval_wait_extreme.go pausePrivateProcess05Approval -> Queued":  2,
 	"marshal_approval_wait_extreme.go reworkExpiredProcess05Approval -> Queued": 1,
+	"marshal_approval_wait_extreme.go retryExpiredApprovalWait -> Queued":       1,
 	"marshal_governed_reassign.go escalateGovernedHarnessMismatch -> Escalated": 1,
 	"marshal_infra_retry_extreme.go returnInfraFailure -> Escalated":            3,
 	"marshal_infra_retry_extreme.go returnInfraFailure -> Returned":             1,
@@ -58,6 +60,7 @@ var frozenTaskStateWriters = map[string]int{
 	"marshal_lifecycle.go escalateWithDetail -> Escalated":                      1,
 	"marshal_lifecycle.go finishMarshalReturn -> Escalated":                     1,
 	"marshal_lifecycle.go parkPausedTask -> Queued":                             1,
+	"marshal_lifecycle.go resume -> Queued":                                     1,
 	"marshal_lifecycle.go reassign -> Reassigned":                               1,
 	"marshal_operations.go recoverOperation -> Dispatched":                      1,
 	"marshal_operations.go recoverOperation -> Escalated":                       1,
@@ -71,10 +74,13 @@ var frozenTaskStateWriters = map[string]int{
 // table, mostly on restart, pause or plan reset. They are frozen so that
 // none is added without review.
 var knownOffTablePaths = map[string]string{
+	"marshal_approval_wait_default.go retryExpiredApprovalWait -> Queued":       "an expired approval wait requeues the task for a fresh attempt",
 	"marshal_approval_wait_extreme.go pausePrivateProcess05Approval -> Queued":  "an approval wait parks a dispatched task back in the queue",
 	"marshal_approval_wait_extreme.go reworkExpiredProcess05Approval -> Queued": "an expired approval requeues the task with a fresh lane",
+	"marshal_approval_wait_extreme.go retryExpiredApprovalWait -> Queued":       "an expired approval wait requeues the task for a fresh attempt",
 	"marshal_lifecycle.go ApplyAmendDraftBound -> Queued":                       "a plan amendment resets tasks to the queue",
 	"marshal_lifecycle.go ApplyAmendDraftBound -> old.State":                    "a plan amendment keeps an unchanged task's prior state",
+	"marshal_lifecycle.go resume -> Queued":                                     "resume returns a dispatched task held on an approval to the queue",
 	"marshal_lifecycle.go parkPausedTask -> Queued":                             "an interrupted dispatch held by a pause returns to the queue",
 	"marshal_operations.go recoverOperation -> Dispatched":                      "restart keeps an interrupted launch dispatched, never queued",
 	"marshal_operations.go recoverOperation -> Escalated":                       "restart escalates an unrecoverable dispatched launch",
