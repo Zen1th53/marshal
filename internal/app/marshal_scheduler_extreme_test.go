@@ -39,12 +39,25 @@ func (m *rollingMemStore) Save(_ context.Context, next rollingState) error {
 	return nil
 }
 
+func (m *rollingMemStore) WithLease(ctx context.Context, generation int64, effect func() error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if generation != m.st.Generation {
+		return ErrRollingFenced
+	}
+	return effect()
+}
+
 // rollingFakeLauncher counts launches per key and refuses a second launch
 // of a key unless it was proved absent, like the launch supervisor.
 type rollingFakeLauncher struct {
-	mu       sync.Mutex
-	launches map[string]int
-	disp     map[string]driver.LaunchDisposition
+	mu           sync.Mutex
+	launches     map[string]int
+	disp         map[string]driver.LaunchDisposition
+	beforeLaunch func()
 }
 
 func newRollingFakeLauncher() *rollingFakeLauncher {
@@ -56,6 +69,9 @@ func (l *rollingFakeLauncher) Launch(_ context.Context, a marshal.RollingAttempt
 	defer l.mu.Unlock()
 	if d, ok := l.disp[a.LaunchKey]; ok && d != driver.LaunchAbsent {
 		return driver.LaunchReceipt{}, &driver.LaunchHeldError{Key: a.LaunchKey, Disposition: d}
+	}
+	if l.beforeLaunch != nil {
+		l.beforeLaunch()
 	}
 	l.launches[a.LaunchKey]++
 	l.disp[a.LaunchKey] = driver.LaunchRunning
@@ -555,5 +571,98 @@ func TestRollingDispatchGateRequiresProof(t *testing.T) {
 	}
 	if _, err := acquireRollingScheduler(context.Background(), rollingPlan{}, rollingDeps{Store: &rollingMemStore{}}); err == nil {
 		t.Fatal("scheduler acquired without its launch, result, admission and proof interfaces")
+	}
+}
+
+func TestRollingLaunchRejectsReplacedLease(t *testing.T) {
+	ctx := context.Background()
+	f := newRollingFixture(t, 2)
+	plan := rollingTestPlan("original", rollingCandidate{Task: "A"})
+	old := f.acquire(plan)
+	next := old.clone()
+	key := rollingLaunchKey(plan.Run, "A", 1, plan.Digest)
+	next.Attempts = append(next.Attempts, marshal.RollingAttempt{
+		Run: plan.Run, Task: "A", Attempt: 1, PlanDigest: plan.Digest,
+		LeaseGeneration: next.Generation, LaunchKey: key, Reservation: true, Phase: marshal.RollingReserved,
+	})
+	if err := old.commit(ctx, next); err != nil {
+		t.Fatal(err)
+	}
+	replacement := f.acquire(rollingTestPlan("amended", rollingCandidate{Task: "A"}))
+	if a := rollingAttemptFor(t, replacement, "A"); a.Phase != marshal.RollingQuarantined || a.Reservation {
+		t.Fatalf("replacement retained reservation: %+v", a)
+	}
+	if old.fenced {
+		t.Fatal("old writer already fenced locally")
+	}
+	if err := old.launch(ctx, key); !errors.Is(err, ErrRollingFenced) {
+		t.Fatalf("launch error = %v", err)
+	}
+	if n := f.launcher.count(key); n != 0 {
+		t.Fatalf("stale writer launched %d workers", n)
+	}
+	if !old.fenced {
+		t.Fatal("rejected writer was not fenced locally")
+	}
+}
+
+func TestRollingDependenciesRequireCurrentIdentity(t *testing.T) {
+	for _, change := range []string{"plan", "run"} {
+		t.Run(change, func(t *testing.T) {
+			ctx := context.Background()
+			f := newRollingFixture(t, 2)
+			plan := rollingTestPlan("original", rollingCandidate{Task: "A"})
+			old := f.acquire(plan)
+			f.tick(old)
+			f.exit(old, "A", "old-result")
+			f.tick(old)
+			if err := old.CompleteReview(ctx, rollingAttemptFor(t, old, "A").LaunchKey, marshal.Merged); err != nil {
+				t.Fatal(err)
+			}
+			amended := rollingTestPlan(plan.Digest, rollingCandidate{Task: "A"}, rollingCandidate{Task: "B", Deps: []string{"A"}})
+			if change == "plan" {
+				amended.Digest = "amended"
+			} else {
+				amended.Run = "another-run"
+			}
+			current := f.acquire(amended)
+			f.tick(current)
+			if hasRollingAttempt(current, "B") {
+				t.Fatal("dependent launched using an older merged result")
+			}
+			key := rollingLaunchKey(amended.Run, "A", 1, amended.Digest)
+			f.launcher.set(key, driver.LaunchExited)
+			f.results.stage(rollingResult{LaunchKey: key, Task: "A", Attempt: 1, PlanDigest: amended.Digest,
+				Exit: marshal.StagedExit{Proof: marshal.ExitProofExited, ExitDigest: "new-exit", EvidenceDigest: "new-evidence", HandInRef: "new-hand-in"}})
+			f.tick(current)
+			if hasRollingAttempt(current, "B") {
+				t.Fatal("dependent launched before current review merged")
+			}
+			if err := current.CompleteReview(ctx, key, marshal.Merged); err != nil {
+				t.Fatal(err)
+			}
+			f.tick(current)
+			b := rollingAttemptFor(t, current, "B")
+			if b.Phase != marshal.RollingRunning || b.DependencyHeads["A"] != "new-hand-in" {
+				t.Fatalf("dependent = %+v", b)
+			}
+		})
+	}
+}
+
+func TestRollingLaunchHoldsLeaseThroughEffect(t *testing.T) {
+	f := newRollingFixture(t, 1)
+	s := f.acquire(rollingTestPlan("current", rollingCandidate{Task: "A"}))
+	checked := false
+	f.launcher.beforeLaunch = func() {
+		checked = true
+		if f.store.mu.TryLock() {
+			f.store.mu.Unlock()
+			t.Fatal("ownership can change at the launch boundary")
+		}
+	}
+	f.tick(s)
+	if !checked {
+		t.Fatal("launch boundary was not reached")
 	}
 }

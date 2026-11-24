@@ -338,8 +338,15 @@ func pauseReturnedProcess05Task(run *marshal.Run, task marshal.Task) {
 			Resolutions: []string{reworkLimitResolution(task.PlanTaskID)}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
 		return
 	}
+	// The bound lane cannot rerun under its spent authority. The retained
+	// result stays pinned and is named beside the approved and attempt bases,
+	// so a scoped new plan can replay it before fresh checks and review.
+	detail := ""
+	if task.ResultCommit != "" {
+		detail = "retained result " + task.ResultCommit + " on attempt base " + task.BaseCommit + " (approved base " + run.BaseCommit + ")"
+	}
 	pauseMarshal(run, marshal.Pause{Reason: "returned governed task " + task.PlanTaskID + " requires a new approved Process 04 plan",
-		Resolutions: []string{"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID})
+		Resolutions: []string{"review the retained failed checks and return reasons; create and approve a new plan, then use /marshal use-plan for fresh task authorization"}, Code: marshal.CodeGovernedRework, Action: marshal.PauseUsePlan, TaskID: task.PlanTaskID, Detail: detail})
 }
 
 // reworkLimitResolution is the working way on from a rework-limit stop: the

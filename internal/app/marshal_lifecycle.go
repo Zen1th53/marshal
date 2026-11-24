@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -102,6 +103,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	// dependencies, and private integration head before any failover mutation,
 	// worktree preparation, or process launch.
 	if _, err := s.admitLaunchBase(ctx, runID, run, *t, nil); err != nil {
+		return MarshalDispatch{}, err
+	}
+	if err := s.admitPriorResult(ctx, runID, run, *t); err != nil {
 		return MarshalDispatch{}, err
 	}
 	rev, err = s.admitProviderDispatch(ctx, runID, &run, rev, i, brief)
@@ -217,6 +221,15 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	}
 	if len(launchPin.MergedDependencyHeads) > 0 {
 		eventData["merged_dependency_heads"] = launchPin.MergedDependencyHeads
+	}
+	// The approved base and the attempt base stay separate; a returned
+	// attempt names the verified prior result it carries forward.
+	eventData["attempt"] = 1 + t.EvidenceAttemptBase + taskReturns(*t)
+	eventData["attempt_base"] = t.BaseCommit
+	eventData["plan_digest"] = run.ApprovalScopeDigest
+	if !fresh && t.State == marshal.Returned && t.ResultCommit != "" && t.FailedAttemptCommit == "" {
+		eventData["prior_result"] = t.ResultCommit
+		eventData["prior_result_ref"] = priorResultRef(runID, t.PlanTaskID, t.ResultCommit)
 	}
 	op := &marshal.LifecycleOperation{
 		Kind:       "launch",
@@ -412,6 +425,71 @@ func restartTaskBranch(ctx context.Context, repository, runID string, t *marshal
 	}
 	t.ResultCommit = ""
 	t.FailedAttemptCommit = ""
+	return nil
+}
+
+// priorResultRef pins a returned attempt's result for the attempt that
+// carries it forward. It is keyed by the commit, so a retry that renumbers
+// attempts never collides with an earlier pin.
+func priorResultRef(runID, taskID, commit string) string {
+	return "refs/" + statepath.RefName + "/" + runID + "/prior/" + taskID + "/" + commit
+}
+
+// pinPriorResult keeps a returned attempt's result reachable until the run
+// is recovered or closed. An existing pin must name the same commit.
+func pinPriorResult(ctx context.Context, repository, runID, taskID, commit string) error {
+	if !marshalCommitPattern.MatchString(commit) {
+		return fmt.Errorf("pin prior result: invalid commit %q", commit)
+	}
+	ref := priorResultRef(runID, taskID, commit)
+	if saved, err := gitMarshal(ctx, repository, "rev-parse", "--verify", ref); err == nil {
+		if saved != commit {
+			return errors.New("pinned prior result identity differs; inspect it before retry")
+		}
+		return nil
+	}
+	if _, err := gitMarshal(ctx, repository, "update-ref", ref, commit, strings.Repeat("0", len(commit))); err != nil {
+		return fmt.Errorf("pin prior result: %w", err)
+	}
+	return nil
+}
+
+// admitPriorResult checks that a returned attempt resuming at its prior
+// result still starts from verified work: the result exists, is pinned, was
+// not quarantined, and descends from the approved base. A failure is a
+// stale_base refusal; nothing is reset and the pinned result stays.
+func (s *MarshalService) admitPriorResult(ctx context.Context, runID string, run marshal.Run, t marshal.Task) error {
+	if t.State != marshal.Returned || t.ResultCommit == "" || t.FailedAttemptCommit != "" || reworkInTaskLane(run, t) {
+		return nil
+	}
+	refuse := func(reason string) error {
+		return newStaleBaseRefusal(marshal.EffectsNone, LaunchBaseRefusalError{
+			TaskID:         t.PlanTaskID,
+			ApprovedRef:    run.TargetRef,
+			ApprovedCommit: run.BaseCommit,
+			Route:          "inspect the pinned prior result, then refresh the task base or replan",
+			Reason:         fmt.Sprintf("stale_base: %s (attempt base %s, prior result %s)", reason, firstNonEmpty(t.BaseCommit, "unknown"), t.ResultCommit),
+			NextCommands:   []string{"/marshal status", "/marshal amend", "/marshal use-plan"},
+		})
+	}
+	if !marshalCommitPattern.MatchString(t.ResultCommit) {
+		return refuse("prior result is not a commit")
+	}
+	if _, err := gitMarshal(ctx, s.Repository, "cat-file", "-e", t.ResultCommit+"^{commit}"); err != nil {
+		return refuse("prior result is missing from the repository")
+	}
+	if err := pinPriorResult(ctx, s.Repository, runID, t.PlanTaskID, t.ResultCommit); err != nil {
+		return refuse(err.Error())
+	}
+	if t.QuarantinedRef != "" {
+		return refuse("prior result was quarantined")
+	}
+	if run.BaseCommit == "" {
+		return refuse("approved base is unknown")
+	}
+	if _, err := gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", run.BaseCommit, t.ResultCommit); err != nil {
+		return refuse("prior result does not descend from the approved base")
+	}
 	return nil
 }
 
@@ -819,6 +897,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
+	marshalReasons := append([]string(nil), proposal.Reasons...)
 	if err := checkArchitectureReview(&proposal, architectureRequired); err != nil {
 		return "", err
 	}
@@ -954,6 +1033,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		eventData[key] = value
 	}
 	if result != marshal.VerdictAccept {
+		if proposal.Independent != nil && (proposal.Verdict == marshal.VerdictAccept) != (proposal.Independent.Verdict == marshal.VerdictAccept) {
+			t.ReviewDisagreement = noteReviewDisagreement(t.ReviewDisagreement, *t, attempt, proposal, marshalReasons, failing)
+		}
 		return s.finishMarshalReturn(ctx, runID, run, rev, i, proposal, eventData)
 	}
 	if _, err = s.Store.SetMarshalReview(ctx, runID, taskID, attempt, proposal); err != nil {
@@ -985,6 +1067,82 @@ func acceptanceRefusal(reason constitution.ReasonCode, independent *marshal.Inde
 	return "acceptance refused: " + string(reason)
 }
 
+// noteReviewDisagreement records a hand-in on which exactly one of the
+// Marshal and the independent reviewer accepted. The key groups materially
+// equivalent conflicts by task, reviewer roles, verdict direction and failing
+// criteria; free-text reasons are kept but never keyed, so rewording a
+// finding does not reset the count.
+func noteReviewDisagreement(prev *marshal.ReviewDisagreement, t marshal.Task, attempt int, review marshal.Review, marshalReasons, failing []string) *marshal.ReviewDisagreement {
+	direction := "marshal-accepts"
+	if review.Verdict != marshal.VerdictAccept {
+		direction = "independent-accepts"
+	}
+	criteria := append([]string(nil), failing...)
+	sort.Strings(criteria)
+	sum := sha256.Sum256([]byte(strings.Join(append([]string{t.PlanTaskID, "marshal", "independent", direction}, criteria...), "\x00")))
+	d := &marshal.ReviewDisagreement{
+		Key:                 hex.EncodeToString(sum[:]),
+		Count:               1,
+		Attempt:             attempt,
+		MarshalReviewer:     review.Reviewer,
+		MarshalVerdict:      review.Verdict,
+		MarshalReasons:      marshalReasons,
+		IndependentReviewer: firstNonEmpty(review.Independent.Provider, review.Independent.Reviewer),
+		IndependentVerdict:  review.Independent.Verdict,
+		IndependentReasons:  append([]string(nil), review.Independent.Reasons...),
+		FailingCriteria:     criteria,
+	}
+	if prev != nil && prev.Key == d.Key {
+		d.Count = prev.Count
+		if prev.Attempt < attempt {
+			d.Count++
+		}
+	}
+	return d
+}
+
+func reviewDisagreementSummary(d marshal.ReviewDisagreement) string {
+	return fmt.Sprintf("the reviewers disagree. Marshal (%s): %s %s. Independent reviewer (%s): %s %s",
+		d.MarshalReviewer, d.MarshalVerdict, strings.Join(d.MarshalReasons, "; "),
+		d.IndependentReviewer, d.IndependentVerdict, strings.Join(d.IndependentReasons, "; "))
+}
+
+func reviewDisagreementData(t marshal.Task, d marshal.ReviewDisagreement) map[string]any {
+	next := "rework " + t.PlanTaskID + " against both reviewers' reasons; to decide yourself, /marshal cancel " + t.PlanTaskID + " or /marshal amend"
+	if d.Count >= 2 {
+		next = reviewDisagreementResolution(t)
+	}
+	return map[string]any{
+		"key":                  d.Key,
+		"count":                d.Count,
+		"attempt":              d.Attempt,
+		"marshal_reviewer":     d.MarshalReviewer,
+		"marshal_verdict":      string(d.MarshalVerdict),
+		"marshal_reasons":      d.MarshalReasons,
+		"independent_reviewer": d.IndependentReviewer,
+		"independent_verdict":  string(d.IndependentVerdict),
+		"independent_reasons":  d.IndependentReasons,
+		"failing_criteria":     d.FailingCriteria,
+		"next_action":          next,
+	}
+}
+
+func reviewDisagreementResolution(t marshal.Task) string {
+	return "Read both verdicts, then decide: give " + t.PlanTaskID + " a targeted attempt (/marshal retry " + t.PlanTaskID + ", then /marshal resume), amend the plan (/marshal amend), or cancel the task (/marshal cancel " + t.PlanTaskID + "). Neither verdict replaces a failing one; the Marshal does not retry it on its own."
+}
+
+// reviewDisagreementPause is the one durable escalation for a repeated
+// reviewer conflict. It carries both verdicts and the owner's next action.
+func reviewDisagreementPause(t marshal.Task, d marshal.ReviewDisagreement) marshal.Pause {
+	return marshal.Pause{
+		Reason:      "reviewers disagreed again on " + t.PlanTaskID + ": " + reviewDisagreementSummary(d),
+		Resolutions: []string{reviewDisagreementResolution(t)},
+		Code:        marshal.CodeReviewDisagreement,
+		Action:      marshal.PauseRetryTask,
+		TaskID:      t.PlanTaskID,
+	}
+}
+
 // finishMarshalReturn records the attempt's reasons and applies the rework
 // policy for validation, review, budget and merge failures. Private governed
 // Process05 bindings pause for a fresh approved plan instead of replaying the
@@ -996,7 +1154,29 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	if len(review.Reasons) == 0 {
 		review.Reasons = []string{"the review did not accept the hand-in"}
 	}
+	if t.ResultCommit != "" {
+		// The returned result stays pinned for the attempt that carries it
+		// forward, and for recovery if that attempt is refused.
+		if err := pinPriorResult(ctx, s.Repository, runID, t.PlanTaskID, t.ResultCommit); err != nil {
+			return "", err
+		}
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
 	result := applyMarshalReturn(&run, t)
+	if d := t.ReviewDisagreement; d != nil && d.Attempt == attempt {
+		data["review_disagreement"] = reviewDisagreementData(*t, *d)
+		if d.Count >= 2 && t.State != marshal.Escalated {
+			// The same conflict again: stop automatic rework. The pause names
+			// the owner's next action; neither verdict is replaced.
+			t.State = marshal.Escalated
+			t.EscalationReason = "the reviewers disagreed again on the same finding"
+			t.EscalationCode = marshal.CodeReviewDisagreement
+			pauseMarshal(&run, reviewDisagreementPause(*t, *d))
+			result = marshal.VerdictEscalate
+		}
+	}
 	pauseReturnedProcess05Task(&run, *t)
 	if review.Verdict == "" {
 		review.Verdict = marshal.VerdictReturn
@@ -1014,9 +1194,6 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	} else if result == marshal.VerdictEscalate {
 		kind = events.EventTypeMarshalEscalated
 	}
-	if data == nil {
-		data = map[string]any{}
-	}
 	data["reason"] = strings.Join(review.Reasons, "; ")
 	data["return_attempt"] = fmt.Sprint(attempt)
 	reasons := append([]string(nil), review.Reasons...)
@@ -1030,7 +1207,11 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	if err := s.save(ctx, runID, run, revision); err != nil {
 		return "", err
 	}
-	s.announceTask(ctx, runID, t.PlanTaskID, attempt, TaskNoticeReviewReturned, fmt.Sprint(revision), "Task "+t.PlanTaskID+" was returned: "+strings.Join(review.Reasons, "; "), "")
+	notice := "Task " + t.PlanTaskID + " was returned: " + strings.Join(review.Reasons, "; ")
+	if d := t.ReviewDisagreement; d != nil && d.Attempt == attempt {
+		notice = "Task " + t.PlanTaskID + " was returned: " + reviewDisagreementSummary(*d)
+	}
+	s.announceTask(ctx, runID, t.PlanTaskID, attempt, TaskNoticeReviewReturned, fmt.Sprint(revision), notice, "")
 	_, err := s.Charge(ctx, runID, t.PlanTaskID, "return", zeroMarshalCharge())
 	return result, err
 }
@@ -2766,6 +2947,11 @@ func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispa
 	run.Tasks[i].State = marshal.Queued
 	if s.HeldTask != nil && s.HeldTask(runID, dispatch.TaskID) {
 		// This session's pause holds the task: Execute waits for the hold.
+		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+	}
+	if s.process05RootRunning != nil && s.process05RootRunning(context.WithoutCancel(ctx), run) {
+		// The person resumed the run before this task's stop was collected:
+		// nothing ran, and the next dispatch continues its lane.
 		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 	}
 	// No pause hold of this session waits for the person's resume (a

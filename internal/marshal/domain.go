@@ -369,6 +369,26 @@ type Task struct {
 	// LaunchKey names the supervised launch of the current attempt. Recovery
 	// reuses it and never mints a new one for an unclear launch.
 	LaunchKey string `json:",omitempty"`
+	// ReviewDisagreement is the latest hand-in on which the Marshal and the
+	// independent reviewer reached different verdicts.
+	ReviewDisagreement *ReviewDisagreement `json:",omitempty"`
+}
+
+// ReviewDisagreement keeps both verdicts of a hand-in the two reviewers
+// disagreed on. Key groups materially equivalent conflicts: the same task,
+// reviewer roles, verdict direction and failing criteria. Count is how many
+// of the task's attempts reached that same conflict.
+type ReviewDisagreement struct {
+	Key                 string
+	Count               int
+	Attempt             int
+	MarshalReviewer     string
+	MarshalVerdict      Verdict
+	MarshalReasons      []string `json:",omitempty"`
+	IndependentReviewer string
+	IndependentVerdict  Verdict
+	IndependentReasons  []string `json:",omitempty"`
+	FailingCriteria     []string `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.
@@ -417,6 +437,9 @@ const (
 	CodeFailedAttemptRecovery = "failed_attempt_recovery"
 	CodeSecurity              = "security"
 	CodeReworkLimit           = "rework_limit"
+	// CodeReviewDisagreement stops automatic rework when the Marshal and the
+	// independent reviewer reach the same conflicting verdicts again.
+	CodeReviewDisagreement    = "review_disagreement"
 	CodeTaskCancelled         = "task_cancelled"
 	CodeVerificationFailed    = "verification_failed"
 	CodeVerificationStopped   = "verification_stopped"

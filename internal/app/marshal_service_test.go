@@ -324,6 +324,9 @@ func TestM09ReturnTwiceReassignThenEscalate(t *testing.T) {
 	}
 	draft := s.Model.(marshalFakeModel).draft
 	s.Model = marshalFakeModel{draft: draft, review: marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "marshal"}}
+	// Both reviewers return it, so the rework limit applies rather than a
+	// reviewer disagreement.
+	setCrossReview(s, marshal.VerdictReturn, "not done")
 	for attempt := 0; attempt < 2; attempt++ {
 		d, err := s.Dispatch(ctx, "run", "a", "write")
 		if err != nil {

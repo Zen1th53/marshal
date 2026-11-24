@@ -303,6 +303,43 @@ func TestStagedHandInReplaysOnceAcrossPauseLeaseLossAndShutdown(t *testing.T) {
 	})
 }
 
+func TestStartupRecoveryReconcilesActiveWorkerSlots(t *testing.T) {
+	for _, state := range []marshal.SlotState{marshal.SlotReserved, marshal.SlotRunning, marshal.SlotHeld} {
+		t.Run(string(state), func(t *testing.T) {
+			f := newSlotFixture(t)
+			_, key := f.dispatch(t)
+			run, rev := f.run(t)
+			if run.Operation != nil || len(run.Commands) != 0 {
+				t.Fatal("fixture has unfinished work beyond its worker slot")
+			}
+			run.Slots[run.SlotIndex(key)].State = state
+			if err := f.s.save(t.Context(), "run", run, rev); err != nil {
+				t.Fatal(err)
+			}
+			f.restart(t)
+			if slot := f.slot(t, key); slot.State != state || slot.Exit != nil || slot.Acked || *f.notified != 0 || f.otherLaunchFits(t) {
+				t.Fatalf("startup released a live worker: %+v notices=%d", slot, *f.notified)
+			}
+			f.host.reboot()
+			f.restart(t)
+			if slot := f.slot(t, key); slot.State != marshal.SlotReleased || !slot.Acked || slot.Exit == nil || slot.Exit.Proof != marshal.ExitProofExited {
+				t.Fatalf("startup did not release the exited worker: %+v", slot)
+			}
+			if *f.notified != 1 || !f.otherLaunchFits(t) || f.handIns(t) != 0 {
+				t.Fatalf("release did not free capacity exactly once: notices=%d", *f.notified)
+			}
+			f.restart(t)
+			if *f.notified != 1 {
+				t.Fatalf("startup repeated the release notification: %d", *f.notified)
+			}
+			if run, _ := f.run(t); run.Tasks[0].State != marshal.Dispatched {
+				t.Fatalf("startup advanced the task: %s", run.Tasks[0].State)
+			}
+			f.expectWorks(t, 1)
+		})
+	}
+}
+
 func TestApprovalAndReviewReleaseOnlyExitedWorkerSlots(t *testing.T) {
 	t.Run("live process awaiting approval keeps its slot", func(t *testing.T) {
 		f := newSlotFixture(t)

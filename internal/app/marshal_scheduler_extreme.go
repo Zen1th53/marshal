@@ -75,6 +75,9 @@ type rollingRejected struct {
 type rollingStore interface {
 	Load(ctx context.Context) (rollingState, error)
 	Save(ctx context.Context, next rollingState) error
+	// WithLease rejects a stale generation and excludes ownership changes until
+	// effect returns. The callback must not call back into this store.
+	WithLease(ctx context.Context, generation int64, effect func() error) error
 }
 
 // rollingCandidate is one plan task the dispatcher may admit.
@@ -405,7 +408,7 @@ func (s *rollingScheduler) dependencyHeads(c rollingCandidate) (map[string]strin
 	for _, dep := range c.Deps {
 		merged := false
 		for _, a := range s.st.Attempts {
-			if a.Task == dep && a.Outcome == marshal.Merged {
+			if a.Run == s.plan.Run && a.PlanDigest == s.plan.Digest && a.Task == dep && a.Outcome == marshal.Merged {
 				merged = true
 				if a.ResultReceipt != nil {
 					heads[dep] = a.ResultReceipt.HandInRef
@@ -481,7 +484,16 @@ func (s *rollingScheduler) launch(ctx context.Context, key string) error {
 		return ErrRollingFenced
 	}
 	i := s.st.index(key)
-	receipt, err := s.deps.Launcher.Launch(ctx, s.st.Attempts[i])
+	var receipt driver.LaunchReceipt
+	err := s.deps.Store.WithLease(ctx, s.st.Generation, func() error {
+		var launchErr error
+		receipt, launchErr = s.deps.Launcher.Launch(ctx, s.st.Attempts[i])
+		return launchErr
+	})
+	if errors.Is(err, ErrRollingFenced) {
+		s.fenced = true
+		return err
+	}
 	next := s.clone()
 	a := &next.Attempts[i]
 	switch {
