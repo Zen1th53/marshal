@@ -129,6 +129,7 @@ const (
 	EventTypeMarshalTaskCancelled           EventType = "marshal.task.cancelled"
 	EventTypeMarshalVerifierRecorded        EventType = "marshal.verifier.recorded"
 	EventTypeMarshalRunClosed               EventType = "marshal.run.closed"
+	EventTypeMarshalCloseFencePassed        EventType = "marshal.close.fence_passed"
 	// Code evidence (Extreme): a worker's evidence receipt recorded with its
 	// task, and the validation of a task's receipts at hand-in or verification.
 	EventTypeMarshalEvidenceReceipt   EventType = "marshal.evidence.receipt"
@@ -171,7 +172,7 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeMarshalTaskDispatched: {}, EventTypeMarshalUsageCharged: {}, EventTypeMarshalTaskHandedIn: {},
 	EventTypeMarshalTaskAccepted: {}, EventTypeMarshalTaskReturned: {},
 	EventTypeMarshalTaskReassigned: {}, EventTypeMarshalPlanAmended: {},
-	EventTypeMarshalEscalated: {}, EventTypeMarshalTaskMerged: {}, EventTypeMarshalTaskCancelled: {}, EventTypeMarshalRunClosed: {}, EventTypeMarshalVerifierRecorded: {},
+	EventTypeMarshalEscalated: {}, EventTypeMarshalTaskMerged: {}, EventTypeMarshalTaskCancelled: {}, EventTypeMarshalRunClosed: {}, EventTypeMarshalCloseFencePassed: {}, EventTypeMarshalVerifierRecorded: {},
 	EventTypeMarshalEvidenceReceipt: {}, EventTypeMarshalEvidenceValidated: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
