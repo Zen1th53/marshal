@@ -123,7 +123,10 @@ type MarshalService struct {
 	// is paused (the person paused it); process05Settle ends any part whose
 	// work all finished while it was paused (Runtime.settleProcess05).
 	process05Paused func(context.Context, marshal.Run) bool
-	process05Settle func(context.Context, marshal.Run) error
+	// process05RootRunning reports whether the root of the run's canonical
+	// execution is found and not paused (Runtime.process05RootRunning).
+	process05RootRunning func(context.Context, marshal.Run) bool
+	process05Settle      func(context.Context, marshal.Run) error
 	// process05CloseOrphanLane closes the task's current attempt when a
 	// restart interrupted it (Runtime.closeOrphanProcess05Lane), so its next
 	// attempt can open. Nil when this edition runs no task lanes.

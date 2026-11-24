@@ -2445,6 +2445,11 @@ func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispa
 		// This session's pause holds the task: Execute waits for the hold.
 		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
 	}
+	if s.process05RootRunning != nil && s.process05RootRunning(context.WithoutCancel(ctx), run) {
+		// The person resumed the run before this task's stop was collected:
+		// nothing ran, and the next dispatch continues its lane.
+		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)
+	}
 	// No pause hold of this session waits for the person's resume (a
 	// restart drops it), so dispatching again would only find the same
 	// paused run, round after round, until the run counted as stalled

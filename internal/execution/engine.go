@@ -754,6 +754,14 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				if lease != nil && t.NativeTurn == nil {
 					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
 				}
+				// A pause or cancel recorded while this round prepared the
+				// task wins: nothing started, so the run stops as the loop
+				// would have stopped on the next round.
+				if errors.Is(err, ErrRunConflict) {
+					if current, getErr := e.store.GetRun(ctx, runID); getErr == nil && current.State != RunRunning && current.Tasks[taskID].State != TaskRunning {
+						return &current, nil
+					}
+				}
 				return &run, err
 			}
 
