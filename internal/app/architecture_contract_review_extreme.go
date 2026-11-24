@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
@@ -68,4 +69,48 @@ func (r *Runtime) StartArchitectureReviewFromContract(ctx context.Context, provi
 	}
 	session, err = r.StartArchitectureReviewForSession(ctx, provider, "", sessionID, hooks)
 	return session, true, err
+}
+
+// AcceptedArchitecture is the accepted project contract's revision and
+// digest, "" when none is accepted. It reads only.
+func (r *Runtime) AcceptedArchitecture(ctx context.Context) (revision int64, digest string) {
+	if r == nil || r.store == nil {
+		return 0, ""
+	}
+	accepted, err := r.store.ReadAcceptedProjectContract(ctx, r.ProjectContractBinding())
+	if err != nil {
+		return 0, ""
+	}
+	return accepted.Contract.Revision, accepted.Digest
+}
+
+// StartAcceptedArchitectureReview opens the accepted project contract on its
+// own read-only review: it never opens a pending revision, so no Accept can
+// be reached from it. want is the digest the caller was shown; a different
+// accepted contract now is refused.
+func (r *Runtime) StartAcceptedArchitectureReview(ctx context.Context, provider, sessionID, want string, hooks ArchitectureReviewHooks) (*ArchitectureReviewSession, error) {
+	if r == nil || r.store == nil {
+		return nil, model.ErrUnavailable
+	}
+	accepted, err := r.store.ReadAcceptedProjectContract(ctx, r.ProjectContractBinding())
+	if err != nil {
+		return nil, err
+	}
+	if want != "" && accepted.Digest != want {
+		return nil, errors.New("The accepted architecture changed; look again.")
+	}
+	language, err := r.ApprovedMarshalLanguage()
+	if err != nil {
+		return nil, err
+	}
+	base, err := r.previousProjectContract(ctx, accepted.Contract)
+	if err != nil {
+		return nil, err
+	}
+	seed, err := contractReviewSeedFor(accepted.Contract, accepted.Digest, language, base)
+	if err != nil {
+		return nil, err
+	}
+	hooks.currentContract, hooks.fromContract = true, seed
+	return r.StartArchitectureReviewForSession(ctx, provider, "", sessionID, hooks)
 }

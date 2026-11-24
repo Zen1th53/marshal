@@ -59,6 +59,10 @@ func (w *Workspace) webBoardAct(ctx context.Context, a webboard.Action) webboard
 			go func() { done <- webActed{res: w.webWorkCommand(a)} }()
 			return
 		}
+		if a.Kind == "cmd" && a.Command != nil && webboard.IsTeamOp(a.Command.Op) {
+			go func() { done <- webActed{res: w.webTeamCommand(a)} }()
+			return
+		}
 		done <- w.webAct(a)
 	}
 	wait, cancel := context.WithTimeout(ctx, webActWait)
@@ -132,6 +136,9 @@ func (w *Workspace) webAct(a webboard.Action) webActed {
 	if a.Kind == "cmd" {
 		if a.Command != nil && webWorkOp(a.Command.Op) {
 			return webActed{res: w.webWorkCommand(a)}
+		}
+		if a.Command != nil && webboard.IsTeamOp(a.Command.Op) {
+			return webActed{res: w.webTeamCommand(a)}
 		}
 		return webActed{res: w.webSetting(a)}
 	}

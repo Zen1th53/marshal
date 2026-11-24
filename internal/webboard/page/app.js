@@ -1012,6 +1012,11 @@
       if (n.changed) li.appendChild(el("small", "tone-info", "changed by this goal"));
       ol.appendChild(li);
     });
+    var links = d && d.links ? d.links : [];
+    links.forEach(function (k) {
+      if (!parts[k.from] || !parts[k.to]) return;
+      ol.appendChild(el("li", "link" + (k.changed ? " changed" : ""), parts[k.from].name + (k.both ? " ⇄ " : " → ") + parts[k.to].name + (k.changed ? " (changed)" : "")));
+    });
   }
 
   // ---- Team ------------------------------------------------------------------
@@ -1060,10 +1065,11 @@
       if (m.contextPct >= 0) {
         var cl = el("ul", "limits"), ci = el("li");
         ci.appendChild(el("span", "what", "context used"));
-        ci.appendChild(el("span", "num", m.contextPct + "%" + (m.contextWindow ? " of " + compact(m.contextWindow) : "")));
+        ci.appendChild(el("span", "num", m.contextPct + "%" + (m.contextWindow ? " of " + compact(m.contextWindow) : "") + (m.contextUsed ? " · " + compact(m.contextUsed) + " used" : "")));
         ci.appendChild(newBar("Marshal context used", m.contextPct, m.contextPct >= 85 ? "bad" : m.contextPct >= 65 ? "warn" : ""));
         cl.appendChild(ci); li.appendChild(cl);
       }
+      if (m.inputKnown) li.appendChild(el("p", "muted", m.inputClear ? "Chat input is clear" : "Chat input has unsent text: the Board waits before it sends"));
       var bound = m.chatBound || f.chat.bound;
       li.appendChild(el("p", bound ? "muted" : "reason", bound ? "Chat bound" + (f.chat.restarts ? " · " + plural(f.chat.restarts, "restart") : "") : "⚠ Chat not bound"));
       ul.appendChild(li);
@@ -1114,7 +1120,7 @@
       if (c.hint) li.appendChild(el("span", "hint", c.hint));
       cl2.appendChild(li);
     });
-    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Check again from the terminal Board." : "");
+    setText("r-checked", r.checked ? "Checked " + when(r.checked) + ". Recheck a provider under Provider actions, or from the terminal Board." : "");
   }
 
   // ---- Activity ------------------------------------------------------------------
@@ -1322,9 +1328,45 @@
       box.appendChild(b);
     });
   }
-  function commandPanel(body) { return $(body && body.target.kind === "run" ? "run-confirm" : body && (body.target.kind === "task" || body.target.kind === "lane") ? "work-confirm" : "settings-confirm"); }
+  function teamCapabilities(f) {
+    return ((f.settingsActions || {}).capabilities || []).filter(function (c) { return c.target.kind === "team"; });
+  }
+  // Team actions: each button previews and confirms its bound request. A
+  // provider's sign-in only opens the provider's own terminal window; no
+  // credential is typed on this page.
+  var teamLabels = {"team/provider.verify": "Recheck", "team/provider.route-around": "Route its tasks around it", "team/provider.signin.start": "Open its sign-in window", "team/session.import.request": "Load an earlier session source", "team/architecture.open": "Open the accepted architecture map (read only)"};
+  function teamPayload(c, value) {
+    if (c.op === "team/telemetry.choose") return {value: value};
+    return c.op.indexOf("team/provider.") === 0 ? {provider: c.target.id} : {};
+  }
+  function teamButton(c, label, value) {
+    var b = el("button", "ghost", label); b.type = "button";
+    b.onclick = function () { previewSetting(newWorkRequest(c, teamPayload(c, value))); };
+    return b;
+  }
+  function renderTeamActions(f) {
+    var caps = teamCapabilities(f);
+    if (!changed("team-acts", caps.map(function (c) { return [c.op, c.target.id, c.attemptId]; }))) return;
+    var box = clear($("tm-acts")), open = clear($("ar-open")), n = 0;
+    show("tm-acts-box", false);
+    caps.forEach(function (c) {
+      if (c.op === "team/architecture.open") { open.appendChild(teamButton(c, teamLabels[c.op] + (c.revision ? " · revision " + c.revision : ""))); return; }
+      var row = el("div", "acts");
+      if (c.op === "team/telemetry.choose") {
+        row.appendChild(el("span", "", "Usage counts"));
+        row.appendChild(teamButton(c, "Keep usage counts on", "keep")); row.appendChild(teamButton(c, "Turn them off", "off"));
+      } else {
+        var what = c.op === "team/session.import.request" ? "Earlier sessions " + (++n) : c.target.id;
+        row.appendChild(el("span", "", what));
+        row.appendChild(teamButton(c, teamLabels[c.op] || c.op));
+      }
+      box.appendChild(row);
+    });
+    show("tm-acts-box", !!box.firstChild);
+  }
+  function commandPanel(body) { return $(body && body.target.kind === "team" ? "team-confirm" : body && body.target.kind === "run" ? "run-confirm" : body && (body.target.kind === "task" || body.target.kind === "lane") ? "work-confirm" : "settings-confirm"); }
   function settingCapability(f, key) {
-    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key && c.target.kind !== "task" && c.target.kind !== "lane" && c.target.kind !== "run"; });
+    return ((f.settingsActions || {}).capabilities || []).find(function (c) { return c.target.id === key && c.target.kind !== "task" && c.target.kind !== "lane" && c.target.kind !== "run" && c.target.kind !== "team"; });
   }
   function newSettingRequest(cap, value) {
     var bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
@@ -1375,7 +1417,7 @@
       return refresh().then(function () { return settingPost(Object.assign({}, body, {preview: true, confirmation: undefined})); }).then(function (r) {
         body.confirmation = r.confirmation; rememberSetting(body);
         var panel = clear(commandPanel(body));
-        var work = body.target.kind === "task" || body.target.kind === "lane" || body.target.kind === "run";
+        var work = body.target.kind === "task" || body.target.kind === "lane" || body.target.kind === "run" || body.target.kind === "team";
         var detail = work ? JSON.stringify(body.payload) : (body.payload.value === undefined ? (body.payload.enabled ? "on" : "off") : body.payload.value);
         panel.appendChild(el("p", "", "Confirm " + body.op + " for " + body.target.id + ": " + detail + ". This preview expires in one minute."));
         var button = el("button", "", "Confirm change"); button.type = "button"; panel.appendChild(button);
@@ -1408,7 +1450,7 @@
     if (!f) return;
     if (!settingsRecovered) { settingsRecovered = true; recoverSetting(); }
     renderTop(f); renderCard(f); renderInbox(f); renderHome(f); renderWork(f); renderArchitecture(f);
-    renderTeam(f); renderActivity(f); renderSettings(f); renderRunControls(f);
+    renderTeam(f); renderTeamActions(f); renderActivity(f); renderSettings(f); renderRunControls(f);
   }
 
   function feedback(kind, text) {
@@ -1529,7 +1571,7 @@
   // bearer header, and reconnects with backoff when the stream ends.
   function connect() {
     retryTimer = null;
-    if (!token) { disconnected("Open the link the Board printed (/marshal web)."); return; }
+    if (!token) { disconnected("Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal."); return; }
     live("wait", retry ? "reconnecting…" : "connecting…");
     var ctrl = typeof AbortController === "function" ? new AbortController() : null;
     var watchdog = null, ended = false;

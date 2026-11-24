@@ -36,6 +36,9 @@ type v2ReadyShown struct {
 	mu     sync.Mutex
 	usage  bool // the Usage counts card
 	signIn bool // the g sign in to agy button
+	// offered is whether the last readiness read offered agy's sign-in
+	// window, drawn or not (the Web Board's team action follows it).
+	offered bool
 	// signingIn is the pane of an open agy sign-in window, "" for none.
 	signingIn string
 }
@@ -138,7 +141,12 @@ func (w *Workspace) addV2ReadyActions(r *vm.Readiness) {
 	if v2SignInParts.here != nil {
 		here = v2SignInParts.here
 	}
-	if at < 0 || !here(w) {
+	shown := w.v2ReadyState()
+	offered := at >= 0 && here(w)
+	shown.mu.Lock()
+	shown.offered = offered
+	shown.mu.Unlock()
+	if !offered {
 		return
 	}
 	r.Checks[at].Hint = signInHint("agy") + " · g opens it here"
@@ -148,28 +156,12 @@ func (w *Workspace) addV2ReadyActions(r *vm.Readiness) {
 // chooseTelemetry keeps telemetry on (and records the notice shown) or turns
 // it off. The card goes at once; the choice is saved off the input loop.
 func (w *Workspace) chooseTelemetry(ctx context.Context, keep bool) {
-	s := &w.v2m
-	s.mu.Lock()
-	s.probe.Told = true
-	if !keep {
-		s.probe.TelemetryOn = false
-	}
-	s.mu.Unlock()
-	w.noteV2Ready(false, false)
-	root := w.providerRoot()
+	w.markTelemetryChoice(keep)
 	run := func(ctx context.Context) {
-		var err error
-		if keep {
-			err = v2TelemetryParts.keep(ctx, root)
-		} else {
-			err = v2TelemetryParts.disable(ctx, root)
-		}
+		err := w.saveTelemetryChoice(ctx, keep)
 		switch {
 		case err != nil:
 			w.memoryAnswer("Could not save the usage counts choice: "+err.Error(), true)
-			s.mu.Lock()
-			s.at = time.Time{} // read the saved choice again
-			s.mu.Unlock()
 		case keep:
 			w.RecordActivity("Usage counts stay on: anonymous install and version counts only. marshal telemetry disable turns them off.")
 			w.memoryAnswer("Usage counts stay on.", false)
@@ -184,28 +176,64 @@ func (w *Workspace) chooseTelemetry(ctx context.Context, keep bool) {
 	}
 }
 
+// markTelemetryChoice takes the Usage counts card away at once.
+func (w *Workspace) markTelemetryChoice(keep bool) {
+	s := &w.v2m
+	s.mu.Lock()
+	s.probe.Told = true
+	if !keep {
+		s.probe.TelemetryOn = false
+	}
+	s.mu.Unlock()
+	w.noteV2Ready(false, false)
+}
+
+// saveTelemetryChoice records the choice; when it cannot be saved the saved
+// choice is read again.
+func (w *Workspace) saveTelemetryChoice(ctx context.Context, keep bool) error {
+	root := w.providerRoot()
+	var err error
+	if keep {
+		err = v2TelemetryParts.keep(ctx, root)
+	} else {
+		err = v2TelemetryParts.disable(ctx, root)
+	}
+	if err != nil {
+		w.v2m.mu.Lock()
+		w.v2m.at = time.Time{}
+		w.v2m.mu.Unlock()
+	}
+	return err
+}
+
 // openAgySignIn is g: agy runs in a new tmux window in the project, where
 // the owner signs in; when the window closes the verify of agy is armed.
 func (w *Workspace) openAgySignIn(ctx context.Context) {
+	if answer, started, isErr := w.startAgySignIn(ctx); answer != "" {
+		_ = started
+		w.memoryAnswer(answer, isErr)
+	}
+}
+
+// startAgySignIn opens agy's sign-in window and says what happened:
+// started is false when no window was opened.
+func (w *Workspace) startAgySignIn(ctx context.Context) (answer string, started, isErr bool) {
 	s := w.v2ReadyState()
 	s.mu.Lock()
 	open := s.signingIn
 	s.mu.Unlock()
 	if open != "" {
-		w.memoryAnswer("agy's sign-in window is already open; sign in there and close it.", false)
-		return
+		return "agy's sign-in window is already open; sign in there and close it.", false, false
 	}
 	dir := w.providerRoot()
 	pane, err := v2SignInParts.open(ctx, w, dir)
 	if err != nil {
-		w.memoryAnswer("Could not open a window for agy: "+err.Error()+". "+signInHint("agy")+".", true)
-		return
+		return "Could not open a window for agy: " + err.Error() + ". " + signInHint("agy") + ".", false, true
 	}
 	s.mu.Lock()
 	s.signingIn = pane
 	s.mu.Unlock()
 	w.RecordActivity("Opened agy in a tmux window to sign in; the Board checks agy again when it closes.")
-	w.memoryAnswer("agy is open in its own window: sign in there, then close it.", false)
 	watch := func(ctx context.Context) {
 		t := time.NewTicker(v2SignInParts.every)
 		defer t.Stop()
@@ -229,6 +257,7 @@ func (w *Workspace) openAgySignIn(ctx context.Context) {
 		s.signingIn = ""
 		s.mu.Unlock()
 	}
+	return "agy is open in its own window: sign in there, then close it.", true, false
 }
 
 // agySignInClosed re-checks agy once its sign-in window closed: the
