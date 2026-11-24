@@ -740,13 +740,9 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 		return w.finishProposalRefusal(ctx, automatic, runID, target, p.action, binding, req.ProposalID, err)
 	}
 	if req.Who == hostWatchActor {
-		// A host-watch lane-cap request is applied only once, and only
-		// while the guard that posted it still stands behind it.
-		if err := w.takeHostCapRequest(req); err != nil {
-			return err
-		}
-		_, err := w.cmd.Handle(ctx, req.Object)
-		return err
+		// A host-watch temporary cap is applied only once, only while the
+		// guard that posted it still stands behind it, and in memory only.
+		return w.takeHostCapRequest(req)
 	}
 	parts := strings.Fields(req.Object)
 	if len(parts) >= 3 && parts[0] == "/harness" && parts[1] == "verify" {

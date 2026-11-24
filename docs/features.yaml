@@ -2389,6 +2389,8 @@ features:
       - internal/hostwatch/policy.go
     tests:
       - internal/tui.TestHostLaneGuardLowersAndRestores
+      - internal/tui.TestThermalOverlayClearsWithoutPersistingCap
+      - internal/tui.TestLegacyThermalCapMigrationPreservesOwnerEdits
       - internal/hostwatch.TestPolicyHysteresis
     docs: []
     web:

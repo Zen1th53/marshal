@@ -4,7 +4,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,6 +142,9 @@ func demoHost(t *testing.T) hostSnapshot {
 	steps(h, c, 110)
 	f.set(func(f *fakeHost) { f.pkg = 95 })
 	steps(h, c, 40)
+	if err := h.guard.approve("req-1"); err != nil {
+		t.Fatal(err)
+	}
 	f.set(func(f *fakeHost) { f.pkg = 66 })
 	steps(h, c, 30)
 	if c.now() != hostEpoch {
@@ -249,9 +251,9 @@ func TestHostViewContent(t *testing.T) {
 		"available < 8 GiB OK",
 		"what Marshal noticed and did",
 		"GUARD · package 30 s avg",
-		"asked owner: lane cap 12 → 6 (inbox)",
+		"asked owner: temporary lane cap 12 → 6 (inbox)",
 		"RELEASE · package 30 s avg",
-		"asked owner: restore lane cap 6 → default (inbox)",
+		"temporary lane cap 6 cleared",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Host view lacks %q", want)
@@ -332,20 +334,23 @@ func TestHostLaneGuardLowersAndRestores(t *testing.T) {
 		f.set(func(f *fakeHost) { f.pkg = 60 })
 		steps(h, c, 35)
 	}
-	t.Run("accepted then restored", func(t *testing.T) {
-		sink := &fakeCapSink{cap: 12, project: 0, accept: true}
+	t.Run("approved then cleared", func(t *testing.T) {
+		sink := &fakeCapSink{cap: 12, project: 0}
 		h, f, c := heat(t, sink)
-		if len(sink.requests) != 1 || sink.requests[0].To != 6 || sink.requests[0].From != 0 || sink.requests[0].RunID != "R-7f3a" || sink.requests[0].Restore {
+		if len(sink.requests) != 1 || sink.requests[0].To != 6 || sink.requests[0].From != 12 || sink.requests[0].RunID != "R-7f3a" {
 			t.Fatalf("requests %+v", sink.requests)
 		}
-		if g := h.snapshot().Guard; !g.Active || g.Cap != 12 || g.Lowered != 6 {
+		if err := h.guard.approve("req-1"); err != nil {
+			t.Fatal(err)
+		}
+		if g := h.snapshot().Guard; !g.Active || g.Cap != 12 || g.Lowered != 6 || g.Temporary != 6 || h.guard.effectiveCap(12) != 6 {
 			t.Fatalf("guard view %+v", g)
 		}
 		cool(h, f, c)
-		if len(sink.requests) != 2 || !sink.requests[1].Restore || sink.requests[1].To != 0 || sink.requests[1].From != 6 {
-			t.Fatalf("restore %+v", sink.requests)
+		if len(sink.requests) != 1 || sink.project != 0 || h.guard.effectiveCap(12) != 12 {
+			t.Fatalf("requests %+v project %d", sink.requests, sink.project)
 		}
-		if !logHas(h, "thermal", "asked owner: restore lane cap 6 → default") {
+		if !logHas(h, "thermal", "temporary lane cap 6 cleared") {
 			t.Fatalf("log %+v", h.snapshot().Log)
 		}
 	})
@@ -359,7 +364,7 @@ func TestHostLaneGuardLowersAndRestores(t *testing.T) {
 		if len(sink.withdrawn) != 1 || len(sink.requests) != 1 {
 			t.Fatalf("withdrawn %v requests %+v", sink.withdrawn, sink.requests)
 		}
-		if !logHas(h, "thermal", "lowering to 4 withdrawn before a decision") {
+		if !logHas(h, "thermal", "temporary cap 4 withdrawn before a decision") {
 			t.Fatalf("log %+v", h.snapshot().Log)
 		}
 	})
@@ -368,7 +373,7 @@ func TestHostLaneGuardLowersAndRestores(t *testing.T) {
 		h, f, c := heat(t, sink)
 		delete(sink.pending, "req-1") // the owner said no
 		cool(h, f, c)
-		if len(sink.requests) != 1 || !logHas(h, "thermal", "lowering was not applied; nothing to restore") {
+		if len(sink.requests) != 1 || !logHas(h, "thermal", "temporary cap was not approved; nothing to clear") {
 			t.Fatalf("requests %+v log %+v", sink.requests, h.snapshot().Log)
 		}
 	})
@@ -389,13 +394,6 @@ func TestHostLaneGuardLowersAndRestores(t *testing.T) {
 		h, _, _ := heat(t, sink)
 		if len(sink.requests) != 0 || !logHas(h, "thermal", "no Marshal run is dispatching; lane cap unchanged") {
 			t.Fatalf("requests %+v log %+v", sink.requests, h.snapshot().Log)
-		}
-	})
-	t.Run("cap unreadable", func(t *testing.T) {
-		sink := &fakeCapSink{cap: 12, projectErr: errors.New("store closed")}
-		h, _, _ := heat(t, sink)
-		if len(sink.requests) != 0 || !logHas(h, "thermal", "could not read the lane cap: store closed") {
-			t.Fatalf("requests %+v", sink.requests)
 		}
 	})
 }

@@ -185,6 +185,8 @@ func requestPlainWords(req permission.Request) string {
 			return "deliver run"
 		case strings.HasPrefix(object, "/marshal approve-task "):
 			return "approve task"
+		case strings.HasPrefix(object, hostCapObject+" "):
+			return "temporary lane cap " + lastField(object)
 		case strings.HasPrefix(object, "/harness verify"):
 			return "verify provider"
 		case strings.HasPrefix(object, "/marshal setting parallel"), strings.HasPrefix(object, "/marshal parallel"):

@@ -1031,7 +1031,7 @@
     var host = [pct(s.cpuPct, "CPU"), pct(s.memPct, "memory used"), pct(s.diskPct, "disk used") + (s.lowDisk ? " (low on space)" : ""),
       s.tempC >= 0 ? s.tempC + " °C" : ""].filter(Boolean).join(" · ");
     kv(dl, "Host load", host);
-    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; lane cap " + s.thermalCap + " asked for" : "") : "off", s.thermalGuard ? "tone-warn" : "");
+    kv(dl, "Thermal cap", s.thermalGuard ? "on: the host runs hot" + (s.thermalCap ? "; temporary lane cap " + s.thermalCap + " for new lanes" : "") : "off", s.thermalGuard ? "tone-warn" : "");
     if (s.notice) kv(dl, "Host note", s.notice);
     kv(dl, "MCP", s.mcpFailed ? "failed in this session · F6 in the terminal shows why" : "working", s.mcpFailed ? "tone-bad" : "");
     var approval = "";
