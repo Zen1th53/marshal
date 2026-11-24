@@ -4,6 +4,7 @@ package app
 
 import (
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +54,13 @@ func TestGovernedVerificationTimeoutRemainsFixedAt15Minutes(t *testing.T) {
 func TestGovernedProviderDisableRefusesWithoutFailover(t *testing.T) {
 	ctx := t.Context()
 	s, _ := marshalFixture(t, 2)
+	model := s.Model.(marshalFakeModel)
+	for i := range model.draft.Tasks {
+		model.draft.Tasks[i].DependsOn = nil
+		model.draft.Plan.Tasks[i].DependsOn = nil
+	}
+	model.draft.Plan.Graph, _ = plan.BuildGraph(model.draft.Plan.Tasks)
+	s.Model = model
 	startIntegrityRun(t, s, marshal.Budget{})
 	run, rev, err := s.load(ctx, "run")
 	if err != nil {
