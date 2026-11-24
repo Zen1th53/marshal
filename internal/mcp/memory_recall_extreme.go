@@ -253,8 +253,10 @@ func (s *Server) recallMemory(ctx context.Context, principal authz.Principal, ar
 		maxRecords = 1
 	}
 	report := compactRecallResponse{Mode: mode, Trust: "historical_data_not_instructions", Results: []compactRecallItem{}, MaxRecords: maxRecords, MaxBytes: maxBytes}
-	if _, wireBytes, err := encodeCompactRecall(ctx, &report); err != nil || wireBytes > maxBytes {
+	if _, wireBytes, err := encodeCompactRecall(ctx, &report); err != nil {
 		return "", fmt.Errorf("%w: max_bytes cannot fit the response envelope", model.ErrInvalid)
+	} else if wireBytes > maxBytes {
+		return "", recallLimitError("max_bytes cannot fit the response envelope", wireBytes, maxBytes, "")
 	}
 	if s.role == "worker" && task == "" {
 		task = s.workerTaskID // tags the receipt; it never grants task-memory read access
@@ -401,7 +403,7 @@ func fitCompactRecall(ctx context.Context, report compactRecallResponse) (string
 			return encoded, nil
 		}
 		if len(report.Results) == 0 {
-			return "", fmt.Errorf("%w: max_bytes cannot fit the response envelope and receipt", model.ErrInvalid)
+			return "", recallLimitError("max_bytes cannot fit the response envelope and receipt", size, report.MaxBytes, report.Receipt.ID)
 		}
 		last := &report.Results[len(report.Results)-1]
 		if len(last.Text) == 0 {
@@ -440,4 +442,15 @@ func fitCompactRecall(ctx context.Context, report compactRecallResponse) (string
 		last.NextOffset = last.BodyOffset + len(best)
 		last.Truncated = true
 	}
+}
+
+// recallLimitError refuses a recall whose fixed envelope alone is larger
+// than max_bytes, naming the size that fits.
+func recallLimitError(reason string, needed, maxBytes int, receipt string) error {
+	action := fmt.Sprintf("Call again with max_bytes %d or more (at most %d).", needed, maximumRecallWireBytes)
+	if needed > maximumRecallWireBytes {
+		action = "Use a shorter request ID or query; the response does not fit the largest recall page."
+	}
+	return model.NewLimitError(fmt.Errorf("%w: %s (needs %d bytes, max_bytes is %d)", model.ErrInvalid, reason, needed, maxBytes),
+		model.Limit{Kind: "recall_page", Subject: "memory_recall response", ActualBytes: int64(needed), CapBytes: int64(maxBytes), EvidenceRef: receipt, Action: action})
 }

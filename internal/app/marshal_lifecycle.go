@@ -184,7 +184,10 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		if err != nil {
 			return MarshalDispatch{}, err
 		}
-		brief = builder(*t, bc)
+		brief, err = fitWorkerBrief(*t, bc, builder, marshalWorkerBriefBytes)
+		if err != nil {
+			return MarshalDispatch{}, err
+		}
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
@@ -322,7 +325,7 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 		if err != nil {
 			return MarshalDispatch{}, err
 		}
-		brief += "\n" + knowledge
+		brief = appendOptionalWorkerKnowledge(brief, knowledge, marshalWorkerBriefBytes)
 		fullEvent, err := s.marshalEventWithBrief(op.Event, brief)
 		if err != nil {
 			return MarshalDispatch{}, err

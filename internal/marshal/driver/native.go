@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/processgroup"
 	"github.com/Zen1th53/marshal/internal/workerenv"
@@ -207,7 +207,7 @@ func (n Native) start(ctx context.Context, req Request, env []string, heldKey st
 	cmd.Env = env
 	// A nil Stdin reads from the null device: never a terminal.
 	cmd.Stdin = nil
-	stdout := &capBuffer{limit: maxStream}
+	stdout := newStreamBuffer(maxStream)
 	stderr := &capBuffer{limit: maxOutput}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -263,8 +263,34 @@ func (n Native) start(ctx context.Context, req Request, env []string, heldKey st
 		closeTerminal()
 		cancel()
 		h.runErr = err
-		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdout.String()) + stderr.String()}
-		h.reported = n.Parse(stdout.Bytes())
+		stdoutText := stdout.String()
+		stderrText := stderr.String()
+		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdoutText) + stderrText}
+		h.reported, h.limits = stdout.result(n.Parse)
+		if stderr.dropped > 0 {
+			kept, extra := trimIncompleteTrailingUTF8(stderr.Bytes())
+			h.limits = append(h.limits, model.Limit{
+				Kind:        "driver_output",
+				Subject:     "worker stderr",
+				ActualBytes: int64(stderr.buf.Len()) + stderr.dropped,
+				CapBytes:    maxOutput,
+				Limited:     true,
+				KeptBytes:   int64(len(kept)),
+				Action:      fmt.Sprintf("Worker stderr dropped %d bytes; inspect the worker log or rerun the command in the worktree for full output.", stderr.dropped+extra),
+			})
+		}
+		if len(stdoutText) > maxOutput && stdout.head.dropped == 0 {
+			kept := trimValidUTF8Prefix(stdoutText, maxOutput)
+			h.limits = append(h.limits, model.Limit{
+				Kind:        "driver_output",
+				Subject:     "worker stdout",
+				ActualBytes: int64(len(stdoutText)),
+				CapBytes:    maxOutput,
+				Limited:     true,
+				KeptBytes:   int64(len(kept)),
+				Action:      fmt.Sprintf("Worker stdout kept %d of %d bytes (%d dropped); inspect the worker log or rerun the command in the worktree for full output.", len(kept), len(stdoutText), len(stdoutText)-len(kept)),
+			})
+		}
 	}()
 	if !held {
 		return h, nil, nil
@@ -306,7 +332,11 @@ func (n Native) Wait(ctx context.Context, h *Handle) (marshal.HandIn, error) {
 		return marshal.HandIn{}, err
 	}
 	id := identity{worker: h.req.Task.Worker, provider: n.Provider, model: h.req.Model, mode: marshal.Native}
-	return assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, n.CheckTimeout)
+	out, err := assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, n.CheckTimeout)
+	if err == nil {
+		out.Limits = append(out.Limits, h.limits...)
+	}
+	return out, err
 }
 
 // Cancel stops the CLI and its children. The worktree is not touched.
@@ -317,13 +347,19 @@ func (n Native) Cancel(h *Handle) error {
 }
 
 // eachJSON calls fn for every JSON object line in a stream. Lines that are
-// not JSON are skipped: a stream is a claim, not a contract.
+// not JSON are skipped: a stream is a claim, not a contract. Each line is
+// parsed on its own, so one overlong or malformed record never hides the
+// records after it.
 func eachJSON(stream []byte, fn func(map[string]any)) {
-	scanner := bufio.NewScanner(bytes.NewReader(stream))
-	scanner.Buffer(make([]byte, 0, 64<<10), 8<<20)
-	for scanner.Scan() {
+	for len(stream) > 0 {
+		line := stream
+		if i := bytes.IndexByte(stream, '\n'); i >= 0 {
+			line, stream = stream[:i], stream[i+1:]
+		} else {
+			stream = nil
+		}
 		var event map[string]any
-		if json.Unmarshal(scanner.Bytes(), &event) == nil {
+		if json.Unmarshal(bytes.TrimSpace(line), &event) == nil {
 			fn(event)
 		}
 	}

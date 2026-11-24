@@ -1758,6 +1758,13 @@ func (w *Workspace) deliverApprovalNotices(ctx context.Context, runID string) {
 		if entry.Category == app.RunNoticeCategory || entry.Category == app.TaskNoticeCategory {
 			return view.writeNotice(entry.EventID, runNoticeText(entry, rendered))
 		}
+		if entry.Category == app.LimitNoticeCategory {
+			if err := view.writeNotice(entry.EventID, limitNoticeText(entry, rendered)); err != nil {
+				return err
+			}
+			w.RecordActivity(limitNoticeActivityLine(entry, rendered))
+			return nil
+		}
 		header := fmt.Sprintf("## MARSHAL approval %s · %s\n\n%s\n", entry.Transition, entry.ApprovalID, rendered)
 		if entry.Command != "" {
 			header += fmt.Sprintf("Command: `%s` (authority: %s, destination: %s)\n", entry.Command, entry.Authority, entry.Destination)
@@ -1789,6 +1796,45 @@ func runNoticeText(entry store.NoticeOutboxEntry, rendered string) string {
 		text += "Next: " + next + "\n"
 	}
 	return text + "\n"
+}
+
+// limitNoticeText is an adapter limit notice as the Marshal's inbox shows it.
+func limitNoticeText(entry store.NoticeOutboxEntry, rendered string) string {
+	text := fmt.Sprintf("## MARSHAL limit reached · %s\n\n%s\n", app.RedactApprovalText(entry.Status), rendered)
+	if next := app.RedactApprovalText(entry.Command); next != "" {
+		text += "Next: " + next + "\n"
+	}
+	return text + "\n"
+}
+
+// limitNoticeActivityLine is the single Activity line shown on the Boards for
+// an adapter limit refusal.
+func limitNoticeActivityLine(entry store.NoticeOutboxEntry, rendered string) string {
+	return app.FormatLimitActivity(rendered, entry.Command)
+}
+
+// recordAdapterLimitNotice persists a typed adapter limit refusal through the
+// durable notice outbox and delivers it to both Boards (Activity) and the
+// Marshal chat inbox.
+func (w *Workspace) recordAdapterLimitNotice(ctx context.Context, runID, source string, limit model.Limit) {
+	if w == nil {
+		return
+	}
+	if w.runtime != nil && w.runtime.Store() != nil {
+		if err := w.runtime.RecordLimitNotice(ctx, runID, source, limit); err == nil {
+			w.deliverApprovalNotices(context.WithoutCancel(ctx), runID)
+			return
+		}
+	}
+	w.RecordActivity(app.FormatLimitActivity(app.FormatLimitNoticeSummary(limit), limit.Action))
+}
+
+// recordAdapterLimitError records and delivers a limit notice when err carries
+// a typed model.Limit.
+func (w *Workspace) recordAdapterLimitError(ctx context.Context, runID, source string, err error) {
+	if limit, ok := model.LimitOf(err); ok {
+		w.recordAdapterLimitNotice(ctx, runID, source, limit)
+	}
 }
 
 // reportResumeFailure shows a resume that did not go through on the Board

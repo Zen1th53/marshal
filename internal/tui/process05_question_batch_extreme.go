@@ -289,13 +289,22 @@ func (w *Workspace) privateDecisionPacket(id string, p *buildPendingDecision) ([
 			}
 		}
 	}
+	packet := func(items []privateDecisionItem) string {
+		texts := make([]string, 0, len(items))
+		for _, item := range items {
+			texts = append(texts, item.p.text)
+		}
+		return "Independent pending transport questions for this exact current run. Judge each separately through its existing decision id; this packet grants no approval. " + strings.Join(texts, " ")
+	}
+	// A batch over the packet bound falls back to fewer questions in the
+	// same order, down to this one alone; the rest keep their IDs and are
+	// delivered on their own turn. Only a single question over the bound is
+	// refused, since it cannot be delivered without truncation.
+	for len(items) > 1 && len(packet(items)) > privateDecisionPacketBytes {
+		items = items[:len(items)-1]
+	}
 	if len(items) == 1 {
 		return items, p.text, !privateProcess05QuestionIntent(p.request) || len(p.text) <= privateDecisionPacketBytes
 	}
-	texts := make([]string, 0, len(items))
-	for _, item := range items {
-		texts = append(texts, item.p.text)
-	}
-	payload := "Independent pending transport questions for this exact current run. Judge each separately through its existing decision id; this packet grants no approval. " + strings.Join(texts, " ")
-	return items, payload, len(payload) <= privateDecisionPacketBytes
+	return items, packet(items), true
 }
