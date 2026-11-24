@@ -8481,8 +8481,8 @@
     },
     {
       "path": "internal/mcp/proposal_extreme.go",
-      "sha256": "cf696ddb100e297ba540657cd55ebaeeb6da606c4aa508ed8b8191a0ba880289",
-      "bytes": 9027
+      "sha256": "9e3d898f7cbc5d184a688ecd0be8a17548d2a05be8863e14afd2051de92783bb",
+      "bytes": 9123
     },
     {
       "path": "internal/mcp/proposal_extreme_test.go",
@@ -14771,13 +14771,13 @@
     },
     {
       "path": "internal/tui/memory_mcp_extreme.go",
-      "sha256": "21ebcf9193793df93e8cd75ca40f5cf531c49b9e143de52ef221e9ceb2c7899d",
-      "bytes": 11307
+      "sha256": "b386666efb648eb4a7df18e09d3b18ddd99dd2ba31c9641680660bf3277e8b9f",
+      "bytes": 12117
     },
     {
       "path": "internal/tui/memory_mcp_extreme_test.go",
-      "sha256": "8d1a772c65e5b62c56003bb52e5113b834a58133ec8a06fdee6daba2b4c711bf",
-      "bytes": 22329
+      "sha256": "2e2ad0dc1509e7b8ee779d499f4b4396d6aeaccecd7b126a2322823643ea5dad",
+      "bytes": 23466
     },
     {
       "path": "internal/tui/memory_mcp_test.go",
