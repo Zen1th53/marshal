@@ -411,8 +411,8 @@ func (r *Runtime) ReconcileInterruptedApproval(ctx context.Context, marshalRunID
 // DeliverPendingNotices replays unacknowledged outbox entries in strict order
 // (opened ahead of closed), renders current live status when delivery happens
 // after agreement/expiry/run close, admits by stable event ID in the durable
-// accepting inbox (deduping crash-before-ack replays), and acks only after
-// durable admission succeeds.
+// accepting inbox, retries delivery using destination event-ID deduplication,
+// and acks only after delivery succeeds.
 func (r *Runtime) DeliverPendingNotices(ctx context.Context, consumer, runID string, deliver func(entry store.NoticeOutboxEntry, rendered string) error) (int, error) {
 	if r == nil || r.store == nil {
 		return 0, model.ErrUnavailable
@@ -450,11 +450,11 @@ func (r *Runtime) DeliverPendingNotices(ctx context.Context, consumer, runID str
 	acked := 0
 	for _, entry := range pending {
 		rendered := r.renderNoticeWithLiveStatus(ctx, entry)
-		admitted, err := r.store.AdmitNotice(ctx, consumer, entry.EventID, "", time.Now().UTC())
+		_, err := r.store.AdmitNotice(ctx, consumer, entry.EventID, "", time.Now().UTC())
 		if err != nil {
 			return acked, err
 		}
-		if admitted && deliver != nil {
+		if deliver != nil {
 			if err := deliver(entry, rendered); err != nil {
 				if releaseErr := r.store.ReleaseNotice(ctx, consumer, entry.EventID); releaseErr != nil {
 					return acked, fmt.Errorf("deliver notice: %v; release claim: %w", err, releaseErr)
