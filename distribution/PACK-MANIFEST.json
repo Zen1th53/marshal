@@ -8451,8 +8451,8 @@
     },
     {
       "path": "internal/mcp/proposal_limit_extreme_test.go",
-      "sha256": "2368e24d06c7b8e9a47ffce263162fac7e1146ae98412ad70d95f5711ab46b81",
-      "bytes": 5482
+      "sha256": "e6d6df7488da1c94cf072c6a7782a6f1a3dc52a8e414a6a98c9ab745cacc2afd",
+      "bytes": 5874
     },
     {
       "path": "internal/mcp/proposal_schema_extreme_test.go",
@@ -8501,8 +8501,8 @@
     },
     {
       "path": "internal/mcp/server_extreme.go",
-      "sha256": "d30edb57cdfbe004f7a5d5aee34ff43461e1d066c9c9f0af5873a9eaedb2e149",
-      "bytes": 3735
+      "sha256": "3bec49203a3258fb8494b5e0115f72caaf2dd4c896b94188b6b2d409cdfa434a",
+      "bytes": 4256
     },
     {
       "path": "internal/mcp/server_extreme_test.go",

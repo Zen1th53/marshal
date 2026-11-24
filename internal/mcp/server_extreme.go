@@ -62,7 +62,12 @@ func (s *Server) callStdioProposal(ctx context.Context, req jsonRPCRequest) (jso
 		}
 		result, err := s.proposalCall(ctx, rawParams.Name, rawParams.Arguments)
 		if err != nil {
-			s.recordLimitError(ctx, rawParams.Name, err)
+			// The Board already recorded the notice of a proposal it refused
+			// at its inner cap; recording it here too would announce the
+			// same refusal twice.
+			if !boardRecordedLimit(err) {
+				s.recordLimitError(ctx, rawParams.Name, err)
+			}
 			resp.Error = toolError(rawParams.Name, err)
 			return resp, true
 		}
@@ -88,4 +93,11 @@ func (s *Server) callStdioProposal(ctx context.Context, req jsonRPCRequest) (jso
 	}
 
 	return resp, false
+}
+
+// boardRecordedLimit reports whether err is a live submission's inner-cap
+// refusal, whose notice the Board records before it answers.
+func boardRecordedLimit(err error) bool {
+	limit, ok := model.LimitOf(err)
+	return ok && (limit.Kind == proposalmcp.LimitKindProposal || limit.Kind == proposalmcp.LimitKindContract)
 }

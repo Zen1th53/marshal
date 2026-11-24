@@ -128,5 +128,16 @@ func TestProposalInnerLimitReachesTool(t *testing.T) {
 		if !strings.Contains(resp.Error.Message, resp.Error.Data.Limit.Action) {
 			t.Fatalf("%s: message %q lacks the action", tc.tool, resp.Error.Message)
 		}
+		// The Board records this refusal's notice; the tool must not record
+		// a second one for it.
+		notices, err := s.runtime.Store().ListNotices(t.Context(), s.runtime.ProjectIdentity(), "", 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range notices {
+			if n.Category == app.LimitNoticeCategory {
+				t.Fatalf("%s: tool recorded a second limit notice: %+v", tc.tool, n)
+			}
+		}
 	}
 }
