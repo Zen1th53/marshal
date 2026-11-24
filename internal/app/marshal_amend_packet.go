@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
@@ -105,7 +106,9 @@ func marshalAmendPacket(run marshal.Run, reason string) ([]byte, int, error) {
 				field, largest = part.name, len(encoded)
 			}
 		}
-		return nil, -1, fmt.Errorf("%w: %s for task %q is too large (%d bytes; amendment packet cap %d)", projectcontext.ErrBudget, field, item.ID, len(data), marshalAmendPacketBytes)
+		return nil, -1, model.NewLimitError(fmt.Errorf("%w: %s for task %q is too large (%d bytes; amendment packet cap %d)", projectcontext.ErrBudget, field, item.ID, len(data), marshalAmendPacketBytes), model.Limit{
+			Kind: "amendment", Subject: field + " of task " + item.ID, ActualBytes: int64(len(data)), CapBytes: marshalAmendPacketBytes,
+			Action: "Amend one smaller change at a time, or split task " + item.ID + " first; the current plan stays as approved."})
 	}
 	return data, target, nil
 }

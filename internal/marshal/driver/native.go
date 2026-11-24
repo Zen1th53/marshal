@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -176,7 +175,7 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 	cmd.Env = env
 	// A nil Stdin reads from the null device: never a terminal.
 	cmd.Stdin = nil
-	stdout := &capBuffer{limit: maxStream}
+	stdout := newStreamBuffer(maxStream)
 	stderr := &capBuffer{limit: maxOutput}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -222,7 +221,7 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 		cancel()
 		h.runErr = err
 		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdout.String()) + stderr.String()}
-		h.reported = n.Parse(stdout.Bytes())
+		h.reported, h.limits = stdout.result(n.Parse)
 	}()
 	return h, nil
 }
@@ -234,7 +233,11 @@ func (n Native) Wait(ctx context.Context, h *Handle) (marshal.HandIn, error) {
 		return marshal.HandIn{}, err
 	}
 	id := identity{worker: h.req.Task.Worker, provider: n.Provider, model: h.req.Model, mode: marshal.Native}
-	return assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, n.CheckTimeout)
+	out, err := assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, n.CheckTimeout)
+	if err == nil {
+		out.Limits = append(out.Limits, h.limits...)
+	}
+	return out, err
 }
 
 // Cancel stops the CLI and its children. The worktree is not touched.
@@ -245,13 +248,19 @@ func (n Native) Cancel(h *Handle) error {
 }
 
 // eachJSON calls fn for every JSON object line in a stream. Lines that are
-// not JSON are skipped: a stream is a claim, not a contract.
+// not JSON are skipped: a stream is a claim, not a contract. Each line is
+// parsed on its own, so one overlong or malformed record never hides the
+// records after it.
 func eachJSON(stream []byte, fn func(map[string]any)) {
-	scanner := bufio.NewScanner(bytes.NewReader(stream))
-	scanner.Buffer(make([]byte, 0, 64<<10), 8<<20)
-	for scanner.Scan() {
+	for len(stream) > 0 {
+		line := stream
+		if i := bytes.IndexByte(stream, '\n'); i >= 0 {
+			line, stream = stream[:i], stream[i+1:]
+		} else {
+			stream = nil
+		}
 		var event map[string]any
-		if json.Unmarshal(scanner.Bytes(), &event) == nil {
+		if json.Unmarshal(bytes.TrimSpace(line), &event) == nil {
 			fn(event)
 		}
 	}

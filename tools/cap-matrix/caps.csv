@@ -1,0 +1,22 @@
+producer,cap_bytes,status,owner,fixtures,recovery
+required project context packet,114688,covered,,internal/projectcontext:TestRequiredPacketLimitAtCap,mandatory context stays whole; the refusal names the packet and asks for an approved scope split
+Marshal model request envelope,114688,pending,runtime prompt work,internal/app:ProviderEnvelope,typed limit after measuring the encoded request; otherwise a stage pause naming the split
+Marshal review and worker brief,114688,pending,runtime prompt work,internal/app:Review;internal/app:WorkerBrief,keep the newest return and mandatory instructions; older reasons compact to a bound artifact pointer
+Marshal knowledge reserve,16384,pending,runtime prompt work,internal/app:RoleKnowledge,optional knowledge moves to scoped recall; mandatory context stays inline
+verifier proof summary,40960,covered,,internal/app:TestIrreducibleVerifierContextSuggestsSplit,output is referenced by checked proof files; an irreducible summary pauses for a plan split without a same-input retry
+amendment packet,12288,pending,runtime prompt work,internal/app:Amendment,optional summary dropped; otherwise the amendment is refused with the field named and the plan kept
+driver output,65536,pending,runtime prompt work,internal/marshal/driver:Output,bounded output with the dropped byte count stated
+driver worker stream,8388608,covered,,internal/marshal/driver:TestBoundedStreamPreservesTerminalReceipt,bounded head plus the separately kept final record; an overlong or malformed final record is a typed incomplete hand-in
+driver git diff,16777216,covered,,internal/marshal/driver:TestGitOutputLimitAtCap;internal/marshal/driver:TestOversizedDiffHandInKeepsPointer;internal/app:TestOversizedDiffKeepsFullScopeValidation,verified base and result pointer with per-file reads; scope still covers every changed path
+plan pack file,65536,covered,,internal/app:TestPackFileLimitAtCap,the pack is refused whole with the file and sizes named and a split suggested
+Marshal tool limit errors,0,covered,,internal/mcp:TestToolErrorPreservesLimitAndChangedDetails,old codes kept with the structured limit and changed-read detail in the error data
+live ordinary proposal,4096,pending,live proposal submission,internal/mcp:ProposalInner,typed refusal and persisted notice with a compact or split action
+live contract proposal,65536,pending,live proposal submission,internal/mcp:ContractInner,typed refusal and persisted notice with a compact or split action
+live proposal frame,16384,pending,live proposal submission,internal/mcp:ProposalFrameSocket;internal/mcp:ProposalFrameSpool,typed refusal and persisted notice with a compact or split action
+native planning context,98304,pending,read and page adapters,internal/tui:NativePlanning,page optional material; mandatory context kept; otherwise a field-specific split
+decision questions,16384,pending,read and page adapters,internal/tui:Questions,individual questions in order with the same IDs
+native live inbox,65536,pending,read and page adapters,internal/tui:Inbox,durable entries with a bounded tail and cursor
+Board diff,4194304,pending,read and page adapters,internal/tui:BoardDiff,scoped file pages or an authorized commit view
+Marshal events knowledge and recall reads,65536,pending,read and page adapters,internal/mcp:Events;internal/mcp:Knowledge;internal/mcp:Recall,revision-bound cursor and remaining count or a named error with a detail path
+code evidence reads,8192,pending,read and page adapters,internal/mcp:CodeContext;internal/mcp:CodeExpand;internal/mcp:CodeValidate,receipt-bound paging keeping evidence identity
+design record and contract reads,1048576,pending,read and page adapters,internal/mcp:DesignRecord;internal/mcp:ContractWire,design refused whole with a smaller-artifact action; contract reads page at the same revision

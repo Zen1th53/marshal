@@ -46,7 +46,8 @@ func (m *MarshalCLI) validateRequiredMarshalModelEnvelope(prompt, schema string)
 		return err
 	}
 	if len(wire) > requiredProviderEnvelopeBytes {
-		return projectcontext.ErrBudget
+		return model.NewLimitError(projectcontext.ErrBudget, model.Limit{Kind: "provider_envelope", Subject: "Marshal model request", ActualBytes: int64(len(wire)), CapBytes: requiredProviderEnvelopeBytes,
+			Action: "Split this step into smaller parts (fewer tasks or shorter text), then try it again."})
 	}
 	return nil
 }

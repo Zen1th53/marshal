@@ -21,6 +21,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
@@ -78,6 +79,7 @@ type Handle struct {
 	observed        marshal.CommandRecord
 	reported        []marshal.CommandRecord
 	runtimeObserved []marshal.CommandRecord
+	limits          []model.Limit
 	runErr          error
 }
 
@@ -181,11 +183,30 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 		return marshal.HandIn{}, err
 	}
 	tree = strings.TrimSpace(tree)
+	var limits []model.Limit
 	diff, err := git(ctx, wt, "diff", "--no-ext-diff", "--no-textconv", req.Task.BaseCommit, result)
+	if limit, ok := model.LimitOf(err); ok && errors.Is(err, ErrHandInTooLarge) {
+		// A change too large to carry inline is handed in by reference: the
+		// verified base and result commits stay the evidence, the changed
+		// paths are enumerated separately below and scope is still checked
+		// against every one of them. The diff is never cut short.
+		diff, err = "", nil
+		limit.Kind = "git_diff"
+		limit.Subject = "diff of the hand-in"
+		limit.EvidenceRef = "result:" + result
+		limit.Action = "Read the change one file at a time: git diff " + req.Task.BaseCommit + " " + result + " -- <path>, for each path the hand-in lists."
+		limits = append(limits, limit)
+	}
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
 	names, err := git(ctx, wt, "diff", "--no-ext-diff", "--no-textconv", "--name-only", req.Task.BaseCommit, result)
+	if limit, ok := model.LimitOf(err); ok {
+		limit.Kind = "git_paths"
+		limit.Subject = "list of changed paths"
+		limit.Action = "Split the task so each part changes fewer files, then approve the amended plan."
+		err = model.NewLimitError(err, limit)
+	}
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
@@ -217,6 +238,7 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 		RuntimeObserved: observed,
 		WorkerReported:  reported,
 		CheckResults:    checks,
+		Limits:          limits,
 	}, nil
 }
 
@@ -376,7 +398,8 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	if stdout.dropped > 0 {
-		return "", fmt.Errorf("%w: git %s produced more than %d bytes", ErrHandInTooLarge, strings.Join(args, " "), maxGitOutput)
+		err := fmt.Errorf("%w: git %s produced more than %d bytes", ErrHandInTooLarge, strings.Join(args, " "), maxGitOutput)
+		return "", model.NewLimitError(err, model.Limit{Kind: "git_output", Subject: "git " + args[0], ActualBytes: int64(stdout.buf.Len()) + stdout.dropped, CapBytes: maxGitOutput})
 	}
 	return stdout.buf.String(), nil
 }
