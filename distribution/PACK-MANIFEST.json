@@ -2750,6 +2750,11 @@
       "bytes": 2461
     },
     {
+      "path": "internal/app/marshal_idle_accept_test.go",
+      "sha256": "5d78cd80fb3e7fb4caf64dd07bf819dc0a32a064f85bc506eb627fcd4da2d6bb",
+      "bytes": 753
+    },
+    {
       "path": "internal/app/marshal_import.go",
       "sha256": "1ba03d100f594c9fdae7591105ae09b79e90b342c5f7eadfd42554f7218eece6",
       "bytes": 3248
@@ -14453,6 +14458,11 @@
       "path": "internal/tui/marshal_handoff_test.go",
       "sha256": "eab725d54395d208af31d9eaeee097e9e16f029465c8acdc28e2cf596d424ac3",
       "bytes": 7671
+    },
+    {
+      "path": "internal/tui/marshal_idle_accept_test.go",
+      "sha256": "64463d4b814b755cd3abcb0cffc095089a955da3be30f15e37e55439b49c309a",
+      "bytes": 3326
     },
     {
       "path": "internal/tui/marshal_import_args_test.go",
