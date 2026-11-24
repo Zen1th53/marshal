@@ -61,9 +61,9 @@ func TestConfineMarshalChatArgsPerProvider(t *testing.T) {
 					}
 				}
 			case provider == "claude":
-				want := []string{"--permission-mode", "manual", "Hello."}
+				want := []string{"--permission-mode", "manual", "--restricted", "--tools", "Read,Glob,Grep", "--", "Hello."}
 				if codexMarshalConfineEnforced { // the shipped edition
-					want = []string{"--permission-mode", "dontAsk", "--settings", wantClaudeSettings, "Hello."}
+					want = []string{"--permission-mode", "dontAsk", "--settings", wantClaudeSettings, "--restricted", "--tools", "Read,Glob,Grep", "--", "Hello."}
 				}
 				if !slices.Equal(args, want) {
 					t.Fatalf("claude %q args %q, want %q", rights, args, want)
@@ -158,8 +158,10 @@ func TestWorkspaceMarshalChatConfinement(t *testing.T) {
 	if got := w.guard.marshalWrites; got != want {
 		t.Fatalf("guard told %v, want %v", got, want)
 	}
-	if _, err := w.confineWorkspaceMarshalChat(context.Background(), "agy", root, []string{"--prompt-interactive", "Hello."}); err != nil {
-		t.Fatal(err)
+	if _, err := w.confineWorkspaceMarshalChat(context.Background(), "agy", root, []string{"--prompt-interactive", "Hello."}); err == nil {
+		if _, supported := probeMarshalOSSandbox(context.Background()); !supported {
+			t.Fatal("unconfined provider launch was allowed")
+		}
 	}
 	if got := w.guard.marshalWrites; got != marshalWritesUnblocked {
 		t.Fatalf("agy: guard told %v", got)

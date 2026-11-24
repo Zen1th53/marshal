@@ -43,6 +43,8 @@ type permissionState struct {
 	// hostCapLive holds the lane-cap requests host-watch still stands
 	// behind; an accepted one is applied only while it is here.
 	hostCapLive map[string]bool
+	// askLedger tracks durable ask records, receipts and legacy file adoptions.
+	askLedger *askLedgerState
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
@@ -425,6 +427,16 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		source = "expired run request"
 	}
 	ctx = a.localControl.Context(ctx)
+	if req.Kind == app.MarshalToolPermissionKind && allow {
+		if boundary := w.evaluatePermissionToolBoundary(ctx, req, source); !boundary.Allowed {
+			refusalSource := source + "; refused=" + string(boundary.Mechanism)
+			if err := a.runtime.CommandPermission(ctx, req, false, refusalSource); err != nil {
+				return err
+			}
+			_ = w.answerNativeChatAsk(ctx, req, false, refusalSource+"; reason="+boundary.Reason)
+			return proposalAuthRefusal(errors.New(boundary.Reason), "/marshal settings execution-rights")
+		}
+	}
 	if err := a.runtime.CommandPermission(ctx, req, allow, source); err != nil {
 		return err
 	}
@@ -643,6 +655,15 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	}
 	if err := view.write("## runtime · granted continuation\n\n" + b.String() + "\n"); err != nil {
 		return "", err
+	}
+	if root := w.runtime.ProjectRoot(); root != "" {
+		_, _ = writeRuntimeEvidence(root, "continuation-"+canonicalNeutralProvider(provider), b.String(), runtimeEvidenceMeta{
+			RunID:    w.activeMarshalRunID(),
+			LaunchID: w.currentAskLaunchID(marshalProposal{}),
+			Event:    "permission-continuation",
+			Source:   "permissions",
+			Actor:    canonicalNeutralProvider(provider),
+		})
 	}
 	return b.String(), nil
 }
