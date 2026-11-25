@@ -490,12 +490,14 @@ type boardUI struct {
 	// decisionRev the revision its keys are bound to; decisionStop is an
 	// armed stop of the paused run (board_decisions_view.go).
 	decisionFocus, decisionRev string
-	decisionStop               bool
-	task                       string // selected task
-	lane                       string // selected lane's worker
-	ack                        string // command answer already seen; the footer stops showing it
-	ackSeq                     uint64 // output sequence when ack was taken: a repeated answer is new
-	note                       string // run note last painted
+	// decisionKey is the key of the decision card the focus is bound to.
+	decisionKey  string
+	decisionStop bool
+	task         string // selected task
+	lane         string // selected lane's worker
+	ack          string // command answer already seen; the footer stops showing it
+	ackSeq       uint64 // output sequence when ack was taken: a repeated answer is new
+	note         string // run note last painted
 	// hostScroll is how far the Host view is scrolled down; hostMax is
 	// the furthest it could go at the last paint.
 	hostScroll, hostMax int

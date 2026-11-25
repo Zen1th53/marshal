@@ -392,6 +392,21 @@ func (w *Workspace) memoryAnswer(text string, isError bool) {
 	w.requestRepaint()
 }
 
+// clearAnswerIf removes the footer answer when it still says text: a line
+// that told what the chat waited for must not outlive the wait.
+func (w *Workspace) clearAnswerIf(text string) {
+	w.mu.Lock()
+	if w.answer != text {
+		w.mu.Unlock()
+		return
+	}
+	w.state.LastOutput, w.state.LastOutputIsError = "", false
+	w.answer, w.answerIsError = "", false
+	w.mu.Unlock()
+	w.outputSeq.Add(1)
+	w.requestRepaint()
+}
+
 // openMemoryEvidence opens the evidence overlay for a candidate: its
 // evidence references when it has any, and its fields either way.
 func (w *Workspace) openMemoryEvidence(id string) {

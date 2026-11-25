@@ -75,6 +75,10 @@ func (w *Workspace) openDecisionFocus(want string) bool {
 	ui := &w.boardUI
 	ui.homePage = ""
 	ui.decisionFocus, ui.decisionRev, ui.decisionStop = kind, rev, false
+	ui.decisionKey = ""
+	if d, ok := w.v2DecisionNow(time.Now()); ok && kind == focusDecision {
+		ui.decisionKey = d.key
+	}
 	w.requestRepaint()
 	return true
 }
@@ -199,6 +203,16 @@ func (w *Workspace) handleDecisionFocusKey(event KeyEvent) bool {
 // paintDecisionPane is the pane of the focused card in cols x rows.
 func (w *Workspace) paintDecisionPane(v boardVisual, b vm.Board, cols, rows int) []string {
 	ui := &w.boardUI
+	// A different card now shown (the Marshal put the next one on the Board
+	// while this one was in focus) takes the focus: its keys are bound to
+	// the card drawn here, so a key acts on what the owner sees. The same
+	// card changing under the owner's eyes keeps its old binding, and a key
+	// meant for it is refused (handleDecisionFocusKey).
+	if ui.decisionFocus == focusDecision && b.Decision != nil {
+		if d, ok := w.v2DecisionNow(time.Now()); ok && d.key != ui.decisionKey && w.decisionRevision(d) == b.Decision.Revision {
+			ui.decisionKey, ui.decisionRev = d.key, b.Decision.Revision
+		}
+	}
 	var body []string
 	switch {
 	case ui.decisionFocus == focusDecision && b.Decision != nil:

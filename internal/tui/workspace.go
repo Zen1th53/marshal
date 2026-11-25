@@ -311,6 +311,10 @@ type Workspace struct {
 	// leftoverRunning is set while the chat monitor submits a leftover
 	// paste of ours, so ticks never stack up behind one.
 	leftoverRunning atomic.Bool
+	// unsent is the paste of ours the chat has not taken yet and the status
+	// shown for it (chat_unsent.go).
+	unsentMu sync.Mutex
+	unsent   *unsentPaste
 	// chatBinding is the Marshal chat's restarts, rebinds and the requests
 	// the Board sent it (chat_binding.go).
 	chatBinding chatBindingState
