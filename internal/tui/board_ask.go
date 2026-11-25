@@ -769,6 +769,7 @@ func (w *Workspace) deliverAskAnswer(ctx context.Context, rec askRecord, label s
 			if errors.Is(err, errChatUnsubmitted) {
 				// Pasted, recorded as ours, not taken yet: the card stays
 				// and the next press submits it instead of pasting again.
+				w.noteUnsentPaste(pane, label, "", func() { w.settleUnsentAsk(rec.ID, label) })
 				return fmt.Errorf("the answer is pasted in the Marshal chat but not submitted yet; press the choice again (%w)", errChatUnsubmitted)
 			}
 			return fmt.Errorf("%w: %v", errAskAdmissionUncertain, err)
@@ -1012,7 +1013,12 @@ func (w *Workspace) answerAskBound(ctx context.Context, req askAnswerBinding) as
 		}
 	}
 
-	// Mark answered ONLY after the assigned receiver durably admitted the turn.
+	return w.admitAskAnswered(ledger, rec, label)
+}
+
+// admitAskAnswered marks rec answered once the receiver durably admitted
+// the turn and closes its card.
+func (w *Workspace) admitAskAnswered(ledger *askLedgerState, rec *askRecord, label string) askAnswerResult {
 	admittedAt := time.Now().UTC()
 	ledger.mu.Lock()
 	rec.Status = askStatusAnswered
@@ -1061,6 +1067,27 @@ func (w *Workspace) answerAskBound(ctx context.Context, req askAnswerBinding) as
 	}
 }
 
+// settleUnsentAsk completes an ask answer whose paste the chat took after
+// delivery had reported it unsubmitted: the receipt that was left failed
+// is admitted and the card closes, exactly as a delivery that succeeded.
+func (w *Workspace) settleUnsentAsk(id, label string) {
+	ledger := w.askLedger()
+	ledger.answerMu.Lock()
+	defer ledger.answerMu.Unlock()
+	ledger.mu.Lock()
+	rec, ok := ledger.records[id]
+	if !ok || rec.Status != askStatusOpen || rec.RequestReceipt == nil || rec.RequestReceipt.Label != label {
+		ledger.mu.Unlock()
+		return
+	}
+	err := w.persistAskAdmission(cloneAskRecord(rec))
+	ledger.mu.Unlock()
+	if err != nil {
+		return
+	}
+	w.admitAskAnswered(ledger, rec, label)
+}
+
 // answerAsk sends choice i's label to the Marshal chat as the owner's own
 // message and closes the card once admitted. With no chat open the card stays
 // and nothing is sent.
@@ -1085,6 +1112,9 @@ func (w *Workspace) answerAsk(i int) {
 	if r.Err != nil && w.outputSeq.Load() == seq {
 		// Never leave the owner at a card that did nothing.
 		w.setOutput("The answer was not sent: "+r.Err.Error(), true)
+		if errors.Is(r.Err, errChatUnsubmitted) {
+			w.setUnsentStatus("The answer was not sent: " + r.Err.Error())
+		}
 	}
 }
 

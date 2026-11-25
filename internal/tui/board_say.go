@@ -266,6 +266,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 	told := map[int]bool{}
 	var watch *sayWatch
 	var shown chatWait     // what the Board last said the chat waits for
+	var shownWords string  // the waiting line the Board last showed
 	var shownReview string // the review command the Board last described
 	var errTold string     // the network error the Board last showed
 	var pausedFrame string // frame where a twice-failed network error paused queued messages
@@ -281,7 +282,7 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 	for {
 		w.say.mu.Lock()
 		queued := len(w.say.pending) > 0
-		if !queued && watch == nil {
+		if !queued && watch == nil && shown == chatWaitNone {
 			w.say.running = false
 			w.say.mu.Unlock()
 			return
@@ -341,12 +342,19 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			trustPending = true
 		}
 		if wait != shown || review.argv != shownReview {
+			if wait == chatWaitNone && shownWords != "" {
+				// The prompt is gone from the chat: the waiting line goes
+				// with it, unless something newer replaced it already.
+				w.clearAnswerIf(shownWords)
+			}
 			shown, shownReview = wait, review.argv
+			shownWords = ""
 			if wait != chatWaitNone {
 				if review.argv != "" {
 					w.addNote(review.plain+". The command the Marshal chat asks to run: "+review.argv, false)
 				}
-				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, queued, item.runtime, review), false)
+				shownWords = chatWaitWords(w.sayProvider(), wait, queued, item.runtime, review)
+				w.memoryAnswer(shownWords, false)
 			}
 			if queued {
 				told[item.id] = true
@@ -477,7 +485,8 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			}
 			w.sayNote(sayEcho{id: item.id, At: item.at, Text: item.text, State: sayQueued, Why: why, Runtime: item.runtime})
 			if wait != chatWaitNone {
-				w.memoryAnswer(chatWaitWords(w.sayProvider(), wait, true, item.runtime, review), false)
+				shownWords = chatWaitWords(w.sayProvider(), wait, true, item.runtime, review)
+				w.memoryAnswer(shownWords, false)
 			} else if pausedFrame == "" && !item.runtime {
 				w.memoryAnswer("Marshal chat busy: your message is queued for its next prompt.", false)
 			}
@@ -522,7 +531,9 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 	if errors.Is(err, errChatUnsubmitted) {
 		// The paste is recorded as ours and the Board keeps pressing Enter
 		// for it; the owner is told it is waiting, never left to wonder.
-		w.memoryAnswer("Marshal pasted a message into the Marshal chat but Enter has not taken it yet. Marshal keeps trying; if it stays, open the chat (F11) and press Enter.", true)
+		const status = "Marshal pasted a message into the Marshal chat but Enter has not taken it yet. Marshal keeps trying; if it stays, open the chat (F11) and press Enter."
+		w.noteUnsentPaste(pane, text, status, nil)
+		w.memoryAnswer(status, true)
 		return before, nil
 	}
 	return before, err
@@ -546,6 +557,7 @@ func (w *Workspace) typeIntoChatStrict(ctx context.Context, pane, text string) (
 				if err := submitChatTurnAs(ctx, run, d, pane, text, deliverEnterTries, deliverEnterWait, false); err != nil {
 					return "", err
 				}
+				w.settleUnsentPaste(pane, true, false)
 				return string(frame), nil
 			}
 		}
@@ -650,6 +662,9 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 	}
 	if !ok {
 		if composerClear(d, string(frame)) {
+			if p, had := ownPasteFor(pane); had {
+				w.settleUnsentPaste(pane, pasteLeftInput(string(frame), p.text), true)
+			}
 			forgetOwnPaste(pane)
 			if marked {
 				clearPanePaste(ctx, w.runChat(), pane)
@@ -658,7 +673,9 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 		return
 	}
 	if !chatBusyNearPrompt(string(frame)) {
-		_ = submitChatTurnAs(ctx, w.runChat(), d, pane, own.text, deliverEnterTries, deliverEnterWait, false)
+		if err := submitChatTurnAs(ctx, w.runChat(), d, pane, own.text, deliverEnterTries, deliverEnterWait, false); err == nil {
+			w.settleUnsentPaste(pane, true, true)
+		}
 	}
 }
 
