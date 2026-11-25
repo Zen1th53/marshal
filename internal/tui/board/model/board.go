@@ -65,6 +65,9 @@ type Worker struct {
 	// unknown; ModelWaitSince when it waits on its model, zero otherwise.
 	// Note explains a worker that cannot be verified or waits long.
 	Liveness WorkerLiveness
+	// Wait says the provider is retrying or out of capacity, from the
+	// worker's latest output; empty while it makes progress.
+	Wait string
 }
 
 // WorkerLiveness is a heartbeat worker's verified liveness.
@@ -284,13 +287,15 @@ type Lane struct {
 	Beat      time.Time
 	// Liveness is the heartbeat worker's, zero for a window.
 	Liveness WorkerLiveness
+	// Wait is the provider's retry or capacity notice, empty for none.
+	Wait string
 }
 
 // newLane is NewLane judged at now. A heartbeat worker's own beats say what
 // it does, whatever its task's snapshot says: it is working while it beats
 // and lost once it has not beaten for WorkerBeatGrace.
 func newLane(w Worker, tasks []TaskRow, now time.Time) Lane {
-	l := Lane{Worker: w.ID, Provider: w.Provider, TaskID: w.TaskID, Pane: w.Pane, Last: w.Last, Status: w.Status, State: LaneIdle}
+	l := Lane{Worker: w.ID, Provider: w.Provider, TaskID: w.TaskID, Pane: w.Pane, Last: w.Last, Status: w.Status, Wait: w.Wait, State: LaneIdle}
 	if w.Heartbeat {
 		l.Heartbeat, l.Beat, l.Started, l.State, l.Liveness = true, w.Beat, w.Started, LaneWorking, w.Liveness
 		if !now.IsZero() && now.Sub(w.Beat) > WorkerBeatGrace {
