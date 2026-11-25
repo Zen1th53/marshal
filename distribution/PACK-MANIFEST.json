@@ -14396,8 +14396,8 @@
     },
     {
       "path": "internal/tui/marshal_dock_focus_test.go",
-      "sha256": "ee0500ef1b61fe5d4e4b58918ad421988257bb2a7f0676ba00e9dcdb75fad30b",
-      "bytes": 6466
+      "sha256": "c8e14241cafaee28ba5af4915b91110fcd4c65dcff68bd9c00c44e4e292b66d9",
+      "bytes": 6427
     },
     {
       "path": "internal/tui/marshal_dock_focuscue_test.go",
