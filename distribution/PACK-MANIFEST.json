@@ -15871,8 +15871,8 @@
     },
     {
       "path": "internal/tui/task_relay.go",
-      "sha256": "ec4422afd35a3dd899fb0a0fa70d455bb2c1faabf61aae236cd5f9e39e676dc4",
-      "bytes": 3748
+      "sha256": "3439c74449bcf333881a692313b79d64bca68297e885766f59ebd1866ae1a9a5",
+      "bytes": 3861
     },
     {
       "path": "internal/tui/task_relay_test.go",
@@ -15881,8 +15881,8 @@
     },
     {
       "path": "internal/tui/task_relay_wait_test.go",
-      "sha256": "58642b3aa4f5b94650ecdd8ebc43840c132a749366a754581a541b1761ff2377",
-      "bytes": 1455
+      "sha256": "1043f5bf493537a964b082fd5e5a5d6692c501a951159b947e47666d690c6164",
+      "bytes": 1923
     },
     {
       "path": "internal/tui/task_relay_window_test.go",

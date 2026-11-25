@@ -35,3 +35,17 @@ func TestProviderWaitReadsRelayAndHomeShowsIt(t *testing.T) {
 		t.Fatalf("tasks line %q", got)
 	}
 }
+
+// A number in the worker's own output is not a rate limit, and an old wait
+// the worker has printed past is over.
+func TestProviderWaitIgnoresOldAndIncidentalNumbers(t *testing.T) {
+	for _, out := range []string{
+		"ok  \texample.com/calc\t0.429s\n",
+		"API Error: 429 rate limit\nRetrying worked, now editing sign.go\n",
+		"want 529 items\n",
+	} {
+		if got := providerWaitText("claude", out); got != "" {
+			t.Errorf("%q gave %q, want nothing", out, got)
+		}
+	}
+}

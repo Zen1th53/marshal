@@ -41,9 +41,9 @@ func providerWait(provider, path string) string {
 
 var retryCount = regexp.MustCompile(`(\d+)/(\d+)`)
 
-// providerWaitText reads the lines of out from the end: the latest error
-// naming a retry, capacity or a rate limit gives the notice; a later JSON
-// event that is not an error means the worker went on.
+// providerWaitText reads the newest line of out (skipping a cut JSON line):
+// an error naming a retry, capacity or a rate limit gives the notice;
+// anything else means the worker went on.
 func providerWaitText(provider, out string) string {
 	lines := strings.Split(out, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -67,17 +67,16 @@ func providerWaitText(provider, out string) string {
 		switch {
 		case strings.Contains(low, "at capacity"):
 			why = "at capacity"
-		case strings.Contains(low, "rate limit") || strings.Contains(low, "429"):
+		case strings.Contains(low, "rate limit") || (strings.Contains(low, "error") && strings.Contains(low, "429")):
 			why = "rate limited"
-		case strings.Contains(low, "overloaded") || strings.Contains(low, "529"):
+		case strings.Contains(low, "overloaded") || (strings.Contains(low, "error") && strings.Contains(low, "529")):
 			why = "overloaded"
 		case strings.Contains(low, "reconnecting"):
 			why = "reconnecting"
 		default:
-			if strings.HasPrefix(line, "{") {
-				return ""
-			}
-			continue
+			// Only the newest plain line counts: an old one the worker
+			// printed before it went on is not a wait.
+			return ""
 		}
 		text := provider + " is " + why
 		if why != "reconnecting" {
