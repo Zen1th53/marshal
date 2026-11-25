@@ -13630,6 +13630,11 @@
       "bytes": 2442
     },
     {
+      "path": "internal/tui/chat_own_paste_test.go",
+      "sha256": "5d58be085f5e712b6e87f4c74617077df23f259d2f0144106855fc48f3ab07ac",
+      "bytes": 6901
+    },
+    {
       "path": "internal/tui/checkpoint_read_pty_test.go",
       "sha256": "90e04891446594a9ab4752d67ff445b44d6a9ffd5b6e38aede3c41c30f772f3f",
       "bytes": 1609
@@ -16323,6 +16328,21 @@
       "path": "internal/tui/testdata/board/verify-split-80x24.golden",
       "sha256": "d7cf50dbacbb3d03508a4ef3d613924720b019f1a33e859dd9e5329fc2daa721",
       "bytes": 3693
+    },
+    {
+      "path": "internal/tui/testdata/mac_frame.txt",
+      "sha256": "2d9c02ef0a90f80bf3d09870e7c09e984518f188221a644b0c2c237a06c66161",
+      "bytes": 3291
+    },
+    {
+      "path": "internal/tui/testdata/mac_frame_confirm_unsent.txt",
+      "sha256": "e082bda72e2bee9e97d5360471cd5a12f92c95e5aee13408540044500c06eb9e",
+      "bytes": 2685
+    },
+    {
+      "path": "internal/tui/testdata/mac_frame_suggestion.txt",
+      "sha256": "3b0451d103f6cd36e22507136a257e275dda196c5b7c6c41fcfccd9e5f9b9483",
+      "bytes": 2970
     },
     {
       "path": "internal/tui/theme.go",
