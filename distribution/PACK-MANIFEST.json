@@ -14401,8 +14401,8 @@
     },
     {
       "path": "internal/tui/marshal_dock_focuscue_test.go",
-      "sha256": "1ae9a9defef2e0d137117b0957cba0a5a5b2b11ce0c1b8aaa4985fdb18d442d2",
-      "bytes": 2707
+      "sha256": "821cb6a534f2462b744d63408829bf090132982d935c4d6877fd355205b8e498",
+      "bytes": 3632
     },
     {
       "path": "internal/tui/marshal_dock_focuspoll_test.go",
@@ -16486,8 +16486,8 @@
     },
     {
       "path": "internal/tui/tmux_status.go",
-      "sha256": "2a8c4415ad490f451d8c14cf8310df3e6586f2f6c89b86ca48055eb4cde4f8eb",
-      "bytes": 14670
+      "sha256": "0d9342d05be755b05b65e7a35c907ae50387fee050e97fcf46ef6a8eab4e17e7",
+      "bytes": 14895
     },
     {
       "path": "internal/tui/tmux_status_test.go",

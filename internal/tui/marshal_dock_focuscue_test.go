@@ -60,3 +60,22 @@ func TestBoardFooterSaysKeysGoToChat(t *testing.T) {
 		t.Fatalf("footer is %d cells, want 100", VisibleLen(line))
 	}
 }
+
+// TestDockStatusRowSurvivesStrftime: tmux passes the status line through
+// strftime, which eats a bare "%". The row picks the focused pane by the
+// Board's own pane option, never by a "%N" pane id, and doubles any "%" in
+// its titles.
+func TestDockStatusRowSurvivesStrftime(t *testing.T) {
+	w := NewWorkspace(nil, "test-proj", "test-session")
+	d := dockStatus{window: "@0", chat: "%7", board: "%0", chatW: 60, boardW: 80, chatTitle: " MARSHAL CHAT · context 6%"}
+	row := w.dockStatusRow(NewTheme(ThemeDefault, true, true), d)
+	if strings.Contains(row, "pane_id") || strings.Contains(row, "%7") || strings.Contains(row, ",%0") {
+		t.Fatalf("status row compares pane ids: %s", row)
+	}
+	if !strings.Contains(row, "#{?@marshal_board_title,") {
+		t.Fatalf("status row does not ask which pane is the Board: %s", row)
+	}
+	if !strings.Contains(row, "context 6%%") {
+		t.Fatalf("a %% in the title is not doubled: %s", row)
+	}
+}
