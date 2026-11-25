@@ -652,6 +652,9 @@ func homeTasks(b vm.Board) []string {
 		} else if t.Note != "" {
 			s += " (" + t.Note + ")"
 		}
+		if t.Provider != "" {
+			s += " · " + t.Provider
+		}
 		out = append(out, s)
 	}
 	return out

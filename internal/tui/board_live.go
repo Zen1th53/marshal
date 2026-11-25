@@ -163,15 +163,15 @@ func (w *Workspace) workerLiveness(runID string) map[string]boardmodel.WorkerLiv
 // window already shows its task.
 func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 	type agent struct {
-		provider, task, pane, state string
-		beat                        *app.WorkerBeat
+		id, provider, task, pane, state string
+		beat                            *app.WorkerBeat
 	}
 	var agents []agent
 	windowed := map[string]bool{}
 	w.tmuxMu.Lock()
 	for _, a := range w.tmuxActiveWins {
 		if a.role == "task" && a.runID == runID && a.taskID != "" {
-			agents = append(agents, agent{provider: a.provider, task: a.taskID, pane: a.paneID, state: a.state})
+			agents = append(agents, agent{id: a.id, provider: a.provider, task: a.taskID, pane: a.paneID, state: a.state})
 			windowed[a.taskID] = true
 		}
 	}
@@ -208,6 +208,9 @@ func (w *Workspace) boardWorkers(runID string) []boardmodel.Worker {
 			status, last = st, msg
 		}
 		x := boardmodel.Worker{ID: fmt.Sprintf("%s-%d", a.provider, seen[a.provider]), Provider: a.provider, TaskID: a.task, Pane: a.pane, Last: last, Status: status}
+		if a.id != "" {
+			x.Wait = providerWait(a.provider, relayLatestPath(w.workDir, a.id))
+		}
 		if a.beat != nil {
 			x.Heartbeat, x.Started, x.Beat = true, a.beat.Started, a.beat.Beat
 			x.Liveness = liveness[a.task]
@@ -234,7 +237,7 @@ func providerName(worker string) string {
 func workersFingerprint(ws []boardmodel.Worker, now time.Time) string {
 	var b strings.Builder
 	for _, x := range ws {
-		fmt.Fprintf(&b, "%s|%s|%s|%s|%s;", x.ID, x.TaskID, x.Pane, x.Status, x.Last)
+		fmt.Fprintf(&b, "%s|%s|%s|%s|%s|%s;", x.ID, x.TaskID, x.Pane, x.Status, x.Last, x.Wait)
 		if x.Heartbeat {
 			fmt.Fprintf(&b, "beat %d %t;", x.Beat.UnixNano(), now.Sub(x.Beat) > boardmodel.WorkerBeatGrace)
 			if l := x.Liveness; l.Process != "" {

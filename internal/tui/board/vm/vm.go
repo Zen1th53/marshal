@@ -271,6 +271,8 @@ type Task struct {
 	ID, Title, Files, Writer, Reviewer string
 	State                              string // merged, review, building, waiting
 	Note                               string // "waits T03"
+	// Provider is the retry or capacity notice of its worker, "" for none.
+	Provider string
 	// Waiting is why the task does not move; nil while it builds or is done.
 	Waiting *Waiting
 }
