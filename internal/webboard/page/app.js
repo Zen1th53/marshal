@@ -232,12 +232,12 @@
     var n = rework(t);
     var word;
     switch (t.state) {
-      case "building": word = n ? "sent back " + n + "×, building" : "building"; break;
+      case "building": word = (n ? "sent back " + n + "×, building" : "building") + (t.wait ? " · " + t.wait : ""); break;
       case "review": word = t.note === "merging" ? "accepted, merging" : "in review"; break;
       case "waiting": word = t.waiting ? t.waiting.label : t.note ? t.note : "waiting"; break;
       default: word = t.state || "–";
     }
-    var c = el("span", "chip " + toneClass(n ? "warn" : /stuck/.test(t.note || "") ? "bad" : taskTone[t.state]), word);
+    var c = el("span", "chip " + toneClass(n || t.wait ? "warn" : /stuck/.test(t.note || "") ? "bad" : taskTone[t.state]), word);
     out.appendChild(c);
     var l = t.state === "building" ? laneFor(f, t.id) : null;
     if (l) { out.appendChild(document.createTextNode(" ")); var s = el("span", "muted el"); s.dataset.lane = l.i; out.appendChild(s); }

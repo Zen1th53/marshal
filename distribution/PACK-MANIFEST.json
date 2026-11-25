@@ -17101,8 +17101,8 @@
     },
     {
       "path": "internal/webboard/frame.go",
-      "sha256": "4add54c28af4e916dcc3f869a16da932cbe87f5fd6b05f5eb35e1254a1ef56bc",
-      "bytes": 25227
+      "sha256": "95f26e6f924b6b50f5099ab04a4d0ff5ec5fcdd1190d20494d43f15a81b01707",
+      "bytes": 25368
     },
     {
       "path": "internal/webboard/frame_test.go",
@@ -17121,8 +17121,8 @@
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "9fa1edfdd4a480ae278364a2cc0ce8a68f2bdc5baf708679130839df6305777c",
-      "bytes": 94022
+      "sha256": "20993388478180c69cba925b931706bc3af05fe4ab66a49f0d33c1595c649ace",
+      "bytes": 94068
     },
     {
       "path": "internal/webboard/page/index.html",

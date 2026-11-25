@@ -272,6 +272,8 @@ type Task struct {
 	Reviewer string `json:"reviewer"`
 	State    string `json:"state"`
 	Note     string `json:"note"`
+	// Provider is its worker's retry or capacity notice, "" for none.
+	Provider string `json:"wait"`
 	// Waiting is why the task does not move, null while it builds or is done.
 	Waiting *Waiting `json:"waiting"`
 }
@@ -584,7 +586,7 @@ func FromBoard(b vm.Board) Frame {
 			Signal: Signal{At: stamp(l.Signal.At), State: l.Signal.State, Label: l.Signal.Label}, Waiting: waiting(l.Waiting)})
 	}
 	for _, t := range b.Tasks {
-		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note, Waiting: waiting(t.Waiting)})
+		f.Tasks = append(f.Tasks, Task{ID: t.ID, Title: t.Title, Files: t.Files, Writer: t.Writer, Reviewer: t.Reviewer, State: t.State, Note: t.Note, Provider: plain(t.Provider, DetailChars), Waiting: waiting(t.Waiting)})
 	}
 	for _, w := range b.Workers {
 		f.Workers = append(f.Workers, Worker{Provider: w.Provider, Glyph: w.Glyph, LeftPct: w.LeftPct, Tag: w.Tag, TagTone: string(w.TagTone),
