@@ -13211,8 +13211,8 @@
     },
     {
       "path": "internal/tui/board_say.go",
-      "sha256": "946283ff4b35b15ee10be4e9f6b3db9b83d575fb3dd750d2a7dd6004c1f3b633",
-      "bytes": 43465
+      "sha256": "d1a77a841abcc5a82a9a918587f583d251ee9ceacdca55717fb10a018d242ff3",
+      "bytes": 43909
     },
     {
       "path": "internal/tui/board_say_review_test.go",
@@ -13588,6 +13588,11 @@
       "path": "internal/tui/chat_delivery_test.go",
       "sha256": "7b228e70b4175c2a052e0c13544eb1b16012d6e301bb4efdb39bb3093e1c666c",
       "bytes": 9701
+    },
+    {
+      "path": "internal/tui/chat_dim_leftover_test.go",
+      "sha256": "48c04e3674cd0c77a487769f98e468bc3118f2cb69a2a7443a96c0955c20670f",
+      "bytes": 1474
     },
     {
       "path": "internal/tui/chat_input_observe_test.go",

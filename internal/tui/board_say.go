@@ -549,16 +549,18 @@ func (w *Workspace) typeIntoChatStrict(ctx context.Context, pane, text string) (
 	run := w.runChat()
 	d := w.chatComposerDialect()
 	if own, ok := ownPasteFor(pane); ok && own.text == text {
-		if frame, err := run(ctx, "capture-pane", "-p", "-t", pane); err == nil {
-			if _, left := ownLeftover(d, pane, string(frame)); left {
-				if chatBusyNearPrompt(string(frame)) {
+		if styled, err := run(ctx, "capture-pane", "-p", "-e", "-t", pane); err == nil && !promptOnlyDim(string(styled)) {
+			// A dimmed suggestion of the same words is not our paste.
+			frame := StripANSI(string(styled))
+			if _, left := ownLeftover(d, pane, frame); left {
+				if chatBusyNearPrompt(frame) {
 					return "", errChatBusy
 				}
 				if err := submitChatTurnAs(ctx, run, d, pane, text, deliverEnterTries, deliverEnterWait, false); err != nil {
 					return "", err
 				}
 				w.settleUnsentPaste(pane, true, false)
-				return string(frame), nil
+				return frame, nil
 			}
 		}
 	}
@@ -648,22 +650,30 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 	}
 	w.chatTypeMu.Lock()
 	defer w.chatTypeMu.Unlock()
-	frame, err := w.runChat()(ctx, "capture-pane", "-p", "-t", pane)
+	styled, err := w.runChat()(ctx, "capture-pane", "-p", "-e", "-t", pane)
 	if err != nil {
 		return
 	}
+	// The input is read off the styled frame: a dimmed provider suggestion
+	// is not our paste even when its words equal ours (Claude often suggests
+	// the very answer the Board sent), and Enter on it would send it.
+	frame := StripANSI(string(styled))
+	suggestion := promptOnlyDim(string(styled))
 	d := w.chatComposerDialect()
-	own, ok := ownLeftover(d, pane, string(frame))
-	if !ok && open {
-		own, ok = adoptOrphanPaste(d, pane, string(frame))
-	}
-	if !ok && marked {
-		own, ok = adoptMarkedPaste(d, pane, string(frame), mark)
+	own, ok := ownPaste{}, false
+	if !suggestion {
+		own, ok = ownLeftover(d, pane, frame)
+		if !ok && open {
+			own, ok = adoptOrphanPaste(d, pane, frame)
+		}
+		if !ok && marked {
+			own, ok = adoptMarkedPaste(d, pane, frame, mark)
+		}
 	}
 	if !ok {
-		if composerClear(d, string(frame)) {
+		if suggestion || composerClear(d, frame) {
 			if p, had := ownPasteFor(pane); had {
-				w.settleUnsentPaste(pane, pasteLeftInput(string(frame), p.text), true)
+				w.settleUnsentPaste(pane, pasteLeftInput(frame, p.text), true)
 			}
 			forgetOwnPaste(pane)
 			if marked {
@@ -672,7 +682,7 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 		}
 		return
 	}
-	if !chatBusyNearPrompt(string(frame)) {
+	if !chatBusyNearPrompt(frame) {
 		if err := submitChatTurnAs(ctx, w.runChat(), d, pane, own.text, deliverEnterTries, deliverEnterWait, false); err == nil {
 			w.settleUnsentPaste(pane, true, true)
 		}
