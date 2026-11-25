@@ -12696,8 +12696,8 @@
     },
     {
       "path": "internal/tui/board/model/board.go",
-      "sha256": "091c26ff0141e76fb980aaec31181f2b3c07cc5feee630e77af7b20e0a38ee9b",
-      "bytes": 25701
+      "sha256": "82c1376df999bfa0e048cd48211617d2e5fccaa6e734b259fdc8a45f766d520f",
+      "bytes": 25937
     },
     {
       "path": "internal/tui/board/model/board_state_test.go",
@@ -12736,8 +12736,8 @@
     },
     {
       "path": "internal/tui/board/vm/vm.go",
-      "sha256": "4af43e363282389745be962549b73b77bd01f62a4d294553379cc2655e7c8f43",
-      "bytes": 17501
+      "sha256": "1acb4c8f02e939c12628ccd56f3785d4138e3cf7d4cc90f286370099f4328c34",
+      "bytes": 17591
     },
     {
       "path": "internal/tui/board/widgets/chat/chat.go",
@@ -13041,8 +13041,8 @@
     },
     {
       "path": "internal/tui/board_live.go",
-      "sha256": "4d8ca7b9447a34c805516fc1671df036a50c1fed3738098051e798e778cd9fe5",
-      "bytes": 41622
+      "sha256": "eaa85611cabd4f45886bab3c96b1503f3aba11d175d8fc17ed8f41c758f950eb",
+      "bytes": 41744
     },
     {
       "path": "internal/tui/board_live_regression_test.go",
@@ -13196,8 +13196,8 @@
     },
     {
       "path": "internal/tui/board_run_view.go",
-      "sha256": "b0920ce1594a9fd79d123b866e5a3ba9da4e0fa379b241ba4cd80ddc284c8d37",
-      "bytes": 22662
+      "sha256": "a5878d889230e3ee1647201b5d676e67c31e3490b67d230a9bb6b41f07df2114",
+      "bytes": 22718
     },
     {
       "path": "internal/tui/board_run_view_test.go",
@@ -13456,8 +13456,8 @@
     },
     {
       "path": "internal/tui/boardv2_flow.go",
-      "sha256": "ba64b4bf8488dbfd8e4a4bd4ae4f31f58b8e974e80b7ff4416e9c8595c42b1d1",
-      "bytes": 38908
+      "sha256": "1cd77b14ab2d2691263dbe67cfe3b039a99b1742799781c9fec988ed7a3e23bc",
+      "bytes": 39260
     },
     {
       "path": "internal/tui/boardv2_flow_default.go",
@@ -15871,13 +15871,18 @@
     },
     {
       "path": "internal/tui/task_relay.go",
-      "sha256": "83b252d21aa7191b20415daf83ec1f183971b64d82f87ee03c07865429bf146c",
-      "bytes": 1283
+      "sha256": "ec4422afd35a3dd899fb0a0fa70d455bb2c1faabf61aae236cd5f9e39e676dc4",
+      "bytes": 3748
     },
     {
       "path": "internal/tui/task_relay_test.go",
       "sha256": "3829e3a1afc1fb2ddc843e0f085ac9ed890dd07bb93c59c20d2037e15e14cd3b",
       "bytes": 5867
+    },
+    {
+      "path": "internal/tui/task_relay_wait_test.go",
+      "sha256": "58642b3aa4f5b94650ecdd8ebc43840c132a749366a754581a541b1761ff2377",
+      "bytes": 1455
     },
     {
       "path": "internal/tui/task_relay_window_test.go",

@@ -701,6 +701,9 @@ func flowLanes(in flowIn) vm.Lanes {
 			row.Step = "working"
 		}
 		laneLiveness(&row, l, in.now)
+		if l.Wait != "" {
+			row.Note = l.Wait
+		}
 		laneSignal(&row, l, in.now)
 		if row.Waiting = laneWaiting(row, l, in.now); row.Waiting == nil {
 			if a, ok := approvals[l.TaskID]; ok && !row.Reviewing {
@@ -801,12 +804,25 @@ func flowTasks(in flowIn) []vm.Task {
 			row.State, row.Note = "waiting", waitsOn(deps[t.ID], state)
 		}
 		row.Waiting = taskWaiting(in, t, deps[t.ID], state, approvals)
+		if row.State == "building" {
+			row.Provider = laneWait(b, t.ID)
+		}
 		if (row.State == "review" || row.State == "merged") && row.Reviewer == "" {
 			row.Reviewer = "marshal"
 		}
 		out = append(out, row)
 	}
 	return out
+}
+
+// laneWait is the provider notice of the live lane on task id, "" for none.
+func laneWait(b boardmodel.Board, id string) string {
+	for _, l := range b.Lanes {
+		if l.TaskID == id && l.Wait != "" {
+			return l.Wait
+		}
+	}
+	return ""
 }
 
 // waitsOn is a queued task's note: the tasks it still waits on, "queued"
