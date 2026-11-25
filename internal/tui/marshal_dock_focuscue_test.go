@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestDockFocusMarkerSaysWhereKeysGo: the active pane's title says KEYS HERE
@@ -77,5 +78,21 @@ func TestDockStatusRowSurvivesStrftime(t *testing.T) {
 	}
 	if !strings.Contains(row, "context 6%%") {
 		t.Fatalf("a %% in the title is not doubled: %s", row)
+	}
+}
+
+// TestBoardHomeSaysKeysGoToChat: the Board's home draws its own key bar, and
+// it too gives way while the docked chat has the keyboard.
+func TestBoardHomeSaysKeysGoToChat(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true), now: time.Now()}
+	if got := strings.Join(w.paintHome(v, 120, 40), "\n"); strings.Contains(got, "keys go to the chat") || !strings.Contains(got, "s say") {
+		t.Fatalf("home with the Board focused:\n%s", got)
+	}
+	v.docked, v.chatKeys = true, true
+	got := strings.Join(w.paintHome(v, 120, 40), "\n")
+	if !strings.Contains(got, "keys go to the chat — F11 for the Board") || strings.Contains(got, "s say") {
+		t.Fatalf("home while the chat has the keys:\n%s", got)
 	}
 }

@@ -325,6 +325,13 @@ func renderHome(v boardVisual, b vm.Board, p homePrimary, cols, rows int) []stri
 			break
 		}
 	}
+	if v.chatKeys {
+		// Keys typed now reach the docked chat, not these.
+		keys = "keys go to the chat — F11 for the Board"
+		if !v.unicode() {
+			keys = "keys go to the chat - F11 for the Board"
+		}
+	}
 	bottom := 1 // the status row
 	if rows >= 4 {
 		bottom = 2 // and the key bar
@@ -341,7 +348,11 @@ func renderHome(v boardVisual, b vm.Board, p homePrimary, cols, rows int) []stri
 		lines[i] = PadCell(s, cols)
 	}
 	if bottom == 2 {
-		lines[rows-2] = PadCell(v.fg("dim", " "+Truncate(keys, cols-1)), cols)
+		tone := "dim"
+		if v.chatKeys {
+			tone = "white"
+		}
+		lines[rows-2] = PadCell(v.fg(tone, " "+Truncate(keys, cols-1)), cols)
 	}
 	if v.status == "" {
 		v.status = v.inboxPrompt

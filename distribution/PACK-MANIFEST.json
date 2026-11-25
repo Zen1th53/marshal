@@ -12981,8 +12981,8 @@
     },
     {
       "path": "internal/tui/board_home.go",
-      "sha256": "47a06f35242f842fb27c1cbfea1c4a0a71bb06de4c01f4f69bae585068a859b3",
-      "bytes": 17078
+      "sha256": "b6332061d0bf22b3f95709f14fbdcf0891240dc692b61cb28f2863f38d9d8890",
+      "bytes": 17336
     },
     {
       "path": "internal/tui/board_home_test.go",
@@ -14401,8 +14401,8 @@
     },
     {
       "path": "internal/tui/marshal_dock_focuscue_test.go",
-      "sha256": "821cb6a534f2462b744d63408829bf090132982d935c4d6877fd355205b8e498",
-      "bytes": 3632
+      "sha256": "013941362772b5328648984cd4d0e9cfd91dd5af37d28c81d8306753f9d1cb91",
+      "bytes": 4404
     },
     {
       "path": "internal/tui/marshal_dock_focuspoll_test.go",
