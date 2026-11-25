@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -517,25 +518,58 @@ var errChatBusy = errors.New("the Marshal chat is busy")
 // types nothing. On success it returns the plain frame captured just before
 // pasting so the deliverer can tell new turn output from older lines.
 func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string, error) {
+	before, err := w.typeIntoChatStrict(ctx, pane, text)
+	if errors.Is(err, errChatUnsubmitted) {
+		// The paste is recorded as ours and the Board keeps pressing Enter
+		// for it; the owner is told it is waiting, never left to wonder.
+		w.memoryAnswer("Marshal pasted a message into the Marshal chat but Enter has not taken it yet. Marshal keeps trying; if it stays, open the chat (F11) and press Enter.", true)
+		return before, nil
+	}
+	return before, err
+}
+
+// typeIntoChatStrict is typeIntoChat, but a paste left unsent comes back as
+// errChatUnsubmitted (the paste stays recorded as ours) instead of success.
+// A message whose paste of ours is still in the input is submitted, not
+// pasted again.
+func (w *Workspace) typeIntoChatStrict(ctx context.Context, pane, text string) (string, error) {
 	w.chatTypeMu.Lock()
 	defer w.chatTypeMu.Unlock()
+	run := w.runChat()
+	d := w.chatComposerDialect()
+	if own, ok := ownPasteFor(pane); ok && own.text == text {
+		if frame, err := run(ctx, "capture-pane", "-p", "-t", pane); err == nil {
+			if _, left := ownLeftover(d, pane, string(frame)); left {
+				if chatBusyNearPrompt(string(frame)) {
+					return "", errChatBusy
+				}
+				if err := submitChatTurnAs(ctx, run, d, pane, text, deliverEnterTries, deliverEnterWait, false); err != nil {
+					return "", err
+				}
+				return string(frame), nil
+			}
+		}
+	}
 	before, ok := w.chatIdleFrame(ctx, pane)
 	if !ok {
 		return "", errChatBusy
 	}
 	buffer := "marshal-say"
-	if _, err := tmux.RunCommand(ctx, "set-buffer", "-b", buffer, "--", text); err != nil {
+	if _, err := run(ctx, "set-buffer", "-b", buffer, "--", text); err != nil {
 		return "", err
 	}
-	if _, err := tmux.RunCommand(ctx, "paste-buffer", "-d", "-p", "-b", buffer, "-t", pane); err != nil {
-		_, _ = tmux.RunCommand(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer)
+	if _, err := run(ctx, "paste-buffer", "-d", "-p", "-b", buffer, "-t", pane); err != nil {
+		_, _ = run(context.WithoutCancel(ctx), "delete-buffer", "-b", buffer)
 		return "", err
 	}
-	markPanePaste(ctx, tmux.RunCommand, pane, "")
+	// From here the text is in the input: record it as ours before anything
+	// can fail, so an error leaves a paste the Board still submits.
+	rememberOwnPaste(pane, text, "")
+	markPanePaste(ctx, run, pane, "")
 	// The paste must have landed in the prompt before Enter submits it.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+		frame, err := run(ctx, "capture-pane", "-p", "-t", pane)
 		if err != nil {
 			return "", err
 		}
@@ -543,7 +577,7 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 			break
 		}
 		if time.Now().After(deadline) {
-			return "", errors.New("the chat did not show the pasted message")
+			return "", fmt.Errorf("%w: the chat did not show the pasted message", errChatUnsubmitted)
 		}
 		select {
 		case <-ctx.Done():
@@ -552,12 +586,26 @@ func (w *Workspace) typeIntoChat(ctx context.Context, pane, text string) (string
 		}
 	}
 	// A paste the provider holds unsent ("[Pasted text #1]") is ours and
-	// stays recorded as ours: the next look submits it (submitOwnLeftover),
-	// so it counts as typed, not as a failure.
-	if err := submitChatTurnAs(ctx, tmux.RunCommand, w.chatComposerDialect(), pane, text, deliverEnterTries, deliverEnterWait, true); err != nil && !errors.Is(err, errChatUnsubmitted) {
+	// stays recorded as ours: the next look submits it (submitOwnLeftover).
+	if err := submitChatTurnAs(ctx, run, d, pane, text, deliverEnterTries, deliverEnterWait, true); err != nil {
+		if ctx.Err() == nil && !errors.Is(err, errChatUnsubmitted) {
+			// Our paste is in the input and recorded; whatever kept it from
+			// being verified, it waits unsent rather than failed.
+			err = fmt.Errorf("%w: %v", errChatUnsubmitted, err)
+		}
 		return "", err
 	}
 	return before, nil
+}
+
+// runChat is the tmux command runner the chat delivery uses.
+func (w *Workspace) runChat() chatRunner {
+	if w.chatRun != nil {
+		return w.chatRun
+	}
+	return func(ctx context.Context, args ...string) ([]byte, error) {
+		return tmux.RunCommand(ctx, args...)
+	}
 }
 
 // chatComposerDialect is the input-box dialect of the tmux chat's provider.
@@ -582,13 +630,13 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 	// left before it restarted is still known as the Board's.
 	mark, marked := "", false
 	if _, ok := ownPasteFor(pane); !ok && !open {
-		if mark, marked = panePasteMark(ctx, tmux.RunCommand, pane); !marked {
+		if mark, marked = panePasteMark(ctx, w.runChat(), pane); !marked {
 			return
 		}
 	}
 	w.chatTypeMu.Lock()
 	defer w.chatTypeMu.Unlock()
-	frame, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+	frame, err := w.runChat()(ctx, "capture-pane", "-p", "-t", pane)
 	if err != nil {
 		return
 	}
@@ -604,13 +652,13 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 		if composerClear(d, string(frame)) {
 			forgetOwnPaste(pane)
 			if marked {
-				clearPanePaste(ctx, tmux.RunCommand, pane)
+				clearPanePaste(ctx, w.runChat(), pane)
 			}
 		}
 		return
 	}
 	if !chatBusyNearPrompt(string(frame)) {
-		_ = submitChatTurnAs(ctx, tmux.RunCommand, d, pane, own.text, deliverEnterTries, deliverEnterWait, false)
+		_ = submitChatTurnAs(ctx, w.runChat(), d, pane, own.text, deliverEnterTries, deliverEnterWait, false)
 	}
 }
 
@@ -621,11 +669,11 @@ func (w *Workspace) submitOwnLeftover(ctx context.Context, pane string, open boo
 // deliverer can tell a provider prompt or network error from busy work
 // without an extra capture-pane call.
 func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, bool) {
-	status, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{pane_in_mode} #{pane_dead}")
+	status, err := w.runChat()(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{pane_in_mode} #{pane_dead}")
 	if err != nil || strings.TrimSpace(string(status)) != pane+" 0 0" {
 		return "", false
 	}
-	first, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-e", "-t", pane)
+	first, err := w.runChat()(ctx, "capture-pane", "-p", "-e", "-t", pane)
 	if err != nil {
 		return "", false
 	}
@@ -634,7 +682,7 @@ func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, boo
 		return "", false
 	case <-time.After(saySettle):
 	}
-	second, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-e", "-t", pane)
+	second, err := w.runChat()(ctx, "capture-pane", "-p", "-e", "-t", pane)
 	if err != nil {
 		return "", false
 	}
@@ -643,7 +691,7 @@ func (w *Workspace) chatIdleFrame(ctx context.Context, pane string) (string, boo
 	if string(first) != string(second) || !clear {
 		return StripANSI(string(second)), false
 	}
-	plain, err := tmux.RunCommand(ctx, "capture-pane", "-p", "-t", pane)
+	plain, err := w.runChat()(ctx, "capture-pane", "-p", "-t", pane)
 	if err != nil {
 		return StripANSI(string(second)), false
 	}

@@ -319,12 +319,16 @@ func awaitOwnPaste(ctx context.Context, run chatRunner, d composerDialect, pane,
 		if err := ctx.Err(); err != nil {
 			return false, "", err
 		}
-		frame, err := run(ctx, "capture-pane", "-p", "-t", pane)
+		raw, err := run(ctx, "capture-pane", "-p", "-e", "-t", pane)
 		if err != nil {
 			return false, "", err
 		}
+		frame := []byte(StripANSI(string(raw)))
 		content, ok := chatComposer(string(frame))
 		switch {
+		case ok && !ownChatComposer(string(frame), text) && chatPromptIdle(string(raw)):
+			// Only dim text at the prompt: the provider's own suggestion
+			// (or placeholder), still showing until it draws the paste.
 		case ok && ownChatComposer(string(frame), text):
 			rememberOwnPaste(pane, text, content)
 			markPanePaste(ctx, run, pane, content)
@@ -380,6 +384,12 @@ func submitChatTurnAs(ctx context.Context, run chatRunner, d composerDialect, pa
 		var seen bool
 		seen, first, err = awaitOwnPaste(ctx, run, d, pane, text, tries, wait)
 		if err != nil {
+			if ctx.Err() != nil {
+				return err
+			}
+			// The text is in the input but could not be verified yet: keep
+			// it recorded as ours so the next look submits it.
+			rememberOwnPaste(pane, text, "")
 			return err
 		}
 		if !seen {
