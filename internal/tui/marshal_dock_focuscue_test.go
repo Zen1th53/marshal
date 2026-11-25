@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestDockFocusMarkerSaysWhereKeysGo: the active pane's title says KEYS HERE
@@ -58,5 +59,40 @@ func TestBoardFooterSaysKeysGoToChat(t *testing.T) {
 	}
 	if VisibleLen(line) != 100 {
 		t.Fatalf("footer is %d cells, want 100", VisibleLen(line))
+	}
+}
+
+// TestDockStatusRowSurvivesStrftime: tmux passes the status line through
+// strftime, which eats a bare "%". The row picks the focused pane by the
+// Board's own pane option, never by a "%N" pane id, and doubles any "%" in
+// its titles.
+func TestDockStatusRowSurvivesStrftime(t *testing.T) {
+	w := NewWorkspace(nil, "test-proj", "test-session")
+	d := dockStatus{window: "@0", chat: "%7", board: "%0", chatW: 60, boardW: 80, chatTitle: " MARSHAL CHAT · context 6%"}
+	row := w.dockStatusRow(NewTheme(ThemeDefault, true, true), d)
+	if strings.Contains(row, "pane_id") || strings.Contains(row, "%7") || strings.Contains(row, ",%0") {
+		t.Fatalf("status row compares pane ids: %s", row)
+	}
+	if !strings.Contains(row, "#{?@marshal_board_title,") {
+		t.Fatalf("status row does not ask which pane is the Board: %s", row)
+	}
+	if !strings.Contains(row, "context 6%%") {
+		t.Fatalf("a %% in the title is not doubled: %s", row)
+	}
+}
+
+// TestBoardHomeSaysKeysGoToChat: the Board's home draws its own key bar, and
+// it too gives way while the docked chat has the keyboard.
+func TestBoardHomeSaysKeysGoToChat(t *testing.T) {
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	v := boardVisual{theme: NewTheme(ThemeNoColor, true, true), now: time.Now()}
+	if got := strings.Join(w.paintHome(v, 120, 40), "\n"); strings.Contains(got, "keys go to the chat") || !strings.Contains(got, "s say") {
+		t.Fatalf("home with the Board focused:\n%s", got)
+	}
+	v.docked, v.chatKeys = true, true
+	got := strings.Join(w.paintHome(v, 120, 40), "\n")
+	if !strings.Contains(got, "keys go to the chat — F11 for the Board") || strings.Contains(got, "s say") {
+		t.Fatalf("home while the chat has the keys:\n%s", got)
 	}
 }

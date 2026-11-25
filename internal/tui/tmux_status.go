@@ -292,12 +292,13 @@ func (w *Workspace) dockStatusRow(th *Theme, d dockStatus) string {
 		}
 		return "#[fg=" + tmuxColour("dim") + "]" + tmuxText(cell) + "#[default]"
 	}
-	choose := func(pane, active, inactive string) string {
-		return "#{?#{==:#{pane_id}," + pane + "}," + escapeBranch(active) + "," + escapeBranch(inactive) + "}"
-	}
 	rule := "#[fg=" + tmuxColour("faint") + "]" + tmuxText(v.boxVert()) + "#[default]"
-	dock := choose(d.chat, seg(d.chatTitle, d.chatW, true), seg(d.chatTitle, d.chatW, false)) + rule +
-		choose(d.board, seg(boardDockTitle, d.boardW, true), seg(boardDockTitle, d.boardW, false))
+	// The status line is expanded in the window's active pane, and only the
+	// Board pane carries @marshal_board_title. Pane ids are not compared:
+	// the status line passes through strftime, which eats their "%".
+	boardKeys := seg(d.chatTitle, d.chatW, false) + rule + seg(boardDockTitle, d.boardW, true)
+	chatKeys := seg(d.chatTitle, d.chatW, true) + rule + seg(boardDockTitle, d.boardW, false)
+	dock := "#{?@marshal_board_title," + escapeBranch(boardKeys) + "," + escapeBranch(chatKeys) + "}"
 	other := "#[fg=" + tmuxColour("dim") + "] #{window_name}#[default]"
 	return "#{?#{==:#{window_id}," + d.window + "}," + escapeBranch(dock) + "," + escapeBranch(other) + "}"
 }
@@ -310,8 +311,11 @@ func (v boardVisual) boxVert() string {
 	return "│"
 }
 
-// tmuxText escapes literal text for a tmux format.
-func tmuxText(s string) string { return strings.ReplaceAll(s, "#", "##") }
+// tmuxText escapes literal text for the status line's format, which tmux
+// also passes through strftime.
+func tmuxText(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "#", "##"), "%", "%%")
+}
 
 // escapeBranch escapes the commas and closing braces a #{?c,a,b} branch must
 // not contain bare, leaving nested #{...} formats and #[...] styles whole.
