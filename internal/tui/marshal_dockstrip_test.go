@@ -44,14 +44,14 @@ func TestDockStripTitleWidths(t *testing.T) {
 		cols int
 		want string
 	}{
-		{"full 132", stripFull, 132, " MARSHAL CHAT  ✳ opus-5.5 · medium  ● live         [m] switch "},
-		{"full 100", stripFull, 100, " MARSHAL CHAT  ✳ opus-5.5  ● live  [m] switch "},
-		{"full 80", stripFull, 80, " MARSHAL CHAT  ✳  ● live        [m] "},
-		{"unbound 132", unbound, 132, " MARSHAL CHAT  ⬡ codex · 6.1-Sol  ○ not bound      [m] switch "},
-		{"unbound 80", unbound, 80, " MARSHAL CHAT  ⬡  ○ not bound   [m] "},
-		{"bare 132", bare, 132, " MARSHAL CHAT  ✳ claude                 [m] switch  F11 Board "},
-		{"bare 100", bare, 100, " MARSHAL CHAT  ✳ claude            [m] switch "},
-		{"bare 80", bare, 80, " MARSHAL CHAT  ✳ claude  [m] switch "},
+		{"full 132", stripFull, 132, " MARSHAL CHAT  ✳ opus-5.5  ● live         [m] switch "},
+		{"full 100", stripFull, 100, " MARSHAL CHAT  ✳  ● live  [m] switch "},
+		{"full 80", stripFull, 80, " ✳ opus-5.5  ● live    [m] "},
+		{"unbound 132", unbound, 132, " MARSHAL CHAT  ⬡ 6.1-Sol  ○ not bound     [m] switch "},
+		{"unbound 80", unbound, 80, " ⬡ codex  ○ not bound  [m] "},
+		{"bare 132", bare, 132, " MARSHAL CHAT  ✳ claude        [m] switch  F11 Board "},
+		{"bare 100", bare, 100, " MARSHAL CHAT  ✳ claude   [m] switch "},
+		{"bare 80", bare, 80, " MARSHAL CHAT  ✳       [m] "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			chatW := dockWidth(tc.cols)
@@ -59,8 +59,8 @@ func TestDockStripTitleWidths(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("got  %q\nwant %q", got, tc.want)
 			}
-			if n := VisibleLen(got); n != chatW-3 {
-				t.Errorf("width %d, want %d", n, chatW-3)
+			if n := VisibleLen(got); n != chatW-dockMarkerW {
+				t.Errorf("width %d, want %d", n, chatW-dockMarkerW)
 			}
 			if at < 0 || !strings.HasPrefix(string([]rune(got)[at:]), "[m]") {
 				t.Errorf("[m] at %d in %q", at, got)

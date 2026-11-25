@@ -43,6 +43,9 @@ type marshalDock struct {
 	windowID string
 
 	docked atomic.Bool // read by paint without taking mu
+	// chatKeys is set while the chat pane, not the Board, has the keyboard:
+	// the Board's footer then says where its keys go.
+	chatKeys atomic.Bool
 	// strip is what the v2 MARSHAL CHAT strip said at the last paint; a
 	// change kicks the dock so the chat's title follows.
 	strip atomic.Pointer[dockStrip]
@@ -67,17 +70,62 @@ func (w *Workspace) startDock(ctx context.Context) {
 	kick := w.dock.kick
 	w.dock.mu.Unlock()
 	w.startBackground(ctx, func(ctx context.Context) {
+		focus := time.NewTicker(dockFocusEvery)
+		defer focus.Stop()
 		for {
 			if err := w.reconcileDock(ctx); err != nil && ctx.Err() == nil {
 				w.RecordActivity("Marshal dock: " + err.Error())
 			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-kick:
+			// Between reconciles, watch which pane has the keyboard.
+			for wait := true; wait; {
+				select {
+				case <-ctx.Done():
+					return
+				case <-kick:
+					wait = false
+				case <-focus.C:
+					w.pollBoardFocus(ctx)
+				}
 			}
 		}
 	})
+}
+
+// dockFocusEvery is how often the Board looks at which pane has the keyboard.
+const dockFocusEvery = 700 * time.Millisecond
+
+// pollBoardFocus reads whether the Board pane is the selected pane of its
+// window and repaints when that changed. An unreadable answer changes nothing.
+func (w *Workspace) pollBoardFocus(ctx context.Context) {
+	if !w.dock.docked.Load() {
+		if w.dock.chatKeys.Swap(false) {
+			w.requestRepaint()
+		}
+		return
+	}
+	w.tmuxMu.Lock()
+	board := w.tmuxMarshalPaneID
+	w.tmuxMu.Unlock()
+	if !isPaneID(board) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, dockWait)
+	defer cancel()
+	out, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", board, "#{pane_active}")
+	if err != nil {
+		return
+	}
+	var chat bool
+	switch strings.TrimSpace(string(out)) {
+	case "0":
+		chat = true
+	case "1":
+	default:
+		return
+	}
+	if w.dock.chatKeys.Swap(chat) != chat {
+		w.requestRepaint()
+	}
 }
 
 // kickDock asks the reconciler to look again: after a resize, a view change
@@ -289,7 +337,7 @@ func (w *Workspace) adoptDockLocked(ctx context.Context, chat *activeTmuxAgent, 
 		title, at := w.dockTitleWith(chat, strip, width, true)
 		pick := [2]int{-1, -1}
 		if at >= 0 {
-			pick = [2]int{3 + at, 3 + at + len("[m]")}
+			pick = [2]int{dockMarkerW + at, dockMarkerW + at + len("[m]")}
 		}
 		if rebound || pick != w.dock.pick || window != w.dock.windowID {
 			if err := w.bindDockClicks(ctx, root, window, chat.paneID, board, width, pick[0], pick[1]); err != nil {
@@ -403,19 +451,41 @@ func (w *Workspace) forgetDockLocked(ctx context.Context) error {
 // selected pane's title is drawn on the accent colour with a marker, the
 // other dimmed, so where the keyboard is shows at a glance from either side.
 // The chat's title is @marshal_dock_title, the Board's @marshal_board_title.
-var dockBorderFormat = "#{?pane_active,#[fg=" + tmuxColour("ink") + "#,bg=" + tmuxColour("accent") + "#,bold] ▶ ,#[fg=" + tmuxColour("dim") + "#,bg=default#,nobold]   }" +
-	"#{?@marshal_dock_title,#{@marshal_dock_title},#{@marshal_board_title}}#[default]"
+var dockBorderFormat = dockBorderFormatFor(true)
+
+// dockMarkerW is the width of the focus marker in front of each pane title.
+// Both states are the same width, so the title and the [m] click range do
+// not move when focus does.
+const dockMarkerW = 12
+
+// dockFocusMarker is the words in front of a pane's title: KEYS HERE on the
+// pane that has the keyboard, how to get it on the other.
+func dockFocusMarker(active, unicode bool) string {
+	if active {
+		if unicode {
+			return " ▶ KEYS HERE"
+		}
+		return " > KEYS HERE"
+	}
+	return " F11 to type"
+}
+
+func dockBorderFormatFor(unicode bool) string {
+	return "#{?pane_active,#[fg=" + tmuxColour("ink") + "#,bg=" + tmuxColour("accent") + "#,bold]" + dockFocusMarker(true, unicode) +
+		",#[fg=" + tmuxColour("dim") + "#,bg=default#,nobold]" + dockFocusMarker(false, unicode) + "}" +
+		"#{?@marshal_dock_title,#{@marshal_dock_title},#{@marshal_board_title}}#[default]"
+}
 
 // boardDockTitle is the Board pane's border title while the chat is docked:
 // how to reach the chat, and that typing here reaches it too.
-const boardDockTitle = "BOARD  ·  F11 / Alt+← chat  ·  s: say it to the Marshal from here "
+const boardDockTitle = " BOARD  ·  F11 / Alt+← chat  ·  s: say it to the Marshal from here "
 
 // styleDockLocked frames the docked panes: titles on the top border row,
 // the selected pane's border in the accent colour, and mouse focus on so a
 // click selects either pane. Caller holds dock.mu.
 func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 	opts := [][2]string{
-		{"pane-border-format", dockBorderFormat},
+		{"pane-border-format", dockBorderFormatFor(w.dockUnicode())},
 		{"pane-border-status", "top"},
 	}
 	if w.statusOwned() {
@@ -449,18 +519,25 @@ func (w *Workspace) styleDockLocked(ctx context.Context, board string) error {
 // memory (the v2 view model, the last usage reading, the chat's launch
 // arguments and the theme); it never opens a file or consults the store on
 // the rendering path. width is the chat pane's width in columns; the title
-// then fits it less the 3-cell focus marker; width <= 0 skips the fit. The
+// then fits it less the focus marker (dockMarkerW cells); width <= 0 skips the fit. The
 // caller holds neither w.mu nor dock.mu.
 func (w *Workspace) dockTitle(chat *activeTmuxAgent, width int) string {
 	title, _ := w.dockTitleAt(chat, width, false)
 	return title
 }
 
-// dockTitleAt is dockTitle; pad lays it out exactly width-3 cells wide with
+// dockTitleAt is dockTitle; pad lays it out exactly width-dockMarkerW cells wide with
 // "[m] switch" flush right (the status line's title row), and it also
 // returns the cell offset of "[m]" in the title, -1 when it is not shown.
 func (w *Workspace) dockTitleAt(chat *activeTmuxAgent, width int, pad bool) (string, int) {
 	return w.dockTitleWith(chat, w.dockStripNow(), width, pad)
+}
+
+// dockUnicode reports whether the theme draws non-ASCII glyphs.
+func (w *Workspace) dockUnicode() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.theme == nil || w.theme.Unicode
 }
 
 // dockTitleWith is dockTitleAt with the v2 strip already taken.

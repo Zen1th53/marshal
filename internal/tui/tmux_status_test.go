@@ -64,9 +64,9 @@ func TestStatusLineOwnedSessionOnly(t *testing.T) {
 				t.Fatal("the status line does not report the vitals row")
 			}
 			// The click lands on [m]: the binding's range is where the title
-			// puts it, three cells of marker in.
+			// puts it, the marker's width in.
 			title, at := w.dockTitleAt(chat, dockWidth(160), true)
-			x0 := 3 + at
+			x0 := dockMarkerW + at
 			if !strings.HasPrefix(string([]rune(title)[at:]), "[m]") ||
 				!strings.Contains(log, "#{e|>=:#{mouse_x},"+strconv.Itoa(x0)+"},#{e|<:#{mouse_x},"+strconv.Itoa(x0+3)+"}") {
 				t.Fatalf("click range for [m] at %d in %q not bound:\n%s", x0, title, log)

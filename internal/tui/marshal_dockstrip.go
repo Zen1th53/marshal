@@ -209,7 +209,7 @@ func dockStripTitle(s dockStrip, unicode bool, width int, pad bool) (string, int
 		}
 		gap := 4
 		if pad && width > 0 {
-			gap = max(2, width-3-VisibleLen(head)-VisibleLen(right))
+			gap = max(2, width-dockMarkerW-VisibleLen(head)-VisibleLen(right))
 		}
 		at := VisibleLen(head) + gap + VisibleLen(right) - VisibleLen(keys)
 		return head + strings.Repeat(" ", gap) + right, at
@@ -218,7 +218,7 @@ func dockStripTitle(s dockStrip, unicode bool, width int, pad bool) (string, int
 	if width <= 0 {
 		return title, at
 	}
-	avail := width - 3
+	avail := width - dockMarkerW
 	fits := func() bool {
 		t, _ := build()
 		return VisibleLen(t) <= avail
