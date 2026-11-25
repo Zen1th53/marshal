@@ -146,6 +146,8 @@ type boardVisual struct {
 	marshalLeads bool
 	// docked is set while the Marshal chat is docked beside the Board.
 	docked bool
+	// chatKeys is set while the docked chat, not the Board, has the keyboard.
+	chatKeys bool
 	// launchProgress is the completed startup checks line shown under the
 	// opening wordmark while the launch check still runs (empty before any
 	// check finishes).
@@ -546,6 +548,15 @@ type footerSpan struct {
 // of a confirmation, picker or composer right-aligned after it, or help after
 // an answer, while they fit beside it.
 func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
+	if v.chatKeys {
+		// Keys typed now reach the chat, so the Board's own hints would
+		// mislead: say where the keyboard is instead.
+		dash := "-"
+		if v.theme == nil || v.theme.Unicode {
+			dash = "—"
+		}
+		return v.fg("white", PadCell(" keys go to the chat "+dash+" F11 for the Board", w)), nil
+	}
 	type item = hintItem
 	var items []item
 	for _, id := range v.hints {

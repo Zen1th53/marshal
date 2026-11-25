@@ -630,6 +630,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	}
 	v.marshalLeads = editionExtreme && accMode == marshal.AcceptMarshal
 	v.empty, v.docked, v.notes = empty, w.dock.docked.Load(), w.noteList()
+	v.chatKeys = v.docked && w.dock.chatKeys.Load()
 	v.planning = w.planningNow(empty, state.Goal)
 	if goal, ok := w.activeGoalNow(empty, state.Goal); ok {
 		v.goalGiven = true

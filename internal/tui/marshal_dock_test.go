@@ -46,6 +46,7 @@ key() { printf '%%s' "$1" | tr -d '%%'; }
 case "$1" in
   display-message)
     case "$*" in
+      *"#{pane_active}"*) [ -f "$d/active" ] && cat "$d/active"; exit 0;;
       *"#{pane_id} #{window_id} #{window_width} #{pane_width}"*)
         ww=$(cat "$d/winw")
         if [ "$target" = "%%0" ]; then

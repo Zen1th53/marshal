@@ -48,7 +48,7 @@ type statusBar struct {
 type dockStatus struct {
 	window, chat, board string
 	chatW, boardW       int
-	chatTitle           string // laid out chatW-3 cells wide (after the marker)
+	chatTitle           string // laid out chatW-dockMarkerW cells wide (after the marker)
 }
 
 // savedOption is a session option as it was before Marshal set it: set says
@@ -284,12 +284,9 @@ func saveStatusOptions(ctx context.Context, target string) ([]savedOption, error
 // its name.
 func (w *Workspace) dockStatusRow(th *Theme, d dockStatus) string {
 	v := boardVisual{theme: th}
+	unicode := th == nil || th.Unicode
 	seg := func(text string, width int, active bool) string {
-		marker := "   "
-		if active {
-			marker = " ▶ "
-		}
-		cell := PadCell(marker+text, width)
+		cell := PadCell(dockFocusMarker(active, unicode)+text, width)
 		if active {
 			return "#[fg=" + tmuxColour("ink") + "]#[bg=" + tmuxColour("accent") + "]#[bold]" + tmuxText(cell) + "#[default]"
 		}

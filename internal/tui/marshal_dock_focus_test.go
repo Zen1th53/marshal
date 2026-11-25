@@ -110,10 +110,10 @@ func TestRealTmuxDockFocusSwitch(t *testing.T) {
 
 	// The highlighted title follows the selected pane.
 	title := func(pane string) string { return display(pane, "#{E:pane-border-format}") }
-	if got := title(board); !strings.Contains(got, "▶") || !strings.Contains(got, "BOARD") || !strings.Contains(got, "F11 / Alt+← chat") {
+	if got := title(board); !strings.Contains(got, "▶ KEYS HERE") || !strings.Contains(got, "BOARD") || !strings.Contains(got, "F11 / Alt+← chat") {
 		t.Fatalf("board title while selected: %q", got)
 	}
-	if got := title(chatPane); strings.Contains(got, "▶") || !strings.Contains(got, "F11 Board") {
+	if got := title(chatPane); strings.Contains(got, "▶") || !strings.Contains(got, "F11 to type") {
 		t.Fatalf("chat title while the Board is selected: %q", got)
 	}
 
@@ -121,7 +121,7 @@ func TestRealTmuxDockFocusSwitch(t *testing.T) {
 		// F11 from the Board selects the chat, F11 from the chat the Board.
 		press(f11)
 		waitFor(t, func() bool { return active() == chatPane })
-		if got := title(chatPane); !strings.Contains(got, "▶") {
+		if got := title(chatPane); !strings.Contains(got, "▶ KEYS HERE") {
 			t.Fatalf("chat title while selected: %q", got)
 		}
 		press(f11)
