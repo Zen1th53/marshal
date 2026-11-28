@@ -859,11 +859,11 @@ func TestAskBrowserBindingChangesForIdenticalQuestions(t *testing.T) {
 	if first == second {
 		t.Fatal("identical successive questions share a browser action binding")
 	}
-	result := w.webAct(webboard.Action{Kind: "key", Card: first, Key: "⏎"})
+	result := w.webAct(namedTestAction(w, webboard.Action{Kind: "key", Card: first, Key: "⏎"}))
 	if result.res.Status != "stale" || len(tr.sentTurns()) != 0 {
 		t.Fatalf("old browser action delivered: %+v", result)
 	}
-	result = w.webAct(webboard.Action{Kind: "key", Card: second, Key: "⏎"})
+	result = w.webAct(namedTestAction(w, webboard.Action{Kind: "key", Card: second, Key: "⏎"}))
 	if result.res.Status != "done" || len(tr.sentTurns()) != 1 {
 		t.Fatalf("current browser action failed: %+v", result)
 	}
