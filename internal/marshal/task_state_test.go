@@ -59,6 +59,12 @@ func TestRestoreAmendedTaskState(t *testing.T) {
 func TestResetTaskForAmendment(t *testing.T) {
 	for state := range taskMoves {
 		task := Task{PlanTaskID: "task", State: state}
+		if state == Merged || state == Cancelled {
+			if ResetTaskForAmendment(&task) == nil || task.State != state {
+				t.Fatal("terminal reset accepted")
+			}
+			continue
+		}
 		if err := ResetTaskForAmendment(&task); err != nil || task.State != Queued {
 			t.Fatalf("reset %s: %v", state, err)
 		}
@@ -69,5 +75,18 @@ func TestResetTaskForAmendment(t *testing.T) {
 	}
 	if ResetTaskForAmendment(nil) == nil {
 		t.Fatal("reset accepted nil task")
+	}
+}
+
+func TestAmendmentRestoreIsBoundToPreviousState(t *testing.T) {
+	previous := Task{PlanTaskID: "task", State: Returned}
+	for state := range taskMoves {
+		if state == previous.State {
+			continue
+		}
+		task := Task{PlanTaskID: "task", State: Queued}
+		if setTaskState(&task, state, &previous, false) == nil || task.State != Queued {
+			t.Fatalf("restored %s absent from previous snapshot", state)
+		}
 	}
 }

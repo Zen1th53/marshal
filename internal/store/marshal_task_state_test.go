@@ -42,19 +42,25 @@ func TestTaskSnapshotWritersRefuseOffTableMoves(t *testing.T) {
 	}
 }
 
-func TestNewPlanVersionCanResetFinishedTask(t *testing.T) {
-	s := openTestStore(t)
-	marshalTestProject(t, s)
-	run := marshal.Run{PlanID: "plan", PlanVersion: 1, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "task", State: marshal.Merged}}}
-	if err := s.SaveMarshalState(t.Context(), "p", "run", run, 0, nil, nil, 0); err != nil {
-		t.Fatal(err)
-	}
-	run.Tasks[0].State = marshal.Queued
-	if err := s.SaveMarshalState(t.Context(), "p", "run", run, 1, nil, nil, 0); err == nil {
-		t.Fatal("finished task reset without new plan")
-	}
-	run.PlanVersion++
-	if err := s.SaveMarshalState(t.Context(), "p", "run", run, 1, nil, nil, 0); err != nil {
-		t.Fatal(err)
+// Whole-struct copies are allowed by the source guard; persistence validates their results.
+func TestNewPlanVersionRefusesTerminalTaskOverwrite(t *testing.T) {
+	for _, state := range []marshal.TaskState{marshal.Merged, marshal.Cancelled} {
+		t.Run(string(state), func(t *testing.T) {
+			s := openTestStore(t)
+			marshalTestProject(t, s)
+			run := marshal.Run{PlanID: "plan", PlanVersion: 1, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "task", State: state}}}
+			if err := s.SaveMarshalState(t.Context(), "p", "run", run, 0, nil, nil, 0); err != nil {
+				t.Fatal(err)
+			}
+			run.PlanVersion++
+			run.Tasks[0] = marshal.Task{PlanTaskID: "task", State: marshal.Queued}
+			if err := s.SaveMarshalState(t.Context(), "p", "run", run, 1, nil, nil, 0); err == nil {
+				t.Fatal("terminal task overwritten")
+			}
+			saved, err := s.GetMarshalRun(t.Context(), "p", "run")
+			if err != nil || saved.Value.Tasks[0].State != state || saved.Revision != 1 {
+				t.Fatalf("durable state changed: %+v %v", saved, err)
+			}
+		})
 	}
 }

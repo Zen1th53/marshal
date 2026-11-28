@@ -2441,8 +2441,8 @@
     },
     {
       "path": "internal/app/marshal_approval_wait_expiry_extreme_test.go",
-      "sha256": "d4df2ab0745ec556563eff9429b94453636f5bc54606b9fb513de8ecab09d3d7",
-      "bytes": 8407
+      "sha256": "2ac2438192044a6557db0b6520df5459929f371bff12cd12b30d62c061d47471",
+      "bytes": 9448
     },
     {
       "path": "internal/app/marshal_approval_wait_extreme.go",
@@ -8206,18 +8206,18 @@
     },
     {
       "path": "internal/marshal/task_state.go",
-      "sha256": "7b74c11657f8c9c7fe047d71fbf52cc0e2c77664899fde7cc2264691b7803bc1",
-      "bytes": 2259
+      "sha256": "a372bde043130b603ff5782293a258aafa3a5884ab2e43511b2c4bfa0797147a",
+      "bytes": 2876
     },
     {
       "path": "internal/marshal/task_state_guard_test.go",
-      "sha256": "a0f37b1b403775f9d3d7c6c71503f8373522b8cff85709f0a12dbc1b9f6a78b3",
-      "bytes": 3499
+      "sha256": "5a467ff883a3b4f0ef485bb40a497864b9af3d28d80e9b4fe930685d9eb1ac1c",
+      "bytes": 8104
     },
     {
       "path": "internal/marshal/task_state_test.go",
-      "sha256": "d839cd71fec24ac28aa159044a7042c7d56e3de314175c5112370c7bd9dbac1a",
-      "bytes": 2652
+      "sha256": "53f79444a1009c5b7209eeefda64fe60c9bf2ecf0725bd9e18bc6bd3bde46850",
+      "bytes": 3229
     },
     {
       "path": "internal/marshal/tier.go",
@@ -11371,8 +11371,8 @@
     },
     {
       "path": "internal/store/marshal_task_state.go",
-      "sha256": "a4af37a38e6cdafeaab3223e5de18c295ae68a7b57700329e4abe631ff7adaf4",
-      "bytes": 1366
+      "sha256": "8166c0122bed06b0fc4d18915d692c8b97f508a398f5e3bb8cb74d1d3171071a",
+      "bytes": 1668
     },
     {
       "path": "internal/store/marshal_task_state_guard_test.go",
@@ -11381,8 +11381,8 @@
     },
     {
       "path": "internal/store/marshal_task_state_test.go",
-      "sha256": "e48cbe48fd51b8b201d368863f02e9301014287704f703a091f8023678b7fa32",
-      "bytes": 2071
+      "sha256": "642644b4ae598d48f0b0a8e48cb7fb20de406eaaae2dcdb65e42ba66a4df8101",
+      "bytes": 2435
     },
     {
       "path": "internal/store/marshal_test.go",
@@ -18086,8 +18086,8 @@
     },
     {
       "path": "tools/e2e/boardseed/main.go",
-      "sha256": "963cce60dfd7e117031988a2020384a67763115c7afaea24d74fae9c4cff3d35",
-      "bytes": 5475
+      "sha256": "389eb0fff5fed53ab238e030e226d7830c9302b39ad3fa827b2c974ecba926e3",
+      "bytes": 6237
     },
     {
       "path": "tools/e2e/button_walk.py",
