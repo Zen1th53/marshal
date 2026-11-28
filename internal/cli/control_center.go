@@ -244,7 +244,7 @@ func (c *command) startupEnvironment() startup.Environment {
 		// Community keeps its conservative startup default.
 		UltraEntitled: startupUltraEntitled(),
 	}
-	verdict := startup.ObserveReadiness(context.Background(), startup.NewSystemProber(), c.canonicalRoot(context.Background()), marshal.ReviewPolicy{})
+	verdict := startup.ObserveReadiness(context.Background(), startup.NewSystemProber(), c.canonicalRoot(context.Background()), marshal.ReviewPolicy{}, false)
 	env.Readiness = &verdict
 	if !sandbox.HostExecutionPreferred() {
 		env.SandboxEnforced = app.SandboxEnforcementAvailable()

@@ -344,3 +344,18 @@ func TestDoctorUsesReadinessVerdict(t *testing.T) {
 		t.Fatalf("%+v", report)
 	}
 }
+
+// A fresh install with no planner chosen is a setup step not taken yet: the
+// report is DEGRADED and names the next step, never FAIL.
+func TestDoctorPlannerNotChosenIsDegraded(t *testing.T) {
+	repo := doctorRepo(t)
+	if _, err := app.Bootstrap(t.Context(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	r := marshal.ComputeReadiness("", map[string]marshal.ProviderReadiness{"claude": {Installed: true, SignedIn: true}}, marshal.ReviewPolicy{})
+	report := Check(t.Context(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe, Readiness: &r})
+	row := report.Check("execution.readiness")
+	if row == nil || row.Verdict != Degraded || !strings.Contains(row.Detail, "/provider use <name>") || report.Verdict != Degraded {
+		t.Fatalf("%+v", report)
+	}
+}

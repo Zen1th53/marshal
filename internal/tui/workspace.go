@@ -1000,7 +1000,8 @@ func (w *Workspace) GetUIState() UIState {
 	w.mu.RLock()
 	state := w.liveStateLocked()
 	w.mu.RUnlock()
-	state.ReadinessBlocker = w.executionReadiness().Blocker
+	readiness, _ := w.executionReadiness()
+	state.ReadinessBlocker = readiness.Blocker
 	return state
 }
 

@@ -26,6 +26,10 @@ type Readiness struct {
 	Blocker            string
 	Guarantee          string
 	NeedsConfirmation  bool
+	// SetupPending marks a planner blocker that is a setup step not taken
+	// yet (no planner chosen, or its sign-in not checked yet) rather than an
+	// observed failure.
+	SetupPending bool
 }
 
 func SignInCommand(provider string) string {
@@ -45,6 +49,7 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 	r := Readiness{ReviewPolicy: policy.Effective()}
 	p := providers[planner]
 	r.PlannerRunnable = planner != "" && p.Runnable()
+	r.SetupPending = planner == "" || (p.Installed && p.AuthUnknown)
 	switch {
 	case planner == "":
 		r.Blocker = "Choose your planner: run `/provider use <name>`."

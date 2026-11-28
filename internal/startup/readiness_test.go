@@ -21,7 +21,7 @@ func TestStartupUsesSharedReadiness(t *testing.T) {
 	}
 	p := healthyProject(root)
 	p.onPath["codex"] = true
-	r := startup.ObserveReadiness(context.Background(), p, root, marshal.ReviewPolicy{FinalModel: marshal.FinalModelOff})
+	r := startup.ObserveReadiness(context.Background(), p, root, marshal.ReviewPolicy{FinalModel: marshal.FinalModelOff}, false)
 	if r.PlannerRunnable || !strings.Contains(r.Blocker, "codex login") {
 		t.Fatalf("%+v", r)
 	}

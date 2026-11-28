@@ -15,7 +15,9 @@ import (
 
 // ObserveReadiness performs only local, read-only inspection. Providers without
 // a read-only auth command remain unknown until runtime evidence is supplied.
-func ObserveReadiness(ctx context.Context, p Prober, root string, policy marshal.ReviewPolicy) marshal.Readiness {
+// It starts no provider process unless probeAuth is set (doctor
+// --probe-providers): then codex's read-only `codex login status` is asked.
+func ObserveReadiness(ctx context.Context, p Prober, root string, policy marshal.ReviewPolicy, probeAuth bool) marshal.Readiness {
 	planner := ""
 	path := filepath.Join(root, statepath.DirName, "default-provider")
 	if root != "" && statepath.CheckPath(root, path) == nil {
@@ -59,7 +61,7 @@ func ObserveReadiness(ctx context.Context, p Prober, root string, policy marshal
 		fact := providers[name]
 		fact.Installed = err == nil
 		fact.AuthUnknown = fact.Installed && !fact.SignedIn
-		if err == nil && name == "codex" {
+		if err == nil && name == "codex" && probeAuth {
 			output, err := p.Run(ctx, root, binary, "login", "status")
 			text := strings.ToLower(string(output))
 			signedOut := strings.Contains(text, "not logged in") || strings.Contains(text, "not signed in") || strings.Contains(text, "authentication required")

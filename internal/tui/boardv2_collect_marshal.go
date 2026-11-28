@@ -438,15 +438,17 @@ func buildV2Ready(in v2MarshalIn) vm.Readiness {
 		settings = marshal.DefaultSettings()
 	}
 	limits, globalCap := app.WorkerConcurrency(settings)
-	verdict := in.readiness()
-	if verdict.Blocker != "" {
-		add(vm.Check{Mark: "bad", Label: "Readiness", Text: verdict.Blocker, Tag: "action"})
+	if in.Probed {
+		verdict := in.readiness()
+		if verdict.Blocker != "" {
+			add(vm.Check{Mark: "bad", Label: "Readiness", Text: verdict.Blocker, Tag: "action"})
+		}
+		guaranteeMark := "ok"
+		if verdict.NeedsConfirmation {
+			guaranteeMark = "warn"
+		}
+		add(vm.Check{Mark: guaranteeMark, Label: "Guarantee", Text: verdict.Guarantee})
 	}
-	guaranteeMark := "ok"
-	if verdict.NeedsConfirmation {
-		guaranteeMark = "warn"
-	}
-	add(vm.Check{Mark: guaranteeMark, Label: "Guarantee", Text: verdict.Guarantee})
 
 	// The Marshal.
 	if prov := in.marshalProvider(); prov == "" {

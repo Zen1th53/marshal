@@ -187,6 +187,20 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 		}
 	}
 	in := w.v2MarshalInput(now)
+	// Every candidate was just found on PATH, whatever the last probe said.
+	found := map[string]bool{}
+	for name, ok := range in.Probe.Installed {
+		found[name] = ok
+	}
+	if !in.Probed {
+		for name, ok := range in.Installed {
+			found[name] = ok
+		}
+	}
+	for _, c := range cands {
+		found[c.provider] = true
+	}
+	in.Probe.Installed, in.Installed = found, found
 	for i := range cands {
 		in.Probe.Lead = cands[i].provider
 		in.Chat = v2Chat{}
@@ -434,14 +448,14 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 		}
 		var figure, colour string
 		switch {
-		case c.readiness != "":
-			figure = c.readiness
-			colour = "failed"
 		case c.out:
 			figure = "out of limit"
 			if !c.until.IsZero() {
 				figure += " until " + resetClock(c.until, v.now)
 			}
+			colour = "failed"
+		case c.readiness != "":
+			figure = c.readiness
 			colour = "failed"
 		case !c.known && c.offer != "":
 			figure = c.offer
@@ -504,9 +518,12 @@ func pickerFigure(c pickerCand) string {
 	return figure
 }
 
+// pickerReadiness is a candidate's planner blocker when it is an observed
+// one (signed out, at a limit). A sign-in not checked yet leaves the limit
+// figure in place: the candidate can still be chosen and checked.
 func pickerReadiness(in v2MarshalIn) string {
 	r := in.readiness()
-	if !r.PlannerRunnable {
+	if !r.PlannerRunnable && !r.SetupPending {
 		return r.Blocker
 	}
 	return ""

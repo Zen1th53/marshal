@@ -30,11 +30,12 @@ func TestFirstUseBoardIsTheDefaultScreen(t *testing.T) {
 	if !w.boardVisible() {
 		t.Fatal("the Board is not the screen with no run")
 	}
-	// Board v2's first screen: YOUR TURN until a planner can run, the readiness
+	// Board v2's first screen: CHECKING until the first provider probe, then
+	// YOUR TURN while no planner can run (never READY), the readiness
 	// checklist, and say-what-to-build leading the key bar.
 	lines, _, _ := w.frameLinesFull(120, 40)
 	text := StripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(lines0(text), " YOUR TURN ") || !strings.Contains(text, "Now:") || !strings.Contains(text, "⏎ chat") {
+	if !idleBeforePlannerReady(lines0(text)) || !strings.Contains(text, "Now:") || !strings.Contains(text, "⏎ chat") {
 		t.Fatalf("no home screen:\n%s", text)
 	}
 	for _, old := range []string{"Talk to the Marshal: /marshal chat", "Native sessions", "ULTRA ACTIVE"} {

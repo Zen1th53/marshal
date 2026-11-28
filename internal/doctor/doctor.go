@@ -220,11 +220,17 @@ func Check(ctx context.Context, root string, options Options) Report {
 	if options.Readiness != nil {
 		verdict = *options.Readiness
 	} else {
-		verdict = startup.ObserveReadiness(ctx, startup.NewSystemProber(), layout.Root, marshal.ReviewPolicy{})
+		verdict = startup.ObserveReadiness(ctx, startup.NewSystemProber(), layout.Root, marshal.ReviewPolicy{}, options.ProbeProviders)
 	}
-	if verdict.Blocker != "" {
+	switch {
+	case verdict.Blocker != "" && verdict.SetupPending:
+		// A setup step not taken yet (no planner chosen, or its sign-in not
+		// checked) degrades the report and names the next step; it is not
+		// an observed failure.
+		add(Result{Name: "execution.readiness", Verdict: Degraded, Method: "local provider evidence", Capability: "provider execution waits for this step", Detail: verdict.Blocker})
+	case verdict.Blocker != "":
 		add(failure("execution.readiness", "local provider evidence", verdict.Blocker))
-	} else {
+	default:
 		add(success("execution.readiness", "local provider evidence", verdict.Guarantee))
 	}
 	// Before Marshal is set up here the files and state its checks read do
