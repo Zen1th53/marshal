@@ -13761,8 +13761,8 @@
     },
     {
       "path": "internal/tui/command_sweep_crosscut_test.go",
-      "sha256": "eab3b948bed03d6992e090dab995224b6d5647a9afade6e0baab84627d50b448",
-      "bytes": 30124
+      "sha256": "3112d68c08144da1bb80f6fb9b8d11e3dcf4fddc043c2eb21f77699fb3379844",
+      "bytes": 30357
     },
     {
       "path": "internal/tui/command_sweep_work_test.go",
@@ -14366,8 +14366,8 @@
     },
     {
       "path": "internal/tui/m11_marshal_test.go",
-      "sha256": "85b11bc97cafb0475b3c46225618a57e31f78187c7520b6fcff1e7f85dbf5cf9",
-      "bytes": 15115
+      "sha256": "bd32c313f1c8cfb1d822de6f20fd958c18a3f292aaa94b00285e04699e9051d3",
+      "bytes": 15349
     },
     {
       "path": "internal/tui/main_test.go",
@@ -14656,8 +14656,8 @@
     },
     {
       "path": "internal/tui/marshal_operator_test.go",
-      "sha256": "5b45fbf0f2c4eb3b789367314fa2d50b59d580fd82012ff69a69246046e1d0e6",
-      "bytes": 5588
+      "sha256": "6bc573ce536fc03a7772e727682bbf9372f32aec1439d6a1c2cd58ea90322d76",
+      "bytes": 5826
     },
     {
       "path": "internal/tui/marshal_outside_run_test.go",
