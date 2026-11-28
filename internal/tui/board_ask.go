@@ -748,7 +748,7 @@ func (w *Workspace) deliverAskAnswer(ctx context.Context, rec askRecord, label s
 		w.say.next++
 		echoID := w.say.next
 		w.say.mu.Unlock()
-		if err := tr.Send(ctx, chattransport.Turn{Text: label}); err != nil {
+		if err := tr.Send(ctx, chattransport.NewTurn(label)); err != nil {
 			w.sayNote(sayEcho{id: echoID, At: now, Text: label, State: sayFailed, Why: err.Error()})
 			w.memoryAnswer("The Marshal chat did not take your message: "+err.Error(), true)
 			return fmt.Errorf("%w: %v", errAskAdmissionUncertain, err)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/chattransport"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/chattransport"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/nativehistory"
@@ -508,11 +508,15 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			dir = nil
 			return out, nil
 		}
-		if !errors.Is(err, chattransport.ErrUnqualified) || !w.isTmuxActive() {
+		if !w.isTmuxActive() && !errors.Is(err, chattransport.ErrUnqualified) {
 			return "", err
 		}
-		// Not qualified here: the tmux-docked chat stays, unchanged.
-		w.RecordActivity("Native Marshal chat unavailable, using the tmux dock: " + err.Error())
+		// Startup failed before any owner message was sent. Use visible paste fallback.
+		fallback := "provider terminal fallback"
+		if w.isTmuxActive() {
+			fallback = "tmux paste fallback"
+		}
+		w.RecordActivity("Structured chat unavailable; transport: " + fallback + ": " + err.Error())
 	}
 	if w.isTmuxActive() {
 		isChat := len(marshalBrief) > 0

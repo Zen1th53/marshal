@@ -10,6 +10,7 @@
 package chattransport
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -47,6 +48,7 @@ const (
 // Event is one structured conversation event. Text fields are provider
 // authored and untrusted: renderers must sanitise them.
 type Event struct {
+	TurnID    string // owner turn correlated by the serialized transport
 	Kind      EventKind
 	SessionID string
 	Model     string
@@ -87,7 +89,10 @@ type Session struct {
 }
 
 // Turn is one operator message.
-type Turn struct{ Text string }
+type Turn struct {
+	ID   string
+	Text string
+}
 
 // Transport is one provider's structured conversation mode.
 type Transport interface {
@@ -124,19 +129,39 @@ type Runner interface {
 type ExecRunner struct{}
 
 type execProcess struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout io.Reader
+	cmd         *exec.Cmd
+	stdin       io.WriteCloser
+	stdout      io.Reader
+	diagnostics boundedDiagnostics
 }
 
 func (p *execProcess) Stdin() io.WriteCloser { return p.stdin }
 func (p *execProcess) Stdout() io.Reader     { return p.stdout }
-func (p *execProcess) Wait() error           { return p.cmd.Wait() }
+func (p *execProcess) Wait() error {
+	if err := p.cmd.Wait(); err != nil {
+		if detail := OneLine(p.diagnostics.String(), 512); detail != "" {
+			return fmt.Errorf("%w: %s", err, detail)
+		}
+		return err
+	}
+	return nil
+}
 func (p *execProcess) Kill() error {
 	if p.cmd.Process == nil {
 		return nil
 	}
 	return p.cmd.Process.Kill()
+}
+
+// boundedDiagnostics consumes all stderr while retaining a small prefix.
+type boundedDiagnostics struct{ bytes.Buffer }
+
+func (b *boundedDiagnostics) Write(p []byte) (int, error) {
+	n := len(p)
+	if left := 4096 - b.Len(); left > 0 {
+		_, _ = b.Buffer.Write(p[:min(left, len(p))])
+	}
+	return n, nil
 }
 
 func (ExecRunner) Start(ctx context.Context, binary, dir string, args, env []string) (Process, error) {
@@ -151,12 +176,14 @@ func (ExecRunner) Start(ctx context.Context, binary, dir string, args, env []str
 	if err != nil {
 		return nil, err
 	}
-	// Provider diagnostics never reach the Board's terminal.
-	cmd.Stderr = io.Discard
+	// Bound diagnostics and surface rejection text through events, never directly
+	// through the Board's terminal.
+	process := &execProcess{cmd: cmd, stdin: stdin, stdout: stdout}
+	cmd.Stderr = &process.diagnostics
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return &execProcess{cmd: cmd, stdin: stdin, stdout: stdout}, nil
+	return process, nil
 }
 
 func (ExecRunner) Output(ctx context.Context, binary string, args ...string) ([]byte, error) {
@@ -172,10 +199,10 @@ func New(provider string, runner Runner) (Transport, error) {
 	switch provider {
 	case "claude":
 		return NewClaude(runner), nil
+	case "codex":
+		return NewCodex(runner), nil
 	default:
-		// Codex has no structured chat client (governed worker turns run
-		// through codex exec); OpenCode serve and ACP are not wired. All of
-		// them keep the tmux-docked chat.
+		// Other providers keep the explicit tmux paste fallback.
 		return nil, fmt.Errorf("%w: %s has no qualified structured chat mode; the tmux-docked chat stays in use", ErrUnqualified, provider)
 	}
 }
@@ -287,6 +314,9 @@ func OneLine(s string, limit int) string {
 func Probe(ctx context.Context, provider, binary string, runner Runner) error {
 	if runner == nil {
 		runner = ExecRunner{}
+	}
+	if provider == "codex" {
+		return probeCodex(ctx, binary, runner)
 	}
 	if provider != "claude" {
 		_, err := New(provider, runner)

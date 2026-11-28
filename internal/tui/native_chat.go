@@ -1,8 +1,7 @@
 package tui
 
-// The Board's native Marshal chat (TUI3-0013, phase 2). It is opt-in: the
-// tmux-docked provider pane stays the default until the owner switches with
-// /view chat native, which is persisted per project. The native chat is
+// Structured chat is the default when the installed provider qualifies.
+// /view chat tmux explicitly selects paste fallback. The native chat is
 // docked at the left edge exactly where the tmux dock sits, so the owner
 // rule "the Marshal chat is always docked and visible" holds in both modes.
 //
@@ -89,13 +88,13 @@ const chatViewSetting = "tui-chat-view"
 
 func loadChatView(root string) string {
 	if root == "" || statepath.CheckPath(root, statepath.Path(root, chatViewSetting)) != nil {
-		return "tmux"
-	}
-	data, err := os.ReadFile(statepath.Path(root, chatViewSetting))
-	if err == nil && strings.TrimSpace(string(data)) == "native" {
 		return "native"
 	}
-	return "tmux"
+	data, err := os.ReadFile(statepath.Path(root, chatViewSetting))
+	if err == nil && strings.TrimSpace(string(data)) == "tmux" {
+		return "tmux"
+	}
+	return "native"
 }
 
 func saveChatView(root, mode string) error {
@@ -224,25 +223,26 @@ func chatProcessEnv(extra []string) []string {
 // prepared. An ErrUnqualified error means nothing was changed and the
 // caller keeps the tmux chat.
 func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary string, args, env []string, dir *briefingDir, watch *nativeHistoryWatch) (string, error) {
-	if canonicalNeutralProvider(provider) != "claude" {
-		_, err := chattransport.New(canonicalNeutralProvider(provider), nil)
+	provider = canonicalNeutralProvider(provider)
+	if err := nativeChatProbe(ctx, provider, binary); err != nil {
 		return "", err
 	}
-	if err := nativeChatProbe(ctx, "claude", binary); err != nil {
-		return "", err
-	}
-	tr, err := nativeChatTransport("claude")
+	tr, err := nativeChatTransport(provider)
 	if err != nil {
 		return "", err
 	}
-	brokerPath, closeBroker, err := w.startChatPermissionBroker(root)
-	if err != nil {
-		return "", err
-	}
+	closeBroker := func() {}
 	const key = "MARSHAL_CHAT_PERMISSION_CONFIG"
-	if err := setClaudeMCPServerEnv(dir, key, brokerPath); err != nil {
-		closeBroker()
-		return "", marshalNotStarted(provider, fmt.Errorf("chat permission binding failed: %w", err))
+	if provider == "claude" {
+		brokerPath, closeFn, err := w.startChatPermissionBroker(root)
+		if err != nil {
+			return "", err
+		}
+		closeBroker = closeFn
+		if err := setClaudeMCPServerEnv(dir, key, brokerPath); err != nil {
+			closeBroker()
+			return "", err
+		}
 	}
 	// From here the launch belongs to the native chat; the tmux chat, if a
 	// surviving one is still running, must not answer as a second Marshal.
@@ -254,7 +254,7 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 	args, opening := stripMarshalKickoff(provider, root, args)
 	saved := loadChatBinding(root)
 	resume := ""
-	if canonicalNeutralProvider(saved.Provider) == "claude" {
+	if canonicalNeutralProvider(saved.Provider) == provider {
 		resume = saved.SessionID
 	}
 	if watch != nil {
@@ -270,6 +270,19 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 		}
 		return "", marshalNotStarted(provider, fmt.Errorf("%w", err))
 	}
+	outboxPath := statepath.Path(root, "chat-outbox.json")
+	if err := statepath.CheckPath(root, outboxPath); err != nil {
+		_ = tr.Close()
+		closeBroker()
+		return "", err
+	}
+	durable, err := chattransport.Persisted(tr, outboxPath)
+	if err != nil {
+		_ = tr.Close()
+		closeBroker()
+		return "", err
+	}
+	tr = durable
 	history := loadNativeChatHistory(root, resume, 200)
 
 	note := ""
@@ -279,9 +292,12 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 	case opening != "":
 		note = "Session opened."
 	}
-	w.attachNativeChat(tr, root, dir, watch, closeBroker, history, note, resume == "" && opening != "")
-	if resume == "" && opening != "" {
-		if err := tr.Send(ctx, chattransport.Turn{Text: opening}); err != nil {
+	w.attachNativeChat(tr, root, dir, watch, closeBroker, history, note, resume == "" && opening != "", provider)
+	if pending := durable.Pending(); pending != nil {
+		w.chatNote(chat.Error, "Saved pending message "+pending.ID+": "+pending.Text+". Check provider history; /view chat resolve "+pending.ID+" acknowledges it without resending.")
+	}
+	if resume == "" && opening != "" && durable.Pending() == nil {
+		if err := tr.Send(ctx, chattransport.NewTurn(opening)); err != nil {
 			w.chatNote(chat.Error, err.Error())
 		}
 	}
@@ -305,13 +321,17 @@ func (w *Workspace) launchNativeChat(ctx context.Context, provider, root, binary
 }
 
 // attachNativeChat makes tr the docked chat and starts its pumps.
-func (w *Workspace) attachNativeChat(tr chattransport.Transport, root string, dir *briefingDir, watch *nativeHistoryWatch, cleanup func(), history []chat.Entry, note string, thinking bool) {
+func (w *Workspace) attachNativeChat(tr chattransport.Transport, root string, dir *briefingDir, watch *nativeHistoryWatch, cleanup func(), history []chat.Entry, note string, thinking bool, providers ...string) {
+	provider := "claude"
+	if len(providers) > 0 {
+		provider = providers[0]
+	}
 	pumps, cancel := context.WithCancel(context.Background())
 	instance := w.workspaceInstanceID()
 	w.chat.mu.Lock()
 	w.chat.launchGeneration++
 	w.chat.launch = fmt.Sprintf("%s:%d", instance, w.chat.launchGeneration)
-	w.chat.tr, w.chat.provider, w.chat.root, w.chat.dir = tr, "claude", root, dir
+	w.chat.tr, w.chat.provider, w.chat.root, w.chat.dir = tr, provider, root, dir
 	w.chat.cleanup, w.chat.cancel, w.chat.watch = cleanup, cancel, watch
 	w.chat.asks = map[string]chattransport.PermissionAsk{}
 	w.chat.model, w.chat.status = "", "starting"
@@ -389,7 +409,10 @@ func (w *Workspace) pumpChatEvents(ctx context.Context, tr chattransport.Transpo
 		select {
 		case <-ctx.Done():
 			return
-		case e := <-events:
+		case e, ok := <-events:
+			if !ok {
+				return
+			}
 			w.applyChatEvent(e)
 		}
 	}
@@ -426,16 +449,32 @@ func (w *Workspace) applyChatEvent(e chattransport.Event) {
 		}
 		turnEnded = true
 	case chattransport.EventError:
+		w.chat.status = "provider error; /view chat tmux for paste fallback"
 		v.Append(chat.Entry{Role: chat.Error, At: now, Text: e.Text})
 	case chattransport.EventExit:
 		v.EndTurn()
-		w.chat.status = "exited"
+		w.chat.status = "exited; /view chat tmux for paste fallback"
 		v.Append(chat.Entry{Role: chat.Note, At: now, Text: e.Text + "; the next message resumes the session."})
 		turnEnded = true
 	}
 	changed := v.Version() != before
-	root, watch := w.chat.root, w.chat.watch
+	root, watch, provider := w.chat.root, w.chat.watch, w.chat.provider
 	w.chat.mu.Unlock()
+	if e.Kind == chattransport.EventExit && e.IsError {
+		// The failed turn stays in the durable outbox. Switching transports
+		// never resends it; only a new owner action may submit another turn.
+		w.startBackground(w.workers.context(), func(ctx context.Context) {
+			if !w.isTmuxActive() {
+				return
+			}
+			out, err := w.fallbackNativeChat(ctx)
+			if err != nil {
+				w.memoryAnswer("Structured chat failed; paste fallback could not start: "+err.Error(), true)
+				return
+			}
+			w.memoryAnswer("Structured chat failed: "+e.Text+". "+out+" Pending text remains in the outbox; no message was resent.", true)
+		})
+	}
 	if e.Kind == chattransport.EventText {
 		w.noteMarshalText(e.Text, now) // the Web Board's "The Marshal says"
 	}
@@ -444,7 +483,7 @@ func (w *Workspace) applyChatEvent(e chattransport.Event) {
 	if (e.Kind == chattransport.EventSession || e.Kind == chattransport.EventResult) && e.SessionID != "" {
 		saved := loadChatBinding(root)
 		if saved.SessionID != e.SessionID {
-			saved.Provider, saved.SessionID = "claude", e.SessionID
+			saved.Provider, saved.SessionID = provider, e.SessionID
 			if err := saveChatBinding(root, saved); err != nil {
 				w.RecordActivity("Marshal chat binding: " + err.Error())
 			}
@@ -479,7 +518,10 @@ func (w *Workspace) pumpChatPermissions(ctx context.Context, tr chattransport.Tr
 		select {
 		case <-ctx.Done():
 			return
-		case ask := <-perms:
+		case ask, ok := <-perms:
+			if !ok {
+				return
+			}
 			w.routeChatAsk(ask)
 		}
 	}
@@ -541,7 +583,7 @@ func (w *Workspace) deliverNativeChatTurn(ctx context.Context, text string) erro
 		return errors.New("the native Marshal chat is not running")
 	}
 	w.requestRepaint()
-	return tr.Send(ctx, chattransport.Turn{Text: text})
+	return tr.Send(ctx, chattransport.NewTurn(text))
 }
 
 func runGrantKey(runID, tool string) string { return runID + "\x00" + tool }
@@ -703,6 +745,21 @@ func (w *Workspace) stopTmuxChat(ctx context.Context) error {
 	return nil
 }
 
+// fallbackNativeChat changes the active transport without turning an automatic
+// failure into a permanent project preference. No pending turn is resent.
+func (w *Workspace) fallbackNativeChat(ctx context.Context) (string, error) {
+	w.stopNativeChat()
+	w.chat.wanted.Store(false)
+	defer w.chat.wanted.Store(true)
+	if w.runtime != nil && w.isTmuxActive() {
+		if _, err := w.marshalChat(context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)); err != nil {
+			return "", err
+		}
+	}
+	w.kickDock()
+	return "Transport: tmux paste fallback.", nil
+}
+
 // handleViewChat is /view chat [native|tmux].
 func (w *Workspace) handleViewChat(ctx context.Context, args []string) (string, error) {
 	root := w.providerRoot()
@@ -718,6 +775,64 @@ func (w *Workspace) handleViewChat(ctx context.Context, args []string) (string, 
 		return fmt.Sprintf("Chat view: %s (now showing the %s). /view chat native|tmux switches.", mode, active), nil
 	}
 	switch strings.ToLower(args[0]) {
+	case "pending", "resolve":
+		w.chat.mu.Lock()
+		tr := w.chat.tr
+		w.chat.mu.Unlock()
+		d, ok := tr.(*chattransport.Durable)
+		if !ok {
+			path := statepath.Path(root, "chat-outbox.json")
+			if err := statepath.CheckPath(root, path); err != nil {
+				return "", err
+			}
+			var err error
+			d, err = chattransport.Persisted(nil, path)
+			if err != nil {
+				return "", err
+			}
+			defer d.Close()
+		}
+		pending := d.Pending()
+		pastes, err := pendingPasteIntents(root)
+		if err != nil {
+			return "", err
+		}
+		if args[0] == "pending" {
+			var lines []string
+			if pending != nil {
+				lines = append(lines, "Pending message "+pending.ID+": "+pending.Text)
+			}
+			for _, turn := range pastes {
+				lines = append(lines, "Pending paste "+turn.ID+": "+turn.Text)
+			}
+			if len(lines) == 0 {
+				return "No pending chat message.", nil
+			}
+			return strings.Join(lines, "\n"), nil
+		}
+		if len(args) != 2 || !nativeSessionID.MatchString(args[1]) {
+			return "Usage: /view chat resolve <message-ID> (acknowledge after checking provider history; never resends)", nil
+		}
+		if pending != nil && pending.ID == args[1] {
+			if err := d.Resolve(args[1]); err != nil {
+				return "", err
+			}
+		} else {
+			found := false
+			for _, turn := range pastes {
+				if turn.ID == args[1] {
+					found = true
+					if err := completePasteIntent(sayItem{messageID: turn.ID, outboxPath: statepath.Path(root, filepath.Join("chat-paste-outbox", turn.ID+".json"))}); err != nil {
+						return "", err
+					}
+				}
+			}
+			if !found {
+				return "", errors.New("pending message ID does not match")
+			}
+		}
+		return "Pending message acknowledged; no message resent.", nil
+
 	case "native":
 		if err := saveChatView(root, "native"); err != nil {
 			return "", fmt.Errorf("chat view not saved: %w", err)
@@ -778,7 +893,7 @@ func (w *Workspace) nativeChatFrame(th *Theme, cols, rows int) ([]string, int, i
 	if w.chat.model != "" {
 		state = w.chat.model
 	}
-	w.chat.view.SetHeader(chat.Header{Provider: w.chat.provider, Role: "native chat", State: state})
+	w.chat.view.SetHeader(chat.Header{Provider: w.chat.provider, Role: "structured", State: state})
 	lines, r, c := w.chat.view.Render(cols, rows, chatStyle(th))
 	return lines, r, c, w.chat.view.Focused()
 }
@@ -975,6 +1090,10 @@ func (w *Workspace) recordChatTransportQualification(ctx context.Context, provid
 			data["result"] = "qualified"
 			line = fmt.Sprintf("Chat: %s %s can also chat inside the Board.", provider, version)
 		}
+	} else if provider == "codex" {
+		data["result"] = "capability-check-required"
+		data["transport"] = "exec JSON events v1; exec and resume help checked at launch"
+		line = "Chat: codex uses structured chat when the installed CLI advertises exec and resume JSON support."
 	} else {
 		data["result"], data["reason"] = "unsupported", "no structured chat transport is qualified for this provider"
 		line = "Chat: " + provider + " chats in its own pane beside the Board."

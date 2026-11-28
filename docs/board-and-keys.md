@@ -2,7 +2,7 @@
 
 The Board is Marshal's control centre. In the terminal it is one short **home screen**: what is happening, the one thing needed from you, and where the **Web Board** is. The Web Board, in your browser, is the full interface: the plan, lanes, tasks, workers, activity, the Marshal's steps and requests, the readiness checklist, and every card with its buttons.
 
-`marshal` opens it in a tmux workspace. The Marshal chat (the provider CLI the Marshal runs in) docks on the left when you open it; the Board stays on the right. The Web Board starts with the Board and opens in your browser when the computer has a display.
+`marshal` opens it in a tmux workspace. The Marshal chat docks on the left when you open it; the Board stays on the right. Qualified providers use structured delivery by default. The header identifies structured chat or tmux paste fallback; `/view chat native|tmux` selects the mode. The Web Board starts with the Board and opens in your browser when the computer has a display.
 
 ---
 

@@ -546,7 +546,13 @@ func (w *Workspace) dockTitleWith(chat *activeTmuxAgent, strip dockStrip, width 
 	unicode := w.theme == nil || w.theme.Unicode
 	w.mu.RUnlock()
 	qs, read := w.usageQuotas()
-	return dockStripTitle(dockStripFill(strip, chat.provider, chat.args, qs, read), unicode, width, pad)
+	title, at := dockStripTitle(dockStripFill(strip, chat.provider, chat.args, qs, read), unicode, max(0, width-12), pad)
+	// Put the transport before truncation so narrow docks still identify paste.
+	title = " paste/tmux " + strings.TrimLeft(title, " ")
+	if at >= 0 {
+		at += 11
+	}
+	return title, at
 }
 
 // dockStripFill gives the strip the chat's own provider and model where the

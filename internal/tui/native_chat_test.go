@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/chattransport"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/chat"
 	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inbox"
@@ -369,8 +370,8 @@ func TestNativeChatDocksLeftOfBoard(t *testing.T) {
 
 func TestViewChatSettingPersists(t *testing.T) {
 	root := t.TempDir()
-	if loadChatView(root) != "tmux" {
-		t.Fatal("default chat view is not tmux")
+	if loadChatView(root) != "native" {
+		t.Fatal("default chat view is not structured")
 	}
 	if err := saveChatView(root, "native"); err != nil {
 		t.Fatal(err)
@@ -538,7 +539,7 @@ func TestHarnessVerifyRecordsChatTransportRange(t *testing.T) {
 	cases := []struct{ provider, version, result string }{
 		{"claude", "2.1.318 (Claude Code)", "qualified"},
 		{"claude", "1.0.99 (Claude Code)", "refused"},
-		{"codex", "0.162.1", "unsupported"},
+		{"codex", "0.162.1", "capability-check-required"},
 	}
 	for _, c := range cases {
 		line, err := w.recordChatTransportQualification(t.Context(), c.provider, c.version, "EV-1")
@@ -560,7 +561,62 @@ func TestHarnessVerifyRecordsChatTransportRange(t *testing.T) {
 			t.Fatalf("range not recorded: %v", e.Data)
 		}
 	}
-	if strings.Join(got, ",") != "claude qualified,claude refused,codex unsupported" {
+	if strings.Join(got, ",") != "claude qualified,claude refused,codex capability-check-required" {
 		t.Fatalf("recorded %v", got)
+	}
+}
+
+func TestChatPendingSurvivesFallbackSwitch(t *testing.T) {
+	w, runtime, fake := boardWithNativeChat(t)
+	path := statepath.Path(runtime.ProjectRoot(), "chat-outbox.json")
+	durable, err := chattransport.Persisted(fake, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.chat.mu.Lock()
+	w.chat.tr = durable
+	w.chat.mu.Unlock()
+	turn := chattransport.NewTurn("saved owner text")
+	if err := durable.Send(t.Context(), turn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.handleViewCommand(t.Context(), []string{"chat", "tmux"}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := w.handleViewCommand(t.Context(), []string{"chat", "pending"})
+	if err != nil || !strings.Contains(out, turn.ID) || !strings.Contains(out, turn.Text) {
+		t.Fatalf("pending after fallback: %q %v", out, err)
+	}
+	if _, err := w.handleViewCommand(t.Context(), []string{"chat", "resolve", turn.ID}); err != nil {
+		t.Fatal(err)
+	}
+	out, err = w.handleViewCommand(t.Context(), []string{"chat", "pending"})
+	if err != nil || out != "No pending chat message." {
+		t.Fatalf("resolve: %q %v", out, err)
+	}
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if len(fake.sent) != 1 {
+		t.Fatalf("fallback replayed message: %v", fake.sent)
+	}
+}
+
+func TestPasteOutboxRecovery(t *testing.T) {
+	w, runtime, _ := boardWithNativeChat(t)
+	turn := chattransport.NewTurn("queued paste before restart")
+	if _, err := savePasteIntent(runtime.ProjectRoot(), turn); err != nil {
+		t.Fatal(err)
+	}
+	w.stopNativeChat()
+	out, err := w.handleViewChat(t.Context(), []string{"pending"})
+	if err != nil || !strings.Contains(out, turn.ID) || !strings.Contains(out, turn.Text) {
+		t.Fatalf("recovery: %q %v", out, err)
+	}
+	if _, err := w.handleViewChat(t.Context(), []string{"resolve", turn.ID}); err != nil {
+		t.Fatal(err)
+	}
+	turns, err := pendingPasteIntents(runtime.ProjectRoot())
+	if err != nil || len(turns) != 0 {
+		t.Fatalf("resolved paste: %+v %v", turns, err)
 	}
 }

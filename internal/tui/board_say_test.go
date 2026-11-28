@@ -409,11 +409,9 @@ done`
 	waitFor(t, func() bool { return echoState(w, "after-perm") == saySent }, func() string { return fmt.Sprintf("%+v", w.sayEchoList()) })
 }
 
-// When a turn ends on a provider network error, the Board shows it and
-// Marshal re-sends the last message once automatically while keeping queued
-// messages queued instead of dropping them. A second network error stops
-// retrying and keeps queued messages queued until the chat moves on.
-func TestBoardSayRetriesNetworkErrorOnceAndKeepsQueued(t *testing.T) {
+// A network failure retains the uncertain owner message without replay and
+// holds queued messages until the owner recovers in the provider terminal.
+func TestBoardSayDoesNotReplayNetworkErrorAndKeepsQueued(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
@@ -477,55 +475,38 @@ done`, logFile)
 		return strings.Split(trimmed, "\n")
 	}
 
-	// Part 1: first turn hits a network error while another message is queued;
-	// Marshal retries netfail1 once, then sends queued-after-netfail.
 	w.sayToMarshal(ctx, "netfail1")
 	waitForTmuxOutput(t, pane, "esc to interrupt")
 	w.sayToMarshal(ctx, "queued-after-netfail")
 	waitFor(t, func() bool { return echoState(w, "queued-after-netfail") == sayQueued }, func() string { return echoState(w, "queued-after-netfail") })
-
-	waitFor(t, func() bool {
-		out := lastBoardOutput(w)
-		return strings.Contains(out, "There was a network issue connecting to the server, please try again") &&
-			strings.Contains(out, "sent the last message again")
-	}, func() string {
-		p, _ := tmux.CapturePane(ctx, pane)
-		return fmt.Sprintf("output %q log %v pane:\n%s", lastBoardOutput(w), readLog(), p)
-	})
-	waitForTmuxOutput(t, pane, "ok:netfail1")
-	waitForTmuxOutput(t, pane, "ok:queued-after-netfail")
-	waitFor(t, func() bool { return echoState(w, "queued-after-netfail") == saySent }, func() string { return echoState(w, "queued-after-netfail") })
-	if got := strings.Join(readLog(), ","); got != "netfail1,netfail1,queued-after-netfail" {
-		t.Fatalf("unexpected delivery order: %q", got)
-	}
-
-	// Part 2: retry also fails -> Marshal stops after 1 retry, tells the owner,
-	// and keeps still-queued queued until the owner recovers in the chat.
-	w.sayToMarshal(ctx, "netfail2")
-	waitForTmuxOutput(t, pane, "got:netfail2")
-	w.sayToMarshal(ctx, "still-queued")
-	waitFor(t, func() bool {
-		out := lastBoardOutput(w)
-		return strings.Contains(out, "Network error again") && strings.Contains(out, "F11")
-	}, func() string {
-		p, _ := tmux.CapturePane(ctx, pane)
-		return fmt.Sprintf("output %q log %v pane:\n%s", lastBoardOutput(w), readLog(), p)
-	})
+	waitFor(t, func() bool { return strings.Contains(lastBoardOutput(w), "no message was resent") }, func() string { return lastBoardOutput(w) })
 	time.Sleep(400 * time.Millisecond)
-	if got := strings.Join(readLog(), ","); got != "netfail1,netfail1,queued-after-netfail,netfail2,netfail2" {
-		t.Fatalf("retried more than once or sent queued message into broken chat: %q", got)
+	if got := strings.Join(readLog(), ","); got != "netfail1" {
+		t.Fatalf("uncertain turn replayed or queue released: %q", got)
 	}
-	if state := echoState(w, "still-queued"); state != sayQueued {
-		t.Fatalf("still-queued state = %q, want %q", state, sayQueued)
-	}
-
-	// Owner opens the chat and runs a clean turn; still-queued then delivers.
 	if _, err := tmux.RunCommand(ctx, "send-keys", "-t", pane, "recover", "Enter"); err != nil {
 		t.Fatal(err)
 	}
 	waitForTmuxOutput(t, pane, "ok:recover")
-	waitForTmuxOutput(t, pane, "ok:still-queued")
-	waitFor(t, func() bool { return echoState(w, "still-queued") == saySent }, func() string { return echoState(w, "still-queued") })
+	waitForTmuxOutput(t, pane, "ok:queued-after-netfail")
+	waitFor(t, func() bool { return echoState(w, "queued-after-netfail") == saySent }, func() string { return echoState(w, "queued-after-netfail") })
+	if got := strings.Join(readLog(), ","); got != "netfail1,recover,queued-after-netfail" {
+		t.Fatalf("unexpected order: %q", got)
+	}
+	saved, err := pendingPasteIntents(w.providerRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, turn := range saved {
+		if turn.Text == "netfail1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("uncertain paste lost from outbox")
+	}
+
 }
 
 // The CLI submits its own opening turn once the folder is trusted. A message
@@ -583,6 +564,8 @@ done`
 		}
 		time.Sleep(30 * time.Millisecond)
 	}
-	waitForTmuxOutput(t, pane, "got:first-goal")
+	// Submission includes the configured trust and paste settle periods;
+	// wait for delivery before using the shorter output-observation budget.
 	waitFor(t, func() bool { return echoState(w, "first-goal") == saySent }, func() string { return fmt.Sprintf("%+v", w.sayEchoList()) })
+	waitForTmuxOutput(t, pane, "got:first-goal")
 }
