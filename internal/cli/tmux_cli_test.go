@@ -54,8 +54,8 @@ func TestTmuxMissingRefusal(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	doctorCode := Execute(context.Background(), repo.Path(), []string{"doctor"}, strings.NewReader(""), &stdout, &stderr)
-	if doctorCode != 0 {
-		t.Fatalf("expected marshal doctor to work without tmux (code 0), got code=%d: %s", doctorCode, stderr.String())
+	if doctorCode != 2 || !strings.Contains(stdout.String(), "Choose your planner") {
+		t.Fatalf("expected doctor to report planner setup without tmux, got code=%d: %s %s", doctorCode, stdout.String(), stderr.String())
 	}
 }
 

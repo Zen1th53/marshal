@@ -34,6 +34,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal chat                    Open a conversation with the Marshal
   /marshal architecture [goal]     Open the view-only architecture diagram in your browser
   /marshal web                     Open this Board in your browser (this computer only; keys and chat messages work as in the terminal)
+  /marshal web copy                Copy a new one-use Web Board link to the clipboard (pbcopy on macOS)
   /marshal draft discard           Discard an unimported draft and reopen chat
   /marshal <goal>                  Draft a plan for the goal; governed tasks need current Process 04 evidence
   /marshal import <TASK-id> <check>  Review a finished CLI task through normal approval and merge
@@ -373,9 +374,12 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "architecture":
 		return w.marshalArchitecture(ctx, strings.Join(args[1:], " "), "")
 	case "web":
-		// Only the bare word: "/marshal web app for X" is a goal.
+		// Only the bare word, or "web copy": "/marshal web app for X" is a goal.
 		if len(args) == 1 {
 			return w.marshalWeb()
+		}
+		if len(args) == 2 && args[1] == "copy" {
+			return w.marshalWebCopy()
 		}
 		return w.marshalStart(ctx, strings.Join(args, " "))
 	case "chat":
@@ -1611,7 +1615,9 @@ func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.Pl
 		if readErr != nil {
 			return "", readErr
 		}
-		if run.State == marshal.Drafting && marshalRunHasGovernedTask(run) {
+		in := w.v2MarshalInput(time.Now())
+		in.Probe.Settings.ReviewPolicy = run.EffectiveReviewPolicy()
+		if run.State == marshal.Drafting && (marshalRunHasGovernedTask(run) || in.readiness().NeedsConfirmation) {
 			m.mu.Lock()
 			approving := m.approving
 			m.mu.Unlock()

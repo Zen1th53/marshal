@@ -62,9 +62,21 @@ Three pages show the rest of what the Web Board shows, in the terminal; `Esc` or
 | `Space` or `Ctrl+K` | Open the action palette. |
 | `/` | Type a command, such as `/marshal settings` or `/task-model T03` (the model a task runs on). Every setting, its default in each edition and when it applies is in the [settings reference](configuration.md#settings-reference). |
 | `?` | Every key. |
-| `q` | Quit. |
-| `Ctrl+X` | Stop all workers (never the Marshal). |
+| `q` | Quit. While work runs, or while another terminal shows this Board, it asks first: `Enter` or `d` **detaches** this terminal (the default: the Marshal, the workers and the run keep running), `s` **stops everything**, `Esc` stays. With nothing running and no other terminal, `q` quits at once. |
+| `Ctrl+X` | Stop all workers. The Marshal, its chat and the run stay; the run waits for you. |
 | `Ctrl+C` | Interrupt; press it twice to leave. |
+
+### Stop, pause, detach: what each one ends
+
+| Action | What stops | What keeps running |
+|---|---|---|
+| Detach (`q` then `Enter`, or tmux's `Ctrl+B` `d`) | Nothing: only this terminal leaves | The Marshal, its chat, every worker, the run and the Web Board. Run `marshal` in the project to return. |
+| Pause everything (`p` in the palette, `/pause all`) | The run pauses: no new task starts | The Marshal, its chat and the worker windows; `/resume all` continues |
+| Stop all workers (`Ctrl+X`, `/stop all`) | Every worker | The Marshal, its chat and the run, which waits for you |
+| Stop the run (`x` on the paused card, `/marshal stop`) | The run | The Marshal and its chat; the run's work is kept and `/marshal resume` continues it |
+| Stop everything (`q` then `s`, `/quit`) | The Marshal, its chat, every worker and the Web Board, in every terminal showing this Board | Nothing; the run's work and the session's records are kept |
+
+Closing the terminal window is a detach: Marshal keeps running in the background, and `marshal` returns to it. After a detach from `q`, the terminal gets its shell back with the line "Marshal keeps running — run `marshal` to return."
 
 A letter that is not a Board key starts a message to the Marshal (`to the Marshal › …`); `Esc` cancels it.
 
@@ -103,7 +115,7 @@ The docked chat's pane title is the **MARSHAL CHAT** strip: the provider and mod
 The Web Board is the Board as a simple web page. It updates live (at most four times a second) and works at phone width, so you can follow and steer a run from a phone through your own remote desktop to this computer.
 
 - It starts with the Board and opens in your browser where there is a display (`MARSHAL_WEB_OPEN=0` keeps the browser closed). `w`, the palette entry **Open the Board in the browser** or `/marshal web` open it again, each time on a fresh one-use link. Where there is a display the footer names only the address, never the link. On a computer with no display (`/marshal web`, or `w`), or when `/marshal web` cannot open the browser, the footer shows the link, and you open it in a browser on that computer.
-- It runs inside the open Board and stops when the Board closes. It listens on `127.0.0.1` only, at a random port, and never on the network.
+- It runs inside the open Board and stops when the Board stops (`q` then `s`, or `/quit`); a detach leaves it running. `/marshal web copy` puts a fresh one-use link on the clipboard (with `pbcopy` on macOS), for a browser other than the one the Board opened. It listens on `127.0.0.1` only, at a random port, and never on the network.
 - The link carries a private, random secret (`http://127.0.0.1:PORT/?t=…`) that works once. The page takes it out of the address bar and the history at once and trades it for the page's own secret, which it keeps for that browser tab only (a reload still works) and sends with each request. No cookie is used. A copy of the link left anywhere else (the footer, the browser's history, the command that opened the browser) is worthless once your page has opened; run `/marshal web` again for a new link, for example for a second tab. If a link was already used by something else when your page opens it, the Web Board shuts every page out and says so: open a new link. Without a link the page shows no data and can do nothing; a link from an earlier Board no longer works. **Do not share the link: anyone on this computer who has it can act for you on the Board.** It never goes to Activity, the Marshal chat or any file the Marshal reads.
 
 ### What the page shows
@@ -132,7 +144,7 @@ Only what the Board offers right now. Each button presses the card's key through
 | **Tell the Marshal…** + **Send** (at most 2000 characters) | `s` on the Board: the message goes to the Marshal chat as yours, never as a command, even when it starts with `/` |
 | Every other card button (allow, deny, gates, the plan's reply, changed files, a change of goal, the question card, "what next?") | the card's own key; the terminal home only says `open the web to decide (w)` |
 
-Not offered on the page: quitting, copying a link to the terminal's clipboard, opening a terminal view, and editing one requirements line (`e` on the terminal home; the page confirms them all).
+Not offered on the page: quitting or detaching, copying a link to the terminal's clipboard, opening a terminal view, and editing one requirements line (`e` on the terminal home; the page confirms them all).
 
 After each click the page says what happened: **Done** (with the Board's own answer; when the button runs commands, such as a retry and a resume, the page waits for them, up to 15 seconds, and says **Started** if they are still running), **Sent** or **Queued**, or **Refused** with the plain reason (a command that failed is refused with its error) (for example "The Board changed since this page showed it; look again", or "No Marshal chat is open"). Every action writes the Activity line the terminal key writes, plus "From the web: …".
 

@@ -20,7 +20,7 @@ git commit --allow-empty -m "Initial commit"
 
 A Git repository must have at least one commit so Marshal can establish a clean baseline for worker branches and merges.
 
-Opening `marshal` in a Git repository that is not set up adds the project files and commits them as `Initialize MARSHAL project`. In a folder outside a Git repository, Marshal can create a project repository for that folder; it leaves files that look like secrets untracked. It will not use your home folder or `/` itself as a project.
+Opening `marshal` in a Git repository that is not set up first shows what setup will do and asks: the files it commits as `Initialize MARSHAL project` and on which branch, the commit workers start from, how many uncommitted files they will not see, that workers run as you without a sandbox, and whether anonymous telemetry is on (you can turn it off there). Answer `n` and nothing is changed; run `marshal` again or `marshal init` when you are ready. With no terminal to ask on, opening stops with that explanation; run `marshal init` or set `MARSHAL_ACCEPT_SETUP=1` to accept. In a folder outside a Git repository, Marshal can create a project repository for that folder; it leaves files that look like secrets untracked. It will not use your home folder or `/` itself as a project.
 
 ---
 
@@ -32,7 +32,7 @@ From your project root, open Marshal:
 marshal
 ```
 
-On first open, Marshal sets up the project automatically. You can also run `marshal init` yourself as an optional explicit setup command. Setup:
+On first open, Marshal asks before it sets up the project (see above). You can also run `marshal init` yourself as an optional explicit setup command. Setup:
 - Creates the local state directory at `.marshal/`, where runtime databases and task logs reside.
 - Writes initial project configuration files: `CAPABILITIES.yaml`, `PACK-VERSION.yaml`, and `RUNTIME-VERSION.yaml`.
 - Configures Git to ignore the `.marshal/` runtime state using `.git/info/exclude`, leaving your personal `.gitignore` clean and untouched.
@@ -40,7 +40,7 @@ On first open, Marshal sets up the project automatically. You can also run `mars
 
 ---
 
-Marshal opens inside a managed tmux environment displaying **the Board**, and the **Web Board** (the full interface) opens in your browser. On a computer with no display, `/marshal web` shows its private link to open.
+Marshal opens inside a managed tmux environment displaying **the Board**, and the **Web Board** (the full interface) opens in your browser. On a computer with no display, `/marshal web` shows its private link to open. To open the Board in another browser, `/marshal web copy` copies a fresh one-use link to the clipboard (with `pbcopy` on macOS).
 
 ## 3. Choose who plans and check readiness
 
@@ -92,12 +92,12 @@ The top line changes to `PLANNING` and *Now* says what the Marshal is doing. The
 
 ## 5. Confirm the requirements and accept the architecture
 
-The Marshal reads your repository, asks questions only where the answer changes the plan, and fills a **requirements card** on the Web Board. Confirm all answers there, or press `y` on the Board (*From you* names it); `e` then a line's letter edits one line.
+The Marshal reads your repository, asks questions only where the answer changes the plan, and fills a **requirements card** on the Web Board. Confirm all answers there, or press `y` on the Board (not `Enter`, which opens the chat); `e` then a line's letter edits one line. The *From you* line shows both keys: `requirements … — y confirm all · e edits a line`.
 
 Then it drafts the architecture. The top line says `YOUR TURN` and *From you* says `architecture waits for you in the browser — open the web to decide (w)`. On the Web Board's **Accept architecture** card:
 
 1. Select **Open in browser** (or press `a` on the Board). The architecture opens in your browser.
-2. Review it and select **Accept architecture** there. Only you can accept, and only in the browser: if the Marshal tries to accept for you, the card says it was refused.
+2. Review it and select **Accept architecture** there. Only you can accept, and only in the browser: if the Marshal tries to accept for you, the card says it was refused. **Accepting starts the work**: the Marshal writes the task plan, approves it itself and starts the workers; you are not asked again before they start (`Ctrl+X` stops them).
 3. To ask for changes, comment in the browser, or tell the Marshal (`s`) what to change.
 
 **No browser here (SSH, a server without a display):** the Web Board's card shows the review's link. The link is kept in memory only, never in a file. Over SSH, the address is local to the remote machine: forward its port first (for example `ssh -L 37667:127.0.0.1:37667 you@server`, with the port from the link), then open the link in your local browser.
@@ -152,6 +152,6 @@ When all tasks pass review and verification:
 - The top line says `DONE`.
 - The chat receives a `[Marshal] The run closed: …` message.
 - You can review the completed commits with standard Git commands (`git log`, `git diff HEAD~1`).
-- Press `q`, `Ctrl+C` twice, or type `/exit` in the command line to leave the Board.
+- Press `q`, `Ctrl+C` twice, or type `/exit` in the command line to leave the Board. While work still runs, or another terminal shows the Board, `q` asks first: `Enter` detaches this terminal and everything keeps running (run `marshal` to return), `s` stops everything. Closing the terminal window also leaves Marshal running in the background.
 
 All keys and screens: [The Board and keys](board-and-keys.md).

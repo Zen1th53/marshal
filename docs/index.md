@@ -16,6 +16,7 @@ Get from zero to an executed multi-agent run in four steps:
 ```bash
 # 1. Install Marshal to ~/.local/bin
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+# (anonymous install count; to skip it: ... | MARSHAL_CLOUD_ENDPOINT=off sh)
 
 # 2. Enter a Git repository and open Marshal
 cd /path/to/project

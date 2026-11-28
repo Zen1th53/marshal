@@ -280,3 +280,27 @@ func TestWebBoardOpenFailureIsNotAnsweredOpening(t *testing.T) {
 	}
 	t.Fatal("w with a failing opener never reported the failure")
 }
+
+// /marshal web copy puts a fresh one-use link on the clipboard and keeps it
+// out of the answer; with no clipboard it shows the link instead.
+func TestMarshalWebCopy(t *testing.T) {
+	webBoardSeams(t)
+	orig := webLinkCopy
+	t.Cleanup(func() { webLinkCopy = orig })
+	var copied string
+	webLinkCopy = func(_ *Workspace, text string) (bool, error) { copied = text; return true, nil }
+	w := emptyBoardWorkspace(t)
+	defer w.Close()
+	resp, err := w.cmd.Handle(context.Background(), "/marshal web copy")
+	if err != nil || !strings.Contains(resp, "Copied a new Web Board link") || webLink.FindString(resp) != "" {
+		t.Fatalf("/marshal web copy: %q %v", resp, err)
+	}
+	if webLink.FindString(copied) == "" {
+		t.Fatalf("copied %q, want a Web Board link", copied)
+	}
+	webLinkCopy = func(*Workspace, string) (bool, error) { return false, errors.New("no clipboard") }
+	resp, _ = w.cmd.Handle(context.Background(), "/marshal web copy")
+	if webLink.FindString(resp) == "" || !strings.Contains(resp, "Could not reach the clipboard") {
+		t.Fatalf("with no clipboard: %q", resp)
+	}
+}

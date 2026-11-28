@@ -21,6 +21,7 @@ type ToolExecutionCard struct {
 
 // UIState captures the complete snapshot of canonical runtime state needed for one-screen rendering.
 type UIState struct {
+	ReadinessBlocker   string
 	ProjectID          string
 	SessionID          string
 	SessionMode        string // "manual", "auto", "ULTRA"

@@ -175,8 +175,8 @@ func TestInstallRefusesAnArchiveThatFailsVerification(t *testing.T) {
 
 	c := checker(t, server)
 	c.Executable = func() (string, error) { return target, nil }
-	if _, err := c.Install(context.Background(), update.Release{Tag: "v9.9.9"}); err == nil {
-		t.Fatal("an unverified archive was installed")
+	if _, err := c.Install(context.Background(), update.Release{Tag: "v9.9.9"}); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected checksum mismatch, got %v", err)
 	}
 	content, err := os.ReadFile(target)
 	if err != nil {

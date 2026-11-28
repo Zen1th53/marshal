@@ -203,7 +203,7 @@ func (w *Workspace) setReqEditing(on bool) {
 // card's keys and before the gate keys while a card is open and no body view
 // or inspector covers the Board. With a card waiting for a line letter (after
 // e), a..h opens the composer to edit that line; Esc or any other key cancels
-// back. Otherwise Enter confirms (or refuses while blanks remain) and e starts
+// back. Otherwise Enter or y confirms (or refuses while blanks remain) and e starts
 // an edit. Every other key falls through to keep its meaning.
 func (w *Workspace) handleRequirementsKey(event KeyEvent) bool {
 	card := w.currentReq()
@@ -228,8 +228,14 @@ func (w *Workspace) handleRequirementsKey(event KeyEvent) bool {
 		w.confirmRequirements()
 		return true
 	case KeyRune:
-		if event.Rune == 'e' {
+		switch event.Rune {
+		case 'e':
 			w.setReqEditing(true)
+			return true
+		case 'y':
+			// y confirms on the card as it does on the home screen, so
+			// the one key the Board names works wherever the card is.
+			w.confirmRequirements()
 			return true
 		}
 	}

@@ -68,7 +68,7 @@ func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 		}
 	}
 	if len(problems) != 0 {
-		msg := "Some of Marshal's files in this project are damaged. Run `marshal doctor` to see which."
+		msg := "Cannot open this project: " + strings.Join(problems, "; ") + ". Run `marshal doctor` for details."
 		allMissing := true
 		for _, p := range problems {
 			if !strings.HasPrefix(p, "missing ") {
@@ -95,7 +95,7 @@ func ValidateProject(ctx context.Context, root string) (project.Layout, error) {
 
 // projectNotReadyError keeps the operator-facing message plain while remaining
 // an invalid-input error for callers that match model.ErrInvalid. detail keeps
-// the technical problem list for the log; it is never printed.
+// the technical problem list for diagnostics.
 type projectNotReadyError struct {
 	msg    string
 	detail string
@@ -107,7 +107,7 @@ type projectNotReadyError struct {
 // ProjectNotSetUp reports whether err is ValidateProject finding a Git
 // project Marshal was never set up in: nothing is damaged and there is no
 // state database. Setting such a project up only adds what is missing, so
-// opening Marshal does it without asking.
+// opening Marshal offers to do it (see the CLI's consentToSetup).
 func ProjectNotSetUp(err error) bool {
 	var notReady projectNotReadyError
 	return errors.As(err, &notReady) && notReady.notSetUp

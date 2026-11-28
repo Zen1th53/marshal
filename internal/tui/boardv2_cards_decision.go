@@ -218,6 +218,10 @@ func (w *Workspace) dismissV2Card(key string) {
 	w.requestRepaint()
 }
 
+// architectureAcceptStarts is what accepting the architecture authorises in
+// this build: the Marshal approves its own task plan and the workers start.
+const architectureAcceptStarts = "Accepting starts the work: the Marshal writes the task plan, approves it itself and starts the workers."
+
 // architectureDecision is the "Accept architecture" card for gate g.
 func (w *Workspace) architectureDecision(g ownerGate, now time.Time) v2Decision {
 	d := v2Decision{kind: decisionArchitecture, key: g.key, gate: g}
@@ -250,6 +254,10 @@ func (w *Workspace) architectureDecision(g ownerGate, now time.Time) v2Decision 
 		c.Link = d.link
 	}
 	c.SelfApproval = w.selfApprovalLine(g, now)
+	if editionExtreme {
+		// What accepting authorises: there is no later plan approval.
+		c.Lines = append(c.Lines, vm.CardLine{Text: architectureAcceptStarts, Tone: vm.ToneMuted})
+	}
 	c.Actions = []vm.Key{{Key: "a", Label: "open in browser"}}
 	if d.link != "" {
 		c.Actions = append(c.Actions, vm.Key{Key: "c", Label: "copy link"})

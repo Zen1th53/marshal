@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/store"
+
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/update"
 )
@@ -19,6 +21,20 @@ import (
 // published SHA-256, and a download that fails that check is not installed.
 func (c command) update(ctx context.Context, args []string) error {
 	install := false
+	yes := false
+	var positional []string
+	for _, arg := range args {
+		switch arg {
+		case "--yes":
+			yes = true
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	args = positional
+	if len(args) > 1 {
+		return fmt.Errorf("usage: marshal update [check|install] [--yes]")
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "install", "apply":
@@ -33,6 +49,9 @@ func (c command) update(ctx context.Context, args []string) error {
 		// The private build never contacts the public feed or replaces itself.
 		return c.print(map[string]any{"current": Version, "edition": "extreme", "available": false, "private": true}, update.PrivateGuidance)
 	}
+	if !update.IsRelease(Version) {
+		return c.print(map[string]any{"current": Version}, update.DevGuidance)
+	}
 	checker := update.NewChecker()
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -46,7 +65,7 @@ func (c command) update(ctx context.Context, args []string) error {
 			"current":   Version,
 			"latest":    release.Tag,
 			"available": false,
-		}, fmt.Sprintf("MARSHAL %s is the latest release.", Version))
+		}, fmt.Sprintf("No newer release to install. Current: %s.", Version))
 	}
 
 	if !install {
@@ -59,6 +78,25 @@ func (c command) update(ctx context.Context, args []string) error {
 			release.Tag, Version, release.URL))
 	}
 
+	if err := update.ValidateInstall(Version, release, store.LatestSchemaVersion); err != nil {
+		return fmt.Errorf("from %s → to %s: %w", Version, release.Tag, err)
+	}
+	transition := fmt.Sprintf("from %s → to %s", Version, release.Tag)
+	if !yes {
+		confirm := c.confirmer()
+		if confirm == nil {
+			return fmt.Errorf("%s: confirmation required; run marshal update install --yes", transition)
+		}
+		ok, err := confirm("Install MARSHAL " + transition)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return c.print(nil, "Update cancelled. Nothing was installed.")
+		}
+	} else {
+		fmt.Fprintln(c.stdout, "Installing MARSHAL "+transition)
+	}
 	installCtx, cancelInstall := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancelInstall()
 	path, err := checker.Install(installCtx, release)

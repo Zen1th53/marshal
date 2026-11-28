@@ -11,7 +11,7 @@ import (
 // real. tools/build_release.sh overrides all three via -ldflags, so a value
 // that still matches its default means the linker left it untouched.
 const (
-	defaultVersion   = "v0.2.0"
+	defaultVersion   = "dev"
 	defaultCommit    = "head"
 	defaultBuildDate = "unknown"
 )
