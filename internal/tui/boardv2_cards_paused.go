@@ -10,8 +10,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 
-// The paused card: a stop that needs one choice from the owner
-// (docs/design/board-v2/screen5.ans). It reads the run's own pause (the
+// The paused card: a stop that needs one choice from the owner.
+// It reads the run's own pause (the
 // code, action and task the runtime recorded) or the Board's stall check
 // (runStall), names the cause in plain words, lists the paused tasks and
 // what of their work is kept, and says exactly what Enter does. Enter runs

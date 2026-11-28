@@ -12,7 +12,7 @@ import (
 )
 
 // The decision card: what the owner must decide before the run can move,
-// over a dimmed Board (docs/design/board-v2/screen4.ans). It is read from
+// over a dimmed Board. It is read from
 // the same canonical waits the inbox shows (board_gates.go, permissions.go):
 // the architecture waiting for the owner's Accept, a drafted plan waiting
 // for approval where the edition asks the owner, or a pending decision in

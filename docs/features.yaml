@@ -3058,7 +3058,6 @@ features:
       - docs/configuration.md
       - docs/troubleshooting.md
       - docs/board-and-keys.md
-      - docs/design/web-board.md
     web: []
     tui:
       - routeOrCommand: /marshal settings
