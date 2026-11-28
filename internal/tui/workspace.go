@@ -998,8 +998,9 @@ func effectiveModeLabel(mode string, entitled bool) string {
 
 func (w *Workspace) GetUIState() UIState {
 	w.mu.RLock()
-	defer w.mu.RUnlock()
 	state := w.liveStateLocked()
+	w.mu.RUnlock()
+	state.ReadinessBlocker = w.executionReadiness().Blocker
 	return state
 }
 

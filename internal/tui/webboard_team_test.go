@@ -261,7 +261,7 @@ func TestFirstRunMarshalModelEffortAndTelemetry(t *testing.T) {
 		SignedIn:  map[string]bool{"codex": true}, Installed: map[string]bool{"codex": true},
 		Probe: v2Probe{Installed: map[string]bool{"codex": true}, TelemetryOn: true}}
 	ready := buildV2Ready(in)
-	if m := buildV2Marshal(in); m.Provider != "codex" || m.Effort != "high" || len(ready.Checks) == 0 || !strings.Contains(ready.Checks[0].Text, "codex") || !ready.TelemetryAsk {
+	if m := buildV2Marshal(in); m.Provider != "codex" || m.Effort != "high" || len(ready.Checks) == 0 || !strings.Contains(ready.Checks[0].Text, "Final check needs Claude Code") || !ready.TelemetryAsk {
 		t.Fatalf("first-run checklist: %+v", ready)
 	}
 

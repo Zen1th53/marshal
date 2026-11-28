@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -18,7 +19,7 @@ func TestCheckHealthyRuntime(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 	if report.Verdict != Pass {
 		t.Fatalf("report = %#v", report)
 	}
@@ -34,7 +35,7 @@ func TestDefaultCheckDoesNotProbeOptionalProviders(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{Lookup: func(name string) (string, error) {
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: func(name string) (string, error) {
 		if name == "git" || name == "bwrap" {
 			return availableTools(name)
 		}
@@ -56,7 +57,7 @@ func TestMissingCodexAndBwrapAreDegraded(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{ProbeProviders: true, Run: successfulProbe, Lookup: func(name string) (string, error) {
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), ProbeProviders: true, Run: successfulProbe, Lookup: func(name string) (string, error) {
 		if name == "codex" || name == "bwrap" {
 			return "", os.ErrNotExist
 		}
@@ -86,7 +87,7 @@ func TestCorruptSQLiteIsFail(t *testing.T) {
 	if err := os.WriteFile(layout.Database, []byte("not sqlite"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 	if report.Verdict != Fail || report.Check("sqlite").Verdict != Fail {
 		t.Fatalf("report = %#v", report)
 	}
@@ -100,7 +101,7 @@ func TestInvalidPolicyIsFail(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo.Path(), "CAPABILITIES.yaml"), []byte("version: 1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 	if report.Verdict != Fail || report.Check("policy").Verdict != Fail {
 		t.Fatalf("report = %#v", report)
 	}
@@ -137,7 +138,7 @@ func TestProbeMCPProviders(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 	check := report.Check("mcp_providers")
 	if check == nil {
 		t.Fatal("missing mcp_providers check")
@@ -152,7 +153,7 @@ func TestProbeMCPProviders(t *testing.T) {
 // report keeps every row. Doctor stays read-only: it sets nothing up.
 func TestDoctorBeforeInitIsPlain(t *testing.T) {
 	repo := doctorRepo(t)
-	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 	if report.Verdict != Fail {
 		t.Fatalf("verdict = %s", report.Verdict)
 	}
@@ -251,7 +252,7 @@ func TestDoctorNamesHotJournalConditionAndFix(t *testing.T) {
 		}
 		injectHotJournal(t, layout.Database, "UPDATE projects SET default_branch = 'uncommitted'")
 
-		report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+		report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 		if report.Verdict != Fail {
 			t.Fatalf("verdict = %s, want FAIL", report.Verdict)
 		}
@@ -278,7 +279,7 @@ func TestDoctorNamesHotJournalConditionAndFix(t *testing.T) {
 		knowledgeDB := filepath.Join(layout.RuntimeDir, "knowledge", "index-v1.db")
 		injectHotJournal(t, knowledgeDB, "UPDATE metadata SET root = 'interrupted' WHERE id = 1")
 
-		report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+		report := Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(), Lookup: availableTools, Run: successfulProbe})
 		if report.Verdict != Fail {
 			t.Fatalf("verdict = %s, want FAIL", report.Verdict)
 		}
@@ -297,7 +298,7 @@ func TestDoctorNamesHotJournalConditionAndFix(t *testing.T) {
 func TestDoctorOnProgressReportsCompletedChecks(t *testing.T) {
 	repo := doctorRepo(t)
 	var seen []string
-	Check(context.Background(), repo.Path(), Options{
+	Check(context.Background(), repo.Path(), Options{Readiness: healthyReadiness(),
 		Lookup: availableTools,
 		Run:    successfulProbe,
 		OnProgress: func(name string) {
@@ -323,5 +324,23 @@ func TestDoctorOnProgressReportsCompletedChecks(t *testing.T) {
 		if has(skipped) {
 			t.Errorf("OnProgress reported NOT_RUN check %q (seen %v)", skipped, seen)
 		}
+	}
+}
+
+func healthyReadiness() *marshal.Readiness {
+	r := marshal.ComputeReadiness("claude", map[string]marshal.ProviderReadiness{"claude": {Installed: true, SignedIn: true}}, marshal.ReviewPolicy{})
+	return &r
+}
+
+func TestDoctorUsesReadinessVerdict(t *testing.T) {
+	repo := doctorRepo(t)
+	if _, err := app.Bootstrap(t.Context(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	r := marshal.ComputeReadiness("codex", map[string]marshal.ProviderReadiness{"codex": {Installed: true}}, marshal.ReviewPolicy{})
+	report := Check(t.Context(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe, Readiness: &r})
+	row := report.Check("execution.readiness")
+	if row == nil || row.Detail != r.Blocker || report.Verdict != Fail {
+		t.Fatalf("%+v", report)
 	}
 }

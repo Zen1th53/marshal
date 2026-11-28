@@ -47,7 +47,7 @@ func TestBoardPlanningAfterAccept(t *testing.T) {
 		lines, _, _ := w.frameLines(160, 40)
 		return StripANSI(strings.Join(lines, "\n"))
 	}
-	if got := frame(); !strings.Contains(got, " READY ") {
+	if got := frame(); !strings.Contains(got, " YOUR TURN ") {
 		t.Fatalf("before the Accept:\n%s", got)
 	}
 	w.planning.Store(true) // what browserAccepted sets
@@ -58,7 +58,7 @@ func TestBoardPlanningAfterAccept(t *testing.T) {
 	if w.planningNow(false, model.GoalContract{}) || w.planning.Load() {
 		t.Fatal("the planning state outlived the run's start")
 	}
-	if got := frame(); !strings.Contains(got, " READY ") {
+	if got := frame(); !strings.Contains(got, " YOUR TURN ") {
 		t.Fatalf("after the run started and closed:\n%s", got)
 	}
 }
@@ -122,12 +122,12 @@ func TestBoardPlanningFromStoredAccept(t *testing.T) {
 	}
 	done := "add square(n)"
 	w.closedGoal.Store(&done)
-	if got := frame(w); !strings.Contains(got, " READY ") {
+	if got := frame(w); !strings.Contains(got, " YOUR TURN ") {
 		t.Fatalf("a goal a closed run delivered still plans:\n%s", got)
 	}
 	c := fresh(t, model.ConfirmationCancelled)
 	defer c.Close()
-	if got := frame(c); !strings.Contains(got, " READY ") || strings.Contains(got, " PLANNING ") {
+	if got := frame(c); !strings.Contains(got, " YOUR TURN ") || strings.Contains(got, " PLANNING ") {
 		t.Fatalf("a cancelled goal still plans:\n%s", got)
 	}
 }

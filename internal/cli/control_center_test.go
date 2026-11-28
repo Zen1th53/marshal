@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
@@ -250,5 +252,16 @@ func assertNoInternalLeak(t *testing.T, output string) {
 		if strings.Contains(lowered, leak) {
 			t.Fatalf("internal detail %q reached the user:\n%s", leak, output)
 		}
+	}
+}
+
+func TestPlannerReadinessDoesNotHideControlCenter(t *testing.T) {
+	r := marshal.ComputeReadiness("codex", map[string]marshal.ProviderReadiness{"codex": {Installed: true}}, marshal.ReviewPolicy{})
+	a := startup.Summarize([]startup.Check{{ID: "execution.readiness", Dimension: startup.DimensionExecution, Required: true, Status: startup.StatusNeedsAttention, Summary: r.Blocker}}, startup.SummaryOptions{})
+	if a.ExecutionPermitted() || !onlyReadinessBlocks(a) {
+		t.Fatalf("%+v", a)
+	}
+	if got := renderAssessment(a); !strings.Contains(got, r.Blocker) || strings.Contains(got, "Readiness: READY") {
+		t.Fatal(got)
 	}
 }

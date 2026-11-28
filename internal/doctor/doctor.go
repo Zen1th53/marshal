@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/egm"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/resources"
+	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/store"
 	"go.yaml.in/yaml/v3"
 )
@@ -168,6 +170,7 @@ type Options struct {
 	Lookup         func(string) (string, error)
 	Run            func(context.Context, string, ...string) (string, error)
 	ProbeProviders bool
+	Readiness      *marshal.Readiness
 	// OnProgress, when set, is called with each check's name as it finishes
 	// (skipped for checks marked NOT_RUN). Used by the Board opening screen to
 	// show live startup progress.
@@ -213,6 +216,17 @@ func Check(ctx context.Context, root string, options Options) Report {
 		return finalizeMissing(report)
 	}
 	add(success("repository", "git rev-parse", "repository identity resolved"))
+	var verdict marshal.Readiness
+	if options.Readiness != nil {
+		verdict = *options.Readiness
+	} else {
+		verdict = startup.ObserveReadiness(ctx, startup.NewSystemProber(), layout.Root, marshal.ReviewPolicy{})
+	}
+	if verdict.Blocker != "" {
+		add(failure("execution.readiness", "local provider evidence", verdict.Blocker))
+	} else {
+		add(success("execution.readiness", "local provider evidence", verdict.Guarantee))
+	}
 	// Before Marshal is set up here the files and state its checks read do
 	// not exist yet, so one row says so and what to do; the rows that fail
 	// only for that reason are folded into it.

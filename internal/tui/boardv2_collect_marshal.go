@@ -104,6 +104,9 @@ func (w *Workspace) v2MarshalInput(now time.Time) v2MarshalIn {
 		}
 		in.RunState = state
 		in.Run = state != marshal.Closed
+		if in.Run {
+			in.Probe.Settings.ReviewPolicy = p.run.EffectiveReviewPolicy()
+		}
 		in.Lanes = map[string]int{}
 		for _, t := range p.Tasks {
 			if t.State == marshal.Dispatched {
@@ -342,7 +345,7 @@ func (in v2MarshalIn) provider(name string) v2Provider {
 		p.State, p.Reason = "not signed in", notSignedInReason(name)
 		return p
 	}
-	p.SignedIn = live || in.SignedIn[name] || (listed && !st.VerifiedAt.IsZero()) ||
+	p.SignedIn = live || in.SignedIn[name] || (listed && !st.VerifiedAt.IsZero() && !st.Expired) ||
 		(hasQuota && q.Known && !q.Stale) || anyOffered(q)
 	switch {
 	case listed && providerInLimit(st, in.Now):
@@ -435,6 +438,15 @@ func buildV2Ready(in v2MarshalIn) vm.Readiness {
 		settings = marshal.DefaultSettings()
 	}
 	limits, globalCap := app.WorkerConcurrency(settings)
+	verdict := in.readiness()
+	if verdict.Blocker != "" {
+		add(vm.Check{Mark: "bad", Label: "Readiness", Text: verdict.Blocker, Tag: "action"})
+	}
+	guaranteeMark := "ok"
+	if verdict.NeedsConfirmation {
+		guaranteeMark = "warn"
+	}
+	add(vm.Check{Mark: guaranteeMark, Label: "Guarantee", Text: verdict.Guarantee})
 
 	// The Marshal.
 	if prov := in.marshalProvider(); prov == "" {

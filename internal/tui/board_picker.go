@@ -37,13 +37,14 @@ type pickerState struct {
 // age is the reading's age as vitals shows it ("read 2h ago", readAgo), empty
 // while the reading is not over 30 minutes old.
 type pickerCand struct {
-	provider string
-	left     int
-	known    bool
-	out      bool
-	busy     bool
-	until    time.Time
-	age      string
+	provider  string
+	readiness string
+	left      int
+	known     bool
+	out       bool
+	busy      bool
+	until     time.Time
+	age       string
 	// dated is set on a reading at 0% left that is old (usage.FreshFor or
 	// more): the limit may have reset since, so it is shown with "may be out
 	// of date" and can still be chosen rather than blocking the provider.
@@ -184,6 +185,12 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 				}
 			}
 		}
+	}
+	in := w.v2MarshalInput(now)
+	for i := range cands {
+		in.Probe.Lead = cands[i].provider
+		in.Chat = v2Chat{}
+		cands[i].readiness = pickerReadiness(in)
 	}
 	return cands
 }
@@ -427,6 +434,9 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 		}
 		var figure, colour string
 		switch {
+		case c.readiness != "":
+			figure = c.readiness
+			colour = "failed"
 		case c.out:
 			figure = "out of limit"
 			if !c.until.IsZero() {
@@ -492,4 +502,12 @@ func pickerFigure(c pickerCand) string {
 		figure += ", may be out of date"
 	}
 	return figure
+}
+
+func pickerReadiness(in v2MarshalIn) string {
+	r := in.readiness()
+	if !r.PlannerRunnable {
+		return r.Blocker
+	}
+	return ""
 }

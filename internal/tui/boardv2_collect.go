@@ -21,6 +21,7 @@ func (w *Workspace) boardV2() vm.Board {
 	w.collectV2System(&b)
 	w.collectV2MarshalSays(&b)
 	w.collectV2Mode(&b)
+	applyReadiness(&b, w.executionReadiness())
 	b.Web = w.webState()
 	return b
 }

@@ -1611,7 +1611,9 @@ func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.Pl
 		if readErr != nil {
 			return "", readErr
 		}
-		if run.State == marshal.Drafting && marshalRunHasGovernedTask(run) {
+		in := w.v2MarshalInput(time.Now())
+		in.Probe.Settings.ReviewPolicy = run.EffectiveReviewPolicy()
+		if run.State == marshal.Drafting && (marshalRunHasGovernedTask(run) || in.readiness().NeedsConfirmation) {
 			m.mu.Lock()
 			approving := m.approving
 			m.mu.Unlock()
