@@ -970,8 +970,168 @@
     });
   }
 
+  // ---- Accepted architecture workspace ----------------------------------------
+  var awRequested = false;
+  var awSnapshot = null, awPopup = null, awReturnFocus = null, awSeverity = "", awOnly = false;
+  function awSVG(tag, attrs, text) {
+    var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function awClose() {
+    if (awPopup) awPopup.remove();
+    awPopup = null;
+    if (awReturnFocus) awReturnFocus.focus();
+    awReturnFocus = null;
+  }
+  function awFiltered(items) {
+    var severity = awSeverity;
+    return (items || []).filter(function (f) { return !severity || f.severity === severity; });
+  }
+  function awItems(id) {
+    var seen = new Set();
+    return awFiltered((awSnapshot.findings[id] || []).concat(awSnapshot.areas[id] || [])).filter(function (f) {
+      var key = JSON.stringify(f); if (seen.has(key)) return false; seen.add(key); return true;
+    });
+  }
+  function awOpen(svg, anchor, id, items, position) {
+    awClose(); awReturnFocus = anchor;
+    var bounds = svg.getBoundingClientRect(), visible = svg.parentNode.getBoundingClientRect();
+    var point = (position || anchor).getBoundingClientRect();
+    var left = Math.max(0, Math.max(0, visible.left) - bounds.left), top = Math.max(0, Math.max(0, visible.top) - bounds.top);
+    var right = Math.min(window.innerWidth, visible.right) - bounds.left;
+    var rightRoom = right - (point.right - bounds.left) - 12;
+    var leftRoom = point.left - bounds.left - left - 12;
+    var flip = rightRoom < 360 && leftRoom >= rightRoom;
+    var width = Math.max(1, Math.min(360, right - left - 8, flip ? leftRoom : rightRoom));
+    var visibleHeight = Math.max(1, Math.min(window.innerHeight, visible.bottom) - Math.max(0, visible.top));
+    var height = Math.min(260, Math.max(1, visibleHeight - 12));
+    var x = Math.max(left + 4, Math.min((flip ? point.left - width - 8 : point.right + 8) - bounds.left, right - width - 4));
+    awPopup = awSVG("foreignObject", {x:x,y:0,width:width,height:height,class:"aw-popup"});
+    var box = document.createElement("div"); box.className = "aw-popover"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", id || awSnapshot.title);
+    var close = document.createElement("button"); close.textContent = "×"; close.setAttribute("aria-label", "Close findings"); close.onclick = awClose; box.appendChild(close);
+    var heading = document.createElement("h3"); heading.textContent = id || awSnapshot.title; box.appendChild(heading);
+    if (!items.length) { var empty = document.createElement("p"); empty.textContent = "No findings for this filter."; box.appendChild(empty); }
+    var list = document.createElement("div"); list.className = "aw-finding-list"; box.appendChild(list);
+    items.forEach(function (f) {
+      var article = document.createElement("article"), title = document.createElement("strong"), detail = document.createElement("p");
+      title.textContent = f.title; detail.textContent = [f.evidence || "No file evidence", f.source].join(" · ");
+      var severity = document.createElement("span"), status = document.createElement("span");
+      severity.className = "aw-severity aw-" + (f.severity === "error" ? "error" : f.severity === "warning" ? "warning" : "info"); severity.textContent = f.severity;
+      status.className = "aw-status"; status.textContent = f.status; status.setAttribute("data-status", f.status);
+      article.appendChild(title); article.appendChild(document.createElement("br")); article.appendChild(severity); article.appendChild(status); article.appendChild(detail); list.appendChild(article);
+    });
+    awPopup.appendChild(box); svg.appendChild(awPopup);
+    height = Math.min(height, box.scrollHeight + 4);
+    var y = Math.max(top + 4, Math.min(point.top - bounds.top, top + visibleHeight - height - 4));
+    awPopup.setAttribute("y", y); awPopup.setAttribute("height", height);
+    box.style.height = height + "px";
+    box.setAttribute("data-side", flip ? "left" : "right");
+    box.style.setProperty("--pointer-y", Math.max(12, Math.min(height - 12, point.top + Math.min(24, point.height / 2) - bounds.top - y)) + "px");
+    close.focus();
+  }
+  function awTarget(svg, id, x, y, width, height, label, edge, header, zone) {
+    var items = awItems(id), group = awSVG("g", {tabindex:0,role:"button","aria-label":label + ": " + items.length + " findings",class:"aw-target" + (edge ? " aw-pill" : zone ? " aw-zone" : "")});
+    if (zone) group.setAttribute("style", "--zone:var(--aw-z-" + zone + ");--zone-bg:var(--aw-z-" + zone + "-bg)");
+    group.appendChild(awSVG("rect", {x:x,y:y,width:width,height:height,rx:edge ? 6 : zone ? 14 : 9,class:edge ? "aw-edge-pill" : zone ? "aw-plane" : "aw-block"}));
+    if (zone) group.appendChild(awSVG("rect", {x:x+1,y:y+1,width:Math.min(width-2,label.length*8+20),height:30,rx:6,class:"aw-tag"}));
+    group.appendChild(awSVG("text", {x:x+(edge || header || zone ? 10 : 38),y:y+(edge ? 18 : 22),class:"aw-label"}, label));
+    if (!edge && !header && !zone) {
+      group.appendChild(awSVG("rect", {x:x+12,y:y+10,width:16,height:16,rx:3,class:"aw-icon"}));
+      group.appendChild(awSVG("path", {d:"M"+(x+16)+","+(y+15)+"h8m-8,5h5",class:"aw-icon"}));
+      group.appendChild(awSVG("text", {x:x+38,y:y+40,class:"aw-subtitle"}, "component · " + id));
+    }
+    if (items.length) {
+      var severity = items.some(function (f) {return f.severity === "error";}) ? "error" : items.some(function (f) {return f.severity === "warning";}) ? "warning" : "info";
+      var badgeX = edge ? width / 2 : header || zone ? Math.min(width - 24, label.length * 8 + 40) : width - 18;
+      var badgeY = y + (edge ? height + 18 : 17);
+      var marker = awSVG("g", {class:"aw-marker-group aw-"+severity});
+      marker.appendChild(awSVG("circle", {cx:x+badgeX,cy:badgeY,r:11,class:"aw-marker"}));
+      marker.appendChild(awSVG("text", {x:x+badgeX,y:badgeY+5,class:"aw-badge"}, "!"));
+      marker.appendChild(awSVG("circle", {cx:x+badgeX+10,cy:badgeY-9,r:7,class:"aw-count"}));
+      marker.appendChild(awSVG("text", {x:x+badgeX+10,y:badgeY-6,class:"aw-count-text"}, items.length));
+      group.appendChild(marker);
+    }
+    group.onclick = function (event) {
+      event.stopPropagation();
+      var position = (header || zone) && items.length ? group.children[group.children.length-1] : group;
+      if (event.target && event.target.getAttribute && /aw-marker|aw-badge|aw-count/.test(event.target.getAttribute("class") || "")) position = event.target;
+      awOpen(svg.ownerSVGElement || svg, group, id, items, position);
+    };
+    group.onkeydown = function (event) {if(event.key === "Enter" || event.key === " ") {event.preventDefault(); group.onclick(event);}};
+    if (!awOnly || items.length) svg.appendChild(group);
+  }
+  function awDraw() {
+    awClose(); var into = $("aw-views"); into.replaceChildren();
+    if (!awSnapshot) return;
+    $("aw-notice").textContent = awSnapshot.notice;
+    Object.keys(awSnapshot.layouts || {}).sort().forEach(function (view) {
+      var zoneNames = ["owner", "ctrl", "exec", "rev", "state", "ext"];
+      var areaIDs = Object.keys(awSnapshot.members || {}).filter(function (id) {return id;}).sort();
+      var layout = awSnapshot.layouts[view], scroll = document.createElement("div"); scroll.className = "aw-scroll";
+      var svg = awSVG("svg", {width:Math.max(420,layout.width),height:layout.height+60, "aria-label":view});
+      var defs = awSVG("defs");
+      [false,true].forEach(function (problem) {
+        var marker = awSVG("marker", {id:"aw-arrow-"+view+(problem ? "-problem" : ""),viewBox:"0 0 10 10",refX:9,refY:5,markerWidth:7,markerHeight:7,orient:"auto-start-reverse"});
+        marker.appendChild(awSVG("path", {d:"M0 0L10 5L0 10Z",class:"aw-arrow"+(problem ? " aw-problem" : "")})); defs.appendChild(marker);
+      });
+      // View names come from the codec; the area id is the nodes' contract parent.
+      var area = view.indexOf("sub:") === 0 ? view.slice(4) : "";
+      awTarget(svg, area, 0, 0, Math.max(420,layout.width), area ? layout.height+60 : 36, area ? "Area: " + area : (awSnapshot.title || "Accepted architecture"), false, true, area ? zoneNames[Math.max(0,areaIDs.indexOf(area)) % 6] : null);
+      var drawing = awSVG("g", {transform:"translate(0 50)"}); svg.appendChild(drawing);
+      var labels = [];
+      (layout.edges || []).forEach(function (e) {
+        var items = awItems(e.id); if (awOnly && !items.length) return;
+        var path = awSVG("polyline", {points:e.points.map(function(p){return p.join(",");}).join(" "),class:"aw-edge"+(items.length ? " aw-problem" : ""),"marker-end":"url(#aw-arrow-"+view+(items.length ? "-problem" : "")+")"});
+        path.setAttribute("tabindex","0");path.setAttribute("role","button");path.setAttribute("aria-label",e.id);
+        path.onclick=function(event){event.stopPropagation();awOpen(svg,path,e.id,items);};path.onkeydown=function(event){if(event.key==="Enter")path.onclick(event);}; drawing.appendChild(path);
+        // Center on the longest routed segment at natural text size.
+        var segment = null, length = -1;
+        e.points.slice(1).forEach(function (p, i) {
+          var a = e.points[i], size = Math.hypot(p[0]-a[0], p[1]-a[1]);
+          if (size > length) { length = size; segment = [a,p]; }
+        });
+        if (segment) {
+          var label = e.caption || e.id, width = label.length * 8 + 20;
+          var x = (segment[0][0]+segment[1][0])/2, y = (segment[0][1]+segment[1][1])/2;
+          labels.push(function () { awTarget(drawing,e.id,x-width/2,y-13,width,26,label,true); });
+        }
+      });
+      (layout.nodes || []).forEach(function (n) {awTarget(drawing,n.id,n.x,n.y,n.width,n.height,n.title || n.id,false,false, areaIDs.indexOf(n.id) >= 0 ? zoneNames[areaIDs.indexOf(n.id)%6] : null);});
+      // Keep captions above blocks even when a narrow gap cannot contain the pill.
+      labels.forEach(function (draw) { draw(); });
+      svg.appendChild(defs);
+      scroll.appendChild(svg); into.appendChild(scroll);
+    });
+  }
+  function awLoad() {
+    $("aw-notice").textContent = "Reading accepted architecture…";
+    evGet("/api/architecture").then(function (r) {
+      if (!r.ok) {$("aw-notice").textContent = "No accepted architecture is available, or this Board session has expired.";return;}
+      awSnapshot = r.d; awDraw();
+    }).catch(function () {$("aw-notice").textContent = "Architecture could not be loaded.";});
+  }
+  $("aw-load").onclick = awLoad;
+  ["", "error", "warning", "info"].forEach(function (severity) {
+    var chip = $("aw-severity-" + (severity || "all"));
+    chip.onclick = function () {
+      awSeverity = severity;
+      ["", "error", "warning", "info"].forEach(function (s) { $("aw-severity-" + (s || "all")).setAttribute("aria-pressed", String(s === severity)); });
+      awDraw();
+    };
+  });
+  $("aw-only").onclick = function () { awOnly = !awOnly; this.setAttribute("aria-pressed", String(awOnly)); awDraw(); };
+  window.addEventListener("resize", awClose);
+  $("aw-views").addEventListener("scroll", function (event) {
+    if (!awPopup || !awPopup.contains(event.target)) awClose();
+  }, true);
+  document.addEventListener("keydown", function (event) {if (event.key === "Escape") awClose();});
+  document.addEventListener("click", function (event) {if (awPopup && !awPopup.contains(event.target)) awClose();});
+
   // ---- Architecture ------------------------------------------------------------
   function renderArchitecture(f) {
+    if (!awRequested) {awRequested = true; awLoad();}
     var d = f.decision && f.decision.kind === "architecture" ? f.decision : null;
     var arch = null;
     f.plan.stages.forEach(function (s) { if (s.name === "arch") arch = s; });

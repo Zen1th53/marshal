@@ -1256,13 +1256,13 @@
     },
     {
       "path": "internal/app/architecture_conformance_extreme.go",
-      "sha256": "415a026a1372754da552092386932d195d86501e1548135fc3de8afc46e626e5",
-      "bytes": 11486
+      "sha256": "5fd2c75f5af1b9e526393c174c8dceb2f8eaf1d87c7775de2a4977b966a1846c",
+      "bytes": 11584
     },
     {
       "path": "internal/app/architecture_conformance_extreme_test.go",
-      "sha256": "22da12d2d571dc53573ec335bf395590cc4c40edafd7e80984f1bd5e5a27cf2f",
-      "bytes": 8463
+      "sha256": "ab49f3382baaafa2ccede0eaf89f1745493d50d79d46be0fc27f739f7618223f",
+      "bytes": 8650
     },
     {
       "path": "internal/app/architecture_context.go",
@@ -1418,6 +1418,26 @@
       "path": "internal/app/architecture_status_test.go",
       "sha256": "ad5e860ab8bfaf4aec51490d82362ee0ff7300e52792d3ad797a38c29a31998f",
       "bytes": 2627
+    },
+    {
+      "path": "internal/app/architecture_workspace_default.go",
+      "sha256": "212f6f598bb0a14bc21123c18a5634b120783c9efb87856f373df1ada186ef66",
+      "bytes": 370
+    },
+    {
+      "path": "internal/app/architecture_workspace_default_test.go",
+      "sha256": "a5e4143256fc093a2e7cc1da2e966ef9d35fff8b5521a123b9a572669b3c2aab",
+      "bytes": 324
+    },
+    {
+      "path": "internal/app/architecture_workspace_extreme.go",
+      "sha256": "1d0ef4e8481038919f6f79d7742f2c16d98c05c0fd15b332d8c79ddea3619b5b",
+      "bytes": 1798
+    },
+    {
+      "path": "internal/app/architecture_workspace_extreme_test.go",
+      "sha256": "cc9d6899daee4385f0ea01639be0054bb37c5d6d22b471fcf9356adabe031d8a",
+      "bytes": 2160
     },
     {
       "path": "internal/app/board_readiness.go",
@@ -5163,6 +5183,16 @@
       "path": "internal/architecturereview/viewer_test.go",
       "sha256": "218ec3f2263abee1379146aa1a507eb578e4621b5c5c1dd411408a007de92e4b",
       "bytes": 2039
+    },
+    {
+      "path": "internal/architectureworkspace/projection.go",
+      "sha256": "18d788a78f9e4ef1e06e3d95d09cfb05ef2946673d998563fcdf2c96fbd9ea2b",
+      "bytes": 5143
+    },
+    {
+      "path": "internal/architectureworkspace/projection_test.go",
+      "sha256": "cefc09238a45bd0ca9ed03686490a8bdbbec5acb6efb4d3fa16896f3c0b3381a",
+      "bytes": 4724
     },
     {
       "path": "internal/artifact/gc_test.go",
@@ -16671,8 +16701,8 @@
     },
     {
       "path": "internal/tui/webboard.go",
-      "sha256": "2a9809234e83e1740f96157c73a1d331e8a7bbbd76e8eef2a527c66967b71509",
-      "bytes": 9580
+      "sha256": "6f5e0bf13abfb96a9086073041707e76e52db9dea307a50bc0fa8481180b9ea4",
+      "bytes": 10478
     },
     {
       "path": "internal/tui/webboard_act.go",
@@ -17140,6 +17170,16 @@
       "bytes": 18245
     },
     {
+      "path": "internal/webboard/architecture.go",
+      "sha256": "a14c0b5c5c31414acbe80401dbcb612585200fb42d25da71ed9ffb0635bd8261",
+      "bytes": 1107
+    },
+    {
+      "path": "internal/webboard/architecture_test.go",
+      "sha256": "8aa626548e4be2ae6131c3789cf531500e1c21eea328c537d91b0bebdce756c5",
+      "bytes": 1560
+    },
+    {
       "path": "internal/webboard/commands.go",
       "sha256": "23bcad9252e67ea67ec9f3b49a0b12a2fda942f926888c79754dbb248f69935e",
       "bytes": 3319
@@ -17186,18 +17226,18 @@
     },
     {
       "path": "internal/webboard/page/app.css",
-      "sha256": "415d30af398bf3d0dec09fb0610de191e83eed51f49767c296b0432697f4e2c9",
-      "bytes": 18185
+      "sha256": "e76ff23fe0a5e4e46f4ac5b5493f5573930723eee75d4ac80a5103829eb6ed4c",
+      "bytes": 24713
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "b0c07acf771d3558a4d610066db00b582a1d8ba9fc18de572b3ad9f8543ab7e6",
-      "bytes": 94054
+      "sha256": "0f3349f95d7d6990b6c29bda9d46c6afef9f6f92aaa713212fea24719a2729e0",
+      "bytes": 105602
     },
     {
       "path": "internal/webboard/page/index.html",
-      "sha256": "fd5a757b554e9721e0311c6faa36f1d7e2e672f8508f9a8e5c6517e00fdbb1e2",
-      "bytes": 14676
+      "sha256": "695f24910f5fcb1d1d427fa89815c2b089d0712efe0646240deb2ee22f59b485",
+      "bytes": 15563
     },
     {
       "path": "internal/webboard/page_visibility_test.go",
@@ -17206,13 +17246,13 @@
     },
     {
       "path": "internal/webboard/server.go",
-      "sha256": "7facee71fb1a359667d4d31a49debdaa55678152c5e3dbf696fcf6cccd3a36ab",
-      "bytes": 17412
+      "sha256": "3c988894871ac89962f16e229525c6264a12be90f4ff3a46c73e08f7598937fb",
+      "bytes": 17569
     },
     {
       "path": "internal/webboard/server_test.go",
-      "sha256": "493096ff9092ca733e9db1793aa6dd9b5b6e6e24200745db274a7f150e8b561a",
-      "bytes": 13634
+      "sha256": "536fd390ef7117c8e8d4c41cdb10185102a0ad5562f333e1da4cee1b87369997",
+      "bytes": 13864
     },
     {
       "path": "internal/webboard/settings.go",
@@ -17223,6 +17263,16 @@
       "path": "internal/webboard/settings_test.go",
       "sha256": "433382425be01d51bb7ef99d92ad21b0005862e9fc479ca97961bb2890d13ac1",
       "bytes": 12514
+    },
+    {
+      "path": "internal/webboard/testdata/architecture-fixture.cjs",
+      "sha256": "90ecfe3f3601798746878fd1b0a7ed9e728fce9f6f7438db9e0b7c8e81927544",
+      "bytes": 1831
+    },
+    {
+      "path": "internal/webboard/testdata/architecture.cjs",
+      "sha256": "60643f650fc0280c04eda56116e1a68e52cae7948ed08ed043c5b49488645482",
+      "bytes": 9058
     },
     {
       "path": "internal/webboard/testdata/card.cjs",
@@ -18151,7 +18201,7 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d8eb0de05d5a527bb9fb38651b5194272a1894a366fa960ea0d5a7aea26b1a7b",
+      "sha256": "2fbe9627ec5fa1b25ccbd6e777f31a40de6a7ffcfeb501f4043e8871c6e63288",
       "bytes": 480419
     },
     {
