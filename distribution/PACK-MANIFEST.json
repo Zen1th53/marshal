@@ -1256,13 +1256,13 @@
     },
     {
       "path": "internal/app/architecture_conformance_extreme.go",
-      "sha256": "415a026a1372754da552092386932d195d86501e1548135fc3de8afc46e626e5",
-      "bytes": 11486
+      "sha256": "5fd2c75f5af1b9e526393c174c8dceb2f8eaf1d87c7775de2a4977b966a1846c",
+      "bytes": 11584
     },
     {
       "path": "internal/app/architecture_conformance_extreme_test.go",
-      "sha256": "22da12d2d571dc53573ec335bf395590cc4c40edafd7e80984f1bd5e5a27cf2f",
-      "bytes": 8463
+      "sha256": "ab49f3382baaafa2ccede0eaf89f1745493d50d79d46be0fc27f739f7618223f",
+      "bytes": 8650
     },
     {
       "path": "internal/app/architecture_context.go",
@@ -1436,8 +1436,8 @@
     },
     {
       "path": "internal/app/architecture_workspace_extreme_test.go",
-      "sha256": "4c22d9b4a13d89653c1491dbe4070bd69c862909bc45b9e6232eba77f4474fd2",
-      "bytes": 898
+      "sha256": "cc9d6899daee4385f0ea01639be0054bb37c5d6d22b471fcf9356adabe031d8a",
+      "bytes": 2160
     },
     {
       "path": "internal/app/board_readiness.go",
@@ -18196,7 +18196,7 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "d8eb0de05d5a527bb9fb38651b5194272a1894a366fa960ea0d5a7aea26b1a7b",
+      "sha256": "2fbe9627ec5fa1b25ccbd6e777f31a40de6a7ffcfeb501f4043e8871c6e63288",
       "bytes": 480419
     },
     {

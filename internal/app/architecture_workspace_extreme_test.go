@@ -3,6 +3,8 @@
 package app
 
 import (
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/architectureworkspace"
@@ -25,7 +27,41 @@ func TestArchitectureWorkspaceRetainsAdvisoryAndReviewerFindings(t *testing.T) {
 	if len(store) != 1 || store[0].Source != "reviewer" {
 		t.Fatalf("reviewer finding missing: %#v", store)
 	}
-	if len(snapshot.Areas["web"]) != 1 {
+	var child *architectureworkspace.Finding
+	for _, finding := range snapshot.Findings["login"] {
+		if finding.Source == "conformance" && finding.Title == "No tracked implementation files for this component" {
+			child = &finding
+			break
+		}
+	}
+	if child == nil || !slices.Contains(snapshot.Members["web"], "login") || !slices.Contains(snapshot.Areas["web"], *child) {
 		t.Fatalf("unimplemented child not rolled up: %#v", snapshot.Areas)
+	}
+}
+
+func TestArchitectureWorkspaceIgnoresMarshalState(t *testing.T) {
+	r, dir := conformanceRuntime(t, false)
+	before, err := r.ArchitectureWorkspace(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportBefore, err := r.ArchitectureConformance(t.Context(), "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRepoFile(t, dir, ".marshal/runtime.go", "package state\n")
+	gitTest(t, dir, "add", "-f", ".marshal/runtime.go")
+	gitTest(t, dir, "commit", "-m", "tracked runtime state")
+	after, err := r.ArchitectureWorkspace(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportAfter, err := r.ArchitectureConformance(t.Context(), "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportAfter.Commit = reportBefore.Commit
+	if !reflect.DeepEqual(reportBefore, reportAfter) || !reflect.DeepEqual(before, after) {
+		t.Fatalf("runtime state changed conformance or workspace: before=%+v after=%+v", reportBefore, reportAfter)
 	}
 }
