@@ -41,8 +41,13 @@ func TestQuitFromNextCardEndsOwnedSession(t *testing.T) {
 	}, "\n"))
 
 	w.openNext(boardmodel.RunHead{ID: "run", State: marshal.Closed, Done: 1, Total: 1})
-	if !w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'q'}) {
-		t.Fatal("q on the what-next card did not quit")
+	// A worker is still open, so q asks first (quit_ask.go); s stops
+	// everything.
+	if w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 'q'}) {
+		t.Fatal("q on the what-next card quit without asking while a worker is open")
+	}
+	if !w.handleTerminalKey(ctx, KeyEvent{Type: KeyRune, Rune: 's'}) {
+		t.Fatal("s on the quit question did not quit")
 	}
 	// The raw terminal loop's exit, in its order: the dock returns the chat,
 	// Close stops the workers, then the owned session ends.

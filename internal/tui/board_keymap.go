@@ -108,7 +108,7 @@ var boardKeymap = []boardKey{
 	{Group: "HOME", Keys: "i", What: "inbox: everything waiting for you", Press: pressRune('i'), Class: KeyOpen, ID: "home.inbox", Hint: "inbox", When: homeShown, Why: reason("Leave the view first: Esc.")},
 	{Group: "HOME", Keys: "c", What: "readiness: checks, providers, limits", Press: pressRune('c'), Class: KeyOpen, ID: "home.ready", Hint: "checks", When: homeShown, Why: reason("Leave the view first: Esc.")},
 	{Group: "HOME", Keys: "e", What: "requirements: edit a line", Press: pressRune('e'), Class: KeyOpen, ID: "home.reqedit", When: func(w *Workspace) bool { return w.currentReq() != nil }, Why: reason("No requirements wait for you.")},
-	{Group: "HOME", Keys: "q", What: "quit Marshal", Press: pressRune('q'), Class: KeyConfirm, ID: "home.quit", Hint: "quit"},
+	{Group: "HOME", Keys: "q", What: "quit; asks first while work runs", Press: pressRune('q'), Class: KeyConfirm, ID: "home.quit", Hint: "quit"},
 	{Group: "HOME", Keys: "Esc", What: "close a view, help", Class: KeyOpen, ID: "board.close", Hint: "esc", When: func(w *Workspace) bool { return w.anyBodyView() || w.boardHelp.Load() }, Why: reason("Nothing is open to close.")},
 	{Group: "BOARD", Keys: "d", What: "project diff", Command: "/diff", Class: KeyOpen, ID: "task.diff", Hint: "diff"},
 	{Group: "BOARD", Keys: "a", What: "project architecture in the browser", Command: "/marshal architecture", Class: KeyOpen, ID: "architecture.browse", Core: true, CoreOrder: 2, CoreKey: "a", CoreLabel: "open the architecture"},
@@ -127,7 +127,7 @@ var boardKeymap = []boardKey{
 	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen, ID: "command.line", Hint: "command"},
 	{ID: "palette", Group: "MARSHAL", Keys: "space  Ctrl+K", What: "all actions; type to filter", Hint: "actions", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "?", What: "this help", Press: pressRune('?'), Class: KeyOpen, ID: "help", Hint: "help", Core: true, CoreOrder: 8, CoreKey: "?", CoreLabel: "help"},
-	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers, never the Marshal", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)", ID: "workers.stop", Core: true, CoreOrder: 6, CoreKey: "Ctrl+X", CoreLabel: "stop all workers"},
+	{Group: "MARSHAL", Keys: "Ctrl+X", What: "stop all workers; Marshal stays", Command: "/stop all", Class: KeyConfirm, Direct: "spec: ^X unchanged, one key stops all workers (Decision 9)", ID: "workers.stop", Core: true, CoreOrder: 6, CoreKey: "Ctrl+X", CoreLabel: "stop all workers"},
 	{Group: "MARSHAL", Keys: "Ctrl+C", What: "interrupt; twice to exit", Class: KeyConfirm, Direct: "spec: ^C unchanged, it interrupts; a second press exits", ID: "interrupt"},
 
 	{Group: "FUNCTION KEYS", Keys: "F1", What: "help overview", Command: "/help", Class: KeyOpen, ID: "fkey.help"},
@@ -248,11 +248,11 @@ type paletteCommand struct {
 // their commands still type and complete. Stopping every worker is the
 // Board's Ctrl+X row (workers.stop).
 var shippedPaletteCommands = []paletteCommand{
-	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; the Marshal starts no new one until you resume", Command: "/pause all", Core: true, CoreOrder: 5, CoreKey: "p", CoreLabel: "pause everything"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
+	{PaletteAction: PaletteAction{ID: "run.pause", Category: "MARSHAL", Title: "pause the run", Description: "Pause every running task; no new one starts until /resume all, and the Marshal and its chat stay open", Command: "/pause all", Core: true, CoreOrder: 5, CoreKey: "p", CoreLabel: "pause everything"}, When: func(w *Workspace) bool { return w.runPausable.Load() > 0 }, Why: reason("No run is running to pause.")},
 	{PaletteAction: PaletteAction{ID: "run.resume", Category: "MARSHAL", Title: "resume the run", Description: "Resume every paused task and let the Marshal go on", Command: "/resume all"}, When: func(w *Workspace) bool { return w.runResumable.Load() > 0 }, Why: reason("No run is paused.")},
 	{PaletteAction: PaletteAction{ID: "web.open", Category: "MARSHAL", Title: "Open the Board in the browser", Description: "This Board on this computer only: see it and answer its card from the browser; /marshal web shows its private link", Command: "/marshal web"}},
 	{PaletteAction: PaletteAction{ID: "app.doctor", Category: "MARSHAL", Title: "check the setup again", Description: "Run the health check the opening runs", Command: "/doctor"}},
-	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal", Description: "Leave Marshal", Command: "/quit"}},
+	{PaletteAction: PaletteAction{ID: "app.quit", Category: "MARSHAL", Title: "quit Marshal and stop everything", Description: "Stop the Marshal, its chat and every worker now; q on the Board offers detach instead, which keeps them running", Command: "/quit"}},
 }
 
 // row is the command as a palette row; with a workspace it is marked off,

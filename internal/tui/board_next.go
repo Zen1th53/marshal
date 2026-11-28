@@ -160,7 +160,7 @@ func (w *Workspace) clearNext() {
 // handleNextKey is the card's keys on the Board, taken before the gate keys
 // while the card is open: n focuses the Marshal chat for the next goal (as m
 // does) and closes the card; d opens the Verify view and leaves the card up;
-// q is the normal quit. The owner types the next goal; nothing auto-starts.
+// q is the normal quit (it asks first while work runs). The owner types the next goal; nothing auto-starts.
 func (w *Workspace) handleNextKey(event KeyEvent) bool {
 	if w.currentNext() == nil || event.Type != KeyRune {
 		return false
@@ -174,7 +174,7 @@ func (w *Workspace) handleNextKey(event KeyEvent) bool {
 		w.openNextDetails()
 		return true
 	case 'q':
-		w.requestExit()
+		w.requestQuit(context.Background())
 		return true
 	}
 	return false
@@ -190,7 +190,7 @@ func (w *Workspace) clickNext(id string) {
 	case "d":
 		w.openNextDetails()
 	case "q":
-		w.requestExit()
+		w.requestQuit(context.Background())
 	}
 }
 

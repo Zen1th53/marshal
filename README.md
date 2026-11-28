@@ -127,11 +127,12 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 
 Then, in a Git repository of yours, run `marshal`. Choose who plans, check the readiness
 list (sign in to any provider it marks), and say what you want built with `s` or in the
-Marshal chat. Confirm the requirements card with `Enter` (or edit an answer with `e`); when the
-**Accept architecture** card opens, press `a` to open the architecture in your browser and accept
-it there. That is the owner gate. The Marshal then plans and approves the plan itself, starts the
-workers, and runs a final independent check. You need at least one coding agent CLI, installed and
-signed in ([requirements](#requirements)); Marshal has no model costs of its own.
+Marshal chat. Confirm the requirements card with `y` on the Board (or edit an answer with `e`
+then the line's letter); the *From you* line shows both keys. When the **Accept architecture**
+card opens, press `a` to open the architecture in your browser and accept it there. That is the
+owner gate, and accepting starts the work: the Marshal then writes the task plan, approves it
+itself (you are not asked again), starts the workers, and runs a final independent check. You
+need at least one coding agent CLI, installed and signed in ([requirements](#requirements)); Marshal has no model costs of its own.
 
 **Telemetry:** Marshal sends anonymous usage telemetry (a random install ID, version,
 OS/architecture, mode and timestamps; never code, prompts, paths or commands).
@@ -241,13 +242,13 @@ full interface, and it opens in your browser as the Board starts:
 |---|---|
 | `Enter` / `F11` | Open the Marshal chat; `F11` switches between chat and the Board |
 | `y` | Do the safe step **From you** names; a second `y` within 2 s does nothing |
-| `w` | Open the Web Board |
+| `w` | Open the Web Board (`/marshal web copy` copies a fresh link instead) |
 | `s` | Say something to the Marshal from the Board |
 | `a` | Open the architecture in your browser (where you accept it) |
 | `m` | Change the Marshal's model or provider |
 | `Space` or `Ctrl+K` | Action palette |
-| `Ctrl+X` | Stop all workers (never the Marshal) |
-| `q` | Quit |
+| `Ctrl+X` | Stop all workers; the Marshal, its chat and the run stay |
+| `q` | Quit. While work runs it asks: `Enter` detaches (work keeps running; `marshal` returns), `s` stops everything |
 | `?` | Every key |
 
 The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
