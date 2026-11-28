@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 func TestEncodeRunningFrame(t *testing.T) {

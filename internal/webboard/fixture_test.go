@@ -3,7 +3,7 @@ package webboard
 import (
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // The fixtures are the Board v2 golden fixtures (internal/tui/board/v2),

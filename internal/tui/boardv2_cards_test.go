@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 

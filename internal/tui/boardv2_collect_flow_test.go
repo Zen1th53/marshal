@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 var flowNow = time.Date(2026, 11, 20, 19, 31, 0, 0, time.UTC)

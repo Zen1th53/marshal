@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/permission"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 func TestCollectV2ChatRequestsAndState(t *testing.T) {

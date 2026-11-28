@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // The Board keeps the final prose of the Marshal's last turn: never a tool

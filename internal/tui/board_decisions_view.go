@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // The decision pane: the waiting decision or paused card drawn in full on

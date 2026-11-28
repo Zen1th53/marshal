@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // The owner cards as Board v2 decision cards: the changed-files guard, the

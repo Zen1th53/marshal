@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 

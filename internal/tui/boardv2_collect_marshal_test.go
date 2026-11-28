@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/store"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/usage"
 )
 

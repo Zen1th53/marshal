@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // flowIn is everything the flow collector reads for one frame. The
