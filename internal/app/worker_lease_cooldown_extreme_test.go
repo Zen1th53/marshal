@@ -32,7 +32,7 @@ func TestExtremeLeaseExpiryAndCrashNeverCoolProvider(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		run.Tasks[0].State = marshal.Dispatched
+		run, rev = advanceTaskFixture(t, s, "par", 0, marshal.Dispatched)
 		if err = s.returnInfraFailure(t.Context(), "par", run, rev, 0, cause); err != nil {
 			t.Fatal(err)
 		}

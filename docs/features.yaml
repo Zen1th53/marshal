@@ -440,7 +440,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_decision.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
       - internal/webboard.TestApprovalFrameIncludesAgeAndRedactsReason
     docs:
       - docs/board-and-keys.md
@@ -467,7 +467,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_paused.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -602,7 +602,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_decision.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -661,15 +661,29 @@ features:
         kind: control
 
   - id: TUI-CMD-marshal-chat
-    name: Open or focus the Marshal provider chat
+    name: Open or focus capability-qualified structured chat with durable turns and visible paste fallback
     editions: [default, governed]
     sources:
       - internal/tui/commands_marshal.go
+      - internal/tui/native_chat.go
+      - internal/chattransport/transport.go
+      - internal/chattransport/claude.go
+      - internal/chattransport/codex.go
+      - internal/chattransport/durable.go
+      - internal/tui/chat_paste_outbox.go
       - internal/webboard/page/index.html
     tests:
       - internal/webboard.TestFrameMarshalSays
+      - internal/chattransport.TestVersionedFixtures
+      - internal/chattransport.TestDurableRetryAndRestart
+      - internal/chattransport.TestDurableCompletionDeduplicatesAcrossRestart
+      - internal/chattransport.TestCodexRuntimeQualificationAndResume
+      - internal/tui.TestChatPendingSurvivesFallbackSwitch
+      - internal/tui.TestPasteOutboxRecovery
+      - internal/tui.TestBoardSayDoesNotReplayNetworkErrorAndKeepsQueued
     docs:
       - docs/board-and-keys.md
+      - docs/configuration.md
     web:
       - routeOrCommand: "#home"
         anchor: 'id="marshal-says"'
@@ -792,7 +806,7 @@ features:
       - internal/tui/commands_marshal.go
       - internal/webboard/page/app.js
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -1107,7 +1121,7 @@ features:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
-        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers", stopAllWarn)'
+        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers")'
         kind: control
     tui:
       - routeOrCommand: /stop all
@@ -1809,7 +1823,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_keys.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -1854,7 +1868,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_decision.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -1908,7 +1922,7 @@ features:
       - internal/webboard/page/app.js
       - internal/permission/popup.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs: []
     web:
       - routeOrCommand: "#home"
@@ -3601,7 +3615,7 @@ features:
       - internal/tui.TestRequirementsEditVersioned
       - internal/tui.TestPlanApproveRequiresViewedCurrentDigest
       - internal/tui.TestDecisionAuthorityAndRevisionMatrix
-      - internal/tui.TestLegacyActionUsesTypedAuthority
+      - internal/tui.TestLegacyKeysAreRefused
       - internal/webboard.TestDecisionRendersAllAvailableActions
     docs: []
     web:

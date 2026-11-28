@@ -24,7 +24,9 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		return handin, model.ErrNotFound
 	}
 	t := &run.Tasks[i]
-	t.State = marshal.Escalated
+	if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+		return marshal.HandIn{}, err
+	}
 	t.EscalationReason = "provider limit: " + reason
 	t.EscalationCode = escalationCode(marshal.CodeProviderLimit, t.EscalationReason)
 	run.Operation = nil

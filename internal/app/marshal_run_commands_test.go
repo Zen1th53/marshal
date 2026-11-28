@@ -164,7 +164,7 @@ func TestTaskActionEligibilityMatrix(t *testing.T) {
 			t.Run(operation+"/"+string(state), func(t *testing.T) {
 				s := handedInFixture(t)
 				run, rev, _ := s.load(t.Context(), "run")
-				run.Tasks[0].State = state
+				run, rev = advanceTaskFixture(t, s, "run", 0, state)
 				if err := s.save(t.Context(), "run", run, rev); err != nil {
 					t.Fatal(err)
 				}

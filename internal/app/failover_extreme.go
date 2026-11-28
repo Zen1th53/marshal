@@ -289,7 +289,10 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		if idx < 0 || r.Tasks[idx].State != marshal.Dispatched {
 			return
 		}
-		r.Tasks[idx].State = marshal.Escalated
+		if err := marshal.SetTaskState(&r.Tasks[idx], marshal.Escalated); err != nil {
+			retErr = errors.Join(retErr, err)
+			return
+		}
 		machine := "provider failover interrupted: " + retErr.Error()
 		r.Tasks[idx].EscalationReason = machine
 		r.Tasks[idx].EscalationCode = escalationCode(marshal.CodeFailoverInterrupted, r.Tasks[idx].EscalationReason)
@@ -348,7 +351,9 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 		nextWorker, err = s.selectFailoverWorker(ctx, currentWorker, t.Mode, drivers, order)
 	}
 	if err != nil {
-		t.State = marshal.Escalated
+		if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+			return marshal.HandIn{}, err
+		}
 		machine := "provider failover: " + err.Error()
 		t.EscalationReason = machine
 		baseCode := marshal.CodeProviderFailover
@@ -424,7 +429,9 @@ func (s *MarshalService) handleWorkerLimit(ctx context.Context, runID string, di
 
 	// Reassign task with fresh session, same brief and scope
 	t.Worker = nextWorker
-	t.State = marshal.Reassigned
+	if err := marshal.SetTaskState(t, marshal.Reassigned); err != nil {
+		return marshal.HandIn{}, err
+	}
 	t.ResultCommit = ""
 	t.EscalationReason = ""
 	t.EscalationCode = ""
@@ -553,7 +560,9 @@ func (s *MarshalService) admitProviderDispatch(ctx context.Context, runID string
 		run.CloseAuthorization.Voided = true
 	}
 	t.Worker = next
-	t.State = marshal.Reassigned
+	if err := marshal.SetTaskState(t, marshal.Reassigned); err != nil {
+		return rev, err
+	}
 	t.ProviderFailoverPending = true
 	t.FailoverBrief = brief
 	if t.ReturnsByAgent == nil {

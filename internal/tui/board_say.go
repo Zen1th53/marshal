@@ -29,7 +29,7 @@ import (
 // can answer (trust this folder, allow this step), or end a turn on a
 // network error and wait for nothing. The deliverer reads the same pane
 // captures it already takes to tell those apart, so the Board says what is
-// waiting for whom, and a turn lost to the network is sent once more.
+// waiting for whom, and uncertain turns are retained without automatic replay.
 
 // sayEcho is one message as Activity shows it.
 type sayEcho struct {
@@ -64,10 +64,12 @@ type sayState struct {
 }
 
 type sayItem struct {
-	id      int
-	text    string
-	at      time.Time
-	runtime bool
+	messageID  string
+	outboxPath string
+	id         int
+	text       string
+	at         time.Time
+	runtime    bool
 }
 
 // sayEchoes is how many messages Activity remembers.
@@ -92,14 +94,12 @@ var (
 
 // sayWatch is a message Marshal typed into the tmux chat whose turn has not
 // been seen to end yet. The deliverer keeps looking at the chat until it
-// does, so a turn that ends on a provider network error is noticed (the
-// provider does not retry by itself) and the message is sent once more.
+// does, so a turn ending in a provider error is reported without resending.
 type sayWatch struct {
 	item    sayItem
 	before  string    // the plain frame just before it was typed
 	at      time.Time // when it was typed
 	started bool      // the chat was seen not idle since
-	retried bool      // already sent again once after a network error
 }
 
 // composing reports whether the composer has the keyboard: it holds text,
@@ -157,6 +157,7 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) int {
 	w.say.next++
 	id := w.say.next
 	w.say.mu.Unlock()
+	turn := chattransport.NewTurn(text)
 	now := time.Now()
 	echo := sayEcho{id: id, At: now, Text: text, State: saySending, Runtime: runtime}
 	role := chat.You
@@ -181,10 +182,22 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) int {
 	// being sent.
 	bg := w.workers.context()
 	if tr != nil {
+		if durable, ok := tr.(*chattransport.Durable); ok {
+			if err := durable.Prepare(turn); err != nil {
+				echo.State, echo.Why = sayFailed, err.Error()
+				w.sayNote(echo)
+				if !runtime {
+					w.composer.SetText(text)
+					w.say.open.Store(true)
+				}
+				w.memoryAnswer(err.Error(), true)
+				return id
+			}
+		}
 		echo.State = saySent
 		w.sayNote(echo)
 		w.startBackground(bg, func(ctx context.Context) {
-			if err := tr.Send(ctx, chattransport.Turn{Text: text}); err != nil {
+			if err := tr.Send(ctx, turn); err != nil {
 				w.sayNote(sayEcho{id: id, At: now, Text: text, State: sayFailed, Why: err.Error(), Runtime: runtime})
 				w.memoryAnswer(sayWhose(runtime, "The Marshal chat did not take your message: ", "The Marshal chat did not take Marshal's notice: ")+err.Error(), true)
 			}
@@ -204,9 +217,22 @@ func (w *Workspace) sayAs(ctx context.Context, text string, runtime bool) int {
 		w.setOutput("No Marshal chat is open, so nothing was sent; /marshal chat starts one. Your text is back in the line below.", true)
 		return id
 	}
+	outboxPath := ""
+	if !runtime {
+		var err error
+		outboxPath, err = savePasteIntent(w.providerRoot(), turn)
+		if err != nil {
+			echo.State, echo.Why = sayFailed, err.Error()
+			w.sayNote(echo)
+			w.composer.SetText(text)
+			w.say.open.Store(true)
+			w.memoryAnswer("Chat outbox could not save your message: "+err.Error(), true)
+			return id
+		}
+	}
 	w.sayNote(echo)
 	w.say.mu.Lock()
-	w.say.pending = append(w.say.pending, sayItem{id: id, text: text, at: now, runtime: runtime})
+	w.say.pending = append(w.say.pending, sayItem{id: id, messageID: turn.ID, outboxPath: outboxPath, text: text, at: now, runtime: runtime})
 	start := !w.say.running
 	w.say.running = true
 	w.say.mu.Unlock()
@@ -259,8 +285,8 @@ func (w *Workspace) sayWait(ctx context.Context) bool {
 
 // deliverSaid types the queued messages into the tmux chat, oldest first,
 // each only once the chat is idle at an empty prompt. After typing one it
-// keeps looking at the chat until that turn ends, so a turn lost to a
-// network error is sent again once; and while the chat waits on the owner
+// keeps looking at the chat until that turn ends, retaining uncertain turns
+// without replay; while the chat waits on the owner
 // it says so instead of "busy".
 func (w *Workspace) deliverSaid(ctx context.Context) {
 	told := map[int]bool{}
@@ -366,9 +392,8 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 			}
 		}
 
-		// A turn that ended on a network error: the provider gave up on it,
-		// so Marshal sends the message again, once. Queued messages stay
-		// queued behind it.
+		// A network error cannot prove whether the provider accepted a turn.
+		// Retain its intent and pause the queue without replaying it.
 		if wait == chatWaitNone && pane != "" && pausedFrame == "" && (watch != nil || queued) {
 			sent, before := "", ""
 			if watch != nil {
@@ -378,36 +403,10 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 				held = time.Now()
 				who := w.sayProvider()
 				switch {
-				case watch != nil && !watch.retried:
-					b, err := w.typeIntoChat(ctx, pane, watch.item.text)
-					if err == nil {
-						watch = &sayWatch{item: watch.item, before: b, at: time.Now(), retried: true}
-						errTold = line
-						msg := "Network error in the Marshal chat: " + who + " said “" + line + "”. Marshal sent the last message again"
-						if queued {
-							msg += "; queued messages stay queued."
-						} else {
-							msg += "."
-						}
-						w.memoryAnswer(msg, false)
-						if !w.sayWait(ctx) {
-							return
-						}
-						continue
-					}
-					if ctx.Err() == nil && !errors.Is(err, errChatBusy) {
-						watch = nil
-						w.memoryAnswer("Network error in the Marshal chat: "+who+" said “"+line+"”. Marshal could not send the last message again: "+err.Error(), true)
-					} else if errTold != line {
-						// Not back at its prompt yet: say so, and try again
-						// at the next look.
-						errTold = line
-						w.memoryAnswer("Network error in the Marshal chat: "+who+" said “"+line+"”. Marshal sends the last message again once the chat is back at its prompt.", true)
-					}
 				case watch != nil:
 					watch = nil
 					errTold = line
-					msg := "Network error again in the Marshal chat: " + who + " said “" + line + "”. Marshal already sent the last message again once, so it stops there: open the chat (F11) and send it when the connection is back."
+					msg := "Network error in the Marshal chat: " + who + " said “" + line + "”. Delivery is uncertain; no message was resent. Open the chat (F11) and check provider history. /view chat pending shows saved owner text."
 					if queued {
 						pausedFrame = frame
 						told[item.id] = true
@@ -428,7 +427,13 @@ func (w *Workspace) deliverSaid(ctx context.Context) {
 					}
 				}
 			} else if watch != nil && (idle && (watch.started || time.Since(watch.at) > sayTurnSettle) || time.Since(watch.at) > sayGiveUp) {
-				// The turn ended cleanly (or was watched long enough).
+				// Correlate this observed turn to the paste's local message ID.
+				// A timeout alone does not prove completion; retain the intent.
+				if idle && (watch.started || time.Since(watch.at) > sayTurnSettle) {
+					if err := completePasteIntent(watch.item); err != nil {
+						w.RecordActivity("Chat outbox: " + err.Error())
+					}
+				}
 				watch = nil
 				errTold = ""
 			}

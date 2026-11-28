@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // sinkLog is a fake sink that records the actions it took.
@@ -103,16 +103,16 @@ func post(t *testing.T, s *Server, body []byte, header func(h http.Header)) (*ht
 	return r, res
 }
 
-func keyBody(t *testing.T, f Frame, key string) []byte {
+func pauseActionBody(t *testing.T, f Frame, key string) []byte {
 	t.Helper()
 	if f.Act == nil {
 		t.Fatal("frame has no action section")
 	}
-	b, _ := json.Marshal(map[string]any{"action": "key", "card": f.Act.Card, "key": key, "token": f.Act.Tokens[key]})
+	b, _ := json.Marshal(map[string]any{"action": "decide", "card": f.Act.Card, "choice": PauseOp(key), "cardRevision": f.Act.Card, "token": f.Act.Tokens[ChoiceToken(PauseOp(key), "")]})
 	return b
 }
 
-func TestActPressesTheCardsKey(t *testing.T) {
+func TestActRunsNamedPauseAction(t *testing.T) {
 	s, _, log := startActing(t, fixturePaused())
 	f := boardFrame(t, s)
 	if f.Act == nil || !strings.HasPrefix(f.Act.Card, "paused:") || f.Act.SayMax != SayMax {
@@ -126,13 +126,13 @@ func TestActPressesTheCardsKey(t *testing.T) {
 	if _, ok := f.Act.Tokens["esc"]; ok {
 		t.Error("the paused card has no esc, but a token was minted for it")
 	}
-	r, res := post(t, s, keyBody(t, f, "⏎"), nil)
+	r, res := post(t, s, pauseActionBody(t, f, "⏎"), nil)
 	if r.StatusCode != http.StatusOK || res.Status != "done" || res.Text != "Done." {
 		t.Fatalf("POST: %d %+v", r.StatusCode, res)
 	}
 	checkHeaders(t, "POST /api/act", r)
 	got := log.taken()
-	if len(got) != 1 || got[0].Kind != "key" || got[0].Key != "⏎" || got[0].Card != f.Act.Card {
+	if len(got) != 1 || got[0].Kind != "decide" || got[0].Choice != "pause/continue" || got[0].Card != f.Act.Card {
 		t.Fatalf("sink got %+v", got)
 	}
 }
@@ -140,7 +140,7 @@ func TestActPressesTheCardsKey(t *testing.T) {
 func TestActRefusals(t *testing.T) {
 	s, _, log := startActing(t, fixturePaused())
 	f := boardFrame(t, s)
-	body := keyBody(t, f, "⏎")
+	body := pauseActionBody(t, f, "⏎")
 	cases := []struct {
 		name   string
 		body   []byte
@@ -162,10 +162,10 @@ func TestActRefusals(t *testing.T) {
 		{"unknown field", []byte(`{"action":"key","shell":"rm -rf /"}`), nil, http.StatusBadRequest},
 		{"two bodies", append(append([]byte{}, body...), body...), nil, http.StatusBadRequest},
 		{"unknown action", []byte(`{"action":"command","text":"/marshal stop"}`), nil, http.StatusBadRequest},
-		{"wrong card", []byte(`{"action":"key","card":"paused:0","key":"⏎","token":"` + f.Act.Tokens["⏎"] + `"}`), nil, http.StatusConflict},
-		{"no token", []byte(`{"action":"key","card":"` + f.Act.Card + `","key":"⏎"}`), nil, http.StatusConflict},
-		{"another key's token", []byte(`{"action":"key","card":"` + f.Act.Card + `","key":"x","token":"` + f.Act.Tokens["⏎"] + `"}`), nil, http.StatusConflict},
-		{"key not on the card", []byte(`{"action":"key","card":"` + f.Act.Card + `","key":"q","token":"` + f.Act.Tokens["⏎"] + `"}`), nil, http.StatusConflict},
+		{"wrong card", []byte(`{"action":"decide","choice":"pause/continue","card":"paused:0","key":"⏎","token":"` + f.Act.Tokens[ChoiceToken("pause/continue", "")] + `"}`), nil, http.StatusConflict},
+		{"no token", []byte(`{"action":"decide","choice":"pause/continue","card":"` + f.Act.Card + `","key":"⏎"}`), nil, http.StatusConflict},
+		{"another key's token", []byte(`{"action":"decide","choice":"pause/stop","card":"` + f.Act.Card + `","key":"x","token":"` + f.Act.Tokens[ChoiceToken("pause/continue", "")] + `"}`), nil, http.StatusConflict},
+		{"key not on the card", []byte(`{"action":"decide","choice":"unavailable","card":"` + f.Act.Card + `","key":"q","token":"` + f.Act.Tokens[ChoiceToken("pause/continue", "")] + `"}`), nil, http.StatusConflict},
 	}
 	for _, c := range cases {
 		r, res := post(t, s, c.body, c.header)
@@ -182,7 +182,7 @@ func TestActRefusals(t *testing.T) {
 func TestActWrongHostIsRefused(t *testing.T) {
 	s, _, log := startActing(t, fixturePaused())
 	f := boardFrame(t, s)
-	q, _ := http.NewRequest("POST", "http://"+s.Addr()+"/api/act", bytes.NewReader(keyBody(t, f, "⏎")))
+	q, _ := http.NewRequest("POST", "http://"+s.Addr()+"/api/act", bytes.NewReader(pauseActionBody(t, f, "⏎")))
 	q.Host = "evil.example:" + s.port
 	q.Header.Set("Authorization", "Bearer "+s.token)
 	q.Header.Set("Origin", "http://"+s.Addr())
@@ -205,14 +205,14 @@ func TestActWrongHostIsRefused(t *testing.T) {
 func TestActTokenIsSpent(t *testing.T) {
 	s, _, log := startActing(t, fixturePaused())
 	f := boardFrame(t, s)
-	body := keyBody(t, f, "d")
+	body := pauseActionBody(t, f, "d")
 	if r, _ := post(t, s, body, nil); r.StatusCode != http.StatusOK {
 		t.Fatalf("first: %d", r.StatusCode)
 	}
 	if r, res := post(t, s, body, nil); r.StatusCode != http.StatusConflict || res.Status != "refused" {
 		t.Fatalf("replay: %d %+v", r.StatusCode, res)
 	}
-	other := keyBody(t, f, "⏎")
+	other := pauseActionBody(t, f, "⏎")
 	if r, _ := post(t, s, other, nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("another token of the same frame: %d", r.StatusCode)
 	}
@@ -220,7 +220,7 @@ func TestActTokenIsSpent(t *testing.T) {
 	if g.Act.Card != f.Act.Card || g.Act.Tokens["d"] == f.Act.Tokens["d"] {
 		t.Fatalf("the next frame did not get a new token: %+v", g.Act)
 	}
-	if r, _ := post(t, s, keyBody(t, g, "d"), nil); r.StatusCode != http.StatusOK {
+	if r, _ := post(t, s, pauseActionBody(t, g, "d"), nil); r.StatusCode != http.StatusOK {
 		t.Fatalf("fresh token: %d", r.StatusCode)
 	}
 	if n := len(log.taken()); n != 2 {
@@ -239,7 +239,7 @@ func TestActStaleCard(t *testing.T) {
 	b.Paused = &p
 	src.set(b)
 	time.Sleep(frameEvery + 50*time.Millisecond)
-	if r, res := post(t, s, keyBody(t, f, "⏎"), nil); r.StatusCode != http.StatusConflict {
+	if r, res := post(t, s, pauseActionBody(t, f, "⏎"), nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("changed card: %d %+v", r.StatusCode, res)
 	}
 	// A clock that moves on the card is not a change of card.
@@ -250,11 +250,11 @@ func TestActStaleCard(t *testing.T) {
 	b2.Paused = &p2
 	g := boardFrame(t, s)
 	src.set(b2)
-	if r, _ := post(t, s, keyBody(t, g, "⏎"), nil); r.StatusCode != http.StatusOK {
+	if r, _ := post(t, s, pauseActionBody(t, g, "⏎"), nil); r.StatusCode != http.StatusOK {
 		t.Fatalf("progress only: %d", r.StatusCode)
 	}
 	src.set(fixtureDecision())
-	if r, _ := post(t, s, keyBody(t, boardFrame(t, s), "⏎"), nil); r.StatusCode != http.StatusConflict {
+	if r, _ := post(t, s, pauseActionBody(t, boardFrame(t, s), "⏎"), nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("the decision card has no ⏎: %d", r.StatusCode)
 	}
 	if n := len(log.taken()); n != 1 {
@@ -274,7 +274,7 @@ func TestActStaleWhenTheButtonChanged(t *testing.T) {
 	p.Actions = append([]vm.Key{{Key: "⏎", Label: "move to codex"}}, p.Actions[1:]...)
 	b.Paused = &p
 	src.set(b)
-	if r, _ := post(t, s, keyBody(t, f, "⏎"), nil); r.StatusCode != http.StatusConflict {
+	if r, _ := post(t, s, pauseActionBody(t, f, "⏎"), nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("changed button: %d", r.StatusCode)
 	}
 	if n := len(log.taken()); n != 0 {
@@ -297,19 +297,19 @@ func TestActScreenKeys(t *testing.T) {
 	b2 := b
 	b2.Keys = kv("r", "retry T05", "ctrl+x", "stop all workers")
 	src.set(b2)
-	if r, _ := post(t, s, keyBody(t, f, "r"), nil); r.StatusCode != http.StatusConflict {
+	if r, _ := post(t, s, pauseActionBody(t, f, "r"), nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("retry of another task: %d", r.StatusCode)
 	}
 	time.Sleep(frameEvery + 50*time.Millisecond) // past the cached frame
 	g := boardFrame(t, s)
 	body, _ := json.Marshal(map[string]any{"action": "key", "card": g.Act.Card, "key": "ctrl+x", "token": g.Act.Tokens["ctrl+x"], "confirmed": true})
-	if r, _ := post(t, s, body, nil); r.StatusCode != http.StatusOK {
-		t.Fatalf("stop all: %d", r.StatusCode)
+	if r, res := post(t, s, body, nil); r.StatusCode != http.StatusBadRequest || !strings.Contains(res.Text, "no longer supported") {
+		t.Fatalf("key refusal: %d %+v", r.StatusCode, res)
 	}
-	got := log.taken()
-	if len(got) != 1 || got[0].Key != "ctrl+x" || !got[0].Confirmed {
-		t.Fatalf("sink %+v", got)
+	if len(log.taken()) != 0 {
+		t.Fatal("key request reached the sink")
 	}
+
 }
 
 // The sink's own "the card changed" is a 409 too.
@@ -320,7 +320,7 @@ func TestActSinkStale(t *testing.T) {
 	if f.Act.Tokens["esc"] == "" || f.Act.Tokens["a"] == "" {
 		t.Fatalf("decision tokens: %v", f.Act.Tokens)
 	}
-	if r, _ := post(t, s, keyBody(t, f, "a"), nil); r.StatusCode != http.StatusConflict {
+	if r, _ := post(t, s, pauseActionBody(t, f, "a"), nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("stale: %d", r.StatusCode)
 	}
 }
@@ -347,7 +347,7 @@ func TestActSay(t *testing.T) {
 	}
 	// A key token cannot be minted for a screen without a card.
 	b, _ := json.Marshal(map[string]any{"action": "key", "card": f.Act.Card, "key": "x", "token": f.Act.Tokens["say"]})
-	if r, _ := post(t, s, b, nil); r.StatusCode != http.StatusConflict {
+	if r, _ := post(t, s, b, nil); r.StatusCode != http.StatusBadRequest {
 		t.Fatalf("key on the running screen: %d", r.StatusCode)
 	}
 }
@@ -397,7 +397,7 @@ func TestActPushesNewTokens(t *testing.T) {
 	if err := json.Unmarshal([]byte(first.data), &f); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := post(t, s, keyBody(t, f, "w"), nil); r.StatusCode != http.StatusOK {
+	if r, _ := post(t, s, pauseActionBody(t, f, "w"), nil); r.StatusCode != http.StatusOK {
 		t.Fatalf("POST: %d", r.StatusCode)
 	}
 	next, ok := nextBoard(t, ch, 2*time.Second)
@@ -440,5 +440,41 @@ func TestActDecideCarriesTypedChoice(t *testing.T) {
 	}
 	if r, _ := post(t, s, body, nil); r.StatusCode != http.StatusConflict {
 		t.Fatalf("replay: %d", r.StatusCode)
+	}
+}
+
+func TestNamedPauseTokensCannotReplay(t *testing.T) {
+	for _, key := range []string{"⏎", "w", "d", "x"} {
+		t.Run(PauseOp(key), func(t *testing.T) {
+			s, _, log := startActing(t, fixturePaused())
+			f := boardFrame(t, s)
+			body := pauseActionBody(t, f, key)
+			stale, _ := json.Marshal(map[string]any{"action": "decide", "choice": PauseOp(key), "card": "paused:old", "cardRevision": "paused:old", "token": f.Act.Tokens[ChoiceToken(PauseOp(key), "")]})
+			if r, _ := post(t, s, stale, nil); r.StatusCode != http.StatusConflict {
+				t.Fatalf("stale card: %d", r.StatusCode)
+			}
+			if r, res := post(t, s, body, nil); r.StatusCode != http.StatusOK {
+				t.Fatalf("first: %d %+v", r.StatusCode, res)
+			}
+			if r, res := post(t, s, body, nil); r.StatusCode != http.StatusConflict {
+				t.Fatalf("replay: %d %+v", r.StatusCode, res)
+			}
+			if len(log.taken()) != 1 {
+				t.Fatal("replay reached the sink")
+			}
+		})
+	}
+}
+
+func TestCardKeyRequestIsRefused(t *testing.T) {
+	s, _, log := startActing(t, fixturePaused())
+	f := boardFrame(t, s)
+	body, _ := json.Marshal(map[string]any{"action": "key", "key": "⏎", "card": f.Act.Card, "token": f.Act.Tokens["⏎"]})
+	r, res := post(t, s, body, nil)
+	if r.StatusCode != http.StatusBadRequest || res.Status != "refused" || !strings.Contains(res.Text, "Refresh the page") {
+		t.Fatalf("key: %d %+v", r.StatusCode, res)
+	}
+	if len(log.taken()) != 0 {
+		t.Fatal("key request reached the sink")
 	}
 }

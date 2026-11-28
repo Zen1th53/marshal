@@ -81,8 +81,13 @@ func TestImportedTaskPanelAndAcceptance(t *testing.T) {
 	if len(m.approvals) != 0 {
 		t.Fatal("queued task stored consent")
 	}
-	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	// Imported results are still dispatched: queued -> dispatched -> handed_in.
+	run.Tasks[0].State = marshal.Dispatched
 	if _, err := m.service.Store.SetMarshalRun(ctx, ws.projectID, "RUN-imported", run, 1); err != nil {
+		t.Fatal(err)
+	}
+	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	if _, err := m.service.Store.SetMarshalRun(ctx, ws.projectID, "RUN-imported", run, 2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.service.Store.SetMarshalTask(ctx, "RUN-imported", run.Tasks[0], 0); err != nil {

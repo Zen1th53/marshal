@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshalsteps"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // The Marshal's steps, from its tool calls. Every call the Marshal makes

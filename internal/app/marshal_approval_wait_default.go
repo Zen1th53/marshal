@@ -76,7 +76,9 @@ func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID str
 		if cleared.ExpiresAt != nil {
 			reason = fmt.Sprintf("approval %s expired at %s", cleared.ApprovalID, cleared.ExpiresAt.UTC().Format("2006-01-02T15:04:05Z07:00"))
 		}
-		t.State = marshal.Queued
+		if err := marshal.SetTaskState(t, marshal.Queued); err != nil {
+			return true, err
+		}
 		if run.State == marshal.AwaitingUser {
 			run.State = marshal.Dispatching
 			run.Pause = nil

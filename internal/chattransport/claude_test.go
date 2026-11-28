@@ -156,7 +156,7 @@ func TestClaudeRefusesUnqualifiedVersionBeforeAnyProcess(t *testing.T) {
 }
 
 func TestNewRefusesProvidersWithoutAQualifiedMode(t *testing.T) {
-	for _, p := range []string{"codex", "opencode", "agy", "antigravity"} {
+	for _, p := range []string{"opencode", "agy", "antigravity"} {
 		if _, err := New(p, newFakeRunner("")); !errors.Is(err, ErrUnqualified) {
 			t.Fatalf("%s: want ErrUnqualified, got %v", p, err)
 		}

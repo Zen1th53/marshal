@@ -3,7 +3,7 @@ package tui
 import (
 	"math"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // collectV2System fills b.System: the host figures the vitals row shows,

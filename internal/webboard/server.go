@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // Source builds one Board frame. The server calls it on its own goroutines,
@@ -77,6 +77,7 @@ type Server struct {
 	settingsTokens map[string]cachedSettingsToken
 	previews       map[string]Confirmation
 	details        detailsPointer
+	architecture   architecturePointer
 
 	listener net.Listener
 	http     *http.Server
@@ -357,13 +358,17 @@ func (s *Server) Handler() http.Handler {
 			s.serveFile(w, f.name, f.contentType)
 			return
 		}
-		if q.URL.Path != "/api/board" && q.URL.Path != "/api/events" && q.URL.Path != "/api/details" && q.URL.Path != "/api/details/page" {
+		if q.URL.Path != "/api/architecture" && q.URL.Path != "/api/board" && q.URL.Path != "/api/events" && q.URL.Path != "/api/details" && q.URL.Path != "/api/details/page" {
 			deny(w, http.StatusNotFound, "Not found.")
 			return
 		}
 		if !s.authorized(q) {
 			h.Set("WWW-Authenticate", `Bearer realm="marshal-board"`)
 			deny(w, http.StatusUnauthorized, "Open the link the Board printed. To get a new one-time link press w on the Board, or run /marshal web in the terminal.")
+			return
+		}
+		if q.URL.Path == "/api/architecture" {
+			s.serveArchitecture(w, q)
 			return
 		}
 		if q.URL.Path == "/api/events" {

@@ -87,15 +87,8 @@ func TestExtremeReturnedCollectionDoesNotReviewMissingHandIn(t *testing.T) {
 	if _, err := s.Approve(ctx, "returned"); err != nil {
 		t.Fatal(err)
 	}
-	rec, err := s.Store.GetMarshalRun(ctx, s.ProjectID, "returned")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec.Value.Tasks[0].State = marshal.Returned
-	if _, err = s.Store.SetMarshalRun(ctx, s.ProjectID, "returned", rec.Value, rec.Revision); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.reviewCollectedDispatch(ctx, "returned", "a"); err != nil {
+	_, _ = advanceTaskFixture(t, s, "returned", 0, marshal.Returned)
+	if err := s.reviewCollectedDispatch(ctx, "returned", "a"); err != nil {
 		t.Fatalf("returned task was reviewed: %v", err)
 	}
 }

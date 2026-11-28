@@ -1,8 +1,8 @@
 package tui
 
 import (
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/usage"
 	"strings"
 	"testing"

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // The terminal home is one simple screen: what is happening, the one thing

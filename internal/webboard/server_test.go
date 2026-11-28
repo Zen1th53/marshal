@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 func startTest(t *testing.T, src Source) *Server {
@@ -241,6 +241,9 @@ func TestPageIsSelfContained(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := string(data)
+		// SVG arrowheads reference definitions in the same document; they do not
+		// load external resources. Keep rejecting every other url() reference.
+		s = regexp.MustCompile(`url\(#aw-arrow-`).ReplaceAllString(s, "local-arrow(")
 		for _, bad := range []string{`src="http`, `href="http`, "src='http", "//cdn", "googleapis", "@import", "url(", "innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "localStorage"} {
 			if strings.Contains(s, bad) {
 				t.Errorf("%s contains %q", name, bad)

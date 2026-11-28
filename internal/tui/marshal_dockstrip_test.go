@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // stripFull is the full dock strip.
@@ -137,7 +137,7 @@ func TestDockTitleEdition(t *testing.T) {
 	chat := &activeTmuxAgent{provider: "claude", args: []string{"--model", "claude-opus-5-5"}}
 	w := NewWorkspace(nil, "test-proj", "test-session")
 	w.workDir = t.TempDir()
-	if got, want := w.dockTitle(chat, 0), " MARSHAL CHAT  ✳ claude · Opus 5.5    [m] switch  F11 Board "; got != want {
+	if got, want := w.dockTitle(chat, 0), " paste/tmux MARSHAL CHAT  ✳ claude · Opus 5.5    [m] switch  F11 Board "; got != want {
 		t.Errorf("v2:\n got %q\nwant %q", got, want)
 	}
 }

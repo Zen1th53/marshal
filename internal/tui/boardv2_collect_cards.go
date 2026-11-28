@@ -3,7 +3,7 @@ package tui
 import (
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // collectV2Cards fills the decision card and the paused card of the Board v2 view model. A field left at its zero

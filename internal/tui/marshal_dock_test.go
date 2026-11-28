@@ -317,7 +317,7 @@ func TestMarshalDockTitleV2Strip(t *testing.T) {
 	want := w.dockTitle(chat, dockWidth(132))
 	log := f.take()
 	mustContain(t, log, "set-option -p -t %7 @marshal_dock_title "+want)
-	for _, part := range []string{" MARSHAL CHAT  ⬡ ", "[m]"} {
+	for _, part := range []string{"paste/tmux", "⬡", "[m]"} {
 		if !strings.Contains(want, part) {
 			t.Errorf("title %q lacks %q", want, part)
 		}

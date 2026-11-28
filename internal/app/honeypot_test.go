@@ -105,7 +105,7 @@ func TestMarshalHoneypotHandInNeverMerged(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				saved.Tasks[0].State = marshal.Accepted
+				saved, revision = advanceTaskFixture(t, s, "run", 0, marshal.Accepted)
 				saved.Tasks[0].ResultCommit = handin.Value.ResultCommit
 				if err := s.save(t.Context(), "run", saved, revision); err != nil {
 					t.Fatal(err)

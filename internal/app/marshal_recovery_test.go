@@ -118,6 +118,9 @@ func TestMajorAmendmentDispatchKeepsOldArtifacts(t *testing.T) {
 	if run.State != marshal.Drafting {
 		t.Fatal(run.State)
 	}
+	if run.Tasks[0].State != marshal.Queued || run.PlanVersion <= old.PlanVersion || run.ArtifactRevision <= old.ArtifactRevision {
+		t.Fatalf("changed merged task was not queued on a new revision: %+v", run)
+	}
 	if run.Tasks[0].Branch == old.Tasks[0].Branch {
 		t.Fatal("revision reused task branch")
 	}
@@ -900,14 +903,15 @@ func TestLegacyCancelledScopeCannotMergeVerifyOrClose(t *testing.T) {
 	for _, boundary := range []string{"merge", "verify", "close"} {
 		t.Run(boundary, func(t *testing.T) {
 			s := mergedRecoveryFixture(t)
-			run, rev, err := s.load(t.Context(), "run")
+			run, _, err := s.load(t.Context(), "run")
 			if err != nil {
 				t.Fatal(err)
 			}
 			run.Tasks[0].State = marshal.Cancelled
 			// This is the historical runtime's completion disposition.
 			run.State = marshal.Verifying
-			if err := s.save(t.Context(), "run", run, rev); err != nil {
+			// Seed a historical snapshot; current execution cannot cancel merged work.
+			if err := s.Store.SaveMarshalState(t.Context(), s.ProjectID, "legacy", run, 0, nil, nil, 0); err != nil {
 				t.Fatal(err)
 			}
 			invoked := false
@@ -917,16 +921,16 @@ func TestLegacyCancelledScopeCannotMergeVerifyOrClose(t *testing.T) {
 			}
 			switch boundary {
 			case "merge":
-				err = s.Merge(t.Context(), "run", run.Tasks[0].PlanTaskID)
+				err = s.Merge(t.Context(), "legacy", run.Tasks[0].PlanTaskID)
 			case "verify":
-				_, err = s.VerifyMerged(t.Context(), "run", knownCharge())
+				_, err = s.VerifyMerged(t.Context(), "legacy", knownCharge())
 			case "close":
-				err = s.Close(t.Context(), "run")
+				err = s.Close(t.Context(), "legacy")
 			}
 			if err == nil || !strings.Contains(err.Error(), "scope requires review") || invoked {
 				t.Fatalf("cancelled scope passed %s: %v", boundary, err)
 			}
-			run, err = s.Snapshot(t.Context(), "run")
+			run, err = s.Snapshot(t.Context(), "legacy")
 			if err != nil || run.Pause == nil || run.Pause.ResumeState != "" || run.State != marshal.AwaitingUser {
 				t.Fatalf("scope stop not durable: %+v %v", run, err)
 			}

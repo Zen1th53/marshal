@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // evidence is a mutable details source for the tests.

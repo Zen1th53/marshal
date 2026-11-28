@@ -3,7 +3,7 @@ package tui
 import (
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // collectV2Chat fills the Marshal chat state (Chat, Requests, Marshal.ChatBound/InputClear/InputKnown) of the Board v2 view model. A field left at its zero

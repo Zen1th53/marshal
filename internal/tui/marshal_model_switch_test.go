@@ -41,6 +41,9 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			}
 			cleanupTmuxWorkspace(t, w)
 			root := w.providerRoot()
+			if err := saveChatView(root, "tmux"); err != nil {
+				t.Fatal(err)
+			}
 			w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 			w.tmuxMarshalWin = "marshal"
 			w.tmuxPath = "tmux"
@@ -273,6 +276,9 @@ func TestMarshalChatStartupUsesPersistedProvider(t *testing.T) {
 	_, w, _ := acceptanceWorkspace(t)
 	cleanupTmuxWorkspace(t, w)
 	root := w.providerRoot()
+	if err := saveChatView(root, "tmux"); err != nil {
+		t.Fatal(err)
+	}
 	// The attached project owns the default, even if the workspace directory
 	// or the last chat's saved provider differs.
 	w.workDir = t.TempDir()

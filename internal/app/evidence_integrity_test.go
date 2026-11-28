@@ -97,7 +97,7 @@ func TestHoneypotScanMissingAndQuarantineSurviveRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			run.Tasks[0].State = marshal.Accepted
+			run, rev = advanceTaskFixture(t, s, "run", 0, marshal.Accepted)
 			run.Tasks[0].ResultCommit = run.BaseCommit
 			run.Tasks[0].HoneypotRequired = true
 			run.Tasks[0].HoneypotScanID = "scan-1"
