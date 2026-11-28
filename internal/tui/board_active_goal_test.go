@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 type activeGoalFakeArch struct{}
@@ -27,6 +29,11 @@ func activeGoalBoardWorkspace(t *testing.T, st *store.Store, session string) *Wo
 	w.screen = NewScreen(NewTerminal(strings.NewReader(""), &strings.Builder{}))
 	w.homeBoard = true
 	w.archSource = activeGoalFakeArch{}
+	w.v2m.probe = v2Probe{Lead: "claude", Installed: map[string]bool{"claude": true}, Settings: marshal.DefaultSettings(), HasSettings: true}
+	w.v2m.at = time.Now()
+	w.v2m.key = "\x00"
+	w.usage.quotas = []usage.Quota{{Provider: "claude", Known: true, AsOf: time.Now()}}
+	w.usage.read = true
 	w.endOpening()
 	return w
 }

@@ -535,10 +535,18 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	// Scope and Reason are plain sentences for the operator; every technical
 	// value (IDs, revisions, digests) goes to Detail, which is never rendered.
 	scope, reason := marshalRunProposalPopupText(p, run)
+	ownerConfirmation := false
+	if p.action == "approve" || p.action == "amend-approve" {
+		in := w.v2MarshalInput(time.Now())
+		in.Probe.Settings.ReviewPolicy = run.EffectiveReviewPolicy()
+		verdict := in.readiness()
+		ownerConfirmation = verdict.NeedsConfirmation
+		scope, reason = approvalGuaranteeText(scope, reason, verdict)
+	}
 	if p.reviewed != nil {
 		scope += " Tasks and checks are on the Plan view (press 7)."
 	}
-	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: scope, Who: p.requester(), Reason: reason, RunID: runID, TaskID: binding, Detail: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision)}
+	req := permission.Request{OwnerConfirmation: ownerConfirmation, ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: scope, Who: p.requester(), Reason: reason, RunID: runID, TaskID: binding, Detail: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision)}
 	if p.action == "approve-task" {
 		var transport permission.Request
 		w.describePrivateTransportApproval(&transport, p.id)
@@ -2120,4 +2128,9 @@ func (w *Workspace) writeMarshalInboxRefusal(subject string, err error) {
 	if e != nil {
 		w.RecordActivity("Marshal refusal inbox delivery failed: " + e.Error())
 	}
+}
+
+func approvalGuaranteeText(scope, reason string, r marshal.Readiness) (string, string) {
+	return scope + " Effective guarantee (" + Edition() + "): " + r.Guarantee,
+		reason + " Confirm this guarantee or deny and fix the policy or provider first."
 }

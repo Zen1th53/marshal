@@ -247,13 +247,15 @@ func (s *MarshalService) verifyChecksOnly(ctx context.Context, runID string, run
 	return result, s.save(ctx, runID, run, rev)
 }
 
+// These helpers retain their checks-only names for existing callers, but also
+// bind full-proof closes (empty delivery kind and receipt fields).
 // recordChecksOnlyCloseFence persists the operation-keyed proof-of-passage
 // record before the Git target mutation without advancing the marshal run
 // revision. Recovery requires this exact record to complete an interrupted
-// checks-only close once Git moved to the recorded commit.
+// close once Git moved to the recorded commit.
 func (s *MarshalService) recordChecksOnlyCloseFence(ctx context.Context, runID string, op *marshal.LifecycleOperation) error {
-	if s == nil || s.Store == nil || runID == "" || op == nil || op.ID == "" || op.Kind != "close" || !op.Authorized || op.DeliveryKind != verification.DeliveredChecksOnly || op.ReceiptID == "" || op.ReceiptDigest == "" || op.Target == "" || op.Before == "" || op.After == "" {
-		return errors.New("checks-only close fence record requires an authorized close operation")
+	if s == nil || s.Store == nil || runID == "" || op == nil || op.ID == "" || op.Kind != "close" || !op.Authorized || (op.DeliveryKind != "" && (op.DeliveryKind != verification.DeliveredChecksOnly || op.ReceiptID == "" || op.ReceiptDigest == "")) || op.Target == "" || op.Before == "" || op.After == "" {
+		return errors.New("close fence record requires an authorized close operation")
 	}
 	checkpoint, _ := op.Event.Data["checkpoint"].(string)
 	event := events.Event{

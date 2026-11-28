@@ -20,7 +20,7 @@ git commit --allow-empty -m "Initial commit"
 
 A Git repository must have at least one commit so Marshal can establish a clean baseline for worker branches and merges.
 
-Opening `marshal` in a Git repository that is not set up adds the project files and commits them as `Initialize MARSHAL project`. In a folder outside a Git repository, Marshal can create a project repository for that folder; it leaves files that look like secrets untracked. It will not use your home folder or `/` itself as a project.
+Opening `marshal` in a Git repository that is not set up first shows what setup will do and asks: the files it commits as `Initialize MARSHAL project` and on which branch, the commit workers start from, how many uncommitted files they will not see, that workers run as you without a sandbox, and whether anonymous telemetry is on (you can turn it off there). Answer `n` and nothing is changed; run `marshal` again or `marshal init` when you are ready. With no terminal to ask on, opening stops with that explanation; run `marshal init` or set `MARSHAL_ACCEPT_SETUP=1` to accept. In a folder outside a Git repository, Marshal can create a project repository for that folder; it leaves files that look like secrets untracked. It will not use your home folder or `/` itself as a project.
 
 ---
 
@@ -32,7 +32,7 @@ From your project root, open Marshal:
 marshal
 ```
 
-On first open, Marshal sets up the project automatically. You can also run `marshal init` yourself as an optional explicit setup command. Setup:
+On first open, Marshal asks before it sets up the project (see above). You can also run `marshal init` yourself as an optional explicit setup command. Setup:
 - Creates the local state directory at `.marshal/`, where runtime databases and task logs reside.
 - Writes initial project configuration files: `CAPABILITIES.yaml`, `PACK-VERSION.yaml`, and `RUNTIME-VERSION.yaml`.
 - Configures Git to ignore the `.marshal/` runtime state using `.git/info/exclude`, leaving your personal `.gitignore` clean and untouched.

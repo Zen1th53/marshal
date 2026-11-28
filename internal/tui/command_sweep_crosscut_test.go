@@ -298,7 +298,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 		{"\x1bOR", "Git Diff"}, {"\x1bOS", "Run:"},
 		{"\x1b[15~", "Discover models failed"}, {"\x1b[17~", mcpNoFailure}, // F6 shows MCP only on failure
 		{"\x1b[18~", "Install Codex"}, {"\x1b[19~", "Install Claude"},
-		{"\x1b[20~", "OpenCode exited"}, {"\x1b[21~", "Update check failed"},
+		{"\x1b[20~", "OpenCode exited"}, {"\x1b[21~", "This is a dev build"},
 		{"\x1b[24~", "Antigravity exited"},
 	} {
 		if key.raw == "\x1b[19~" {

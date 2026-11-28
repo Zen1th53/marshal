@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/statepath"
@@ -46,9 +47,18 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 	layout, err := app.ValidateProject(ctx, c.root)
 	if app.ProjectNotSetUp(err) {
 		// An existing Git project Marshal was never set up in is set up on
-		// opening, as `marshal init` would: it only adds what is missing.
-		// The line naming what was committed is printed here and carried
-		// to the TUI's Activity, as a started repository's is.
+		// opening, as `marshal init` would, once the owner has seen what it
+		// commits and where: the branch is theirs, and work they have not
+		// committed stays outside what workers see. Declining writes
+		// nothing. The line naming what was committed is printed here and
+		// carried to the TUI's Activity, as a started repository's is.
+		ok, consentErr := c.consentToSetup(ctx)
+		if consentErr != nil {
+			return consentErr
+		}
+		if !ok {
+			return nil
+		}
 		_, committed, setupErr := initializeProjectWithOptions(ctx, c.root, app.BootstrapOptions{DeferKnowledgeIndex: true})
 		if setupErr != nil {
 			return setupErr
@@ -72,7 +82,8 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return errCoreFailure
 	}
 
-	if !assessment.ExecutionPermitted() {
+	// Provider setup must not hide the control center needed to fix it.
+	if !assessment.ExecutionPermitted() && !onlyReadinessBlocks(assessment) {
 		fmt.Fprint(c.stderr, startup.BuildLanding(assessment).Render())
 		return fmt.Errorf("MARSHAL project %q cannot start; run `marshal doctor` for details", canonicalRoot)
 	}
@@ -261,6 +272,8 @@ func (c *command) startupEnvironment() startup.Environment {
 		// Community keeps its conservative startup default.
 		UltraEntitled: startupUltraEntitled(),
 	}
+	verdict := startup.ObserveReadiness(context.Background(), startup.NewSystemProber(), c.canonicalRoot(context.Background()), marshal.ReviewPolicy{}, false)
+	env.Readiness = &verdict
 	if !sandbox.HostExecutionPreferred() {
 		env.SandboxEnforced = app.SandboxEnforcementAvailable()
 		env.NetworkEnforced = app.EgressEnforcementAvailable()
@@ -272,3 +285,8 @@ func (c *command) startupEnvironment() startup.Environment {
 // from an ordinary command failure so the exit code can reflect that the
 // control center never opened.
 var errCoreFailure = fmt.Errorf("marshal cannot start in this directory")
+
+func onlyReadinessBlocks(a startup.Assessment) bool {
+	blocking := a.Blocking()
+	return len(blocking) == 1 && blocking[0].ID == "execution.readiness"
+}
