@@ -46,9 +46,18 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 	layout, err := app.ValidateProject(ctx, c.root)
 	if app.ProjectNotSetUp(err) {
 		// An existing Git project Marshal was never set up in is set up on
-		// opening, as `marshal init` would: it only adds what is missing.
-		// The line naming what was committed is printed here and carried
-		// to the TUI's Activity, as a started repository's is.
+		// opening, as `marshal init` would, once the owner has seen what it
+		// commits and where: the branch is theirs, and work they have not
+		// committed stays outside what workers see. Declining writes
+		// nothing. The line naming what was committed is printed here and
+		// carried to the TUI's Activity, as a started repository's is.
+		ok, consentErr := c.consentToSetup(ctx)
+		if consentErr != nil {
+			return consentErr
+		}
+		if !ok {
+			return nil
+		}
 		_, committed, setupErr := initializeProjectWithOptions(ctx, c.root, app.BootstrapOptions{DeferKnowledgeIndex: true})
 		if setupErr != nil {
 			return setupErr

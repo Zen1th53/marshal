@@ -209,6 +209,7 @@ marshal --json memory list
 
 | Variable | Description |
 |---|---|
+| `MARSHAL_ACCEPT_SETUP=1` | Accept the first-launch setup (commit Marshal's three project files) without the question, for launches with no terminal. `marshal init` does the same explicitly. |
 | `MARSHAL_NO_UPDATE_CHECK=1` | Suppress automatic online checks for new Marshal versions. |
 | `MARSHAL_PROVIDER_PATH_ONLY=1` | Restrict agent CLI discovery strictly to directories listed in `$PATH`. |
 | `MARSHAL_CLOUD_ENDPOINT` | Specify the community cloud endpoint (default: `https://marshal.blackhat.uz`), or set to `off` to disable telemetry and cloud communication entirely. |

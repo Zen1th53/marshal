@@ -107,7 +107,7 @@ type projectNotReadyError struct {
 // ProjectNotSetUp reports whether err is ValidateProject finding a Git
 // project Marshal was never set up in: nothing is damaged and there is no
 // state database. Setting such a project up only adds what is missing, so
-// opening Marshal does it without asking.
+// opening Marshal offers to do it (see the CLI's consentToSetup).
 func ProjectNotSetUp(err error) bool {
 	var notReady projectNotReadyError
 	return errors.As(err, &notReady) && notReady.notSetUp
