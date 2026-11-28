@@ -23,7 +23,7 @@ func (r *Review) Handler(token string) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		reply := func(status int, value any) {
-			body, err := canonicalJSON(value)
+			body, err := json.Marshal(value)
 			if err != nil {
 				status = http.StatusInternalServerError
 				body = json.RawMessage(`{"error":"review response could not be encoded"}`)
@@ -31,6 +31,13 @@ func (r *Review) Handler(token string) http.Handler {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(status)
 			_, _ = w.Write(body)
+		}
+		// Only the default view and the roomy renderer are supported.
+		for _, layout := range q.URL.Query()["layout"] {
+			if layout != "" && layout != "roomy" {
+				reply(http.StatusBadRequest, map[string]any{"error": "Unsupported layout"})
+				return
+			}
 		}
 		host := q.Host
 		if parsed, _, err := net.SplitHostPort(host); err == nil {
@@ -183,8 +190,7 @@ func (r *Review) Handler(token string) http.Handler {
 				reply(http.StatusInternalServerError, map[string]any{"error": "Review state unavailable"})
 				return
 			}
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_, _ = w.Write(state)
+			reply(http.StatusOK, state)
 			return
 		}
 		if q.Method != http.MethodPost {
@@ -209,7 +215,6 @@ func (r *Review) Handler(token string) http.Handler {
 			reply(http.StatusConflict, map[string]any{"error": err.Error()})
 			return
 		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = w.Write(state)
+		reply(http.StatusOK, state)
 	})
 }

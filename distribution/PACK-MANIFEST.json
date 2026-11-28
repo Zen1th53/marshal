@@ -5201,8 +5201,8 @@
     },
     {
       "path": "internal/architecturereview/server.go",
-      "sha256": "40f1a896a109d68c151f6ee201cd7934b0c10dc68c5040b890eedf51e348a924",
-      "bytes": 7372
+      "sha256": "b77f182276de11d0429f908ee96f1f95cdb4fb950822715f51504e9282bef402",
+      "bytes": 7504
     },
     {
       "path": "internal/architecturereview/testdata/lifecycle.cjs",
