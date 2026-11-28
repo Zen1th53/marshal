@@ -17266,18 +17266,18 @@
     },
     {
       "path": "internal/webboard/page/app.css",
-      "sha256": "e76ff23fe0a5e4e46f4ac5b5493f5573930723eee75d4ac80a5103829eb6ed4c",
-      "bytes": 24713
+      "sha256": "f0be790a01efc1c9f930fcfd10ee68f47a7604eb23fbc79ab8b6b75c8757e93b",
+      "bytes": 29954
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "0f3349f95d7d6990b6c29bda9d46c6afef9f6f92aaa713212fea24719a2729e0",
-      "bytes": 105602
+      "sha256": "b2c612c0cd34165814d130a6e3155c40099422b0aea12ca306e5986f470ced38",
+      "bytes": 105539
     },
     {
       "path": "internal/webboard/page/index.html",
-      "sha256": "695f24910f5fcb1d1d427fa89815c2b089d0712efe0646240deb2ee22f59b485",
-      "bytes": 15563
+      "sha256": "8896f341026d5792061db5cc167cd8dc89bdcd3e83e5cd546547b9d0fdea245b",
+      "bytes": 15569
     },
     {
       "path": "internal/webboard/page_visibility_test.go",
@@ -18221,8 +18221,8 @@
     },
     {
       "path": "tools/e2e/webboard_smoke.mjs",
-      "sha256": "6f9ccde55b2f2202e222a4ecf3dbd7f5a3020da82da96c585025a4bea2dc6ac5",
-      "bytes": 19436
+      "sha256": "0a14b8d8391d28eecb28753e31de7a21f5a48f273066831ff1b6c3dc1138ac0e",
+      "bytes": 24135
     },
     {
       "path": "tools/effect-inventory/detection.go",
