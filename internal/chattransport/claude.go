@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/usage"
+	"log"
 	"strings"
 	"sync"
+
+	"github.com/Zen1th53/marshal/internal/usage"
 )
 
 // ClaudePermissionTool is the MARSHAL MCP tool Claude Code calls, through
@@ -35,6 +37,7 @@ type Claude struct {
 	mu        sync.Mutex
 	session   Session
 	sessionID string
+	turnID    string
 	proc      Process
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -138,6 +141,7 @@ func (c *Claude) Resume(ctx context.Context, sessionID string) error {
 // claudeUserLine is one stream-json input message.
 type claudeUserLine struct {
 	Type    string `json:"type"`
+	UUID    string `json:"uuid,omitempty"`
 	Message struct {
 		Role    string `json:"role"`
 		Content []struct {
@@ -154,6 +158,7 @@ func (c *Claude) Send(ctx context.Context, t Turn) error {
 	}
 	var line claudeUserLine
 	line.Type = "user"
+	line.UUID = t.ID
 	line.Message.Role = "user"
 	line.Message.Content = append(line.Message.Content, struct {
 		Type string `json:"type"`
@@ -175,6 +180,7 @@ func (c *Claude) Send(ctx context.Context, t Turn) error {
 		}
 	}
 	proc := c.proc
+	c.turnID = t.ID
 	c.mu.Unlock()
 	// The write happens outside mu: a provider blocked on its own stdout
 	// must still be drained by the reader, which needs no lock to emit.
@@ -277,6 +283,12 @@ func (c *Claude) read(ctx context.Context, proc Process, gen int) {
 	var p claudeParser
 	for sc.Scan() {
 		for _, e := range p.parse(sc.Bytes()) {
+			c.mu.Lock()
+			e.TurnID = c.turnID
+			if e.Kind == EventResult {
+				c.turnID = ""
+			}
+			c.mu.Unlock()
 			if e.Kind == EventSession && e.SessionID != "" {
 				c.mu.Lock()
 				if c.gen == gen {
@@ -288,6 +300,9 @@ func (c *Claude) read(ctx context.Context, proc Process, gen int) {
 		}
 	}
 	scanErr := sc.Err()
+	if scanErr != nil {
+		_ = proc.Kill()
+	}
 	waitErr := proc.Wait()
 	c.mu.Lock()
 	current := c.gen == gen
@@ -295,6 +310,10 @@ func (c *Claude) read(ctx context.Context, proc Process, gen int) {
 		c.proc = nil
 	}
 	closed := c.closed
+	turnID := c.turnID
+	if current {
+		c.turnID = ""
+	}
 	c.mu.Unlock()
 	if !current || closed {
 		return
@@ -302,15 +321,22 @@ func (c *Claude) read(ctx context.Context, proc Process, gen int) {
 	// The asks this process made can no longer be answered by it.
 	c.asks.denyAll("The Marshal process ended before the operator decided.")
 	text := "Claude Code exited"
+	if turnID != "" {
+		text += " before completing message " + turnID
+	}
 	if err := errors.Join(scanErr, waitErr); err != nil {
 		text += ": " + OneLine(err.Error(), 160)
 	}
-	c.emit(ctx, Event{Kind: EventExit, Text: text, IsError: scanErr != nil || waitErr != nil})
+	c.emit(ctx, Event{Kind: EventExit, TurnID: turnID, Text: text, IsError: scanErr != nil || waitErr != nil || turnID != ""})
 }
 
 // claudeParser turns stream-json lines into Events. It keeps the message
 // being streamed so deltas name the message they belong to.
-type claudeParser struct{ message string }
+// claudeParser implements the stream-json v1 contract selected by ClaudeRange.
+type claudeParserV1 struct{ message string }
+
+// claudeParser selects the qualified stream contract.
+type claudeParser = claudeParserV1
 
 type claudeLine struct {
 	Type      string          `json:"type"`
@@ -319,6 +345,7 @@ type claudeLine struct {
 	Model     string          `json:"model"`
 	IsError   bool            `json:"is_error"`
 	Result    string          `json:"result"`
+	Errors    []string        `json:"errors"`
 	CostUSD   *float64        `json:"total_cost_usd"`
 	Event     json.RawMessage `json:"event"`
 	Message   json.RawMessage `json:"message"`
@@ -340,15 +367,16 @@ type claudeMessage struct {
 	Content json.RawMessage `json:"content"`
 }
 
-func (p *claudeParser) parse(line []byte) []Event {
+func (p *claudeParserV1) parse(line []byte) []Event {
 	line = []byte(strings.TrimSpace(string(line)))
-	if len(line) == 0 || line[0] != '{' {
+	if len(line) == 0 {
 		return nil
 	}
 	// Claude reports its limits only in this stream now; keep the latest.
 	usage.RecordClaudeRateLimit(line)
 	var l claudeLine
 	if json.Unmarshal(line, &l) != nil {
+		log.Printf("claude events v1: malformed event")
 		return nil
 	}
 	switch l.Type {
@@ -368,6 +396,7 @@ func (p *claudeParser) parse(line []byte) []Event {
 			} `json:"delta"`
 		}
 		if json.Unmarshal(l.Event, &se) != nil {
+			log.Printf("claude events v1: malformed stream event")
 			return nil
 		}
 		switch se.Type {
@@ -377,6 +406,9 @@ func (p *claudeParser) parse(line []byte) []Event {
 			if se.Delta.Type == "text_delta" && se.Delta.Text != "" {
 				return []Event{{Kind: EventTextDelta, MessageID: p.message, Text: se.Delta.Text}}
 			}
+		case "content_block_start", "content_block_stop", "message_delta", "message_stop", "ping":
+		default:
+			log.Printf("claude events v1: ignored stream type %q", OneLine(se.Type, 80))
 		}
 	case "assistant":
 		var m claudeMessage
@@ -407,15 +439,19 @@ func (p *claudeParser) parse(line []byte) []Event {
 			}
 		}
 		return out
+	case "rate_limit_event":
+		return nil
 	case "result":
 		e := Event{Kind: EventResult, SessionID: l.SessionID, IsError: l.IsError || (l.Subtype != "" && l.Subtype != "success"), CostUSD: l.CostUSD}
 		if e.IsError {
-			e.Text = OneLine(l.Result, 240)
+			e.Text = OneLine(strings.TrimSpace(l.Result+" "+strings.Join(l.Errors, "; ")), 240)
 			if e.Text == "" {
 				e.Text = l.Subtype
 			}
 		}
 		return []Event{e}
+	default:
+		log.Printf("claude events v1: ignored type %q", OneLine(l.Type, 80))
 	}
 	return nil
 }

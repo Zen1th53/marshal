@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"thread-1"}
+{"type":"turn.started"}
+{"type":"future.event","data":{"nested":true}}
+{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"Hello"}}
+{malformed
+{"type":"turn.completed","usage":{"input_tokens":12,"output_tokens":3}}

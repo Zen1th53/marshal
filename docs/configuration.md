@@ -224,3 +224,24 @@ marshal --json memory list
 | `MARSHAL_OPENCODE_MODEL` | The model Marshal uses for OpenCode, including its harness verification. |
 | `MARSHAL_CODEX_TRUST_PROFILE` | Default edition: `off` stops Marshal from adding its trust profile to Codex launches. |
 | `BOARD_TRUECOLOR` | `1` draws the Board in 24-bit colour, as `COLORTERM=truecolor` or `24bit` does, for a terminal that takes 24-bit colour but does not set `COLORTERM`. |
+
+### Chat transport
+
+Board chat selects structured delivery by default for qualified providers. Claude
+uses stream-json with the inbox permission broker; Codex uses exec JSON events
+when runtime help advertises both exec and resume JSON support and the launch
+options are compatible. Unsupported providers or failed startup use tmux paste
+fallback. The chat header or dock status identifies the transport. Select paste
+explicitly with `/view chat tmux`, or retry structured mode with `/view chat native`.
+A failed structured process switches to paste when tmux is available.
+
+Owner turns have persistent IDs and an outbox saved before dispatch.
+Replies are correlated to the one active turn. Repeated delivery of the same ID
+is suppressed, including after completion and restart. An interrupted turn is
+retained without automatic replay because provider acceptance may have preceded
+the interruption. `/view chat pending` shows its ID and text, including in paste
+mode. Check provider history, then `/view chat resolve <message-ID>` to acknowledge
+it without sending again. A new structured send while a turn is pending returns the text to
+the composer. Queued pastes also persist across restart; network errors never
+re-paste an uncertain message. Paste fallback uses terminal observation rather than provider reply
+IDs; its delivery status reflects that limitation.

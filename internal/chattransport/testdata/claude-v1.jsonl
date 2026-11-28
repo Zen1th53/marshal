@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"session-1","model":"model"}
+{"type":"future.event","data":{"nested":true}}
+{"type":"stream_event","event":{"type":"message_start","message":{"id":"message-1"}}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}}
+{malformed
+{"type":"assistant","message":{"id":"message-1","content":[{"type":"text","text":"Hello"}]}}
+{"type":"result","subtype":"success","session_id":"session-1"}
