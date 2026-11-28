@@ -12,7 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
-// The Web Board's owner actions (phase 2, docs/design/web-board.md). The
+// The Web Board's owner actions (phase 2). The
 // server (internal/webboard) checks the bearer token, the page's origin and
 // the action token; this side presses the button on the Board's own input
 // loop, through the handler the terminal key (or the click on that button)
