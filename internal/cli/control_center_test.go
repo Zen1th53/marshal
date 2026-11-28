@@ -56,8 +56,9 @@ func gitDirectory(t *testing.T) string {
 }
 
 // Opening Marshal in an existing Git project it was never set up in sets
-// the project up, as `marshal init` would, and says in one line what it
-// committed; `marshal doctor` stays read-only (TestDoctorBeforeInitIsPlain).
+// the project up once accepted (here by MARSHAL_ACCEPT_SETUP=1; see
+// setup_consent_test.go), as `marshal init` would, and says in one line what
+// it committed; `marshal doctor` stays read-only (TestDoctorBeforeInitIsPlain).
 func TestTUISetsUpProjectNotSetUpYet(t *testing.T) {
 	for _, partial := range []bool{false, true} {
 		for _, args := range [][]string{nil, {"tui"}} {
@@ -72,6 +73,7 @@ func TestTUISetsUpProjectNotSetUpYet(t *testing.T) {
 				}
 				t.Setenv("TMUX", "")
 				t.Setenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH", "1")
+				t.Setenv(acceptSetupEnv, "1")
 				// tmux fails, so the launch stops right after setup.
 				fake := filepath.Join(t.TempDir(), "tmux")
 				if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {

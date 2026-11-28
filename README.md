@@ -125,7 +125,11 @@ Or install it yourself (Linux, macOS, Windows via WSL2; checksum-verified, no su
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-Then, in a Git repository of yours, run `marshal`. Choose who plans, check the readiness
+The installer counts the install anonymously. To install without being counted, run the installer with telemetry off: `curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | MARSHAL_CLOUD_ENDPOINT=off sh`. `marshal telemetry disable` keeps it off afterwards.
+
+Then, in a Git repository of yours, run `marshal`. The first time, it shows what it will commit
+(three small config files, on your current branch) and how many uncommitted files workers will
+not see, and asks before it changes anything. Choose who plans, check the readiness
 list (sign in to any provider it marks), and say what you want built with `s` or in the
 Marshal chat. Confirm the requirements card with `Enter` (or edit an answer with `e`); when the
 **Accept architecture** card opens, press `a` to open the architecture in your browser and accept
