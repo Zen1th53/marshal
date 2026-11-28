@@ -157,7 +157,7 @@ func TestExtremeStallWithoutEscalatedTaskResumes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.Tasks[taskIndex(run, "b")].State = marshal.Queued
+	run, rev = advanceTaskFixture(t, s, "par", taskIndex(run, "b"), marshal.Queued)
 	if err = s.save(t.Context(), "par", run, rev); err != nil {
 		t.Fatal(err)
 	}

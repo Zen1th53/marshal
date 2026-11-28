@@ -5,7 +5,7 @@ import (
 )
 
 func (w *Workspace) handleBoardInboxKey(ctx context.Context, event KeyEvent) bool {
-	if !w.boardVisible() || w.hostView.Load() || w.memView.Load() || w.provView.Load() || w.verView.Load() || w.secView.Load() || w.planView.Load() || w.archView.Load() || len(w.boardInbox()) == 0 || w.diffViewer.IsOpen() || w.palette.IsOpen() {
+	if !w.boardInboxAvailable() {
 		return false
 	}
 	w.inboxView.Update(w.boardInbox())
@@ -61,4 +61,8 @@ func (w *Workspace) handleBoardInboxKey(ctx context.Context, event KeyEvent) boo
 		return false
 	}
 	return true
+}
+
+func (w *Workspace) boardInboxAvailable() bool {
+	return !(!w.boardVisible() || w.hostView.Load() || w.memView.Load() || w.provView.Load() || w.verView.Load() || w.secView.Load() || w.planView.Load() || w.archView.Load() || len(w.boardInbox()) == 0 || w.diffViewer.IsOpen() || w.palette.IsOpen())
 }

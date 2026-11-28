@@ -918,7 +918,9 @@ func (s *MarshalService) reconcileStartedStaleLaunch(ctx context.Context, runID 
 	exited, checkErr := s.verifyStartedProcessExited(ctx, runID, run, *t)
 	if checkErr != nil || !exited {
 		// Process exit is not verified yet: hold capacity and keep task dispatched.
-		t.State = marshal.Dispatched
+		if err := marshal.SetTaskState(t, marshal.Dispatched); err != nil {
+			return run, rev, err
+		}
 		t.StaleProcessExitUnverified = true
 		reason := staleErr.Error() + "; holding capacity until started process exits"
 		if checkErr != nil {
@@ -941,7 +943,9 @@ func (s *MarshalService) reconcileStartedStaleLaunch(ctx context.Context, runID 
 	t.StaleProcessExitUnverified = false
 	t.ResultCommit = ""
 	t.FailedAttemptCommit = ""
-	t.State = marshal.Escalated
+	if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+		return run, rev, err
+	}
 	t.EscalationCode = marshal.CodeStaleBase
 	t.EscalationReason = staleErr.Error()
 	run.Operation = nil

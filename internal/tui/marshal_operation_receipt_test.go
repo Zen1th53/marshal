@@ -432,8 +432,8 @@ func TestBusyAndPreApplyRefusalMatrix(t *testing.T) {
 		assertNoMutation(t, rev)
 	})
 
-	// 3. Board Enter and Web legacy actions return the same pre-effect refusal naming the holder.
-	t.Run("board_enter_and_web_legacy_busy", func(t *testing.T) {
+	// 3. Board Enter and Web typed actions return the same pre-effect refusal naming the holder.
+	t.Run("board_enter_and_web_typed_busy", func(t *testing.T) {
 		origStop := boardStopHandle
 		t.Cleanup(func() { boardStopHandle = origStop })
 		var ran []string
@@ -444,7 +444,7 @@ func TestBusyAndPreApplyRefusalMatrix(t *testing.T) {
 
 		// Web paused-card Enter refuses pre-effect without queuing or running commands.
 		f := webCard(t, w)
-		res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "⏎"})
+		res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "⏎"}))
 		if res.Status != "refused" || res.Code != marshal.RefusalCodeBusy || res.Effects != marshal.EffectsNone {
 			t.Fatalf("web paused Enter = %+v", res)
 		}

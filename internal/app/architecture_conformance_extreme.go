@@ -197,7 +197,7 @@ func (r *Runtime) ArchitectureConformance(ctx context.Context, commit string) (A
 	used := map[string]bool{}
 	var code []string
 	for _, f := range files {
-		if f == "" {
+		if f == "" || strings.HasPrefix(f, ".marshal/") {
 			continue
 		}
 		owner := m.Owner(f)
@@ -316,6 +316,9 @@ func pathExt(p string) string {
 // Tests, fixtures and documentation are advisory when unowned. Source extensions
 // match the conformance scanner; test naming conventions are excluded.
 func architectureProductionSource(file string) bool {
+	if strings.HasPrefix(file, ".marshal/") {
+		return false
+	}
 	lower := strings.ToLower(file)
 	for _, segment := range strings.Split(lower, "/") {
 		switch segment {

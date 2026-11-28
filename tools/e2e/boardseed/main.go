@@ -78,7 +78,29 @@ func seed(ctx context.Context, root string) error {
 	}
 	run := marshal.Run{PlanID: "PLAN-demo", PlanVersion: 2, ApprovalScopeDigest: "d", BaseCommit: "base", Tier: marshal.Ultra, Settings: marshal.DefaultSettings(), State: marshal.Dispatching}
 	for _, r := range rows {
-		t := marshal.Task{PlanTaskID: r.id, Title: r.file, Worker: r.worker, State: r.state, Files: []string{r.file}}
+		t := marshal.Task{PlanTaskID: r.id, Title: r.file, Worker: r.worker, Files: []string{r.file}}
+		// Seed the board through the same lifecycle as live tasks.
+		path := []marshal.TaskState{marshal.Queued}
+		switch r.state {
+		case marshal.Dispatched:
+			path = append(path, marshal.Dispatched)
+		case marshal.HandedIn:
+			path = append(path, marshal.Dispatched, marshal.HandedIn)
+		case marshal.Accepted:
+			path = append(path, marshal.Dispatched, marshal.HandedIn, marshal.Accepted)
+		case marshal.Merged:
+			path = append(path, marshal.Dispatched, marshal.HandedIn, marshal.Accepted, marshal.Merged)
+		case marshal.Returned:
+			path = append(path, marshal.Dispatched, marshal.Returned)
+		case marshal.Escalated:
+			path = append(path, marshal.Escalated)
+		}
+		for _, state := range path {
+			if err := marshal.SetTaskState(&t, state); err != nil {
+				return err
+			}
+		}
+
 		if r.id == "T-024" {
 			t.ReturnsByAgent = map[string]int{"claude": 1}
 		}

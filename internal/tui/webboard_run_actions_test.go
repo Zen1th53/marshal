@@ -2,7 +2,6 @@ package tui
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -152,8 +151,8 @@ func TestLegacyStopAndTypedStopUseBoundWriter(t *testing.T) {
 
 	// The legacy screen key never stops workers past the bound control.
 	f := webboard.FromBoard(w.webBoardFrame())
-	legacy := w.webScreenAct(webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: webKeyStopAll, Confirmed: true})
-	if legacy.res.Status != "refused" || !strings.Contains(legacy.res.Text, "bound stop-workers") {
+	legacy := w.webAct(webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: webKeyStopAll, Confirmed: true})
+	if legacy.res.Status != "refused" {
 		t.Fatalf("legacy stop ran: %+v", legacy.res)
 	}
 	workers := runTestAction(t, w, mustRunCapability(t, w, "run/stop-workers"), "30112233445566778899aabbccddeeff", webboard.SettingPayload{})

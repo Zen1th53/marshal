@@ -40,3 +40,18 @@ context.frame = {settingsActions:{projectId:'project', capabilities:[
   await assert.rejects(vm.runInContext('settingPost(body)',context));
   assert.equal(requests.length,2);
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+// Screen shortcuts require their exact typed capability, including on old frames.
+vm.runInContext(script.slice(script.indexOf('  function screenKey('), script.indexOf('  var armedStop')), context);
+context.frame.keys = [{key:'r',label:'retry selected'},{key:'ctrl+x',label:'stop all workers'}];
+context.frame.act = {tokens:{r:'old', 'ctrl+x':'old'}};
+assert.equal(vm.runInContext('retryTask(frame)',context),'selected');
+assert.ok(vm.runInContext('screenKey(frame,"ctrl+x")',context));
+const caps = context.frame.settingsActions.capabilities;
+context.frame.settingsActions.capabilities = caps.filter(c => c.op !== 'task/retry' && c.op !== 'run/stop-workers');
+assert.equal(vm.runInContext('retryTask(frame)',context),'');
+assert.equal(vm.runInContext('screenKey(frame,"ctrl+x")',context),null);
+context.frame.settingsActions.capabilities = caps.filter(c => c.target.id === 'sibling');
+assert.equal(vm.runInContext('retryTask(frame)',context),'');
+
+context.frame.settingsActions.capabilities = caps;

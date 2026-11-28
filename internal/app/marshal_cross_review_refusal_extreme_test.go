@@ -61,7 +61,7 @@ func TestCrossReviewReturnNamesTheReviewAsTheRefusal(t *testing.T) {
 // plain resume that leaves it escalated. Earlier returns stay counted.
 func TestReworkLimitEscalationStopRetriesTheTask(t *testing.T) {
 	run := marshal.Run{Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "router", Worker: "agy", State: marshal.HandedIn, ReturnsByAgent: map[string]int{"codex": 2, "agy": 0}}}}
-	if got := applyMarshalReturn(&run, &run.Tasks[0]); got != marshal.VerdictEscalate {
+	if got, err := applyMarshalReturn(&run, &run.Tasks[0]); err != nil || got != marshal.VerdictEscalate {
 		t.Fatalf("verdict %s, want escalate", got)
 	}
 	p := run.Pause

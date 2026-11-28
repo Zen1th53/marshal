@@ -87,7 +87,10 @@ func (s *MarshalService) pauseHandInNotRecorded(ctx context.Context, runID, task
 	}
 	// A retry opens a fresh lane, as after a sign-in stop.
 	retireWorkerAuthLane(run, t)
-	t.State, t.EscalationCode, t.EscalationReason = marshal.Escalated, marshal.CodeHandInNotRecorded, reason
+	if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+		return err
+	}
+	t.EscalationCode, t.EscalationReason = marshal.CodeHandInNotRecorded, reason
 	run.Operation = nil
 	pauseMarshal(&run, marshal.Pause{Reason: plain, Detail: reason, Code: marshal.CodeHandInNotRecorded, Action: marshal.PauseRetryTask, TaskID: taskID, Resolutions: []string{resolution}})
 	if err := s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, map[string]any{"reason": reason, "summary": plain, "hand_in_not_recorded": true, "worker": t.Worker}); err != nil {

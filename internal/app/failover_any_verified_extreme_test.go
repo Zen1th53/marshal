@@ -48,13 +48,13 @@ func TestFailoverAnyVerifiedProfileModel(t *testing.T) {
 // worker had failed it too. (An operator reassignment keeps its own rule.)
 func TestFailoverAnyVerifiedProviderFailoverIsNotRework(t *testing.T) {
 	run := marshal.Run{Settings: marshal.Settings{ReworkLimit: 4}}
-	task := marshal.Task{PlanTaskID: "T", Worker: "agy", ReturnsByAgent: map[string]int{"agy": 2}}
+	task := marshal.Task{PlanTaskID: "T", Worker: "agy", State: marshal.HandedIn, ReturnsByAgent: map[string]int{"agy": 2}}
 	task.Worker = "opencode"
 	retireFailoverReturns(&task, "opencode")
 	if len(task.ReturnsByAgent) != 1 || task.ReturnsByAgent["opencode"] != 0 || task.LaneReworkBase != 2 || taskReturns(task) != 2 {
 		t.Fatalf("returns not retired: %+v base=%d", task.ReturnsByAgent, task.LaneReworkBase)
 	}
-	if verdict := applyMarshalReturn(&run, &task); verdict != marshal.VerdictReturn {
+	if verdict, err := applyMarshalReturn(&run, &task); err != nil || verdict != marshal.VerdictReturn {
 		t.Fatalf("first return after failover = %s, want return", verdict)
 	}
 	if taskReturns(task) != 3 {

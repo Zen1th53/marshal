@@ -597,8 +597,13 @@ func TestCommandSweepCrosscutDecisions(t *testing.T) {
 	if len(m.approvals) != 0 {
 		t.Fatal("queued task stored consent")
 	}
-	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	// The saved run follows the task lifecycle: queued -> dispatched -> handed_in.
+	run.Tasks[0].State = marshal.Dispatched
 	if _, err := m.service.Store.SetMarshalRun(ctx, w.projectID, m.runID, run, 1); err != nil {
+		t.Fatal(err)
+	}
+	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	if _, err := m.service.Store.SetMarshalRun(ctx, w.projectID, m.runID, run, 2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.service.Store.SetMarshalTask(ctx, m.runID, run.Tasks[0], 0); err != nil {

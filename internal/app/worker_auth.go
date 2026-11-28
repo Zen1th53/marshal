@@ -92,7 +92,10 @@ func (s *MarshalService) pauseWorkerAuth(ctx context.Context, runID, taskID, cau
 	reason := adapter.DiagnosticSummary(cause, 1000)
 	plain := fmt.Sprintf("%s is not signed in for workers: %s. %s", t.Worker, workerSigninInstruction(t.Worker), reason)
 	retireWorkerAuthLane(run, t)
-	t.State, t.EscalationCode, t.EscalationReason = marshal.Escalated, marshal.CodeWorkerAuth, reason
+	if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+		return err
+	}
+	t.EscalationCode, t.EscalationReason = marshal.CodeWorkerAuth, reason
 	run.Operation = nil
 	pauseMarshal(&run, marshal.Pause{Reason: plain, Detail: reason, Code: marshal.CodeWorkerAuth, Action: marshal.PauseRetryTask, TaskID: taskID, Resolutions: []string{"Sign in using the worker's provider home, then press Enter to retry."}})
 	if err := s.record(ctx, runID, taskID, events.EventTypeMarshalEscalated, map[string]any{"reason": reason, "summary": plain, "infra_failure": providerAuthFailure, "worker": t.Worker}); err != nil {
