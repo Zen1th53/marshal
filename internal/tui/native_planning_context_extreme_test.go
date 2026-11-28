@@ -341,6 +341,9 @@ func TestMarshalSelfApprovedPlanIsToldToTheOwner(t *testing.T) {
 	m.mu.Lock()
 	m.runID, m.service, m.provider = runID, service, "codex"
 	m.mu.Unlock()
+	// Full guarantees: the planner and Claude Code's final check can run, so
+	// the plan needs no owner confirmation and the Marshal may approve it.
+	probedProvidersReady(w, "codex", "codex", "claude")
 	if err := w.queueMarshalRunProposal(marshalProposal{action: "approve"}); err != nil {
 		t.Fatal(err)
 	}

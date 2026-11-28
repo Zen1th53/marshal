@@ -37,13 +37,14 @@ type pickerState struct {
 // age is the reading's age as vitals shows it ("read 2h ago", readAgo), empty
 // while the reading is not over 30 minutes old.
 type pickerCand struct {
-	provider string
-	left     int
-	known    bool
-	out      bool
-	busy     bool
-	until    time.Time
-	age      string
+	provider  string
+	readiness string
+	left      int
+	known     bool
+	out       bool
+	busy      bool
+	until     time.Time
+	age       string
 	// dated is set on a reading at 0% left that is old (usage.FreshFor or
 	// more): the limit may have reset since, so it is shown with "may be out
 	// of date" and can still be chosen rather than blocking the provider.
@@ -184,6 +185,26 @@ func (w *Workspace) candidatesForDrivers(ctx context.Context, providers []string
 				}
 			}
 		}
+	}
+	in := w.v2MarshalInput(now)
+	// Every candidate was just found on PATH, whatever the last probe said.
+	found := map[string]bool{}
+	for name, ok := range in.Probe.Installed {
+		found[name] = ok
+	}
+	if !in.Probed {
+		for name, ok := range in.Installed {
+			found[name] = ok
+		}
+	}
+	for _, c := range cands {
+		found[c.provider] = true
+	}
+	in.Probe.Installed, in.Installed = found, found
+	for i := range cands {
+		in.Probe.Lead = cands[i].provider
+		in.Chat = v2Chat{}
+		cands[i].readiness = pickerReadiness(in)
 	}
 	return cands
 }
@@ -433,6 +454,9 @@ func (v boardVisual) pickerBody(w, h, y int) []string {
 				figure += " until " + resetClock(c.until, v.now)
 			}
 			colour = "failed"
+		case c.readiness != "":
+			figure = c.readiness
+			colour = "failed"
 		case !c.known && c.offer != "":
 			figure = c.offer
 		case !c.known:
@@ -492,4 +516,15 @@ func pickerFigure(c pickerCand) string {
 		figure += ", may be out of date"
 	}
 	return figure
+}
+
+// pickerReadiness is a candidate's planner blocker when it is an observed
+// one (signed out, at a limit). A sign-in not checked yet leaves the limit
+// figure in place: the candidate can still be chosen and checked.
+func pickerReadiness(in v2MarshalIn) string {
+	r := in.readiness()
+	if !r.PlannerRunnable && !r.SetupPending {
+		return r.Blocker
+	}
+	return ""
 }
