@@ -94,6 +94,13 @@ If Marshal is interrupted (e.g. terminal closed, machine rebooted, or workers st
 - Task outputs, events, and candidate memories are preserved in `.marshal/state.db`.
 - Unfinished task branches remain in their temporary worktrees.
 
+A major plan amendment redoes a merged or cancelled task only when it changes
+that task's definition and assigns a newer artifact revision. Unchanged terminal
+tasks keep their state. The store also requires a newer plan version before
+accepting this reset to queued; increasing only the plan version or the run's
+artifact revision cannot reopen terminal work. Prior branches, worktrees and
+hand-in evidence remain available after replacement.
+
 ### How to Resume
 
 To resume where you left off:

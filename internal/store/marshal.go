@@ -54,6 +54,15 @@ func marshalWriteTx[T any](ctx context.Context, tx *sql.Tx, table string, keys [
 	if current != expected {
 		return 0, fmt.Errorf("%w: %s revision %d, expected %d", model.ErrConflict, table, current, expected)
 	}
+	if current > 0 && (table == "marshal_runs" || table == "marshal_tasks") {
+		var previous string
+		if err := tx.QueryRowContext(ctx, "SELECT data_json FROM "+table+" WHERE "+strings.Join(where, " AND "), values...).Scan(&previous); err != nil {
+			return 0, err
+		}
+		if err := checkTaskSnapshotWrite([]byte(previous), value); err != nil {
+			return 0, err
+		}
+	}
 	next := current + 1
 	if current == 0 {
 		cols := append(append([]string{}, keys...), "revision", "data_json")

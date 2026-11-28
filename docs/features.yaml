@@ -434,7 +434,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_decision.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
       - internal/webboard.TestApprovalFrameIncludesAgeAndRedactsReason
     docs:
       - docs/board-and-keys.md
@@ -461,7 +461,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_paused.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -596,7 +596,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_decision.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -800,7 +800,7 @@ features:
       - internal/tui/commands_marshal.go
       - internal/webboard/page/app.js
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -1115,7 +1115,7 @@ features:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
-        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers", stopAllWarn)'
+        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers")'
         kind: control
     tui:
       - routeOrCommand: /stop all
@@ -1817,7 +1817,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_keys.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -1862,7 +1862,7 @@ features:
       - internal/webboard/page/app.js
       - internal/tui/boardv2_cards_decision.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs:
       - docs/board-and-keys.md
     web:
@@ -1916,7 +1916,7 @@ features:
       - internal/webboard/page/app.js
       - internal/permission/popup.go
     tests:
-      - internal/webboard.TestActPressesTheCardsKey
+      - internal/webboard.TestActRunsNamedPauseAction
     docs: []
     web:
       - routeOrCommand: "#home"
@@ -3609,7 +3609,7 @@ features:
       - internal/tui.TestRequirementsEditVersioned
       - internal/tui.TestPlanApproveRequiresViewedCurrentDigest
       - internal/tui.TestDecisionAuthorityAndRevisionMatrix
-      - internal/tui.TestLegacyActionUsesTypedAuthority
+      - internal/tui.TestLegacyKeysAreRefused
       - internal/webboard.TestDecisionRendersAllAvailableActions
     docs: []
     web:

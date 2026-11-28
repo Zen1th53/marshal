@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 func boardWithRun(state marshal.RunState, userPaused bool) model.Board {

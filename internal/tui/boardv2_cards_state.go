@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/projectcontext"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // The decision and paused cards are drawn on every frame, so nothing they

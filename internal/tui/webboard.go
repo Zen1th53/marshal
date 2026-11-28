@@ -3,13 +3,14 @@ package tui
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/architectureworkspace"
 	"github.com/Zen1th53/marshal/internal/settingscatalog"
 	"github.com/Zen1th53/marshal/internal/store"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
@@ -167,6 +168,23 @@ func (w *Workspace) webBoardServer() (*webboard.Server, error) {
 		return nil, err
 	}
 	srv.ConfigureDetails(w.webDetailsSource())
+	srv.ConfigureArchitecture(func(ctx context.Context) (architectureworkspace.Snapshot, error) {
+		var observations []architectureworkspace.Finding
+		service, runID, run := w.webDetailRun(ctx)
+		if service != nil {
+			for _, task := range run.Tasks {
+				if _, attempt, ok := latestAttempt(ctx, service, runID, task); ok {
+					if review, err := service.Store.GetMarshalReview(ctx, runID, task.PlanTaskID, attempt); err == nil {
+						observations = append(observations, architectureworkspace.Reviewer(w.webSecrets(review.Value.ArchitectureMismatches))...)
+						if review.Value.Independent != nil {
+							observations = append(observations, architectureworkspace.Reviewer(w.webSecrets(review.Value.Independent.ArchitectureMismatches))...)
+						}
+					}
+				}
+			}
+		}
+		return w.runtime.ArchitectureWorkspace(ctx, observations...)
+	})
 	if w.store != nil {
 		if err := srv.ConfigureSettings(webboard.SettingsConfig{Source: w.webSettingsState, Store: w.store, CurrentStore: func() *store.Store { w.mu.RLock(); defer w.mu.RUnlock(); return w.store }, Reconcile: w.reconcileWebRequests}); err != nil {
 			srv.Close()

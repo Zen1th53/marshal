@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // homeBusy is a run with lanes, tasks, Activity, the Marshal's state, an

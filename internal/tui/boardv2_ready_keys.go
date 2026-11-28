@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/tmux"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // The keys of the Board v2 readiness screen's own cards, and the key bar of

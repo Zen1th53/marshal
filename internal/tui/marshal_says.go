@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/redaction"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // marshalSaid is the final text of the Marshal's last chat turn: assistant

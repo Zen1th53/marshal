@@ -5,11 +5,11 @@ package tui
 import (
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/permission"
-	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
@@ -230,64 +230,32 @@ func TestDecisionAuthorityAndRevisionMatrix(t *testing.T) {
 	}
 }
 
-// A card's legacy key resolves to its typed choice and runs under the same
-// checks: k on the change card keeps; a on the inbox card begins the allow
-// of the request the card names, even with the inbox selection elsewhere;
-// Enter on a plan card no one opened is refused.
-func TestLegacyActionUsesTypedAuthority(t *testing.T) {
-	w, tr := heldChangeBoard(t)
-	if res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "k"}); res.Status != "done" {
-		t.Fatalf("k: %+v", res)
+// Requests using the removed key action cannot change the card.
+func TestLegacyKeysAreRefused(t *testing.T) {
+	w, _ := heldChangeBoard(t)
+	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "k"})
+	if res.Status != "refused" || w.currentChange() == nil {
+		t.Fatalf("legacy key: %+v", res)
 	}
-	if w.currentChange() != nil {
-		t.Fatal("legacy k did not keep the current goal")
-	}
-	chatWaitFor(t, "the keep message", func() bool { return len(tr.sentTurns()) == 1 })
+}
 
-	ib := emptyBoardWorkspace(t)
-	t.Cleanup(ib.Close)
-	t.Cleanup(func() { v2Cards.Delete(ib) })
-	ib.permissions.mu.Lock()
-	ib.permissions.inbox = []permission.Request{
-		{Kind: "network", Object: "proxy.golang.org", Reason: "go mod download", RunID: "R-1", TaskID: "T03"},
-		{Kind: "network", Object: "example.org", Reason: "docs", RunID: "R-1", TaskID: "T04"},
-	}
-	ib.permissions.mu.Unlock()
-	items := ib.boardInbox()
-	ib.inboxView.Update(items)
-	ib.inboxView.Move(1)
-	f := webCard(t, ib)
-	if !strings.HasSuffix(f.Decision.Revision, items[0].Canonical) {
-		t.Fatalf("inbox revision %q", f.Decision.Revision)
-	}
-	res := ib.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "a"})
-	if res.Status != "done" || res.Confirm == nil || ib.inboxView.Selected() != items[0].Request.Key() || ib.inboxView.Action() != 'a' {
-		t.Fatalf("legacy a: %+v selected %q", res, ib.inboxView.Selected())
-	}
-	if items[0].Gate == boardmodel.GateTyped && !res.Confirm.Text {
-		t.Fatal("a hard gate's confirmation does not ask for its id")
-	}
-	res = webDecideNow(t, ib, webCard(t, ib), "inbox.decide", "allow", func(a *webboard.Action) { a.Confirmed, a.Text = true, items[0].Canonical })
-	// This Board has no runtime: the decision reaches the approval writer
-	// for the card's request, which refuses for want of one.
-	if res.Status != "refused" || !strings.Contains(res.Text, "no runtime is attached") || ib.inboxView.Confirming() {
-		t.Fatalf("confirm: %+v", res)
-	}
-
-	if !ownerPlanGate {
-		return
-	}
-	pw, _, ptr := boardWithNativeChat(t)
-	t.Cleanup(func() { v2Cards.Delete(pw) })
-	pw.planSource = fakePlanSource{}
-	pw.setMarshalPanel(draftingPanel("awaiting plan approval; /marshal approve"))
-	if res := pw.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, pw)), Key: "⏎"}); res.Status != "refused" || pw.v2PlanArmed() != "" || len(ptr.sentTurns()) != 0 {
-		t.Fatalf("legacy Enter on an unread plan: %+v", res)
-	}
-	if res := pw.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, pw)), Key: "7"}); res.Status != "done" {
-		t.Fatalf("legacy 7: %+v", res)
-	}
-	if res := pw.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, pw)), Key: "⏎"}); res.Status != "done" || res.Confirm == nil {
-		t.Fatalf("legacy Enter on a read plan: %+v", res)
+func TestWebInboxChoiceRejectsHiddenInbox(t *testing.T) {
+	for _, overlay := range []string{"host", "memory", "provider", "verification", "security", "plan", "architecture"} {
+		t.Run(overlay, func(t *testing.T) {
+			w := emptyBoardWorkspace(t)
+			t.Cleanup(w.Close)
+			t.Cleanup(func() { v2Cards.Delete(w) })
+			w.permissions.inbox = []permission.Request{{Kind: "network", Object: "example.org", RunID: "R-1", TaskID: "T03"}}
+			f := webCard(t, w)
+			if f.Decision == nil {
+				t.Fatal("no inbox card")
+			}
+			flags := map[string]*atomic.Bool{"host": &w.hostView, "memory": &w.memView, "provider": &w.provView, "verification": &w.verView, "security": &w.secView, "plan": &w.planView, "architecture": &w.archView}
+			flags[overlay].Store(true)
+			res := w.webInboxChoice(f.Decision, webboard.Choice{Value: "allow", Label: "allow"}, webboard.Action{})
+			if res.Status != "stale" || w.inboxView.Confirming() || len(w.boardInbox()) != 1 {
+				t.Fatalf("hidden inbox: %+v", res)
+			}
+		})
 	}
 }

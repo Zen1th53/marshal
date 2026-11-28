@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // The decision card: what the owner must decide before the run can move,

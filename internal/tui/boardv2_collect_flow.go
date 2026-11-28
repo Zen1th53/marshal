@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/tui/board/layout"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // collectV2Flow fills the top bar, the NOW line, Plan, Lanes, Tasks, Inbox, Activity and the Marshal steps of the Board v2 view model. A field left at its zero

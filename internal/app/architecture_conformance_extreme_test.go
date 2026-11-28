@@ -56,7 +56,9 @@ func conformanceRuntime(t *testing.T, withDeps bool) (*Runtime, string) {
 	writeRepoFile(t, dir, "go.mod", "module example.com/shop\n\ngo 1.26\n")
 	writeRepoFile(t, dir, "internal/api/h.go", "package api\nimport \"example.com/shop/internal/store\"\nvar _ = store.X\n")
 	writeRepoFile(t, dir, "internal/store/s.go", "package store\nvar X = 1\n")
-	gitTest(t, dir, "add", "-A")
+	// Keep runtime state and bootstrap metadata out of the fixture commit.
+	gitTest(t, dir, "rm", "--cached", "--ignore-unmatch", "-r", ".")
+	gitTest(t, dir, "add", "go.mod", "internal/api/h.go", "internal/store/s.go")
 	gitTest(t, dir, "commit", "-m", "base")
 	return r, dir
 }

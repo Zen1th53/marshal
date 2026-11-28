@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/redaction"
 	"github.com/Zen1th53/marshal/internal/settingscatalog"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 // Version is the frame format version, the "v" field of every frame.

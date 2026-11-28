@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
@@ -21,9 +21,7 @@ import (
 // by typed id (decisionChoices) and carries a bound revision
 // (decisionRevision). The page sends a choice with the revision it showed;
 // webDecide checks the choice and the revision against the card the Board
-// shows now and runs the same handler the terminal key or click reaches. A
-// legacy key the card offers resolves to its typed choice first
-// (legacyChoice), so both paths share one authority check.
+// shows now and runs the same handler the terminal key or click reaches.
 //
 //	change.apply|keep|release   the change card's own click actions
 //	requirements.confirm        confirm all lines (refused while blanks remain)
@@ -144,28 +142,6 @@ func planPreviewOf(run marshal.Run) *vm.PlanPreview {
 	return p
 }
 
-// legacyChoice is the typed choice a legacy key of f's decision card
-// presses, false for a key with none (esc, a local action) or while a
-// confirmation the key answers is open.
-func (w *Workspace) legacyChoice(f webboard.Frame, key string) (webboard.Action, bool) {
-	d := f.Decision
-	if d == nil || (d.Kind == decisionInbox && w.inboxView.Confirming()) {
-		return webboard.Action{}, false
-	}
-	for _, c := range d.Choices {
-		if c.Key != key || c.Local {
-			continue
-		}
-		a := webboard.Action{Kind: "decide", Card: webboard.CardID(f), Choice: c.ID, Value: c.Value, Revision: d.Revision}
-		if d.Plan != nil {
-			// The card id binds the plan the page showed.
-			a.Digest = d.Plan.Digest
-		}
-		return a, true
-	}
-	return webboard.Action{}, false
-}
-
 func staleCard(text string) webboard.Result {
 	return webboard.Result{Status: "stale", Text: text}
 }
@@ -271,6 +247,9 @@ func (w *Workspace) webDecideNow(cur v2Decision, d *webboard.Decision, c webboar
 	case "plan.read", "plan.approve":
 		return w.webPlanChoice(cur, d, c, a)
 	case "inbox.inspect":
+		if !w.boardInboxAvailable() || (!w.inboxView.Confirming() && w.composing()) {
+			return staleCard("The inbox is hidden. Close the open view and try again.")
+		}
 		item, ok := w.inboxItemFor(d.Revision)
 		if !ok {
 			return staleCard("That request is no longer pending.")
@@ -423,6 +402,9 @@ func (w *Workspace) inboxItemFor(revision string) (boardmodel.InboxItem, bool) {
 // confirmation types what it asks for (a hard gate's id, a return's
 // reason) and decides.
 func (w *Workspace) webInboxChoice(d *webboard.Decision, c webboard.Choice, a webboard.Action) webboard.Result {
+	if !w.boardInboxAvailable() || (!w.inboxView.Confirming() && w.composing()) {
+		return staleCard("The inbox is hidden. Close the open view and try again.")
+	}
 	item, ok := w.inboxItemFor(d.Revision)
 	if !ok {
 		return staleCard("That request is no longer pending.")
