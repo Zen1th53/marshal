@@ -132,7 +132,6 @@ func (w *Workspace) recoverBoundMCPMemory(record store.MarshalProposal) bool {
 func validMemoryMCPText(s string, limit int, multiline bool) bool {
 	return len(s) > 0 && len(s) <= limit && !strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) && !(multiline && (r == '\n' || r == '\t')) })
 }
-
 // validateMemoryMCPArgs names the exact field that failed, so a caller that
 // guessed a project id (or sent a malformed title) can correct it.
 func validateMemoryMCPArgs(args memoryMCPSubmission, projectID string) error {

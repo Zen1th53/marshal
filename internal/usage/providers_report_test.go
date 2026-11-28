@@ -105,6 +105,7 @@ func TestAgyOfferShowsSpentFamilies(t *testing.T) {
 	}
 }
 
+
 // `agy -p /usage` as agy 1.5.10 printed it on 19 November.
 const agyUsageOut = "Gemini Models\tWeekly Limit Remaining\t100%\t2026-11-26T03:51:20Z\n" +
 	"Gemini Models\tFive Hour Limit Remaining\t100%\t2026-11-19T08:51:20Z\n" +

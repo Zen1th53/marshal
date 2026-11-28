@@ -3,6 +3,7 @@ package architecturecodec
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -19,6 +20,7 @@ func roomyFixture() json.RawMessage {
 		c := v.(map[string]any)
 		if p := parents[c["id"].(string)]; p != "" {
 			c["parent"] = p
+			c["responsibility"] = map[string]string{"browser": "Owner web interface", "console": "Operator terminal", "gateway": "Routes incoming requests", "worker": "Executes background jobs", "auth": "Verifies identity", "cache": "Fast lookup storage", "database": "Persistent records", "archive": "Retained snapshots", "query": "Query input", "result": "Result output"}[c["id"].(string)]
 		}
 	}
 	for _, v := range a["connections"].([]any) {
@@ -30,8 +32,48 @@ func roomyFixture() json.RawMessage {
 	return raw
 }
 
+func roomyLargeFixture() json.RawMessage {
+	var ids []string
+	parents := map[string]string{}
+	groups := [][]string{}
+	for area, count := range []int{5, 3, 2, 2, 2, 2} {
+		root := fmt.Sprintf("area%d", area)
+		ids = append(ids, root)
+		var group []string
+		for j := 0; j < count; j++ {
+			id := fmt.Sprintf("block%d_%d", area, j)
+			ids = append(ids, id)
+			parents[id] = root
+			group = append(group, id)
+		}
+		groups = append(groups, group)
+	}
+	var edges [][3]string
+	for area := 0; area < 5; area++ {
+		for j := 0; j < 3; j++ {
+			edges = append(edges, [3]string{groups[area][j%len(groups[area])], groups[area+1][j%len(groups[area+1])], "handoff"})
+		}
+	}
+	for area := 0; area < 6; area++ {
+		edges = append(edges, [3]string{groups[area][0], groups[area][1], "local call"})
+	}
+	edges = append(edges, [3]string{groups[5][0], groups[1][0], "feedback"}, [3]string{groups[0][0], groups[3][0], "events"}, [3]string{groups[2][0], groups[5][0], "archive"})
+	var a map[string]any
+	_ = json.Unmarshal(architectureJSON(ids, edges), &a)
+	for _, v := range a["components"].([]any) {
+		c := v.(map[string]any)
+		id := c["id"].(string)
+		c["responsibility"] = "Contract component"
+		if p := parents[id]; p != "" {
+			c["parent"] = p
+		}
+	}
+	raw, _ := json.Marshal(a)
+	return raw
+}
+
 func TestRoomyGeometry(t *testing.T) {
-	cases := map[string]json.RawMessage{"compound": roomyFixture()}
+	cases := map[string]json.RawMessage{"compound": roomyFixture(), "large": roomyLargeFixture()}
 	for name, raw := range layoutCases {
 		cases[name] = raw
 	}
@@ -67,19 +109,32 @@ func TestRoomyGeometry(t *testing.T) {
 			for i, p := range segments {
 				for _, q := range segments[i+1:] {
 					if collinearOverlap(p, q) {
-						t.Fatal("routing lanes share a segment")
+						t.Fatalf("routing lanes share a segment: %v / %v", p, q)
 					}
 				}
 			}
+			var labelRects []Rect
 			for i, e := range l.Edges {
+				if len(e.Points) > 6 {
+					t.Fatalf("more than four bends: %s", e.ID)
+				}
 				c := a["connections"].([]any)[i].(map[string]any)
 				s, tgt := nodes[c["source"].(string)], nodes[c["target"].(string)]
 				if !onBoundary(e.Points[0], s) || !onBoundary(e.Points[len(e.Points)-1], tgt) {
 					t.Fatalf("wrong endpoints: %s", e.ID)
 				}
-				label := Rect{X: e.LabelAt[0] - textExtent(e.Caption)/2, Y: e.LabelAt[1] - 14, Width: textExtent(e.Caption), Height: 20}
+				label := Rect{X: e.LabelAt[0] - textExtent(e.Caption)/2 - 12, Y: e.LabelAt[1] - 18, Width: textExtent(e.Caption) + 24, Height: 26}
+				for _, r := range labelRects {
+					if label.X < r.X+r.Width && label.X+label.Width > r.X && label.Y < r.Y+r.Height && label.Y+label.Height > r.Y {
+						t.Fatalf("overlapping labels: %s", e.ID)
+					}
+				}
+				labelRects = append(labelRects, label)
+				if e.Points[0][0] != s.X+s.Width || e.Points[len(e.Points)-1][0] != tgt.X {
+					t.Fatalf("incorrect endpoint side: %s", e.ID)
+				}
 				for _, n := range l.Nodes {
-					if label.X < n.X+n.Width && label.X+label.Width > n.X && label.Y < n.Y+n.Height && label.Y+label.Height > n.Y {
+					if !n.Area && label.X < n.X+n.Width && label.X+label.Width > n.X && label.Y < n.Y+n.Height && label.Y+label.Height > n.Y {
 						t.Fatalf("label intersects node: %s / %s", e.ID, n.ID)
 					}
 				}
@@ -153,5 +208,115 @@ func TestRoomyGoldenSVG(t *testing.T) {
 	}
 	if _, err := RenderSVG(roomyFixture(), RendererOptions{}); err == nil {
 		t.Fatal("roomy renderer must be gated")
+	}
+}
+
+func TestRoomyRankAndExports(t *testing.T) {
+	for name, raw := range map[string]json.RawMessage{"roomy-layout": roomyFixture(), "roomy-layout-large": roomyLargeFixture()} {
+		l, err := RoomyLayout(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if l.Width <= l.Height {
+			t.Fatal("expected landscape layout")
+		}
+		a, _ := decodeObject(raw)
+		parents := ParentsOf(a)
+		roots := []string{}
+		boxes := map[string]CompoundNode{}
+		for _, n := range l.Nodes {
+			boxes[n.ID] = n
+			if n.Area {
+				roots = append(roots, n.ID)
+			}
+		}
+		weights := make([][]int, len(roots))
+		idx := map[string]int{}
+		for i, id := range roots {
+			idx[id] = i
+			weights[i] = make([]int, len(roots))
+		}
+		root := func(id string) string {
+			for parents[id] != "" {
+				id = parents[id]
+			}
+			return id
+		}
+		for _, v := range a["connections"].([]any) {
+			c := v.(map[string]any)
+			s, tgt := root(c["source"].(string)), root(c["target"].(string))
+			if s != tgt {
+				weights[idx[s]][idx[tgt]]++
+			}
+		}
+		order := feedbackOrder(weights)
+		for i, u := range order {
+			for _, v := range order[i+1:] {
+				if weights[u][v]+weights[v][u] > 0 && boxes[roots[u]].X >= boxes[roots[v]].X {
+					t.Fatal("areas out of rank order")
+				}
+			}
+		}
+		svg, err := RenderSVG(raw, RendererOptions{Roomy: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		golden := "testdata/" + name + ".svg"
+		if name == "roomy-layout-large" {
+			if os.Getenv("UPDATE_ROOMY_GOLDEN") == "1" {
+				if err := os.WriteFile(golden, []byte(svg), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want, err := os.ReadFile(golden)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(want) != svg {
+				t.Fatal("large SVG differs from golden")
+			}
+			if strings.Count(svg, `data-role="area"`) != 6 || strings.Count(svg, `data-role="block"`) != 16 || len(l.Edges) != 24 {
+				t.Fatal("large fixture counts changed")
+			}
+		}
+		if dest := os.Getenv("ROOMY_EXPORT_DIR"); dest != "" {
+			if err := os.WriteFile(dest+"/"+name+".svg", []byte(svg), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func TestRoomyEqualRanksAndFeedbackMinimum(t *testing.T) {
+	raw := architectureJSON([]string{"left", "peer", "sink"}, [][3]string{{"left", "sink", "call"}, {"peer", "sink", "call"}})
+	l, err := RoomyLayout(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes := map[string]Node{}
+	for _, n := range l.Nodes {
+		nodes[n.ID] = n.Node
+	}
+	if nodes["left"].X != nodes["peer"].X || nodes["left"].Y == nodes["peer"].Y || nodes["sink"].X <= nodes["left"].X {
+		t.Fatal("equal ranks must share a column and stack vertically")
+	}
+	for _, n := range []int{3, 19} {
+		w := make([][]int, n)
+		for i := range w {
+			w[i] = make([]int, n)
+		}
+		w[0][1] = 4
+		w[1][2] = 4
+		w[2][0] = 1
+		order := feedbackOrder(w)
+		cost := 0
+		for i, u := range order {
+			for _, v := range order[i+1:] {
+				cost += w[v][u]
+			}
+		}
+		if cost != 1 {
+			t.Fatalf("feedback cost=%d, want minimum 1", cost)
+		}
 	}
 }

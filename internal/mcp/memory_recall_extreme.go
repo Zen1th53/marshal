@@ -38,9 +38,9 @@ func memoryRecallTool() Tool {
 		Description: "Recall memory by 1-3 words or MEM- ID (detail requires MEM- ID)",
 		InputSchema: objectSchema(map[string]any{
 			"project_id": stringSchema(), "query": stringSchema(),
-			"max_records":  map[string]any{"type": "integer", "minimum": 1, "maximum": 20},
-			"max_bytes":    map[string]any{"type": "integer", "minimum": minimumRecallWireBytes, "maximum": maximumRecallWireBytes},
-			"current_head": stringSchema(), "current_branch": stringSchema(), "task_id": stringSchema(),
+			"max_records":       map[string]any{"type": "integer", "minimum": 1, "maximum": 20},
+			"max_bytes":         map[string]any{"type": "integer", "minimum": minimumRecallWireBytes, "maximum": maximumRecallWireBytes},
+			"current_head":      stringSchema(), "current_branch": stringSchema(), "task_id": stringSchema(),
 			"allowed_scope_ids": map[string]any{"type": "array", "items": stringSchema(), "maxItems": 16},
 			"detail":            map[string]any{"type": "boolean"},
 			"offset":            map[string]any{"type": "integer", "minimum": 0},

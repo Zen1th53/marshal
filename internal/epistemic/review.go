@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	ErrLGTMNotEvidence         = errors.New("LGTM or casual peer agreement is not admissible evidence in MARSHAL")
-	ErrVerificationTheater     = errors.New("verification theater detected: test passes unconditionally or lacks mutation sensitivity")
-	ErrCriticalClaimUnverified = errors.New("critical claim cannot be approved without deterministic verification evidence")
+	ErrLGTMNotEvidence          = errors.New("LGTM or casual peer agreement is not admissible evidence in MARSHAL")
+	ErrVerificationTheater      = errors.New("verification theater detected: test passes unconditionally or lacks mutation sensitivity")
+	ErrCriticalClaimUnverified  = errors.New("critical claim cannot be approved without deterministic verification evidence")
 )
 
 // ReviewAuditor enforces Review-the-Reviewer discipline and checks for verification theater.

@@ -65,10 +65,10 @@ func seedTestOptimizationCycle(t *testing.T, runtime *app.Runtime, cycleID strin
 			EnvironmentHash: "env-hash-1",
 			Outcome:         learning.OutcomeVerifiedComplete,
 		},
-		Objectives: []optimization.Objective{{Name: "verified_success", HigherIsBetter: true, Weight: 1.0}},
-		Candidates: []optimization.Candidate{cand},
-		Baselines:  []optimization.Baseline{baseline},
-		Provenance: "p08-test",
+		Objectives:  []optimization.Objective{{Name: "verified_success", HigherIsBetter: true, Weight: 1.0}},
+		Candidates:  []optimization.Candidate{cand},
+		Baselines:   []optimization.Baseline{baseline},
+		Provenance:  "p08-test",
 	}, now)
 	if err != nil {
 		t.Fatalf("NewCycle: %v", err)

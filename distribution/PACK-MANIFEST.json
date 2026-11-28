@@ -5031,18 +5031,23 @@
     },
     {
       "path": "internal/architecturecodec/roomy.go",
-      "sha256": "176dcd92f8fd9ca5dfc79d548a5c69509ed60f713097c08652ec2cee2cd40d4e",
-      "bytes": 7736
+      "sha256": "2243da0b1935f7e573c427fabd477a08372245833a86ecc9a8b820f64722d3ad",
+      "bytes": 19480
     },
     {
       "path": "internal/architecturecodec/roomy_test.go",
-      "sha256": "3539eda00b011bc5d42eac39da1bf402a1cebd023cadd7509887af8160b2d60c",
-      "bytes": 4954
+      "sha256": "7547f1e26a46ab069e8225daea27b3698dfd922a11d3ddcb6c9a4edc5be99fe2",
+      "bytes": 10098
+    },
+    {
+      "path": "internal/architecturecodec/testdata/roomy-layout-large.svg",
+      "sha256": "d5ac45edcc56601ab2c8fb189d3f244350454a3185b97497bfd2eb30470f836c",
+      "bytes": 20599
     },
     {
       "path": "internal/architecturecodec/testdata/roomy.svg",
-      "sha256": "c70593ea1d31cce605600dd4ef61eab3b718c54ab031fa6680e884f73bc50d76",
-      "bytes": 10180
+      "sha256": "b14fb14d57cbc2d5fac3a155b2885a940d38384bec7d72056f4fc468b17c1e4d",
+      "bytes": 10512
     },
     {
       "path": "internal/architecturereview/accept_test.go",
@@ -6446,8 +6451,8 @@
     },
     {
       "path": "internal/epistemic/coverage.go",
-      "sha256": "5173501fdb4367c4b93ec14b778cc4a8ab25ce33aa1aa710871b5d3419969b8f",
-      "bytes": 3719
+      "sha256": "825e8826dccd439e5e9f0bd985f1b3eab721fc6168a26a369ea7af97b8f24fd5",
+      "bytes": 3739
     },
     {
       "path": "internal/epistemic/engine.go",
@@ -6461,8 +6466,8 @@
     },
     {
       "path": "internal/epistemic/errors.go",
-      "sha256": "053d2ee7253d7b726d4ecb0775e1b4477ff4d82c9cc1a7ff926f683ebb6db410",
-      "bytes": 1888
+      "sha256": "d7928b78a8e719520ac4e3934dbd2b1023fccc063906fe230214709a4b9f885c",
+      "bytes": 1875
     },
     {
       "path": "internal/epistemic/evidence_discipline.go",
@@ -6471,8 +6476,8 @@
     },
     {
       "path": "internal/epistemic/fingerprint.go",
-      "sha256": "03378f27815d703bbba65e629e9a4ea8330a405ae0b3d171eb3f77cdae316a95",
-      "bytes": 3062
+      "sha256": "24041236138bee9f4766006553387bb486d569186b3b6ba6bd4487162617a0a4",
+      "bytes": 3061
     },
     {
       "path": "internal/epistemic/formation.go",
@@ -6481,23 +6486,23 @@
     },
     {
       "path": "internal/epistemic/postmortem.go",
-      "sha256": "bc3ccc8e32671399dc4b0b5250145a6cee46f1abee9e236e410e2d5f2f383738",
+      "sha256": "9a4c80ca65dc54f93124e293cb0027967c0ec2d52124d73bc511ff7ba07bbdf3",
       "bytes": 3249
     },
     {
       "path": "internal/epistemic/review.go",
-      "sha256": "ad361ad8ee273521f9216114756d3b56b0a84ece68c157732a79417c0af8061a",
-      "bytes": 2413
+      "sha256": "414d056d26ca04b3f51b69dc38fe13c212fa1c89e0fff0d7860999bd0814fde8",
+      "bytes": 2416
     },
     {
       "path": "internal/epistemic/revision.go",
-      "sha256": "b002aad0233c18b117a87c25e2afb9a491b297118798bb983fa7c8d7657fc546",
-      "bytes": 4398
+      "sha256": "1a50dadd9a644ec61bc060c2bf995581e7ff4a1a2384b06cf21c1ad625fae14b",
+      "bytes": 4408
     },
     {
       "path": "internal/epistemic/secondwave_test.go",
-      "sha256": "c84500c2b4b8c64a64a1ab026203c0d4bc2dd2f597ebf0f37634d0c5a456f3de",
-      "bytes": 4971
+      "sha256": "06378027f644da17d2fbfdc4d3b6c951bd04cf48b07446a564816eb5b360538d",
+      "bytes": 4966
     },
     {
       "path": "internal/epistemic/temporal.go",
@@ -8356,8 +8361,8 @@
     },
     {
       "path": "internal/mcp/marshal_approvals.go",
-      "sha256": "fcf5e78bad08c1810c4aabc23655087a2384837818813bb9580279b005a14787",
-      "bytes": 2404
+      "sha256": "c2753bb2c0b60095701398075d93821813c08ca20d895cb1000d89f4fd67a63d",
+      "bytes": 2401
     },
     {
       "path": "internal/mcp/marshal_approvals_test.go",
@@ -8396,8 +8401,8 @@
     },
     {
       "path": "internal/mcp/memory_recall_extreme.go",
-      "sha256": "f141eb166006606812567b5f0e2ff2e43236dea37d19829b17fe2672f56d9818",
-      "bytes": 16374
+      "sha256": "d55783fa31a623a600437cf104d21b2790be1f4760ea8fc8d1e28a50966fc440",
+      "bytes": 16389
     },
     {
       "path": "internal/mcp/memory_recall_extreme_test.go",
@@ -8441,8 +8446,8 @@
     },
     {
       "path": "internal/mcp/process08_test.go",
-      "sha256": "2e069908d0edf6066d3e4263881211a582fc1eb4e7696f43932ba948c1cccc3c",
-      "bytes": 21978
+      "sha256": "d077be9381d49541d4c9fea61b0f9b272ebbf52f9d3809f92b1b3cb157af9938",
+      "bytes": 21982
     },
     {
       "path": "internal/mcp/project_alias_test.go",
@@ -8656,8 +8661,8 @@
     },
     {
       "path": "internal/memory/conflict/detector_test.go",
-      "sha256": "32730aa4c00ba3da2046178e78a96351d3ff507ae5d4808908f66e0b9d038819",
-      "bytes": 3063
+      "sha256": "069724e9fbb0c3079152e68f97fc236ef28dc56c7c65dce70908a91ba4e92db1",
+      "bytes": 3033
     },
     {
       "path": "internal/memory/eval/retrieval.go",
@@ -8881,8 +8886,8 @@
     },
     {
       "path": "internal/memory/writeback/reflector_test.go",
-      "sha256": "0428b2c07cd88a2d7c765758a5305f006fe82a8823561cde1f3718a6a0cf8228",
-      "bytes": 2664
+      "sha256": "0a3861e3a8fa4f68b3956cb1e2c6a8171d15b12c43e967c357fddec4f0e6f7cb",
+      "bytes": 2682
     },
     {
       "path": "internal/model/budget.go",
@@ -14836,8 +14841,8 @@
     },
     {
       "path": "internal/tui/memory_mcp_extreme.go",
-      "sha256": "b3bfe28064100d8ca1c94d42a5f05840b7e5d2f9125052fa9bf013a92f9ef339",
-      "bytes": 12118
+      "sha256": "b386666efb648eb4a7df18e09d3b18ddd99dd2ba31c9641680660bf3277e8b9f",
+      "bytes": 12117
     },
     {
       "path": "internal/tui/memory_mcp_extreme_test.go",
@@ -16916,8 +16921,8 @@
     },
     {
       "path": "internal/usage/providers_report_test.go",
-      "sha256": "16c0c1710491328df298b3b67aa9ad716abc7c136a74b0265c4f9e1da18b4387",
-      "bytes": 6896
+      "sha256": "d8c514cd1a2b2e8d796978bbaa563ed5506059efd44eb50871cf97fc63b66fb6",
+      "bytes": 6897
     },
     {
       "path": "internal/usage/session.go",
@@ -17436,8 +17441,8 @@
     },
     {
       "path": "internal/workerterminal/lifecycle.go",
-      "sha256": "95db92f3a3cd032c0fc51e1ddc9469a700cf67cdc6f47a0256dddb5157755a7f",
-      "bytes": 1223
+      "sha256": "6d9b7161af15641518ad0e431ff595599ec8c24712c671018a2d5146e345ed7b",
+      "bytes": 1222
     },
     {
       "path": "internal/workerterminal/pty_darwin.go",

@@ -10,16 +10,16 @@ import (
 
 // PostMortemCard contains concise, structured retrospective data on a finished task or goal.
 type PostMortemCard struct {
-	GoalID           string               `json:"goal_id"`
-	GoalRevision     int64                `json:"goal_revision"`
-	WhatWorked       []string             `json:"what_worked"`
-	WhatWasRedone    []string             `json:"what_was_redone"`
+	GoalID          string                `json:"goal_id"`
+	GoalRevision    int64                 `json:"goal_revision"`
+	WhatWorked      []string              `json:"what_worked"`
+	WhatWasRedone   []string              `json:"what_was_redone"`
 	WrongAssumptions []string             `json:"wrong_assumptions"`
-	Failures         []string             `json:"failures"`
-	ConsumedBudget   model.ConsumedBudget `json:"consumed_budget"`
-	UnresolvedRisks  []string             `json:"unresolved_risks"`
-	RoutingLessons   []string             `json:"routing_lessons"`
-	GeneratedAt      time.Time            `json:"generated_at"`
+	Failures        []string              `json:"failures"`
+	ConsumedBudget  model.ConsumedBudget  `json:"consumed_budget"`
+	UnresolvedRisks []string              `json:"unresolved_risks"`
+	RoutingLessons  []string              `json:"routing_lessons"`
+	GeneratedAt     time.Time             `json:"generated_at"`
 }
 
 // GeneratePostMortemCard produces a concise markdown summary for developers and operators.
