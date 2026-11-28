@@ -17266,13 +17266,13 @@
     },
     {
       "path": "internal/webboard/page/app.css",
-      "sha256": "251d8cc40acf9e0e8fab2ad40e792f509cdabe535428226702b18fb9f2d1f7ca",
-      "bytes": 20197
+      "sha256": "6893f72e1b4485a6529933c9beb05dfd2eae391b49368904f3a65a2eeb86d67d",
+      "bytes": 20279
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "3e3c4caaad1b39bbd26b773a405edbc215e874945df4ec2fd4437615c1b74cb4",
-      "bytes": 102371
+      "sha256": "eda61962732cdb2aa0851efdc19568c8b95faa457997c7cc544148ebb976cdb4",
+      "bytes": 103143
     },
     {
       "path": "internal/webboard/page/index.html",
@@ -17311,8 +17311,8 @@
     },
     {
       "path": "internal/webboard/testdata/architecture.cjs",
-      "sha256": "b1128b34923b336c0ff4f64d2be42872e3dd57a205aca2bc2aa448268f180411",
-      "bytes": 6483
+      "sha256": "80375e5dc1c53ec6e5d2dfa0b54ccdfd7b5d2e31aefcca5fc40712256c31f2fa",
+      "bytes": 7509
     },
     {
       "path": "internal/webboard/testdata/card.cjs",

@@ -76,3 +76,17 @@ $('aw-views').listeners.scroll({target:currentPopup.children[0]});
 assert.equal(currentPopup.removed,undefined,'internal scrolling must keep the popover open');
 $('aw-views').listeners.scroll({target:viewport});
 assert.equal(currentPopup.removed,true,'diagram scrolling should dismiss stale positioning');
+
+// Captions and findings badges fit between adjacent blocks at natural size.
+const serviceDrawing=$('aw-views').children[2].children[0].children[1];
+const charge=serviceDrawing.children.find(c=>c.attrs['aria-label']==='charge: 1 findings');
+assert.equal(charge.children[0].attrs.class,'aw-edge-pill');
+assert.equal(charge.children[0].attrs.x+charge.children[0].attrs.width/2,270);
+assert.ok(charge.children[0].attrs.x>=230);
+assert.ok(charge.children[0].attrs.x+charge.children[0].attrs.width<=310);
+assert.ok(charge.children[2].attrs.y>=charge.children[0].attrs.y+charge.children[0].attrs.height);
+context.snapshot.layouts.architecture.edges=[{id:'routed',points:[[330,130],[350,130],[350,230]],label_at:[340,130],caption:'route'}];
+vm.runInContext('awDraw()',context);
+const routed=$('aw-views').children[0].children[0].children[1].children.find(c=>c.attrs['aria-label']==='route: 0 findings');
+assert.equal(routed.children[0].attrs.x+routed.children[0].attrs.width/2,350);
+assert.equal(routed.children[0].attrs.y+13,180);

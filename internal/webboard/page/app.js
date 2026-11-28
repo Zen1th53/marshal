@@ -1034,13 +1034,13 @@
   }
   function awTarget(svg, id, x, y, width, height, label, edge, header) {
     var items = awItems(id), group = awSVG("g", {tabindex:0,role:"button","aria-label":label + ": " + items.length + " findings",class:"aw-target"});
-    if (!edge) group.appendChild(awSVG("rect", {x:x,y:y,width:width,height:height,rx:8,class:"aw-block"}));
-    group.appendChild(awSVG("text", {x:x+10,y:y+22,class:"aw-label"}, label));
+    group.appendChild(awSVG("rect", {x:x,y:y,width:width,height:height,rx:edge ? 12 : 8,class:edge ? "aw-edge-pill" : "aw-block"}));
+    group.appendChild(awSVG("text", {x:x+10,y:y+(edge ? 18 : 22),class:"aw-label"}, label));
     if (items.length) {
       var severity = items.some(function (f) {return f.severity === "error";}) ? "error" : items.some(function (f) {return f.severity === "warning";}) ? "warning" : "info";
-      var badgeX = header ? Math.min(width - 64, label.length * 8 + 22) : width - 64;
-      group.appendChild(awSVG("rect", {x:x+badgeX,y:y+2,width:62,height:25,rx:10,class:"aw-marker aw-"+severity}));
-      group.appendChild(awSVG("text", {x:x+badgeX+7,y:y+20,class:"aw-badge"}, "! " + items.length));
+      var badgeX = edge ? (width - 62) / 2 : header ? Math.min(width - 64, label.length * 8 + 22) : width - 64;
+      group.appendChild(awSVG("rect", {x:x+badgeX,y:y+(edge ? height+4 : 2),width:62,height:25,rx:10,class:"aw-marker aw-"+severity}));
+      group.appendChild(awSVG("text", {x:x+badgeX+7,y:y+(edge ? height+22 : 20),class:"aw-badge"}, "! " + items.length));
     }
     group.onclick = function (event) {
       event.stopPropagation();
@@ -1062,14 +1062,27 @@
       var area = view.indexOf("sub:") === 0 ? view.slice(4) : "";
       awTarget(svg, area, 0, 0, Math.max(420,layout.width), 36, area ? "Area: " + area : (awSnapshot.title || "Accepted architecture"), false, true);
       var drawing = awSVG("g", {transform:"translate(0 50)"}); svg.appendChild(drawing);
+      var labels = [];
       (layout.edges || []).forEach(function (e) {
         var items = awItems(e.id); if (awOnly && !items.length) return;
         var path = awSVG("polyline", {points:e.points.map(function(p){return p.join(",");}).join(" "),class:"aw-edge"});
         path.setAttribute("tabindex","0");path.setAttribute("role","button");path.setAttribute("aria-label",e.id);
         path.onclick=function(event){event.stopPropagation();awOpen(svg,path,e.id,items);};path.onkeydown=function(event){if(event.key==="Enter")path.onclick(event);}; drawing.appendChild(path);
-        awTarget(drawing,e.id,e.label_at[0]-60,e.label_at[1]-22,180,30,e.caption || e.id,true);
+        // Center on the longest routed segment at natural text size.
+        var segment = null, length = -1;
+        e.points.slice(1).forEach(function (p, i) {
+          var a = e.points[i], size = Math.hypot(p[0]-a[0], p[1]-a[1]);
+          if (size > length) { length = size; segment = [a,p]; }
+        });
+        if (segment) {
+          var label = e.caption || e.id, width = label.length * 8 + 20;
+          var x = (segment[0][0]+segment[1][0])/2, y = (segment[0][1]+segment[1][1])/2;
+          labels.push(function () { awTarget(drawing,e.id,x-width/2,y-13,width,26,label,true); });
+        }
       });
       (layout.nodes || []).forEach(function (n) {awTarget(drawing,n.id,n.x,n.y,n.width,n.height,n.id,false);});
+      // Keep captions above blocks even when a narrow gap cannot contain the pill.
+      labels.forEach(function (draw) { draw(); });
       scroll.appendChild(svg); into.appendChild(scroll);
     });
   }
