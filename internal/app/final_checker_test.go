@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -76,5 +77,16 @@ func TestFinalCheckProviderPolicy(t *testing.T) {
 	run.Settings.ReviewPolicy.FinalProvider = "any"
 	if provider, _, err = r.independentVerifierChoice(run); err != nil || provider != "claude" {
 		t.Fatalf("enabled fallback: %s %v", provider, err)
+	}
+}
+
+func TestFinalCheckerReadinessMatchesRuntimeWithoutMCP(t *testing.T) {
+	r, _ := verifierProviderFixture(t, "opencode")
+	ready := marshal.ComputeReadiness("opencode", map[string]marshal.ProviderReadiness{
+		"opencode": {Installed: true, SignedIn: true},
+	}, marshal.ReviewPolicy{})
+	_, _, err := r.independentVerifierChoice(marshal.Run{})
+	if ready.FinalCheckEligible || err == nil || !strings.Contains(ready.Blocker, "Marshal MCP unavailable") {
+		t.Fatalf("readiness and runtime disagree: %+v, %v", ready, err)
 	}
 }

@@ -24,16 +24,19 @@ func ObserveReadiness(ctx context.Context, p Prober, root string, policy marshal
 		data, _ := os.ReadFile(path)
 		planner = strings.TrimSpace(string(data))
 	}
+	settings := marshal.DefaultSettings()
 	providers := map[string]marshal.ProviderReadiness{}
 	if root != "" && statepath.CheckPath(root, filepath.Join(root, statepath.DirName, "state.db")) == nil {
 		if st, err := store.OpenReadOnly(ctx, filepath.Join(root, statepath.DirName, "state.db")); err == nil {
 			defer st.Close()
 			if project, err := st.Project(ctx); err == nil {
-				if settings, err := st.GetMarshalSettings(ctx, project.ID); err == nil {
-					policy = settings.Value.ReviewPolicy
+				if stored, err := st.GetMarshalSettings(ctx, project.ID); err == nil {
+					settings = stored.Value
+					policy = settings.ReviewPolicy
 				}
 				if _, run, err := st.LatestMarshalRun(ctx, project.ID); err == nil && run.Value.State != marshal.Closed {
 					policy = run.Value.EffectiveReviewPolicy()
+					settings = run.Value.Settings
 				}
 				if overview, err := st.ProviderOverview(ctx, project.ID, time.Now()); err == nil {
 					for _, status := range overview {
@@ -59,6 +62,7 @@ func ObserveReadiness(ctx context.Context, p Prober, root string, policy marshal
 	for _, name := range []string{"claude", "codex", "agy", "opencode"} {
 		binary, err := p.LookPath(name)
 		fact := providers[name]
+		fact.Disabled = !settings.ProviderEnabled(name)
 		fact.Installed = err == nil
 		fact.AuthUnknown = fact.Installed && !fact.SignedIn
 		if err == nil && name == "codex" && probeAuth {

@@ -13,9 +13,12 @@ func (in v2MarshalIn) readiness() marshal.Readiness {
 		p := in.provider(name)
 		// Sign-in is known false only when a check said so; a provider at a
 		// limit or not checked yet has unknown sign-in.
-		fact := marshal.ProviderReadiness{Installed: p.Installed, SignedIn: p.SignedIn, AuthUnknown: !p.SignedIn && p.State != "not signed in" && p.State != "not installed"}
+		fact := marshal.ProviderReadiness{Disabled: !in.Probe.Settings.ProviderEnabled(name), Installed: p.Installed, SignedIn: p.SignedIn, AuthUnknown: !p.SignedIn && p.State != "not signed in" && p.State != "not installed"}
 		if p.State == "limit" {
 			fact.Unavailable = p.Reason
+			if fact.Unavailable == "" {
+				fact.Unavailable = "provider limit; wait for capacity, then check sign-in"
+			}
 		}
 		providers[name] = fact
 	}

@@ -239,7 +239,7 @@ func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, stri
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	s.GovernedCheck = fixtureCheckRunner
 	s.ApprovalActor = func(context.Context, string, string) (string, error) { return "user", nil }
@@ -1103,7 +1103,7 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 		if session.Binding.TreeDigest != head {
 			return marshal.VerifierEvidence{}, errors.New("verifier saw a different commit")
 		}
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	if v, err := s.VerifyMerged(ctx, "run", knownCharge()); err != nil || v != verification.VerifiedComplete {
 		t.Fatalf("verify %s %v", v, err)

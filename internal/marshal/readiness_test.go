@@ -69,3 +69,25 @@ func TestFinalProviderPolicySnapshot(t *testing.T) {
 		t.Fatal("unknown provider accepted")
 	}
 }
+
+func TestReadinessFinalCheckerCapabilities(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		disabled bool
+		want     string
+	}{
+		{"opencode", false, "Marshal MCP unavailable"},
+		{"codex", true, "enable the provider"},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			p := ProviderReadiness{Installed: true, SignedIn: true, Disabled: tc.disabled}
+			if !p.Runnable() {
+				t.Fatal("fixture must be runnable")
+			}
+			r := ComputeReadiness(tc.provider, map[string]ProviderReadiness{tc.provider: p}, ReviewPolicy{})
+			if r.FinalCheckEligible || !strings.Contains(r.Blocker, tc.want) {
+				t.Fatalf("%+v", r)
+			}
+		})
+	}
+}

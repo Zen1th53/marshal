@@ -156,7 +156,7 @@ func independentCheckerResolution() string {
 
 // checkVerifierFreshSession refuses a final check that did not run in a
 // session of its own. A verifier of any provider must not report a worker's
-// session or the Marshal's own conversation. One of a worker's provider is
+// session or the Marshal's own conversation. Every verifier is
 // accepted only with proof that it started clean: the runtime started its
 // session fresh, and the provider reported a new session id. data records
 // the sessions compared and whether the worker-provider fallback was used.
@@ -175,10 +175,11 @@ func (s *MarshalService) checkVerifierFreshSession(record marshal.VerifierEviden
 	if sameProviderAsWorker(record.Provider, workers...) {
 		data["verifier_same_provider_fallback"] = true
 		data["verifier_fallback_reason"] = "no provider that did none of the run's tasks could do the final check; " + record.Provider + " checked it in a fresh session"
-		if !record.FreshSession || record.SessionID == "" {
-			err = errors.Join(err, errors.New("independent verifier of a worker's provider did not run in a fresh session of its own"))
-		}
 	}
+	if !record.FreshSession || record.SessionID == "" {
+		err = errors.Join(err, errors.New("independent verifier did not run in a fresh session of its own"))
+	}
+
 	return err
 }
 

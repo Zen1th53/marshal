@@ -8,7 +8,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
-	"github.com/Zen1th53/marshal/internal/sessionmcp"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -18,28 +17,6 @@ import (
 // provider. A provider that did none of the run's tasks is preferred when
 // one can take the role; otherwise a worker's provider checks the work in a
 // fresh session, and the evidence records that it did.
-
-// finalCheckerGaps lists why provider cannot do the final check: it is not
-// installed, cannot reach Marshal's tools, reported a quota or rate limit
-// recently (when limits is set), or its answer does not name its model.
-func (r *Runtime) finalCheckerGaps(provider string, installed []string, limits bool) []string {
-	var reasons []string
-	if !slices.Contains(installed, provider) {
-		reasons = append(reasons, "not installed")
-	}
-	if !sessionmcp.MarshalProvider(provider) {
-		reasons = append(reasons, "Marshal MCP unavailable")
-	}
-	if limits {
-		if reason, limited := r.providerLimited(provider); limited {
-			reasons = append(reasons, "limited: "+reason)
-		}
-	}
-	if reason := requiredVerifierAttributionGap(provider); reason != "" {
-		reasons = append(reasons, reason)
-	}
-	return reasons
-}
 
 // workerSessions lists the provider sessions the runtime observed for the
 // run's workers, from the verified runtime proof. A verifier or reviewer

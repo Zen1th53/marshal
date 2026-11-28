@@ -222,6 +222,8 @@ First published release of the 0.2.18 changes below (v0.2.18 was tagged but not 
 
 ## 0.2.14
 
+The Claude Code restrictions below describe this historical release. Current final checks accept any qualified configured provider in a fresh session; the owner can pin a family with `final-provider`. See [provider policy](how-it-works.md).
+
 ### Fixed
 - ULTRA runs whose tasks are done by Antigravity or Claude finish their final check and deliver; the independent checker is now a provider that can name its model (Claude Code) instead of Codex, which always stopped with "REQUIRED_CONTEXT_REVIEW_PENDING". The check itself is unchanged.
 - With no independent checker available the run stops before spending a model turn and says to install Claude Code or wait for its limit, then press Enter.

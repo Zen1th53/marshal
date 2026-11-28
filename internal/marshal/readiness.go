@@ -1,10 +1,16 @@
 package marshal
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
+)
 
 // ProviderReadiness contains observed facts, not assumptions from installation.
 // Unknown authentication never qualifies a provider as runnable.
 type ProviderReadiness struct {
+	Disabled    bool
 	Installed   bool
 	SignedIn    bool
 	AuthUnknown bool
@@ -13,6 +19,28 @@ type ProviderReadiness struct {
 
 func (p ProviderReadiness) Runnable() bool {
 	return p.Installed && p.SignedIn && !p.AuthUnknown && p.Unavailable == ""
+}
+
+// FinalCheckerGaps is the shared readiness and runtime eligibility predicate.
+func FinalCheckerGaps(provider string, installed, disabled bool, unavailable string, policy ReviewPolicy) []string {
+	var reasons []string
+	policy = policy.Effective()
+	if disabled || (policy.FinalProvider != "any" && policy.FinalProvider != provider) {
+		reasons = append(reasons, "excluded by final-check policy; enable the provider or change final-provider")
+	}
+	if !installed {
+		reasons = append(reasons, "not installed; install the provider")
+	}
+	if !sessionmcp.MarshalProvider(provider) {
+		reasons = append(reasons, "Marshal MCP unavailable; choose a provider with Marshal MCP support")
+	}
+	if unavailable != "" {
+		reasons = append(reasons, unavailable)
+	}
+	if gap := VerifierAttributionGap(provider); gap != "" {
+		reasons = append(reasons, gap)
+	}
+	return reasons
 }
 
 // Readiness is the shared execution verdict. Blocker always names the first
@@ -69,8 +97,14 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 	}
 	r.ChecksOnly = r.ReviewPolicy.FinalModel == FinalModelOff
 	r.FinalCheckEligible = r.ChecksOnly
+	var exclusions []string
 	for _, name := range r.Workers {
-		if r.ReviewPolicy.FinalProvider == "any" || r.ReviewPolicy.FinalProvider == name {
+		p := providers[name]
+		gaps := FinalCheckerGaps(name, p.Installed, p.Disabled, p.Unavailable, r.ReviewPolicy)
+		if len(gaps) != 0 {
+			exclusions = append(exclusions, name+": "+strings.Join(gaps, ", "))
+		}
+		if len(gaps) == 0 {
 			r.FinalCheckEligible = true
 		}
 	}
@@ -79,6 +113,9 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 	}
 	if r.Blocker == "" && !r.FinalCheckEligible {
 		r.Blocker = "Final check needs a qualified provider allowed by final-provider: sign in, or approve a checks-only policy with `/marshal settings final-model off`."
+		if len(exclusions) > 0 {
+			r.Blocker += " " + strings.Join(exclusions, "; ")
+		}
 	}
 	r.Guarantee = "Independent hand-in review is required."
 	if r.ReviewPolicy.CrossReview == CrossReviewOff {

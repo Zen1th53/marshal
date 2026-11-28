@@ -41,7 +41,7 @@ func TestExtremeRunParallelCrossReviewAndVerifier(t *testing.T) {
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "test", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		verified.Store(true)
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 
 	settings, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
@@ -216,7 +216,7 @@ func TestExtremeDecideCannotSkipReviewAndVerifier(t *testing.T) {
 		if session.Binding.TreeDigest != head {
 			return marshal.VerifierEvidence{}, errors.New("verifier saw a different commit")
 		}
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	if v, err := s.VerifyMerged(ctx, "run", knownCharge()); err != nil || v != verification.VerifiedComplete {
 		t.Fatalf("verify %s %v", v, err)
@@ -251,7 +251,7 @@ func setupExtremeService(t *testing.T, n int) (*MarshalService, string) {
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "test", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	return s, repo
 }

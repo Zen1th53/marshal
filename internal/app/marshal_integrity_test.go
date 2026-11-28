@@ -146,7 +146,7 @@ func TestMarshalMixedTierRequiresIndependentVerification(t *testing.T) {
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "test", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		called = true
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "test", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "test", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	if result, err := s.VerifyMerged(t.Context(), "run", knownCharge()); err != nil || result != verification.VerifiedComplete || !called {
 		t.Fatalf("independent verification: %s %v called=%v", result, err, called)

@@ -734,7 +734,7 @@ func testAdmittedUltraCollector(t *testing.T, turnOff bool, beforeLaunch ...bool
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "test", nil }
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
-		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 
 	settings, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)

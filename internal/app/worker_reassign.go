@@ -205,12 +205,12 @@ func (r *Runtime) independentVerifierChoice(run marshal.Run) (provider string, w
 		workers = append(workers, task.Worker)
 	}
 	for _, candidate := range MarshalProviders() {
-		policy := run.EffectiveReviewPolicy()
-		if !run.Settings.ProviderEnabled(candidate) || (policy.FinalProvider != "any" && policy.FinalProvider != candidate) {
-			excluded = append(excluded, candidate+": excluded by final-check policy")
-			continue
+		unavailable := ""
+		if reason, limited := r.providerLimited(candidate); limited {
+			unavailable = "limited: " + reason
 		}
-		if reasons := r.finalCheckerGaps(candidate, installed, true); len(reasons) != 0 {
+		reasons := marshal.FinalCheckerGaps(candidate, slices.Contains(installed, candidate), !run.Settings.ProviderEnabled(candidate), unavailable, run.EffectiveReviewPolicy())
+		if len(reasons) != 0 {
 			excluded = append(excluded, candidate+": "+strings.Join(reasons, ", "))
 		} else {
 			available = append(available, candidate)

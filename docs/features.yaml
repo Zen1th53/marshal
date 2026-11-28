@@ -148,8 +148,14 @@ features:
       - internal/tui/board_keymap.go
       - internal/app/marshal_lifecycle.go
       - internal/marshal/tier.go
+      - internal/marshal/readiness.go
+      - internal/app/worker_reassign.go
+      - internal/app/review_evidence.go
     tests:
       - internal/marshal.TestTierPolicyMarshalLeaseUsesSettings
+      - internal/marshal.TestReadinessFinalCheckerCapabilities
+      - internal/app.TestFinalCheckerReadinessMatchesRuntimeWithoutMCP
+      - internal/app.TestFinalCheckRefusesVerifierReusingWorkerSession
     docs:
       - docs/board-and-keys.md
     web: []
