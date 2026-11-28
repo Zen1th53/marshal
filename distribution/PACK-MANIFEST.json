@@ -586,8 +586,8 @@
     },
     {
       "path": "docs/features.yaml",
-      "sha256": "a9e844488945dfcd3e6ae6b278bfd814fdab9d9d8a466aec773ac5a16f2ebc9c",
-      "bytes": 122846
+      "sha256": "ff28db2186b27d5f0c1eb4a7a1926bffb3532217a8be4061b7ffc01463babfbf",
+      "bytes": 122823
     },
     {
       "path": "docs/getting-started.md",
@@ -12991,8 +12991,8 @@
     },
     {
       "path": "internal/tui/board_inbox.go",
-      "sha256": "de369e93eb9fe67c3a1c66b236c2ad72d5e4b771f8fec162260f76a7b94afcb2",
-      "bytes": 1529
+      "sha256": "97c77190c52ba877dae68955223572c58f63c06276a310f95c97a4b29846bd06",
+      "bytes": 1617
     },
     {
       "path": "internal/tui/board_inbox_test.go",
@@ -14596,8 +14596,8 @@
     },
     {
       "path": "internal/tui/marshal_operation_receipt_test.go",
-      "sha256": "27239bf41b919507c6024d06c392181623b290a062e48c5a236da554e9cfa8c7",
-      "bytes": 36224
+      "sha256": "2a27c68b2fca6b49fae2313cb66c1124600f3f5e56977071d8536ff2f429a243",
+      "bytes": 36242
     },
     {
       "path": "internal/tui/marshal_operator_test.go",
@@ -14606,8 +14606,8 @@
     },
     {
       "path": "internal/tui/marshal_outside_run_test.go",
-      "sha256": "ae0411008829d1fe0598d94909e6052d8eeaa077b4bd28a7963eabdfceb2590a",
-      "bytes": 40729
+      "sha256": "4b6c73a233c946cd3239b920d919cf6914824af6a5088d449799cb042cac778d",
+      "bytes": 40769
     },
     {
       "path": "internal/tui/marshal_panel.go",
@@ -16631,18 +16631,18 @@
     },
     {
       "path": "internal/tui/webboard_act.go",
-      "sha256": "75c5a2dd8b2faf278c6558e4bce6f6a785bff64c3dd75b47a258a09758a1ae82",
-      "bytes": 17807
+      "sha256": "7afe066a969da40df06cc553a985c8a22e24d2b7d913d7d62cf1f1c167b5619d",
+      "bytes": 10722
     },
     {
       "path": "internal/tui/webboard_act_linux_test.go",
-      "sha256": "27727c3c6aac317bd5b4bfdccee9d5331509932523e6dc4f285ce55f7b36d91c",
-      "bytes": 3943
+      "sha256": "5377599296831f23ee73c00194e19ff63992bded52aa17600e93ea49b2022bab",
+      "bytes": 2528
     },
     {
       "path": "internal/tui/webboard_act_test.go",
-      "sha256": "6c8230feaa5d16c081e53eec1da1663d29bfae9b1b8700e546f9636b276fdae3",
-      "bytes": 12289
+      "sha256": "2a72ce66d0c0f91fc4e5bf3a055eaf133992cffcf0d43178f9d608bdb99353d7",
+      "bytes": 11896
     },
     {
       "path": "internal/tui/webboard_card_actions_test.go",
@@ -16676,13 +16676,13 @@
     },
     {
       "path": "internal/tui/webboard_decisions.go",
-      "sha256": "d26920026c0cfc18f0dd6eca3abc196cbd1ae85404efb398b082c4a9a1688cac",
-      "bytes": 15739
+      "sha256": "7cf67fa7bcd02bf349c0f79235a75a38b9a0410daa319f33ca51ce3b3528419c",
+      "bytes": 15184
     },
     {
       "path": "internal/tui/webboard_decisions_test.go",
-      "sha256": "498c00f052e112da3e36dc4041b4eb684cf67f833415bc76da7fbb4959538726",
-      "bytes": 12489
+      "sha256": "c62d67687b1ab57e0e01152c1592959525fbaf791fefd84fb8fb28302405dc3b",
+      "bytes": 10712
     },
     {
       "path": "internal/tui/webboard_details.go",
@@ -16706,8 +16706,8 @@
     },
     {
       "path": "internal/tui/webboard_run_actions_test.go",
-      "sha256": "570edf0a338cf15dd7656a9fe7570273a6a287191d72d69840b9a11d8a0d4d60",
-      "bytes": 12082
+      "sha256": "fe182e2a5cc2ef020754b324ea064b9d9c96e61ab7b20702d2dc42c355fa9a45",
+      "bytes": 12005
     },
     {
       "path": "internal/tui/webboard_settings.go",
@@ -17136,8 +17136,8 @@
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "794770153a6d4fa43bc88a2ecf6a8361c19445975cb75ca37c14735dbfb6d664",
-      "bytes": 94372
+      "sha256": "34d95d80604de89a581db6f1cee255d8b9310aee596e122f661adc11da0596e5",
+      "bytes": 93884
     },
     {
       "path": "internal/webboard/page/index.html",
@@ -17176,8 +17176,8 @@
     },
     {
       "path": "internal/webboard/testdata/commands.cjs",
-      "sha256": "d8a8c560e6f88c4c70cc8d637058fde3b6a67a5f9e03bbbac90eed51920167a3",
-      "bytes": 3213
+      "sha256": "0d20ab5bbee210f98d500eb5ce365cff74d27be3af9ed547e7496715fb7066fb",
+      "bytes": 4214
     },
     {
       "path": "internal/webboard/testdata/decisions.cjs",

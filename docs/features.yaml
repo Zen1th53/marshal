@@ -1101,7 +1101,7 @@ features:
       - docs/board-and-keys.md
     web:
       - routeOrCommand: "#work"
-        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers", stopAllWarn)'
+        anchor: 'twoStep("ghost", "ctrl+x", "stop all workers")'
         kind: control
     tui:
       - routeOrCommand: /stop all
@@ -3596,7 +3596,7 @@ features:
       - internal/tui.TestRequirementsEditVersioned
       - internal/tui.TestPlanApproveRequiresViewedCurrentDigest
       - internal/tui.TestDecisionAuthorityAndRevisionMatrix
-      - internal/tui.TestLegacyActionUsesTypedAuthority
+      - internal/tui.TestLegacyKeysAreRefused
       - internal/webboard.TestDecisionRendersAllAvailableActions
     docs: []
     web:
