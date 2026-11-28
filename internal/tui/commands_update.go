@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/update"
 )
 
@@ -37,6 +38,9 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 	if update.PrivateEdition() {
 		return update.PrivateGuidance, nil
 	}
+	if !update.IsRelease(h.ws.buildVersion()) {
+		return update.DevGuidance, nil
+	}
 	checker := update.NewChecker()
 	current := h.ws.buildVersion()
 
@@ -50,9 +54,9 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 	if !newer {
 		h.ws.setUpdateAvailable("")
 		if !install {
-			return fmt.Sprintf("MARSHAL %s is the latest release.", current), nil
+			return fmt.Sprintf("No newer release to install. Current: %s.", current), nil
 		}
-		return fmt.Sprintf("Nothing to install. MARSHAL %s is the latest release.", current), nil
+		return fmt.Sprintf("Nothing to install. No newer release to install. Current: %s.", current), nil
 	}
 	h.ws.setUpdateAvailable(release.Tag)
 
@@ -62,8 +66,23 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 		if release.URL != "" {
 			fmt.Fprintf(&b, "  %s\n", release.URL)
 		}
-		b.WriteString("  [F10] or /update install downloads it, checks it against the release's published checksums, and replaces this binary.")
+		b.WriteString("  [F10] or /update install asks for confirmation, checks it against the release's published checksums, and replaces this binary.")
 		return b.String(), nil
+	}
+
+	confirmed := len(args) >= 3 && args[1] == "confirm" && args[2] == release.Tag && h.pendingUpdate == release.Tag
+	allowUnknown := len(args) == 4 && args[3] == "--allow-downgrade"
+	if !confirmed {
+		h.pendingUpdate = release.Tag
+		warning := ""
+		if release.SchemaVersion == 0 {
+			warning = "\nTarget schema support is unknown. Add --allow-downgrade only if you accept the risk."
+		}
+		return fmt.Sprintf("Confirm update: from %s → to %s\nReplace this binary? Type /update install confirm %s%s\nAny other command cancels.", current, release.Tag, release.Tag, warning), nil
+	}
+	h.pendingUpdate = ""
+	if err := update.ValidateInstall(current, release, store.LatestSchemaVersion, allowUnknown); err != nil {
+		return err.Error(), nil
 	}
 
 	// The download is given its own, longer window: a release archive is not a
@@ -86,7 +105,7 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 // all when MARSHAL_NO_UPDATE_CHECK is set: a workspace that opened is not the
 // place to explain that GitHub was unreachable.
 func (w *Workspace) checkForUpdateInBackground(ctx context.Context) {
-	if update.Disabled() || update.PrivateEdition() {
+	if update.Disabled() || update.PrivateEdition() || !update.IsRelease(w.buildVersion()) {
 		return
 	}
 	w.startBackground(ctx, func(ctx context.Context) {

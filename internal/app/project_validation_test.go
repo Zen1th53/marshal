@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -40,7 +41,7 @@ func TestValidateProjectMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = ValidateProject(t.Context(), init.Path())
-	if err == nil || !strings.Contains(err.Error(), "are damaged") {
+	if err == nil || (!strings.Contains(err.Error(), "Cannot open this project") || !strings.Contains(err.Error(), "CAPABILITIES.yaml")) {
 		t.Fatalf("damaged message = %v", err)
 	}
 	if !errors.Is(err, model.ErrInvalid) {
@@ -85,7 +86,7 @@ func TestInvalidProjectRefusedBeforeRuntimeWrites(t *testing.T) {
 			if rt, err := Open(t.Context(), repo.Path()); err == nil {
 				rt.Close()
 				t.Fatal("opened an invalid project")
-			} else if !strings.Contains(err.Error(), "are damaged") {
+			} else if !strings.Contains(err.Error(), "Cannot open this project") {
 				t.Fatal(err)
 			}
 			after, err := os.ReadFile(statepath.Path(repo.Path(), "state.db"))
@@ -96,5 +97,27 @@ func TestInvalidProjectRefusedBeforeRuntimeWrites(t *testing.T) {
 				t.Fatalf("Open created runtime owner lock: %v", err)
 			}
 		})
+	}
+}
+
+// A newer database is incompatible, not damaged. Keep the actual cause visible.
+func TestValidateProjectReportsNewerSchema(t *testing.T) {
+	repo := runtimeRepo(t)
+	layout, err := Bootstrap(t.Context(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", layout.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO schema_migrations(version, applied_at) VALUES(99999, 'test')"); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	db.Close()
+	_, err = ValidateProject(t.Context(), repo.Path())
+	if err == nil || !strings.Contains(err.Error(), "unsupported state schema 99999") || strings.Contains(err.Error(), "damaged") {
+		t.Fatalf("got %v", err)
 	}
 }
