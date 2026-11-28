@@ -3,6 +3,7 @@ package startup
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"os"
@@ -100,7 +101,8 @@ type Environment struct {
 	// UltraEntitled reports a verified, unexpired entitlement.
 	UltraEntitled bool
 	// Now is the assessment clock.
-	Now time.Time
+	Now       time.Time
+	Readiness *marshal.Readiness
 }
 
 // Assess observes the environment and returns the startup picture.
@@ -133,6 +135,9 @@ func Assess(ctx context.Context, prober Prober, env Environment) Assessment {
 	checks = append(checks, probeIsolation(env)...)
 	checks = append(checks, probeHarness(prober))
 	checks = append(checks, probeUltra(env))
+	if env.Readiness != nil {
+		checks = append([]Check{readinessCheck(*env.Readiness)}, checks...)
+	}
 
 	firstRun := projectRoot == "" || !marshalInitialized(prober, projectRoot)
 

@@ -41,6 +41,8 @@ It ends with what is left to do, if anything, and the command to start.
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
+To install without being counted, run the installer with telemetry off: `curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | MARSHAL_CLOUD_ENDPOINT=off sh`. `marshal telemetry disable` keeps it off afterwards.
+
 ### Customizing the Installation
 
 You can override default settings using environment variables:

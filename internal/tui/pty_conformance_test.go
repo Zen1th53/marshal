@@ -470,11 +470,11 @@ func TestPTYKeyboardContract(t *testing.T) {
 // TestPTYTabCompletion proves Tab completion happens inside the real terminal
 // rather than only in the in-process completer.
 func TestPTYTabCompletion(t *testing.T) {
-	// 41 rows: the always-on vitals row takes the top row of every screen, so
-	// the classic screen's body is one row shorter than the terminal. The
-	// extra row keeps /doctor's DIAGNOSTICS header on screen, as it was before
-	// the vitals row existed.
-	s := startCommandTUI(t, 41, 120)
+	// 43 rows: the always-on vitals row takes the top row of every screen, so
+	// the classic screen's body is one row shorter than the terminal, and
+	// /doctor lists an execution readiness row. The extra rows keep /doctor's
+	// DIAGNOSTICS header on screen.
+	s := startCommandTUI(t, 43, 120)
 
 	// "/doc" + Tab must resolve to /doctor and then run it.
 	s.send("/doc")

@@ -125,13 +125,18 @@ Or install it yourself (Linux, macOS, Windows via WSL2; checksum-verified, no su
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-Then, in a Git repository of yours, run `marshal`. Choose who plans, check the readiness
+The installer counts the install anonymously. To install without being counted, run the installer with telemetry off: `curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | MARSHAL_CLOUD_ENDPOINT=off sh`. `marshal telemetry disable` keeps it off afterwards.
+
+Then, in a Git repository of yours, run `marshal`. The first time, it shows what it will commit
+(three small config files, on your current branch) and how many uncommitted files workers will
+not see, and asks before it changes anything. Choose who plans, check the readiness
 list (sign in to any provider it marks), and say what you want built with `s` or in the
-Marshal chat. Confirm the requirements card with `Enter` (or edit an answer with `e`); when the
-**Accept architecture** card opens, press `a` to open the architecture in your browser and accept
-it there. That is the owner gate. The Marshal then plans and approves the plan itself, starts the
-workers, and runs a final independent check. You need at least one coding agent CLI, installed and
-signed in ([requirements](#requirements)); Marshal has no model costs of its own.
+Marshal chat. Confirm the requirements card with `y` on the Board (or edit an answer with `e`
+then the line's letter); the *From you* line shows both keys. When the **Accept architecture**
+card opens, press `a` to open the architecture in your browser and accept it there. That is the
+owner gate, and accepting starts the work: the Marshal then writes the task plan, approves it
+itself (you are not asked again), starts the workers, and runs a final independent check. You
+need at least one coding agent CLI, installed and signed in ([requirements](#requirements)); Marshal has no model costs of its own.
 
 **Telemetry:** Marshal sends anonymous usage telemetry (a random install ID, version,
 OS/architecture, mode and timestamps; never code, prompts, paths or commands).
@@ -165,14 +170,18 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
 2. **Build in isolation.** The plan is split into small tasks. Each task names
    its files, acceptance criteria and a check command, and runs in its own Git
    worktree and branch, so parallel workers never overwrite each other.
-3. **Checked before it merges.** Every plan gets an independent review
-   and final check. Another agent with a fresh context
+3. **Checked before it merges.** By default, plans get independent review
+   and a final check. In the free build, review can be Off. An approved
+   checks-only policy runs executable checks without an independent final
+   model check; its delivery is labelled checks-only, not independently verified.
+   The final model check currently requires Claude Code installed and signed in.
+   With review enabled, another agent with a fresh context
    reviews every hand-in against its criteria: a different provider when one
-   is available, otherwise a new session of the same one. An independent
-   verifier, also in a session of its own, then runs the checks on the
+   is available, otherwise a new session of the same one. When final model
+   checking is enabled, an independent verifier in a session of its own runs the checks on the
    integrated result.
-4. **Only verified work lands.** Accepted tasks merge, and the run closes to
-   `main` with a record of who did what and which checks passed.
+4. **Delivery records the effective guarantee.** Accepted tasks merge, and the
+   run closes to `main` with a record of who did what and which checks passed.
 
 [Full lifecycle →](docs/how-it-works.md)
 
@@ -241,19 +250,20 @@ full interface, and it opens in your browser as the Board starts:
 |---|---|
 | `Enter` / `F11` | Open the Marshal chat; `F11` switches between chat and the Board |
 | `y` | Do the safe step **From you** names; a second `y` within 2 s does nothing |
-| `w` | Open the Web Board |
+| `w` | Open the Web Board (`/marshal web copy` copies a fresh link instead) |
 | `s` | Say something to the Marshal from the Board |
 | `a` | Open the architecture in your browser (where you accept it) |
 | `m` | Change the Marshal's model or provider |
 | `Space` or `Ctrl+K` | Action palette |
-| `Ctrl+X` | Stop all workers (never the Marshal) |
-| `q` | Quit |
+| `Ctrl+X` | Stop all workers; the Marshal, its chat and the run stay |
+| `q` | Quit. While work runs it asks: `Enter` detaches (work keeps running; `marshal` returns), `s` stops everything |
 | `?` | Every key |
 
 The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
-runs on. Every plan's final independent check requires Claude Code installed. It runs in a
-fresh session, even if Claude Code also worked on the run. If unavailable, the run stops
-before checking and tells you to install Claude Code or wait for its limit. [All screens and keys →](docs/board-and-keys.md)
+runs on. When the final model check is required, it needs Claude Code installed and signed
+in. It runs in a fresh session, even if Claude Code also worked on the run. If unavailable, the run stops
+before checking and tells you to install Claude Code or wait for its limit. An approved
+checks-only policy skips this model check and labels the delivery checks-only. [All screens and keys →](docs/board-and-keys.md)
 
 ---
 

@@ -3418,7 +3418,7 @@ features:
     web: []
     tui:
       - routeOrCommand: q
-        anchor: 'w.requestExit()'
+        anchor: 'w.requestQuit(ctx)'
         kind: control
 
   - id: L11
