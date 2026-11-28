@@ -193,6 +193,14 @@
   <!-- Architecture -->
   <section id="s-architecture" class="sect" aria-labelledby="h-arch" hidden>
     <div class="sect-head"><h1 id="h-arch">Architecture</h1></div>
+    <section class="panel" aria-label="NOW technical diagram">
+      <h2>NOW technical diagram</h2>
+      <button id="aw-load" type="button">Load / refresh accepted architecture</button>
+      <label>Severity <select id="aw-severity"><option value="">All</option><option value="error">Error</option><option value="warning">Warning</option><option value="info">Info</option></select></label>
+      <label><input id="aw-only" type="checkbox"> Only problem places</label>
+      <p id="aw-notice" role="status"></p>
+      <div id="aw-views"></div>
+    </section>
     <dl id="ar-facts" class="kv big"></dl>
     <div id="ar-acts" class="acts"></div>
     <div id="ar-open" class="acts"></div>
