@@ -54,6 +54,7 @@ The tables below are generated from the settings catalogue (`go run ./tools/feat
 
 | Setting | Choices or units | Default | Applies | Notes |
 |---|---|---|---|---|
+| `final-provider` | any, codex, claude, opencode, agy | `any` | next run | Final verifier family: any prefers a different implementing family; a pin still requires native identity, a fresh session and exact commit binding. |
 | `execution-rights` | read-only, small-tasks | `read-only` | next run | Approved and running settings keep their snapshot. |
 | `acceptance-mode` | marshal, marshal-then-user, user | `marshal` | next run | Approved and running settings keep their snapshot. |
 | `control` | free, strict | `free` | next run | Approved and running settings keep their snapshot. |

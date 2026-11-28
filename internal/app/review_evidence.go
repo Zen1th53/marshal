@@ -150,14 +150,8 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 }
 
 // independentCheckerResolution says what makes a final checker available.
-// In the shipped edition only Claude Code can be the final checker, because
-// only its answer names the model that gave it. It may have done this run's
-// tasks: the check runs in a fresh session of its own.
 func independentCheckerResolution() string {
-	if requiredVerifierAttributionGap("codex") != "" {
-		return "Install Claude Code or wait until its limit passes. Then press Enter to let the Marshal retry."
-	}
-	return "Install another AI tool, or wait until one's limit passes. Then press Enter to let the Marshal retry."
+	return "Enable and sign in to a qualified AI tool allowed by final-provider, or wait until its limit passes. Then press Enter to retry."
 }
 
 // checkVerifierFreshSession refuses a final check that did not run in a

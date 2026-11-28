@@ -56,3 +56,25 @@ func TestFinalCheckPrefersProviderThatDidNoTasks(t *testing.T) {
 		t.Fatalf("non-worker provider not preferred: %q worker=%v %v", provider, worker, err)
 	}
 }
+
+func TestFinalCheckProviderPolicy(t *testing.T) {
+	r, _ := verifierProviderFixture(t, "codex", "claude")
+	for _, p := range MarshalProviders() {
+		providerHealth.Clear(p)
+		t.Cleanup(func() { providerHealth.Clear(p) })
+	}
+	run := marshal.Run{Tasks: []marshal.Task{{Worker: "codex"}}}
+	run.Settings.ReviewPolicy.FinalProvider = "codex"
+	provider, worker, err := r.independentVerifierChoice(run)
+	if err != nil || provider != "codex" || !worker {
+		t.Fatalf("pin ignored: %s %v %v", provider, worker, err)
+	}
+	run.Settings.DisabledProviders = "codex"
+	if _, _, err = r.independentVerifierChoice(run); err == nil {
+		t.Fatal("disabled pinned provider selected")
+	}
+	run.Settings.ReviewPolicy.FinalProvider = "any"
+	if provider, _, err = r.independentVerifierChoice(run); err != nil || provider != "claude" {
+		t.Fatalf("enabled fallback: %s %v", provider, err)
+	}
+}

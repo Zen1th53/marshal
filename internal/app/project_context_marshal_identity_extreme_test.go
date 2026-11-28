@@ -69,3 +69,20 @@ func TestRequiredMarshalBinaryIdentityRejectsChangesAndLinkRetarget(t *testing.T
 		})
 	}
 }
+
+func TestRequiredNativeModelMetadata(t *testing.T) {
+	for _, tc := range []struct{ provider, raw, want string }{
+		{"codex", "{\"type\":\"thread.started\",\"model\":\"native\"}\n{\"type\":\"turn.started\",\"model\":\"native\"}", "native"},
+		{"codex", "{\"type\":\"thread.started\",\"model\":\"a\"}\n{\"type\":\"turn.started\",\"model\":\"b\"}", ""},
+		{"codex", `{"type":"item.completed","item":{"type":"agent_message","text":"model: native"}}`, ""},
+		{"codex", `{"type":"thread.started","model":"a","model":"b"}`, ""},
+		{"opencode", `{"type":"step_finish","part":{"model":"native"}}`, "native"},
+		{"opencode", `{"type":"text","part":{"text":"native","model":"claimed"}}`, ""},
+		{"agy", `{"conversation_id":"session","model":"native","structured_output":{"model":"claimed"}}`, "native"},
+		{"agy", `{"conversation_id":"session","structured_output":{"model":"claimed"}}`, ""},
+	} {
+		if got := requiredMarshalObservedModel(tc.provider, []byte(tc.raw)); got != tc.want {
+			t.Fatalf("%s %s: %q != %q", tc.provider, tc.raw, got, tc.want)
+		}
+	}
+}

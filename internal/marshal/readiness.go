@@ -68,12 +68,17 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 		}
 	}
 	r.ChecksOnly = r.ReviewPolicy.FinalModel == FinalModelOff
-	r.FinalCheckEligible = r.ChecksOnly || providers["claude"].Runnable()
+	r.FinalCheckEligible = r.ChecksOnly
+	for _, name := range r.Workers {
+		if r.ReviewPolicy.FinalProvider == "any" || r.ReviewPolicy.FinalProvider == name {
+			r.FinalCheckEligible = true
+		}
+	}
 	if r.Blocker == "" && len(r.Workers) == 0 {
 		r.Blocker = "No worker can run: run `claude` and sign in."
 	}
 	if r.Blocker == "" && !r.FinalCheckEligible {
-		r.Blocker = "Final check needs Claude Code: run `claude` and sign in, or approve a checks-only policy with `/marshal settings final-model off`."
+		r.Blocker = "Final check needs a qualified provider allowed by final-provider: sign in, or approve a checks-only policy with `/marshal settings final-model off`."
 	}
 	r.Guarantee = "Independent hand-in review is required."
 	if r.ReviewPolicy.CrossReview == CrossReviewOff {
@@ -86,9 +91,9 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 	case r.ChecksOnly:
 		r.Guarantee += " Checks-only delivery: executable checks run; no independent final model check or verified-delivery receipt."
 	case !r.FinalCheckEligible:
-		r.Guarantee += " Final check is unavailable; closure will wait for Claude Code. Run `claude` and sign in, or approve a checks-only policy before dispatch."
+		r.Guarantee += " Final check is unavailable; closure will wait for a qualified provider. Sign in, or approve a checks-only policy before dispatch."
 	default:
-		r.Guarantee += " Claude Code independently checks the integrated result and runs the checks."
+		r.Guarantee += " A qualified provider independently checks the integrated result in a fresh session; native model identity and commit binding are required."
 	}
 	r.NeedsConfirmation = !r.FinalCheckEligible || r.ChecksOnly || r.ReviewPolicy.CrossReview == CrossReviewOff || r.ReviewPolicy.Design == DesignReviewOff
 	return r

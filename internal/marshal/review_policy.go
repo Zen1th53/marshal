@@ -52,25 +52,30 @@ const (
 // ReviewPolicy configures optional review controls for upcoming runs.
 // Empty fields read as the shipped defaults.
 type ReviewPolicy struct {
-	FinalModel  FinalModelPolicy   `json:"finalModel,omitempty"`
-	CrossReview CrossReviewPolicy  `json:"crossReview,omitempty"`
-	Design      DesignReviewPolicy `json:"design,omitempty"`
-	Conformance ConformancePolicy  `json:"conformance,omitempty"`
+	FinalProvider string             `json:"finalProvider,omitempty"`
+	FinalModel    FinalModelPolicy   `json:"finalModel,omitempty"`
+	CrossReview   CrossReviewPolicy  `json:"crossReview,omitempty"`
+	Design        DesignReviewPolicy `json:"design,omitempty"`
+	Conformance   ConformancePolicy  `json:"conformance,omitempty"`
 }
 
 // DefaultReviewPolicy returns the shipped defaults used when no policy is stored.
 func DefaultReviewPolicy() ReviewPolicy {
 	return ReviewPolicy{
-		FinalModel:  FinalModelRequired,
-		CrossReview: CrossReviewRequired,
-		Design:      DesignReviewOnDemand,
-		Conformance: ConformanceEnforce,
+		FinalProvider: "any",
+		FinalModel:    FinalModelRequired,
+		CrossReview:   CrossReviewRequired,
+		Design:        DesignReviewOnDemand,
+		Conformance:   ConformanceEnforce,
 	}
 }
 
 // Effective resolves legacy empty fields to the shipped defaults.
 func (p ReviewPolicy) Effective() ReviewPolicy {
 	eff := p
+	if eff.FinalProvider == "" {
+		eff.FinalProvider = "any"
+	}
 	if eff.FinalModel == "" {
 		eff.FinalModel = FinalModelRequired
 	}
@@ -102,6 +107,11 @@ func (p ReviewPolicy) Weakened() bool {
 
 // Validate checks enum syntax and edition locks.
 func (p ReviewPolicy) Validate() error {
+	switch p.FinalProvider {
+	case "", "any", "codex", "claude", "opencode", "agy":
+	default:
+		return fmt.Errorf("invalid final provider %q", p.FinalProvider)
+	}
 	if p.FinalModel != "" && p.FinalModel != FinalModelRequired && p.FinalModel != FinalModelOff {
 		return fmt.Errorf("invalid final model policy %q", p.FinalModel)
 	}
@@ -119,6 +129,7 @@ func (p ReviewPolicy) Validate() error {
 
 // ReviewPolicySnapshot captures the review policy bound to a run before approval.
 type ReviewPolicySnapshot struct {
+	FinalProvider string             `json:"finalProvider,omitempty"`
 	PolicyVersion int                `json:"policyVersion"`
 	PlanDigest    string             `json:"planDigest,omitempty"`
 	FinalModel    FinalModelPolicy   `json:"finalModel"`
@@ -135,6 +146,7 @@ func NewReviewPolicySnapshot(policy ReviewPolicy, planDigest, actor string, conf
 	return &ReviewPolicySnapshot{
 		PolicyVersion: ReviewPolicyVersion,
 		PlanDigest:    planDigest,
+		FinalProvider: eff.FinalProvider,
 		FinalModel:    eff.FinalModel,
 		CrossReview:   eff.CrossReview,
 		Design:        eff.Design,
@@ -147,10 +159,11 @@ func NewReviewPolicySnapshot(policy ReviewPolicy, planDigest, actor string, conf
 // Policy converts a snapshot into its ReviewPolicy fields.
 func (s ReviewPolicySnapshot) Policy() ReviewPolicy {
 	return ReviewPolicy{
-		FinalModel:  s.FinalModel,
-		CrossReview: s.CrossReview,
-		Design:      s.Design,
-		Conformance: s.Conformance,
+		FinalProvider: s.FinalProvider,
+		FinalModel:    s.FinalModel,
+		CrossReview:   s.CrossReview,
+		Design:        s.Design,
+		Conformance:   s.Conformance,
 	}.Effective()
 }
 
@@ -163,10 +176,11 @@ func (s ReviewPolicySnapshot) Validate() error {
 		return errors.New("incomplete review policy snapshot")
 	}
 	return ReviewPolicy{
-		FinalModel:  s.FinalModel,
-		CrossReview: s.CrossReview,
-		Design:      s.Design,
-		Conformance: s.Conformance,
+		FinalProvider: s.FinalProvider,
+		FinalModel:    s.FinalModel,
+		CrossReview:   s.CrossReview,
+		Design:        s.Design,
+		Conformance:   s.Conformance,
 	}.Validate()
 }
 

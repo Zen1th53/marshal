@@ -136,11 +136,35 @@ func (m *MarshalCLI) captureRequiredMarshalTurn(prompt, schema string, raw, payl
 	if p == nil || p.runtime != m.runtime || p.cli != m || p.receipt.Outcome != "QUALIFIED" || startedAt.IsZero() || finishedAt.Before(startedAt) {
 		return
 	}
+	observedModel := requiredMarshalObservedModel(m.Provider, raw)
+	identityEvidence := []byte(nil)
+	if m.Provider == "codex" {
+		rolloutModel, rollout, invalid := requiredCodexRolloutModel(session, p.workspace, startedAt, finishedAt)
+		identityEvidence = rollout
+		nativeField := false
+		for _, line := range bytes.Split(bytes.TrimSpace(raw), []byte("\n")) {
+			var event map[string]json.RawMessage
+			if proposalmcp.DecodeStrict(line, &event) != nil {
+				invalid = true
+				break
+			}
+			var kind string
+			_ = json.Unmarshal(event["type"], &kind)
+			if (kind == "thread.started" || kind == "turn.started") && len(event["model"]) > 0 {
+				nativeField = true
+			}
+		}
+		if invalid || (nativeField && observedModel == "") || (observedModel != "" && rolloutModel != "" && observedModel != rolloutModel) {
+			observedModel = ""
+		} else if observedModel == "" {
+			observedModel = rolloutModel
+		}
+	}
 	m.requiredTurnCapture = &requiredMarshalTurnCapture{
 		preparation: *p, provider: m.Provider, session: session, priorSession: priorSession,
-		binaryDigest: p.binaryDigest, observedModel: requiredMarshalObservedModel(m.Provider, raw),
+		binaryDigest: p.binaryDigest, observedModel: observedModel,
 		inputDigest:   projectcontext.Digest("marshal.required.actual-model-input.v1", struct{ Provider, Prompt, Schema string }{m.Provider, prompt, schema}),
-		outputDigest:  projectcontext.Digest("marshal.required.actual-model-output.v1", raw),
+		outputDigest:  projectcontext.Digest("marshal.required.actual-model-output.v2", struct{ Output, Identity []byte }{raw, identityEvidence}),
 		payloadDigest: projectcontext.Digest("marshal.required.actual-model-payload.v1", payload),
 		startedAt:     startedAt, finishedAt: finishedAt,
 	}
