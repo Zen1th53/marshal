@@ -76,7 +76,7 @@ func TestWebActPausedEnterIsTheKey(t *testing.T) {
 	if f.Paused.Actions[0].Key != "⏎" || !strings.HasPrefix(f.Paused.Actions[0].Label, "retry T03") {
 		t.Fatalf("actions %+v", f.Paused.Actions)
 	}
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "⏎"})
+	res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "⏎"}))
 	if res.Status != "done" {
 		t.Fatalf("result %+v", res)
 	}
@@ -100,10 +100,10 @@ func TestWebActPausedEnterIsTheKey(t *testing.T) {
 func TestWebActStopNeedsConfirmation(t *testing.T) {
 	w, ran := webPausedWorkspace(t, leasePause)
 	card := webboard.CardID(webCard(t, w))
-	if res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "x"}); res.Status != "refused" || len(*ran) != 0 {
+	if res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "x"})); res.Status != "refused" || len(*ran) != 0 {
 		t.Fatalf("unconfirmed stop: %+v ran %q", res, *ran)
 	}
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "x", Confirmed: true})
+	res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "x", Confirmed: true}))
 	if res.Status != "done" || !slices.Equal(*ran, []string{"/marshal stop"}) || !strings.HasPrefix(res.Text, "Stopped.") {
 		t.Fatalf("stop: %+v ran %q", res, *ran)
 	}
@@ -115,7 +115,7 @@ func TestWebActStopNeedsConfirmation(t *testing.T) {
 // d answers with the raw error, the text the terminal shows.
 func TestWebActRawError(t *testing.T) {
 	w, _ := webPausedWorkspace(t, leasePause)
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "d"})
+	res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "d"}))
 	if res.Status != "done" || res.Text != "Raw error: infra retry: task time ran out" {
 		t.Fatalf("d: %+v", res)
 	}
@@ -131,10 +131,10 @@ func TestWebActRefusals(t *testing.T) {
 		a    webboard.Action
 		want string
 	}{
-		{"stale card", webboard.Action{Kind: "key", Card: "paused:000", Key: "⏎"}, "stale"},
-		{"key not shown", webboard.Action{Kind: "key", Card: card, Key: "r"}, "refused"},
-		{"esc not on a paused card", webboard.Action{Kind: "key", Card: card, Key: "esc"}, "refused"},
-		{"typed text with nothing asking", webboard.Action{Kind: "key", Card: card, Key: "⏎", Text: "R-9"}, "refused"},
+		{"stale card", namedTestAction(w, webboard.Action{Kind: "key", Card: "paused:000", Key: "⏎"}), "stale"},
+		{"key not shown", namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "r"}), "refused"},
+		{"esc not on a paused card", namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "esc"}), "refused"},
+		{"typed text with nothing asking", namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "⏎", Text: "R-9"}), "refused"},
 		{"unknown kind", webboard.Action{Kind: "command", Card: card, Text: "/marshal stop"}, "refused"},
 	} {
 		if res := w.webBoardAct(t.Context(), c.a); res.Status != c.want {
@@ -180,7 +180,7 @@ func TestWebActRunsOnTheInputLoop(t *testing.T) {
 			}
 		}
 	}()
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "⏎"})
+	res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "⏎"}))
 	if res.Status != "done" || res.Text != "ok" || w.commandBusy.Load() {
 		t.Fatalf("loop: %+v busy=%v", res, w.commandBusy.Load())
 	}
@@ -194,7 +194,7 @@ func TestWebActRunsOnTheInputLoop(t *testing.T) {
 	t.Cleanup(func() { webActWait = orig })
 	webActWait = 0
 	*ran = nil
-	res = w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "⏎"})
+	res = w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: card, Key: "⏎"}))
 	if res.Status != "refused" {
 		t.Fatalf("busy loop: %+v", res)
 	}
@@ -213,7 +213,7 @@ func TestWebActFailedCommandIsRefused(t *testing.T) {
 	boardStopHandle = func(_ *Workspace, _ context.Context, cmd string) (string, error) {
 		return "", errors.New("the run store is locked")
 	}
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "x", Confirmed: true})
+	res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "x", Confirmed: true}))
 	if res.Status != "refused" || !strings.Contains(res.Text, "Could not stop the run") {
 		t.Fatalf("result %+v", res)
 	}
@@ -276,12 +276,12 @@ func TestWebActInboxAllowIsTwoSteps(t *testing.T) {
 	w.permissions.inbox = []permission.Request{{Kind: "network", Object: "proxy.golang.org", Reason: "go mod download", RunID: "R-1", TaskID: "T03"}}
 	w.permissions.mu.Unlock()
 	f := webCard(t, w)
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "a"})
+	res := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(f), Key: "a"}))
 	if res.Status != "done" || res.Confirm == nil || !w.inboxView.Confirming() {
 		t.Fatalf("a: %+v confirming=%v", res, w.inboxView.Confirming())
 	}
 	// Esc cancels the confirmation, as in the terminal.
-	res = w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "esc"})
+	res = w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "esc"}))
 	if res.Status != "done" || w.inboxView.Confirming() {
 		t.Fatalf("esc: %+v confirming=%v", res, w.inboxView.Confirming())
 	}
@@ -289,33 +289,38 @@ func TestWebActInboxAllowIsTwoSteps(t *testing.T) {
 
 // With no card on screen, "Stop all workers" is Ctrl+X: /stop all, run the
 // way the key runs it, after the page's second click; never the Marshal.
-func TestWebActStopAllWorkersIsCtrlX(t *testing.T) {
-	w := NewWorkspace(nil, "project", "session")
-	w.screen = NewScreen(nil)
-	t.Cleanup(w.Close)
-	t.Cleanup(func() { v2Cards.Delete(w) })
-	run := marshal.Run{State: marshal.Dispatching, PlanID: "PLAN-1", Settings: marshal.Settings{ReworkLimit: 2},
-		Tasks: []marshal.Task{{PlanTaskID: "T03", Title: "sub-view links", Worker: "codex", State: marshal.Dispatched}}}
-	w.setMarshalPanel(newMarshalPanel("R-9", "codex", run, "running"))
+func TestWebScreenKeysWithoutRuntime(t *testing.T) {
+	w, _ := webPausedWorkspace(t, leasePause)
+	w.webBoard()
+	state, _ := webBoards.Load(w)
+	state.(*webBoardState).retry = "T03"
+	if keys := w.webScreenKeys(); len(keys) != 0 {
+		t.Fatalf("unsupported controls: %+v", keys)
+	}
+}
+
+// namedTestAction builds the typed request for the button a terminal key names.
+func namedTestAction(w *Workspace, a webboard.Action) webboard.Action {
 	f := webboard.FromBoard(w.webBoardFrame())
-	if f.Decision != nil || f.Paused != nil {
-		t.Fatalf("a card is shown: %+v %+v", f.Decision, f.Paused)
+	a.Kind, a.Revision = "decide", webboard.CardID(f)
+	if f.Paused != nil {
+		a.Choice = webboard.PauseOp(a.Key)
+	} else if a.Key == "esc" {
+		a.Choice = "card/dismiss"
+	} else if f.Decision != nil {
+		// A decision is bound to its own revision, whether or not the key
+		// names a choice on it: a key the card does not offer is refused,
+		// never stale, while the card stays the same.
+		a.Revision = f.Decision.Revision
+		if f.Decision.Plan != nil {
+			a.Digest = f.Decision.Plan.Digest
+		}
+		for _, c := range f.Decision.Choices {
+			if c.Key == a.Key {
+				a.Choice, a.Value = c.ID, c.Value
+				break
+			}
+		}
 	}
-	if got := webboard.ActionKeys(f); !slices.Equal(got, []string{"ctrl+x"}) {
-		t.Fatalf("screen keys %q (no stuck task: no retry)", got)
-	}
-	card := webboard.CardID(f)
-	if res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "ctrl+x"}); res.Status != "refused" || w.GetUIState().LastCommand == "/stop all" {
-		t.Fatalf("unconfirmed: %+v", res)
-	}
-	if res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "r", Confirmed: true}); res.Status != "refused" {
-		t.Fatalf("retry with none offered: %+v", res)
-	}
-	res := w.webBoardAct(t.Context(), webboard.Action{Kind: "key", Card: card, Key: "ctrl+x", Confirmed: true})
-	if res.Status == "stale" || w.GetUIState().LastCommand != "/stop all" {
-		t.Fatalf("stop all: %+v last command %q", res, w.GetUIState().LastCommand)
-	}
-	if res.Status == "done" && !webNoteHas(w, "From the web: stop all workers") {
-		t.Fatalf("activity %+v", w.noteList())
-	}
+	return a
 }

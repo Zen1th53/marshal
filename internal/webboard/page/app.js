@@ -300,26 +300,24 @@
   var planOpen = "", editing = null;
   function screenKey(f, key) {
     if (f.decision || f.paused || !f.act || !f.act.tokens[key]) return null;
+    if (key === "r" && !workCapabilities(f, retryTaskID(f)).some(function (c) { return c.op === "task/retry"; })) return null;
+    if (key === "ctrl+x" && !runCapabilities(f).some(function (c) { return c.op === "run/stop-workers"; })) return null;
     for (var i = 0; i < f.keys.length; i++) if (f.keys[i].key === key) return f.keys[i];
     return null;
   }
   // retryTask is the task the screen's Retry would start again, or "".
   function retryTask(f) {
     var k = screenKey(f, "r");
+    return k ? retryTaskID(f) : "";
+  }
+  function retryTaskID(f) {
+    var k = (f.keys || []).find(function (k) { return k.key === "r"; });
     var m = k && /^retry\s+(\S+)/i.exec(k.label);
     return m ? m[1] : "";
   }
 
   var armedStop = null, confirmStep = null, armed = null, pending = false;
-  // arm is the first click of a two-step action: it says what the second
-  // click does and disarms itself after 6 seconds.
-  function arm(id, text) {
-    armed = id;
-    feedback("wait", text);
-    render(frame);
-    setTimeout(function () { if (armed === id) { armed = null; render(frame); } }, 6000);
-  }
-  function twoStep(cls, key, label, warn) {
+  function twoStep(cls, key, label) {
     if (key === "r" && frame) {
       var retry = workCapabilities(frame, retryTask(frame)).find(function (c) { return c.op === "task/retry"; });
       if (retry) { var typed = el("button", cls, label); typed.type = "button"; typed.onclick = function () { previewSetting(newWorkRequest(retry, {})); }; return typed; }
@@ -329,16 +327,9 @@
       var workers = runCapabilities(frame).find(function (c) { return c.op === "run/stop-workers"; });
       if (workers) { var bound = el("button", cls, label); bound.type = "button"; bound.onclick = function () { previewSetting(newWorkRequest(workers, {})); }; return bound; }
     }
-    var id = (frame.act ? frame.act.card : "") + "|" + key;
-    var on = armed === id;
-    return button(cls + (on ? " danger" : ""), on ? "Click again to " + label : cap(label), function () {
-      if (armed !== id) { arm(id, warn); return; }
-      armed = null;
-      act({ action: "key", key: key, confirmed: true }, cap(label));
-    });
+    return null;
   }
-  var retryWarn = "Retrying starts the task again from scratch in a fresh session, keeping its branch. Click again to retry.";
-  var stopAllWarn = "This stops every worker; the Marshal keeps running. Click again to stop them.";
+
 
   function button(cls, text, onClick) {
     var b = el("button", cls, text);
@@ -418,10 +409,10 @@
         var text = confirmStep.text ? typed.value.trim() : "";
         if (confirmStep.text && !text) { feedback("bad", "Type what the Board asks for first."); typed.focus(); return; }
         if (confirmStep.choice) { decide(confirmStep.choice, { confirmed: true, text: text }, "Confirm"); return; }
-        act({ action: "key", key: "⏎", text: text }, "Confirm");
+        feedback("bad", "Refresh the page and choose the action again.");
       });
       if (frame && frame.act && frame.act.tokens.esc) {
-        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; act({ action: "key", key: "esc" }, "Cancel"); }));
+        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; act({ action: "decide", choice: "card/dismiss", value: "", cardRevision: frame.act.card }, "Cancel"); }));
       } else {
         sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; sigs.card = ""; render(frame); }));
       }
@@ -457,7 +448,9 @@
           return;
         }
         armedStop = null;
-        act({ action: "key", key: b.key, confirmed: stop }, b.label);
+        var op = {"⏎": "pause/continue", w: "pause/wait", d: "pause/details", x: "pause/stop"}[b.key];
+        if (!f.paused || !op) { feedback("bad", "Refresh the page and choose a named action."); return; }
+        act({ action: "decide", choice: op, value: "", cardRevision: f.act.card, confirmed: stop }, b.label);
       };
       if (i === 0) {
         prim.textContent = text;
@@ -709,17 +702,17 @@
   function renderControls(f) {
     var rt = retryTask(f), stop = screenKey(f, "ctrl+x");
     var rtTask = f.tasks.filter(function (x) { return x.id === rt; });
-    if (!changed("controls", [rt, rtTask, !!stop, f.lanes.items.length, armed, pending, f.act && f.act.card])) return;
+    if (!changed("controls", [rt, rtTask, !!stop, f.settingsActions, f.lanes.items.length, armed, pending, f.act && f.act.card])) return;
     var box = clear($("controls"));
     // Each button with the facts it decides on next to it.
     if (rt) {
       var t = null;
       f.tasks.forEach(function (x) { if (x.id === rt) t = x; });
-      box.appendChild(twoStep("ghost", "r", "retry " + rt + " from scratch", retryWarn));
+      box.appendChild(twoStep("ghost", "r", "retry " + rt + " from scratch"));
       box.appendChild(el("span", "muted", rt + (t ? " · " + t.title + (t.note ? " · " + t.note : "") : "") + " · starts again in a fresh session, keeps its branch"));
     }
     if (stop) {
-      box.appendChild(twoStep("ghost", "ctrl+x", "stop all workers", stopAllWarn));
+      box.appendChild(twoStep("ghost", "ctrl+x", "stop all workers"));
       box.appendChild(el("span", "muted", plural(f.lanes.items.length, "worker") + " running · the Marshal keeps running"));
     }
     box.hidden = !box.firstChild;
@@ -997,7 +990,7 @@
     kv(dl, "Open requests to the Marshal", String(pendingReq));
     var acts = clear($("ar-acts"));
     if (canOpen) {
-      acts.appendChild(button("primary", "Open the architecture map", function () { act({ action: "key", key: "a" }, "Open the architecture map"); }));
+      acts.appendChild(button("primary", "Open the architecture map", function () { decide({ id: "architecture.open", value: "" }); }));
       setText("ar-note", "The map opens on its own review page in a new tab; Accept happens only there, never on this page.");
     } else {
       setText("ar-note", d ? "The review page opens from the card on Home." :
