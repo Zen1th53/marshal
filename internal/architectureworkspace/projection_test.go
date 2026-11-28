@@ -23,7 +23,7 @@ func TestProjectionAnchorsAndRollups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Findings["api"]) != 1 || len(got.Findings[edge]) != 1 || len(got.Findings[""]) != 1 {
+	if len(got.Findings["api"]) != 1 || len(got.Findings[edge]) != 1 || len(got.Areas[""]) != 1 || len(got.Findings[""]) != 0 {
 		t.Fatalf("anchors: %#v", got.Findings)
 	}
 	if len(got.Areas["service"]) != 3 {
@@ -74,5 +74,48 @@ func TestReviewerLineEvidenceAndMissingPart(t *testing.T) {
 	}
 	if len(got.Findings["data"]) != 1 {
 		t.Fatal("file ownership was lost", got)
+	}
+}
+
+func TestAreaOwnershipAndMembership(t *testing.T) {
+	got, err := Project(fixture(), []Finding{{Title: "area file", Evidence: "src/README.md"}, {Title: "root", Evidence: "README.md"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Areas["service"]) != 1 || len(got.Areas[""]) != 1 || len(got.Findings) != 0 || len(got.Members["service"]) != 2 {
+		t.Fatal(got)
+	}
+}
+
+func TestNestedAreasAndRootFallback(t *testing.T) {
+	c := fixture()
+	c.Components = append(c.Components,
+		projectcontext.Component{ID: "clients", Paths: []string{"clients"}},
+		projectcontext.Component{ID: "web", Parent: "clients", Paths: []string{"clients/web"}},
+		projectcontext.Component{ID: "mobile", Parent: "clients", Paths: []string{"clients/mobile"}},
+		projectcontext.Component{ID: "worker", Parent: "service", Paths: []string{"src/worker"}},
+		projectcontext.Component{ID: "jobs", Parent: "worker", Paths: []string{"src/worker/jobs"}},
+	)
+	edge := projectcontext.ContractConnections(c)[0].ID()
+	got, err := Project(c, []Finding{
+		{Title: "component", Evidence: "clients/web/app.ts"},
+		{Title: "edge", Edge: edge},
+		{Title: "area", Evidence: "src/worker/README.md"},
+		{Title: "explicit nested area", Part: "worker"},
+		{Title: "root", Evidence: "README.md"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Findings["web"]) != 1 || len(got.Findings[edge]) != 1 || len(got.Areas["worker"]) != 2 || len(got.Areas["service"]) != 3 || len(got.Areas[""]) != 1 {
+		t.Fatal(got)
+	}
+	if len(got.Members["clients"]) != 2 || len(got.Members["worker"]) != 1 {
+		t.Fatal(got.Members)
+	}
+	for id := range got.Areas {
+		if _, ok := got.Members[id]; !ok {
+			t.Fatalf("area %q has no explicit membership", id)
+		}
 	}
 }

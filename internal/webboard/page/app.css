@@ -265,7 +265,7 @@ body.is-down main { opacity: .6; }
 
 /* Accepted architecture stays at codec size inside a two-axis viewport. */
 .aw-scroll {overflow:auto; max-height:70vh; max-width:100%; margin-block:16px; border:1px solid #555;}
-.aw-scroll svg {display:block; max-width:none; flex:none; background:#10151e;}
+.aw-scroll svg {overflow:visible; display:block; max-width:none; flex:none; background:#10151e;}
 .aw-block {fill:#1c293b; stroke:#8092ac;}
 .aw-label {fill:#e5edf8; font-size:13px;}
 .aw-edge {fill:none; stroke:#9daec5; stroke-width:3; cursor:pointer;}
@@ -275,6 +275,19 @@ body.is-down main { opacity: .6; }
 .aw-warning {fill:#78541d; stroke:#ffc065;}
 .aw-info {fill:#234d78; stroke:#8dbbff;}
 .aw-badge {fill:white; font-size:14px; font-weight:bold;}
-.aw-popover {box-sizing:border-box; height:100%; overflow:auto; background:#182333; color:#fff; border:2px solid #a7bddb; border-radius:8px; padding:10px; overflow-wrap:anywhere;}
+.aw-popover {box-sizing:border-box; max-height:260px; overflow:auto; background:#182333; color:#fff; border:2px solid #a7bddb; border-radius:8px; padding:10px; overflow-wrap:anywhere;}
 .aw-popover button {float:right;}
 .aw-popover article {border-top:1px solid #657084; padding-top:8px;}
+
+.aw-toolbar {display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px;}
+.aw-toolbar .primary {width:auto; min-height:36px; padding:7px 14px; font-size:14px;}
+.aw-toolbar .filters {display:flex; flex-wrap:wrap; gap:5px; margin:0;}
+.aw-toolbar .filters button {padding:4px 11px; font-size:13px;}
+.aw-scroll {border-color:var(--rule); border-radius:10px;}
+.aw-popover {position:relative; border-width:1px; padding:12px 16px;}
+.aw-popover::before {content:""; position:absolute; top:var(--pointer-y); left:0; border:6px solid transparent; border-right-color:var(--acc); transform:translateY(-50%);}
+.aw-popover[data-side="left"]::before {left:auto; right:0; border-right-color:transparent; border-left-color:var(--acc);}
+.aw-popover h3 {margin:0 24px 10px 0; font-size:15px;}
+.aw-popover article {padding-top:8px; margin-top:8px; font-size:13px;}
+.aw-popover p {margin:6px 0 0; font-size:12px; color:var(--muted);}
+.aw-popover button {background:var(--panel2); color:var(--ink); border:1px solid var(--rule); border-radius:5px;}

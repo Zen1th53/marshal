@@ -3,6 +3,7 @@ package architectureworkspace
 
 import (
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -26,13 +27,14 @@ type Snapshot struct {
 	Notice   string                              `json:"notice"`
 	Layouts  map[string]architecturecodec.Layout `json:"layouts"`
 	Findings map[string][]Finding                `json:"findings"`
+	Members  map[string][]string                 `json:"members"`
 	Areas    map[string][]Finding                `json:"areas"`
 }
 
 // Project uses contract parents as areas because contracts have no area type.
-// Unknown locations remain unplaced; geometry never supplies membership.
+// Every finding belongs to an element or a containing area, including the root.
 func Project(c projectcontext.Contract, observations []Finding) (Snapshot, error) {
-	out := Snapshot{Title: c.ID, Findings: map[string][]Finding{}, Areas: map[string][]Finding{}}
+	out := Snapshot{Title: c.ID, Findings: map[string][]Finding{}, Areas: map[string][]Finding{}, Members: map[string][]string{}}
 	parents := map[string]string{}
 	areaIDs := map[string]bool{}
 	edges := map[string]projectcontext.Connection{}
@@ -70,6 +72,12 @@ func Project(c projectcontext.Contract, observations []Finding) (Snapshot, error
 	if err != nil {
 		return out, err
 	}
+	for id, parent := range parents {
+		out.Members[parent] = append(out.Members[parent], id)
+	}
+	for area := range out.Members {
+		sort.Strings(out.Members[area])
+	}
 	owner := archconform.NewMap(c)
 	seen := map[string]bool{}
 	for _, f := range observations {
@@ -93,11 +101,19 @@ func Project(c projectcontext.Contract, observations []Finding) (Snapshot, error
 				rollup(parents, parents[id], areas)
 			}
 		} else if target != "" {
-			rollup(parents, parents[target], areas)
+			if areaIDs[target] {
+				rollup(parents, target, areas)
+				target = ""
+			} else {
+				rollup(parents, parents[target], areas)
+			}
 		} else if areaIDs[f.Area] {
-			areas[f.Area] = true
-			rollup(parents, parents[f.Area], areas)
+			rollup(parents, f.Area, areas)
 		}
+		if target == "" && len(areas) == 0 {
+			areas[""] = true // The root area contains the entire accepted diagram.
+		}
+
 		keyBytes, _ := json.Marshal([]any{f.Title, f.Evidence, f.Source, f.Severity, f.Status, target, areas})
 		key := string(keyBytes)
 		if seen[key] {
@@ -106,8 +122,6 @@ func Project(c projectcontext.Contract, observations []Finding) (Snapshot, error
 		seen[key] = true
 		if target != "" {
 			out.Findings[target] = append(out.Findings[target], f)
-		} else if len(areas) == 0 {
-			out.Findings[""] = append(out.Findings[""], f)
 		}
 		for area := range areas {
 			out.Areas[area] = append(out.Areas[area], f)

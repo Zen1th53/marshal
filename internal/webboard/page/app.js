@@ -979,7 +979,7 @@
 
   // ---- Accepted architecture workspace ----------------------------------------
   var awRequested = false;
-  var awSnapshot = null, awPopup = null, awReturnFocus = null;
+  var awSnapshot = null, awPopup = null, awReturnFocus = null, awSeverity = "", awOnly = false;
   function awSVG(tag, attrs, text) {
     var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
     Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
@@ -993,7 +993,7 @@
     awReturnFocus = null;
   }
   function awFiltered(items) {
-    var severity = $("aw-severity").value;
+    var severity = awSeverity;
     return (items || []).filter(function (f) { return !severity || f.severity === severity; });
   }
   function awItems(id) {
@@ -1002,41 +1002,54 @@
       var key = JSON.stringify(f); if (seen.has(key)) return false; seen.add(key); return true;
     });
   }
-  function awOpen(svg, anchor, id, items) {
+  function awOpen(svg, anchor, id, items, position) {
     awClose(); awReturnFocus = anchor;
     var bounds = svg.getBoundingClientRect(), visible = svg.parentNode.getBoundingClientRect();
-    var point = anchor.getBoundingClientRect();
+    var point = (position || anchor).getBoundingClientRect();
     var left = Math.max(0, Math.max(0, visible.left) - bounds.left), top = Math.max(0, Math.max(0, visible.top) - bounds.top);
-    var right = Math.min(bounds.width, Math.min(window.innerWidth, visible.right) - bounds.left);
+    var right = Math.min(window.innerWidth, visible.right) - bounds.left;
     var width = Math.max(1, Math.min(360, right - left - 8));
     var visibleHeight = Math.max(1, Math.min(window.innerHeight, visible.bottom) - Math.max(0, visible.top));
     var height = Math.min(260, Math.max(1, visibleHeight - 12));
-    var x = Math.max(left, Math.min(point.right - bounds.left + 8, right - width - 4));
-    var y = Math.max(top, Math.min(point.top - bounds.top, top + visibleHeight - height - 4));
-    awPopup = awSVG("foreignObject", {x:x,y:y,width:width,height:height});
-    var box = document.createElement("div"); box.className = "aw-popover"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", id || "Unplaced findings");
+    var flip = point.right - bounds.left + 8 + width > right;
+    var x = Math.max(left + 4, Math.min((flip ? point.left - width - 8 : point.right + 8) - bounds.left, right - width - 4));
+    awPopup = awSVG("foreignObject", {x:x,y:0,width:width,height:height});
+    var box = document.createElement("div"); box.className = "aw-popover"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", id || awSnapshot.title);
     var close = document.createElement("button"); close.textContent = "×"; close.setAttribute("aria-label", "Close findings"); close.onclick = awClose; box.appendChild(close);
-    var heading = document.createElement("h3"); heading.textContent = id || "Unplaced findings"; box.appendChild(heading);
+    var heading = document.createElement("h3"); heading.textContent = id || awSnapshot.title; box.appendChild(heading);
     if (!items.length) { var empty = document.createElement("p"); empty.textContent = "No findings for this filter."; box.appendChild(empty); }
     items.forEach(function (f) {
       var article = document.createElement("article"), title = document.createElement("strong"), detail = document.createElement("p");
       title.textContent = f.title; detail.textContent = [f.severity, f.evidence || "No file evidence", f.source, f.status].join(" · ");
       article.appendChild(title); article.appendChild(detail); box.appendChild(article);
     });
-    awPopup.appendChild(box); svg.appendChild(awPopup); close.focus();
+    awPopup.appendChild(box); svg.appendChild(awPopup);
+    height = Math.min(height, box.scrollHeight + 4);
+    var y = Math.max(top + 4, Math.min(point.top - bounds.top, top + visibleHeight - height - 4));
+    awPopup.setAttribute("y", y); awPopup.setAttribute("height", height);
+    box.style.maxHeight = height + "px";
+    box.setAttribute("data-side", flip ? "left" : "right");
+    box.style.setProperty("--pointer-y", Math.max(12, Math.min(height - 12, point.top + Math.min(24, point.height / 2) - bounds.top - y)) + "px");
+    close.focus();
   }
-  function awTarget(svg, id, x, y, width, height, label, edge) {
+  function awTarget(svg, id, x, y, width, height, label, edge, header) {
     var items = awItems(id), group = awSVG("g", {tabindex:0,role:"button","aria-label":label + ": " + items.length + " findings",class:"aw-target"});
     if (!edge) group.appendChild(awSVG("rect", {x:x,y:y,width:width,height:height,rx:8,class:"aw-block"}));
     group.appendChild(awSVG("text", {x:x+10,y:y+22,class:"aw-label"}, label));
     if (items.length) {
       var severity = items.some(function (f) {return f.severity === "error";}) ? "error" : items.some(function (f) {return f.severity === "warning";}) ? "warning" : "info";
-      group.appendChild(awSVG("rect", {x:x+width-64,y:y+2,width:62,height:25,rx:10,class:"aw-marker aw-"+severity}));
-      group.appendChild(awSVG("text", {x:x+width-57,y:y+20,class:"aw-badge"}, "! " + items.length));
+      var badgeX = header ? Math.min(width - 64, label.length * 8 + 22) : width - 64;
+      group.appendChild(awSVG("rect", {x:x+badgeX,y:y+2,width:62,height:25,rx:10,class:"aw-marker aw-"+severity}));
+      group.appendChild(awSVG("text", {x:x+badgeX+7,y:y+20,class:"aw-badge"}, "! " + items.length));
     }
-    group.onclick = function (event) {event.stopPropagation(); awOpen(svg.ownerSVGElement || svg, group, id, items);};
+    group.onclick = function (event) {
+      event.stopPropagation();
+      var position = header && items.length ? group.children[2] : group;
+      if (event.target && event.target.getAttribute && /aw-marker|aw-badge/.test(event.target.getAttribute("class") || "")) position = event.target;
+      awOpen(svg.ownerSVGElement || svg, group, id, items, position);
+    };
     group.onkeydown = function (event) {if(event.key === "Enter" || event.key === " ") {event.preventDefault(); group.onclick(event);}};
-    if (!$("aw-only").checked || items.length) svg.appendChild(group);
+    if (!awOnly || items.length) svg.appendChild(group);
   }
   function awDraw() {
     awClose(); var into = $("aw-views"); into.replaceChildren();
@@ -1047,10 +1060,10 @@
       var svg = awSVG("svg", {width:Math.max(420,layout.width),height:layout.height+60, "aria-label":view});
       // View names come from the codec; the area id is the nodes' contract parent.
       var area = view.indexOf("sub:") === 0 ? view.slice(4) : "";
-      awTarget(svg, area, 0, 0, Math.max(420,layout.width), 36, area ? "Area: " + area : (awItems("").length ? "Unplaced findings" : awSnapshot.title || "Accepted architecture"), false);
+      awTarget(svg, area, 0, 0, Math.max(420,layout.width), 36, area ? "Area: " + area : (awSnapshot.title || "Accepted architecture"), false, true);
       var drawing = awSVG("g", {transform:"translate(0 50)"}); svg.appendChild(drawing);
       (layout.edges || []).forEach(function (e) {
-        var items = awItems(e.id); if ($("aw-only").checked && !items.length) return;
+        var items = awItems(e.id); if (awOnly && !items.length) return;
         var path = awSVG("polyline", {points:e.points.map(function(p){return p.join(",");}).join(" "),class:"aw-edge"});
         path.setAttribute("tabindex","0");path.setAttribute("role","button");path.setAttribute("aria-label",e.id);
         path.onclick=function(event){event.stopPropagation();awOpen(svg,path,e.id,items);};path.onkeydown=function(event){if(event.key==="Enter")path.onclick(event);}; drawing.appendChild(path);
@@ -1068,8 +1081,19 @@
     }).catch(function () {$("aw-notice").textContent = "Architecture could not be loaded.";});
   }
   $("aw-load").onclick = awLoad;
-  $("aw-severity").onchange = awDraw;
-  $("aw-only").onchange = awDraw;
+  ["", "error", "warning", "info"].forEach(function (severity) {
+    var chip = $("aw-severity-" + (severity || "all"));
+    chip.onclick = function () {
+      awSeverity = severity;
+      ["", "error", "warning", "info"].forEach(function (s) { $("aw-severity-" + (s || "all")).setAttribute("aria-pressed", String(s === severity)); });
+      awDraw();
+    };
+  });
+  $("aw-only").onclick = function () { awOnly = !awOnly; this.setAttribute("aria-pressed", String(awOnly)); awDraw(); };
+  window.addEventListener("resize", awClose);
+  $("aw-views").addEventListener("scroll", function (event) {
+    if (!awPopup || !awPopup.contains(event.target)) awClose();
+  }, true);
   document.addEventListener("keydown", function (event) {if (event.key === "Escape") awClose();});
   document.addEventListener("click", function (event) {if (awPopup && !awPopup.contains(event.target)) awClose();});
 

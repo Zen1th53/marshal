@@ -5231,13 +5231,13 @@
     },
     {
       "path": "internal/architectureworkspace/projection.go",
-      "sha256": "5b618fa3cdf8884cb874b83fb733d62a4d990253897fc4896a2e29cb1640947d",
-      "bytes": 4770
+      "sha256": "18d788a78f9e4ef1e06e3d95d09cfb05ef2946673d998563fcdf2c96fbd9ea2b",
+      "bytes": 5143
     },
     {
       "path": "internal/architectureworkspace/projection_test.go",
-      "sha256": "bc1b56cca7bb1eaafc2cac48b7ce280ac5cc6fc1ad7d72db3fbf584ffb84f747",
-      "bytes": 3008
+      "sha256": "cefc09238a45bd0ca9ed03686490a8bdbbec5acb6efb4d3fa16896f3c0b3381a",
+      "bytes": 4724
     },
     {
       "path": "internal/artifact/gc_test.go",
@@ -17266,18 +17266,18 @@
     },
     {
       "path": "internal/webboard/page/app.css",
-      "sha256": "e8f347e8447b5eaf6f1c292f10f510948cb13f6becf001e420d8d9cf2f242770",
-      "bytes": 19142
+      "sha256": "251d8cc40acf9e0e8fab2ad40e792f509cdabe535428226702b18fb9f2d1f7ca",
+      "bytes": 20197
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "ab8f21cc42272f5426aa4f2c2289c2f4adacf67983a95de2fc83a9ab65c23bf8",
-      "bytes": 100998
+      "sha256": "3e3c4caaad1b39bbd26b773a405edbc215e874945df4ec2fd4437615c1b74cb4",
+      "bytes": 102371
     },
     {
       "path": "internal/webboard/page/index.html",
-      "sha256": "4b281dfb0e295af211e74b7991fc2a0e882dd5a755f29321dcbd3e22f5d6c5d3",
-      "bytes": 15235
+      "sha256": "695f24910f5fcb1d1d427fa89815c2b089d0712efe0646240deb2ee22f59b485",
+      "bytes": 15563
     },
     {
       "path": "internal/webboard/page_visibility_test.go",
@@ -17305,9 +17305,14 @@
       "bytes": 12514
     },
     {
+      "path": "internal/webboard/testdata/architecture-fixture.cjs",
+      "sha256": "90ecfe3f3601798746878fd1b0a7ed9e728fce9f6f7438db9e0b7c8e81927544",
+      "bytes": 1831
+    },
+    {
       "path": "internal/webboard/testdata/architecture.cjs",
-      "sha256": "b482af0e63d9129a223cacf0f1176dbaeff48829046cf950938785c7bc94c434",
-      "bytes": 3681
+      "sha256": "b1128b34923b336c0ff4f64d2be42872e3dd57a205aca2bc2aa448268f180411",
+      "bytes": 6483
     },
     {
       "path": "internal/webboard/testdata/card.cjs",
