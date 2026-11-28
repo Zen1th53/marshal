@@ -1040,7 +1040,7 @@
   }
   function awTarget(svg, id, x, y, width, height, label, edge, header, zone) {
     var items = awItems(id), group = awSVG("g", {tabindex:0,role:"button","aria-label":label + ": " + items.length + " findings",class:"aw-target" + (edge ? " aw-pill" : zone ? " aw-zone" : "")});
-    if (zone) group.setAttribute("style", "--zone:var(--aw-z-" + zone + ");--zone-bg:var(--aw-z-" + zone + "-bg)");
+    if (zone) group.setAttribute("data-zone", zone);
     group.appendChild(awSVG("rect", {x:x,y:y,width:width,height:height,rx:edge ? 6 : zone ? 14 : 9,class:edge ? "aw-edge-pill" : zone ? "aw-plane" : "aw-block"}));
     if (zone) group.appendChild(awSVG("rect", {x:x+1,y:y+1,width:Math.min(width-2,label.length*8+20),height:30,rx:6,class:"aw-tag"}));
     group.appendChild(awSVG("text", {x:x+(edge || header || zone ? 10 : 38),y:y+(edge ? 18 : 22),class:"aw-label"}, label));
