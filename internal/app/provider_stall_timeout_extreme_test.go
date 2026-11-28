@@ -124,7 +124,7 @@ func TestProviderDisableAppliesToNextAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runNow.Tasks[1].State = marshal.Queued
+	runNow, runRev = advanceTaskFixture(t, s, "run", 1, marshal.Queued)
 	runNow.Tasks[1].Worker = "codex"
 	if err := s.save(ctx, "run", runNow, runRev); err != nil {
 		t.Fatal(err)
@@ -290,6 +290,7 @@ func TestRuntimeLimitsDistinguishAbsentAndZero(t *testing.T) {
 			if cur.Tasks[0].State == marshal.Escalated {
 				break
 			}
+			cur, curRev = advanceTaskFixture(t, s, "par", 0, marshal.Dispatched)
 			if err := s.returnInfraFailure(ctx, "par", cur, curRev, 0, "stream: unexpected end of JSON input"); err != nil {
 				t.Fatal(err)
 			}

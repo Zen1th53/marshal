@@ -579,7 +579,7 @@ func TestReturnedTaskRetryPreservesReworkAndEscalatedRetry(t *testing.T) {
 	if err := s.RetryTask(ctx, "retry-returned", "a", true); err == nil || !strings.Contains(err.Error(), "/marshal resume") {
 		t.Fatalf("queued task needs actionable retry error: %v", err)
 	}
-	run.Tasks[0].State = marshal.Returned
+	run, rev = advanceTaskFixture(t, s, "retry-returned", 0, marshal.Returned)
 	run.Tasks[0].ReturnsByAgent = map[string]int{"worker": 1}
 	run.Process05Bound, run.Process05Parallel = true, true
 	if err := s.save(ctx, "retry-returned", run, rev); err != nil {

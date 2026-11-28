@@ -22,3 +22,8 @@ assert.equal(buttons.length, 4, 'question choices were dropped');
 assert.equal(buttons[3].local, false, 'choice became a local comment action');
 context.frame = {decision:{kind:'guard',actions:[{key:'⏎',label:'Undo'},{key:'esc',label:'Cancel'}]}};
 assert.equal(vm.runInContext('cardButtons(frame)', context).length, 2, 'guard cancel was hidden');
+// Every server action from the shipped page names its operation.
+assert.doesNotMatch(script, /action:\s*["']key["']/);
+for (const op of ['pause/continue', 'pause/wait', 'pause/details', 'pause/stop', 'card/dismiss']) {
+  assert.ok(script.includes(op), 'missing named action ' + op);
+}
