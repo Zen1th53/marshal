@@ -45,7 +45,7 @@
         }
         disconnected(x.d.text || "This link does not work any more. Run /marshal web for a new one.");
       })
-      .catch(function () { disconnected("The Board is not answering (closed?)."); });
+      .catch(function () { disconnected("Marshal is not answering; it may have been stopped. Run `marshal` in the project, then press w there for a new Board link."); });
   }
 
   var docsURL = "https://marshal.blackhat.uz/docs";
@@ -1615,7 +1615,7 @@
       }
       return pump();
     }).catch(function () {
-      again("The Board is not answering (closed?).");
+      again("Marshal is not answering; it may have been stopped. Run `marshal` in the project, then press w there for a new Board link.");
     });
   }
 

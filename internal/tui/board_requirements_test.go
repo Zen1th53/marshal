@@ -183,7 +183,7 @@ func TestHomeYesConfirmsRequirements(t *testing.T) {
 	if !w.handleBoardKey(KeyEvent{Type: KeyEnter}) || w.currentReq() == nil {
 		t.Fatal("Enter acted on the requirements card")
 	}
-	if got := strings.Join(frameLinesText(w, 80, 24), "\n"); !strings.Contains(got, "— y confirm all") {
+	if got := strings.Join(frameLinesText(w, 80, 24), "\n"); !strings.Contains(got, "— y confirm all · e edits a line") {
 		t.Fatalf("From you does not name y:\n%s", got)
 	}
 	if !w.handleBoardKey(KeyEvent{Type: KeyRune, Rune: 'y'}) {
@@ -272,3 +272,21 @@ const realUserReqCard = `[` +
 	`{"line":"g","text":"Proposed: standard-library only, no network","source":"Implementation recommendation"},` +
 	`{"line":"h","text":"No configured token budget; use the default","source":"Launch current limits; owner request"}` +
 	`]`
+
+// y on the card confirms as Enter does: the key the home screen names works
+// on the card too.
+func TestRequirementsCardYConfirms(t *testing.T) {
+	w, _, tr := boardWithNativeChat(t)
+	p, err := parseMarshalProposal(reqProposalLine(fullReqCard))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.openRequirements(p)
+	if !w.handleV2CardKey(KeyEvent{Type: KeyRune, Rune: 'y'}) {
+		t.Fatal("y was not taken by the card")
+	}
+	chatWaitFor(t, "the confirmation", func() bool { return len(tr.sentTurns()) == 1 })
+	if got := tr.sentTurns(); got[0] != "confirm all" {
+		t.Fatalf("sent %q, want \"confirm all\"", got)
+	}
+}

@@ -154,6 +154,10 @@ func homeFromYou(b vm.Board, p homePrimary) (string, bool) {
 	switch {
 	case n.ChatAsked:
 		return what + " — ⏎ open chat", true
+	case p.kind == decisionRequirements:
+		// The card's keys are on the line itself: y confirms (Enter here
+		// opens the chat), e then a letter edits one line.
+		return what + " — y " + p.label + " · e edits a line", true
 	case p.label != "":
 		return what + " — y " + p.label, true
 	case !n.FromYouOK:
@@ -429,7 +433,8 @@ func (w *Workspace) handleHomeKey(event KeyEvent) bool {
 		w.openSay()
 		return true
 	case 'q':
-		w.requestExit()
+		// Asks first while work runs or another terminal shows the Board.
+		w.requestQuit(ctx)
 		return true
 	case 'a':
 		// The project architecture in the browser; it never accepts one.

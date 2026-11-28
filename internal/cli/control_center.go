@@ -204,7 +204,26 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 	if err := tmux.SelectWindow(ctx, controlCentreTarget(sessionName)); err != nil {
 		return tuiChildResult(root, fmt.Errorf("select control centre: %w", err))
 	}
-	return tuiChildResult(root, tmux.AttachSessionContext(ctx, sessionName, c.stdin, c.stdout, c.stderr))
+	attachErr := tmux.AttachSessionContext(ctx, sessionName, c.stdin, c.stdout, c.stderr)
+	c.noteStillRunning(ctx, sessionName, attachErr)
+	return tuiChildResult(root, attachErr)
+}
+
+// stillRunningNotice is printed when this terminal leaves a Marshal that
+// goes on running: a detach, or a quit question answered with detach.
+const stillRunningNotice = "Marshal keeps running — run `marshal` to return."
+
+// noteStillRunning tells the operator, after the attach returned, that the
+// control centre goes on running without this terminal. A quit ends the
+// control centre's window, so it says nothing then.
+func (c *command) noteStillRunning(ctx context.Context, sessionName string, attachErr error) {
+	if attachErr != nil || !tmux.HasSession(ctx, sessionName) {
+		return
+	}
+	if dead, err := tmux.IsPaneDead(ctx, controlCentreTarget(sessionName)); err != nil || dead {
+		return
+	}
+	fmt.Fprintln(c.stdout, stillRunningNotice)
 }
 
 // controlCentreTarget is the control centre window of sessionName, matched
