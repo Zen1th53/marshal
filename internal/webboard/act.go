@@ -19,18 +19,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
-// Owner actions (phase 2). The page sends POST /api/act; the server checks
-// who is asking and that the page saw the card the Board shows now, then
-// hands the action to the Sink, which presses the same key the terminal
-// Board would on the Board's own input loop. Nothing here runs a command.
+// Actions are bound to the card and a single-use token before reaching the
+// input loop. Named choices call the same handlers as terminal controls.
 
 // Action is one owner action from the page.
 type Action struct {
 	Command *store.WebIntent
 	Commit  func(func() Result) Result
 
-	// Kind is "key" (a button of the card on screen) or "say" (a message
-	// to the Marshal, as the Board's s composer sends it).
+	// Kind selects a named choice, command or message.
 	Kind string
 	// Card is the card the page acted on (CardID of its frame).
 	Card string
@@ -177,7 +174,7 @@ func actionKeys(ks []Key) []string {
 func ActionKeys(f Frame) []string {
 	switch {
 	case f.Decision != nil:
-		out := append(actionKeys(f.Decision.Actions), "esc")
+		out := append(actionKeys(f.Decision.Actions), "esc", ChoiceToken("card/dismiss", ""))
 		for _, c := range f.Decision.Choices {
 			if !c.Local {
 				out = append(out, ChoiceToken(c.ID, c.Value))
@@ -185,7 +182,13 @@ func ActionKeys(f Frame) []string {
 		}
 		return out
 	case f.Paused != nil:
-		return actionKeys(f.Paused.Actions)
+		out := actionKeys(f.Paused.Actions)
+		for _, k := range f.Paused.Actions {
+			if op := PauseOp(k.Key); op != "" {
+				out = append(out, ChoiceToken(op, ""))
+			}
+		}
+		return out
 	}
 	// With no card, the screen's own buttons the Board put in the key list
 	// (retry the stuck task, stop all workers).
@@ -295,12 +298,8 @@ func (s *Server) serveAct(w http.ResponseWriter, q *http.Request) {
 	name := req.Key
 	switch req.Action {
 	case "key":
-		a.Kind = "key"
-		a.Key = req.Key
-		if utf8.RuneCountInString(req.Text) > 200 {
-			refuse(w, http.StatusRequestEntityTooLarge, "The typed text is too long.")
-			return
-		}
+		refuse(w, http.StatusBadRequest, "Key actions are no longer supported. Refresh the page and use a named action.")
+		return
 	case "decide":
 		a.Kind, a.Choice, a.Value, a.Revision, a.Digest, a.Line, a.Reason = "decide", req.Choice, req.Value, req.CardRevision, req.PlanDigest, req.Line, req.Reason
 		name = ChoiceToken(req.Choice, req.Value)
@@ -374,4 +373,19 @@ func (s *Server) spend() {
 	s.epoch++
 	s.lastBody = nil
 	s.frameMu.Unlock()
+}
+
+// PauseOp names the action offered by a paused card control.
+func PauseOp(key string) string {
+	switch key {
+	case "⏎":
+		return "pause/continue"
+	case "w":
+		return "pause/wait"
+	case "d":
+		return "pause/details"
+	case "x":
+		return "pause/stop"
+	}
+	return ""
 }

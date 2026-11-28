@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/webboard"
 )
 
 // The keys of the Board v2 cards. The decision card takes keys first, as it
@@ -109,31 +111,41 @@ func (w *Workspace) handleV2DecisionKey(event KeyEvent, d v2Decision) bool {
 // handleV2PauseKey is the paused card's keys: Enter does what the card says,
 // w waits for the reset, d shows the raw error, x stops the run.
 func (w *Workspace) handleV2PauseKey(event KeyEvent, z v2Pause) bool {
-	ctx := w.workers.context()
+	key := ""
 	switch {
 	case event.Type == KeyEnter:
+		key = "⏎"
+	case event.Type == KeyRune:
+		key = string(event.Rune)
+	}
+	return w.runPauseAction(webboard.PauseOp(key), z)
+}
+
+// runPauseAction is shared by terminal controls and named web actions.
+func (w *Workspace) runPauseAction(op string, z v2Pause) bool {
+	ctx := w.workers.context()
+	switch op {
+	case "pause/continue":
 		w.actOnPause(ctx, z)
-		return true
-	case isRune(event, 'w'):
+	case "pause/wait":
 		if z.until.IsZero() {
 			w.memoryAnswer("This stop has no reset time to wait for; Enter does what the card says.", false)
 			return true
 		}
 		w.armQuotaResume(context.Background(), z.until)
 		w.memoryAnswer("Waiting: the run resumes at "+resetClock(z.until, time.Now())+" or as soon as a provider has limit left.", false)
-		return true
-	case isRune(event, 'd'):
+	case "pause/details":
 		if z.detail == "" {
 			w.memoryAnswer("No raw error was recorded for this stop.", false)
 		} else {
 			w.memoryAnswer("Raw error: "+z.detail, true)
 		}
-		return true
-	case isRune(event, 'x'):
+	case "pause/stop":
 		w.stopPausedRun(ctx)
-		return true
+	default:
+		return false
 	}
-	return false
+	return true
 }
 
 // actOnPause is Enter on the paused card, one handler for every cause:

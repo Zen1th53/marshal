@@ -193,6 +193,21 @@
   <!-- Architecture -->
   <section id="s-architecture" class="sect" aria-labelledby="h-arch" hidden>
     <div class="sect-head"><h1 id="h-arch">Architecture</h1></div>
+    <section class="panel" aria-label="NOW technical diagram">
+      <h2>NOW technical diagram</h2>
+      <div class="aw-toolbar">
+        <button id="aw-load" class="primary" type="button">Refresh diagram</button>
+        <div class="filters" role="group" aria-label="Finding severity">
+          <button id="aw-severity-all" type="button" aria-pressed="true">All</button>
+          <button id="aw-severity-error" type="button" aria-pressed="false">Error</button>
+          <button id="aw-severity-warning" type="button" aria-pressed="false">Warning</button>
+          <button id="aw-severity-info" type="button" aria-pressed="false">Info</button>
+        </div>
+        <div class="filters"><button id="aw-only" type="button" aria-pressed="false">Only problem places</button></div>
+      </div>
+      <p id="aw-notice" role="status"></p>
+      <div id="aw-views"></div>
+    </section>
     <dl id="ar-facts" class="kv big"></dl>
     <div id="ar-acts" class="acts"></div>
     <div id="ar-open" class="acts"></div>
