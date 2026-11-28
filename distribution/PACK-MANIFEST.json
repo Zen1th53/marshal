@@ -1616,13 +1616,13 @@
     },
     {
       "path": "internal/app/control_adapter.go",
-      "sha256": "50639cfe6635090b6df61bdbe050f6e526a8ee421de17e4716c71ba644d200fc",
-      "bytes": 4248
+      "sha256": "783f61f43f82f7a89df4c2494522dd2b57e21c2b805aa4f0ef5ffcc6bed9742e",
+      "bytes": 4411
     },
     {
       "path": "internal/app/control_adapter_test.go",
-      "sha256": "1e5517c8eeb8dbefb89938c0ee68a158474fbd479249e6992b59bf47912166b3",
-      "bytes": 4596
+      "sha256": "c0fe290c4b20ef331ab91245c885dcb104d93bc21de8a49bac40221d36061bf5",
+      "bytes": 4750
     },
     {
       "path": "internal/app/credential_auto_default.go",

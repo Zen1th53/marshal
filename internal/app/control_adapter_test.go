@@ -79,6 +79,10 @@ func TestControlAdapterParity(t *testing.T) {
 	if err != nil || receipt != got {
 		t.Fatalf("%+v %v", receipt, err)
 	}
+	again2, err := a.Submit(owner, c)
+	if err != nil || again2 != got {
+		t.Fatalf("retried request must return the stored receipt: %+v %v", again2, err)
+	}
 	r.resumeRun = func(string) {}
 	c.RequestID = "resume"
 	c.IdempotencyKey = "resume"

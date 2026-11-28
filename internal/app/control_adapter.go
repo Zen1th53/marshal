@@ -83,6 +83,11 @@ func (a *ControlAdapter) Submit(ctx context.Context, c control.Command) (control
 		a.mu.Unlock()
 		return control.Receipt{}, model.ErrConflict
 	}
+	if r, done := a.receipts[c.RequestID]; done {
+		// A retried request returns its stored receipt; the command is not run again.
+		a.mu.Unlock()
+		return r, nil
+	}
 	a.commands[c.RequestID] = c
 	a.mu.Unlock()
 	e := CommandEnvelope{ProjectID: c.ProjectID, SessionID: c.SessionID, TargetID: c.TargetID, ExpectedVersion: c.ExpectedRevision, IdempotencyKey: c.IdempotencyKey}
