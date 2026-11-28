@@ -64,3 +64,45 @@ func TestNewPlanVersionRefusesTerminalTaskOverwrite(t *testing.T) {
 		})
 	}
 }
+
+func TestTerminalAmendmentSnapshotGuard(t *testing.T) {
+	for _, state := range []marshal.TaskState{marshal.Merged, marshal.Cancelled} {
+		for _, tc := range []struct {
+			name         string
+			plan         int64
+			branch, work string
+			nextState    marshal.TaskState
+			allowed      bool
+		}{
+			{"replacement", 2, "marshal/run/r2/task", "new", marshal.Queued, true},
+			{"same artifact", 2, "marshal/run/r1/task", "new", marshal.Queued, false},
+			{"older artifact", 2, "marshal/run/task", "new", marshal.Queued, false},
+			{"same plan", 1, "marshal/run/r2/task", "new", marshal.Queued, false},
+			{"same definition", 2, "marshal/run/r2/task", "old", marshal.Queued, false},
+			{"other open state", 2, "marshal/run/r2/task", "new", marshal.Dispatched, false},
+		} {
+			t.Run(string(state)+"/"+tc.name, func(t *testing.T) {
+				s := openTestStore(t)
+				marshalTestProject(t, s)
+				run := marshal.Run{PlanID: "plan", PlanVersion: 1, ArtifactRevision: 1, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "task", State: state, Branch: "marshal/run/r1/task", Instructions: "old"}}}
+				if err := s.SaveMarshalState(t.Context(), "p", "run", run, 0, nil, nil, 0); err != nil {
+					t.Fatal(err)
+				}
+				run.PlanVersion, run.ArtifactRevision = tc.plan, 2
+				run.Tasks[0].State, run.Tasks[0].Branch, run.Tasks[0].Instructions = tc.nextState, tc.branch, tc.work
+				err := s.SaveMarshalState(t.Context(), "p", "run", run, 1, nil, nil, 0)
+				if (err == nil) != tc.allowed {
+					t.Fatalf("save: %v", err)
+				}
+				saved, err := s.GetMarshalTask(t.Context(), "run", "task")
+				wantState, wantRevision := state, int64(1)
+				if tc.allowed {
+					wantState, wantRevision = marshal.Queued, 2
+				}
+				if err != nil || saved.Value.State != wantState || saved.Revision != wantRevision {
+					t.Fatalf("task projection: %+v %v", saved, err)
+				}
+			})
+		}
+	}
+}

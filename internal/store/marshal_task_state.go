@@ -32,14 +32,15 @@ func checkTaskSnapshotWrite[T any](previous []byte, value T) error {
 			if !exists {
 				continue
 			}
-			// Terminal work remains final even for whole-struct replacements
-			// carrying a newer plan version.
-			if (prior.State == marshal.Merged || prior.State == marshal.Cancelled) && task.State != prior.State {
+			// Only a newer plan replacing this task's definition and artifact may
+			// reopen terminal work. A run-wide revision alone is insufficient.
+			replacement := next.PlanVersion > old.PlanVersion && task.State == marshal.Queued && marshal.TaskAmendmentReplacesArtifact(prior, task)
+			if (prior.State == marshal.Merged || prior.State == marshal.Cancelled) && task.State != prior.State && !replacement {
 				return fmt.Errorf("cannot save task %s: terminal work is final", task.PlanTaskID)
 			}
-			// A new artifact after a plan amendment explicitly resets changed work.
 			if next.PlanVersion > old.PlanVersion && task.State == marshal.Queued {
-				if err := marshal.ResetTaskForAmendment(&prior); err != nil {
+				reset := task
+				if err := marshal.ResetTaskForAmendment(&reset, prior); err != nil {
 					return err
 				}
 			} else if err := marshal.SetTaskState(&prior, task.State); err != nil {

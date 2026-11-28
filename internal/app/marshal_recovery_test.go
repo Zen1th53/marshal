@@ -118,6 +118,9 @@ func TestMajorAmendmentDispatchKeepsOldArtifacts(t *testing.T) {
 	if run.State != marshal.Drafting {
 		t.Fatal(run.State)
 	}
+	if run.Tasks[0].State != marshal.Queued || run.PlanVersion <= old.PlanVersion || run.ArtifactRevision <= old.ArtifactRevision {
+		t.Fatalf("changed merged task was not queued on a new revision: %+v", run)
+	}
 	if run.Tasks[0].Branch == old.Tasks[0].Branch {
 		t.Fatal("revision reused task branch")
 	}

@@ -65,6 +65,9 @@ func TestMajorAmendmentKeepsMergedTasksAndBudget(t *testing.T) {
 		t.Fatalf("amendment was not major: %s", run.State)
 	}
 	a, b := run.Tasks[0], run.Tasks[1]
+	if run.ArtifactRevision != before.ArtifactRevision {
+		t.Fatal("unchanged merged work advanced its artifact revision")
+	}
 	if a.State != marshal.Merged || a.ResultCommit != before.Tasks[0].ResultCommit || a.Branch != before.Tasks[0].Branch {
 		t.Fatalf("merged task was reset by the amendment: %+v", a)
 	}

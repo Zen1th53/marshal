@@ -2454,7 +2454,7 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		// re-queueing it would redo merged or accepted tasks. The run keeps its
 		// integration branch, which already holds that merged work. Only when
 		// the amendment changes or removes a merged task does the integration
-		// start over on a new artifact revision with every task queued again.
+		// start over on a new artifact revision. Unchanged terminal tasks remain final.
 		keep, merged := keepsMergedWork(run.Tasks, d.Tasks)
 		if !keep || !merged {
 			run.ArtifactRevision = amended.Version
@@ -2463,7 +2463,8 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		previous := run.Tasks
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
-			if old := taskIndex(marshal.Run{Tasks: previous}, run.Tasks[i].PlanTaskID); keep && old >= 0 && marshalTaskFinished(previous[old].State) && marshalTaskDefinitionUnchanged(previous[old], run.Tasks[i]) {
+			old := taskIndex(marshal.Run{Tasks: previous}, run.Tasks[i].PlanTaskID)
+			if old >= 0 && (keep && marshalTaskFinished(previous[old].State) || previous[old].State == marshal.Merged || previous[old].State == marshal.Cancelled) && marshalTaskDefinitionUnchanged(previous[old], run.Tasks[i]) {
 				run.Tasks[i] = previous[old]
 				continue
 			}
@@ -2472,13 +2473,17 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 				return run, err
 			}
 			run.Tasks[i].ReturnsByAgent = nil
-			if err := marshal.ResetTaskForAmendment(&run.Tasks[i]); err != nil {
+			run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, amended.Version)
+			var prior []marshal.Task
+			if old >= 0 {
+				prior = append(prior, previous[old])
+			}
+			if err := marshal.ResetTaskForAmendment(&run.Tasks[i], prior...); err != nil {
 				return run, err
 			}
 			run.Tasks[i].BaseCommit = run.BaseCommit
 			run.Tasks[i].ResultCommit = ""
 			run.Tasks[i].FailedAttemptCommit = ""
-			run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, amended.Version)
 		}
 		run.State = marshal.Drafting
 		if run.CloseAuthorization != nil {
@@ -2604,16 +2609,7 @@ func marshalTaskFinished(state marshal.TaskState) bool {
 // marshalTaskDefinitionUnchanged reports whether an amended task asks for the
 // same work as before: same type, scope, criteria, checks and instructions.
 func marshalTaskDefinitionUnchanged(old, next marshal.Task) bool {
-	if old.PlanTaskID != next.PlanTaskID || old.EffectiveType() != next.EffectiveType() || old.Instructions != next.Instructions || old.ExpectedOutput != next.ExpectedOutput ||
-		!slices.Equal(old.Files, next.Files) || !slices.Equal(old.Criteria, next.Criteria) || !slices.Equal(old.DependsOn, next.DependsOn) || len(old.Checks) != len(next.Checks) {
-		return false
-	}
-	for i := range old.Checks {
-		if old.Checks[i].Command != next.Checks[i].Command || !slices.Equal(old.Checks[i].Criteria, next.Checks[i].Criteria) {
-			return false
-		}
-	}
-	return true
+	return marshal.TaskDefinitionUnchanged(old, next)
 }
 
 // validateAmendRoutes refuses, before owner approval, an amendment that adds a

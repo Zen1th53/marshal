@@ -90,3 +90,31 @@ func TestAmendmentRestoreIsBoundToPreviousState(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalAmendmentRequiresChangedDefinitionAndArtifact(t *testing.T) {
+	for _, state := range []TaskState{Merged, Cancelled} {
+		for _, tc := range []struct {
+			name, instructions, branch string
+			allowed                    bool
+		}{
+			{"replacement", "new work", "marshal/run/r2/task", true},
+			{"same artifact", "new work", "marshal/run/r1/task", false},
+			{"older artifact", "new work", "marshal/run/task", false},
+			{"unchanged definition", "old work", "marshal/run/r2/task", false},
+			{"other run", "new work", "marshal/other/r2/task", false},
+		} {
+			t.Run(string(state)+"/"+tc.name, func(t *testing.T) {
+				old := Task{PlanTaskID: "task", State: state, Instructions: "old work", Branch: "marshal/run/r1/task"}
+				next := old
+				next.Instructions, next.Branch = tc.instructions, tc.branch
+				err := ResetTaskForAmendment(&next, old)
+				if (err == nil) != tc.allowed {
+					t.Fatalf("reset: %v", err)
+				}
+				if tc.allowed && next.State != Queued || !tc.allowed && next.State != state {
+					t.Fatalf("unexpected state: %s", next.State)
+				}
+			})
+		}
+	}
+}
