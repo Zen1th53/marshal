@@ -22,10 +22,10 @@ const group=svg.children[1].children[0];assert.equal(group.attrs.tabindex,0);
 group.onkeydown({key:'Enter',preventDefault(){},stopPropagation(){}});
 assert.equal(svg.children.at(-1).tag,'foreignObject');
 const popup=svg.children.at(-1);assert.ok(popup.attrs.x>=0);assert.ok(popup.attrs.x+popup.attrs.width<=320,'popover not clamped');
-assert.equal(popup.children[0].children[2].children[0].textContent,'<script>unsafe</script>');
+assert.equal(popup.children[0].children[2].children[0].children[0].textContent,'<script>unsafe</script>');
 events.keydown({key:'Escape'});assert.equal(popup.removed,true);
 group.onclick({stopPropagation(){}});events.click({target:new Element('div')});assert.equal(svg.children.at(-1).removed,true);
-vm.runInContext('awSeverity="warning"',context);vm.runInContext('awDraw()',context);let current=$('aw-views').children[0].children[0].children[1].children[0];assert.equal(current.children.length,2,'severity count retained');
+vm.runInContext('awSeverity="warning"',context);vm.runInContext('awDraw()',context);let current=$('aw-views').children[0].children[0].children[1].children[0];assert.equal(current.children.length,5,'severity count retained');
 vm.runInContext('awOnly=true',context);vm.runInContext('awDraw()',context);assert.equal($('aw-views').children[0].children[0].children[0].children.length,0,'problem-only did not hide clean node');
 
 // Severity and problem-place filtering also apply to exact edge markers.
@@ -84,9 +84,32 @@ assert.equal(charge.children[0].attrs.class,'aw-edge-pill');
 assert.equal(charge.children[0].attrs.x+charge.children[0].attrs.width/2,270);
 assert.ok(charge.children[0].attrs.x>=230);
 assert.ok(charge.children[0].attrs.x+charge.children[0].attrs.width<=310);
-assert.ok(charge.children[2].attrs.y>=charge.children[0].attrs.y+charge.children[0].attrs.height);
+assert.ok(charge.children[charge.children.length-1].children[0].attrs.cy-11>=charge.children[0].attrs.y+charge.children[0].attrs.height);
 context.snapshot.layouts.architecture.edges=[{id:'routed',points:[[330,130],[350,130],[350,230]],label_at:[340,130],caption:'route'}];
 vm.runInContext('awDraw()',context);
 const routed=$('aw-views').children[0].children[0].children[1].children.find(c=>c.attrs['aria-label']==='route: 0 findings');
 assert.equal(routed.children[0].attrs.x+routed.children[0].attrs.width/2,350);
 assert.equal(routed.children[0].attrs.y+13,180);
+
+// A clean area still receives a plane, and findings use circular severity markers.
+context.snapshot.areas={};
+vm.runInContext('awSnapshot=snapshot;awDraw()',context);
+const overview=$('aw-views').children[0].children[0];
+const cleanArea=overview.children[1].children.find(c=>c.attrs['aria-label']==='experience: 0 findings');
+assert.ok(cleanArea.attrs.class.includes('aw-zone'),'area styling must use membership, not findings');
+assert.equal(cleanArea.children[0].attrs.class,'aw-plane');
+assert.equal(cleanArea.children[1].attrs.class,'aw-tag');
+const checkout=$('aw-views').children[1].children[0].children[1].children.find(c=>c.attrs['aria-label']==='checkout: 1 findings');
+const marker=checkout.children.at(-1);
+assert.ok(marker.attrs.class.includes('aw-error'));
+assert.equal(marker.children[0].tag,'circle');
+assert.equal(marker.children[1].textContent,'!');
+assert.equal(marker.children[3].textContent,1);
+checkout.onclick({stopPropagation(){}});
+const card=$('aw-views').children[1].children[0].children.at(-1).children[0].children[2].children[0];
+assert.equal(card.children[2].textContent,'error');
+assert.equal(card.children[3].attrs['data-status'],'open');
+assert.ok(card.children[4].textContent.includes('web/checkout/cart.ts:42'));
+const serviceEdge=$('aw-views').children[2].children[0].children[1].children.find(c=>c.tag==='polyline');
+assert.ok(serviceEdge.attrs.class.includes('aw-problem'));
+assert.equal(serviceEdge.attrs['marker-end'],'url(#aw-arrow-sub:services-problem)');

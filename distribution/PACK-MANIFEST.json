@@ -17266,13 +17266,13 @@
     },
     {
       "path": "internal/webboard/page/app.css",
-      "sha256": "6893f72e1b4485a6529933c9beb05dfd2eae391b49368904f3a65a2eeb86d67d",
-      "bytes": 20279
+      "sha256": "e76ff23fe0a5e4e46f4ac5b5493f5573930723eee75d4ac80a5103829eb6ed4c",
+      "bytes": 24713
     },
     {
       "path": "internal/webboard/page/app.js",
-      "sha256": "eda61962732cdb2aa0851efdc19568c8b95faa457997c7cc544148ebb976cdb4",
-      "bytes": 103143
+      "sha256": "0a58aaea3c4d94b59037ebd4ecd9997402ca4508337d844e593d298ab22027a1",
+      "bytes": 105786
     },
     {
       "path": "internal/webboard/page/index.html",
@@ -17291,8 +17291,8 @@
     },
     {
       "path": "internal/webboard/server_test.go",
-      "sha256": "493096ff9092ca733e9db1793aa6dd9b5b6e6e24200745db274a7f150e8b561a",
-      "bytes": 13634
+      "sha256": "536fd390ef7117c8e8d4c41cdb10185102a0ad5562f333e1da4cee1b87369997",
+      "bytes": 13864
     },
     {
       "path": "internal/webboard/settings.go",
@@ -17311,8 +17311,8 @@
     },
     {
       "path": "internal/webboard/testdata/architecture.cjs",
-      "sha256": "80375e5dc1c53ec6e5d2dfa0b54ccdfd7b5d2e31aefcca5fc40712256c31f2fa",
-      "bytes": 7509
+      "sha256": "60643f650fc0280c04eda56116e1a68e52cae7948ed08ed043c5b49488645482",
+      "bytes": 9058
     },
     {
       "path": "internal/webboard/testdata/card.cjs",
