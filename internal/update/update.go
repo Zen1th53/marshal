@@ -158,9 +158,11 @@ const DevGuidance = "This is a dev build. Self-update will not replace it. To in
 // IsRelease reports whether the identity is an unambiguous release tag.
 func IsRelease(version string) bool { _, ok := parseVersion(version); return ok }
 
-// ValidateInstall refuses version and known schema regressions. Unknown schema
-// support needs a separate override; ordinary installation confirmation is not enough.
-func ValidateInstall(current string, release Release, schema int, allowUnknown bool) error {
+// ValidateInstall refuses dev builds, targets that are not a newer release,
+// and targets whose published schema support is older than this build's.
+// A release that does not publish schema support is accepted: it is a newer
+// release by version, and refusing every such release would block all updates.
+func ValidateInstall(current string, release Release, schema int) error {
 	if !IsRelease(current) {
 		return errors.New(DevGuidance)
 	}
@@ -169,9 +171,6 @@ func ValidateInstall(current string, release Release, schema int, allowUnknown b
 	}
 	if release.SchemaVersion > 0 && release.SchemaVersion < schema {
 		return fmt.Errorf("refusing update: target supports schema v%d; this build supports v%d. Keep this binary", release.SchemaVersion, schema)
-	}
-	if release.SchemaVersion <= 0 && !allowUnknown {
-		return fmt.Errorf("target schema support is unknown; this build supports schema v%d. Keep this binary, or use --allow-downgrade to accept the risk explicitly", schema)
 	}
 	return nil
 }

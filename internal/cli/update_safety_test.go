@@ -37,7 +37,7 @@ func TestCLIDevUpdateNeverDownloads(t *testing.T) {
 	defer func() { Version = old }()
 	t.Setenv(update.APIEnv, "http://127.0.0.1:1")
 	var out bytes.Buffer
-	err := (command{stdout: &out}).update(context.Background(), []string{"install", "--yes", "--allow-downgrade"})
+	err := (command{stdout: &out}).update(context.Background(), []string{"install", "--yes"})
 	if err != nil || !strings.Contains(out.String(), "dev build") {
 		t.Fatalf("%s: %v", out.String(), err)
 	}

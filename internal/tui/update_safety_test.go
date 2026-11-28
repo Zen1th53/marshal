@@ -18,7 +18,7 @@ func TestUpdateInstallRequiresConfirmation(t *testing.T) {
 		if !strings.HasSuffix(r.URL.Path, "/releases/latest") {
 			t.Errorf("unexpected download: %s", r.URL.Path)
 		}
-		w.Write([]byte(`{"tag_name":"v9.9.9"}`))
+		w.Write([]byte(`{"tag_name":"v9.9.9","schema_version":1}`))
 	}))
 	defer server.Close()
 	t.Setenv(update.APIEnv, server.URL)
@@ -31,7 +31,7 @@ func TestUpdateInstallRequiresConfirmation(t *testing.T) {
 		t.Fatalf("%s: %v", got, err)
 	}
 	got, err = h.handleUpdate(context.Background(), []string{"install", "confirm", "v9.9.9"})
-	if err != nil || !strings.Contains(got, "--allow-downgrade") {
+	if err != nil || !strings.Contains(got, "schema v1;") {
 		t.Fatalf("%s: %v", got, err)
 	}
 }

@@ -71,17 +71,12 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 	}
 
 	confirmed := len(args) >= 3 && args[1] == "confirm" && args[2] == release.Tag && h.pendingUpdate == release.Tag
-	allowUnknown := len(args) == 4 && args[3] == "--allow-downgrade"
 	if !confirmed {
 		h.pendingUpdate = release.Tag
-		warning := ""
-		if release.SchemaVersion == 0 {
-			warning = "\nTarget schema support is unknown. Add --allow-downgrade only if you accept the risk."
-		}
-		return fmt.Sprintf("Confirm update: from %s → to %s\nReplace this binary? Type /update install confirm %s%s\nAny other command cancels.", current, release.Tag, release.Tag, warning), nil
+		return fmt.Sprintf("Confirm update: from %s → to %s\nReplace this binary? Type /update install confirm %s\nAny other command cancels.", current, release.Tag, release.Tag), nil
 	}
 	h.pendingUpdate = ""
-	if err := update.ValidateInstall(current, release, store.LatestSchemaVersion, allowUnknown); err != nil {
+	if err := update.ValidateInstall(current, release, store.LatestSchemaVersion); err != nil {
 		return err.Error(), nil
 	}
 

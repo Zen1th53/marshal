@@ -21,21 +21,19 @@ import (
 // published SHA-256, and a download that fails that check is not installed.
 func (c command) update(ctx context.Context, args []string) error {
 	install := false
-	yes, allowUnknown := false, false
+	yes := false
 	var positional []string
 	for _, arg := range args {
 		switch arg {
 		case "--yes":
 			yes = true
-		case "--allow-downgrade":
-			allowUnknown = true
 		default:
 			positional = append(positional, arg)
 		}
 	}
 	args = positional
 	if len(args) > 1 {
-		return fmt.Errorf("usage: marshal update [check|install] [--yes] [--allow-downgrade]")
+		return fmt.Errorf("usage: marshal update [check|install] [--yes]")
 	}
 	if len(args) > 0 {
 		switch args[0] {
@@ -80,14 +78,14 @@ func (c command) update(ctx context.Context, args []string) error {
 			release.Tag, Version, release.URL))
 	}
 
-	if err := update.ValidateInstall(Version, release, store.LatestSchemaVersion, allowUnknown); err != nil {
+	if err := update.ValidateInstall(Version, release, store.LatestSchemaVersion); err != nil {
 		return fmt.Errorf("from %s → to %s: %w", Version, release.Tag, err)
 	}
 	transition := fmt.Sprintf("from %s → to %s", Version, release.Tag)
 	if !yes {
 		confirm := c.confirmer()
 		if confirm == nil {
-			return fmt.Errorf("%s: confirmation required; run marshal update install --yes (and --allow-downgrade only if you accept unknown schema support)", transition)
+			return fmt.Errorf("%s: confirmation required; run marshal update install --yes", transition)
 		}
 		ok, err := confirm("Install MARSHAL " + transition)
 		if err != nil {
