@@ -55,9 +55,22 @@ func TestWebActOpensTheArchitectureReview(t *testing.T) {
 			t.Fatalf("the review link reached Activity: %q", n.Text)
 		}
 	}
-	// Enter is not on the card: the page cannot accept for the owner.
+	// Enter is not on the card: the page cannot accept for the owner, on
+	// the card as it is now (refused, not stale).
 	if r := w.webBoardAct(t.Context(), namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "⏎"})); r.Status != "refused" {
 		t.Fatalf("Enter on the architecture card: %+v", r)
+	}
+	// Nor can a typed accept that the card never offered.
+	accept := namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "a"})
+	accept.Choice = "architecture.accept"
+	if r := w.webBoardAct(t.Context(), accept); r.Status != "refused" {
+		t.Fatalf("accept on the architecture card: %+v", r)
+	}
+	// An open bound to a revision the card no longer has is stale.
+	old := namedTestAction(w, webboard.Action{Kind: "key", Card: webboard.CardID(webCard(t, w)), Key: "a"})
+	old.Revision += ":before"
+	if r := w.webBoardAct(t.Context(), old); r.Status != "stale" || r.Link != "" {
+		t.Fatalf("open on an old revision: %+v", r)
 	}
 }
 

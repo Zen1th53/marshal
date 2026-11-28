@@ -16681,13 +16681,13 @@
     },
     {
       "path": "internal/tui/webboard_act_linux_test.go",
-      "sha256": "5377599296831f23ee73c00194e19ff63992bded52aa17600e93ea49b2022bab",
-      "bytes": 2528
+      "sha256": "19730b77f32eda76b6d064161c146a8671264bc231a5010db071157e8bf9189c",
+      "bytes": 3234
     },
     {
       "path": "internal/tui/webboard_act_test.go",
-      "sha256": "2a72ce66d0c0f91fc4e5bf3a055eaf133992cffcf0d43178f9d608bdb99353d7",
-      "bytes": 11896
+      "sha256": "602a4ee5fe9fe9de5b0ed2c44385fb8b2d49a8b1fe2729e404e20b46afcd0d85",
+      "bytes": 12075
     },
     {
       "path": "internal/tui/webboard_card_actions_test.go",

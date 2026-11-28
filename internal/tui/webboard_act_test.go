@@ -308,13 +308,16 @@ func namedTestAction(w *Workspace, a webboard.Action) webboard.Action {
 	} else if a.Key == "esc" {
 		a.Choice = "card/dismiss"
 	} else if f.Decision != nil {
+		// A decision is bound to its own revision, whether or not the key
+		// names a choice on it: a key the card does not offer is refused,
+		// never stale, while the card stays the same.
+		a.Revision = f.Decision.Revision
+		if f.Decision.Plan != nil {
+			a.Digest = f.Decision.Plan.Digest
+		}
 		for _, c := range f.Decision.Choices {
 			if c.Key == a.Key {
 				a.Choice, a.Value = c.ID, c.Value
-				a.Revision = f.Decision.Revision
-				if f.Decision.Plan != nil {
-					a.Digest = f.Decision.Plan.Digest
-				}
 				break
 			}
 		}
