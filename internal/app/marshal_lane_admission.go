@@ -116,7 +116,9 @@ func (s *MarshalService) escalateTaskLaneAdmission(ctx context.Context, runID st
 		}
 	}
 	run.Operation = nil
-	run.Tasks[i].State = marshal.Escalated
+	if err := marshal.SetTaskState(&run.Tasks[i], marshal.Escalated); err != nil {
+		return err
+	}
 	run.Tasks[i].EscalationReason = machine
 	run.Tasks[i].EscalationCode = escalationCode(marshal.CodeLaneAdmission, machine)
 	capacity := errors.Is(cause, execution.ErrRunBlocked) && strings.Contains(cause.Error(), "capacity exhausted")
@@ -143,7 +145,9 @@ func (s *MarshalService) restartInterruptedLaneTask(ctx context.Context, runID s
 	t := &run.Tasks[i]
 	run.Operation = nil
 	retireInterruptedLane(t)
-	t.State = marshal.Returned
+	if err := marshal.SetTaskState(t, marshal.Returned); err != nil {
+		return err
+	}
 	run.State = marshal.Reviewing
 	summary := firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID) + ": its earlier attempt was interrupted; Marshal closed it and will start the task again."
 	if err := s.save(ctx, runID, run, rev); err != nil {
@@ -161,7 +165,9 @@ func (s *MarshalService) restartInterruptedLaneTask(ctx context.Context, runID s
 func (s *MarshalService) retryLaneAdmissionOnce(ctx context.Context, runID string, run marshal.Run, rev int64, i int, machine string) error {
 	t := &run.Tasks[i]
 	run.Operation = nil
-	t.State = marshal.Returned
+	if err := marshal.SetTaskState(t, marshal.Returned); err != nil {
+		return err
+	}
 	run.State = marshal.Reviewing
 	summary := firstNonEmpty(strings.TrimSpace(t.Title), t.PlanTaskID) + " couldn't start yet; Marshal is trying it once more."
 	if err := s.save(ctx, runID, run, rev); err != nil {

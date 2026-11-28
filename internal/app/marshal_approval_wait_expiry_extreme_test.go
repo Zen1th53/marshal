@@ -195,7 +195,25 @@ func TestExtremeProcess05RequestedExpiryRefusesResumeWithoutChangingReceipt(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if recovered.Tasks[0].Process05WaitApprovalID != "" || len(recovered.Tasks[0].ReturnsByAgent) != 0 || workerCalls.Load() != 0 {
+	if recovered.Tasks[0].State != marshal.Queued || recovered.Tasks[0].Process05WaitApprovalID != "" || len(recovered.Tasks[0].ReturnsByAgent) != 0 || workerCalls.Load() != 0 {
 		t.Fatalf("serial retry did not cleanly clear expired wait without rework: %+v worker=%d", recovered.Tasks[0], workerCalls.Load())
+	}
+}
+
+func TestExpiredApprovalRetryRequiresQueuedTask(t *testing.T) {
+	for _, state := range []marshal.TaskState{marshal.Dispatched, marshal.HandedIn, marshal.Accepted, marshal.Returned, marshal.Reassigned, marshal.Escalated, marshal.Merged, marshal.Cancelled} {
+		t.Run(string(state), func(t *testing.T) {
+			s, _ := marshalFixture(t, 1)
+			run := marshal.Run{PlanID: "plan", PlanVersion: 1, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "a", Branch: "task/run/a", State: state, Process05WaitApprovalID: "expired"}}}
+			if err := s.save(t.Context(), "run", run, 0); err != nil {
+				t.Fatal(err)
+			}
+			if handled, err := s.retryExpiredApprovalWait(t.Context(), "run", run, 1, 0); handled || err != nil {
+				t.Fatalf("nonqueued retry: %v %v", handled, err)
+			}
+			if err := s.reworkExpiredProcess05Approval(t.Context(), run, run.Tasks[0], &process05ApprovalExpired{}); !errors.Is(err, execution.ErrRunConflict) {
+				t.Fatalf("nonqueued rework: %v", err)
+			}
+		})
 	}
 }

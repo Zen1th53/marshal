@@ -258,16 +258,21 @@ const (
 	Cancelled  TaskState = "cancelled"
 )
 
+// Queued work may be held or rerouted before launch. Interrupted dispatches
+// may be requeued after a pause or approval wait, or escalated/rerouted when
+// their worker cannot continue. A returned attempt may be requeued while its
+// failed evidence is archived. These moves preserve saved execution lanes.
+// Merge conflicts apply the same rework limits to accepted work as reviews.
 var taskMoves = map[TaskState][]TaskState{
-	Queued:     {Dispatched},                                // A ready task is assigned.
-	Dispatched: {HandedIn, Returned},                        // Work arrives or execution fails.
-	HandedIn:   {Accepted, Returned, Reassigned, Escalated}, // Review decides the hand-in's next step.
-	Accepted:   {Merged, Returned},                          // Accepted work merges or a conflict returns it.
-	Returned:   {Dispatched, Reassigned, Escalated},         // Rework retries, changes worker, or escalates.
-	Reassigned: {Dispatched, Escalated},                     // The new worker starts or reassignment cannot proceed.
-	Escalated:  {Returned, Reassigned, Cancelled},           // Operator can retry, reassign or cancel.
-	Merged:     {},                                          // Integrated work is final for this task.
-	Cancelled:  {},                                          // Cancelled task ends work.
+	Queued:     {Dispatched, Escalated, Reassigned},                 // Assigned, held, or routed before launch.
+	Dispatched: {HandedIn, Returned, Queued, Escalated, Reassigned}, // Work arrives, waits, or needs another worker.
+	HandedIn:   {Accepted, Returned, Reassigned, Escalated},         // Review decides the hand-in's next step.
+	Accepted:   {Merged, Returned, Reassigned, Escalated},           // Merge succeeds or conflict follows the rework policy.
+	Returned:   {Dispatched, Reassigned, Escalated, Queued},         // Retry, park, change worker, or escalate.
+	Reassigned: {Dispatched, Escalated},                             // The new worker starts or reassignment cannot proceed.
+	Escalated:  {Returned, Reassigned, Cancelled},                   // Operator can retry, reassign or cancel.
+	Merged:     {},                                                  // Integrated work is final for this task.
+	Cancelled:  {},                                                  // Cancelled task ends work.
 }
 
 // TransitionTask rejects moves outside the task lifecycle.

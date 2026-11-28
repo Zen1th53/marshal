@@ -79,7 +79,7 @@ func TestMarshalGovernedHarnessMismatchIsNotAReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.Tasks[0].State = marshal.Dispatched
+	run, rev = advanceTaskFixture(t, s, "run", 0, marshal.Dispatched)
 	run.Tasks[0].EscalationReason = ""
 	run.Pause = nil
 	if err = s.save(ctx, "run", run, rev); err != nil {

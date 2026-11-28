@@ -498,7 +498,9 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	policySnap := marshal.NewReviewPolicySnapshot(settings.Value.ReviewPolicy, d.Plan.Graph.Digest, "", time.Time{})
 	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack, ReviewPolicy: policySnap}
 	for i := range run.Tasks {
-		run.Tasks[i].State = marshal.Queued
+		if err := marshal.SetTaskState(&run.Tasks[i], marshal.Queued); err != nil {
+			return run, err
+		}
 		run.Tasks[i].BaseCommit = run.BaseCommit
 		run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, 0)
 	}

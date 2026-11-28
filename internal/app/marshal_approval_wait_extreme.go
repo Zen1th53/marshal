@@ -205,7 +205,9 @@ func (s *MarshalService) pausePrivateProcess05Approval(ctx context.Context, runI
 		if expired, ok := isProcess05ApprovalExpired(err, wait.approval); ok && reworkFailedLaneWorker(run, run.Tasks[i]) {
 			// The approval can expire before the orchestration handle parks it.
 			run.Tasks[i].Process05WaitRunID, run.Tasks[i].Process05WaitApprovalID = wait.run, wait.approval
-			run.Tasks[i].State = marshal.Queued
+			if err := marshal.SetTaskState(&run.Tasks[i], marshal.Queued); err != nil {
+				return true, err
+			}
 			if err := s.save(context.WithoutCancel(ctx), runID, run, rev); err != nil {
 				return true, err
 			}
@@ -220,7 +222,9 @@ func (s *MarshalService) pausePrivateProcess05Approval(ctx context.Context, runI
 	run.Tasks[i].Process05WaitRunID, run.Tasks[i].Process05WaitApprovalID = wait.run, wait.approval
 	// Only the orchestration handle ended. The actual lane/native turn and
 	// its approval remain untouched; waiting is neither failure nor rework.
-	run.Tasks[i].State = marshal.Queued
+	if err := marshal.SetTaskState(&run.Tasks[i], marshal.Queued); err != nil {
+		return true, err
+	}
 	// Isolated ULTRA lanes do not share a base, so one lane's pending
 	// approval does not hold the others: Execute keeps dispatching and
 	// reviewing them, and pauses only when nothing but waits remain.
@@ -331,7 +335,9 @@ func (s *MarshalService) reworkExpiredProcess05Approval(ctx context.Context, run
 	// so the next dispatch opens a fresh task lane and requests a fresh approval,
 	// without penalizing the worker's rework allowance.
 	t.LaneReworkBase++
-	t.State = marshal.Queued
+	if err := marshal.SetTaskState(t, marshal.Queued); err != nil {
+		return err
+	}
 
 	reason := expiredApprovalReason(expired.approvalID, expired.expiresAt)
 	review := marshal.Review{
@@ -537,7 +543,9 @@ func (s *MarshalService) retryExpiredApprovalWait(ctx context.Context, runID str
 	}
 	t.Process05WaitRunID = ""
 	t.Process05WaitApprovalID = ""
-	t.State = marshal.Queued
+	if err := marshal.SetTaskState(t, marshal.Queued); err != nil {
+		return true, err
+	}
 	if run.State == marshal.AwaitingUser {
 		run.State = marshal.Dispatching
 		run.Pause = nil

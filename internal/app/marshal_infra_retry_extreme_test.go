@@ -170,7 +170,7 @@ func TestExtremeInfraStreakCoolsProviderForFailover(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := 0
-	run.Tasks[i].State = marshal.Dispatched
+	run, rev = advanceTaskFixture(t, s, "par", i, marshal.Dispatched)
 	if err = s.returnInfraFailure(t.Context(), "par", run, rev, i, "worker failed: dial tcp: connection refused"); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestExtremeInfraStreakCoolsProviderForFailover(t *testing.T) {
 		t.Fatal("one failure cooled the provider")
 	}
 	run, rev, _ = s.load(t.Context(), "par")
-	run.Tasks[i].State = marshal.Dispatched
+	run, rev = advanceTaskFixture(t, s, "par", i, marshal.Dispatched)
 	if err = s.returnInfraFailure(t.Context(), "par", run, rev, i, "worker failed: dial tcp: connection refused"); err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestExtremePlatformRefusalStopsWithoutRetryOrCooldown(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := 0
-	run.Tasks[i].State = marshal.Dispatched
+	run, rev = advanceTaskFixture(t, s, "par", i, marshal.Dispatched)
 	cause := "worker failed: run failed: one or more tasks failed: unavailable: probe Codex version failed: worker terminal transport unavailable on this platform"
 	if err = s.returnInfraFailure(t.Context(), "par", run, rev, i, cause); err != nil {
 		t.Fatal(err)
