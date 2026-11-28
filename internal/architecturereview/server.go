@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/architecturecodec"
 )
 
 //go:embed review.html
@@ -21,7 +23,7 @@ func (r *Review) Handler(token string) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		reply := func(status int, value any) {
-			body, err := canonicalJSON(value)
+			body, err := json.Marshal(value)
 			if err != nil {
 				status = http.StatusInternalServerError
 				body = json.RawMessage(`{"error":"review response could not be encoded"}`)
@@ -29,6 +31,13 @@ func (r *Review) Handler(token string) http.Handler {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(status)
 			_, _ = w.Write(body)
+		}
+		// Only the default view and the roomy renderer are supported.
+		for _, layout := range q.URL.Query()["layout"] {
+			if layout != "" && layout != "roomy" {
+				reply(http.StatusBadRequest, map[string]any{"error": "Unsupported layout"})
+				return
+			}
 		}
 		host := q.Host
 		if parsed, _, err := net.SplitHostPort(host); err == nil {
@@ -48,8 +57,26 @@ func (r *Review) Handler(token string) http.Handler {
 			_, _ = io.WriteString(w, page)
 			return
 		}
-		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance" && q.URL.Path != "/api/codeview") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
+		if (q.URL.Path != "/api/roomy" && q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance" && q.URL.Path != "/api/codeview") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
 			reply(http.StatusForbidden, map[string]any{"error": "Review access denied"})
+			return
+		}
+		if q.URL.Path == "/api/roomy" {
+			if q.Method != http.MethodPost {
+				reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported renderer method"})
+				return
+			}
+			raw, err := io.ReadAll(http.MaxBytesReader(w, q.Body, 8<<20))
+			if err != nil {
+				reply(http.StatusBadRequest, map[string]any{"error": "Architecture is too large"})
+				return
+			}
+			svg, err := architecturecodec.RenderSVG(raw, architecturecodec.RendererOptions{Roomy: true})
+			if err != nil {
+				reply(http.StatusBadRequest, map[string]any{"error": err.Error()})
+				return
+			}
+			reply(http.StatusOK, map[string]any{"svg": svg})
 			return
 		}
 		if q.URL.Path == "/api/codeview" {
@@ -163,8 +190,7 @@ func (r *Review) Handler(token string) http.Handler {
 				reply(http.StatusInternalServerError, map[string]any{"error": "Review state unavailable"})
 				return
 			}
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_, _ = w.Write(state)
+			reply(http.StatusOK, state)
 			return
 		}
 		if q.Method != http.MethodPost {
@@ -189,7 +215,6 @@ func (r *Review) Handler(token string) http.Handler {
 			reply(http.StatusConflict, map[string]any{"error": err.Error()})
 			return
 		}
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = w.Write(state)
+		reply(http.StatusOK, state)
 	})
 }
