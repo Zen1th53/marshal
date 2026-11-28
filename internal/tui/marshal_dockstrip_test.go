@@ -8,7 +8,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
-// stripFull is the strip of docs/design/board-v2/screen6.ans.
+// stripFull is the full dock strip.
 var stripFull = dockStrip{provider: "claude", model: "opus-5.5", effort: "medium",
 	known: true, bound: true, clear: true, inputKnown: true, stage: "tasks · 6m", answered: 3}
 
