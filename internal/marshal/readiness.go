@@ -1,10 +1,16 @@
 package marshal
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
+)
 
 // ProviderReadiness contains observed facts, not assumptions from installation.
 // Unknown authentication never qualifies a provider as runnable.
 type ProviderReadiness struct {
+	Disabled    bool
 	Installed   bool
 	SignedIn    bool
 	AuthUnknown bool
@@ -13,6 +19,28 @@ type ProviderReadiness struct {
 
 func (p ProviderReadiness) Runnable() bool {
 	return p.Installed && p.SignedIn && !p.AuthUnknown && p.Unavailable == ""
+}
+
+// FinalCheckerGaps is the shared readiness and runtime eligibility predicate.
+func FinalCheckerGaps(provider string, installed, disabled bool, unavailable string, policy ReviewPolicy) []string {
+	var reasons []string
+	policy = policy.Effective()
+	if disabled || (policy.FinalProvider != "any" && policy.FinalProvider != provider) {
+		reasons = append(reasons, "excluded by final-check policy; enable the provider or change final-provider")
+	}
+	if !installed {
+		reasons = append(reasons, "not installed; install the provider")
+	}
+	if !sessionmcp.MarshalProvider(provider) {
+		reasons = append(reasons, "Marshal MCP unavailable; choose a provider with Marshal MCP support")
+	}
+	if unavailable != "" {
+		reasons = append(reasons, unavailable)
+	}
+	if gap := VerifierAttributionGap(provider); gap != "" {
+		reasons = append(reasons, gap)
+	}
+	return reasons
 }
 
 // Readiness is the shared execution verdict. Blocker always names the first
@@ -68,12 +96,26 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 		}
 	}
 	r.ChecksOnly = r.ReviewPolicy.FinalModel == FinalModelOff
-	r.FinalCheckEligible = r.ChecksOnly || providers["claude"].Runnable()
+	r.FinalCheckEligible = r.ChecksOnly
+	var exclusions []string
+	for _, name := range r.Workers {
+		p := providers[name]
+		gaps := FinalCheckerGaps(name, p.Installed, p.Disabled, p.Unavailable, r.ReviewPolicy)
+		if len(gaps) != 0 {
+			exclusions = append(exclusions, name+": "+strings.Join(gaps, ", "))
+		}
+		if len(gaps) == 0 {
+			r.FinalCheckEligible = true
+		}
+	}
 	if r.Blocker == "" && len(r.Workers) == 0 {
 		r.Blocker = "No worker can run: run `claude` and sign in."
 	}
 	if r.Blocker == "" && !r.FinalCheckEligible {
-		r.Blocker = "Final check needs Claude Code: run `claude` and sign in, or approve a checks-only policy with `/marshal settings final-model off`."
+		r.Blocker = "Final check needs a qualified provider allowed by final-provider: sign in, or approve a checks-only policy with `/marshal settings final-model off`."
+		if len(exclusions) > 0 {
+			r.Blocker += " " + strings.Join(exclusions, "; ")
+		}
 	}
 	r.Guarantee = "Independent hand-in review is required."
 	if r.ReviewPolicy.CrossReview == CrossReviewOff {
@@ -86,9 +128,9 @@ func ComputeReadiness(planner string, providers map[string]ProviderReadiness, po
 	case r.ChecksOnly:
 		r.Guarantee += " Checks-only delivery: executable checks run; no independent final model check or verified-delivery receipt."
 	case !r.FinalCheckEligible:
-		r.Guarantee += " Final check is unavailable; closure will wait for Claude Code. Run `claude` and sign in, or approve a checks-only policy before dispatch."
+		r.Guarantee += " Final check is unavailable; closure will wait for a qualified provider. Sign in, or approve a checks-only policy before dispatch."
 	default:
-		r.Guarantee += " Claude Code independently checks the integrated result and runs the checks."
+		r.Guarantee += " A qualified provider independently checks the integrated result in a fresh session; native model identity and commit binding are required."
 	}
 	r.NeedsConfirmation = !r.FinalCheckEligible || r.ChecksOnly || r.ReviewPolicy.CrossReview == CrossReviewOff || r.ReviewPolicy.Design == DesignReviewOff
 	return r

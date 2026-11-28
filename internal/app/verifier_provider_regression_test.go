@@ -307,6 +307,15 @@ func TestFinalCheckRefusesVerifierReusingWorkerSession(t *testing.T) {
 			}
 		})
 	}
+	for _, record := range []marshal.VerifierEvidence{
+		{Provider: "codex", SessionID: "resumed"},
+		{Provider: "codex", FreshSession: true},
+	} {
+		s := &MarshalService{}
+		if err := s.checkVerifierFreshSession(record, []string{"claude"}, nil, map[string]any{}); err == nil || !strings.Contains(err.Error(), "did not run in a fresh session") {
+			t.Fatalf("different-provider verifier accepted: %v", err)
+		}
+	}
 	// The session check itself: a worker's observed session is refused for
 	// any provider, as is the Marshal's own conversation.
 	s := &MarshalService{Model: &MarshalCLI{ConversationID: "marshal-session"}}

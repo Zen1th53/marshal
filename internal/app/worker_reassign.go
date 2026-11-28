@@ -189,7 +189,7 @@ var errIndependentVerifierUnavailable = errors.New("marshal: independent verifie
 // workers': a provider that did none of the run's tasks is preferred, and
 // otherwise a worker's provider checks the work in a new session. Only a
 // provider that is not installed, cannot reach Marshal's tools, is limited,
-// or whose answer does not name its model is excluded; every exclusion is
+// or without native identity support is excluded; every exclusion is
 // kept so a paused run says exactly what must change.
 func (r *Runtime) independentVerifierProvider(run marshal.Run) (string, error) {
 	provider, _, err := r.independentVerifierChoice(run)
@@ -205,14 +205,19 @@ func (r *Runtime) independentVerifierChoice(run marshal.Run) (provider string, w
 		workers = append(workers, task.Worker)
 	}
 	for _, candidate := range MarshalProviders() {
-		if reasons := r.finalCheckerGaps(candidate, installed, true); len(reasons) != 0 {
+		unavailable := ""
+		if reason, limited := r.providerLimited(candidate); limited {
+			unavailable = "limited: " + reason
+		}
+		reasons := marshal.FinalCheckerGaps(candidate, slices.Contains(installed, candidate), !run.Settings.ProviderEnabled(candidate), unavailable, run.EffectiveReviewPolicy())
+		if len(reasons) != 0 {
 			excluded = append(excluded, candidate+": "+strings.Join(reasons, ", "))
 		} else {
 			available = append(available, candidate)
 		}
 	}
 	if len(available) == 0 {
-		return "", false, fmt.Errorf("%w; no provider is installed, MCP-capable, not limited and names the model that answered; excluded providers: %s", errIndependentVerifierUnavailable, strings.Join(excluded, "; "))
+		return "", false, fmt.Errorf("%w; no configured provider is installed, MCP-capable, not limited and supports native model identity; excluded providers: %s", errIndependentVerifierUnavailable, strings.Join(excluded, "; "))
 	}
 	for _, candidate := range available {
 		if !sameProviderAsWorker(candidate, workers...) {

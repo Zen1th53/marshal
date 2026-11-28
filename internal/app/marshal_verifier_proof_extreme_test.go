@@ -147,7 +147,7 @@ func TestPrivateVerifierRuntimeProofRejectsDriftDuringModelReview(t *testing.T) 
 		if err := os.WriteFile(filepath.Join(dir, "marker.txt"), []byte("drift"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		return marshal.VerifierEvidence{Reviewer: "test", Provider: "test", Commit: h, Verdict: "pass", InputDigest: verifierInputDigest(r, h, v)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "test", Provider: "test", Commit: h, Verdict: "pass", InputDigest: verifierInputDigest(r, h, v)}, nil
 	}
 	if err := s.captureIndependentVerification(t.Context(), "proof", run, head, session); err == nil {
 		t.Fatal("model pass settled on drifted tree")
@@ -227,7 +227,7 @@ func TestPrivateVerifierRuntimeProofPersistsWithExactInputDigestAcrossReopen(t *
 		t.Fatal(err)
 	}
 	s.IndependentVerify = func(_ context.Context, r marshal.Run, h string, v verification.Session) (marshal.VerifierEvidence, error) {
-		return marshal.VerifierEvidence{Reviewer: "verifier:test", Provider: "test", Commit: h, Verdict: "pass", InputDigest: verifierInputDigest(r, h, v)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier:test", Provider: "test", Commit: h, Verdict: "pass", InputDigest: verifierInputDigest(r, h, v)}, nil
 	}
 	if err := s.captureIndependentVerification(t.Context(), "proof", run, head, session); err != nil {
 		t.Fatal(err)
@@ -468,7 +468,7 @@ func TestPrivateVerifierLargeOutputArtifactReachesModelAndSurvivesReopen(t *test
 				if err != nil || string(data) != expected {
 					t.Fatal("model lost output", err)
 				}
-				return marshal.VerifierEvidence{Reviewer: "verifier:test", Provider: "test", Commit: h, Verdict: "pass", InputDigest: verifierInputDigest(r, h, v)}, nil
+				return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier:test", Provider: "test", Commit: h, Verdict: "pass", InputDigest: verifierInputDigest(r, h, v)}, nil
 			}
 			if err := s.captureIndependentVerification(t.Context(), "proof", run, head, session); err != nil || !called {
 				t.Fatal("output never reached verifier", err)

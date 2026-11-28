@@ -26,7 +26,7 @@ marshal
 Once inside the Board:
 1. **Confirm requirements**: The Marshal fills a requirements card. Confirm all on the Web Board or with `y` on the Board, or press `e` and a line's letter to edit an answer.
 2. **Accept the architecture**: Press `y` to open the architecture in your browser and accept it. This is the owner gate.
-3. **The Marshal plans**: The Marshal creates and approves the plan itself; there is no plan approval popup. Every hand-in gets an independent cross-review, then a final independent check reruns the checks for every plan. Every plan’s final independent check needs Claude Code installed; it runs in a fresh session, so Claude Code may also have done some of the tasks.
+3. **The Marshal plans**: The Marshal creates and approves the plan itself; there is no plan approval popup. Every hand-in gets an independent cross-review, then a final independent check reruns the checks for every plan. The final check accepts any qualified configured provider in a fresh session, with native model identity and exact commit binding. The owner can pin a family with `/marshal settings final-provider <any|codex|claude|opencode|agy>`. If none qualifies, the run pauses with the reason until a provider becomes available.
 4. **Finish**: The run closes to `main`, and the chat says `[Marshal] The run closed: …`.
 
 ---

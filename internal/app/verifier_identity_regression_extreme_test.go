@@ -20,7 +20,7 @@ import (
 
 // fakeVerifierCLIs installs owned stand-ins for the codex and claude CLIs that
 // answer the required verifier turn with a PASS for every criterion. Codex
-// output carries a thread id but, like the real CLI, no model metadata; Claude
+// output carries native thread metadata; Claude
 // output carries its native modelUsage. No installed provider runs.
 func fakeVerifierCLIs(t *testing.T) (dir, codexLog, claudeLog string) {
 	t.Helper()
@@ -29,10 +29,13 @@ func fakeVerifierCLIs(t *testing.T) (dir, codexLog, claudeLog string) {
 		t.Skip("requires host python3")
 	}
 	dir = t.TempDir()
+	t.Setenv("CODEX_HOME", t.TempDir())
 	codexLog, claudeLog = filepath.Join(dir, "codex-ran"), filepath.Join(dir, "claude-ran")
 	verdict := "data,_=json.JSONDecoder().raw_decode(prompt.split('Native model identity comes from actual CLI metadata, never your answer.\\n',1)[1])\nverdict={'head':data['head'],'assessments':[{'id':x['id'],'status':'PASS','reason':'Fixture semantic assessment (runtime-proof.json:1)','check_ids':x['check_ids']} for x in data['criteria']]}\n"
-	codex := "#!" + python + "\nimport json,sys,uuid\nprompt=sys.stdin.read()\nopen(" + strconvQuote(codexLog) + ",'a').write('ran\\n')\n" + verdict
-	codex += "print(json.dumps({'type':'thread.started','thread_id':'codex-'+str(uuid.uuid4())}))\nprint(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':json.dumps(verdict)}}))\n"
+	codex := "#!" + python + "\nimport json,sys,uuid,os,datetime\nprompt=sys.stdin.read()\nopen(" + strconvQuote(codexLog) + ",'a').write('ran\\n')\n" + verdict
+	codex = strings.TrimSuffix(codex, verdict)
+	codex += "if 'Exact runtime input: ' in prompt:\n data,_=json.JSONDecoder().raw_decode(prompt.split('Exact runtime input: ',1)[1]);verdict={'head':data['Head'],'tree':data['Tree'],'contract_digest':data['ContractDigest'],'assessments':[{'obligation_id':x,'status':'PASS','reason':'Fixture architecture review','evidence_refs':['obligation:'+x,'workspace:'+data['Tree']]} for x in data['Obligations']]}\nelse:\n " + strings.ReplaceAll(strings.TrimSuffix(verdict, "\n"), "\n", "\n ") + "\n"
+	codex += "sid=os.environ.get('VERIFIER_FIXTURE_SESSION') or 'codex-'+str(uuid.uuid4());now=datetime.datetime.now(datetime.timezone.utc);stamp=now.isoformat()\nroot=os.path.join(os.environ['CODEX_HOME'],'sessions',now.strftime('%Y/%m/%d'));os.makedirs(root,exist_ok=True)\nwith open(os.path.join(root,'rollout-'+sid+'.jsonl'),'w') as f:\n f.write(json.dumps({'type':'session_meta','timestamp':stamp,'payload':{'id':sid,'cwd':os.getcwd()}})+'\\n')\n f.write(json.dumps({'type':'turn_context','payload':{'cwd':os.getcwd(),'model':'codex-fixture'}})+'\\n')\nif os.environ.get('VERIFIER_FIXTURE_HEAD'):verdict['head']=os.environ['VERIFIER_FIXTURE_HEAD']\nevent={'type':'thread.started','thread_id':sid}\nif os.environ.get('VERIFIER_FIXTURE_MODEL'):event['model']=os.environ['VERIFIER_FIXTURE_MODEL']\nprint(json.dumps(event))\nprint(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':json.dumps(verdict)}}))\n"
 	// Claude also answers the architecture attestation turn that follows a
 	// completed check.
 	claude := "#!" + python + "\nimport json,sys,uuid\nprompt=sys.argv[sys.argv.index('-p')+1]\nopen(" + strconvQuote(claudeLog) + ",'a').write('ran\\n')\n"
@@ -56,13 +59,7 @@ func ranFake(path string) bool {
 	return err == nil
 }
 
-// The real-user ULTRA run (Codex as Marshal, agy workers) reached its final
-// check after a restart and stopped with REQUIRED_CONTEXT_REVIEW_PENDING: the
-// verifier selection picked Codex, the first installed provider that is not a
-// worker, and a Codex answer cannot name the model that gave it, so the
-// required check refused it after a paid turn. The same happens on a fresh run.
-// Selection now picks a verifier whose answer can be attributed (Claude), and
-// the final check completes.
+// A qualified independent provider can attest the integrated result.
 func TestRequiredVerifierPicksAProviderThatReportsItsModel(t *testing.T) {
 	// The worker is agy, as in the real run; Codex and Claude are both
 	// installed and independent of it.
@@ -82,16 +79,13 @@ func TestRequiredVerifierPicksAProviderThatReportsItsModel(t *testing.T) {
 	if err != nil || session.State != verification.VerifiedComplete || binding.RunID != root.RunID {
 		t.Fatalf("final check did not complete: %v %v", session.State, err)
 	}
-	if ranFake(codexLog) || !ranFake(claudeLog) {
+	if !ranFake(codexLog) || !ranFake(claudeLog) {
 		t.Fatalf("verifier: codex ran %v, claude ran %v", ranFake(codexLog), ranFake(claudeLog))
 	}
 }
 
-// The Mac demo's shape on the required path: Claude Code did the run's task
-// and is the only provider whose answer names its model. It checks the work
-// in a fresh session of its own and the final check completes; it is not
-// refused for having done the task.
-func TestRequiredVerifierWorkerProviderChecksInFreshSession(t *testing.T) {
+// Prefer another qualified family when the worker family is available too.
+func TestRequiredVerifierPrefersDifferentWorkerFamily(t *testing.T) {
 	r, ctx, s, id, run, head, root := integrationSourceFixtureForWorker(t, "claude", nil, func(req *CreatePlanRequest) {
 		req.Checks = map[string][]string{"fix": {"test -f README.md"}}
 	})
@@ -105,7 +99,7 @@ func TestRequiredVerifierWorkerProviderChecksInFreshSession(t *testing.T) {
 	if err != nil || session.State != verification.VerifiedComplete || binding.RunID != root.RunID {
 		t.Fatalf("final check by the worker's provider did not complete: %v %v", session.State, err)
 	}
-	if ranFake(codexLog) || !ranFake(claudeLog) {
+	if !ranFake(codexLog) || !ranFake(claudeLog) {
 		t.Fatalf("verifier: codex ran %v, claude ran %v", ranFake(codexLog), ranFake(claudeLog))
 	}
 }
@@ -129,23 +123,19 @@ func TestWorkerSessionsFromRuntimeProof(t *testing.T) {
 // When no installed independent provider can name its model, the run stops
 // before any check or model turn and says which provider it needs.
 func TestRequiredVerifierWithoutAttributableProviderStopsBeforeTurn(t *testing.T) {
-	r, s := verifierProviderFixture(t, "codex", "agy")
+	r, s := verifierProviderFixture(t)
 	run := marshal.Run{Tier: marshal.Ultra, Tasks: []marshal.Task{{Worker: "agy"}}}
 	for _, p := range MarshalProviders() {
 		providerHealth.Clear(p)
 		t.Cleanup(func() { providerHealth.Clear(p) })
 	}
 	_, _, err := r.verifyRequiredMarshalIntegration(t.Context(), s, "run", run, "head")
-	if !errors.Is(err, errIndependentVerifierUnavailable) || !strings.Contains(err.Error(), "Claude Code") {
+	if !errors.Is(err, errIndependentVerifierUnavailable) || !strings.Contains(err.Error(), "not installed") {
 		t.Fatalf("unattributable verifier was not refused at selection: %v", err)
 	}
 }
 
-// Both real runs stopped at the final check with REQUIRED_CONTEXT_REVIEW_PENDING:
-// the v0.2.12 run recovered after an upgrade (a new Codex Marshal session for
-// the reopened project, Enter on the earlier raw run-conflict stop) and a
-// fresh v0.2.13 run with agy workers. The pause plays no part: the verifier
-// selection picked Codex. Each final check must now finish with Claude.
+// Fresh and resumed runs use the same provider-neutral attestation path.
 func TestUltraFinalCheckFinishesFreshAndAfterRestart(t *testing.T) {
 	for _, recovered := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fresh", true: "recovered after restart"}[recovered], func(t *testing.T) {
@@ -155,10 +145,14 @@ func TestUltraFinalCheckFinishesFreshAndAfterRestart(t *testing.T) {
 }
 
 func ultraFinalCheck(t *testing.T, recovered bool) {
-	r, ctx, _, id, run, _, root := integrationSourceFixtureForWorker(t, "agy", nil, func(req *CreatePlanRequest) {
+	r, ctx, _, id, run, _, root := integrationSourceFixtureForWorker(t, "codex", nil, func(req *CreatePlanRequest) {
 		req.Checks = map[string][]string{"fix": {"test -f README.md"}}
 	})
-	_, codexLog, claudeLog := fakeVerifierCLIs(t)
+	bin, codexLog, claudeLog := fakeVerifierCLIs(t)
+	if err := os.Remove(filepath.Join(bin, "claude")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
 	stored, err := r.store.GetMarshalRun(t.Context(), r.ProjectID(), id)
 	if err != nil {
 		t.Fatal(err)
@@ -200,10 +194,78 @@ func ultraFinalCheck(t *testing.T, recovered bool) {
 		}
 		t.Fatalf("final check stopped (codex ran %v): %v %v; pause %q", ranFake(codexLog), result, err, reason)
 	}
-	if after.State != marshal.Verifying || after.Pause != nil || ranFake(codexLog) || !ranFake(claudeLog) {
+	if after.State != marshal.Verifying || after.Pause != nil || !ranFake(codexLog) || ranFake(claudeLog) {
 		t.Fatalf("after the check: %s %+v codex %v claude %v", after.State, after.Pause, ranFake(codexLog), ranFake(claudeLog))
 	}
 	if current, err := r.Verification().CurrentForRun(ctx, root.RunID); err != nil || current.State != verification.VerifiedComplete {
 		t.Fatalf("no completed canonical verification: %v", err)
+	}
+	stored, err = r.store.GetMarshalRun(ctx, r.ProjectID(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closing := stored.Value
+	closing.Repository, err = s.repositoryIdentity(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := r.store.GetPlan(ctx, closing.PlanID, closing.PlanVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closing.ApprovalScopeDigest = marshalApprovalDigest(plan.ApprovalScopeDigest, closing)
+	closing.CloseAuthorization = closeAuthorization(closing, "fixture-owner")
+	if _, err = r.store.SetMarshalRun(ctx, r.ProjectID(), id, closing, stored.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = gitMarshal(ctx, r.ProjectRoot(), "switch", "--detach", closing.BaseCommit); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(ctx, id); err != nil {
+		t.Fatal("single-provider close refused", err)
+	}
+	closed, err := s.Snapshot(ctx, id)
+	if err != nil || closed.State != marshal.Closed {
+		t.Fatalf("run not closed: %s %v", closed.State, err)
+	}
+	current, err := r.Verification().CurrentForRun(ctx, root.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = r.Verification().Attestation(ctx, current.ID); err != nil {
+		t.Fatal("closed run lacks attestation", err)
+	}
+}
+
+func TestRequiredVerifierRefusesMismatchedObservedModel(t *testing.T) {
+	r, ctx, s, id, run, head, _ := integrationSourceFixtureForWorker(t, "agy", nil, func(req *CreatePlanRequest) { req.Checks = map[string][]string{"fix": {"test -f README.md"}} })
+	s.GovernedCheck, s.runtime = r.runGovernedCheck, r
+	fakeVerifierCLIs(t)
+	t.Setenv("VERIFIER_FIXTURE_MODEL", "different-model")
+	session, _, err := r.verifyRequiredMarshalIntegration(ctx, s, id, run, head)
+	if !errors.Is(err, projectcontext.ErrReviewPending) || session.State == verification.VerifiedComplete {
+		t.Fatalf("conflicting native model accepted: %v %v", session.State, err)
+	}
+}
+
+func TestRequiredCodexVerifierCommitAndReviewerBinding(t *testing.T) {
+	for _, fault := range []string{"head", "reviewer-session"} {
+		t.Run(fault, func(t *testing.T) {
+			r, ctx, s, id, run, head, _ := integrationSourceFixtureForWorker(t, "agy", nil, func(req *CreatePlanRequest) { req.Checks = map[string][]string{"fix": {"test -f README.md"}} })
+			s.GovernedCheck, s.runtime = r.runGovernedCheck, r
+			fakeVerifierCLIs(t)
+			if fault == "head" {
+				t.Setenv("VERIFIER_FIXTURE_HEAD", strings.Repeat("0", 40))
+			} else {
+				t.Setenv("VERIFIER_FIXTURE_SESSION", "reviewer-session")
+				if _, err := s.Store.SetMarshalReview(ctx, id, "fix", 1, marshal.Review{Verdict: marshal.VerdictAccept, Independent: &marshal.IndependentReview{SessionID: "reviewer-session", FreshSession: true}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			session, _, err := r.verifyRequiredMarshalIntegration(ctx, s, id, run, head)
+			if err == nil || session.State == verification.VerifiedComplete {
+				t.Fatalf("%s accepted: %s %v", fault, session.State, err)
+			}
+		})
 	}
 }

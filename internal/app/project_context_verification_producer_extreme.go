@@ -322,6 +322,24 @@ func (r *Runtime) verifyRequiredMarshalIntegrationWithCLI(ctx context.Context, s
 	if slices.Contains(workerSessions(observed.RuntimeProof), capture.session) {
 		return session, binding, fmt.Errorf("%w: independent verifier reused a worker's session", projectcontext.ErrReviewPending)
 	}
+	// Review sessions are also forbidden, including earlier returned attempts.
+	if run.DesignReview != nil && run.DesignReview.SessionID == capture.session {
+		return session, binding, fmt.Errorf("%w: independent verifier reused a design reviewer's session", projectcontext.ErrReviewPending)
+	}
+	if planner, ok := s.Model.(interface{ MarshalConversationID() string }); ok && planner.MarshalConversationID() == capture.session {
+		return session, binding, fmt.Errorf("%w: independent verifier reused the planner's session", projectcontext.ErrReviewPending)
+	}
+	for _, task := range run.Tasks {
+		for attempt := 1; attempt <= 1+task.EvidenceAttemptBase+taskReturns(task); attempt++ {
+			review, reviewErr := s.Store.GetMarshalReview(ctx, id, task.PlanTaskID, attempt)
+			if reviewErr != nil && !errors.Is(reviewErr, model.ErrNotFound) {
+				return session, binding, reviewErr
+			}
+			if reviewErr == nil && review.Value.Independent != nil && review.Value.Independent.SessionID == capture.session {
+				return session, binding, fmt.Errorf("%w: independent verifier reused a reviewer's session", projectcontext.ErrReviewPending)
+			}
+		}
+	}
 	next, observation, payloads, err := requiredVerifierEvidence(session, criteria, verdict, capture)
 	if err != nil {
 		return session, binding, err

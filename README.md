@@ -174,7 +174,7 @@ OS/architecture, mode and timestamps; never code, prompts, paths or commands).
    and a final check. In the free build, review can be Off. An approved
    checks-only policy runs executable checks without an independent final
    model check; its delivery is labelled checks-only, not independently verified.
-   The final model check currently requires Claude Code installed and signed in.
+   The final model check accepts any qualified configured provider with runtime-observed model identity in a fresh session.
    With review enabled, another agent with a fresh context
    reviews every hand-in against its criteria: a different provider when one
    is available, otherwise a new session of the same one. When final model
@@ -260,9 +260,11 @@ full interface, and it opens in your browser as the Board starts:
 | `?` | Every key |
 
 The views (`2`–`8`) still open over the Board. `/task-model <id>` changes the model a task
-runs on. When the final model check is required, it needs Claude Code installed and signed
-in. It runs in a fresh session, even if Claude Code also worked on the run. If unavailable, the run stops
-before checking and tells you to install Claude Code or wait for its limit. An approved
+runs on. The final model check uses a qualified configured provider in a fresh session,
+independent of workers and reviewers. A different family from the implementer is preferred;
+the selected provider and observed model are recorded and bound to the checked commit.
+Use `/marshal settings final-provider <any|codex|claude|opencode|agy>` to pin a family
+for upcoming runs. Missing or conflicting native model evidence blocks attestation. An approved
 checks-only policy skips this model check and labels the delivery checks-only. [All screens and keys →](docs/board-and-keys.md)
 
 ---

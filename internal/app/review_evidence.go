@@ -150,19 +150,13 @@ func (s *MarshalService) pauseUnavailableVerifier(ctx context.Context, runID str
 }
 
 // independentCheckerResolution says what makes a final checker available.
-// In the shipped edition only Claude Code can be the final checker, because
-// only its answer names the model that gave it. It may have done this run's
-// tasks: the check runs in a fresh session of its own.
 func independentCheckerResolution() string {
-	if requiredVerifierAttributionGap("codex") != "" {
-		return "Install Claude Code or wait until its limit passes. Then press Enter to let the Marshal retry."
-	}
-	return "Install another AI tool, or wait until one's limit passes. Then press Enter to let the Marshal retry."
+	return "Enable and sign in to a qualified AI tool allowed by final-provider, or wait until its limit passes. Then press Enter to retry."
 }
 
 // checkVerifierFreshSession refuses a final check that did not run in a
 // session of its own. A verifier of any provider must not report a worker's
-// session or the Marshal's own conversation. One of a worker's provider is
+// session or the Marshal's own conversation. Every verifier is
 // accepted only with proof that it started clean: the runtime started its
 // session fresh, and the provider reported a new session id. data records
 // the sessions compared and whether the worker-provider fallback was used.
@@ -181,10 +175,11 @@ func (s *MarshalService) checkVerifierFreshSession(record marshal.VerifierEviden
 	if sameProviderAsWorker(record.Provider, workers...) {
 		data["verifier_same_provider_fallback"] = true
 		data["verifier_fallback_reason"] = "no provider that did none of the run's tasks could do the final check; " + record.Provider + " checked it in a fresh session"
-		if !record.FreshSession || record.SessionID == "" {
-			err = errors.Join(err, errors.New("independent verifier of a worker's provider did not run in a fresh session of its own"))
-		}
 	}
+	if !record.FreshSession || record.SessionID == "" {
+		err = errors.Join(err, errors.New("independent verifier did not run in a fresh session of its own"))
+	}
+
 	return err
 }
 

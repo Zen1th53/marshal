@@ -3,6 +3,7 @@ package marshal
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReadinessPlannerLeads(t *testing.T) {
@@ -25,9 +26,10 @@ func TestReadinessFinalGuarantees(t *testing.T) {
 		eligible, confirm bool
 		text              string
 	}{
-		{"missing checker", ReviewPolicy{}, false, true, "closure will wait"},
+		{"codex only", ReviewPolicy{}, true, false, "native model identity"},
+		{"pinned unavailable", ReviewPolicy{FinalProvider: "claude"}, false, true, "closure will wait"},
 		{"checks only", ReviewPolicy{FinalModel: FinalModelOff}, true, true, "Checks-only delivery"},
-		{"review off", ReviewPolicy{CrossReview: CrossReviewOff}, false, true, "Review is Off"},
+		{"review off", ReviewPolicy{CrossReview: CrossReviewOff}, true, true, "Review is Off"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := ComputeReadiness("codex", p, tc.policy)
@@ -47,5 +49,45 @@ func TestReadinessMissingAndLimitedPlanner(t *testing.T) {
 		if r.PlannerRunnable || r.Blocker == "" {
 			t.Fatalf("%+v", r)
 		}
+	}
+}
+
+func TestFinalProviderPolicySnapshot(t *testing.T) {
+	policy := DefaultReviewPolicy()
+	policy.FinalProvider = "codex"
+	snapshot := NewReviewPolicySnapshot(policy, "digest", "owner", time.Now())
+	policy.FinalProvider = "claude"
+	if snapshot.Policy().FinalProvider != "codex" || snapshot.Validate() != nil {
+		t.Fatal("final provider pin not preserved")
+	}
+	snapshot.FinalProvider = ""
+	if snapshot.Policy().FinalProvider != "any" {
+		t.Fatal("legacy snapshot did not default to any provider")
+	}
+	snapshot.FinalProvider = "unknown"
+	if snapshot.Validate() == nil {
+		t.Fatal("unknown provider accepted")
+	}
+}
+
+func TestReadinessFinalCheckerCapabilities(t *testing.T) {
+	for _, tc := range []struct {
+		provider string
+		disabled bool
+		want     string
+	}{
+		{"opencode", false, "Marshal MCP unavailable"},
+		{"codex", true, "enable the provider"},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			p := ProviderReadiness{Installed: true, SignedIn: true, Disabled: tc.disabled}
+			if !p.Runnable() {
+				t.Fatal("fixture must be runnable")
+			}
+			r := ComputeReadiness(tc.provider, map[string]ProviderReadiness{tc.provider: p}, ReviewPolicy{})
+			if r.FinalCheckEligible || !strings.Contains(r.Blocker, tc.want) {
+				t.Fatalf("%+v", r)
+			}
+		})
 	}
 }

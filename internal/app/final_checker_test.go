@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -54,5 +55,38 @@ func TestFinalCheckPrefersProviderThatDidNoTasks(t *testing.T) {
 	provider, worker, err := r.independentVerifierChoice(marshal.Run{Tasks: []marshal.Task{{Worker: "codex"}}})
 	if err != nil || provider != "claude" || worker {
 		t.Fatalf("non-worker provider not preferred: %q worker=%v %v", provider, worker, err)
+	}
+}
+
+func TestFinalCheckProviderPolicy(t *testing.T) {
+	r, _ := verifierProviderFixture(t, "codex", "claude")
+	for _, p := range MarshalProviders() {
+		providerHealth.Clear(p)
+		t.Cleanup(func() { providerHealth.Clear(p) })
+	}
+	run := marshal.Run{Tasks: []marshal.Task{{Worker: "codex"}}}
+	run.Settings.ReviewPolicy.FinalProvider = "codex"
+	provider, worker, err := r.independentVerifierChoice(run)
+	if err != nil || provider != "codex" || !worker {
+		t.Fatalf("pin ignored: %s %v %v", provider, worker, err)
+	}
+	run.Settings.DisabledProviders = "codex"
+	if _, _, err = r.independentVerifierChoice(run); err == nil {
+		t.Fatal("disabled pinned provider selected")
+	}
+	run.Settings.ReviewPolicy.FinalProvider = "any"
+	if provider, _, err = r.independentVerifierChoice(run); err != nil || provider != "claude" {
+		t.Fatalf("enabled fallback: %s %v", provider, err)
+	}
+}
+
+func TestFinalCheckerReadinessMatchesRuntimeWithoutMCP(t *testing.T) {
+	r, _ := verifierProviderFixture(t, "opencode")
+	ready := marshal.ComputeReadiness("opencode", map[string]marshal.ProviderReadiness{
+		"opencode": {Installed: true, SignedIn: true},
+	}, marshal.ReviewPolicy{})
+	_, _, err := r.independentVerifierChoice(marshal.Run{})
+	if ready.FinalCheckEligible || err == nil || !strings.Contains(ready.Blocker, "Marshal MCP unavailable") {
+		t.Fatalf("readiness and runtime disagree: %+v, %v", ready, err)
 	}
 }

@@ -153,7 +153,7 @@ func TestVerifierFindingsPersistInCompletionReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
-		return marshal.VerifierEvidence{Reviewer: "verifier:test", Provider: "test", Commit: head, Verdict: "pass", Findings: []string{"boundary reviewed"}, InputDigest: verifierInputDigest(run, head, session)}, nil
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier:test", Provider: "test", Commit: head, Verdict: "pass", Findings: []string{"boundary reviewed"}, InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	if err := s.captureIndependentVerification(t.Context(), "run", run, run.BaseCommit, verification.Session{}); err != nil {
 		t.Fatal(err)
@@ -214,7 +214,7 @@ func TestVerifierRefusalRetainsFindingsAndReason(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
-		return marshal.VerifierEvidence{Reviewer: "verifier:test", Provider: "test", Commit: head, Verdict: "fail", Findings: []string{"missing boundary test"}, InputDigest: verifierInputDigest(run, head, session)}, errors.New("independent verification refused")
+		return marshal.VerifierEvidence{SessionID: "fresh-verifier-session", FreshSession: true, Reviewer: "verifier:test", Provider: "test", Commit: head, Verdict: "fail", Findings: []string{"missing boundary test"}, InputDigest: verifierInputDigest(run, head, session)}, errors.New("independent verification refused")
 	}
 	if err := s.captureIndependentVerification(t.Context(), "run", run, run.BaseCommit, verification.Session{}); err == nil {
 		t.Fatal("refused verifier accepted")

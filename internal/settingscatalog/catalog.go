@@ -125,6 +125,7 @@ func workerStallField() Descriptor {
 
 func Catalogue() []Descriptor {
 	rows := []Descriptor{
+		field("final-provider", "enum", "", []string{"any", "codex", "claude", "opencode", "agy"}, func(s *marshal.Settings) *string { return &s.ReviewPolicy.FinalProvider }),
 		field("execution-rights", "enum", "", []string{"read-only", "small-tasks"}, func(s *marshal.Settings) *marshal.ExecutionRights { return &s.ExecutionRights }),
 		field("acceptance-mode", "enum", "", []string{"marshal", "marshal-then-user", "user"}, func(s *marshal.Settings) *marshal.AcceptanceMode { return &s.AcceptanceMode }),
 		field("control", "enum", "", []string{"free", "strict"}, func(s *marshal.Settings) *marshal.Control { return &s.Control }),
@@ -148,6 +149,10 @@ func Catalogue() []Descriptor {
 	}
 	rows = append(rows, editionRows()...)
 	for i := range rows {
+		if rows[i].Key == "final-provider" {
+			rows[i].Default = "any"
+			rows[i].Help = "Final verifier family: any prefers a different implementing family; a pin still requires native identity, a fresh session and exact commit binding."
+		}
 		if rows[i].Key == "control" {
 			rows[i].Default = string(marshal.DefaultSettings().EffectiveControl())
 		}
@@ -268,6 +273,8 @@ func Effective(s marshal.Settings, key string) string {
 		return string(s.ReviewPolicy.Effective().Design)
 	case "architecture-conformance":
 		return string(s.ReviewPolicy.Effective().Conformance)
+	case "final-provider":
+		return s.ReviewPolicy.Effective().FinalProvider
 	case "final-model":
 		return string(s.ReviewPolicy.Effective().FinalModel)
 	}
@@ -293,7 +300,7 @@ type Row struct {
 
 func isReviewPolicyKey(key string) bool {
 	switch key {
-	case "cross-review", "design-review", "architecture-conformance", "final-model":
+	case "cross-review", "design-review", "architecture-conformance", "final-model", "final-provider":
 		return true
 	}
 	return false
