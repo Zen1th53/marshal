@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // v2Screen picks the screen from what the workspace knows: a card that

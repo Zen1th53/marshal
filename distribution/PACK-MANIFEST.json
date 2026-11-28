@@ -1595,6 +1595,36 @@
       "bytes": 13691
     },
     {
+      "path": "internal/app/control/boundary_test.go",
+      "sha256": "a7608cfc96134fa9e119ee6e24c958abcf71b8650c3d551ba54a84beb8bcac9d",
+      "bytes": 1034
+    },
+    {
+      "path": "internal/app/control/contracts.go",
+      "sha256": "4adee79c6a068c1c795b4215c6cd38860a2d0e0d94cee7dbeadbfa4d231e8aa6",
+      "bytes": 2237
+    },
+    {
+      "path": "internal/app/control/contracts_test.go",
+      "sha256": "569fad4c123f5c71c7ed752de2aa308640dcfb3d8934f27b78534a2a66bfba5f",
+      "bytes": 1299
+    },
+    {
+      "path": "internal/app/control/events.go",
+      "sha256": "a7da9d0b45ccbda13035c0b52365cc73859c767117e1ce444ea912acb40e73e7",
+      "bytes": 2081
+    },
+    {
+      "path": "internal/app/control_adapter.go",
+      "sha256": "50639cfe6635090b6df61bdbe050f6e526a8ee421de17e4716c71ba644d200fc",
+      "bytes": 4248
+    },
+    {
+      "path": "internal/app/control_adapter_test.go",
+      "sha256": "1e5517c8eeb8dbefb89938c0ee68a158474fbd479249e6992b59bf47912166b3",
+      "bytes": 4596
+    },
+    {
       "path": "internal/app/credential_auto_default.go",
       "sha256": "3a277263bfea25907f560c8a7e66e0da0d771bfc8e62d6aef611d9405f061d02",
       "bytes": 421
@@ -5288,6 +5318,11 @@
       "path": "internal/authz/types_test.go",
       "sha256": "41516e147634bf532ff2836020a98e9ec32917d104200c5367f48bf2328997a2",
       "bytes": 1935
+    },
+    {
+      "path": "internal/board/vm/vm.go",
+      "sha256": "1acb4c8f02e939c12628ccd56f3785d4138e3cf7d4cc90f286370099f4328c34",
+      "bytes": 17591
     },
     {
       "path": "internal/browser/open.go",
@@ -12750,11 +12785,6 @@
       "bytes": 2705
     },
     {
-      "path": "internal/tui/board/vm/vm.go",
-      "sha256": "1acb4c8f02e939c12628ccd56f3785d4138e3cf7d4cc90f286370099f4328c34",
-      "bytes": 17591
-    },
-    {
       "path": "internal/tui/board/widgets/chat/chat.go",
       "sha256": "c4fbbda97731d43b9994a688254f580201147e38f7699cc46c3f9c9da5ef745e",
       "bytes": 14577
@@ -12896,13 +12926,13 @@
     },
     {
       "path": "internal/tui/board_decisions_view.go",
-      "sha256": "a6945da0382a5099c1eb0da32db4c7faa1febc7e41084784b236ff9ce80092f4",
-      "bytes": 11659
+      "sha256": "62579da419510b6cdc1ad64342bc5ed6442253abc87031e5ac5a9992c5754b1a",
+      "bytes": 11655
     },
     {
       "path": "internal/tui/board_decisions_view_test.go",
-      "sha256": "d5ee17144c9ce7e665ecadb84912b8895223a3ab3ba3716a1407f6ecafa61451",
-      "bytes": 11595
+      "sha256": "0f893b6f91fc29e48ad6937b5808afcdcebff9292702a39d2cd13e267f8c7a64",
+      "bytes": 11591
     },
     {
       "path": "internal/tui/board_demo_test.go",
@@ -12911,8 +12941,8 @@
     },
     {
       "path": "internal/tui/board_dup_rules_test.go",
-      "sha256": "9588f051916e2eafa403f52af18b6bf7134cbf155fc404a16f47d2f1c11894c8",
-      "bytes": 6604
+      "sha256": "dc14338cea32fe264a9069138ae424ecdb7a49b2ce0ed6dd575ddb1c5c12d518",
+      "bytes": 6600
     },
     {
       "path": "internal/tui/board_e2e_test.go",
@@ -12996,13 +13026,13 @@
     },
     {
       "path": "internal/tui/board_home.go",
-      "sha256": "b6be22dbac273a02d7ad48d6d493dd3bf147fb2bf377785e199f10d286a7b527",
-      "bytes": 17633
+      "sha256": "b265b566d67d3bfb112fbd124a5c1cbec2d9a75a34001b0446f34f680b2adaed",
+      "bytes": 17629
     },
     {
       "path": "internal/tui/board_home_test.go",
-      "sha256": "de0b7e159631c65dde5c164fe34830621d3a0425907d8d0109625ba49e71687c",
-      "bytes": 14647
+      "sha256": "09d4e97561fd0b6a86c0c59d6979f2e914133ff1b4b167dddd7b526e2c242447",
+      "bytes": 14643
     },
     {
       "path": "internal/tui/board_inbox.go",
@@ -13061,8 +13091,8 @@
     },
     {
       "path": "internal/tui/board_live_regression_test.go",
-      "sha256": "2a9e8b1fd4815b6edd42248733c88aec3d7a043a61836050c3ce54c625979c4b",
-      "bytes": 4571
+      "sha256": "f0c1f3e17e53ba5bbb4eb08d2db06da74571ae4e5aec997678890a32a6998e90",
+      "bytes": 4567
     },
     {
       "path": "internal/tui/board_live_test.go",
@@ -13071,8 +13101,8 @@
     },
     {
       "path": "internal/tui/board_liveness.go",
-      "sha256": "2e6d1e5f48b93dc66a4b51c2f66a5960611052c532c258c628d24b3ca9e40c6e",
-      "bytes": 3743
+      "sha256": "382df06e7b4750d3a89239e8120f7fac526e74c043d20460e8765d14dfbe6381",
+      "bytes": 3739
     },
     {
       "path": "internal/tui/board_liveness_test.go",
@@ -13096,8 +13126,8 @@
     },
     {
       "path": "internal/tui/board_mode_test.go",
-      "sha256": "d15d1de009fecfa95d835c54951776dc28d72425a296ab942b56a612f4262320",
-      "bytes": 2957
+      "sha256": "2f1a6237fa0721ea372643fdcaff08b2a94ec368bddab51acb5fba32b06df1a9",
+      "bytes": 2953
     },
     {
       "path": "internal/tui/board_model_quota.go",
@@ -13211,13 +13241,13 @@
     },
     {
       "path": "internal/tui/board_run_view.go",
-      "sha256": "a5878d889230e3ee1647201b5d676e67c31e3490b67d230a9bb6b41f07df2114",
-      "bytes": 22718
+      "sha256": "d6e58402145479c8f8a5b1fbc03e68dafe8f7bca6ec3005b9a19f440a75ac09f",
+      "bytes": 22714
     },
     {
       "path": "internal/tui/board_run_view_test.go",
-      "sha256": "21105bfc7d0afaa0976004d0b1659522be613431201c96b43eee5287ba81dac7",
-      "bytes": 13734
+      "sha256": "e86b0b44d7e5f8428777101868f7d191588cd0989028508c20fb38711f62f910",
+      "bytes": 13730
     },
     {
       "path": "internal/tui/board_runend_test.go",
@@ -13341,8 +13371,8 @@
     },
     {
       "path": "internal/tui/board_waiting_test.go",
-      "sha256": "15ceb39c723948b1af0032fc585438051051bf1586e97079a7e8216c7e88831c",
-      "bytes": 12792
+      "sha256": "0f22e6cb98981b94108a87240810fa77e0f7cd2357acace907cedeaacefe594a",
+      "bytes": 12788
     },
     {
       "path": "internal/tui/board_welcome.go",
@@ -13366,8 +13396,8 @@
     },
     {
       "path": "internal/tui/boardv2_cards_decision.go",
-      "sha256": "c25eeb52825f5e8891035cc9d4916276539dfec1bea83d54bc25ac2833adeda3",
-      "bytes": 10340
+      "sha256": "c38ecef5dc31d1f984a3499dddc89840000549ea46a7ee96163075af7d685c1a",
+      "bytes": 10336
     },
     {
       "path": "internal/tui/boardv2_cards_governed_test.go",
@@ -13381,18 +13411,18 @@
     },
     {
       "path": "internal/tui/boardv2_cards_owner.go",
-      "sha256": "7b74f58c5efc3e04ec91402ab1a865ab563828e5bca3ff0292ac22a6f5a84d3e",
-      "bytes": 10849
+      "sha256": "59e3cb1070ab645580bbfa6901828f22bbf3c1331f15baa2cfbaff652bdaa238",
+      "bytes": 10845
     },
     {
       "path": "internal/tui/boardv2_cards_owner_test.go",
-      "sha256": "0f854c588d348625d8d9aa0f6a168f2a65ea8838534c630987e3857e83268bf6",
-      "bytes": 12285
+      "sha256": "cfe512334ec6cef6a562c95327cee444502ef36228d476f690cd6d9ed8047b2e",
+      "bytes": 12281
     },
     {
       "path": "internal/tui/boardv2_cards_paused.go",
-      "sha256": "f68dbc4207d703246ce867448835066ad090d554833efa3e5953f20ef5603827",
-      "bytes": 14319
+      "sha256": "b28e399653028d5e44b9a02509b6cd53036f313fda3e956081b7e05dfe901ad7",
+      "bytes": 14315
     },
     {
       "path": "internal/tui/boardv2_cards_raw_error_test.go",
@@ -13401,78 +13431,78 @@
     },
     {
       "path": "internal/tui/boardv2_cards_state.go",
-      "sha256": "5e48e287d2d51b0c24eb17b33661a382d32cce4b7004d2382f9f41241279c70b",
-      "bytes": 8800
+      "sha256": "1edb91085f4618eec0be822b339ea5c23468126c8adb907416200f43a2414595",
+      "bytes": 8796
     },
     {
       "path": "internal/tui/boardv2_cards_test.go",
-      "sha256": "84b231cdcdf9816f869a475b13d1fd43d3468ae463f32ea6bb8538018769e694",
-      "bytes": 22408
+      "sha256": "edbae58753018f5997c80e254df7c778a96734bb3de7b56f1cfa859ff063938c",
+      "bytes": 22404
     },
     {
       "path": "internal/tui/boardv2_collect.go",
-      "sha256": "a0212df7dd23d546b6cbda7cc62b248955f75725dcf41852ac855cc76899f24e",
-      "bytes": 2515
+      "sha256": "04083d59201f769f5b9c391ea55faa712edb6eada91433cd675062dd8af74d10",
+      "bytes": 2511
     },
     {
       "path": "internal/tui/boardv2_collect_cards.go",
-      "sha256": "e515a88d7600e053b49f0bd5b907fed26b5795757f803e28f8f1d2366b0cb4d8",
-      "bytes": 990
+      "sha256": "5000d4ab468eeb4cc81a49a21747f6ac6f8e11ab029e71cdca8ca2c5d269e3d2",
+      "bytes": 986
     },
     {
       "path": "internal/tui/boardv2_collect_chat.go",
-      "sha256": "3d7201330d11d5b1e3cd040976021cfd166694545b0d3c0104976beb36878942",
-      "bytes": 2722
+      "sha256": "923459e958010016c0b80ddba7cd28ee7c61291b49408b7b7eb1c14d66a957d8",
+      "bytes": 2718
     },
     {
       "path": "internal/tui/boardv2_collect_chat_test.go",
-      "sha256": "1f95d713c4f2732ae0f5a76116e4be57ead6ab91afd4ebbdb54cde0a91305988",
-      "bytes": 3821
+      "sha256": "3496aeb5d2ce1eac290ddb458ec3947d8a55428b84bdc0334b04a9203cd4f275",
+      "bytes": 3817
     },
     {
       "path": "internal/tui/boardv2_collect_flow.go",
-      "sha256": "78aa9c03e20dfa9e7d3185275c53028ba260f38ebf366b8575a0ee3b4b1f4434",
-      "bytes": 6575
+      "sha256": "2727b09b477cc03147e5618513722ea6950232d1bc774ec45242a60d00a165e4",
+      "bytes": 6571
     },
     {
       "path": "internal/tui/boardv2_collect_flow_test.go",
-      "sha256": "134e2b973d2d99aafa4040b15df54088feabeab83288feba1edd948e54c5bce4",
-      "bytes": 22165
+      "sha256": "eafaffbf334ef7c67a21e3a9032a9d4405691630e47edf95c1049cd44ffb92d1",
+      "bytes": 22161
     },
     {
       "path": "internal/tui/boardv2_collect_limits.go",
-      "sha256": "c5d250620253218fe4a428010a530ecb6e291911d2172719cb793fcb09500b49",
-      "bytes": 5355
+      "sha256": "d6ad5a088d552de0ddde2e2b6a4bba7e4a8b15a083df5a8a7d4847930ee15fe6",
+      "bytes": 5351
     },
     {
       "path": "internal/tui/boardv2_collect_limits_test.go",
-      "sha256": "6445bb976ec8a77616c97e7e182b1ab7451eb0b1a67a3c03c72b54eeee778faa",
-      "bytes": 9436
+      "sha256": "ecb6f026611d8af1c459aa9d3fd4deb868c17bd8659d82eb268b4f8ebafa68d3",
+      "bytes": 9432
     },
     {
       "path": "internal/tui/boardv2_collect_marshal.go",
-      "sha256": "be39fd1f4cd08cb1d6ca77fab1f0900af54cd0451c2e3a5e6d88658996d9aea1",
-      "bytes": 20738
+      "sha256": "69d6c7eb801cdd3143d01cc08aca211af15ee4a4ec896953ecc8ec7bc5d3e2db",
+      "bytes": 20734
     },
     {
       "path": "internal/tui/boardv2_collect_marshal_test.go",
-      "sha256": "e89ac38c89aef5e578d95d1bbf71a0be477e99b7eb161df2cf33f2535e39cfbe",
-      "bytes": 13346
+      "sha256": "b9f00e19ee71b9ce8cf451fedb7ab18cd52f2c209780e6d99c2c0cfbe4001989",
+      "bytes": 13342
     },
     {
       "path": "internal/tui/boardv2_collect_system.go",
-      "sha256": "3eea30c85128dba4078167449977df9c4084a597e525a27b1fd56c0dc43f5e3f",
-      "bytes": 1439
+      "sha256": "014ae4520132c5f3f557080983c8fdd769e2ecfed1ea275a12eda5ca2305b951",
+      "bytes": 1435
     },
     {
       "path": "internal/tui/boardv2_collect_system_test.go",
-      "sha256": "776d62e008c23b9279c01f2759932acc033a327afff5b53eb92f4e6e62e6033c",
-      "bytes": 782
+      "sha256": "93d054c6baac7504f425926a54b88833e642f2e29eb98935c329a75ddf80741a",
+      "bytes": 778
     },
     {
       "path": "internal/tui/boardv2_flow.go",
-      "sha256": "1cd77b14ab2d2691263dbe67cfe3b039a99b1742799781c9fec988ed7a3e23bc",
-      "bytes": 39260
+      "sha256": "218e902ae1631fcbe701b39e3b987f01c5226b27c0f66a7952fb6a71fae9183a",
+      "bytes": 39256
     },
     {
       "path": "internal/tui/boardv2_flow_default.go",
@@ -13501,8 +13531,8 @@
     },
     {
       "path": "internal/tui/boardv2_mouse.go",
-      "sha256": "d6ff23718f8757b04aaa602dd0518f935d204ed726799333dbf0bcfe5ea6cc31",
-      "bytes": 2478
+      "sha256": "c41c1a555445c880cef9250491c53318b690c684b3d1f6925b6a8bd43f7e3a77",
+      "bytes": 2474
     },
     {
       "path": "internal/tui/boardv2_mouse_test.go",
@@ -13516,18 +13546,18 @@
     },
     {
       "path": "internal/tui/boardv2_paint.go",
-      "sha256": "30d3c4fa652eee70a02ebf2cf0e94a682138a541b17466f937dcc290c1aa4cc9",
-      "bytes": 787
+      "sha256": "b4ec20dd42eca5cd44fda7c0ab277c60ad4feebc17c37831f8e37521bf0ba3e5",
+      "bytes": 783
     },
     {
       "path": "internal/tui/boardv2_ready_keys.go",
-      "sha256": "6cd6c60ac6224a15334cfc41a3fc111e35ba764f4a8ddb9b51ccbd70e5decead",
-      "bytes": 9363
+      "sha256": "f6f44a11411f92787cc62c59c8e636e9b5c4cd5171755087e57af5af3461a97d",
+      "bytes": 9359
     },
     {
       "path": "internal/tui/boardv2_steps.go",
-      "sha256": "abcdb382772a6a78d03ffe7bb62b8ba3a3b64aa881c5f0de1d58a70663d13a77",
-      "bytes": 11064
+      "sha256": "fb14215a1ea07f7177b3a8b0fd0c03be1a47c6b0fd921c5aca17e33aa702d39a",
+      "bytes": 11060
     },
     {
       "path": "internal/tui/boardv2_steps_extreme_test.go",
@@ -13611,8 +13641,8 @@
     },
     {
       "path": "internal/tui/chat_input_observe_test.go",
-      "sha256": "617e1fa3c7d0b0bcaea1eb25abde4a701e29d38094fced3d067dc3c976924ff2",
-      "bytes": 2393
+      "sha256": "0d700d9a1bc05b2573a34d5f7d62c1b61db4c3eadd4a61a12a2bbfcd4280db60",
+      "bytes": 2389
     },
     {
       "path": "internal/tui/chat_live_claude_test.go",
@@ -14226,8 +14256,8 @@
     },
     {
       "path": "internal/tui/host_thermal_test.go",
-      "sha256": "56026a0fb0c464b78e0267b316612a729efc3f80f6b579576f400c5376a071e3",
-      "bytes": 17203
+      "sha256": "cb88a2d091c616a6f2174a5a266084e90f65514d42914baf977d12c71587352f",
+      "bytes": 17199
     },
     {
       "path": "internal/tui/host_view.go",
@@ -14451,13 +14481,13 @@
     },
     {
       "path": "internal/tui/marshal_dockstrip.go",
-      "sha256": "e8382c13a50a683f24d2e901ee71e83417c473b7e57f058d28822fadae8c8024",
-      "bytes": 6628
+      "sha256": "16f63623e3b19e3685a8821de0c19e35c54e52a2f9d8e3bad8dc8b80a4d83a6c",
+      "bytes": 6624
     },
     {
       "path": "internal/tui/marshal_dockstrip_test.go",
-      "sha256": "7f298373a6d21da9ebea4c7d0a4840cae8504391a183d83af618e72a42a76995",
-      "bytes": 6779
+      "sha256": "13f4d9ec14e2479c750407ef567ad51c4c9d6b46189a4c6c78e4484659cccba4",
+      "bytes": 6775
     },
     {
       "path": "internal/tui/marshal_draft_failure_test.go",
@@ -14761,13 +14791,13 @@
     },
     {
       "path": "internal/tui/marshal_says.go",
-      "sha256": "bb82275ded7876cedf6e030a4535f7ba38e9e06b379e4ad0ec0d2e95b97154bd",
-      "bytes": 3758
+      "sha256": "c881daaea1f5e1bda380623669a87ac35b9655cfd971bc9e72719c0db3b703e7",
+      "bytes": 3754
     },
     {
       "path": "internal/tui/marshal_says_test.go",
-      "sha256": "c61b82db05b25d72584774c7ece1ef06bfb9d9fce0045347b42f84ef5c508c7a",
-      "bytes": 3581
+      "sha256": "16e07102a2dbecf5728a0ad6afd7aedf9a29c46e63e2dd2aa025466618af90ba",
+      "bytes": 3577
     },
     {
       "path": "internal/tui/marshal_splash.go",
@@ -15496,8 +15526,8 @@
     },
     {
       "path": "internal/tui/proposal_rebind_extreme_test.go",
-      "sha256": "3dd65fe45ec7ef53d0562e1fcaa67792f14edf20b38c3a82f640e3d42ee5ec4e",
-      "bytes": 6313
+      "sha256": "e520bca27cc9286a452442426c62ea4631060449939d06128b7167daf82bf1c8",
+      "bytes": 6309
     },
     {
       "path": "internal/tui/proposal_refusal_extreme_test.go",
@@ -15661,8 +15691,8 @@
     },
     {
       "path": "internal/tui/readiness.go",
-      "sha256": "fc711e343417ca09787529201e40b3fc8f3173f57a3519312c63b84725079a61",
-      "bytes": 2102
+      "sha256": "268f31bbeaced8e02d857a14c53c9716efce18aa1bbdf38345e61b21b89fc62c",
+      "bytes": 2098
     },
     {
       "path": "internal/tui/readiness_extreme_test.go",
@@ -15671,8 +15701,8 @@
     },
     {
       "path": "internal/tui/readiness_test.go",
-      "sha256": "41bc7ed0b2ffeb693c3f1e1cf3b4a7480123584d38e904a8860ed10f6fd3829b",
-      "bytes": 4698
+      "sha256": "cd344b0907da8441c1218e7c3dc310a7f35b46408ced312ed8500b5b84944dbb",
+      "bytes": 4694
     },
     {
       "path": "internal/tui/redact.go",
@@ -15931,8 +15961,8 @@
     },
     {
       "path": "internal/tui/task_relay_wait_test.go",
-      "sha256": "1043f5bf493537a964b082fd5e5a5d6692c501a951159b947e47666d690c6164",
-      "bytes": 1923
+      "sha256": "ad04090bdd933ac4037216437d799f164876947a6781462223fd5c524c738d62",
+      "bytes": 1919
     },
     {
       "path": "internal/tui/task_relay_window_test.go",
@@ -16671,13 +16701,13 @@
     },
     {
       "path": "internal/tui/webboard.go",
-      "sha256": "2a9809234e83e1740f96157c73a1d331e8a7bbbd76e8eef2a527c66967b71509",
-      "bytes": 9580
+      "sha256": "9a0715fe47f2905a212078453fffb25989c6fa4f8964b1cc631eb2c16fa505d3",
+      "bytes": 9576
     },
     {
       "path": "internal/tui/webboard_act.go",
-      "sha256": "5b3ef847a6d31a2966de803096446db7971d60e93b3237ff8aa2c87195f54bed",
-      "bytes": 15262
+      "sha256": "70e86efe95a9c986eb0230388117d5666e80a98705263615e53a80772d4ac857",
+      "bytes": 15258
     },
     {
       "path": "internal/tui/webboard_act_linux_test.go",
@@ -16721,8 +16751,8 @@
     },
     {
       "path": "internal/tui/webboard_decisions.go",
-      "sha256": "d26920026c0cfc18f0dd6eca3abc196cbd1ae85404efb398b082c4a9a1688cac",
-      "bytes": 15739
+      "sha256": "ef08aecb62d2f522962c46bca2ac2745fa29f4599211bfb2e16e8f6294e590bb",
+      "bytes": 15735
     },
     {
       "path": "internal/tui/webboard_decisions_test.go",
@@ -16781,8 +16811,8 @@
     },
     {
       "path": "internal/tui/webboard_test.go",
-      "sha256": "03f0f25ba02d15753fc1883f536b6e9de9738a0f06b8fcc4d8849c8d6dbb1210",
-      "bytes": 9420
+      "sha256": "a96336509884ea8f757f8a3c206b3135d98e7918f6658bf165bc940d7c0b7652",
+      "bytes": 9416
     },
     {
       "path": "internal/tui/worker_signal_linux_test.go",
@@ -17131,8 +17161,8 @@
     },
     {
       "path": "internal/webboard/act_test.go",
-      "sha256": "e84ad78b12e9b29d2ed9d3050c1830f00bde098f00283b535dd2d0f6c499f1c9",
-      "bytes": 16375
+      "sha256": "d3dcbcf0fc31bfa461326ac0d1f5a730f9a83f16f48fd2588d5807f83079cab1",
+      "bytes": 16371
     },
     {
       "path": "internal/webboard/commands.go",
@@ -17146,8 +17176,8 @@
     },
     {
       "path": "internal/webboard/demo_test.go",
-      "sha256": "b3ee9a219aa961924bfa375e852003dc78f46b8d2290654583f2aa13afbe859b",
-      "bytes": 4882
+      "sha256": "19898d6754ea42ebf3b5023adeaefe9ea68e55622a218b851ec672df1032ac7b",
+      "bytes": 4878
     },
     {
       "path": "internal/webboard/details.go",
@@ -17156,23 +17186,23 @@
     },
     {
       "path": "internal/webboard/evidence_pages_test.go",
-      "sha256": "a76fe00d770736fc7266b6fe39d3f4bb58695f112e2b5a5a19fedf5192e55a95",
-      "bytes": 9275
+      "sha256": "42f36548f911681a025a3dd90ff25c9de6f5cba9c71b841690f642711c6d6490",
+      "bytes": 9271
     },
     {
       "path": "internal/webboard/fixture_test.go",
-      "sha256": "7929239c26adc22712eeb966b854dfc88a14f18fee69a0faa568d210165bc9c2",
-      "bytes": 18112
+      "sha256": "c72055098aad9f81f274bcf28b5d027ff2566ab20c6ee5a1c224852b4417d5e4",
+      "bytes": 18108
     },
     {
       "path": "internal/webboard/frame.go",
-      "sha256": "95f26e6f924b6b50f5099ab04a4d0ff5ec5fcdd1190d20494d43f15a81b01707",
-      "bytes": 25368
+      "sha256": "df8baa1f6c25a315ec5719ce5fc8e77eedbc8efb4daad40dbf37bb176ee2689f",
+      "bytes": 25364
     },
     {
       "path": "internal/webboard/frame_test.go",
-      "sha256": "57706913a0ddcb647b933ac225336941fe1753eb782deccb20d79665b82b618b",
-      "bytes": 22594
+      "sha256": "09d6ac15e5f6693cc4910f9b6885e49790b8af3300a490671962284b834ef97e",
+      "bytes": 22590
     },
     {
       "path": "internal/webboard/link_test.go",
@@ -17196,18 +17226,18 @@
     },
     {
       "path": "internal/webboard/page_visibility_test.go",
-      "sha256": "dd1fe63ea4cdde2c8cb0e79ef3ebe649c5b2da7a9d0103069804c7eafdd2b4dc",
-      "bytes": 2480
+      "sha256": "d07d439bf0a4c2a11373e2c6e9af2d563d031f831b7f20ba2b7c89a46f797ea3",
+      "bytes": 2476
     },
     {
       "path": "internal/webboard/server.go",
-      "sha256": "7facee71fb1a359667d4d31a49debdaa55678152c5e3dbf696fcf6cccd3a36ab",
-      "bytes": 17412
+      "sha256": "ff2c7b985ecb853d2419e7c0e01680228ac022fe715a9951bd43fb3edec32386",
+      "bytes": 17408
     },
     {
       "path": "internal/webboard/server_test.go",
-      "sha256": "493096ff9092ca733e9db1793aa6dd9b5b6e6e24200745db274a7f150e8b561a",
-      "bytes": 13634
+      "sha256": "4687710e0a929227f961755b70093ebe2c51586393f156869d695c2e559cbc5c",
+      "bytes": 13630
     },
     {
       "path": "internal/webboard/settings.go",
@@ -17216,8 +17246,8 @@
     },
     {
       "path": "internal/webboard/settings_test.go",
-      "sha256": "433382425be01d51bb7ef99d92ad21b0005862e9fc479ca97961bb2890d13ac1",
-      "bytes": 12514
+      "sha256": "9629896db547702e7f2bffd0debd681d9af75282c3c50359914655c7045658cc",
+      "bytes": 12510
     },
     {
       "path": "internal/webboard/testdata/card.cjs",

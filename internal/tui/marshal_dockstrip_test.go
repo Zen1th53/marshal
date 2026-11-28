@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // stripFull is the full dock strip.

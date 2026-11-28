@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // Before the host watcher's first sample the figures are unknown (-1), not

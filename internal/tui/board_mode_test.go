@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/board/vm"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
 )
 
 func TestBoardModeReportsEffectiveTierSeparately(t *testing.T) {

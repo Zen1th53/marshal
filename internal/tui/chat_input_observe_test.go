@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // The chat window's monitor reads the input box off the styled capture it

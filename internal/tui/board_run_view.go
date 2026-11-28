@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/tui/board/vm"
+	"github.com/Zen1th53/marshal/internal/board/vm"
 )
 
 // The home screen's pages: the Run view (r), the Inbox view (i) and the
