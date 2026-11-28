@@ -115,7 +115,9 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	run.Operation = nil
 	kindEvent := events.EventTypeMarshalTaskReturned
 	if recoveryErr != nil {
-		t.State = marshal.Escalated
+		if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+			return err
+		}
 		machine := "failed attempt recovery: " + recoveryErr.Error()
 		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeFailedAttemptRecovery, t.EscalationReason)
@@ -126,7 +128,9 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 	} else if kind == platformUnsupported {
 		// Every provider fails the same way here, so neither a retry nor a
 		// provider cooldown can help: stop at once and say why.
-		t.State = marshal.Escalated
+		if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+			return err
+		}
 		machine := fmt.Sprintf("%s: %s", infraRetryEscalation, reason)
 		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
@@ -135,7 +139,9 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
 	} else if retryLimit > 0 && t.InfraRetries > retryLimit {
-		t.State = marshal.Escalated
+		if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+			return err
+		}
 		machine := fmt.Sprintf("%s: %d attempts ended without a hand-in; last on %s (%s): %s", infraRetryEscalation, t.InfraRetries, t.Worker, kind, reason)
 		t.EscalationReason = machine
 		t.EscalationCode = escalationCode(marshal.CodeInfraRetry, t.EscalationReason)
@@ -145,7 +151,9 @@ func (s *MarshalService) returnInfraFailure(ctx context.Context, runID string, r
 		data["reason"], data["summary"] = machine, plain
 		kindEvent = events.EventTypeMarshalEscalated
 	} else {
-		t.State = marshal.Returned
+		if err := marshal.SetTaskState(t, marshal.Returned); err != nil {
+			return err
+		}
 		// Only a failure that says something about the provider cools it;
 		// a crash, an expired lease or a lost connection to Marshal's tools
 		// would otherwise park the run as waiting on a quota it still has.

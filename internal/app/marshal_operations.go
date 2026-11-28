@@ -172,7 +172,9 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			return run, rev, model.ErrNotFound
 		}
 		op.Event.Data["launch_outcome"] = "interrupted; driver completion unknown"
-		run.Tasks[i].State = marshal.Dispatched
+		if err := marshal.SetTaskState(&run.Tasks[i], marshal.Dispatched); err != nil {
+			return run, rev, err
+		}
 		run.State = marshal.Dispatching
 		// The started worker keeps the slot reserved for its launch.
 		markSlotRunning(&run, launchKey)
@@ -207,7 +209,9 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 				i := taskIndex(run, op.TaskID)
 				if i >= 0 {
 					run.Tasks[i].ResultCommit = head
-					run.Tasks[i].State = marshal.Escalated
+					if err := marshal.SetTaskState(&run.Tasks[i], marshal.Escalated); err != nil {
+						return run, rev, err
+					}
 				}
 				op.Event.Data["result_commit"] = head
 			}

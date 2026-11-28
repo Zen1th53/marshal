@@ -193,7 +193,9 @@ func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, b
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
-	next.Tasks[i].State = marshal.Dispatched
+	if err := marshal.SetTaskState(&next.Tasks[i], marshal.Dispatched); err != nil {
+		return dispatch, err
+	}
 	next.Tasks[i].ExecutionTier = policy.Tier
 	if s.LaunchSupervisor != nil && !s.supervisesLaunch(d) {
 		// A driver that cannot hold its worker launches directly, unslotted.
@@ -591,7 +593,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		if i < 0 {
 			return handin, errors.Join(err, model.ErrNotFound)
 		}
-		run.Tasks[i].State = marshal.Escalated
+		if err := marshal.SetTaskState(&run.Tasks[i], marshal.Escalated); err != nil {
+			return marshal.HandIn{}, err
+		}
 		run.Tasks[i].EscalationReason = "security: " + err.Error()
 		run.Tasks[i].EscalationCode = escalationCode(marshal.CodeSecurity, run.Tasks[i].EscalationReason)
 		pauseMarshal(&run, marshal.Pause{Reason: "security: " + err.Error(), Resolutions: []string{"resolve the security alert and amend the plan before retrying"}, Code: marshal.CodeSecurity, Action: marshal.PauseResume})
@@ -753,7 +757,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	t.ResultCommit = handin.ResultCommit
 	t.LaunchKey = ""
 	if validationErr == nil {
-		t.State = marshal.HandedIn
+		if err := marshal.SetTaskState(t, marshal.HandedIn); err != nil {
+			return marshal.HandIn{}, err
+		}
 		run.State = marshal.Reviewing
 	}
 	run.Operation = nil
@@ -1068,7 +1074,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if _, err = s.Store.SetMarshalReview(ctx, runID, taskID, attempt, proposal); err != nil {
 		return "", err
 	}
-	t.State = marshal.Accepted
+	if err := marshal.SetTaskState(t, marshal.Accepted); err != nil {
+		return "", err
+	}
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return "", err
 	}
@@ -1208,13 +1216,18 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 	if data == nil {
 		data = map[string]any{}
 	}
-	result := applyMarshalReturn(&run, t)
+	result, err := applyMarshalReturn(&run, t)
+	if err != nil {
+		return "", err
+	}
 	if d := t.ReviewDisagreement; d != nil && d.Attempt == attempt {
 		data["review_disagreement"] = reviewDisagreementData(*t, *d)
 		if d.Count >= 2 && t.State != marshal.Escalated {
 			// The same conflict again: stop automatic rework. The pause names
 			// the owner's next action; neither verdict is replaced.
-			t.State = marshal.Escalated
+			if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+				return "", err
+			}
 			t.EscalationReason = "the reviewers disagreed again on the same finding"
 			t.EscalationCode = marshal.CodeReviewDisagreement
 			pauseMarshal(&run, reviewDisagreementPause(*t, *d))
@@ -1256,14 +1269,14 @@ func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, 
 		notice = "Task " + t.PlanTaskID + " was returned: " + reviewDisagreementSummary(*d)
 	}
 	s.announceTask(ctx, runID, t.PlanTaskID, attempt, TaskNoticeReviewReturned, fmt.Sprint(revision), notice, "")
-	_, err := s.Charge(ctx, runID, t.PlanTaskID, "return", zeroMarshalCharge())
+	_, err = s.Charge(ctx, runID, t.PlanTaskID, "return", zeroMarshalCharge())
 	return result, err
 }
 
 // applyMarshalReturn counts a return against the task's worker and moves the
 // task on: back to the same worker, to another worker once the rework limit
 // is reached, or to the user when another worker has failed it too.
-func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
+func applyMarshalReturn(run *marshal.Run, t *marshal.Task) (marshal.Verdict, error) {
 	if t.ReturnsByAgent == nil {
 		t.ReturnsByAgent = map[string]int{}
 	}
@@ -1274,16 +1287,22 @@ func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
 	}
 	switch result {
 	case marshal.VerdictReturn:
-		t.State = marshal.Returned
+		if err := marshal.SetTaskState(t, marshal.Returned); err != nil {
+			return "", err
+		}
 	case marshal.VerdictReassign:
-		t.State = marshal.Reassigned
+		if err := marshal.SetTaskState(t, marshal.Reassigned); err != nil {
+			return "", err
+		}
 	case marshal.VerdictEscalate:
-		t.State = marshal.Escalated
+		if err := marshal.SetTaskState(t, marshal.Escalated); err != nil {
+			return "", err
+		}
 		t.EscalationReason = "worker rework limit reached"
 		t.EscalationCode = escalationCode(marshal.CodeReworkLimit, t.EscalationReason)
 		pauseMarshal(run, reworkLimitEscalationPause(*t))
 	}
-	return result
+	return result, nil
 }
 
 // ReturnByUser sends a handed-in task back on the person's decision, with
@@ -1598,7 +1617,9 @@ func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, op
 	}
 	t.Worker = worker
 	if !queued {
-		t.State = marshal.Reassigned
+		if err := marshal.SetTaskState(t, marshal.Reassigned); err != nil {
+			return err
+		}
 	}
 	t.EscalationReason = ""
 	t.EscalationCode = ""
@@ -1695,7 +1716,9 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 	} else {
 		prepareReturnedTaskRetry(run, t)
 	}
-	t.State = marshal.Returned
+	if err := marshal.SetTaskState(t, marshal.Returned); err != nil {
+		return err
+	}
 	t.EscalationReason = ""
 	t.EscalationCode = ""
 	if t.ReturnsByAgent != nil && (wasEscalated || isExtremeBuild) {
@@ -1738,7 +1761,9 @@ func (s *MarshalService) CancelTask(ctx context.Context, runID, taskID string) e
 	if err := marshal.TransitionTask(t.State, marshal.Cancelled); err != nil {
 		return err
 	}
-	t.State = marshal.Cancelled
+	if err := marshal.SetTaskState(t, marshal.Cancelled); err != nil {
+		return err
+	}
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
@@ -1825,7 +1850,9 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
-	next.Tasks[i].State = marshal.Merged
+	if err := marshal.SetTaskState(&next.Tasks[i], marshal.Merged); err != nil {
+		return err
+	}
 	next.State = marshal.Merging
 	all := true
 	for _, t := range next.Tasks {
@@ -2425,7 +2452,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 				return run, err
 			}
 			run.Tasks[i].ReturnsByAgent = nil
-			run.Tasks[i].State = marshal.Queued
+			if err := marshal.ResetTaskForAmendment(&run.Tasks[i]); err != nil {
+				return run, err
+			}
 			run.Tasks[i].BaseCommit = run.BaseCommit
 			run.Tasks[i].ResultCommit = ""
 			run.Tasks[i].FailedAttemptCommit = ""
@@ -2475,7 +2504,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		previous := run.Tasks
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
-			run.Tasks[i].State = marshal.Queued
+			if err := marshal.ResetTaskForAmendment(&run.Tasks[i]); err != nil {
+				return run, err
+			}
 			run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, 0)
 			if run.ArtifactRevision > 0 {
 				run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, run.ArtifactRevision)
@@ -2486,7 +2517,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 			run.Tasks[i].ReturnsByAgent = nil
 			for _, old := range previous {
 				if old.PlanTaskID == run.Tasks[i].PlanTaskID {
-					run.Tasks[i].State = old.State
+					if err := marshal.RestoreAmendedTaskState(&run.Tasks[i], old); err != nil {
+						return run, err
+					}
 					run.Tasks[i].Branch = old.Branch
 					run.Tasks[i].BaseCommit = old.BaseCommit
 					run.Tasks[i].ResultCommit = old.ResultCommit
@@ -2637,7 +2670,9 @@ func (s *MarshalService) escalateWithDetail(ctx context.Context, runID, taskID, 
 		if i < 0 {
 			return model.ErrNotFound
 		}
-		run.Tasks[i].State = marshal.Escalated
+		if err := marshal.SetTaskState(&run.Tasks[i], marshal.Escalated); err != nil {
+			return err
+		}
 		run.Tasks[i].EscalationReason = reason
 		run.Tasks[i].EscalationCode = escalationCode(code, reason)
 	}
@@ -2851,7 +2886,9 @@ func (s *MarshalService) resume(ctx context.Context, runID string) (marshal.Run,
 		}
 		if t.State == marshal.Dispatched && !s.dispatchLive(runID, t.PlanTaskID) {
 			if s.requeueGovernedApprovalTask(ctx, run, *t) {
-				run.Tasks[i].State = marshal.Queued
+				if err := marshal.SetTaskState(&run.Tasks[i], marshal.Queued); err != nil {
+					return run, err
+				}
 				if err = s.save(ctx, runID, run, rev); err != nil {
 					return run, err
 				}
@@ -2999,7 +3036,9 @@ func (s *MarshalService) parkPausedTask(ctx context.Context, runID string, dispa
 	if i < 0 || run.Tasks[i].State != marshal.Dispatched {
 		return true, errors.Join(cause, model.ErrConflict)
 	}
-	run.Tasks[i].State = marshal.Queued
+	if err := marshal.SetTaskState(&run.Tasks[i], marshal.Queued); err != nil {
+		return true, err
+	}
 	if s.HeldTask != nil && s.HeldTask(runID, dispatch.TaskID) {
 		// This session's pause holds the task: Execute waits for the hold.
 		return true, s.save(context.WithoutCancel(ctx), runID, run, rev)

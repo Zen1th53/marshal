@@ -110,7 +110,7 @@ func TestMarshalOperatorMovesQueuedGovernedTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	planned := run.Tasks[0].Worker
-	run.Tasks[0].State = marshal.Queued
+	run, rev = advanceTaskFixture(t, s, "run", 0, marshal.Queued)
 	run.Tasks[0].EscalationReason = ""
 	run.Tasks[0].ReturnsByAgent = nil
 	run.Pause = nil
