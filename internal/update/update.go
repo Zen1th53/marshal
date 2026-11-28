@@ -56,7 +56,8 @@ type Release struct {
 	Tag string `json:"tag"`
 	// URL is the release page, so a user can read what changed before
 	// installing anything.
-	URL string `json:"url"`
+	URL           string `json:"url"`
+	SchemaVersion int    `json:"schema_version"`
 }
 
 // Checker looks up the latest release.
@@ -124,9 +125,10 @@ func (c *Checker) Latest(ctx context.Context) (Release, error) {
 	}
 
 	var payload struct {
-		TagName string `json:"tag_name"`
-		HTMLURL string `json:"html_url"`
-		Draft   bool   `json:"draft"`
+		TagName       string `json:"tag_name"`
+		HTMLURL       string `json:"html_url"`
+		Draft         bool   `json:"draft"`
+		SchemaVersion int    `json:"schema_version"`
 	}
 	// The feed is read with a bound: a response that keeps coming is not a
 	// release description.
@@ -137,7 +139,7 @@ func (c *Checker) Latest(ctx context.Context) (Release, error) {
 	if tag == "" || payload.Draft {
 		return Release{}, fmt.Errorf("the release feed named no published release")
 	}
-	return Release{Tag: tag, URL: payload.HTMLURL}, nil
+	return Release{Tag: tag, URL: payload.HTMLURL, SchemaVersion: payload.SchemaVersion}, nil
 }
 
 // Available reports the latest release and whether it is newer than the
@@ -148,6 +150,29 @@ func (c *Checker) Available(ctx context.Context, current string) (Release, bool,
 		return Release{}, false, err
 	}
 	return latest, Newer(current, latest.Tag), nil
+}
+
+// DevGuidance explains why an unidentified build is never replaced.
+const DevGuidance = "This is a dev build. Self-update will not replace it. To install a release deliberately, download a tagged release from https://github.com/Zen1th53/marshal/releases and install it separately."
+
+// IsRelease reports whether the identity is an unambiguous release tag.
+func IsRelease(version string) bool { _, ok := parseVersion(version); return ok }
+
+// ValidateInstall refuses dev builds, targets that are not a newer release,
+// and targets whose published schema support is older than this build's.
+// A release that does not publish schema support is accepted: it is a newer
+// release by version, and refusing every such release would block all updates.
+func ValidateInstall(current string, release Release, schema int) error {
+	if !IsRelease(current) {
+		return errors.New(DevGuidance)
+	}
+	if !Newer(current, release.Tag) {
+		return fmt.Errorf("refusing update from %s → to %s: target must be a newer release", current, release.Tag)
+	}
+	if release.SchemaVersion > 0 && release.SchemaVersion < schema {
+		return fmt.Errorf("refusing update: target supports schema v%d; this build supports v%d. Keep this binary", release.SchemaVersion, schema)
+	}
+	return nil
 }
 
 // Newer reports whether tag is a later version than current.
@@ -242,7 +267,7 @@ func (c *Checker) Install(ctx context.Context, release Release) (string, error) 
 	}
 	sum := sha256.Sum256(payload)
 	if !strings.EqualFold(hex.EncodeToString(sum[:]), expected) {
-		return "", fmt.Errorf("checksum verification failed for %s; nothing was installed", archive)
+		return "", fmt.Errorf("checksum mismatch: checksum verification failed for %s; nothing was installed", archive)
 	}
 
 	binary, err := extractBinary(payload)

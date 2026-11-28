@@ -191,8 +191,8 @@ func TestLegalCLI(t *testing.T) {
 }
 
 func TestCLIDevelopmentVersion(t *testing.T) {
-	if Version != "v0.2.0" {
-		t.Fatalf("local build version = %q, want v0.2.0", Version)
+	if Version != "dev" {
+		t.Fatalf("local build version = %q, want dev", Version)
 	}
 }
 

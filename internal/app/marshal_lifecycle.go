@@ -1868,6 +1868,9 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 	if err != nil {
 		return err
 	}
+	if err = s.atLifecycleBoundary("merge", "intent"); err != nil {
+		return err
+	}
 	effectCompleted := false
 	defer func() {
 		if !effectCompleted {
@@ -1886,6 +1889,10 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retEr
 		} else if _, err = wm.Prepare(ctx, model.WorktreeRequest{TaskID: integrationTaskID(runID, run), Branch: branch, BaseCommit: run.BaseCommit}); err != nil {
 			return err
 		}
+	}
+	if err = s.atLifecycleBoundary("merge", "worktree"); err != nil {
+		effectCompleted = true // Simulated crash must retain the journal.
+		return err
 	}
 	// The checkout must be the clean, run-owned integration source at the
 	// expected head before it moves; otherwise nothing was published.
@@ -2174,6 +2181,9 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	if err != nil {
 		return err
 	}
+	if err = s.atLifecycleBoundary("close", "intent"); err != nil {
+		return err
+	}
 	effectCompleted := false
 	defer func() {
 		if !effectCompleted {
@@ -2191,6 +2201,10 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 	}()
 
 	if _, err = gitMarshal(ctx, s.Repository, "update-ref", checkpoint, old); err != nil {
+		return err
+	}
+	if err = s.atLifecycleBoundary("close", "checkpoint"); err != nil {
+		effectCompleted = true
 		return err
 	}
 	env.Reversibility = constitution.ReversibleInternal
@@ -2227,6 +2241,10 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 		return err
 	}
 	rev++
+	if err = s.atLifecycleBoundary("close", "authorized"); err != nil {
+		effectCompleted = true
+		return err
+	}
 	effect := func() error {
 		if _, err = gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", old, head); err != nil {
 			return errors.New("target cannot fast-forward")
@@ -2238,10 +2256,12 @@ func (s *MarshalService) closeRun(ctx context.Context, runID string) (retErr err
 		if err != nil {
 			return err
 		}
-		if receipt != nil {
-			if err = s.ensureChecksOnlyCloseFence(ctx, runID, op); err != nil {
-				return err
-			}
+		if err = s.ensureChecksOnlyCloseFence(ctx, runID, op); err != nil {
+			return err
+		}
+		if err = s.atLifecycleBoundary("close", "fence"); err != nil {
+			effectCompleted = true
+			return err
 		}
 		if checkedOut != "" {
 			// Git's fast-forward merge updates the branch, index and files

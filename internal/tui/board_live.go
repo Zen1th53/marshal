@@ -692,6 +692,7 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 	cursorRow, cursorCol := rows, 1
 	text := w.composer.Text()
 	saying := w.say.open.Load()
+	quitKind, quitHeld := w.quitAsking()
 	switch {
 	case text != "" || saying:
 		prefix := ""
@@ -702,6 +703,8 @@ func (w *Workspace) boardFrameVitals(state UIState, th *Theme, popup []string, c
 		runes := []rune(cleanBoard(text))
 		v.status = prefix + string(runes)
 		cursorCol = min(cols, 2+VisibleLen(prefix)+VisibleLen(string(runes[:min(len(runes), w.composer.CursorPos())])))
+	case quitKind != quitAskNone:
+		v.status = quitAskStatus(quitKind, quitHeld)
 	case ui.retryArmed != "":
 		v.status = retryArmStatus(p.Board, ui.retryArmed)
 	case w.interruptArmed:

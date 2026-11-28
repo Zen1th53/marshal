@@ -152,8 +152,12 @@ type Workspace struct {
 	// interruptArmed records that a Ctrl+C arrived with nothing left to
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
-	interruptArmed        bool
-	exitRequested         bool
+	interruptArmed bool
+	exitRequested  bool
+	// quitAsk is the open quit question (quit_ask.go) and quitAskHold what
+	// it was opened for; guarded by mu.
+	quitAsk               quitAskKind
+	quitAskHold           quitHold
 	nativeOnStart         *[]string
 	nativeStartupProvider string
 	// nativeProvider records which agent a session last opened. It is an
@@ -998,8 +1002,10 @@ func effectiveModeLabel(mode string, entitled bool) string {
 
 func (w *Workspace) GetUIState() UIState {
 	w.mu.RLock()
-	defer w.mu.RUnlock()
 	state := w.liveStateLocked()
+	w.mu.RUnlock()
+	readiness, _ := w.executionReadiness()
+	state.ReadinessBlocker = readiness.Blocker
 	return state
 }
 
@@ -1258,6 +1264,12 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 	// press exit, so a reflexive Ctrl+C never discards a session the
 	// operator is still working in.
 	if event.Type == KeyCtrlC {
+		if kind, _ := w.quitAsking(); kind != quitAskNone {
+			w.closeQuitAsk()
+			w.setOutput("Still here. Nothing was stopped.", false)
+			w.renderFullView()
+			return false
+		}
 		if w.commandBusy.Load() {
 			dropped := w.clearCommandQueue()
 			w.cancelCommand()
@@ -1312,6 +1324,16 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 	if w.interruptArmed {
 		w.interruptArmed = false
 		w.renderFullView()
+	}
+
+	// The quit question q opened takes the next key (quit_ask.go).
+	if took, exit := w.handleQuitAskKey(ctx, event); took {
+		if exit {
+			w.clearTerminal()
+			return true
+		}
+		w.renderFullView()
+		return false
 	}
 
 	// A click on [m] in the chat's title row (tmux_status.go) opens the

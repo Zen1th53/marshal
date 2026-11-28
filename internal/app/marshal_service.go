@@ -74,6 +74,9 @@ type MarshalService struct {
 	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
 	// AfterLifecycleEffect injects a failure after the effect but before completion.
 	AfterLifecycleEffect func(kind, operationID string) error
+
+	// lifecycleBoundary is a test seam that leaves the durable journal intact.
+	lifecycleBoundary func(kind, boundary string) error
 	// VerifyProcessExit optionally confirms whether an already-started worker
 	// process has exited before stale-base recovery releases its capacity.
 	VerifyProcessExit func(ctx context.Context, runID, taskID string) (bool, error)

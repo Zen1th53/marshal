@@ -17,8 +17,9 @@ const msgNothingChanged = "Nothing was changed: this needs an open project. Rest
 
 // CommandHandler dispatches interactive slash commands in the TUI workspace.
 type CommandHandler struct {
-	ws          *Workspace
-	memoryReads operatorMemoryReadState
+	ws            *Workspace
+	memoryReads   operatorMemoryReadState
+	pendingUpdate string
 }
 
 func NewCommandHandler(ws *Workspace) *CommandHandler {
@@ -35,6 +36,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	parts := strings.Fields(line)
 	cmd := strings.ToLower(parts[0])
+	if cmd != "/update" {
+		h.pendingUpdate = ""
+	}
 	// A question /ultra stop asked is answered by the next command or not at
 	// all, so a confirmation typed later cannot switch execution off.
 	if cmd != "/ultra" && h.ws != nil {

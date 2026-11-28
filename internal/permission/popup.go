@@ -16,8 +16,10 @@ import (
 )
 
 type Request struct {
-	SourceLaunch     string `json:",omitempty"`
-	SourceOccurrence string `json:",omitempty"`
+	// OwnerConfirmation keeps an effective-guarantee decision with the owner.
+	OwnerConfirmation bool   `json:",omitempty"`
+	SourceLaunch      string `json:",omitempty"`
+	SourceOccurrence  string `json:",omitempty"`
 	// ApprovalBinding retains an opaque reviewed snapshot across popup recovery.
 	ApprovalBinding                                 string `json:",omitempty"`
 	ProposalID                                      string `json:",omitempty"`
@@ -32,6 +34,9 @@ type Request struct {
 
 func (r Request) Key() string {
 	key := r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider + "\x00" + r.ApprovalBinding + "\x00" + r.Detail
+	if r.OwnerConfirmation {
+		key += "\x00owner-confirmation"
+	}
 	if r.SourceLaunch != "" {
 		key += "\x00" + r.SourceLaunch + "\x00" + r.SourceOccurrence
 	}

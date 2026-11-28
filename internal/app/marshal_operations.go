@@ -64,7 +64,10 @@ func (s *MarshalService) completeOperation(ctx context.Context, runID string, re
 	}
 	next := *op.Next
 	next.Operation = nil
-	return s.saveMarshalState(ctx, runID, next, rev, &op.Event, op.HandIn, op.Attempt)
+	if err := s.saveMarshalState(ctx, runID, next, rev, &op.Event, op.HandIn, op.Attempt); err != nil {
+		return err
+	}
+	return s.atLifecycleBoundary(op.Kind, "receipt")
 }
 func (s *MarshalService) afterOperationEffect(op *marshal.LifecycleOperation) error {
 	if s.AfterLifecycleEffect != nil {
@@ -270,10 +273,24 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			if err != nil {
 				return run, rev, err
 			}
-			break
+		} else {
+			completed = op.Authorized && head == op.After
+			if completed {
+				passed, fenceErr := s.hasChecksOnlyCloseFence(ctx, runID, op)
+				if fenceErr != nil {
+					return run, rev, fenceErr
+				}
+				if !passed {
+					return run, rev, fmt.Errorf("unfinished close %s: missing durable close fence proof; cannot prove fence passage; inspect %s and confirm the delivery before resolving the retained operation", op.ID, op.Target)
+				}
+			}
 		}
-		completed = op.Authorized && head == op.After
-		if !completed && head != op.Before {
+		if completed {
+			if err := s.verifyAppliedCloseCheckout(ctx, op); err != nil {
+				return run, rev, err
+			}
+		}
+		if !completed && !unapplied && head != op.Before {
 			return run, rev, interruptedOperationRefusal(runID, op, marshal.EffectsPartial, fmt.Sprintf("unfinished close %s: target moved; inspect %s", op.ID, op.Target), []string{"/marshal status"})
 		}
 	default:
@@ -591,4 +608,29 @@ func (s *MarshalService) recoverChecksOnlyClose(ctx context.Context, runID strin
 		}
 	}
 	return false, true, nil
+}
+
+func (s *MarshalService) atLifecycleBoundary(kind, boundary string) error {
+	if s.lifecycleBoundary != nil {
+		return s.lifecycleBoundary(kind, boundary)
+	}
+	return nil
+}
+
+// verifyAppliedCloseCheckout requires the target's files and index to agree
+// with the published commit before recovery acknowledges delivery.
+func (s *MarshalService) verifyAppliedCloseCheckout(ctx context.Context, op *marshal.LifecycleOperation) error {
+	checkedOut, err := marshalTargetWorktree(ctx, s.Repository, op.Target)
+	if err != nil {
+		return fmt.Errorf("unfinished close %s: cannot read target checkout; inspect %s: %w", op.ID, op.Target, err)
+	}
+	if checkedOut == "" {
+		return nil
+	}
+	head, headErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
+	status, statusErr := gitMarshalStdout(ctx, checkedOut, "status", "--porcelain=v1", "--untracked-files=all")
+	if headErr != nil || statusErr != nil || head != op.After || status != "" {
+		return fmt.Errorf("unfinished close %s: target checkout does not match delivered commit; save any local work, then run git -C %q reset --hard %s; confirm HEAD is %s and git status --porcelain is clean, then resume", op.ID, checkedOut, op.After, op.After)
+	}
+	return nil
 }

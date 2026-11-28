@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
@@ -54,8 +56,9 @@ func gitDirectory(t *testing.T) string {
 }
 
 // Opening Marshal in an existing Git project it was never set up in sets
-// the project up, as `marshal init` would, and says in one line what it
-// committed; `marshal doctor` stays read-only (TestDoctorBeforeInitIsPlain).
+// the project up once accepted (here by MARSHAL_ACCEPT_SETUP=1; see
+// setup_consent_test.go), as `marshal init` would, and says in one line what
+// it committed; `marshal doctor` stays read-only (TestDoctorBeforeInitIsPlain).
 func TestTUISetsUpProjectNotSetUpYet(t *testing.T) {
 	for _, partial := range []bool{false, true} {
 		for _, args := range [][]string{nil, {"tui"}} {
@@ -70,6 +73,7 @@ func TestTUISetsUpProjectNotSetUpYet(t *testing.T) {
 				}
 				t.Setenv("TMUX", "")
 				t.Setenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH", "1")
+				t.Setenv(acceptSetupEnv, "1")
 				// tmux fails, so the launch stops right after setup.
 				fake := filepath.Join(t.TempDir(), "tmux")
 				if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
@@ -250,5 +254,16 @@ func assertNoInternalLeak(t *testing.T, output string) {
 		if strings.Contains(lowered, leak) {
 			t.Fatalf("internal detail %q reached the user:\n%s", leak, output)
 		}
+	}
+}
+
+func TestPlannerReadinessDoesNotHideControlCenter(t *testing.T) {
+	r := marshal.ComputeReadiness("codex", map[string]marshal.ProviderReadiness{"codex": {Installed: true}}, marshal.ReviewPolicy{})
+	a := startup.Summarize([]startup.Check{{ID: "execution.readiness", Dimension: startup.DimensionExecution, Required: true, Status: startup.StatusNeedsAttention, Summary: r.Blocker}}, startup.SummaryOptions{})
+	if a.ExecutionPermitted() || !onlyReadinessBlocks(a) {
+		t.Fatalf("%+v", a)
+	}
+	if got := renderAssessment(a); !strings.Contains(got, r.Blocker) || strings.Contains(got, "Readiness: READY") {
+		t.Fatal(got)
 	}
 }
