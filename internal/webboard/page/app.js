@@ -334,7 +334,7 @@
     return button(cls + (on ? " danger" : ""), on ? "Click again to " + label : cap(label), function () {
       if (armed !== id) { arm(id, warn); return; }
       armed = null;
-      act({ action: "key", key: key, confirmed: true }, cap(label));
+      feedback("bad", "Refresh the page and use the named run control.");
     });
   }
   var retryWarn = "Retrying starts the task again from scratch in a fresh session, keeping its branch. Click again to retry.";
@@ -418,10 +418,10 @@
         var text = confirmStep.text ? typed.value.trim() : "";
         if (confirmStep.text && !text) { feedback("bad", "Type what the Board asks for first."); typed.focus(); return; }
         if (confirmStep.choice) { decide(confirmStep.choice, { confirmed: true, text: text }, "Confirm"); return; }
-        act({ action: "key", key: "⏎", text: text }, "Confirm");
+        feedback("bad", "Refresh the page and choose the action again.");
       });
       if (frame && frame.act && frame.act.tokens.esc) {
-        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; act({ action: "key", key: "esc" }, "Cancel"); }));
+        sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; act({ action: "decide", choice: "card/dismiss", value: "", cardRevision: frame.act.card }, "Cancel"); }));
       } else {
         sec.appendChild(button("linkbtn", "Cancel", function () { confirmStep = null; sigs.card = ""; render(frame); }));
       }
@@ -457,7 +457,9 @@
           return;
         }
         armedStop = null;
-        act({ action: "key", key: b.key, confirmed: stop }, b.label);
+        var op = {"⏎": "pause/continue", w: "pause/wait", d: "pause/details", x: "pause/stop"}[b.key];
+        if (!f.paused || !op) { feedback("bad", "Refresh the page and choose a named action."); return; }
+        act({ action: "decide", choice: op, value: "", cardRevision: f.act.card, confirmed: stop }, b.label);
       };
       if (i === 0) {
         prim.textContent = text;
@@ -997,7 +999,7 @@
     kv(dl, "Open requests to the Marshal", String(pendingReq));
     var acts = clear($("ar-acts"));
     if (canOpen) {
-      acts.appendChild(button("primary", "Open the architecture map", function () { act({ action: "key", key: "a" }, "Open the architecture map"); }));
+      acts.appendChild(button("primary", "Open the architecture map", function () { decide({ id: "architecture.open", value: "" }); }));
       setText("ar-note", "The map opens on its own review page in a new tab; Accept happens only there, never on this page.");
     } else {
       setText("ar-note", d ? "The review page opens from the card on Home." :

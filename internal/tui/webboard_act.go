@@ -161,6 +161,9 @@ func (w *Workspace) webActNow(a webboard.Action) (_ webboard.Result, started boo
 	case "say":
 		return w.webSay(a.Text), false, 0
 	case "decide":
+		if f.Paused != nil || a.Choice == "card/dismiss" {
+			return w.webCardAction(f, a)
+		}
 		return w.webDecide(f, a), false, 0
 	case "key":
 	default:
@@ -469,4 +472,73 @@ func (w *Workspace) webScreenAct(a webboard.Action) webActed {
 	}
 	w.RecordActivity("From the web: " + label + ".")
 	return r
+}
+
+// webCardAction admits a named action against the exact card shown.
+func (w *Workspace) webCardAction(f webboard.Frame, a webboard.Action) (webboard.Result, bool, uint64) {
+	if a.Revision != webboard.CardID(f) {
+		return staleCard("The card changed. Refresh the page and try again."), false, 0
+	}
+	if a.Value != "" || a.Text != "" || a.Reason != "" {
+		return refused("This action does not take text."), false, 0
+	}
+	if a.Choice == "card/dismiss" {
+		if f.Decision == nil {
+			return refused("No decision is open."), false, 0
+		}
+		if w.inboxView.Confirming() {
+			w.inboxView.Cancel()
+			w.requestRepaint()
+		} else if w.v2PlanArmed() != "" {
+			s := w.v2CardState()
+			s.mu.Lock()
+			s.planArmed = ""
+			s.mu.Unlock()
+			w.memoryAnswer("Reply not sent.", false)
+			return webboard.Result{Status: "done", Text: "Reply not sent."}, false, 0
+		} else if d, ok := w.v2DecisionNow(boardNow()); ok {
+			w.dismissV2Card(d.key)
+		}
+		return webboard.Result{Status: "done", Text: "Decision set aside. It remains in the inbox."}, false, 0
+	}
+	if f.Paused == nil {
+		return refused("No paused card is open."), false, 0
+	}
+	index := slices.IndexFunc(f.Paused.Actions, func(k webboard.Key) bool { return webboard.PauseOp(k.Key) == a.Choice })
+	if index < 0 {
+		return refused("That action is not on the card. Refresh the page."), false, 0
+	}
+	if a.Choice == "pause/stop" && !a.Confirmed {
+		return refused("Click Stop the run again to confirm."), false, 0
+	}
+	if w.commandBusy.Load() {
+		return w.webBusyResult("A command is running. Wait for it to finish."), false, 0
+	}
+	z, ok := w.v2PauseNow(boardNow())
+	if !ok {
+		return staleCard("The paused card closed. Refresh the page."), false, 0
+	}
+	if a.Choice == "pause/continue" && !z.wait && z.enter.action != marshal.PauseUsePlan {
+		if err := w.marshalSession().busyErrorIfBusy("paused_enter"); err != nil {
+			return refusedErr(err), false, 0
+		}
+	}
+	before := w.outputSeq.Load()
+	w.runPauseAction(a.Choice, z)
+	w.RecordActivity("From the web: " + f.Paused.Actions[index].Label + " (" + f.Paused.Title + ").")
+	seq := w.outputSeq.Load()
+	res := webboard.Result{Status: "done"}
+	if seq != before {
+		w.mu.RLock()
+		res.Text = w.answer
+		bad, receipt := w.answerIsError, w.lastRefusal
+		w.mu.RUnlock()
+		if bad && a.Choice != "pause/details" {
+			res.Status = "refused"
+			if receipt != nil {
+				res = res.WithRefusal(receipt.Clone())
+			}
+		}
+	}
+	return res, w.commandBusy.Load(), seq
 }

@@ -72,77 +72,36 @@ from the page. What shipped, and where it differs from the first design:
   `7` (a terminal view), `e` (edit in the terminal), `q` (quit), `esc`
   ("later"), and the inbox card's `⏎ details`; `k` (comment) focuses the
   message box.
-- **Transport**: `POST /api/act`, JSON body `{"action": "key"|"say", "card":
-  "<card id>", "key": "<card key>", "text": "…", "token": "<action token>",
-  "confirmed": bool}`. Unknown fields, trailing data or another action kind
-  are `400`. Only `/api/act` takes POST (`405 Allow: POST` for any other
-  method); every other path stays GET only.
-- **Checks**, in order: Host (`421`), bearer token (`401`; still never in the
-  query, never a cookie), `Origin` exactly `http://127.0.0.1:PORT` or
-  `http://localhost:PORT` (missing or other: `403`), `Sec-Fetch-Site:
-  same-origin` when sent (`403`), `Content-Type: application/json` parsed
-  with `mime.ParseMediaType` (`415`), body at most 16 KiB (`413`), a message
-  at most 2000 characters (`413`), then the action token (`409`). No CORS
-  headers, no cookie.
-- **Action token** (the CSRF token of the first design): every frame carries
-  `act: {card, tokens, sayMax}`, minted by the server, not read from `vm`.
-  `card` is `CardID`: `decision:`/`paused:` plus a digest of everything the
-  owner decides on (kind, title, cause or summary, what the main button will
-  do, the buttons' keys and labels, the decision's lines, parts and notes,
-  the paused task titles; not the reset note, a task's progress or what of it
-  is kept, the room on other providers or the other lanes, so a ticking card
-  is not a new card, while a card whose button now does something else is), or `screen:<screen>` with no card. `tokens` holds one token per key
-  the card shows (plus `esc` on a decision) and `say`:
-  `HMAC-SHA256(server key, card || action count || key)`. The action count
-  goes up on every accepted action, so each token works once: a replay, or a
-  second tab acting on the same frame, is `409`. The server rebuilds the
-  frame (never the cached one) to check the card and the token, spends the
-  count before the action runs, and drops the frame cache, so the event
-  stream pushes new tokens at once. Actions are serialized.
-- **Dispatch** (`internal/tui/webboard_act.go`): the sink posts the action to
-  the Board's input loop (`postUI`) and waits up to 10 s; an action the loop
-  did not reach in time is refused and never runs later (a claim flag). On
-  the loop it checks again that `CardID` of the frame the terminal would
-  paint equals the page's, and that the key is on that card, then:
-  - an owner card's button with a click reference runs the classic card's
-    click handler (`clickGuard`, `answerAsk`, `clickRequirements`,
-    `clickChange`, `clickNext`), as a click in the terminal does;
-  - any other key goes to `handleV2CardKey` with the key event `v2KeyEvent`
-    makes of it: the paused card's `Enter` (`actOnPause`: `/marshal retry …
-    fresh-session`, `/marshal reassign …`, `/marshal resume`, or the wait for
-    the reset), `w`, `d`, `x` (`stopPausedRun`), the plan's armed reply, the
-    inbox's decision keys, `a` on the architecture card
-    (`openArchitectureReview`);
-  - `say` goes to `sayToMarshal`, the `s` composer's path, as the owner's
-    words (never a command). With no Marshal chat open it is refused rather
-    than put into the terminal's composer.
-  It does not go through `handleTerminalKey` or `v2CardKey`, whose result
-  depends on what the terminal last painted and on its composer.
-  The handler's own result is the answer: a key the Board did not take is
-  "refused", the text is the footer answer the key set, and an answer the
-  Board flags as an error is "refused" (except `d`, whose raw error is
-  flagged on purpose). A key that started commands off the loop (the paused
-  card's retry, reassign, resume run on the command lane) is waited for off
-  the loop, up to 15 s, and answered with the commands' own result ("done",
-  or "refused" with the error), or "started" while they still run; while a
-  command already runs, a key is refused. A key that armed
-  a second step (the inbox's confirmation, the plan's armed reply) returns a
-  `confirm` step, which the page shows as a **Confirm …** button (with a text
-  field when the hard gate reads its canonical id) and a **Cancel** (`esc`).
-- **With no card**: the frame's `keys` (the terminal key bar is never sent)
-  carry the screen's own buttons, and `CardID` is `screen:<screen>:` plus a
-  digest of them, so they get tokens like a card's keys: `r` "retry <task>"
-  while `retryTarget` finds a task (noted on the input loop at each paint,
-  `noteWebRetry`, since the frame is built off the loop and the task under
-  the keyboard is loop state), and `ctrl+x` "stop all workers" while a run
-  is on the Board. On the loop, `r` re-runs `retryTarget` (the task must be
-  the one the button named), arms it (`armRetry`) and presses Enter
-  (`handleRetryKey`: `retryAndContinue`); `ctrl+x` runs `/stop all` as the
-  key does (`runCommand`, the priority lane), and the page waits for its
-  answer. Both need the page's second click (`confirmed`).
-- **Two-step stop**: `x` on the paused card is one key in the terminal; the
-  page asks for a second click and sends `confirmed: true`, which the sink
-  requires.
+- **Transport**: `POST /api/act` accepts named `decide` choices, `cmd`
+  envelopes, and `say` messages. `action: "key"` returns `400` with a request
+  to refresh and use a named action. The page never sends terminal keys.
+- **Checks**: Host, bearer, same Origin, JSON content type, bounded body,
+  current card and single-use action token are checked before dispatch.
+  Tokens bind the card, choice and action count. Spending a token before
+  dispatch prevents replay across tabs. Card actions also check their revision
+  on the input loop, so queued actions cannot affect a replacement card.
+- **Card action inventory**: the former key route could reach these actions:
+
+  | Card | Controls | Named actions |
+  | --- | --- | --- |
+  | Paused | Enter, w, d, x | `pause/continue`, `pause/wait`, `pause/details`, `pause/stop` |
+  | Architecture | a, k | `architecture.open`, local comment composer |
+  | Plan | Enter, 7, k | `plan.approve`, `plan.read`, local comment composer |
+  | Inbox | Enter, a, d, confirmation text | `inbox.inspect`, `inbox.decide`, `inbox.return` |
+  | Change | Enter, k, x | `change.apply`, `change.keep`, `change.release` |
+  | Requirements | confirm, edit a line | `requirements.confirm`, `requirements.edit` |
+  | Question, changed files, next step | answer or button reference | `card.choose` |
+  | Decision cancellation | Esc | `card/dismiss` |
+
+  Copying a link, quitting, and terminal-only view controls stay local.
+  Screen retry and stop-workers buttons use the existing bound task and run
+  commands. The paused card's named operations share `runPauseAction` with
+  terminal controls. That handler calls the same retry, move, resume, stop,
+  quota timer and detail services, and returns the same answer and refusal
+  metadata. A raw error detail remains a successful read. Stop requires a
+  second click. Asynchronous commands retain the existing completion wait.
+- **Confirmation**: typed plan and inbox choices keep their existing second
+  step, digest and canonical-id checks. Cancel uses `card/dismiss`.
 - **Authority**: an action is the owner's because only the owner holds the
   link; the link reaches the footer only, never Activity, the Marshal chat,
   MCP tools or a file the Marshal reads. There is no peer-process check (the
