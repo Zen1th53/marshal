@@ -94,6 +94,10 @@ func (p *buildPendingDecision) markDelivered(now time.Time) {
 // Queue processing remains asynchronous: stop and proposal polling never wait
 // for a model response. The request ID is fresh for each admitted occurrence.
 func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Request) bool {
+	// Reduced guarantees require the owner, even when the Marshal normally approves plans.
+	if req.OwnerConfirmation {
+		return false
+	}
 	if req.Kind == "network" && req.ProposalID == "" && req.SourceLaunch == "" {
 		if provider, automatic := w.runtime.AutomaticProviderEgressRequest(ctx, req.RunID, req.Object); automatic {
 			w.finishBuildDecision(ctx, req, "provider-egress:"+req.RunID, true, "Registered provider CLI vendor, telemetry or standard toolchain host", provider)
@@ -500,7 +504,7 @@ func marshalSelfAcceptRefused(req permission.Request, allow bool, err error) boo
 // marshalSelfApprovedPlan reports whether a decision the Marshal made
 // approved a drafted plan, with no owner in the loop.
 func marshalSelfApprovedPlan(req permission.Request, allow bool, err error) bool {
-	return err == nil && allow && req.Kind == "marshal-command" && req.Object == "/marshal approve"
+	return err == nil && allow && !req.OwnerConfirmation && req.Kind == "marshal-command" && req.Object == "/marshal approve"
 }
 
 // marshalDecisionActivity is the Activity line for a decision the Marshal

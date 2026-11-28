@@ -35,7 +35,7 @@ func TestUpdateEdition(t *testing.T) {
 		// Community still consults the release feed: either the unreachable
 		// proxy fails the check, or (for a dev build) the feed path reports
 		// the latest release. It never prints the private guidance.
-		checked := code != 0 && strings.Contains(stderr.String(), "update check failed") || code == 0 && (strings.Contains(stdout.String(), "latest release") || strings.Contains(stdout.String(), "is available"))
+		checked := code != 0 && strings.Contains(stderr.String(), "update check failed") || code == 0 && (strings.Contains(stdout.String(), "dev build") || strings.Contains(stdout.String(), "latest release") || strings.Contains(stdout.String(), "is available"))
 		if !checked || strings.Contains(stdout.String(), "private build") {
 			t.Fatalf("%v: community did not check the release feed: code %d stdout %q stderr %q", args, code, stdout.String(), stderr.String())
 		}

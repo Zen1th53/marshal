@@ -365,3 +365,12 @@ func TestApprovalSnapshotDistinguishesPopupRequests(t *testing.T) {
 		t.Fatal("opaque snapshot exposed as popup implementation details")
 	}
 }
+
+func TestOwnerConfirmationHasDistinctIdentity(t *testing.T) {
+	r := Request{Kind: "marshal-command", Object: "/marshal approve", Scope: "Effective guarantee"}
+	old := r.Key()
+	r.OwnerConfirmation = true
+	if r.Key() == old {
+		t.Fatal("owner decision reused an automatic request identity")
+	}
+}

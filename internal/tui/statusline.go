@@ -146,6 +146,9 @@ func gitSegment(s UIState, th *Theme) string {
 }
 
 func runtimeStateSegment(s UIState, th *Theme) string {
+	if s.ReadinessBlocker != "" {
+		return th.RenderBadgeText("YOUR TURN") + " " + s.ReadinessBlocker
+	}
 	state := string(s.UnderstandingState)
 	if state == "" {
 		state = "READY"
