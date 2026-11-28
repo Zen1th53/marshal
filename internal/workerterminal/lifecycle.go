@@ -12,6 +12,7 @@ type Lifecycle func(processgroup.Reference) error
 func WithLifecycle(ctx context.Context, observer Lifecycle) context.Context {
 	return context.WithValue(ctx, lifecycleKey{}, observer)
 }
+
 // LifecycleOf returns the start observer ctx carries, if any.
 func LifecycleOf(ctx context.Context) Lifecycle {
 	observer, _ := ctx.Value(lifecycleKey{}).(Lifecycle)

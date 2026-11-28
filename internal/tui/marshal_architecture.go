@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	neturl "net/url"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -218,7 +219,16 @@ func (w *Workspace) resolveArchitectureProposal(id string, err error) {
 
 // openArchitectureBrowser opens url in the user's desktop browser.
 func openArchitectureBrowser(ctx context.Context, url string) error {
-	return browser.Open(ctx, url)
+	parsed, err := neturl.Parse(url)
+	if err != nil {
+		return err
+	}
+	query := parsed.Query()
+	if !query.Has("layout") {
+		query.Set("layout", "roomy")
+	}
+	parsed.RawQuery = query.Encode()
+	return browser.Open(ctx, parsed.String())
 }
 
 func (w *Workspace) boundMarshalArchitectureSource() string {

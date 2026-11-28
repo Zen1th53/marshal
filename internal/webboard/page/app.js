@@ -1500,7 +1500,7 @@
         feedback("ok", !text ? word + "." : text.indexOf(word) === 0 ? text : word + ": " + text);
         if (res.link) {
           $("review").hidden = false;
-          $("review-link").href = res.link;
+          $("review-link").href = res.link + (res.link.indexOf("?") >= 0 ? "&" : "?") + "layout=roomy";
         }
         return true;
       })

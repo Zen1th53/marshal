@@ -9,11 +9,11 @@ import (
 
 // RevisionRequest encapsulates a requested state change for a claim.
 type RevisionRequest struct {
-	TargetState  model.ClaimState        `json:"target_state"`
-	Reason       string                  `json:"reason"`
-	Actor        model.AuthorProvenance  `json:"actor"`
-	EvidenceRef  *model.EvidenceRef      `json:"evidence_ref,omitempty"`
-	IsAssertion  bool                    `json:"is_assertion"` // True if actor is only asserting without empirical proof
+	TargetState model.ClaimState       `json:"target_state"`
+	Reason      string                 `json:"reason"`
+	Actor       model.AuthorProvenance `json:"actor"`
+	EvidenceRef *model.EvidenceRef     `json:"evidence_ref,omitempty"`
+	IsAssertion bool                   `json:"is_assertion"` // True if actor is only asserting without empirical proof
 }
 
 // ClaimRevisionDiscipline enforces Discipline C: Claim Revision.

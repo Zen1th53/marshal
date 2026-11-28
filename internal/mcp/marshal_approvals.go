@@ -14,9 +14,9 @@ import (
 // marshalApprovalsResponse is the read-only, run-scoped approval view pulled
 // by the Marshal chat. It never mutates approval receipts or run state.
 type marshalApprovalsResponse struct {
-	RunID     string                   `json:"run_id,omitempty"`
-	NoRun     bool                     `json:"no_run,omitempty"`
-	Approvals []app.ApprovalNoticeView `json:"approvals"`
+	RunID     string                    `json:"run_id,omitempty"`
+	NoRun     bool                      `json:"no_run,omitempty"`
+	Approvals []app.ApprovalNoticeView  `json:"approvals"`
 	Notices   []store.NoticeOutboxEntry `json:"notices,omitempty"`
 }
 

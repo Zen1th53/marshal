@@ -9,16 +9,16 @@ import (
 
 // CoverageReport represents the critical claim evaluation for a Goal.
 type CoverageReport struct {
-	GoalID               string        `json:"goal_id"`
-	GoalRevision         int64         `json:"goal_revision"`
-	TotalClaims          int           `json:"total_claims"`
-	CriticalClaims       int           `json:"critical_claims"`
-	VerifiedCritical     int           `json:"verified_critical"`
-	MissingClaims        []string      `json:"missing_claims,omitempty"`
-	UnverifiedCritical   []model.Claim `json:"unverified_critical,omitempty"`
-	ContestedClaims      []model.Claim `json:"contested_claims,omitempty"`
-	CanSucceed           bool          `json:"can_succeed"`
-	BlockerReason        string        `json:"blocker_reason,omitempty"`
+	GoalID             string        `json:"goal_id"`
+	GoalRevision       int64         `json:"goal_revision"`
+	TotalClaims        int           `json:"total_claims"`
+	CriticalClaims     int           `json:"critical_claims"`
+	VerifiedCritical   int           `json:"verified_critical"`
+	MissingClaims      []string      `json:"missing_claims,omitempty"`
+	UnverifiedCritical []model.Claim `json:"unverified_critical,omitempty"`
+	ContestedClaims    []model.Claim `json:"contested_claims,omitempty"`
+	CanSucceed         bool          `json:"can_succeed"`
+	BlockerReason      string        `json:"blocker_reason,omitempty"`
 }
 
 // CriticalClaimCoverageDiscipline enforces Discipline F: Critical-Claim Coverage.

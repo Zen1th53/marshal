@@ -17,27 +17,27 @@ func TestT88StructuredContradictionDetection(t *testing.T) {
 
 	// 1. Version contradiction on same dependency/subject in same scope
 	recA := model.MemoryRecordV2{
-		ID:        "MEM-DEP-V1",
-		ProjectID: "PROJ-1",
-		Kind:      model.MemoryKindDecision,
-		Lifecycle: model.MemoryDurable,
-		Title:     "Go Runtime Dependency",
-		Body:      "Runtime requires Go version 1.22",
-		Scope:     string(model.ScopeProject),
-		ScopeID:   "PROJ-1",
+		ID:         "MEM-DEP-V1",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindDecision,
+		Lifecycle:  model.MemoryDurable,
+		Title:      "Go Runtime Dependency",
+		Body:       "Runtime requires Go version 1.22",
+		Scope:      string(model.ScopeProject),
+		ScopeID:    "PROJ-1",
 		ObservedAt: now.Add(-time.Hour),
 		ValidFrom:  now.Add(-time.Hour),
 	}
 
 	recB := model.MemoryRecordV2{
-		ID:        "MEM-DEP-V2",
-		ProjectID: "PROJ-1",
-		Kind:      model.MemoryKindDecision,
-		Lifecycle: model.MemoryCandidate,
-		Title:     "Go Runtime Dependency",
-		Body:      "Runtime requires Go version 1.24", // Contradiction
-		Scope:     string(model.ScopeProject),
-		ScopeID:   "PROJ-1",
+		ID:         "MEM-DEP-V2",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindDecision,
+		Lifecycle:  model.MemoryCandidate,
+		Title:      "Go Runtime Dependency",
+		Body:       "Runtime requires Go version 1.24", // Contradiction
+		Scope:      string(model.ScopeProject),
+		ScopeID:    "PROJ-1",
 		ObservedAt: now,
 		ValidFrom:  now,
 	}
@@ -71,25 +71,25 @@ func TestT88DifferentScopesDoNotConflict(t *testing.T) {
 
 	// Task 1 decision vs Task 2 decision on task-scope should not conflict across tasks
 	recTask1 := model.MemoryRecordV2{
-		ID:        "MEM-TASK-1",
-		ProjectID: "PROJ-1",
-		Kind:      model.MemoryKindDecision,
-		Title:     "Working Directory",
-		Body:      "Directory is /tmp/task1",
-		Scope:     string(model.ScopeTask),
-		ScopeID:   "TASK-1",
+		ID:         "MEM-TASK-1",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindDecision,
+		Title:      "Working Directory",
+		Body:       "Directory is /tmp/task1",
+		Scope:      string(model.ScopeTask),
+		ScopeID:    "TASK-1",
 		ObservedAt: now,
 		ValidFrom:  now,
 	}
 
 	recTask2 := model.MemoryRecordV2{
-		ID:        "MEM-TASK-2",
-		ProjectID: "PROJ-1",
-		Kind:      model.MemoryKindDecision,
-		Title:     "Working Directory",
-		Body:      "Directory is /tmp/task2",
-		Scope:     string(model.ScopeTask),
-		ScopeID:   "TASK-2",
+		ID:         "MEM-TASK-2",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindDecision,
+		Title:      "Working Directory",
+		Body:       "Directory is /tmp/task2",
+		Scope:      string(model.ScopeTask),
+		ScopeID:    "TASK-2",
 		ObservedAt: now,
 		ValidFrom:  now,
 	}

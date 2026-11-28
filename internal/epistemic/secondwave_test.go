@@ -116,12 +116,12 @@ func TestPostMortemCardGeneration(t *testing.T) {
 	toks := int64(45000)
 	cost := 0.15
 	card := PostMortemCard{
-		GoalID:          "goal-v15",
-		GoalRevision:    3,
-		WhatWorked:      []string{"TUI workspace rendered one-screen dashboard", "CAS concurrency prevented conflict"},
-		WhatWasRedone:   []string{"Refactored exitCode nil check"},
+		GoalID:           "goal-v15",
+		GoalRevision:     3,
+		WhatWorked:       []string{"TUI workspace rendered one-screen dashboard", "CAS concurrency prevented conflict"},
+		WhatWasRedone:    []string{"Refactored exitCode nil check"},
 		WrongAssumptions: []string{"Assumed exitCode(nil) returned 0"},
-		Failures:        []string{"Fingerprint fp-123 caused retry cut"},
+		Failures:         []string{"Fingerprint fp-123 caused retry cut"},
 		ConsumedBudget: model.ConsumedBudget{
 			TotalTokens: &toks,
 			CostUSD:     &cost,

@@ -43,12 +43,12 @@ func TestT119PostRunReflectionAndWriteback(t *testing.T) {
 
 	// 2. Failed run writeback: Must record failure finding without pretending success
 	failedOutcome := writeback.RunOutcome{
-		TaskID:          "TASK-FAIL-1",
-		ProjectID:       "PROJ-1",
-		Status:          "FAILED",
-		CommitSHA:       "commit-fail-67890",
-		ErrorMessage:    "sqlite3.OperationalError: database is locked",
-		ObservedAt:      now,
+		TaskID:       "TASK-FAIL-1",
+		ProjectID:    "PROJ-1",
+		Status:       "FAILED",
+		CommitSHA:    "commit-fail-67890",
+		ErrorMessage: "sqlite3.OperationalError: database is locked",
+		ObservedAt:   now,
 	}
 
 	failedCandidate, err := reflector.ReflectAndWriteback(ctx, failedOutcome)

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/architecturecodec"
 )
 
 //go:embed review.html
@@ -48,8 +50,26 @@ func (r *Review) Handler(token string) http.Handler {
 			_, _ = io.WriteString(w, page)
 			return
 		}
-		if (q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance" && q.URL.Path != "/api/codeview") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
+		if (q.URL.Path != "/api/roomy" && q.URL.Path != "/api/review" && q.URL.Path != "/api/builders" && q.URL.Path != "/api/design" && q.URL.Path != "/api/history" && q.URL.Path != "/api/conformance" && q.URL.Path != "/api/codeview") || !matches(strings.TrimPrefix(q.Header.Get("Authorization"), "Bearer ")) || !strings.HasPrefix(q.Header.Get("Authorization"), "Bearer ") {
 			reply(http.StatusForbidden, map[string]any{"error": "Review access denied"})
+			return
+		}
+		if q.URL.Path == "/api/roomy" {
+			if q.Method != http.MethodPost {
+				reply(http.StatusMethodNotAllowed, map[string]any{"error": "Unsupported renderer method"})
+				return
+			}
+			raw, err := io.ReadAll(http.MaxBytesReader(w, q.Body, 8<<20))
+			if err != nil {
+				reply(http.StatusBadRequest, map[string]any{"error": "Architecture is too large"})
+				return
+			}
+			svg, err := architecturecodec.RenderSVG(raw, architecturecodec.RendererOptions{Roomy: true})
+			if err != nil {
+				reply(http.StatusBadRequest, map[string]any{"error": err.Error()})
+				return
+			}
+			reply(http.StatusOK, map[string]any{"svg": svg})
 			return
 		}
 		if q.URL.Path == "/api/codeview" {
