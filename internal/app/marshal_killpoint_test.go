@@ -42,7 +42,7 @@ func reopenKillPoint(t *testing.T, s *MarshalService, path string) *MarshalServi
 	return s
 }
 
-func TestG1KillPoints(t *testing.T) {
+func TestMergeRecoveryKillPoints(t *testing.T) {
 	for _, boundary := range []string{"intent", "worktree", "git", "receipt"} {
 		for _, task := range []string{"a", "b"} {
 			t.Run(task+"/"+boundary, func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestG1KillPoints(t *testing.T) {
 	}
 }
 
-func TestG2KillPoints(t *testing.T) {
+func TestCloseRecoveryKillPoints(t *testing.T) {
 	for _, proof := range []string{"full", "checks-only"} {
 		for _, checkout := range []string{"checked-out", "unchecked"} {
 			for _, boundary := range []string{"intent", "checkpoint", "authorized", "fence", "git", "receipt"} {
@@ -171,7 +171,7 @@ func TestG2KillPoints(t *testing.T) {
 }
 
 // A matching target commit alone must not prove that the close fence ran.
-func TestG2AdvancedWithoutFence(t *testing.T) {
+func TestCloseRecoveryAdvancedWithoutFence(t *testing.T) {
 	for _, proof := range []string{"full", "checks-only"} {
 		for _, checkout := range []string{"checked-out", "unchecked"} {
 			t.Run(proof+"/"+checkout, func(t *testing.T) {
@@ -232,7 +232,7 @@ func TestG2AdvancedWithoutFence(t *testing.T) {
 	}
 }
 
-func TestG2PartialTargetCheckout(t *testing.T) {
+func TestCloseRecoveryPartialTargetCheckout(t *testing.T) {
 	for _, proof := range []string{"full", "checks-only"} {
 		t.Run(proof, func(t *testing.T) {
 			var s *MarshalService
